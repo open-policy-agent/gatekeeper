@@ -75,7 +75,7 @@ type Manager struct {
 	mgr             manager.Manager
 	ucloop          *updateConstraintLoop
 	reporter        *reporter
-	log             logr.Logger
+	logger          logr.Logger
 	processExcluder *process.Excluder
 	eventRecorder   record.EventRecorder
 	gkNamespace     string
@@ -157,6 +157,7 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 		gkNamespace:     util.GetNamespace(),
 		auditCache:      deps.CacheLister,
 		expansionSystem: deps.ExpansionSystem,
+		logger:          log,
 	}
 	return am, nil
 }
@@ -165,23 +166,23 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 func (am *Manager) audit(ctx context.Context) error {
 	startTime := time.Now()
 	timestamp := startTime.UTC().Format(time.RFC3339)
-	am.log = log.WithValues(logging.AuditID, timestamp)
-	logStart(am.log)
+	am.logger = am.logger.WithValues(logging.AuditID, timestamp)
+	logStart(am.logger)
 	// record audit latency
 	defer func() {
-		logFinish(am.log)
+		logFinish(am.logger)
 		endTime := time.Now()
 		latency := endTime.Sub(startTime)
 		if err := am.reporter.reportLatency(latency); err != nil {
-			am.log.Error(err, "failed to report latency")
+			am.logger.Error(err, "failed to report latency")
 		}
 		if err := am.reporter.reportRunEnd(endTime); err != nil {
-			am.log.Error(err, "failed to report run end time")
+			am.logger.Error(err, "failed to report run end time")
 		}
 	}()
 
 	if err := am.reporter.reportRunStart(startTime); err != nil {
-		am.log.Error(err, "failed to report run start time")
+		am.logger.Error(err, "failed to report run start time")
 	}
 
 	// Create a new client to get an updated RESTMapper.
@@ -192,7 +193,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	am.client = c
 	// don't audit anything until the constraintTemplate crd is in the cluster
 	if err := am.ensureCRDExists(ctx); err != nil {
-		am.log.Info("Audit exits, required crd has not been deployed ", "CRD", crdName)
+		am.logger.Info("Audit exits, required crd has not been deployed ", "CRD", crdName)
 		return nil
 	}
 
@@ -200,7 +201,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	constraintsGVKs, err := am.getAllConstraintKinds()
 	if err != nil {
 		// if no constraint is found with the constraint apiversion, then return
-		am.log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
+		am.logger.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
 		return nil
 	}
 
@@ -214,12 +215,12 @@ func (am *Manager) audit(ctx context.Context) error {
 
 	if *auditFromCache {
 		var res []Result
-		am.log.Info("Auditing from cache")
+		am.logger.Info("Auditing from cache")
 		res, errs := am.auditFromCache(ctx)
 
-		am.log.Info("Audit from cache results", "violations", len(res))
+		am.logger.Info("Audit from cache results", "violations", len(res))
 		for _, err := range errs {
-			am.log.Error(err, "Auditing")
+			am.logger.Error(err, "Auditing")
 		}
 
 		err := am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
@@ -227,7 +228,7 @@ func (am *Manager) audit(ctx context.Context) error {
 			return err
 		}
 	} else {
-		am.log.Info("Auditing via discovery client")
+		am.logger.Info("Auditing via discovery client")
 		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 		if err != nil {
 			return err
@@ -237,12 +238,12 @@ func (am *Manager) audit(ctx context.Context) error {
 	// log constraints with violations
 	for gvknn := range updateLists {
 		ar := updateLists[gvknn][0]
-		logConstraint(am.log, &gvknn, ar.enforcementAction, totalViolationsPerConstraint[gvknn])
+		logConstraint(am.logger, &gvknn, ar.enforcementAction, totalViolationsPerConstraint[gvknn])
 	}
 
 	for k, v := range totalViolationsPerEnforcementAction {
 		if err := am.reporter.reportTotalViolations(k, v); err != nil {
-			am.log.Error(err, "failed to report total violations")
+			am.logger.Error(err, "failed to report total violations")
 		}
 	}
 
@@ -264,7 +265,7 @@ func (am *Manager) auditResources(
 	// delete all from cache dir before starting audit
 	err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
 	if err != nil {
-		am.log.Error(err, "unable to remove existing content from cache directory in auditResources", "apiCacheDir", *apiCacheDir)
+		am.logger.Error(err, "unable to remove existing content from cache directory in auditResources", "apiCacheDir", *apiCacheDir)
 		return err
 	}
 
@@ -276,7 +277,7 @@ func (am *Manager) auditResources(
 	serverResourceLists, err := discoveryClient.ServerPreferredResources()
 	if err != nil {
 		if discovery.IsGroupDiscoveryFailedError(err) {
-			am.log.Error(err, "Kubernetes has an orphaned APIService. Delete orphaned APIService using kubectl delete apiservice <name>")
+			am.logger.Error(err, "Kubernetes has an orphaned APIService. Delete orphaned APIService using kubectl delete apiservice <name>")
 		} else {
 			return err
 		}
@@ -286,7 +287,7 @@ func (am *Manager) auditResources(
 	for _, rl := range serverResourceLists {
 		gvParsed, err := schema.ParseGroupVersion(rl.GroupVersion)
 		if err != nil {
-			am.log.Error(err, "Error parsing GroupVersion", "GroupVersion", rl.GroupVersion)
+			am.logger.Error(err, "Error parsing GroupVersion", "GroupVersion", rl.GroupVersion)
 			continue
 		}
 
@@ -317,13 +318,13 @@ func (am *Manager) auditResources(
 		for _, c := range constraintsGVK {
 			constraintList.SetGroupVersionKind(c)
 			if err = am.client.List(ctx, constraintList); err != nil {
-				am.log.Error(err, "Unable to list objects for gvk", "group", c.Group, "version", c.Version, "kind", c.Kind)
+				am.logger.Error(err, "Unable to list objects for gvk", "group", c.Group, "version", c.Version, "kind", c.Kind)
 				continue
 			}
 			for _, constraint := range constraintList.Items {
 				kinds, found, err := unstructured.NestedSlice(constraint.Object, "spec", "match", "kinds")
 				if err != nil {
-					am.log.Error(err, "Unable to return spec.match.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
+					am.logger.Error(err, "Unable to return spec.match.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
 					// looking at all kinds if there is an error
 					matchedKinds["*"] = true
 					break constraintsLoop
@@ -332,19 +333,19 @@ func (am *Manager) auditResources(
 					for _, k := range kinds {
 						kind, ok := k.(map[string]interface{})
 						if !ok {
-							am.log.Error(errors.New("could not cast kind as map[string]"), "kind", k)
+							am.logger.Error(errors.New("could not cast kind as map[string]"), "kind", k)
 							continue
 						}
 						kindsKind, _, err := unstructured.NestedSlice(kind, "kinds")
 						if err != nil {
-							am.log.Error(err, "Unable to return kinds.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
+							am.logger.Error(err, "Unable to return kinds.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
 							continue
 						}
 						for _, kk := range kindsKind {
 							kks, ok := kk.(string)
 							if !ok {
 								err := fmt.Errorf("invalid kinds.kinds value type %#v, want string", kk)
-								am.log.Error(err, "group", c.Group, "version", c.Version, "kind", c.Kind)
+								am.logger.Error(err, "group", c.Group, "version", c.Version, "kind", c.Kind)
 								continue constraintsLoop
 							}
 
@@ -371,11 +372,11 @@ func (am *Manager) auditResources(
 	for gv, gvKinds := range clusterAPIResources {
 	kindsLoop:
 		for kind := range gvKinds {
-			am.log.V(logging.DebugLevel).Info("Listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
+			am.logger.V(logging.DebugLevel).Info("Listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 			// delete all existing folders from cache dir before starting next kind
 			err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
 			if err != nil {
-				am.log.Error(err, "unable to remove existing content from cache directory in kindsLoop", "apiCacheDir", *apiCacheDir)
+				am.logger.Error(err, "unable to remove existing content from cache directory in kindsLoop", "apiCacheDir", *apiCacheDir)
 				return err
 			}
 			// tracking number of folders created for this kind
@@ -401,7 +402,7 @@ func (am *Manager) auditResources(
 
 				err := am.client.List(ctx, objList, opts)
 				if err != nil {
-					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
+					am.logger.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
 					continue kindsLoop
 				}
 				// for each batch, create a parent folder
@@ -409,14 +410,14 @@ func (am *Manager) auditResources(
 				subPath = fmt.Sprintf("%s_%d", kind, folderCount)
 				parentDir := path.Join(*apiCacheDir, subPath)
 				if err := os.Mkdir(parentDir, 0o750); err != nil {
-					am.log.Error(err, "Unable to create parentDir", "parentDir", parentDir)
+					am.logger.Error(err, "Unable to create parentDir", "parentDir", parentDir)
 					continue kindsLoop
 				}
 				folderCount++
 				for index := range objList.Items {
 					isExcludedNamespace, err := am.skipExcludedNamespace(&objList.Items[index])
 					if err != nil {
-						log.Error(err, "error while excluding namespaces")
+						am.logger.Error(err, "error while excluding namespaces")
 					}
 
 					if isExcludedNamespace {
@@ -428,11 +429,11 @@ func (am *Manager) auditResources(
 					item := objList.Items[index]
 					jsonBytes, err := item.MarshalJSON()
 					if err != nil {
-						log.Error(err, "error while marshaling unstructured object to JSON")
+						am.logger.Error(err, "error while marshaling unstructured object to JSON")
 						continue
 					}
 					if err := os.WriteFile(destFile, jsonBytes, 0o600); err != nil {
-						log.Error(err, "error writing data to file")
+						am.logger.Error(err, "error writing data to file")
 						continue
 					}
 				}
@@ -440,19 +441,19 @@ func (am *Manager) auditResources(
 				resourceVersion = objList.GetResourceVersion()
 				opts.Continue = objList.GetContinue()
 				if opts.Continue == "" {
-					am.log.V(logging.DebugLevel).Info("Finished listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
+					am.logger.V(logging.DebugLevel).Info("Finished listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 					break
 				}
-				am.log.V(logging.DebugLevel).Info("Requesting next chunk of objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
+				am.logger.V(logging.DebugLevel).Info("Requesting next chunk of objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 			}
 			// Loop through all subDirs to review all files for this kind.
-			am.log.V(logging.DebugLevel).Info("Reviewing objects for GVK", gv.Group, "version", gv.Version, "kind", kind)
+			am.logger.V(logging.DebugLevel).Info("Reviewing objects for GVK", gv.Group, "version", gv.Version, "kind", kind)
 			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
-			am.log.V(logging.DebugLevel).Info("Review complete for GVK", gv.Group, "version", gv.Version, "kind", kind)
+			am.logger.V(logging.DebugLevel).Info("Review complete for GVK", gv.Group, "version", gv.Version, "kind", kind)
 		}
 	}
 
@@ -489,14 +490,14 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		}
 		resp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
 		if err != nil {
-			am.log.Error(err, "Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
+			am.logger.Error(err, "Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
 			continue
 		}
 
 		if *logStatsAudit {
 			logging.LogStatsEntries(
 				am.opa,
-				am.log,
+				am.logger,
 				resp.StatsEntries,
 				"audit from cache review request stats",
 			)
@@ -548,18 +549,18 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 
 		files, err := am.getFilesFromDir(pDir, int(*auditChunkSize))
 		if err != nil {
-			am.log.Error(err, "Unable to get files from directory")
+			am.logger.Error(err, "Unable to get files from directory")
 			continue
 		}
 		for _, fileName := range files {
 			contents, err := os.ReadFile(path.Join(pDir, fileName)) // #nosec G304
 			if err != nil {
-				am.log.Error(err, "Unable to get content from file", "fileName", fileName)
+				am.logger.Error(err, "Unable to get content from file", "fileName", fileName)
 				continue
 			}
 			objFile, err := am.readUnstructured(contents)
 			if err != nil {
-				am.log.Error(err, "Unable to get unstructured data from content in file", "fileName", fileName)
+				am.logger.Error(err, "Unable to get unstructured data from content in file", "fileName", fileName)
 				continue
 			}
 			objNs := objFile.GetNamespace()
@@ -567,7 +568,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			if objNs != "" {
 				nsRef, err := nsCache.Get(ctx, am.client, objNs)
 				if err != nil {
-					am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
+					am.logger.Error(err, "Unable to look up object namespace", "objNs", objNs)
 					continue
 				}
 				ns = &nsRef
@@ -580,7 +581,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 
 			resp, err := am.opa.Review(ctx, augmentedObj, drivers.Stats(*logStatsAudit))
 			if err != nil {
-				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
+				am.logger.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
 				continue
 			}
 
@@ -593,7 +594,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			}
 			resultants, err := am.expansionSystem.Expand(base)
 			if err != nil {
-				am.log.Error(err, "unable to expand object", "objName", objFile.GetName())
+				am.logger.Error(err, "unable to expand object", "objName", objFile.GetName())
 				continue
 			}
 			for _, resultant := range resultants {
@@ -604,7 +605,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				}
 				resultantResp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
 				if err != nil {
-					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
+					am.logger.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
 					continue
 				}
 				expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
@@ -615,7 +616,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			if *logStatsAudit {
 				logging.LogStatsEntries(
 					am.opa,
-					am.log,
+					am.logger,
 					resp.StatsEntries,
 					"audit review request stats",
 				)
@@ -696,12 +697,12 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Audit Manager close")
+			am.logger.Info("Audit Manager close")
 			close(am.stopper)
 			return
 		case <-ticker.C:
 			if err := am.audit(ctx); err != nil {
-				log.Error(err, "audit manager audit() failed")
+				am.logger.Error(err, "audit manager audit() failed")
 			}
 		}
 	}
@@ -709,10 +710,10 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 
 // Start implements controller.Controller.
 func (am *Manager) Start(ctx context.Context) error {
-	log.Info("Starting Audit Manager")
+	am.logger.Info("Starting Audit Manager")
 	go am.auditManagerLoop(ctx)
 	<-ctx.Done()
-	log.Info("Stopping audit manager workers")
+	am.logger.Info("Stopping audit manager workers")
 	return nil
 }
 
@@ -783,7 +784,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		}
 
 		totalViolationsPerEnforcementAction[ea]++
-		logViolation(am.log, r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels())
+		logViolation(am.logger, r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels())
 		if *emitAuditEvents {
 			emitEvent(r.Constraint, timestamp, ea, gvk, namespace, name, rv, r.Msg, am.gkNamespace, uid, am.eventRecorder)
 		}
@@ -795,14 +796,14 @@ func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []sche
 	// if there is a previous reporting thread, close it before starting a new one
 	if am.ucloop != nil {
 		// this is closing the previous audit reporting thread
-		am.log.Info("closing the previous audit reporting thread")
+		am.logger.Info("closing the previous audit reporting thread")
 		close(am.ucloop.stop)
 		select {
 		case <-am.ucloop.stopped:
 		case <-time.After(time.Duration(*auditInterval) * time.Second):
 			// avoid deadlocking in cases where ucloop never stops
 			// this creates potential leak of threads but avoids potential of deadlocking
-			am.log.Info("timeout waiting for previous audit reporting thread to finish")
+			am.logger.Info("timeout waiting for previous audit reporting thread to finish")
 		}
 	}
 
@@ -813,7 +814,7 @@ func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []sche
 		ul:      updateLists,
 		ts:      timestamp,
 		tv:      totalViolations,
-		log:     am.log,
+		log:     am.logger,
 	}
 
 	go am.ucloop.update(ctx, constraintsGVKs)

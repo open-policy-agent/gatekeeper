@@ -64,6 +64,7 @@ func TestWebhookAssign(t *testing.T) {
 		},
 		mutationSystem: sys,
 		deserializer:   codecs.UniversalDeserializer(),
+		logger:         log,
 	}
 
 	raw := []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`)
@@ -130,6 +131,7 @@ func TestWebhookAssignMetadata(t *testing.T) {
 		},
 		mutationSystem: sys,
 		deserializer:   codecs.UniversalDeserializer(),
+		logger:         log,
 	}
 
 	raw := []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`)
