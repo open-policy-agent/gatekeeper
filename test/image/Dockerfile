@@ -5,6 +5,8 @@ ARG BATS_VERSION
 ARG ORAS_VERSION
 ARG YQ_VERSION
 
+RUN git config --global --add safe.directory "*"
+
 RUN apt-get update &&\
     apt-get install -y apt-utils make
 
