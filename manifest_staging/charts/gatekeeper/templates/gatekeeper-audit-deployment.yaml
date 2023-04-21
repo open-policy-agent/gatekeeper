@@ -42,8 +42,10 @@ spec:
         heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
+      {{- with .Values.audit.affinity }}
       affinity:
-        {{- toYaml .Values.audit.affinity | nindent 8 }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
       automountServiceAccountToken: true
       containers:
       - {{- if .Values.image.release }}

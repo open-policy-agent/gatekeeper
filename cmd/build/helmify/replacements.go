@@ -35,7 +35,10 @@ var replacements = map[string]string{
 
 	`HELMSUBST_DEPLOYMENT_AUDIT_POD_SECURITY_CONTEXT: ""`: `{{- toYaml .Values.audit.podSecurityContext | nindent 8 }}`,
 
-	`HELMSUBST_DEPLOYMENT_AUDIT_AFFINITY: ""`: `{{- toYaml .Values.audit.affinity | nindent 8 }}`,
+	`HELMSUBST_DEPLOYMENT_AUDIT_AFFINITY: ""`: `{{- with .Values.audit.affinity }}
+      affinity:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}`,
 
 	`HELMSUBST_DEPLOYMENT_AUDIT_SECURITY_CONTEXT: ""`: `{{- if .Values.enableRuntimeDefaultSeccompProfile }}
           seccompProfile:
@@ -53,7 +56,10 @@ var replacements = map[string]string{
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SECURITY_CONTEXT: ""`: `{{- toYaml .Values.controllerManager.podSecurityContext | nindent 8 }}`,
 
-	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_AFFINITY: ""`: `{{- toYaml .Values.controllerManager.affinity | nindent 8 }}`,
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_AFFINITY: ""`: `{{- with .Values.controllerManager.affinity }}
+      affinity:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}`,
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_TYPE": `{{ .Values.controllerManager.strategyType }}`,
 
