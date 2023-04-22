@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	apitypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -120,17 +119,7 @@ func add(mgr manager.Manager, r *Reconciler) error {
 	if r.eventSource != nil {
 		err = c.Watch(
 			r.eventSource,
-			handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []reconcile.Request {
-				if obj.GetObjectKind().GroupVersionKind() != expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate") {
-					return nil
-				}
-				return []reconcile.Request{{
-					NamespacedName: apitypes.NamespacedName{
-						Namespace: obj.GetNamespace(),
-						Name:      obj.GetName(),
-					},
-				}}
-			}))
+			&handler.EnqueueRequestForObject{})
 		if err != nil {
 			return err
 		}
@@ -174,7 +163,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			r.getTracker().TryCancelExpect(versionedET)
 			return reconcile.Result{}, err
 		}
-		log.V(1).Info("removed expansion template", "template name", et.GetName())
+		log.V(logging.DebugLevel).Info("removed expansion template", "template name", et.GetName())
 		r.registry.remove(request.NamespacedName)
 		r.getTracker().CancelExpect(versionedET)
 		r.queueConflicts(oldConflicts)
@@ -200,8 +189,8 @@ func (r *Reconciler) queueConflicts(old expansion.IDSet) {
 	for tID := range symmetricDiff(old, r.system.GetConflicts()) {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
+		// ExpansionTemplate is cluster-scoped, so we do not set namespace
 		u.SetName(string(tID))
-		u.SetNamespace("default") // ExpansionTemplate is cluster-scoped
 
 		r.events <- event.GenericEvent{Object: u}
 	}

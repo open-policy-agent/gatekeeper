@@ -130,6 +130,9 @@ func genGVKToSchemaGVK(gvk expansionunversioned.GeneratedGVK) schema.GroupVersio
 // mutators. If no ExpansionTemplates match `base`, an empty slice
 // will be returned. If `s.mutationSystem` is nil, no mutations will be applied.
 func (s *System) Expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
 	var res []*Resultant
 	if err := s.expandRecursive(base, &res, 0); err != nil {
 		return nil, err

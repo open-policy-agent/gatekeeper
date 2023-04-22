@@ -153,13 +153,12 @@ func (d *db) edgesForTemplate(template *expansionunversioned.ExpansionTemplate) 
 	return edges
 }
 
-func (d *db) handleRemove(template *expansionunversioned.ExpansionTemplate) {
-	id := keyForTemplate(template)
-
+func (d *db) handleRemove(id TemplateID) {
 	// The template must exist. Existence checks should be done upstream.
 	if _, exists := d.store[id]; !exists {
 		panic(fmt.Errorf("called handleRemove for template %q, but template DNE in store", id))
 	}
+	template := d.store[id].template
 
 	// Update storage
 	delete(d.store, id)
@@ -224,7 +223,7 @@ func (d *db) upsert(template *expansionunversioned.ExpansionTemplate) error {
 	id := keyForTemplate(template)
 	old, hasOld := d.store[id]
 	if hasOld {
-		d.handleRemove(old.template)
+		d.handleRemove(id)
 	}
 
 	newCycle, err := d.handleAdd(template)
@@ -250,7 +249,7 @@ func (d *db) remove(template *expansionunversioned.ExpansionTemplate) {
 		return
 	}
 
-	d.handleRemove(old.template)
+	d.handleRemove(id)
 	// If the removed template was part of a cycle, we need to recheck the graph
 	// in case that cycle was resolved
 	if old.hasConflicts {
