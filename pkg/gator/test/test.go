@@ -28,13 +28,13 @@ func init() {
 }
 
 // options for the Test func.
-type TOpts struct {
+type Opts struct {
 	// Driver specific options
 	IncludeTrace bool
 	GatherStats  bool
 }
 
-func Test(objs []*unstructured.Unstructured, tOpts TOpts) (*GatorResponses, error) {
+func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error) {
 	// create the client
 	driver, err := makeRegoDriver(tOpts)
 	if err != nil {
@@ -186,7 +186,7 @@ func isConstraint(u *unstructured.Unstructured) bool {
 	return gvk.Group == "constraints.gatekeeper.sh"
 }
 
-func makeRegoDriver(tOpts TOpts) (*rego.Driver, error) {
+func makeRegoDriver(tOpts Opts) (*rego.Driver, error) {
 	var args []rego.Arg
 	if tOpts.GatherStats {
 		args = append(args, rego.GatherStats())

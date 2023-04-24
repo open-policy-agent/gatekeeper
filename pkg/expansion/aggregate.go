@@ -10,7 +10,7 @@ import (
 const (
 	childMsgPrefix = "[Implied by %s]"
 
-	ChildStatLabel = "EphemeralReviewFor"
+	ChildStatLabel = "Implied by"
 )
 
 // AggregateResponses aggregates all responses from children into the parent.

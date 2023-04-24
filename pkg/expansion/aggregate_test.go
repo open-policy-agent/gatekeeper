@@ -146,10 +146,6 @@ func Test_AggregateStats(t *testing.T) {
 			child := tc.child
 			AggregateStats(tc.templateName, parent, child)
 
-			// if len(tc.parent.StatsEntries) != tc.expectedStats {
-			// 	t.Errorf("expected %d stats, got %d", tc.expectedStats, len(tc.parent.StatsEntries))
-			// }
-
 			require.Len(t, parent.StatsEntries, tc.expectedStats)
 
 			for _, se := range tc.parent.StatsEntries {

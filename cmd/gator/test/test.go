@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
-	"github.com/open-policy-agent/gatekeeper/cmd/gator/commons"
+	cmdutils "github.com/open-policy-agent/gatekeeper/cmd/gator/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -55,15 +55,16 @@ var (
 )
 
 const (
-	flagNameFilename        = "filename"
-	flagNameOutput          = "output"
-	flagNameImage           = "image"
-	flagNameTempDir         = "tempdir"
-	flagStatsOutputFileName = "stats-ofile"
+	flagNameFilename = "filename"
+	flagNameOutput   = "output"
+	flagNameImage    = "image"
+	flagNameTempDir  = "tempdir"
 
 	stringJSON          = "json"
 	stringYAML          = "yaml"
 	stringHumanFriendly = "default"
+
+	fourSpaceTab = "    "
 )
 
 func init() {
@@ -78,15 +79,15 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
-		commons.ErrFatalf("reading: %v", err)
+		cmdutils.ErrFatalf("reading: %v", err)
 	}
 	if len(unstrucs) == 0 {
-		commons.ErrFatalf("no input data identified")
+		cmdutils.ErrFatalf("no input data identified")
 	}
 
-	responses, err := test.Test(unstrucs, test.TOpts{IncludeTrace: flagIncludeTrace, GatherStats: flagGatherStats})
+	responses, err := test.Test(unstrucs, test.Opts{IncludeTrace: flagIncludeTrace, GatherStats: flagGatherStats})
 	if err != nil {
-		commons.ErrFatalf("auditing objects: %v\n", err)
+		cmdutils.ErrFatalf("auditing objects: %v", err)
 	}
 	results := responses.Results()
 
@@ -107,15 +108,15 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 		var jsonB []byte
 		var err error
 		if stats != nil {
-			statsAndResuluts := map[string]interface{}{"results": results, "stats": stats}
-			jsonB, err = json.MarshalIndent(statsAndResuluts, "", "    ")
+			statsAndResults := map[string]interface{}{"results": results, "stats": stats}
+			jsonB, err = json.MarshalIndent(statsAndResults, "", fourSpaceTab)
 			if err != nil {
-				commons.ErrFatalf("marshaling validation json results and stats: %v", err)
+				cmdutils.ErrFatalf("marshaling validation json results and stats: %v", err)
 			}
 		} else {
-			jsonB, err = json.MarshalIndent(results, "", "    ")
+			jsonB, err = json.MarshalIndent(results, "", fourSpaceTab)
 			if err != nil {
-				commons.ErrFatalf("marshaling validation json results: %v", err)
+				cmdutils.ErrFatalf("marshaling validation json results: %v", err)
 			}
 		}
 
@@ -124,38 +125,38 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 		yamlResults := test.GetYamlFriendlyResults(results)
 		jsonb, err := json.Marshal(yamlResults)
 		if err != nil {
-			commons.ErrFatalf("pre-marshaling results to json: %v", err)
+			cmdutils.ErrFatalf("pre-marshaling results to json: %v", err)
 		}
 
 		unmarshalled := []*test.YamlGatorResult{}
 		err = json.Unmarshal(jsonb, &unmarshalled)
 		if err != nil {
-			commons.ErrFatalf("pre-unmarshaling results from json: %v", err)
+			cmdutils.ErrFatalf("pre-unmarshaling results from json: %v", err)
 		}
 
 		var yamlb []byte
 		if stats != nil {
-			statsAndResuluts := map[string]interface{}{"results": yamlResults, "stats": stats}
+			statsAndResults := map[string]interface{}{"results": yamlResults, "stats": stats}
 
 			statsJSONB, err := json.Marshal(stats)
 			if err != nil {
-				commons.ErrFatalf("pre-marshaling stats to json: %v", err)
+				cmdutils.ErrFatalf("pre-marshaling stats to json: %v", err)
 			}
 
 			unmarshalledStats := []*instrumentation.StatsEntry{}
 			err = json.Unmarshal(statsJSONB, &unmarshalledStats)
 			if err != nil {
-				commons.ErrFatalf("pre-unmarshaling stats from json: %v", err)
+				cmdutils.ErrFatalf("pre-unmarshaling stats from json: %v", err)
 			}
 
-			yamlb, err = yaml.Marshal(statsAndResuluts)
+			yamlb, err = yaml.Marshal(statsAndResults)
 			if err != nil {
-				commons.ErrFatalf("marshaling validation yaml results and stats: %v", err)
+				cmdutils.ErrFatalf("marshaling validation yaml results and stats: %v", err)
 			}
 		} else {
 			yamlb, err = yaml.Marshal(unmarshalled)
 			if err != nil {
-				commons.ErrFatalf("marshaling validation yaml results: %v", err)
+				cmdutils.ErrFatalf("marshaling validation yaml results: %v", err)
 			}
 		}
 

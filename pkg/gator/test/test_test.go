@@ -178,7 +178,7 @@ func TestTest(t *testing.T) {
 				objs = append(objs, u)
 			}
 
-			resps, err := Test(objs, TOpts{})
+			resps, err := Test(objs, Opts{})
 			if tc.err != nil {
 				require.ErrorIs(t, err, tc.err)
 			} else if err != nil {
@@ -218,7 +218,7 @@ func Test_Test_withTrace(t *testing.T) {
 		objs = append(objs, u)
 	}
 
-	resps, err := Test(objs, TOpts{IncludeTrace: true})
+	resps, err := Test(objs, Opts{IncludeTrace: true})
 	if err != nil {
 		t.Errorf("got err '%v', want nil", err)
 	}
@@ -265,7 +265,7 @@ func Test_Test_withStats(t *testing.T) {
 		objs = append(objs, u)
 	}
 
-	resps, err := Test(objs, TOpts{GatherStats: true})
+	resps, err := Test(objs, Opts{GatherStats: true})
 	assert.NoError(t, err)
 
 	actualStats := resps.StatsEntries

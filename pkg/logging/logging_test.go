@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -45,8 +46,8 @@ func Test_LogStatsEntries(t *testing.T) {
 		"test message",
 	)
 
-	require.Contains(t, testBuf.String(), "\"test message\" someLabel=\"someLabelValue\" "+
+	expectedLogLine := fmt.Sprintf("\"test message\" someLabel=\"someLabelValue\" "+
 		"scope=\"someScope\" statsFor=\"someConstranint\" source_type=\"someType\" "+
-		"source_value=\"someValue\" name=\"someStat\" value=\"someValue\" description=\"unknown description\"",
-	)
+		"source_value=\"someValue\" name=\"someStat\" value=\"someValue\" description=\"%s\"", instrumentation.UnknownDescription)
+	require.Contains(t, testBuf.String(), expectedLogLine)
 }

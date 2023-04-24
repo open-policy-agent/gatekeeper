@@ -1,4 +1,4 @@
-package commons
+package util
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ func ErrFatalf(format string, a ...interface{}) {
 	os.Exit(1)
 }
 
-func StringToFile(s, path string) {
+func WriteToFile(s string, path string) {
 	file, err := os.Create(path)
 	if err != nil {
 		ErrFatalf("error creating file at path %s: %v", path, err)
