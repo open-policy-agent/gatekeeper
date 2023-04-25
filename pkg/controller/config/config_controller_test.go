@@ -17,6 +17,7 @@ package config
 
 import (
 	"fmt"
+	"net/http"
 	gosync "sync"
 	"testing"
 	"time"
@@ -34,7 +35,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
-	"github.com/open-policy-agent/gatekeeper/v3/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
@@ -71,9 +71,8 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
-		NewCache:           dynamiccache.New,
-		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c)
+		MapperProvider: func(c *rest.Config, cli *http.Client) (meta.RESTMapper, error) {
+			return apiutil.NewDynamicRESTMapper(c, cli)
 		},
 	})
 	if err != nil {

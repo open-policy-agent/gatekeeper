@@ -52,6 +52,7 @@ var (
 	flagGatherStats  bool
 	flagImages       []string
 	flagTempDir      string
+	flagEnableK8sCel bool
 )
 
 const (
@@ -72,6 +73,7 @@ func init() {
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
 	Cmd.Flags().BoolVarP(&flagIncludeTrace, "trace", "t", false, "include a trace for the underlying Constraint Framework evaluation.")
 	Cmd.Flags().BoolVarP(&flagGatherStats, "stats", "", false, "include performance stats returned from the Constraint Framework.")
+	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "prototype-enable-k8s-native-validation", "", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 }
@@ -85,7 +87,7 @@ func run(cmd *cobra.Command, args []string) {
 		cmdutils.ErrFatalf("no input data identified")
 	}
 
-	responses, err := test.Test(unstrucs, test.Opts{IncludeTrace: flagIncludeTrace, GatherStats: flagGatherStats})
+	responses, err := test.Test(unstrucs, test.Opts{IncludeTrace: flagIncludeTrace, GatherStats: flagGatherStats, UseK8sCEL: flagEnableK8sCel})
 	if err != nil {
 		cmdutils.ErrFatalf("auditing objects: %v", err)
 	}

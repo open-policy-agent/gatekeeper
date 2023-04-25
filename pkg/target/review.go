@@ -17,3 +17,8 @@ type gkReview struct {
 	namespace *corev1.Namespace
 	source    types.SourceType
 }
+
+func (g *gkReview) GetAdmissionRequest() *admissionv1.AdmissionRequest {
+	return &g.AdmissionRequest
+}
+

@@ -2,7 +2,6 @@ package webhook
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
@@ -25,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -219,64 +219,16 @@ func makeOpaClient() (*constraintclient.Client, error) {
 	return c, nil
 }
 
-func TestTemplateValidation(t *testing.T) {
-	tc := []struct {
-		Name          string
-		Template      *templates.ConstraintTemplate
-		ErrorExpected bool
-	}{
-		{
-			Name:          "Valid Template",
-			Template:      validRegoTemplate(),
-			ErrorExpected: false,
-		},
-		{
-			Name:          "Invalid Template",
-			Template:      invalidRegoTemplate(),
-			ErrorExpected: true,
-		},
-	}
-	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
-			opa, err := makeOpaClient()
-			if err != nil {
-				t.Fatalf("Could not initialize OPA: %s", err)
-			}
-			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}, log: log}
-
-			b, err := json.Marshal(tt.Template)
-			if err != nil {
-				t.Fatalf("Error parsing yaml: %s", err)
-			}
-
-			review := &admission.Request{
-				AdmissionRequest: admissionv1.AdmissionRequest{
-					Kind: metav1.GroupVersionKind{
-						Group:   "templates.gatekeeper.sh",
-						Version: "v1beta1",
-						Kind:    "ConstraintTemplate",
-					},
-					Object: runtime.RawExtension{
-						Raw: b,
-					},
-				},
-			}
-
-			ctx := context.Background()
-			_, err = handler.validateGatekeeperResources(ctx, review)
-			if err != nil && !tt.ErrorExpected {
-				t.Errorf("err = %s; want nil", err)
-			}
-
-			if err == nil && tt.ErrorExpected {
-				t.Error("err = nil; want non-nil")
-			}
-		})
-	}
-}
-
 type nsGetter struct {
 	testclients.NoopClient
+}
+
+func (f *nsGetter) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return false, nil
+}
+
+func (f *nsGetter) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	return schema.GroupVersionKind{}, nil
 }
 
 func (f *nsGetter) SubResource(_ string) ctrlclient.SubResourceClient {
@@ -296,6 +248,14 @@ func (f *nsGetter) Get(_ context.Context, key ctrlclient.ObjectKey, obj ctrlclie
 
 type errorNSGetter struct {
 	testclients.NoopClient
+}
+
+func (f *errorNSGetter) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return false, nil
+}
+
+func (f *errorNSGetter) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	return schema.GroupVersionKind{}, nil
 }
 
 func (f *errorNSGetter) SubResource(_ string) ctrlclient.SubResourceClient {

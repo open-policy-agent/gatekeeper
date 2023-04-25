@@ -3,6 +3,7 @@ package constrainttemplatestatus_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
-	"github.com/open-policy-agent/gatekeeper/v3/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,9 +44,8 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
-		NewCache:           dynamiccache.New,
-		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c)
+		MapperProvider: func(c *rest.Config, cli *http.Client) (meta.RESTMapper, error) {
+			return apiutil.NewDynamicRESTMapper(c, cli)
 		},
 		Logger: testutils.NewLogger(t),
 	})

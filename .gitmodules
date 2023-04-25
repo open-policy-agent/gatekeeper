@@ -1,0 +1,3 @@
+[submodule "third_party/sigs.k8s.io/controller-runtime"]
+	path = third_party/sigs.k8s.io/controller-runtime
+	url = git@github.com:kubernetes-sigs/controller-runtime.git

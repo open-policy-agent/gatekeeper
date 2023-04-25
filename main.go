@@ -16,6 +16,7 @@ limitations under the License.
 package main
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"flag"
@@ -30,6 +31,7 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	api "github.com/open-policy-agent/gatekeeper/v3/apis"
@@ -54,7 +56,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/version"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
-	"github.com/open-policy-agent/gatekeeper/v3/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	_ "go.uber.org/automaxprocs" // set GOMAXPROCS to the number of container cores, if known.
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -70,6 +71,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+	crWebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 const (
@@ -107,6 +109,7 @@ var (
 	certServiceName      = flag.String("cert-service-name", "gatekeeper-webhook-service", "The service name used to generate the TLS cert's hostname. Defaults to gatekeeper-webhook-service")
 	enableTLSHealthcheck = flag.Bool("enable-tls-healthcheck", false, "enable probing webhook API with certificate stored in certDir")
 	disabledBuiltins     = util.NewFlagSet()
+	enableK8sCel         = flag.Bool("prototype-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
 )
 
 func init() {
@@ -209,17 +212,31 @@ func innerMain() int {
 	// Must be called before ctrl.NewManager!
 	metrics.DisableRESTClientMetrics()
 
+	serverOpts := crWebhook.Options{
+		Host:          *host,
+		Port:          *port,
+		CertDir:       *certDir,
+		TLSMinVersion: *webhook.TLSMinVersion,
+	}
+	if *webhook.ClientCAName != "" {
+		serverOpts.ClientCAName = *webhook.ClientCAName
+		serverOpts.TLSOpts = []func(*tls.Config){
+			func(cfg *tls.Config) {
+				cfg.VerifyConnection = webhook.GetCertNameVerifier()
+			},
+		}
+	}
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
-		NewCache:               dynamiccache.New,
 		Scheme:                 scheme,
 		MetricsBindAddress:     *metricsAddr,
 		LeaderElection:         false,
 		Port:                   *port,
 		Host:                   *host,
+		WebhookServer:          crWebhook.NewServer(serverOpts),
 		CertDir:                *certDir,
 		HealthProbeBindAddress: *healthAddr,
-		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c)
+		MapperProvider: func(c *rest.Config, cli *http.Client) (meta.RESTMapper, error) {
+			return apiutil.NewDynamicRESTMapper(c, cli)
 		},
 	})
 	if err != nil {
@@ -367,14 +384,28 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		// register the client cert watcher to the mutation system
 		mutationOpts.ClientCertWatcher = certWatcher
 	}
+
+	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
+
+	if *enableK8sCel {
+		// initialize K8sValidation
+		k8sDriver, err := k8scel.New()
+		if err != nil {
+			setupLog.Error(err, "unable to set up K8s native driver")
+			return err
+		}
+		cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
+	}
+
 	// initialize OPA
 	driver, err := rego.New(args...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up Driver")
 		return err
 	}
+	cfArgs = append(cfArgs, constraintclient.Driver(driver))
 
-	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	client, err := constraintclient.NewClient(cfArgs...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")
 		return err

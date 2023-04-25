@@ -62,7 +62,7 @@ type AddFunction func(manager.Manager) error
 // It supports non-blocking calls to get informers, as well as the
 // ability to remove an informer dynamically.
 type RemovableCache interface {
-	GetInformerNonBlocking(obj client.Object) (cache.Informer, error)
+	GetInformer(_ context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error)
 	List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
 	Remove(obj client.Object) error
 }
@@ -138,13 +138,13 @@ func (wm *Manager) GetManagedGVK() []schema.GroupVersionKind {
 	return wm.managedKinds.GetGVK()
 }
 
-func (wm *Manager) addWatch(r *Registrar, gvk schema.GroupVersionKind) error {
+func (wm *Manager) addWatch(ctx context.Context, r *Registrar, gvk schema.GroupVersionKind) error {
 	wm.watchedMux.Lock()
 	defer wm.watchedMux.Unlock()
-	return wm.doAddWatch(r, gvk)
+	return wm.doAddWatch(ctx, r, gvk)
 }
 
-func (wm *Manager) doAddWatch(r *Registrar, gvk schema.GroupVersionKind) error {
+func (wm *Manager) doAddWatch(ctx context.Context, r *Registrar, gvk schema.GroupVersionKind) error {
 	// lock acquired by caller
 
 	if r == nil {
@@ -177,7 +177,7 @@ func (wm *Manager) doAddWatch(r *Registrar, gvk schema.GroupVersionKind) error {
 	default:
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(gvk)
-		informer, err := wm.cache.GetInformerNonBlocking(u)
+		informer, err := wm.cache.GetInformer(ctx, u, cache.InformerGetOption(cache.BlockUntilSynced(false)))
 		if err != nil || informer == nil {
 			// This is expected to fail if a CRD is unregistered.
 			return fmt.Errorf("getting informer for kind: %+v %w", gvk, err)
@@ -201,13 +201,13 @@ func (wm *Manager) doAddWatch(r *Registrar, gvk schema.GroupVersionKind) error {
 	return nil
 }
 
-func (wm *Manager) removeWatch(r *Registrar, gvk schema.GroupVersionKind) error {
+func (wm *Manager) removeWatch(ctx context.Context, r *Registrar, gvk schema.GroupVersionKind) error {
 	wm.watchedMux.Lock()
 	defer wm.watchedMux.Unlock()
-	return wm.doRemoveWatch(r, gvk)
+	return wm.doRemoveWatch(ctx, r, gvk)
 }
 
-func (wm *Manager) doRemoveWatch(r *Registrar, gvk schema.GroupVersionKind) error {
+func (wm *Manager) doRemoveWatch(ctx context.Context, r *Registrar, gvk schema.GroupVersionKind) error {
 	// lock acquired by caller
 
 	v, ok := wm.watchedKinds[gvk]
@@ -250,7 +250,7 @@ func (wm *Manager) doRemoveWatch(r *Registrar, gvk schema.GroupVersionKind) erro
 }
 
 // replaceWatches ensures all and only desired watches are running.
-func (wm *Manager) replaceWatches(r *Registrar) error {
+func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 	wm.watchedMux.Lock()
 	defer wm.watchedMux.Unlock()
 
@@ -262,7 +262,7 @@ func (wm *Manager) replaceWatches(r *Registrar) error {
 			// This registrar still desires this gvk, skip.
 			continue
 		}
-		if err := wm.doRemoveWatch(r, gvk); err != nil {
+		if err := wm.doRemoveWatch(ctx, r, gvk); err != nil {
 			errlist = append(errlist, fmt.Errorf("removing watch for %+v %w", gvk, err))
 		}
 	}
@@ -272,7 +272,7 @@ func (wm *Manager) replaceWatches(r *Registrar) error {
 		if !v.registrars[r] {
 			continue
 		}
-		if err := wm.doAddWatch(r, gvk); err != nil {
+		if err := wm.doAddWatch(ctx, r, gvk); err != nil {
 			errlist = append(errlist, fmt.Errorf("adding watch for %+v %w", gvk, err))
 		}
 	}
@@ -288,7 +288,7 @@ func (wm *Manager) replaceWatches(r *Registrar) error {
 }
 
 // OnAdd implements cache.ResourceEventHandler. Called by informers.
-func (wm *Manager) OnAdd(obj interface{}) {
+func (wm *Manager) OnAdd(obj interface{}, _ bool) {
 	// Send event to eventLoop() for processing
 	select {
 	case wm.events <- obj:

@@ -2,6 +2,7 @@ package externaldata
 
 import (
 	"context"
+	"net/http"
 	gosync "sync"
 	"testing"
 	"time"
@@ -47,8 +48,8 @@ func setupManager(t *testing.T) manager.Manager {
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
-		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c)
+		MapperProvider: func(c *rest.Config, cli *http.Client) (meta.RESTMapper, error) {
+			return apiutil.NewDynamicRESTMapper(c, cli)
 		},
 	})
 	if err != nil {

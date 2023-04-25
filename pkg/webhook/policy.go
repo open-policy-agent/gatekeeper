@@ -30,7 +30,6 @@ import (
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -120,12 +119,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 	}
 	handler.semaphore = make(chan struct{}, threadCount)
 	wh := &admission.Webhook{Handler: handler}
-	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
-	// Otherwise we risk having unstable logger names for the webhook.
-	if err := wh.InjectLogger(log); err != nil {
-		return err
-	}
-	congifureWebhookServer(mgr.GetWebhookServer()).Register("/v1/admit", wh)
+	mgr.GetWebhookServer().Register("/v1/admit", wh)
 	return nil
 }
 
@@ -383,18 +377,6 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 
 	// Ensure that it is possible to generate a CRD for this ConstraintTemplate.
 	_, err = h.opa.CreateCRD(ctx, unversioned)
-	if err != nil {
-		return true, err
-	}
-
-	// Create a temporary Driver and attempt to add the Template to it. This
-	// ensures the Rego code both parses and compiles.
-	d, err := rego.New()
-	if err != nil {
-		return false, fmt.Errorf("unable to create Driver: %w", err)
-	}
-
-	err = d.AddTemplate(ctx, unversioned)
 	if err != nil {
 		return true, err
 	}
