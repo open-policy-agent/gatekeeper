@@ -16,19 +16,17 @@ that create a resource that violates a constraint.
 
 ## `ExpansionTemplate`s explained
 
-An `ExpansionTemplate` is a custom resource that Gatekeeper will use to simulate a workload resource expansion. Gatekeeper will create temporary, fake resources and validate the constraints against them. We refer to these resources that Gatekeeper creates for validation purposes as `expanded resources`, but  the terms `mock resources`, `simulated resources`, `resulting resources`, and `resultant resources` all refer to the same notion.
+An `ExpansionTemplate` is a custom resource that Gatekeeper will use to create temporary, fake resources and validate the constraints against them. We refer to these resources that Gatekeeper creates for validation purposes as `expanded resources`. We refer to the `Deployment` or other workload resource as the `parent resource` and the act of creating those `expanded` resources as `expansion`.
 
 The `ExpansionTemplate` custom resource specifies:
 
-- Which workload resource(s) should be simulated, specified by their GVK
-- The GVK of the resulting resources
-- The "source", a field to use as the blueprint for the resulting resource. The template
-  source is a field on the parent resource which will be used as the base (TODO: define) for
-  expanding. For example, in a case where a
+- Which workload resource(s) should be expanded, specified by their GVK
+- The GVK of the expanded resources
+- The "source" as defined in the field `templateSource` on the `parent resource`, which is used as the blueprint for the expanded resource. For example, in a case where a
   `Deployment` expands into a `Pod`, `spec.template` would typically be the
   source.
-- Optionally, an `enforcementAction` override can be used when validating resultant
-  resources. If this field is set, any violations against the resulting resource
+- Optionally, an `enforcementAction` override can be used when validating expanded
+  resources. If this field is set, any violations against the expanded resource
   will use this enforcement action. If an enforcement action is not specified by
   the `ExpansionTemplate`, the enforcement action set by the Constraint in
   violation will be used.
@@ -62,33 +60,32 @@ spec:
 ```
 
 With this `ExpansionTemplate`, any constraints that are configured to target
-`Pods` will also be evaluated on the temporary, fake pods that Gatekeeper creates when a `Deployment` or `ReplicaSet` is
-being reviewed. Any violations created against these resulting `Pod`s, and only these resulting `Pod`s, will have their
+`Pods` will also be evaluated on the `expanded` pods that Gatekeeper creates when a `Deployment` or `ReplicaSet` is
+being reviewed. Any violations created against these expanded `Pod`s, and only these expanded `Pod`s, will have their
 enforcement action set to `warn`, regardless of the enforcement actions
 specified by the Constraint in violation.
 
-If, for any reason, you want to exempt simulated resources from a specific
-constraint, look at the [Match Source](#match-source) section below.
+To see how to use Mutators and Constraints to exclusively review expanded resources, see the [Match Source](#match-source) section below.
 
 ### Limitations
 
 #### Sidecars and Mutators
 
-It may not always be possible to build an accurate representation of a
-mock resource by looking at the workload resource alone. For example, suppose a
+It may not always be possible to build an accurate representation of an
+expanded resource by looking at the workload resource alone. For example, suppose a
 cluster is using [Istio](https://istio.io/), which will inject a sidecar container on specific
 resources. This sidecar configuration is not specified in the config of the
 workload resource (i.e. Deployment), but rather injected by Istio's webhook. In
-order to accurately represent mock resources modified by controllers or
+order to accurately represent expanded resources modified by controllers or
 webhooks, Gatekeeper leverages its
 [Mutations](mutation.md)
-feature to allow mock resources to be manipulated into their desired form. In
+feature to allow expanded resources to be manipulated into their desired form. In
 the Istio example, `Assign` and `ModifySet` mutators could be configured to
-mimic Istio sidecar injection. For further details on mutating mock resources
+mimic Istio sidecar injection. For further details on mutating expanded resources
 see the [Match Source](#match-source) section below, or to see a working example,
-see the [Example](#example) section.
+see the [Mutating Example](#mutating-example) section.
 
-#### Enforcement Points
+#### Unknown Data
 
 Any resources configured for expansion will be expanded by both the validating
 webhook and
@@ -96,15 +93,15 @@ webhook and
 feature will only be enabled if a user creates an `ExpansionTemplate` that
 targets any resources that exist on the cluster.
 
-Note that the accuracy of enforcement depends on how well the mock resource
+Note that the accuracy of enforcement depends on how well the expanded resource
 resembles the real thing. Mutations can help with this, but 100% accuracy is
 impossible because not all fields can be predicted. For instance, Deployments
-create pods with random names. Inaccurate mocks may lead to over- or under-
-enforcement. In the case of under-enforcement, the resultant pod should still be
+create pods with random names. Inaccurately expanded resources may lead to over- or under-
+enforcement. In the case of under-enforcement, the expanded pod should still be
 rejected. Finally, non-state-based policies (those that rely on transient
 metadata such as requesting user or time of creation) cannot be enforced
 accurately. This is because such metadata would necessarily be different when
-creating the resultant resource. For example, a Deployment is created using the
+creating the expanded resource. For example, a Deployment is created using the
 requesting user's account, but the pod creation request comes from the service
 account of the Deployment controller.
 
@@ -180,7 +177,7 @@ What follows is an example of:
 - an  `ExpansionTemplate` configured to expand `Deployments` into `Pods`
 - an `Assign` mutator to add the Istio sidecar container to `Pods`
 - a `ModifySet` mutator to add the `proxy` and `sidecar` args
-- an inbound `Deployment`, and the resulting `Pod`
+- an inbound `Deployment`, and the expanded `Pod`
 
 **Note that the Mutators set the `source: Generated` field, which will cause
 them to only be applied when expanding resources specified
