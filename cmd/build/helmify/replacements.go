@@ -123,6 +123,15 @@ var replacements = map[string]string{
     - '*'
   {{- end }}`,
 
+	"HELMSUBST_MUTATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.webhookURL }}
+    url: https://{{ .Values.webhookURL }}/v1/mutate
+    {{- else }}
+    service:
+      name: gatekeeper-webhook-service
+      namespace: '{{ .Release.Namespace }}'
+      path: /v1/mutate
+    {{- end }}`,
+
 	"HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT": `{{ .Values.validatingWebhookTimeoutSeconds }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.validatingWebhookFailurePolicy }}`,
@@ -147,6 +156,15 @@ var replacements = map[string]string{
 	"HELMSUBST_VALIDATING_WEBHOOK_OBJECT_SELECTOR": `{{ toYaml .Values.validatingWebhookObjectSelector }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY": `{{ .Values.validatingWebhookCheckIgnoreFailurePolicy }}`,
+
+	"HELMSUBST_VALIDATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.webhookURL }}
+    url: https://{{ .Values.webhookURL }}/v1/admit
+    {{- else }}
+    service:
+      name: gatekeeper-webhook-service
+      namespace: '{{ .Release.Namespace }}'
+      path: /v1/admit
+    {{- end }}`,
 
 	"HELMSUBST_RESOURCEQUOTA_POD_LIMIT": `{{ .Values.podCountLimit }}`,
 

@@ -15,10 +15,14 @@ webhooks:
   - v1
   - v1beta1
   clientConfig:
+    {{- if .Values.webhookURL }}
+    url: https://{{ .Values.webhookURL }}/v1/admit
+    {{- else }}
     service:
       name: gatekeeper-webhook-service
       namespace: '{{ .Release.Namespace }}'
       path: /v1/admit
+    {{- end }}
   failurePolicy: {{ .Values.validatingWebhookFailurePolicy }}
   matchPolicy: Exact
   name: validation.gatekeeper.sh
