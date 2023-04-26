@@ -7,18 +7,12 @@ Generally, design docs are on Google docs:
 ## In Development
 
 ## Proposed
-* [Template e2e Testing Design](https://docs.google.com/document/d/15nWc9TH97LF9o58CTVxYxFM9tYk8-seB5erIa2gouPo/edit)
-* [ByPod Status Design](https://docs.google.com/document/d/13xmVQuE9Q8CFDpL9pzpoAyH1nIzHndP0OfccXVShiPo/edit)
-* [Namespace-Scoped Constraints](https://docs.google.com/document/d/1-pY7B5C6R0fjUbDu8izlcP7MSUDVDHv5XK16BFyTGRc/edit#heading=h.w8j68o8vjdts)
-* [Mutation Design - 4th Edition (current approach)](https://docs.google.com/document/d/1MdchNFz9guycX__QMGxpJviPaT_MZs8iXaAFqCvoXYQ/edit?ts=5f73fb77#
-)
-   * [Mutation Interfaces (for the current approach)](https://docs.google.com/document/d/1c5Z3g6Zsfmga7xod4--t6RrXamdAaMaqYzPNujtZb10/edit)
+* Mutation (see [implemented](#implemented) for current version)
    * [OPA Gatekeeper Mutation (alternate proposal)](https://docs.google.com/document/d/1LtNIxd-Y3oh0HPgPYdaVV7t2c6vBSwzYAFcTyxQYZjE/edit)
    * [Mutation Revised Design Doc (June 2019)](https://docs.google.com/document/d/1G7WgZKx1Y3VOTUjrqn7DjDaZgSKCIZowILm_I6psrw0/edit#heading=h.mtvdjag5uj9)
    * [Mutation Initial Design Doc (April 2019)](https://docs.google.com/document/d/1qTHwqoUX8AL2jodyWKB_2szrGDwhi14Ra_LlQ-ogtck/edit#heading=h.iu1ppjy7g7j)
-* [External Data](https://docs.google.com/document/d/1hPi86jdsCKg8puYT5_s_73mPGExUJeZfyKmvG-XWtPc/edit#)
-* [gator validate](https://docs.google.com/document/d/1B0hXDia8SExOkCVAEbPVHFJmnWeJgHziGvMxnzrENa0/edit)
 * [Sync Resource](https://docs.google.com/document/d/1ZbXaEh7v_HcgrRu7N-kEucU2pXyq1Rt7cSmmFOBN2q8/edit)
+* [Gatekeeper constraint per enforcement point enforcement actions](https://docs.google.com/document/d/1QIABjZN9B8oBZF5mm1hz5IhpTGulm1jTNn20nYIF-Hc/edit#heading=h.9oaxevykg8w6)
 
 ## Implemented
 * [V3 Accepted Design](https://docs.google.com/document/d/1yC4wgpVoJj6ngYnSTtO-HeaIBl05gla562sD7qKPy3M/edit#heading=h.z0bjqzl81dpe)
@@ -35,6 +29,13 @@ Generally, design docs are on Google docs:
 * [Gatekeeper v1beta1 CRD Deprecation](https://docs.google.com/document/d/12TD9vk79X3y0RgNxURamW4tQOyd6YjA6WrwDAqcplwg/edit#)
 * [Compiler Sharding Design](https://docs.google.com/document/d/1ibCxaI-7HyWyDjQNL4iDRMHnrauufIMJ1D6LwIKdlsI/edit)
 * [External Data TLS Support](https://docs.google.com/document/d/1GjV3WeC2bgQ3j37_mMpY9hr7YOAqzSJ6jDSu-DVrcmU/edit)
+* [Template e2e Testing Design](https://docs.google.com/document/d/15nWc9TH97LF9o58CTVxYxFM9tYk8-seB5erIa2gouPo/edit)
+* [ByPod Status Design](https://docs.google.com/document/d/13xmVQuE9Q8CFDpL9pzpoAyH1nIzHndP0OfccXVShiPo/edit)
+* [Namespace-Scoped Constraints](https://docs.google.com/document/d/1-pY7B5C6R0fjUbDu8izlcP7MSUDVDHv5XK16BFyTGRc/edit#heading=h.w8j68o8vjdts)
+* [Mutation Design - 4th Edition (current approach)](https://docs.google.com/document/d/1MdchNFz9guycX__QMGxpJviPaT_MZs8iXaAFqCvoXYQ/edit?ts=5f73fb77#)
+   * [Mutation Interfaces (for the current approach)](https://docs.google.com/document/d/1c5Z3g6Zsfmga7xod4--t6RrXamdAaMaqYzPNujtZb10/edit)
+* [External Data](https://docs.google.com/document/d/1hPi86jdsCKg8puYT5_s_73mPGExUJeZfyKmvG-XWtPc/edit#)
+* [gator validate](https://docs.google.com/document/d/1B0hXDia8SExOkCVAEbPVHFJmnWeJgHziGvMxnzrENa0/edit)
 
 ## Roadmap (in development)
 * See [milestones](https://github.com/open-policy-agent/gatekeeper/milestones?direction=asc&sort=due_date)
