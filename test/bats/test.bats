@@ -475,8 +475,13 @@ __expansion_audit_test() {
   # test adding a ExpansionTemplate that creates a cycle updates template's status
   run kubectl apply -f test/expansion/expand_pod_cronjob.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get -f test/expansion/expand_pod_cronjob.yaml -ojson | jq -r -e '.status.byPod[0]'"
+  # expand-cronjobs, expand-jobs, and expand_pod_cronjob should each have an error set in their status
   local status_err=$(kubectl get -f test/expansion/expand_pod_cronjob.yaml -o jsonpath='{.status.byPod[0].errors}' | grep "template forms expansion cycle" | wc -l)
   assert_match "${status_err}" "1"
+  local status_err2=$(kubectl get expansiontemplate expand-cronjobs -o jsonpath='{.status.byPod[0].errors}' | grep "template forms expansion cycle" | wc -l)
+  assert_match "${status_err2}" "1"
+  local status_err3=$(kubectl get expansiontemplate expand-jobs -o jsonpath='{.status.byPod[0].errors}' | grep "template forms expansion cycle" | wc -l)
+  assert_match "${status_err3}" "1"
 
   # cleanup
   run kubectl delete --ignore-not-found namespace loadbalancers

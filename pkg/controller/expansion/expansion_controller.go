@@ -133,7 +133,7 @@ func add(mgr manager.Manager, r *Reconciler) error {
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	defer r.registry.report(ctx)
-	log.V(1).Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
+	log.V(logging.DebugLevel).Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
 
 	deleted := false
 	versionedET := &v1alpha1.ExpansionTemplate{}
