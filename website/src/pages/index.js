@@ -21,7 +21,7 @@ function HeroBanner() {
                 message:
                   'A customizable cloud native policy controller that helps <b>enforce policies and strengthen governance</b>',
                 description:
-                  'Home page hero title, can contain simple html tags',
+                  'A customizable cloud native policy controller that helps enforce policies and strengthen governance',
               }),
             }}
           />
@@ -216,8 +216,8 @@ export default function Home() {
   const {siteConfig} = useDocusaurusContext();
   return (
     <Layout
-      title={`Hello from ${siteConfig.title}`}
-      description="Description will go into a meta tag in <head />">
+      title={`${siteConfig.title}`}
+      description="Open Policy Agent Gatekeeper">
       <HeroBanner />
       <main>
         <ContributingCompanies />
