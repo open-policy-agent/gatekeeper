@@ -7,7 +7,7 @@ title: Working with Workload Resources
 
 [Workload resources](https://kubernetes.io/docs/concepts/workloads/) are Kubernetes resources like Deployments or DaemonSets that create Pods by-way-of a controller. Because many Gatekeeper validation policies are written to enforce against Pods, like those found in the [Gatekeeper policy library](https://www.github.com/open-policy-agent/gatekeeper-library), it is important to recognize that Gatekeeper Pod violation messages will not be directly reported to the user when using the library as those Pods are created from workload resources.
 
-To reject workload resources that can create a resource that violates a constraint, checkout the [Validation of Workflow Resources](expansion.md) feature available in Gatekeeper v3.10+.
+To reject workload resources that can create a resource that violates a constraint, checkout the [Validation of Workload Resources](expansion.md) feature available in Gatekeeper v3.10+.
 
 ### Example
 

@@ -60,7 +60,6 @@ func Test_formatOutput(t *testing.T) {
         object:
             kind: kind
     enforcementaction: ""
-    evaluationmeta: null
   violatingObject:
     bar: xyz
   trace: xyz

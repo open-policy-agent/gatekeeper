@@ -17,6 +17,7 @@ import (
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
@@ -31,6 +32,15 @@ import (
 const (
 	libRoot   = "data.lib"
 	violation = "violation"
+
+	templateRunTimeNS     = "templateRunTimeNS"
+	templateRunTimeNsDesc = "the number of nanoseconds it took to evaluate all constraints for a template"
+
+	constraintCountName        = "constraintCount"
+	constraintCountDescription = "the number of constraints that were evaluated for the given constraint kind"
+
+	tracingEnabledLabelName = "TracingEnabled"
+	printEnabledLabelName   = "PrintEnabled"
 )
 
 var _ drivers.Driver = &Driver{}
@@ -72,14 +82,9 @@ type Driver struct {
 
 	// clientCertWatcher is a watcher for the TLS certificate used to communicate with providers.
 	clientCertWatcher *certwatcher.CertWatcher
-}
 
-// EvaluationMeta has rego specific metadata from evaluation.
-type EvaluationMeta struct {
-	// TemplateRunTime is the number of milliseconds it took to evaluate all constraints for a template.
-	TemplateRunTime float64 `json:"templateRunTime"`
-	// ConstraintCount indicates how many constraints were evaluated for an underlying rego engine eval call.
-	ConstraintCount uint `json:"constraintCount"`
+	// gatherStats controls whether the driver gathers any stats around its API calls.
+	gatherStats bool
 }
 
 // Name returns the name of the driver.
@@ -233,9 +238,9 @@ func (d *Driver) eval(ctx context.Context, compiler *ast.Compiler, target string
 	return res, t, err
 }
 
-func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...drivers.QueryOpt) ([]*types.Result, *string, error) {
+func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...drivers.QueryOpt) (*drivers.QueryResponse, error) {
 	if len(constraints) == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	constraintsByKind := toConstraintsByKind(constraints)
@@ -250,11 +255,18 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 	// once per call to Query instead of once per compiler.
 	reviewMap, err := toInterfaceMap(review)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	d.mtx.RLock()
 	defer d.mtx.RUnlock()
+
+	cfg := &drivers.QueryCfg{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	var statsEntries []*instrumentation.StatsEntry
 
 	for kind, kindConstraints := range constraintsByKind {
 		evalStartTime := time.Now()
@@ -263,14 +275,14 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 			// The Template was just removed, so the Driver is in an inconsistent
 			// state with Client. Raise this as an error rather than attempting to
 			// continue.
-			return nil, nil, fmt.Errorf("missing Template %q for target %q", kind, target)
+			return nil, fmt.Errorf("missing Template %q for target %q", kind, target)
 		}
 
 		// Parse input into an ast.Value to avoid round-tripping through JSON when
 		// possible.
 		parsedInput, err := toParsedInput(target, kindConstraints, reviewMap)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		resultSet, trace, err := d.eval(ctx, compiler, target, path, parsedInput, opts...)
@@ -297,25 +309,54 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 
 		kindResults, err := drivers.ToResults(constraintsMap, resultSet)
 		if err != nil {
-			return nil, nil, err
-		}
-
-		for _, result := range kindResults {
-			result.EvaluationMeta = EvaluationMeta{
-				TemplateRunTime: float64(evalEndTime.Nanoseconds()) / 1000000,
-				ConstraintCount: uint(len(kindResults)),
-			}
+			return nil, err
 		}
 
 		results = append(results, kindResults...)
+
+		if d.gatherStats || (cfg != nil && cfg.StatsEnabled) {
+			statsEntries = append(statsEntries,
+				&instrumentation.StatsEntry{
+					Scope:    instrumentation.TemplateScope,
+					StatsFor: kind,
+					Stats: []*instrumentation.Stat{
+						{
+							Name:  templateRunTimeNS,
+							Value: uint64(evalEndTime.Nanoseconds()),
+							Source: instrumentation.Source{
+								Type:  instrumentation.EngineSourceType,
+								Value: schema.Name,
+							},
+						},
+						{
+							Name:  constraintCountName,
+							Value: len(kindConstraints),
+							Source: instrumentation.Source{
+								Type:  instrumentation.EngineSourceType,
+								Value: schema.Name,
+							},
+						},
+					},
+					Labels: []*instrumentation.Label{
+						{
+							Name:  tracingEnabledLabelName,
+							Value: d.traceEnabled || cfg.TracingEnabled,
+						},
+						{
+							Name:  printEnabledLabelName,
+							Value: d.printEnabled,
+						},
+					},
+				})
+		}
 	}
 
 	traceString := traceBuilder.String()
 	if len(traceString) != 0 {
-		return results, &traceString, nil
+		return &drivers.QueryResponse{Results: results, Trace: &traceString, StatsEntries: statsEntries}, nil
 	}
 
-	return results, nil, nil
+	return &drivers.QueryResponse{Results: results, StatsEntries: statsEntries}, nil
 }
 
 func (d *Driver) Dump(ctx context.Context) (string, error) {
@@ -356,6 +397,17 @@ func (d *Driver) Dump(ctx context.Context) (string, error) {
 	}
 
 	return string(b), nil
+}
+
+func (d *Driver) GetDescriptionForStat(statName string) (string, error) {
+	switch statName {
+	case templateRunTimeNS:
+		return templateRunTimeNsDesc, nil
+	case constraintCountName:
+		return constraintCountDescription, nil
+	default:
+		return "", fmt.Errorf("unknown stat name")
+	}
 }
 
 func (d *Driver) getTLSCertificate() (*tls.Certificate, error) {
