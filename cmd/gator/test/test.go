@@ -138,13 +138,17 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 		if stats != nil {
 			statsAndResults := map[string]interface{}{"results": yamlResults, "stats": stats}
 
-			statsJSONB, err := json.Marshal(stats)
+			statsJSONB, err := json.Marshal(statsAndResults)
 			if err != nil {
 				cmdutils.ErrFatalf("pre-marshaling stats to json: %v", err)
 			}
 
-			unmarshalledStats := []*instrumentation.StatsEntry{}
-			err = json.Unmarshal(statsJSONB, &unmarshalledStats)
+			var statsAndResultsStruct = struct {
+				Results []*test.YamlGatorResult
+				Stats   []*instrumentation.StatsEntry
+			}{}
+
+			err = json.Unmarshal(statsJSONB, &statsAndResultsStruct)
 			if err != nil {
 				cmdutils.ErrFatalf("pre-unmarshaling stats from json: %v", err)
 			}

@@ -46,12 +46,9 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 		return nil, fmt.Errorf("creating OPA client: %w", err)
 	}
 
-	// mark off which indices hold objs that are templates or constraints
-	templatesOrConstraints := make([]bool, len(objs))
-
 	// search for templates, add them if they exist
 	ctx := context.Background()
-	for idx, obj := range objs {
+	for _, obj := range objs {
 		if !isTemplate(obj) {
 			continue
 		}
@@ -65,13 +62,11 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 		if err != nil {
 			return nil, fmt.Errorf("adding template %q: %w", templ.GetName(), err)
 		}
-
-		templatesOrConstraints[idx] = true
 	}
 
 	// add all constraints.  A constraint must be added after its associated
 	// template or OPA will return an error
-	for idx, obj := range objs {
+	for _, obj := range objs {
 		if !isConstraint(obj) {
 			continue
 		}
@@ -80,8 +75,6 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 		if err != nil {
 			return nil, fmt.Errorf("adding constraint %q: %w", obj.GetName(), err)
 		}
-
-		templatesOrConstraints[idx] = true
 	}
 
 	// finally, add all the data.
@@ -102,12 +95,7 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 	responses := &GatorResponses{
 		ByTarget: make(map[string]*GatorResponse),
 	}
-	for idx, obj := range objs {
-		if templatesOrConstraints[idx] {
-			// skip review on anything that is a constraint or a template
-			continue
-		}
-
+	for _, obj := range objs {
 		// Try to attach the namespace if it was supplied (ns will be nil otherwise)
 		ns, _ := er.NamespaceForResource(obj)
 		au := target.AugmentedUnstructured{

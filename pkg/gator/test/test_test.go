@@ -104,6 +104,20 @@ func TestTest(t *testing.T) {
 						Constraint: constraintNeverValidate,
 					},
 				},
+				{
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "never validate",
+						Constraint: constraintNeverValidate,
+					},
+				},
+				{
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "never validate",
+						Constraint: constraintNeverValidate,
+					},
+				},
 			},
 			cmpOption: ignoreGatorResultFields(),
 		},
@@ -233,6 +247,20 @@ func Test_Test_withTrace(t *testing.T) {
 				Constraint: constraintNeverValidate,
 			},
 		},
+		{
+			Result: types.Result{
+				Target:     target.Name,
+				Msg:        "never validate",
+				Constraint: constraintNeverValidate,
+			},
+		},
+		{
+			Result: types.Result{
+				Target:     target.Name,
+				Msg:        "never validate",
+				Constraint: constraintNeverValidate,
+			},
+		},
 	}
 
 	diff := cmp.Diff(want, got, ignoreGatorResultFields(), cmpopts.IgnoreFields(
@@ -269,44 +297,47 @@ func Test_Test_withStats(t *testing.T) {
 	assert.NoError(t, err)
 
 	actualStats := resps.StatsEntries
-	expectedStats := []*instrumentation.StatsEntry{
-		{
-			Scope:    "template",
-			StatsFor: "NeverValidate",
-			Stats: []*instrumentation.Stat{
-				{
-					Name: "templateRunTimeNS",
-					// Value: 0, // will be checled later
-					Source: instrumentation.Source{
-						Type:  "engine",
-						Value: "Rego",
-					},
-				},
-				{
-					Name:  "constraintCount",
-					Value: 1,
-					Source: instrumentation.Source{
-						Type:  "engine",
-						Value: "Rego",
-					},
+	expectesSE := &instrumentation.StatsEntry{
+		Scope:    "template",
+		StatsFor: "NeverValidate",
+		Stats: []*instrumentation.Stat{
+			{
+				Name: "templateRunTimeNS",
+				// Value: 0, // will be checled later
+				Source: instrumentation.Source{
+					Type:  "engine",
+					Value: "Rego",
 				},
 			},
-			Labels: []*instrumentation.Label{
-				{
-					Name:  "TracingEnabled",
-					Value: false,
-				},
-				{
-					Name:  "PrintEnabled",
-					Value: false,
-				},
-				{
-					Name:  "target",
-					Value: "admission.k8s.gatekeeper.sh",
+			{
+				Name:  "constraintCount",
+				Value: 1,
+				Source: instrumentation.Source{
+					Type:  "engine",
+					Value: "Rego",
 				},
 			},
 		},
+		Labels: []*instrumentation.Label{
+			{
+				Name:  "TracingEnabled",
+				Value: false,
+			},
+			{
+				Name:  "PrintEnabled",
+				Value: false,
+			},
+			{
+				Name:  "target",
+				Value: "admission.k8s.gatekeeper.sh",
+			},
+		},
 	}
+
+	// test.go calls review on all 3 objects (template, constraint, objToReview)
+	// so we need 3 "almost" copies of the stat entry above.
+	expectedStats := []*instrumentation.StatsEntry{}
+	expectedStats = append(expectedStats, expectesSE, expectesSE, expectesSE)
 
 	diff := cmp.Diff(actualStats, expectedStats, cmpopts.IgnoreFields(
 		instrumentation.Stat{}, "Value",
@@ -315,7 +346,8 @@ func Test_Test_withStats(t *testing.T) {
 		t.Errorf("diff in StatsEntries (-want +got):\n%s", diff)
 	}
 
-	// there should be one stats entry with two stats
+	// there should be at least 3 stats entry with two stats each
+	assert.Len(t, actualStats, len(expectedStats))
 	assert.Len(t, actualStats[0].Stats, 2)
 	for _, stat := range actualStats[0].Stats {
 		if stat.Name == "templateRunTimeNS" {
