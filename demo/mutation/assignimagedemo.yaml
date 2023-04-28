@@ -1,0 +1,18 @@
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: AssignImage
+metadata:
+  name: assign-container-image-registry
+spec:
+  applyTo:
+  - groups: [ "" ]
+    kinds: [ "Pod" ]
+    versions: [ "v1" ]
+  location: "spec.containers[name:*].image"
+  parameters:
+    assignDomain: "mycompany.registry.io"
+  match:
+    source: "All"
+    scope: Namespaced
+    kinds:
+    - apiGroups: [ "*" ]
+      kinds: [ "Pod" ]
