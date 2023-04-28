@@ -23,9 +23,14 @@ module.exports = {
       logo: {
         alt: 'Gatekeeper logo',
         src: 'img/logo.svg',
-        href: 'https://open-policy-agent.github.io/gatekeeper/website/docs/',
+        href: 'https://open-policy-agent.github.io/gatekeeper/website/',
       },
       items: [
+        {
+          to: 'docs/',
+          label: 'Docs',
+          position: 'left',
+        },
         {
           href: 'https://open-policy-agent.github.io/gatekeeper-library/',
           label: 'Policy Library',
