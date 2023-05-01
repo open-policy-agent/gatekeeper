@@ -23,16 +23,16 @@ type versionless interface {
 }
 
 // syncAnnotationName is the name of the annotation that stores
-// GVKS that are required to be synced
+// GVKS that are required to be synced.
 const SyncAnnotationName = "metadata.gatekeeper.sh/requiresSyncData"
 
 // SyncAnnotationContents contains a list of requirements, each of which
-// contains an expanded set of equivalent GVKs
+// contains an expanded set of equivalent GVKs.
 type SyncRequirements []map[schema.GroupVersionKind]struct{}
 
 // compactGVKEquivalentSet contains a set of equivalent GVKs, expressed
 // in the compact form [groups, versions, kinds] where any combination of
-// items from these three fields can be considered a valid equivalent
+// items from these three fields can be considered a valid equivalent.
 type compactGVKEquivalentSet struct {
 	Groups   []string `json:"groups"`
 	Versions []string `json:"versions"`
@@ -228,7 +228,7 @@ func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
 }
 
 // ReadSyncRequirements parses the sync requirements from a
-// constraint template
+// constraint template.
 func ReadSyncRequirements(t *templates.ConstraintTemplate) (*SyncRequirements, error) {
 	syncRequirements := &SyncRequirements{}
 	if t.ObjectMeta.Annotations != nil {
@@ -264,7 +264,7 @@ func (r *SyncRequirements) UnmarshalJSON(data []byte) error {
 }
 
 // Takes a compactGVKSet and expands and unions it with the set of
-// GVKs pointed to by the 'expandedEquivalentSet' argument
+// GVKs pointed to by the 'expandedEquivalentSet' argument.
 func expandCompactEquivalentSet(compactEquivalentSet compactGVKEquivalentSet, expandedEquivalentSet map[schema.GroupVersionKind]struct{}) {
 	for _, group := range compactEquivalentSet.Groups {
 		for _, version := range compactEquivalentSet.Versions {
