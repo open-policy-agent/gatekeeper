@@ -233,6 +233,7 @@ func ReadSyncRequirements(t *templates.ConstraintTemplate) (*SyncRequirements, e
 	syncRequirements := &SyncRequirements{}
 	if t.ObjectMeta.Annotations != nil {
 		if annotation, exists := t.ObjectMeta.Annotations[SyncAnnotationName]; exists {
+			annotation = strings.Trim(annotation, "\n\"")
 			err := json.Unmarshal([]byte(annotation), syncRequirements)
 			if err != nil {
 				return nil, err
@@ -243,7 +244,6 @@ func ReadSyncRequirements(t *templates.ConstraintTemplate) (*SyncRequirements, e
 }
 
 func (r *SyncRequirements) UnmarshalJSON(data []byte) error {
-	data = bytes.Trim(data, "\"\n")
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var compactAnnotation [][]compactGVKEquivalentSet
