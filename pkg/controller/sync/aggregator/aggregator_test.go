@@ -8,8 +8,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+const (
+	// allowed keys.
+	syncset    = "TODOa"
+	configsync = "TODOb"
+)
+
+var (
+	// test gvks.
+	g1v1k1 = schema.GroupVersionKind{Group: "group1", Version: "v1", Kind: "Kind1"}
+	g1v1k2 = schema.GroupVersionKind{Group: "group1", Version: "v1", Kind: "Kind2"}
+)
+
 type upsertKeyGVKs struct {
-	key  Key
+	key  KindName
 	gvks []schema.GroupVersionKind
 }
 
@@ -20,8 +32,8 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 		// each entry in the list is a new Upsert call
 		keyGVKs     []upsertKeyGVKs
 		expectAdded bool
-		expectData  map[Key]map[schema.GroupVersionKind]struct{}
-		expectRev   map[schema.GroupVersionKind]map[Key]struct{}
+		expectData  map[KindName]map[schema.GroupVersionKind]struct{}
+		expectRev   map[schema.GroupVersionKind]map[KindName]struct{}
 		expectErr   bool
 	}{
 		// error cases
@@ -29,17 +41,11 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 			name: "add new key with invalid kind",
 			keyGVKs: []upsertKeyGVKs{
 				{
-					key: Key{
+					key: KindName{
 						Kind: "c",
 						Name: "bar",
 					},
-					gvks: []schema.GroupVersionKind{
-						{
-							Group:   "group1",
-							Version: "v1",
-							Kind:    "Kind1",
-						},
-					},
+					gvks: []schema.GroupVersionKind{g1v1k1},
 				},
 			},
 			expectErr: true,
@@ -49,58 +55,31 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 			name: "add one key and GVKs",
 			keyGVKs: []upsertKeyGVKs{
 				{
-					key: Key{
+					key: KindName{
 						Kind: syncset,
 						Name: "foo",
 					},
-					gvks: []schema.GroupVersionKind{
-						{
-							Group:   "group1",
-							Version: "v1",
-							Kind:    "Kind1",
-						},
-						{
-							Group:   "group2",
-							Version: "v1",
-							Kind:    "Kind2",
-						},
-					},
+					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
 				},
 			},
 			expectAdded: true,
-			expectData: map[Key]map[schema.GroupVersionKind]struct{}{
+			expectData: map[KindName]map[schema.GroupVersionKind]struct{}{
 				{
 					Kind: syncset,
 					Name: "foo",
 				}: {
-					{
-						Group:   "group1",
-						Version: "v1",
-						Kind:    "Kind1",
-					}: {},
-					{
-						Group:   "group2",
-						Version: "v1",
-						Kind:    "Kind2",
-					}: {},
+					g1v1k1: {},
+					g1v1k2: {},
 				},
 			},
-			expectRev: map[schema.GroupVersionKind]map[Key]struct{}{
-				{
-					Group:   "group1",
-					Version: "v1",
-					Kind:    "Kind1",
-				}: {
+			expectRev: map[schema.GroupVersionKind]map[KindName]struct{}{
+				g1v1k1: {
 					{
 						Kind: syncset,
 						Name: "foo",
 					}: {},
 				},
-				{
-					Group:   "group2",
-					Version: "v1",
-					Kind:    "Kind2",
-				}: {
+				g1v1k2: {
 					{
 						Kind: syncset,
 						Name: "foo",
@@ -112,81 +91,39 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 			name: "add two keys and GVKs",
 			keyGVKs: []upsertKeyGVKs{
 				{
-					key: Key{
+					key: KindName{
 						Kind: syncset,
 						Name: "foo",
 					},
-					gvks: []schema.GroupVersionKind{
-						{
-							Group:   "group1",
-							Version: "v1",
-							Kind:    "Kind1",
-						},
-						{
-							Group:   "group2",
-							Version: "v1",
-							Kind:    "Kind2",
-						},
-					},
+					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
 				},
 				{
-					key: Key{
+					key: KindName{
 						Kind: configsync,
 						Name: "foo",
 					},
-					gvks: []schema.GroupVersionKind{
-						{
-							Group:   "group1",
-							Version: "v1",
-							Kind:    "Kind1",
-						},
-						{
-							Group:   "group2",
-							Version: "v1",
-							Kind:    "Kind2",
-						},
-					},
+					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
 				},
 			},
 			expectAdded: true,
-			expectData: map[Key]map[schema.GroupVersionKind]struct{}{
+			expectData: map[KindName]map[schema.GroupVersionKind]struct{}{
 				{
 					Kind: syncset,
 					Name: "foo",
 				}: {
-					{
-						Group:   "group1",
-						Version: "v1",
-						Kind:    "Kind1",
-					}: {},
-					{
-						Group:   "group2",
-						Version: "v1",
-						Kind:    "Kind2",
-					}: {},
+					g1v1k1: {},
+					g1v1k2: {},
 				},
 				{
 					Kind: configsync,
 					Name: "foo",
 				}: {
-					{
-						Group:   "group1",
-						Version: "v1",
-						Kind:    "Kind1",
-					}: {},
-					{
-						Group:   "group2",
-						Version: "v1",
-						Kind:    "Kind2",
-					}: {},
+					g1v1k1: {},
+					g1v1k2: {},
 				},
 			},
-			expectRev: map[schema.GroupVersionKind]map[Key]struct{}{
-				{
-					Group:   "group1",
-					Version: "v1",
-					Kind:    "Kind1",
-				}: {
+			expectRev: map[schema.GroupVersionKind]map[KindName]struct{}{
+				g1v1k1: {
 					{
 						Kind: syncset,
 						Name: "foo",
@@ -196,11 +133,7 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 						Name: "foo",
 					}: {},
 				},
-				{
-					Group:   "group2",
-					Version: "v1",
-					Kind:    "Kind2",
-				}: {
+				g1v1k2: {
 					{
 						Kind: syncset,
 						Name: "foo",
@@ -216,22 +149,20 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			agg := NewGVKAggregator()
+			tt := tt
+			agg := NewGVKAggregator([]string{syncset, configsync})
 
 			for _, keyGVKs := range tt.keyGVKs {
-				added, err := agg.UpsertWithValidation(keyGVKs.key, keyGVKs.gvks)
+				err := agg.UpsertWithValidation(keyGVKs.key, keyGVKs.gvks)
 
 				if tt.expectErr {
 					assert.Error(t, err, "expected an error but none occurred")
 					return
 				}
-
-				require.Equal(t, tt.expectAdded, added, "returned value did not match expected")
 			}
 
-			// these are open box tests for the underlying implementation of the GVKAggregator
-			require.Equal(t, tt.expectData, agg.(*bidiGVKAggregator).store, "data map did not match expected")            //nolint:forcetypeassert
-			require.Equal(t, tt.expectRev, agg.(*bidiGVKAggregator).reverseStore, "reverse store did not match expected") //nolint:forcetypeassert
+			require.Equal(t, tt.expectData, agg.store, "data map did not match expected")            //nolint:forcetypeassert
+			require.Equal(t, tt.expectRev, agg.reverseStore, "reverse store did not match expected") //nolint:forcetypeassert
 		})
 	}
 }
