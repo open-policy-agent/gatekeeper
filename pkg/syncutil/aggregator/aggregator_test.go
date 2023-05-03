@@ -24,7 +24,7 @@ type upsertKeyGVKs struct {
 	gvks []schema.GroupVersionKind
 }
 
-func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
+func Test_GVKAggregator_Upsert(t *testing.T) {
 	// Define test cases with inputs and expected outputs
 	tests := []struct {
 		name string
@@ -135,6 +135,13 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 
 			for _, keyGVKs := range tt.keyGVKs {
 				agg.Upsert(keyGVKs.key, keyGVKs.gvks)
+			}
+
+			// require all gvks added to be present in the aggregator
+			for _, keyGVKs := range tt.keyGVKs {
+				for _, addedGVK := range keyGVKs.gvks {
+					require.True(t, agg.IsPresent(addedGVK))
+				}
 			}
 
 			require.Equal(t, tt.expectData, agg.store, "data map did not match expected")            //nolint:forcetypeassert

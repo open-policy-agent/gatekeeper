@@ -28,6 +28,14 @@ type GVKAgreggator struct {
 	reverseStore map[schema.GroupVersionKind]map[Key]struct{}
 }
 
+func (b *GVKAgreggator) IsPresent(gvk schema.GroupVersionKind) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	_, found := b.reverseStore[gvk]
+	return found
+}
+
 func (b *GVKAgreggator) ListGVKs() []schema.GroupVersionKind {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
