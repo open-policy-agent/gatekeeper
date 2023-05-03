@@ -8,15 +8,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-type KindName struct {
-	Kind string
-	Name string
+type Key struct {
+	Source string
+	ID     string
 }
 
 func NewGVKAggregator(allowedKeyKinds []string) *GVKAgreggator {
 	return &GVKAgreggator{
-		store:        make(map[KindName]map[schema.GroupVersionKind]struct{}),
-		reverseStore: make(map[schema.GroupVersionKind]map[KindName]struct{}),
+		store:        make(map[Key]map[schema.GroupVersionKind]struct{}),
+		reverseStore: make(map[schema.GroupVersionKind]map[Key]struct{}),
 	}
 }
 
@@ -24,8 +24,8 @@ func NewGVKAggregator(allowedKeyKinds []string) *GVKAgreggator {
 type GVKAgreggator struct {
 	mu gosync.RWMutex
 
-	store        map[KindName]map[schema.GroupVersionKind]struct{}
-	reverseStore map[schema.GroupVersionKind]map[KindName]struct{}
+	store        map[Key]map[schema.GroupVersionKind]struct{}
+	reverseStore map[schema.GroupVersionKind]map[Key]struct{}
 }
 
 func (b *GVKAgreggator) ListGVKs() []schema.GroupVersionKind {
@@ -35,7 +35,7 @@ func (b *GVKAgreggator) ListGVKs() []schema.GroupVersionKind {
 	return maps.Keys(b.reverseStore)
 }
 
-func (b *GVKAgreggator) Remove(k KindName) error {
+func (b *GVKAgreggator) Remove(k Key) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -62,7 +62,7 @@ func (b *GVKAgreggator) Remove(k KindName) error {
 	return nil
 }
 
-func (b *GVKAgreggator) Upsert(k KindName, gvks []schema.GroupVersionKind) {
+func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -73,7 +73,7 @@ func (b *GVKAgreggator) Upsert(k KindName, gvks []schema.GroupVersionKind) {
 	for _, gvk := range gvks {
 		b.store[k][gvk] = struct{}{}
 		if _, found := b.reverseStore[gvk]; !found {
-			b.reverseStore[gvk] = make(map[KindName]struct{})
+			b.reverseStore[gvk] = make(map[Key]struct{})
 		}
 		b.reverseStore[gvk][k] = struct{}{}
 	}

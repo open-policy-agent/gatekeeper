@@ -20,7 +20,7 @@ var (
 )
 
 type upsertKeyGVKs struct {
-	key  KindName
+	key  Key
 	gvks []schema.GroupVersionKind
 }
 
@@ -29,42 +29,42 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 	tests := []struct {
 		name string
 		// each entry in the list is a new Upsert call
-		keyGVKs     []upsertKeyGVKs
+		keyGVKs []upsertKeyGVKs
 
-		expectData  map[KindName]map[schema.GroupVersionKind]struct{}
-		expectRev   map[schema.GroupVersionKind]map[KindName]struct{}
+		expectData map[Key]map[schema.GroupVersionKind]struct{}
+		expectRev  map[schema.GroupVersionKind]map[Key]struct{}
 	}{
 		{
 			name: "add one key and GVKs",
 			keyGVKs: []upsertKeyGVKs{
 				{
-					key: KindName{
-						Kind: syncset,
-						Name: "foo",
+					key: Key{
+						Source: syncset,
+						ID:     "foo",
 					},
 					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
 				},
 			},
-			expectData: map[KindName]map[schema.GroupVersionKind]struct{}{
+			expectData: map[Key]map[schema.GroupVersionKind]struct{}{
 				{
-					Kind: syncset,
-					Name: "foo",
+					Source: syncset,
+					ID:     "foo",
 				}: {
 					g1v1k1: {},
 					g1v1k2: {},
 				},
 			},
-			expectRev: map[schema.GroupVersionKind]map[KindName]struct{}{
+			expectRev: map[schema.GroupVersionKind]map[Key]struct{}{
 				g1v1k1: {
 					{
-						Kind: syncset,
-						Name: "foo",
+						Source: syncset,
+						ID:     "foo",
 					}: {},
 				},
 				g1v1k2: {
 					{
-						Kind: syncset,
-						Name: "foo",
+						Source: syncset,
+						ID:     "foo",
 					}: {},
 				},
 			},
@@ -73,55 +73,55 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 			name: "add two keys and GVKs",
 			keyGVKs: []upsertKeyGVKs{
 				{
-					key: KindName{
-						Kind: syncset,
-						Name: "foo",
+					key: Key{
+						Source: syncset,
+						ID:     "foo",
 					},
 					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
 				},
 				{
-					key: KindName{
-						Kind: configsync,
-						Name: "foo",
+					key: Key{
+						Source: configsync,
+						ID:     "foo",
 					},
 					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
 				},
 			},
-			expectData: map[KindName]map[schema.GroupVersionKind]struct{}{
+			expectData: map[Key]map[schema.GroupVersionKind]struct{}{
 				{
-					Kind: syncset,
-					Name: "foo",
+					Source: syncset,
+					ID:     "foo",
 				}: {
 					g1v1k1: {},
 					g1v1k2: {},
 				},
 				{
-					Kind: configsync,
-					Name: "foo",
+					Source: configsync,
+					ID:     "foo",
 				}: {
 					g1v1k1: {},
 					g1v1k2: {},
 				},
 			},
-			expectRev: map[schema.GroupVersionKind]map[KindName]struct{}{
+			expectRev: map[schema.GroupVersionKind]map[Key]struct{}{
 				g1v1k1: {
 					{
-						Kind: syncset,
-						Name: "foo",
+						Source: syncset,
+						ID:     "foo",
 					}: {},
 					{
-						Kind: configsync,
-						Name: "foo",
+						Source: configsync,
+						ID:     "foo",
 					}: {},
 				},
 				g1v1k2: {
 					{
-						Kind: syncset,
-						Name: "foo",
+						Source: syncset,
+						ID:     "foo",
 					}: {},
 					{
-						Kind: configsync,
-						Name: "foo",
+						Source: configsync,
+						ID:     "foo",
 					}: {},
 				},
 			},
