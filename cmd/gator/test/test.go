@@ -143,7 +143,7 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 				cmdutils.ErrFatalf("pre-marshaling stats to json: %v", err)
 			}
 
-			var statsAndResultsStruct = struct {
+			statsAndResultsStruct := struct {
 				Results []*test.YamlGatorResult
 				Stats   []*instrumentation.StatsEntry
 			}{}
