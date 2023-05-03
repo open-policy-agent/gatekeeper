@@ -4,7 +4,6 @@ import (
 	"fmt"
 	gosync "sync"
 
-	"golang.org/x/exp/maps"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -37,13 +36,6 @@ func (b *GVKAgreggator) IsPresent(gvk schema.GroupVersionKind) bool {
 
 	_, found := b.reverseStore[gvk]
 	return found
-}
-
-func (b *GVKAgreggator) ListGVKs() []schema.GroupVersionKind {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	return maps.Keys(b.reverseStore)
 }
 
 func (b *GVKAgreggator) Remove(k Key) error {
