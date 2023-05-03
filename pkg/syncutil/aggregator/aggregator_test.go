@@ -25,7 +25,6 @@ type upsertKeyGVKs struct {
 }
 
 func Test_GVKAggregator_Upsert(t *testing.T) {
-	// Define test cases with inputs and expected outputs
 	tests := []struct {
 		name string
 		// each entry in the list is a new Upsert call
@@ -144,8 +143,8 @@ func Test_GVKAggregator_Upsert(t *testing.T) {
 				}
 			}
 
-			require.Equal(t, tt.expectData, agg.store, "data map did not match expected")            //nolint:forcetypeassert
-			require.Equal(t, tt.expectRev, agg.reverseStore, "reverse store did not match expected") //nolint:forcetypeassert
+			require.Equal(t, tt.expectData, agg.store, "data map did not match expected")
+			require.Equal(t, tt.expectRev, agg.reverseStore, "reverse store did not match expected")
 		})
 	}
 }

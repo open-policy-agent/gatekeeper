@@ -20,11 +20,14 @@ func NewGVKAggregator(allowedKeyKinds []string) *GVKAgreggator {
 	}
 }
 
-// todo comments.
 type GVKAgreggator struct {
 	mu gosync.RWMutex
 
-	store        map[Key]map[schema.GroupVersionKind]struct{}
+	// store keeps track of associations between a Key type and a set of GVKs.
+	store map[Key]map[schema.GroupVersionKind]struct{}
+	// reverseStore keeps track of associations between a GVK and the set of Key types
+	// that references the GVK in the store map above. It is useful to have reverseStore
+	// in order for IsPresent() and ListGVKs() to run in optimal time.
 	reverseStore map[schema.GroupVersionKind]map[Key]struct{}
 }
 
@@ -55,9 +58,8 @@ func (b *GVKAgreggator) Remove(k Key) error {
 	for gvk := range gvks {
 		keySet, found := b.reverseStore[gvk]
 		if !found {
-			// this should not happen if we keep the two maps are well defined
-			// but let's be defensive nonetheless
-
+			// this should not happen if we keep the two maps well defined
+			// but let's be defensive nonetheless.
 			return fmt.Errorf("internal aggregator error: gvks stores are corrupted for key: %s", k)
 		}
 
