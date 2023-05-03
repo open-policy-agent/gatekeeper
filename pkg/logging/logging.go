@@ -4,6 +4,7 @@ import (
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
+	gkinstr "github.com/open-policy-agent/gatekeeper/pkg/instrumentation"
 )
 
 // Log keys.
@@ -36,5 +37,5 @@ const (
 )
 
 func LogStatsEntries(client *constraintclient.Client, logger logr.Logger, entries []*instrumentation.StatsEntry, msg string) {
-	logger.WithValues(StatsEntries, entries).Info(msg)
+	logger.WithValues(StatsEntries, gkinstr.ToStatsEntriesWithDesc(client, entries)).Info(msg)
 }

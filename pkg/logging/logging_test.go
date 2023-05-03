@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/go-logr/zapr"
@@ -58,7 +59,10 @@ func Test_LogStatsEntries(t *testing.T) {
 		"test message",
 	)
 
-	expectedLogLine := "\"msg\":\"test message\",\"stats_entries\":[{\"scope\":\"someScope\",\"statsFor\":\"someConstranint\",\"stats\":[{\"name\":\"someStat\",\"value\":\"someValue\",\"source\":{\"type\":\"someType\",\"value\":\"someValue\"}}],\"labels\":[{\"name\":\"someLabel\",\"value\":\"someLabelValue\"}]}]}\n"
+	expectedLogLine := fmt.Sprintf("\"msg\":\"test message\",\"stats_entries\":[{\"scope\":\"someScope\","+
+		"\"statsFor\":\"someConstranint\",\"stats\":[{\"name\":\"someStat\",\"value\":\"someValue\","+
+		"\"source\":{\"type\":\"someType\",\"value\":\"someValue\"},\"description\":\"%s\"}],"+
+		"\"labels\":[{\"name\":\"someLabel\",\"value\":\"someLabelValue\"}]}]}\n", instrumentation.UnknownDescription)
 	require.Contains(t, testBuf.String(), expectedLogLine)
 }
 
