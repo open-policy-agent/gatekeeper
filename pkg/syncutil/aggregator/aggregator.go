@@ -17,8 +17,6 @@ func NewGVKAggregator(allowedKeyKinds []string) *GVKAgreggator {
 	return &GVKAgreggator{
 		store:        make(map[KindName]map[schema.GroupVersionKind]struct{}),
 		reverseStore: make(map[schema.GroupVersionKind]map[KindName]struct{}),
-
-		allowedKeyKinds: allowedKeyKinds,
 	}
 }
 
@@ -28,23 +26,6 @@ type GVKAgreggator struct {
 
 	store        map[KindName]map[schema.GroupVersionKind]struct{}
 	reverseStore map[schema.GroupVersionKind]map[KindName]struct{}
-
-	allowedKeyKinds []string
-}
-
-func (b *GVKAgreggator) validateKind(k KindName) error {
-	if len(b.allowedKeyKinds) == 0 {
-		return nil
-	}
-
-	for _, kk := range b.allowedKeyKinds {
-		if k.Kind == kk {
-			// we found a match so allow the kind
-			return nil
-		}
-	}
-
-	return fmt.Errorf("unsupported key kind for key (%s, %s); supported values are: %s", k.Kind, k.Name, b.allowedKeyKinds)
 }
 
 func (b *GVKAgreggator) ListGVKs() []schema.GroupVersionKind {
@@ -81,11 +62,7 @@ func (b *GVKAgreggator) Remove(k KindName) error {
 	return nil
 }
 
-func (b *GVKAgreggator) UpsertWithValidation(k KindName, gvks []schema.GroupVersionKind) error {
-	if err := b.validateKind(k); err != nil {
-		return err
-	}
-
+func (b *GVKAgreggator) Upsert(k KindName, gvks []schema.GroupVersionKind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -100,6 +77,4 @@ func (b *GVKAgreggator) UpsertWithValidation(k KindName, gvks []schema.GroupVers
 		}
 		b.reverseStore[gvk][k] = struct{}{}
 	}
-
-	return nil
 }

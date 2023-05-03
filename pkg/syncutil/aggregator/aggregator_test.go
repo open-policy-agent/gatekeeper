@@ -3,13 +3,12 @@ package aggregator
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
-	// allowed keys.
+	// common test keys.
 	syncset    = "TODOa"
 	configsync = "TODOb"
 )
@@ -31,26 +30,10 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 		name string
 		// each entry in the list is a new Upsert call
 		keyGVKs     []upsertKeyGVKs
-		expectAdded bool
+
 		expectData  map[KindName]map[schema.GroupVersionKind]struct{}
 		expectRev   map[schema.GroupVersionKind]map[KindName]struct{}
-		expectErr   bool
 	}{
-		// error cases
-		{
-			name: "add new key with invalid kind",
-			keyGVKs: []upsertKeyGVKs{
-				{
-					key: KindName{
-						Kind: "c",
-						Name: "bar",
-					},
-					gvks: []schema.GroupVersionKind{g1v1k1},
-				},
-			},
-			expectErr: true,
-		},
-		// happy path cases
 		{
 			name: "add one key and GVKs",
 			keyGVKs: []upsertKeyGVKs{
@@ -62,7 +45,6 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
 				},
 			},
-			expectAdded: true,
 			expectData: map[KindName]map[schema.GroupVersionKind]struct{}{
 				{
 					Kind: syncset,
@@ -105,7 +87,6 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
 				},
 			},
-			expectAdded: true,
 			expectData: map[KindName]map[schema.GroupVersionKind]struct{}{
 				{
 					Kind: syncset,
@@ -153,12 +134,7 @@ func Test_bidiGVKAggregator_UpsertWithValidation(t *testing.T) {
 			agg := NewGVKAggregator([]string{syncset, configsync})
 
 			for _, keyGVKs := range tt.keyGVKs {
-				err := agg.UpsertWithValidation(keyGVKs.key, keyGVKs.gvks)
-
-				if tt.expectErr {
-					assert.Error(t, err, "expected an error but none occurred")
-					return
-				}
+				agg.Upsert(keyGVKs.key, keyGVKs.gvks)
 			}
 
 			require.Equal(t, tt.expectData, agg.store, "data map did not match expected")            //nolint:forcetypeassert
