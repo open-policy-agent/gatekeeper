@@ -130,7 +130,7 @@ func Test_GVKAggregator_Upsert(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt := tt
-			agg := NewGVKAggregator([]string{syncset, configsync})
+			agg := NewGVKAggregator()
 
 			for _, keyGVKs := range tt.keyGVKs {
 				agg.Upsert(keyGVKs.key, keyGVKs.gvks)

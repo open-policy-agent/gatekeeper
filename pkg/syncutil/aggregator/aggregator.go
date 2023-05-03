@@ -13,7 +13,7 @@ type Key struct {
 	ID     string
 }
 
-func NewGVKAggregator(allowedKeyKinds []string) *GVKAgreggator {
+func NewGVKAggregator() *GVKAgreggator {
 	return &GVKAgreggator{
 		store:        make(map[Key]map[schema.GroupVersionKind]struct{}),
 		reverseStore: make(map[schema.GroupVersionKind]map[Key]struct{}),
