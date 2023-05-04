@@ -26,14 +26,19 @@ type versionless interface {
 // GVKS that are required to be synced.
 const SyncAnnotationName = "metadata.gatekeeper.sh/requiresSyncData"
 
-// SyncAnnotationContents contains a list of requirements, each of which
-// contains an expanded set of equivalent GVKs.
-type SyncRequirements []map[schema.GroupVersionKind]struct{}
+// SyncAnnotationContents contains a list of ANDed requirements, each of which
+// contains an expanded set of equivalent (ORed) GVKs.
+type SyncRequirements []GVKEquivalenceSet
 
-// compactGVKEquivalentSet contains a set of equivalent GVKs, expressed
+// GVKEquivalenceSet is a set of GVKs that a template can use
+// interchangeably in its referential policy implementation.
+type GVKEquivalenceSet map[schema.GroupVersionKind]struct{}
+
+// compactGVKEquivalenceSet contains a set of equivalent GVKs, expressed
 // in the compact form [groups, versions, kinds] where any combination of
 // items from these three fields can be considered a valid equivalent.
-type compactGVKEquivalentSet struct {
+// Used solely for unmarshalling.
+type compactGVKEquivalenceSet struct {
 	Groups   []string `json:"groups"`
 	Versions []string `json:"versions"`
 	Kinds    []string `json:"kinds"`
@@ -230,47 +235,41 @@ func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
 // ReadSyncRequirements parses the sync requirements from a
 // constraint template.
 func ReadSyncRequirements(t *templates.ConstraintTemplate) (*SyncRequirements, error) {
-	syncRequirements := &SyncRequirements{}
+	syncRequirements := make(SyncRequirements, 0)
 	if t.ObjectMeta.Annotations != nil {
 		if annotation, exists := t.ObjectMeta.Annotations[SyncAnnotationName]; exists {
 			annotation = strings.Trim(annotation, "\n\"")
-			err := json.Unmarshal([]byte(annotation), syncRequirements)
+			compactSyncRequirements := make([][]compactGVKEquivalenceSet, 0)
+			decoder := json.NewDecoder(bytes.NewReader([]byte(annotation)))
+			decoder.DisallowUnknownFields()
+			err := decoder.Decode(&compactSyncRequirements)
 			if err != nil {
 				return nil, err
 			}
+			for _, compactRequirement := range compactSyncRequirements {
+				requirement := GVKEquivalenceSet{}
+				for _, compactEquivalenceSet := range compactRequirement {
+					for equivalentGVK := range expandCompactEquivalenceSet(compactEquivalenceSet) {
+						requirement[equivalentGVK] = struct{}{}
+					}
+				}
+				syncRequirements = append(syncRequirements, requirement)
+			}
 		}
 	}
-	return syncRequirements, nil
-}
-
-func (r *SyncRequirements) UnmarshalJSON(data []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	var compactAnnotation [][]compactGVKEquivalentSet
-	err := decoder.Decode(&compactAnnotation)
-	if err != nil {
-		return err
-	}
-
-	*r = make([]map[schema.GroupVersionKind]struct{}, 0, len(compactAnnotation))
-	for _, compactRequirement := range compactAnnotation {
-		expandedRequirement := map[schema.GroupVersionKind]struct{}{}
-		for _, compactEquivalentSet := range compactRequirement {
-			expandCompactEquivalentSet(compactEquivalentSet, expandedRequirement)
-		}
-		*r = append(*r, expandedRequirement)
-	}
-	return nil
+	return &syncRequirements, nil
 }
 
 // Takes a compactGVKSet and expands and unions it with the set of
 // GVKs pointed to by the 'expandedEquivalentSet' argument.
-func expandCompactEquivalentSet(compactEquivalentSet compactGVKEquivalentSet, expandedEquivalentSet map[schema.GroupVersionKind]struct{}) {
-	for _, group := range compactEquivalentSet.Groups {
-		for _, version := range compactEquivalentSet.Versions {
-			for _, kind := range compactEquivalentSet.Kinds {
-				expandedEquivalentSet[schema.GroupVersionKind{Group: group, Version: version, Kind: kind}] = struct{}{}
+func expandCompactEquivalenceSet(compactEquivalenceSet compactGVKEquivalenceSet) GVKEquivalenceSet {
+	equivalenceSet := GVKEquivalenceSet{}
+	for _, group := range compactEquivalenceSet.Groups {
+		for _, version := range compactEquivalenceSet.Versions {
+			for _, kind := range compactEquivalenceSet.Kinds {
+				equivalenceSet[schema.GroupVersionKind{Group: group, Version: version, Kind: kind}] = struct{}{}
 			}
 		}
 	}
+	return equivalenceSet
 }
