@@ -30,7 +30,7 @@ function HeroBanner() {
           <Link className="button button--primary" to="/docs">
             <Translate>Get Started</Translate>
           </Link>
-          <Link className="button button--info" to="https://docusaurus.newhttps://open-policy-agent.github.io/gatekeeper-library/website/">
+          <Link className="button button--info" to="https://open-policy-agent.github.io/gatekeeper-library/website/">
             <Translate>Browse the Policy Library</Translate>
           </Link>
           <span className={styles.indexCtasGitHubButtonWrapper}>
