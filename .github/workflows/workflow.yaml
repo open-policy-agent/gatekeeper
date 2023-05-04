@@ -295,7 +295,7 @@ jobs:
 
       - name: Run trivy on git repository
         run: |
-          trivy fs --format table --ignore-unfixed --skip-dirs website --security-checks vuln .
+          trivy fs --format table --ignore-unfixed --skip-dirs website --scanners vuln .
 
       - name: Build docker images
         run: |
@@ -308,7 +308,5 @@ jobs:
       - name: Run trivy on images
         run: |
           for img in "gatekeeper-e2e:latest" "gatekeeper-crds:latest"; do
-            for vuln_type in "os" "library"; do
-              trivy image --ignore-unfixed --vuln-type="${vuln_type}" "${img}"
-            done
+              trivy image --ignore-unfixed --vuln-type="os,library" "${img}"
           done
