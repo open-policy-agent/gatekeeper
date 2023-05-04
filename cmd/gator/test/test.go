@@ -143,17 +143,17 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 				cmdutils.ErrFatalf("pre-marshaling stats to json: %v", err)
 			}
 
-			statsAndResultsStruct := struct {
+			statsAndResultsUnmarshalled := struct {
 				Results []*test.YamlGatorResult
 				Stats   []*instrumentation.StatsEntry
 			}{}
 
-			err = json.Unmarshal(statsJSONB, &statsAndResultsStruct)
+			err = json.Unmarshal(statsJSONB, &statsAndResultsUnmarshalled)
 			if err != nil {
 				cmdutils.ErrFatalf("pre-unmarshaling stats from json: %v", err)
 			}
 
-			yamlb, err = yaml.Marshal(statsAndResults)
+			yamlb, err = yaml.Marshal(statsAndResultsUnmarshalled)
 			if err != nil {
 				cmdutils.ErrFatalf("marshaling validation yaml results and stats: %v", err)
 			}
