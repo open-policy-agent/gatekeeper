@@ -59,7 +59,7 @@ func Test_LogStatsEntries(t *testing.T) {
 		"test message",
 	)
 
-	expectedLogLine := fmt.Sprintf("\"msg\":\"test message\",\"stats_entries\":[{\"scope\":\"someScope\","+
+	expectedLogLine := fmt.Sprintf("\"msg\":\"test message\",\"execution_stats\":[{\"scope\":\"someScope\","+
 		"\"statsFor\":\"someConstranint\",\"stats\":[{\"name\":\"someStat\",\"value\":\"someValue\","+
 		"\"source\":{\"type\":\"someType\",\"value\":\"someValue\"},\"description\":\"%s\"}],"+
 		"\"labels\":[{\"name\":\"someLabel\",\"value\":\"someLabelValue\"}]}]}\n", instrumentation.UnknownDescription)
