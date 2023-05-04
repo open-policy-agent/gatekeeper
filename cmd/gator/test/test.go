@@ -107,6 +107,7 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 	case stringJSON:
 		var jsonB []byte
 		var err error
+
 		if stats != nil {
 			statsAndResults := map[string]interface{}{"results": results, "stats": stats}
 			jsonB, err = json.MarshalIndent(statsAndResults, "", fourSpaceTab)
@@ -123,18 +124,8 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 		return string(jsonB)
 	case stringYAML:
 		yamlResults := test.GetYamlFriendlyResults(results)
-		jsonb, err := json.Marshal(yamlResults)
-		if err != nil {
-			cmdutils.ErrFatalf("pre-marshaling results to json: %v", err)
-		}
-
-		unmarshalled := []*test.YamlGatorResult{}
-		err = json.Unmarshal(jsonb, &unmarshalled)
-		if err != nil {
-			cmdutils.ErrFatalf("pre-unmarshaling results from json: %v", err)
-		}
-
 		var yamlb []byte
+
 		if stats != nil {
 			statsAndResults := map[string]interface{}{"results": yamlResults, "stats": stats}
 
@@ -158,6 +149,17 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 				cmdutils.ErrFatalf("marshaling validation yaml results and stats: %v", err)
 			}
 		} else {
+			jsonb, err := json.Marshal(yamlResults)
+			if err != nil {
+				cmdutils.ErrFatalf("pre-marshaling results to json: %v", err)
+			}
+
+			unmarshalled := []*test.YamlGatorResult{}
+			err = json.Unmarshal(jsonb, &unmarshalled)
+			if err != nil {
+				cmdutils.ErrFatalf("pre-unmarshaling results from json: %v", err)
+			}
+
 			yamlb, err = yaml.Marshal(unmarshalled)
 			if err != nil {
 				cmdutils.ErrFatalf("marshaling validation yaml results: %v", err)
