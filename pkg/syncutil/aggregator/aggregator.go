@@ -7,9 +7,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// Key defines a type, identifier tuple to store
+// in the GVKAggregator.
 type Key struct {
+	// Source specifies the type or where this Key comes from.
 	Source string
-	ID     string
+	// ID specifies the name of the type that this Key is.
+	ID string
 }
 
 func NewGVKAggregator() *GVKAgreggator {
@@ -30,6 +34,7 @@ type GVKAgreggator struct {
 	reverseStore map[schema.GroupVersionKind]map[Key]struct{}
 }
 
+// IsPresent returns true if the given gvk is present in the GVKAggregator.
 func (b *GVKAgreggator) IsPresent(gvk schema.GroupVersionKind) bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
