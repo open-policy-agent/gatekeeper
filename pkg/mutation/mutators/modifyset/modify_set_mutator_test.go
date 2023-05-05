@@ -3,7 +3,7 @@ package modifyset
 import (
 	"testing"
 
-	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/stretchr/testify/require"
 )
 

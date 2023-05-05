@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 

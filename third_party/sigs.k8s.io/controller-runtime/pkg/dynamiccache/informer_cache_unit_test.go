@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 
-	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache/internal"
+	"github.com/open-policy-agent/gatekeeper/v3/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache/internal"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllertest"
 	crscheme "sigs.k8s.io/controller-runtime/pkg/scheme"
 )

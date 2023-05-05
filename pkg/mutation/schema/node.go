@@ -3,9 +3,9 @@ package schema
 import (
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 )
 
 // node is an element of an implicit schema.

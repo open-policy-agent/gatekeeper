@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	// register exporters with the registry.
-	"github.com/open-policy-agent/gatekeeper/pkg/metrics/exporters/opencensus"
-	"github.com/open-policy-agent/gatekeeper/pkg/metrics/exporters/prometheus"
-	"github.com/open-policy-agent/gatekeeper/pkg/metrics/exporters/stackdriver"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/opencensus"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/prometheus"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/stackdriver"
 )
 
 func init() {

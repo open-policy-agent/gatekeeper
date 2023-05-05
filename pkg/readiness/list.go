@@ -20,7 +20,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"

@@ -18,7 +18,7 @@ package constrainttemplate
 import (
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/test/testutils"
+	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"k8s.io/client-go/rest"
 )
 

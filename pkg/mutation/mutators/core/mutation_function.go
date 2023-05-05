@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
-	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
+	path "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

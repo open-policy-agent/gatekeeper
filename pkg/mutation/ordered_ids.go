@@ -3,7 +3,7 @@ package mutation
 import (
 	"sort"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 )
 
 type orderedIDs struct {

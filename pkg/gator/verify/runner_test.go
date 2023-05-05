@@ -10,8 +10,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
 )

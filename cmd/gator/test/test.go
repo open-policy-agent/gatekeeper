@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/test"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

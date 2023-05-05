@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
