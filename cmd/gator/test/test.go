@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/open-policy-agent/gatekeeper/cmd/gator/utils"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -15,24 +16,24 @@ import (
 )
 
 const (
-	examples = `  # test a manifest containing Kubernetes objects, Constraint Templates, and Constraints
-  gator test --filename="manifest.yaml"
+	examples = `# test a manifest containing Kubernetes objects, Constraint Templates, and Constraints
+gator test --filename="manifest.yaml"
 
-  # test a directory
-  gator test --filename="config-and-policies/"
+# test a directory
+gator test --filename="config-and-policies/"
 
-  # Use multiple inputs
-  gator test --filename="manifest.yaml" --filename="templates-and-constraints/"
+# Use multiple inputs
+gator test --filename="manifest.yaml" --filename="templates-and-constraints/"
 
-  # Receive input from stdin
-  cat manifest.yaml | gator test
+# Receive input from stdin
+cat manifest.yaml | gator test
 
-  # Output structured violations data
-  gator test --filename="manifest.yaml" --output=json
+# Output structured violations data
+gator test --filename="manifest.yaml" --output=json
 
-  Note: The alpha "gator test" has been renamed to "gator verify".  "gator
-  verify" verifies individual Constraint Templates against suites of tests, where "gator
-  test" evaluates sets of resources against sets of Constraints and Templates.`
+Note: The alpha "gator test" has been renamed to "gator verify".  "gator
+verify" verifies individual Constraint Templates against suites of tests, where "gator
+test" evaluates sets of resources against sets of Constraints and Templates.`
 )
 
 var Cmd = &cobra.Command{
@@ -73,15 +74,15 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
-		errFatalf("reading: %v", err)
+		utils.ErrFatalF("reading: %v", err)
 	}
 	if len(unstrucs) == 0 {
-		errFatalf("no input data identified")
+		utils.ErrFatalF("no input data identified")
 	}
 
 	responses, err := test.Test(unstrucs, flagIncludeTrace)
 	if err != nil {
-		errFatalf("auditing objects: %v\n", err)
+		utils.ErrFatalF("auditing objects: %v", err)
 	}
 	results := responses.Results()
 
@@ -101,25 +102,25 @@ func formatOutput(flagOutput string, results []*test.GatorResult) string {
 	case stringJSON:
 		b, err := json.MarshalIndent(results, "", "    ")
 		if err != nil {
-			errFatalf("marshaling validation json results: %v", err)
+			utils.ErrFatalF("marshaling validation json results: %v", err)
 		}
 		return string(b)
 	case stringYAML:
 		yamlResults := test.GetYamlFriendlyResults(results)
 		jsonb, err := json.Marshal(yamlResults)
 		if err != nil {
-			errFatalf("pre-marshaling results to json: %v", err)
+			utils.ErrFatalF("pre-marshaling results to json: %v", err)
 		}
 
 		unmarshalled := []*test.YamlGatorResult{}
 		err = json.Unmarshal(jsonb, &unmarshalled)
 		if err != nil {
-			errFatalf("pre-unmarshaling results from json: %v", err)
+			utils.ErrFatalF("pre-unmarshaling results from json: %v", err)
 		}
 
 		yamlb, err := yaml.Marshal(unmarshalled)
 		if err != nil {
-			errFatalf("marshaling validation yaml results: %v", err)
+			utils.ErrFatalF("marshaling validation yaml results: %v", err)
 		}
 		return string(yamlb)
 	case stringHumanFriendly:
@@ -148,9 +149,4 @@ func enforceableFailure(results []*test.GatorResult) bool {
 	}
 
 	return false
-}
-
-func errFatalf(format string, a ...interface{}) {
-	fmt.Fprintf(os.Stderr, format, a...)
-	os.Exit(1)
 }
