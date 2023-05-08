@@ -297,6 +297,7 @@ func innerMain() int {
 			setupLog.Error(err, "problem running manager")
 			mgrErr <- err
 		}
+		close(mgrErr)
 	}()
 
 	// block until either setupControllers or mgr has an error, or mgr exits.
