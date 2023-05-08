@@ -74,15 +74,15 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
-		utils.ErrFatalF("reading: %v", err)
+		utils.ErrFatalf("reading: %v", err)
 	}
 	if len(unstrucs) == 0 {
-		utils.ErrFatalF("no input data identified")
+		utils.ErrFatalf("no input data identified")
 	}
 
 	responses, err := test.Test(unstrucs, flagIncludeTrace)
 	if err != nil {
-		utils.ErrFatalF("auditing objects: %v", err)
+		utils.ErrFatalf("auditing objects: %v", err)
 	}
 	results := responses.Results()
 
@@ -102,25 +102,25 @@ func formatOutput(flagOutput string, results []*test.GatorResult) string {
 	case stringJSON:
 		b, err := json.MarshalIndent(results, "", "    ")
 		if err != nil {
-			utils.ErrFatalF("marshaling validation json results: %v", err)
+			utils.ErrFatalf("marshaling validation json results: %v", err)
 		}
 		return string(b)
 	case stringYAML:
 		yamlResults := test.GetYamlFriendlyResults(results)
 		jsonb, err := json.Marshal(yamlResults)
 		if err != nil {
-			utils.ErrFatalF("pre-marshaling results to json: %v", err)
+			utils.ErrFatalf("pre-marshaling results to json: %v", err)
 		}
 
 		unmarshalled := []*test.YamlGatorResult{}
 		err = json.Unmarshal(jsonb, &unmarshalled)
 		if err != nil {
-			utils.ErrFatalF("pre-unmarshaling results from json: %v", err)
+			utils.ErrFatalf("pre-unmarshaling results from json: %v", err)
 		}
 
 		yamlb, err := yaml.Marshal(unmarshalled)
 		if err != nil {
-			utils.ErrFatalF("marshaling validation yaml results: %v", err)
+			utils.ErrFatalf("marshaling validation yaml results: %v", err)
 		}
 		return string(yamlb)
 	case stringHumanFriendly:

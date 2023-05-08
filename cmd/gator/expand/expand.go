@@ -69,15 +69,15 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
-		utils.ErrFatalF("reading: %v", err)
+		utils.ErrFatalf("reading: %v", err)
 	}
 	if len(unstrucs) == 0 {
-		utils.ErrFatalF("no input data identified")
+		utils.ErrFatalf("no input data identified")
 	}
 
 	resultants, err := expand.Expand(unstrucs)
 	if err != nil {
-		utils.ErrFatalF("error expanding resources: %v", err)
+		utils.ErrFatalf("error expanding resources: %v", err)
 	}
 	// Sort resultants for deterministic output
 	sortUnstructs(resultants)
@@ -96,19 +96,19 @@ func run(cmd *cobra.Command, args []string) {
 func resourcetoYAMLString(resource *unstructured.Unstructured) string {
 	jsonb, err := json.Marshal(resource)
 	if err != nil {
-		utils.ErrFatalF("pre-marshaling results to json: %v", err)
+		utils.ErrFatalf("pre-marshaling results to json: %v", err)
 	}
 
 	unmarshalled := map[string]interface{}{}
 	err = json.Unmarshal(jsonb, &unmarshalled)
 	if err != nil {
-		utils.ErrFatalF("pre-unmarshaling results from json: %v", err)
+		utils.ErrFatalf("pre-unmarshaling results from json: %v", err)
 	}
 
 	var b bytes.Buffer
 	yamlEncoder := yaml.NewEncoder(&b)
 	if err := yamlEncoder.Encode(unmarshalled); err != nil {
-		utils.ErrFatalF("marshaling validation yaml results: %v", err)
+		utils.ErrFatalf("marshaling validation yaml results: %v", err)
 	}
 	return b.String()
 }
@@ -116,7 +116,7 @@ func resourcetoYAMLString(resource *unstructured.Unstructured) string {
 func resourceToJSONString(resource *unstructured.Unstructured) string {
 	b, err := json.MarshalIndent(resource, "", "    ")
 	if err != nil {
-		utils.ErrFatalF("marshaling validation json results: %v", err)
+		utils.ErrFatalf("marshaling validation json results: %v", err)
 	}
 	return string(b)
 }
@@ -129,7 +129,7 @@ func resourcesToString(resources []*unstructured.Unstructured, format string) st
 	case stringJSON:
 		conversionFunc = resourceToJSONString
 	default:
-		utils.ErrFatalF("unrecognized value for %s flag: %s", flagNameFormat, format)
+		utils.ErrFatalf("unrecognized value for %s flag: %s", flagNameFormat, format)
 	}
 
 	output := ""
@@ -145,11 +145,11 @@ func resourcesToString(resources []*unstructured.Unstructured, format string) st
 func stringToFile(s string, path string) {
 	file, err := os.Create(path)
 	if err != nil {
-		utils.ErrFatalF("error creating file at path %s: %v", path, err)
+		utils.ErrFatalf("error creating file at path %s: %v", path, err)
 	}
 
 	if _, err = fmt.Fprint(file, s); err != nil {
-		utils.ErrFatalF("error writing to file at path %s: %s", path, err)
+		utils.ErrFatalf("error writing to file at path %s: %s", path, err)
 	}
 }
 
