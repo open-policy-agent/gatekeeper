@@ -15,8 +15,8 @@ webhooks:
   - v1
   - v1beta1
   clientConfig:
-    {{- if .Values.webhookURL }}
-    url: https://{{ .Values.webhookURL }}/v1/mutate
+    {{- if .Values.mutatingWebhookURL }}
+    url: https://{{ .Values.mutatingWebhookURL }}/v1/mutate
     {{- else }}
     service:
       name: gatekeeper-webhook-service
