@@ -123,8 +123,8 @@ var replacements = map[string]string{
     - '*'
   {{- end }}`,
 
-	"HELMSUBST_MUTATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.webhookURL }}
-    url: https://{{ .Values.webhookURL }}/v1/mutate
+	"HELMSUBST_MUTATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.mutatingWebhookURL }}
+    url: https://{{ .Values.mutatingWebhookURL }}/v1/mutate
     {{- else }}
     service:
       name: gatekeeper-webhook-service
@@ -157,8 +157,8 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY": `{{ .Values.validatingWebhookCheckIgnoreFailurePolicy }}`,
 
-	"HELMSUBST_VALIDATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.webhookURL }}
-    url: https://{{ .Values.webhookURL }}/v1/admit
+	"HELMSUBST_VALIDATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.validatingWebhookURL }}
+    url: https://{{ .Values.validatingWebhookURL }}/v1/admit
     {{- else }}
     service:
       name: gatekeeper-webhook-service
