@@ -33,9 +33,9 @@ const (
 	MutationApplied       = "mutation_applied"
 	Mutator               = "mutator"
 	DebugLevel            = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
-	ExecutionsStats       = "execution_stats"
+	ExecutionStats       = "execution_stats"
 )
 
 func LogStatsEntries(client *constraintclient.Client, logger logr.Logger, entries []*instrumentation.StatsEntry, msg string) {
-	logger.WithValues(ExecutionsStats, gkinstr.ToStatsEntriesWithDesc(client, entries)).Info(msg)
+	logger.WithValues(ExecutionStats, gkinstr.ToStatsEntriesWithDesc(client, entries)).Info(msg)
 }

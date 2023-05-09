@@ -106,7 +106,7 @@ func (c *fakeCore) Write(e zapcore.Entry, fields []zapcore.Field) error { //noli
 }
 
 func (c *fakeCore) Sync() error {
-	return nil // TODO(acpana): revisit implementation for GC
+	return nil // TODO(acpana): revisit implementation for GC / https://github.com/open-policy-agent/gatekeeper/issues/2748
 }
 
 func (c *fakeCore) clone() *fakeCore {

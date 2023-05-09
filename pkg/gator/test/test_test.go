@@ -303,7 +303,7 @@ func Test_Test_withStats(t *testing.T) {
 		Stats: []*instrumentation.Stat{
 			{
 				Name: "templateRunTimeNS",
-				// Value: 0, // will be checled later
+				// Value: 0, // will be checked later
 				Source: instrumentation.Source{
 					Type:  "engine",
 					Value: "Rego",
