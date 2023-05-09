@@ -274,7 +274,7 @@ func Test_GVKAggreggator_E2E(t *testing.T) {
 	require.NoError(t, b.Upsert(key1, gvksKind1)) // key1 now has: g1v1k1, g2v1k1, g2v2k1
 	require.NoError(t, b.Upsert(key2, gvksKind2)) // key2 now has: g1v1k2, g2v1k2, g2v2k2
 
-	// require that every gvk that was just added to be presnet
+	// require that every gvk that was just added to be present
 	gvksThatShouldBeTracked := map[schema.GroupVersionKind]interface{}{
 		g1v1k1: struct{}{}, g2v1k1: struct{}{}, g2v2k1: struct{}{},
 		g1v1k2: struct{}{}, g2v1k2: struct{}{}, g2v2k2: struct{}{},
@@ -305,9 +305,7 @@ func Test_GVKAggreggator_E2E(t *testing.T) {
 	require.NoError(t, b.Remove(key1))
 
 	// untrack gvks that shouldn't exist in the
-	gvksThatShouldntBeTracked := map[schema.GroupVersionKind]interface{}{}
 	for _, gvk := range []schema.GroupVersionKind{g1v1k1, g2v1k1, g1v1k2, g2v1k2} {
-		gvksThatShouldntBeTracked[gvk] = struct{}{}
 		delete(gvksThatShouldBeTracked, gvk)
 
 		// also require that this gvk not be present since it was removed
@@ -324,16 +322,16 @@ func Test_GVKAggreggator_E2E(t *testing.T) {
 	require.NoError(t, b.Upsert(key2, gvksGroup3))
 
 	// require all previously added gvks to not be present:
-	testPreseneceForGVK(t, false, b, gvksKind1...)
-	testPreseneceForGVK(t, false, b, gvksKind2...)
-	testPreseneceForGVK(t, false, b, gvksVersion1...)
-	testPreseneceForGVK(t, false, b, gvksVersion2...)
+	testPresenceForGVK(t, false, b, gvksKind1...)
+	testPresenceForGVK(t, false, b, gvksKind2...)
+	testPresenceForGVK(t, false, b, gvksVersion1...)
+	testPresenceForGVK(t, false, b, gvksVersion2...)
 
 	// require newly added gvks to be present
-	testPreseneceForGVK(t, true, b, gvksGroup3...)
+	testPresenceForGVK(t, true, b, gvksGroup3...)
 }
 
-func testPreseneceForGVK(t *testing.T, requireTrue bool, b *GVKAgreggator, gvks ...schema.GroupVersionKind) {
+func testPresenceForGVK(t *testing.T, requireTrue bool, b *GVKAgreggator, gvks ...schema.GroupVersionKind) {
 	t.Helper()
 
 	var msg string

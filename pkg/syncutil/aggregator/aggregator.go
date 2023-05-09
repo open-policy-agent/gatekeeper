@@ -76,40 +76,19 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// if any oldOGVKs exist, we deal with 3 flavors of GVKs:
-	// - A. GVKs that are net new
-	// - B. GVKs that are both new and old (intersection)
-	// - C. GVKs that shouold be marked to be pruned because they are no longer
-	// referenced by Key k.
-	//
-	// It is sufficient in this block to determine C and prune GVKs both from
-	// b.store and b.reverseStore. Flavors A & B will be taken care of
-	// in the for loop below.
-	if oldGvks, found := b.store[k]; found {
-		gvksToPrune := b.markOldGVKsToPrune(gvks, oldGvks)
-
-		// prune store
-		for gkvToPrune := range gvksToPrune {
-			delete(oldGvks, gkvToPrune)
+	oldGVKs, found := b.store[k]
+	if found {
+		// gvksToRemove contains old GKVs that are not included in the new gvks list
+		gvksToRemove := b.unreferencedOldGVKsToPrune(gvks, oldGVKs)
+		if err := b.pruneReverseStore(gvksToRemove, k); err != nil {
+			return fmt.Errorf("failed to prune entries on upsert: %w", err)
 		}
-
-		if err := b.pruneReverseStore(gvksToPrune, k); err != nil {
-			return fmt.Errorf("failed to prune entries: %w", err)
-		}
-
-		if len(oldGvks) == 0 {
-			b.store[k] = make(map[schema.GroupVersionKind]struct{})
-		} else {
-			b.store[k] = oldGvks
-		}
-	} else {
-		b.store[k] = make(map[schema.GroupVersionKind]struct{})
 	}
 
-	// Flavor A: add new GVKs
-	// Flavor B: no op for interesection GVKs since they are already present in the stores
+	b.store[k] = b.makeSet(gvks)
+
+	// add reverse links
 	for _, gvk := range gvks {
-		b.store[k][gvk] = struct{}{}
 		if _, found := b.reverseStore[gvk]; !found {
 			b.reverseStore[gvk] = make(map[Key]struct{})
 		}
@@ -119,7 +98,16 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 	return nil
 }
 
-func (b *GVKAgreggator) markOldGVKsToPrune(newGVKs []schema.GroupVersionKind, oldGVKs map[schema.GroupVersionKind]struct{}) map[schema.GroupVersionKind]struct{} {
+func (b *GVKAgreggator) makeSet(gvks []schema.GroupVersionKind) map[schema.GroupVersionKind]struct{} {
+	gvkSet := make(map[schema.GroupVersionKind]struct{})
+	for _, gvk := range gvks {
+		gvkSet[gvk] = struct{}{}
+	}
+
+	return gvkSet
+}
+
+func (b *GVKAgreggator) unreferencedOldGVKsToPrune(newGVKs []schema.GroupVersionKind, oldGVKs map[schema.GroupVersionKind]struct{}) map[schema.GroupVersionKind]struct{} {
 	// deep copy oldGVKs
 	oldGVKsCpy := make(map[schema.GroupVersionKind]struct{}, len(oldGVKs))
 	for k, v := range oldGVKs {
@@ -146,7 +134,7 @@ func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struc
 
 		delete(keySet, k)
 
-		// remove GVK from reverseStore if it's not referenced by any Ket anymore.
+		// remove GVK from reverseStore if it's not referenced by any Key anymore.
 		if len(keySet) == 0 {
 			delete(b.reverseStore, gvk)
 		} else {
