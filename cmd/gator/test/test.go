@@ -7,7 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/cmd/gator/utils"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
+	cmdutils "github.com/open-policy-agent/gatekeeper/cmd/gator/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -48,6 +49,7 @@ var (
 	flagFilenames    []string
 	flagOutput       string
 	flagIncludeTrace bool
+	flagGatherStats  bool
 	flagImages       []string
 	flagTempDir      string
 )
@@ -61,12 +63,15 @@ const (
 	stringJSON          = "json"
 	stringYAML          = "yaml"
 	stringHumanFriendly = "default"
+
+	fourSpaceTab = "    "
 )
 
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
-	Cmd.Flags().BoolVarP(&flagIncludeTrace, "trace", "t", false, `include a trace for the underlying constraint framework evaluation`)
+	Cmd.Flags().BoolVarP(&flagIncludeTrace, "trace", "t", false, "include a trace for the underlying Constraint Framework evaluation.")
+	Cmd.Flags().BoolVarP(&flagGatherStats, "stats", "", false, "include performance stats returned from the Constraint Framework.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 }
@@ -74,19 +79,19 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
-		utils.ErrFatalf("reading: %v", err)
+		cmdutils.ErrFatalf("reading: %v", err)
 	}
 	if len(unstrucs) == 0 {
-		utils.ErrFatalf("no input data identified")
+		cmdutils.ErrFatalf("no input data identified")
 	}
 
-	responses, err := test.Test(unstrucs, flagIncludeTrace)
+	responses, err := test.Test(unstrucs, test.Opts{IncludeTrace: flagIncludeTrace, GatherStats: flagGatherStats})
 	if err != nil {
-		utils.ErrFatalf("auditing objects: %v", err)
+		cmdutils.ErrFatalf("auditing objects: %v", err)
 	}
 	results := responses.Results()
 
-	fmt.Print(formatOutput(flagOutput, results))
+	fmt.Print(formatOutput(flagOutput, results, responses.StatsEntries))
 
 	// Whether or not we return non-zero depends on whether we have a `deny`
 	// enforcementAction on one of the violated constraints
@@ -97,31 +102,70 @@ func run(cmd *cobra.Command, args []string) {
 	os.Exit(exitCode)
 }
 
-func formatOutput(flagOutput string, results []*test.GatorResult) string {
+func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instrumentation.StatsEntry) string {
 	switch strings.ToLower(flagOutput) {
 	case stringJSON:
-		b, err := json.MarshalIndent(results, "", "    ")
-		if err != nil {
-			utils.ErrFatalf("marshaling validation json results: %v", err)
+		var jsonB []byte
+		var err error
+
+		if stats != nil {
+			statsAndResults := map[string]interface{}{"results": results, "stats": stats}
+			jsonB, err = json.MarshalIndent(statsAndResults, "", fourSpaceTab)
+			if err != nil {
+				cmdutils.ErrFatalf("marshaling validation json results and stats: %v", err)
+			}
+		} else {
+			jsonB, err = json.MarshalIndent(results, "", fourSpaceTab)
+			if err != nil {
+				cmdutils.ErrFatalf("marshaling validation json results: %v", err)
+			}
 		}
-		return string(b)
+
+		return string(jsonB)
 	case stringYAML:
 		yamlResults := test.GetYamlFriendlyResults(results)
-		jsonb, err := json.Marshal(yamlResults)
-		if err != nil {
-			utils.ErrFatalf("pre-marshaling results to json: %v", err)
+		var yamlb []byte
+
+		if stats != nil {
+			statsAndResults := map[string]interface{}{"results": yamlResults, "stats": stats}
+
+			statsJSONB, err := json.Marshal(statsAndResults)
+			if err != nil {
+				cmdutils.ErrFatalf("pre-marshaling stats to json: %v", err)
+			}
+
+			statsAndResultsUnmarshalled := struct {
+				Results []*test.YamlGatorResult
+				Stats   []*instrumentation.StatsEntry
+			}{}
+
+			err = json.Unmarshal(statsJSONB, &statsAndResultsUnmarshalled)
+			if err != nil {
+				cmdutils.ErrFatalf("pre-unmarshaling stats from json: %v", err)
+			}
+
+			yamlb, err = yaml.Marshal(statsAndResultsUnmarshalled)
+			if err != nil {
+				cmdutils.ErrFatalf("marshaling validation yaml results and stats: %v", err)
+			}
+		} else {
+			jsonb, err := json.Marshal(yamlResults)
+			if err != nil {
+				cmdutils.ErrFatalf("pre-marshaling results to json: %v", err)
+			}
+
+			unmarshalled := []*test.YamlGatorResult{}
+			err = json.Unmarshal(jsonb, &unmarshalled)
+			if err != nil {
+				cmdutils.ErrFatalf("pre-unmarshaling results from json: %v", err)
+			}
+
+			yamlb, err = yaml.Marshal(unmarshalled)
+			if err != nil {
+				cmdutils.ErrFatalf("marshaling validation yaml results: %v", err)
+			}
 		}
 
-		unmarshalled := []*test.YamlGatorResult{}
-		err = json.Unmarshal(jsonb, &unmarshalled)
-		if err != nil {
-			utils.ErrFatalf("pre-unmarshaling results from json: %v", err)
-		}
-
-		yamlb, err := yaml.Marshal(unmarshalled)
-		if err != nil {
-			utils.ErrFatalf("marshaling validation yaml results: %v", err)
-		}
 		return string(yamlb)
 	case stringHumanFriendly:
 	default:
