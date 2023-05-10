@@ -16,17 +16,17 @@ import (
 )
 
 const (
-	examples = `  # expand resources in a manifest
-  gator expand --filename="manifest.yaml"
+	examples = `# expand resources in a manifest
+gator expand --filename="manifest.yaml"
 
-  # expand a directory
-  gator expand --filename="config-and-policies/"
+# expand a directory
+gator expand --filename="config-and-policies/"
 
-  # Use multiple inputs
-  gator expand --filename="manifest.yaml" --filename="templates-and-constraints/"
+# Use multiple inputs
+gator expand --filename="manifest.yaml" --filename="templates-and-constraints/"
 
-  # Output JSON to file
-  gator expand --filename="manifest.yaml" --format=json --outputfile=results.yaml `
+# Output JSON to file
+gator expand --filename="manifest.yaml" --format=json --outputfile=results.yaml`
 )
 
 var Cmd = &cobra.Command{
@@ -69,10 +69,10 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
-		util.ErrFatalf("reading: %v\n", err)
+		util.ErrFatalf("reading: %v", err)
 	}
 	if len(unstrucs) == 0 {
-		util.ErrFatalf("no input data identified\n")
+		util.ErrFatalf("no input data identified")
 	}
 
 	resultants, err := expand.Expand(unstrucs)
