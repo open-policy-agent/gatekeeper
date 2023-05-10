@@ -21,12 +21,13 @@ type SyncRequirements []GVKEquivalenceSet
 type GVKEquivalenceSet map[schema.GroupVersionKind]struct{}
 
 // CompactSyncRequirements contains a list of ANDed requirements, each of
+// which contains a list of equivalent (ORed) GVKs in compact form.
 type CompactSyncRequirements [][]CompactGVKEquivalenceSet
 
 // compactGVKEquivalenceSet contains a set of equivalent GVKs, expressed
 // in the compact form [groups, versions, kinds] where any combination of
 // items from these three fields can be considered a valid equivalent.
-// Used solely for unmarshalling.
+// Used for unmarshalling as this is the form used in requiressync annotations.
 type CompactGVKEquivalenceSet struct {
 	Groups   []string `json:"groups"`
 	Versions []string `json:"versions"`
@@ -56,8 +57,7 @@ func ReadSyncRequirements(t *templates.ConstraintTemplate) (SyncRequirements, er
 	return SyncRequirements{}, nil
 }
 
-// Takes a compactGVKSet and expands and unions it with the set of
-// GVKs pointed to by the 'expandedEquivalentSet' argument.
+// Takes a compactGVKSet and expands it into a GVKEquivalenceSet.
 func ExpandCompactEquivalenceSet(compactEquivalenceSet CompactGVKEquivalenceSet) GVKEquivalenceSet {
 	equivalenceSet := GVKEquivalenceSet{}
 	for _, group := range compactEquivalenceSet.Groups {
@@ -70,7 +70,8 @@ func ExpandCompactEquivalenceSet(compactEquivalenceSet CompactGVKEquivalenceSet)
 	return equivalenceSet
 }
 
-// Convert
+// Takes a CompactSyncRequirements (the json form provided in the template
+// annotation) and expands it into a SyncRequirements.
 func ExpandCompactRequirements(compactSyncRequirements CompactSyncRequirements) (SyncRequirements, error) {
 	syncRequirements := SyncRequirements{}
 	for _, compactRequirement := range compactSyncRequirements {
