@@ -1,588 +1,20 @@
 package expansion
 
 import (
-	"encoding/json"
-	"fmt"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	expansionunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
-	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion/fixtures"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assign"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignimage"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
-	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 )
-
-type templateData struct {
-	name              string
-	apply             []match.ApplyTo
-	source            string
-	generatedGVK      expansionunversioned.GeneratedGVK
-	enforcementAction string
-}
-
-func newTemplate(data *templateData) *expansionunversioned.ExpansionTemplate {
-	return &expansionunversioned.ExpansionTemplate{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ExpansionTemplate",
-			APIVersion: "expansiontemplates.gatekeeper.sh/v1beta1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: data.name,
-		},
-		Spec: expansionunversioned.ExpansionTemplateSpec{
-			ApplyTo:           data.apply,
-			TemplateSource:    data.source,
-			GeneratedGVK:      data.generatedGVK,
-			EnforcementAction: data.enforcementAction,
-		},
-	}
-}
-
-func TestUpsertRemoveTemplate(t *testing.T) {
-	tests := []struct {
-		name          string
-		add           []*expansionunversioned.ExpansionTemplate
-		remove        []*expansionunversioned.ExpansionTemplate
-		check         []*expansionunversioned.ExpansionTemplate
-		wantAddErr    bool
-		wantRemoveErr bool
-	}{
-		{
-			name: "adding 2 valid templates",
-			add: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-				newTemplate(&templateData{
-					name: "test2",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Foo"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Bar",
-					},
-				}),
-			},
-			check: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-				newTemplate(&templateData{
-					name: "test2",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Foo"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Bar",
-					},
-				}),
-			},
-			wantAddErr: false,
-		},
-		{
-			name: "adding template with empty name returns error",
-			add: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-			},
-			check:      []*expansionunversioned.ExpansionTemplate{},
-			wantAddErr: true,
-		},
-		{
-			name: "adding template with empty source returns error",
-			add: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "hello",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-			},
-			check:      []*expansionunversioned.ExpansionTemplate{},
-			wantAddErr: true,
-		},
-		{
-			name: "adding template with empty GVK returns error",
-			add: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "hello",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source:       "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{},
-				}),
-			},
-			check:      []*expansionunversioned.ExpansionTemplate{},
-			wantAddErr: true,
-		},
-		{
-			name: "removing a template with empty name returns error",
-			add: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-			},
-			remove: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-			},
-			check: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-			},
-			wantAddErr:    false,
-			wantRemoveErr: true,
-		},
-		{
-			name: "adding 2 templates, removing 1",
-			add: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-				newTemplate(&templateData{
-					name: "test2",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-			},
-			remove: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test2",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-			},
-			check: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-			},
-			wantAddErr:    false,
-			wantRemoveErr: false,
-		},
-		{
-			name: "updating an existing template",
-			add: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"Baz"},
-						Kinds:    []string{"Foo"},
-						Versions: []string{"v9000"},
-					}},
-					source: "spec.something",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v9000",
-						Kind:    "Bar",
-					},
-				}),
-			},
-			check: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"Baz"},
-						Kinds:    []string{"Foo"},
-						Versions: []string{"v9000"},
-					}},
-					source: "spec.something",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v9000",
-						Kind:    "Bar",
-					},
-				}),
-			},
-			wantAddErr: false,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			ec := NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
-
-			for _, templ := range tc.add {
-				err := ec.UpsertTemplate(templ)
-				if tc.wantAddErr && err == nil {
-					t.Errorf("expected error, got nil")
-				} else if !tc.wantAddErr && err != nil {
-					t.Errorf("failed to add template: %s", err)
-				}
-			}
-
-			for _, templ := range tc.remove {
-				err := ec.RemoveTemplate(templ)
-				if tc.wantRemoveErr && err == nil {
-					t.Errorf("expected error, got nil")
-				} else if !tc.wantRemoveErr && err != nil {
-					t.Errorf("failed to remove template: %s", err)
-				}
-			}
-
-			if len(ec.templates) != len(tc.check) {
-				t.Errorf("incorrect number of templates in cache, got %d, want %d", len(ec.templates), len(tc.check))
-			}
-			for _, templ := range tc.check {
-				k := templ.ObjectMeta.Name
-				got, exists := ec.templates[k]
-				if !exists {
-					t.Errorf("could not find template with key %q", k)
-				}
-				if cmp.Diff(got, templ) != "" {
-					t.Errorf("got value:  \n%s\n, wanted: \n%s\n\n diff: \n%s", prettyResource(got), prettyResource(templ), cmp.Diff(got, templ))
-				}
-			}
-		})
-	}
-}
-
-func TestTemplatesForGVK(t *testing.T) {
-	tests := []struct {
-		name         string
-		gvk          expansionunversioned.GeneratedGVK
-		addTemplates []*expansionunversioned.ExpansionTemplate
-		want         []*expansionunversioned.ExpansionTemplate
-	}{
-		{
-			name: "adding 2 templates, 1 match",
-			gvk: expansionunversioned.GeneratedGVK{
-				Group:   "apps",
-				Version: "v1",
-				Kind:    "Deployment",
-			},
-			addTemplates: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-				newTemplate(&templateData{
-					name: "test2",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Foo"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Bar",
-					},
-				}),
-			},
-			want: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-			},
-		},
-		{
-			name: "adding 2 templates, 2 matches",
-			gvk: expansionunversioned.GeneratedGVK{
-				Group:   "apps",
-				Version: "v1",
-				Kind:    "Deployment",
-			},
-			addTemplates: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-				newTemplate(&templateData{
-					name: "test2",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Bar",
-					},
-				}),
-			},
-			want: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-				newTemplate(&templateData{
-					name: "test2",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Bar",
-					},
-				}),
-			},
-		},
-		{
-			name: "adding 1 templates, 0 match",
-			addTemplates: []*expansionunversioned.ExpansionTemplate{
-				newTemplate(&templateData{
-					name: "test1",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
-			},
-			want: []*expansionunversioned.ExpansionTemplate{},
-			gvk: expansionunversioned.GeneratedGVK{
-				Group:   "",
-				Version: "v9000",
-				Kind:    "CronJob",
-			},
-		},
-		{
-			name:         "no templates, no matches",
-			addTemplates: []*expansionunversioned.ExpansionTemplate{},
-			want:         []*expansionunversioned.ExpansionTemplate{},
-			gvk: expansionunversioned.GeneratedGVK{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Pod",
-			},
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			ec := NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
-			for _, te := range tc.addTemplates {
-				if err := ec.UpsertTemplate(te); err != nil {
-					t.Fatalf("error upserting template: %s", err)
-				}
-			}
-
-			got := ec.templatesForGVK(genGVKToSchemaGVK(tc.gvk))
-			sortTemplates(got)
-			wantSorted := make([]*expansionunversioned.ExpansionTemplate, len(tc.want))
-			copy(wantSorted, tc.want)
-			sortTemplates(wantSorted)
-
-			if len(got) != len(wantSorted) {
-				t.Errorf("want %d templates, got %d", len(wantSorted), len(got))
-			}
-			for i := 0; i < len(got); i++ {
-				diff := cmp.Diff(got[i], wantSorted[i])
-				if diff != "" {
-					t.Errorf("got = \n%s\n, want = \n%s\n\n diff \n%s", prettyResource(got[i]), prettyResource(wantSorted[i]), diff)
-				}
-			}
-		})
-	}
-}
 
 func TestExpand(t *testing.T) {
 	tests := []struct {
@@ -596,193 +28,209 @@ func TestExpand(t *testing.T) {
 	}{
 		{
 			name:      "generator with no templates or mutators",
-			generator: loadFixture(fixtures.GeneratorCat, t),
+			generator: fixtures.LoadFixture(fixtures.GeneratorCat, t),
 		},
 		{
 			name:      "generator with no gvk returns error",
-			generator: loadFixture(fixtures.DeploymentNoGVK, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNoGVK, t),
 			expectErr: true,
 		},
 		{
 			name:      "generator with non-matching template",
-			generator: loadFixture(fixtures.GeneratorCat, t),
+			generator: fixtures.LoadFixture(fixtures.GeneratorCat, t),
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{},
 		},
 		{
 			name:      "no mutators basic deployment expands pod",
-			generator: loadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators:  []types.Mutator{},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+				{Obj: fixtures.LoadFixture(fixtures.PodNoMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
 			name:      "deployment expands pod with enforcement action override",
-			generator: loadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators:  []types.Mutator{},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPodsEnforceDryrun, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPodsEnforceDryrun, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: "dryrun", TemplateName: "expand-deployments"},
+				{Obj: fixtures.LoadFixture(fixtures.PodNoMutate, t), EnforcementAction: "dryrun", TemplateName: "expand-deployments"},
 			},
 		},
 		{
 			name:      "1 mutator basic deployment expands pod",
-			generator: loadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators: []types.Mutator{
-				loadAssign(fixtures.AssignPullImage, t),
+				fixtures.LoadAssign(fixtures.AssignPullImage, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+				{Obj: fixtures.LoadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
 			name:      "expand with nil namespace returns error",
-			generator: loadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        nil,
 			mutators: []types.Mutator{
-				loadAssign(fixtures.AssignPullImage, t),
+				fixtures.LoadAssign(fixtures.AssignPullImage, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			expectErr: true,
 		},
 		{
 			name:      "1 mutator source All deployment expands pod and mutates",
-			generator: loadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators: []types.Mutator{
-				loadAssign(fixtures.AssignPullImageSourceAll, t),
+				fixtures.LoadAssign(fixtures.AssignPullImageSourceAll, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+				{Obj: fixtures.LoadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
 			name:      "1 mutator source empty deployment expands pod and mutates",
-			generator: loadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators: []types.Mutator{
-				loadAssign(fixtures.AssignPullImageSourceEmpty, t),
+				fixtures.LoadAssign(fixtures.AssignPullImageSourceEmpty, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+				{Obj: fixtures.LoadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
 			name:      "1 mutator source Original deployment expands pod but does not mutate",
-			generator: loadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators: []types.Mutator{
-				loadAssign(fixtures.AssignHostnameSourceOriginal, t),
+				fixtures.LoadAssign(fixtures.AssignHostnameSourceOriginal, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+				{Obj: fixtures.LoadFixture(fixtures.PodNoMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
 			name:      "2 mutators, only 1 match, basic deployment expands pod",
-			generator: loadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators: []types.Mutator{
-				loadAssign(fixtures.AssignPullImage, t),
-				loadAssignMeta(fixtures.AssignMetaAnnotateKitten, t), // should not match
+				fixtures.LoadAssign(fixtures.AssignPullImage, t),
+				fixtures.LoadAssignMeta(fixtures.AssignMetaAnnotateKitten, t), // should not match
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+				{Obj: fixtures.LoadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
 			name:      "2 mutators, 2 matches, basic deployment expands pod",
-			generator: loadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators: []types.Mutator{
-				loadAssign(fixtures.AssignPullImage, t),
-				loadAssignMeta(fixtures.AssignMetaAnnotatePod, t),
+				fixtures.LoadAssign(fixtures.AssignPullImage, t),
+				fixtures.LoadAssignMeta(fixtures.AssignMetaAnnotatePod, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodImagePullMutateAnnotated, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+				{Obj: fixtures.LoadFixture(fixtures.PodImagePullMutateAnnotated, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
 			name:      "custom CR with 2 different resultant kinds, with mutators",
-			generator: loadFixture(fixtures.GeneratorCat, t),
+			generator: fixtures.LoadFixture(fixtures.GeneratorCat, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators: []types.Mutator{
-				loadAssign(fixtures.AssignKittenAge, t),
-				loadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
-				loadAssignMeta(fixtures.AssignMetaAnnotateKitten, t),
+				fixtures.LoadAssign(fixtures.AssignKittenAge, t),
+				fixtures.LoadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
+				fixtures.LoadAssignMeta(fixtures.AssignMetaAnnotateKitten, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TemplateCatExpandsKitten, t),
-				loadTemplate(fixtures.TemplateCatExpandsPurr, t),
+				fixtures.LoadTemplate(fixtures.TemplateCatExpandsKitten, t),
+				fixtures.LoadTemplate(fixtures.TemplateCatExpandsPurr, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.ResultantKitten, t), EnforcementAction: "dryrun", TemplateName: "expand-cats-kitten"},
-				{Obj: loadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn", TemplateName: "expand-cats-purr"},
+				{Obj: fixtures.LoadFixture(fixtures.ResultantKitten, t), EnforcementAction: "dryrun", TemplateName: "expand-cats-kitten"},
+				{Obj: fixtures.LoadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn", TemplateName: "expand-cats-purr"},
 			},
 		},
 		{
 			name:      "custom CR with 2 different resultant kinds, with mutators and non-matching configs",
-			generator: loadFixture(fixtures.GeneratorCat, t),
+			generator: fixtures.LoadFixture(fixtures.GeneratorCat, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators: []types.Mutator{
-				loadAssign(fixtures.AssignKittenAge, t),
-				loadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
-				loadAssignMeta(fixtures.AssignMetaAnnotateKitten, t),
-				loadAssign(fixtures.AssignPullImage, t), // should not match
+				fixtures.LoadAssign(fixtures.AssignKittenAge, t),
+				fixtures.LoadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
+				fixtures.LoadAssignMeta(fixtures.AssignMetaAnnotateKitten, t),
+				fixtures.LoadAssign(fixtures.AssignPullImage, t), // should not match
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TemplateCatExpandsKitten, t),
-				loadTemplate(fixtures.TemplateCatExpandsPurr, t),
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t), // should not match
+				fixtures.LoadTemplate(fixtures.TemplateCatExpandsKitten, t),
+				fixtures.LoadTemplate(fixtures.TemplateCatExpandsPurr, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t), // should not match
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.ResultantKitten, t), EnforcementAction: "dryrun", TemplateName: "expand-cats-kitten"},
-				{Obj: loadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn", TemplateName: "expand-cats-purr"},
+				{Obj: fixtures.LoadFixture(fixtures.ResultantKitten, t), EnforcementAction: "dryrun", TemplateName: "expand-cats-kitten"},
+				{Obj: fixtures.LoadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn", TemplateName: "expand-cats-purr"},
 			},
 		},
 		{
 			name:      "1 mutator deployment expands pod with AssignImage",
-			generator: loadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators: []types.Mutator{
-				loadAssignImage(fixtures.AssignImage, t),
+				fixtures.LoadAssignImage(fixtures.AssignImage, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
-				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodMutateImage, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+				{Obj: fixtures.LoadFixture(fixtures.PodMutateImage, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+			},
+		},
+		{
+			name:      "recursive expansion with mutators",
+			generator: fixtures.LoadFixture(fixtures.GeneratorCronJob, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				fixtures.LoadAssignMeta(fixtures.AssignMetaAnnotatePod, t),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				fixtures.LoadTemplate(fixtures.TempExpCronJob, t),
+				fixtures.LoadTemplate(fixtures.TempExpJob, t),
+			},
+			want: []*Resultant{
+				{Obj: fixtures.LoadFixture(fixtures.ResultantJob, t), EnforcementAction: "", TemplateName: "expand-cronjobs"},
+				{Obj: fixtures.LoadFixture(fixtures.ResultantRecursivePod, t), EnforcementAction: "", TemplateName: "expand-jobs"},
 			},
 		},
 	}
@@ -826,8 +274,8 @@ func compareResults(got []*Resultant, want []*Resultant, t *testing.T) {
 		return
 	}
 
-	sortReusultants(got)
-	sortReusultants(want)
+	sortResultants(got)
+	sortResultants(want)
 
 	for i := 0; i < len(got); i++ {
 		if diff := cmp.Diff(got[i], want[i]); diff != "" {
@@ -836,7 +284,7 @@ func compareResults(got []*Resultant, want []*Resultant, t *testing.T) {
 	}
 }
 
-func sortReusultants(objs []*Resultant) {
+func sortResultants(objs []*Resultant) {
 	sortKey := func(r *Resultant) string {
 		return r.Obj.GetName() + r.Obj.GetAPIVersion()
 	}
@@ -845,88 +293,118 @@ func sortReusultants(objs []*Resultant) {
 	})
 }
 
-func loadFixture(f string, t *testing.T) *unstructured.Unstructured {
-	obj := make(map[string]interface{})
-	if err := yaml.Unmarshal([]byte(f), obj); err != nil {
-		t.Fatalf("error unmarshaling yaml for fixture: %s", err)
+func TestValidateTemplate(t *testing.T) {
+	tests := []struct {
+		name  string
+		errFn func(e error, t *testing.T)
+		temp  expansionunversioned.ExpansionTemplate
+	}{
+		{
+			name:  "valid expansion template",
+			errFn: noError,
+			temp:  *fixtures.TestTemplate("foo", 1, 2),
+		},
+		{
+			name: "missing name",
+			temp: *fixtures.NewTemplate(&fixtures.TemplateData{
+				Apply: []match.ApplyTo{{
+					Groups:   []string{"apps"},
+					Kinds:    []string{"Deployment"},
+					Versions: []string{"v1"},
+				}},
+				Source: "spec.template",
+				GenGVK: expansionunversioned.GeneratedGVK{
+					Group:   "",
+					Version: "v1",
+					Kind:    "Pod",
+				},
+			}),
+			errFn: matchErr("empty name"),
+		},
+		{
+			name: "missing source",
+			temp: *fixtures.NewTemplate(&fixtures.TemplateData{
+				Name: "test1",
+				Apply: []match.ApplyTo{{
+					Groups:   []string{"apps"},
+					Kinds:    []string{"Deployment"},
+					Versions: []string{"v1"},
+				}},
+				GenGVK: expansionunversioned.GeneratedGVK{
+					Group:   "",
+					Version: "v1",
+					Kind:    "Pod",
+				},
+			}),
+			errFn: matchErr("empty source"),
+		},
+		{
+			name: "missing generated GVK",
+			temp: *fixtures.NewTemplate(&fixtures.TemplateData{
+				Name: "test1",
+				Apply: []match.ApplyTo{{
+					Groups:   []string{"apps"},
+					Kinds:    []string{"Deployment"},
+					Versions: []string{"v1"},
+				}},
+				Source: "spec.template",
+			}),
+			errFn: matchErr("empty generatedGVK"),
+		},
+		{
+			name: "missing applyTo",
+			temp: *fixtures.NewTemplate(&fixtures.TemplateData{
+				Name:   "test1",
+				Source: "spec.template",
+				GenGVK: expansionunversioned.GeneratedGVK{
+					Group:   "",
+					Version: "v1",
+					Kind:    "Pod",
+				},
+			}),
+			errFn: matchErr("specify ApplyTo"),
+		},
+		{
+			name: "loop",
+			temp: *fixtures.NewTemplate(&fixtures.TemplateData{
+				Name: "test1",
+				Apply: []match.ApplyTo{{
+					Groups:   []string{""},
+					Kinds:    []string{"Pod"},
+					Versions: []string{"v1"},
+				}},
+				Source: "spec.template",
+				GenGVK: expansionunversioned.GeneratedGVK{
+					Group:   "",
+					Version: "v1",
+					Kind:    "Pod",
+				},
+			}),
+			errFn: matchErr("also applies to that same GVK"),
+		},
 	}
-
-	jsonBytes, err := json.Marshal(obj)
-	if err != nil {
-		t.Fatalf("error marshaling json for fixture: %s", err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.errFn(ValidateTemplate(&tc.temp), t)
+		})
 	}
-
-	if err = json.Unmarshal(jsonBytes, &obj); err != nil {
-		t.Fatalf("error unmarshaling json for fixture: %s", err)
-	}
-
-	u := unstructured.Unstructured{}
-	u.SetUnstructuredContent(obj)
-	return &u
 }
 
-func loadTemplate(f string, t *testing.T) *expansionunversioned.ExpansionTemplate {
-	u := loadFixture(f, t)
-	te := &expansionunversioned.ExpansionTemplate{}
-	err := convertUnstructuredToTyped(u, te)
-	if err != nil {
-		t.Fatalf("error converting template expansion: %s", err)
+func noError(e error, t *testing.T) {
+	if e != nil {
+		t.Errorf("did want want error, but got %s", e)
 	}
-	return te
 }
 
-func loadAssign(f string, t *testing.T) types.Mutator {
-	u := loadFixture(f, t)
-	a := &mutationsunversioned.Assign{}
-	err := convertUnstructuredToTyped(u, a)
-	if err != nil {
-		t.Fatalf("error converting assign: %s", err)
-	}
-	mut, err := assign.MutatorForAssign(a)
-	if err != nil {
-		t.Fatalf("error creating assign: %s", err)
-	}
-	return mut
-}
+func matchErr(substr string) func(error, *testing.T) {
+	return func(err error, t *testing.T) {
+		if err == nil {
+			t.Error("expected err but got nil")
+			return
+		}
 
-func loadAssignImage(f string, t *testing.T) types.Mutator {
-	u := loadFixture(f, t)
-	a := &mutationsunversioned.AssignImage{}
-	err := convertUnstructuredToTyped(u, a)
-	if err != nil {
-		t.Fatalf("error converting assignImage: %s", err)
+		if !strings.Contains(err.Error(), substr) {
+			t.Errorf("expected error to contain %q, but got %q", substr, err.Error())
+		}
 	}
-	mut, err := assignimage.MutatorForAssignImage(a)
-	if err != nil {
-		t.Fatalf("error creating assignimage: %s", err)
-	}
-	return mut
-}
-
-func loadAssignMeta(f string, t *testing.T) types.Mutator {
-	u := loadFixture(f, t)
-	a := &mutationsunversioned.AssignMetadata{}
-	err := convertUnstructuredToTyped(u, a)
-	if err != nil {
-		t.Fatalf("error converting assignmeta: %s", err)
-	}
-	mut, err := assignmeta.MutatorForAssignMetadata(a)
-	if err != nil {
-		t.Fatalf("error creating assignmeta: %s", err)
-	}
-	return mut
-}
-
-func convertUnstructuredToTyped(u *unstructured.Unstructured, obj interface{}) error {
-	if u == nil {
-		return fmt.Errorf("cannot convert nil unstructured to type")
-	}
-	err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.UnstructuredContent(), obj)
-	return err
-}
-
-func sortTemplates(templates []*expansionunversioned.ExpansionTemplate) {
-	sort.SliceStable(templates, func(x, y int) bool {
-		return templates[x].Name < templates[y].Name
-	})
 }

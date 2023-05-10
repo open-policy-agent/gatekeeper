@@ -53,6 +53,7 @@ var (
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
 	emitAdmissionEvents                = flag.Bool("emit-admission-events", false, "(alpha) emit Kubernetes events for each admission violation")
 	admissionEventsInvolvedNamespace   = flag.Bool("admission-events-involved-namespace", false, "emit admission events for each violation in the involved objects namespace, the default (false) generates events in the namespace Gatekeeper is installed in. Admission events from cluster-scoped resources will still follow the default behavior")
+	logStatsAdmission                  = flag.Bool("log-stats-admission", false, "(alpha) log stats for admission webhook")
 	tlsMinVersion                      = flag.String("tls-min-version", "1.3", "minimum version of TLS supported")
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
 	clientCAName                       = flag.String("client-ca-name", "", "name of the certificate authority bundle to authenticate the Kubernetes API server requests against")

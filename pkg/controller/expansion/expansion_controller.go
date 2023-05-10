@@ -7,8 +7,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
-	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -20,10 +19,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -32,6 +33,9 @@ import (
 )
 
 var log = logf.Log.WithName("controller").WithValues("kind", "ExpansionTemplate", logging.Process, "template_expansion_controller")
+
+// eventQueueSize is how many events to queue before blocking.
+const eventQueueSize = 1024
 
 type Adder struct {
 	WatchManager    *watch.Manager
@@ -78,11 +82,18 @@ type Reconciler struct {
 	registry     *etRegistry
 	statusClient client.StatusClient
 	tracker      *readiness.Tracker
+	events       chan event.GenericEvent
+	eventSource  source.Source
 
 	getPod func(context.Context) (*corev1.Pod, error)
 }
 
-func newReconciler(mgr manager.Manager, system *expansion.System, getPod func(ctx context.Context) (*corev1.Pod, error), tracker *readiness.Tracker) *Reconciler {
+func newReconciler(mgr manager.Manager,
+	system *expansion.System,
+	getPod func(ctx context.Context) (*corev1.Pod, error),
+	tracker *readiness.Tracker,
+) *Reconciler {
+	ev := make(chan event.GenericEvent, eventQueueSize)
 	return &Reconciler{
 		Client:       mgr.GetClient(),
 		system:       system,
@@ -91,26 +102,39 @@ func newReconciler(mgr manager.Manager, system *expansion.System, getPod func(ct
 		statusClient: mgr.GetClient(),
 		getPod:       getPod,
 		tracker:      tracker,
+		events:       ev,
+		eventSource:  &source.Channel{Source: ev, DestBufferSize: 1024},
 	}
 }
 
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r *Reconciler) error {
 	c, err := controller.New("expansion-template-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
+	// Watch for enqueued events
+	if r.eventSource != nil {
+		err = c.Watch(
+			r.eventSource,
+			&handler.EnqueueRequestForObject{})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Watch for changes to ExpansionTemplates
 	return c.Watch(
-		&source.Kind{Type: &v1alpha1.ExpansionTemplate{}},
+		&source.Kind{Type: &expansionv1alpha1.ExpansionTemplate{}},
 		&handler.EnqueueRequestForObject{})
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	defer r.registry.report(ctx)
-	log.Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
+	log.V(logging.DebugLevel).Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
 
 	deleted := false
-	versionedET := &v1alpha1.ExpansionTemplate{}
+	versionedET := &expansionv1alpha1.ExpansionTemplate{}
 	err := r.Get(ctx, request.NamespacedName, versionedET)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -123,6 +147,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err := r.scheme.Convert(versionedET, et, nil); err != nil {
 		return reconcile.Result{}, err
 	}
+	oldConflicts := r.system.GetConflicts()
+
+	if !et.GetDeletionTimestamp().IsZero() {
+		deleted = true
+	}
 
 	if deleted {
 		// et will be an empty struct. We set the metadata name, which is
@@ -132,9 +161,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			r.getTracker().TryCancelExpect(versionedET)
 			return reconcile.Result{}, err
 		}
-		log.Info("removed expansion template", "template name", et.GetName())
+		log.V(logging.DebugLevel).Info("removed expansion template", "template name", et.GetName())
 		r.registry.remove(request.NamespacedName)
 		r.getTracker().CancelExpect(versionedET)
+		r.queueConflicts(oldConflicts)
 		return reconcile.Result{}, r.deleteStatus(ctx, request.NamespacedName.Name)
 	}
 
@@ -149,16 +179,45 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		log.Error(upsertErr, "upserting template", "template_name", et.GetName())
 	}
 
+	r.queueConflicts(oldConflicts)
 	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, et, upsertErr)
 }
 
+func (r *Reconciler) queueConflicts(old expansion.IDSet) {
+	for tID := range symmetricDiff(old, r.system.GetConflicts()) {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
+		// ExpansionTemplate is cluster-scoped, so we do not set namespace
+		u.SetName(string(tID))
+
+		r.events <- event.GenericEvent{Object: u}
+	}
+}
+
+func symmetricDiff(x, y expansion.IDSet) expansion.IDSet {
+	sDiff := make(expansion.IDSet)
+
+	for id := range x {
+		if _, exists := y[id]; !exists {
+			sDiff[id] = true
+		}
+	}
+	for id := range y {
+		if _, exists := x[id]; !exists {
+			sDiff[id] = true
+		}
+	}
+
+	return sDiff
+}
+
 func (r *Reconciler) deleteStatus(ctx context.Context, etName string) error {
-	status := &v1beta1.ExpansionTemplatePodStatus{}
+	status := &statusv1beta1.ExpansionTemplatePodStatus{}
 	pod, err := r.getPod(ctx)
 	if err != nil {
 		return fmt.Errorf("getting reconciler pod: %w", err)
 	}
-	sName, err := v1beta1.KeyForExpansionTemplate(pod.Name, etName)
+	sName, err := statusv1beta1.KeyForExpansionTemplate(pod.Name, etName)
 	if err != nil {
 		return fmt.Errorf("getting key for expansiontemplate: %w", err)
 	}
@@ -178,12 +237,12 @@ func (r *Reconciler) updateOrCreatePodStatus(ctx context.Context, et *unversione
 
 	// Check if it exists already
 	sNS := pod.Namespace
-	sName, err := v1beta1.KeyForExpansionTemplate(pod.Name, et.GetName())
+	sName, err := statusv1beta1.KeyForExpansionTemplate(pod.Name, et.GetName())
 	if err != nil {
 		return fmt.Errorf("getting key for expansiontemplate: %w", err)
 	}
 	shouldCreate := true
-	status := &v1beta1.ExpansionTemplatePodStatus{}
+	status := &statusv1beta1.ExpansionTemplatePodStatus{}
 
 	err = r.Get(ctx, types.NamespacedName{Namespace: sNS, Name: sName}, status)
 	switch {
@@ -206,7 +265,7 @@ func (r *Reconciler) updateOrCreatePodStatus(ctx context.Context, et *unversione
 	return r.Update(ctx, status)
 }
 
-func (r *Reconciler) newETStatus(pod *corev1.Pod, et *unversioned.ExpansionTemplate) (*v1beta1.ExpansionTemplatePodStatus, error) {
+func (r *Reconciler) newETStatus(pod *corev1.Pod, et *unversioned.ExpansionTemplate) (*statusv1beta1.ExpansionTemplatePodStatus, error) {
 	status, err := statusv1beta1.NewExpansionTemplateStatusForPod(pod, et.GetName(), r.scheme)
 	if err != nil {
 		return nil, fmt.Errorf("creating status for pod: %w", err)
@@ -217,15 +276,15 @@ func (r *Reconciler) newETStatus(pod *corev1.Pod, et *unversioned.ExpansionTempl
 }
 
 func (r *Reconciler) getTracker() readiness.Expectations {
-	return r.tracker.For(v1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
+	return r.tracker.For(expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
 }
 
-func setStatusError(status *v1beta1.ExpansionTemplatePodStatus, etErr error) {
+func setStatusError(status *statusv1beta1.ExpansionTemplatePodStatus, etErr error) {
 	if etErr == nil {
 		status.Status.Errors = nil
 		return
 	}
 
-	e := &v1beta1.ExpansionTemplateError{Message: etErr.Error()}
-	status.Status.Errors = append(status.Status.Errors, e)
+	e := &statusv1beta1.ExpansionTemplateError{Message: etErr.Error()}
+	status.Status.Errors = []*statusv1beta1.ExpansionTemplateError{e}
 }

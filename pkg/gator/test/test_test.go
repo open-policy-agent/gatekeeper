@@ -6,9 +6,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -190,7 +192,7 @@ func TestTest(t *testing.T) {
 				objs = append(objs, u)
 			}
 
-			resps, err := Test(objs, false)
+			resps, err := Test(objs, Opts{})
 			if tc.err != nil {
 				require.ErrorIs(t, err, tc.err)
 			} else if err != nil {
@@ -230,7 +232,7 @@ func Test_Test_withTrace(t *testing.T) {
 		objs = append(objs, u)
 	}
 
-	resps, err := Test(objs, true)
+	resps, err := Test(objs, Opts{IncludeTrace: true})
 	if err != nil {
 		t.Errorf("got err '%v', want nil", err)
 	}
@@ -272,6 +274,87 @@ func Test_Test_withTrace(t *testing.T) {
 	for _, gotResult := range got {
 		if gotResult.Trace == nil {
 			t.Errorf("did not find a trace when we expected to find one")
+		}
+	}
+}
+
+// Test_Test_withStats proves that we can get a stats populated when we ask for it.
+func Test_Test_withStats(t *testing.T) {
+	inputs := []string{
+		fixtures.TemplateNeverValidate,
+		fixtures.ConstraintNeverValidate,
+		fixtures.Object,
+	}
+
+	var objs []*unstructured.Unstructured
+	for _, input := range inputs {
+		u, err := readUnstructured([]byte(input))
+		assert.NoErrorf(t, err, "readUnstructured for input %q: %v", input, err)
+		objs = append(objs, u)
+	}
+
+	resps, err := Test(objs, Opts{GatherStats: true})
+	assert.NoError(t, err)
+
+	actualStats := resps.StatsEntries
+	expectesSE := &instrumentation.StatsEntry{
+		Scope:    "template",
+		StatsFor: "NeverValidate",
+		Stats: []*instrumentation.Stat{
+			{
+				Name: "templateRunTimeNS",
+				// Value: 0, // will be checked later
+				Source: instrumentation.Source{
+					Type:  "engine",
+					Value: "Rego",
+				},
+			},
+			{
+				Name:  "constraintCount",
+				Value: 1,
+				Source: instrumentation.Source{
+					Type:  "engine",
+					Value: "Rego",
+				},
+			},
+		},
+		Labels: []*instrumentation.Label{
+			{
+				Name:  "TracingEnabled",
+				Value: false,
+			},
+			{
+				Name:  "PrintEnabled",
+				Value: false,
+			},
+			{
+				Name:  "target",
+				Value: "admission.k8s.gatekeeper.sh",
+			},
+		},
+	}
+
+	// test.go calls review on all 3 objects (template, constraint, objToReview)
+	// so we need 3 "almost" copies of the stat entry above.
+	expectedStats := []*instrumentation.StatsEntry{}
+	expectedStats = append(expectedStats, expectesSE, expectesSE, expectesSE)
+
+	diff := cmp.Diff(actualStats, expectedStats, cmpopts.IgnoreFields(
+		instrumentation.Stat{}, "Value",
+	))
+	if diff != "" {
+		t.Errorf("diff in StatsEntries (-want +got):\n%s", diff)
+	}
+
+	// there should be at least 3 stats entry with two stats each
+	assert.Len(t, actualStats, len(expectedStats))
+	assert.Len(t, actualStats[0].Stats, 2)
+	for _, stat := range actualStats[0].Stats {
+		if stat.Name == "templateRunTimeNS" {
+			require.NotZero(t, stat.Value)
+		}
+		if stat.Name == "constraintCount" {
+			require.Equal(t, stat.Value, 1)
 		}
 	}
 }

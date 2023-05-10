@@ -89,7 +89,7 @@ func Test_formatOutput(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			output := formatOutput(tc.inputFormat, tc.input)
+			output := formatOutput(tc.inputFormat, tc.input, nil)
 			if diff := cmp.Diff(tc.expectedOutput, output); diff != "" {
 				t.Fatal(diff)
 			}

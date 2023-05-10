@@ -160,7 +160,7 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 			return t.assignImage
 		}
 		return noopExpectations{}
-	case gvk.GroupVersion() == expansionv1alpha1.GroupVersion && gvk.Kind == "ExpansionTemplate":
+	case gvk.Group == expansionv1alpha1.GroupVersion.Group && gvk.Kind == "ExpansionTemplate":
 		if t.expansionEnabled {
 			return t.expansions
 		}

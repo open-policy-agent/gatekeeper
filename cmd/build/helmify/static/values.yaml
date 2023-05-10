@@ -14,6 +14,7 @@ validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookObjectSelector: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
+validatingWebhookURL: null
 enableDeleteOperations: false
 enableExternalData: true
 enableGeneratorResourceExpansion: false
@@ -27,6 +28,7 @@ mutatingWebhookExemptNamespacesLabels: {}
 mutatingWebhookObjectSelector: {}
 mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
+mutatingWebhookURL: null
 mutationAnnotations: false
 auditChunkSize: 500
 logLevel: INFO

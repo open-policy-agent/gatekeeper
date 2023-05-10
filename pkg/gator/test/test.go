@@ -27,10 +27,16 @@ func init() {
 	}
 }
 
-func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses, error) {
-	// create the client
+// options for the Test func.
+type Opts struct {
+	// Driver specific options
+	IncludeTrace bool
+	GatherStats  bool
+}
 
-	driver, err := rego.New(rego.Tracing(includeTrace))
+func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error) {
+	// create the client
+	driver, err := makeRegoDriver(tOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +128,7 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 			}
 			expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantReview)
 			expansion.AggregateResponses(resultant.TemplateName, review, resultantReview)
+			expansion.AggregateStats(resultant.TemplateName, review, resultantReview)
 		}
 
 		for targetName, r := range review.ByTarget {
@@ -148,9 +155,10 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 				trace = trace + "\n\n" + *r.Trace
 				targetResponse.Trace = &trace
 			}
-
 			responses.ByTarget[targetName] = targetResponse
 		}
+
+		responses.StatsEntries = append(responses.StatsEntries, review.StatsEntries...)
 	}
 
 	return responses, nil
@@ -164,4 +172,16 @@ func isTemplate(u *unstructured.Unstructured) bool {
 func isConstraint(u *unstructured.Unstructured) bool {
 	gvk := u.GroupVersionKind()
 	return gvk.Group == "constraints.gatekeeper.sh"
+}
+
+func makeRegoDriver(tOpts Opts) (*rego.Driver, error) {
+	var args []rego.Arg
+	if tOpts.GatherStats {
+		args = append(args, rego.GatherStats())
+	}
+	if tOpts.IncludeTrace {
+		args = append(args, rego.Tracing(tOpts.IncludeTrace))
+	}
+
+	return rego.New(args...)
 }
