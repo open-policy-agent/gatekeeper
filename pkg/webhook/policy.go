@@ -601,7 +601,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 }
 
 func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {
-	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace))
+	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace), drivers.Stats(*logStatsAdmission))
 	if resp != nil && trace {
 		log.Info(resp.TraceDump())
 	}
