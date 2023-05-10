@@ -79,7 +79,7 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 	oldGVKs, found := b.store[k]
 	if found {
 		// gvksToRemove contains old GKVs that are not included in the new gvks list
-		gvksToRemove := b.unreferencedOldGVKsToPrune(gvks, oldGVKs)
+		gvksToRemove := unreferencedOldGVKsToPrune(gvks, oldGVKs)
 		if err := b.pruneReverseStore(gvksToRemove, k); err != nil {
 			return fmt.Errorf("failed to prune entries on upsert: %w", err)
 		}
@@ -107,22 +107,6 @@ func (b *GVKAgreggator) makeSet(gvks []schema.GroupVersionKind) map[schema.Group
 	return gvkSet
 }
 
-func (b *GVKAgreggator) unreferencedOldGVKsToPrune(newGVKs []schema.GroupVersionKind, oldGVKs map[schema.GroupVersionKind]struct{}) map[schema.GroupVersionKind]struct{} {
-	// deep copy oldGVKs
-	oldGVKsCpy := make(map[schema.GroupVersionKind]struct{}, len(oldGVKs))
-	for k, v := range oldGVKs {
-		oldGVKsCpy[k] = v
-	}
-
-	// intersection: exclude the oldGVKs that are present in the new GVKs as well.
-	for _, newGVK := range newGVKs {
-		// don't prune what is being already added
-		delete(oldGVKsCpy, newGVK)
-	}
-
-	return oldGVKsCpy
-}
-
 func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struct{}, k Key) error {
 	for gvk := range gvks {
 		keySet, found := b.reverseStore[gvk]
@@ -143,4 +127,20 @@ func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struc
 	}
 
 	return nil
+}
+
+func unreferencedOldGVKsToPrune(newGVKs []schema.GroupVersionKind, oldGVKs map[schema.GroupVersionKind]struct{}) map[schema.GroupVersionKind]struct{} {
+	// deep copy oldGVKs
+	oldGVKsCpy := make(map[schema.GroupVersionKind]struct{}, len(oldGVKs))
+	for k, v := range oldGVKs {
+		oldGVKsCpy[k] = v
+	}
+
+	// intersection: exclude the oldGVKs that are present in the new GVKs as well.
+	for _, newGVK := range newGVKs {
+		// don't prune what is being already added
+		delete(oldGVKsCpy, newGVK)
+	}
+
+	return oldGVKsCpy
 }
