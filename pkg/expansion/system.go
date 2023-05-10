@@ -8,14 +8,24 @@ import (
 	"sync"
 
 	expansionunversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var ExpansionEnabled *bool
+var (
+	ExpansionEnabled *bool
+	log              = logf.Log.WithName("expansion").WithValues(logging.Process, "expansion")
+)
+
+// maxRecursionDepth specifies the maximum call depth for recursive expansion.
+// Theoretically, it should be impossible for a cycle to be created but this
+// measure is put in place as a safeguard.
+const maxRecursionDepth = 30
 
 func init() {
 	ExpansionEnabled = flag.Bool("enable-generator-resource-expansion", false, "(alpha) Enable the expansion of generator resources")
@@ -23,8 +33,8 @@ func init() {
 
 type System struct {
 	lock           sync.RWMutex
-	templates      map[string]*expansionunversioned.ExpansionTemplate
 	mutationSystem *mutation.System
+	db             templateDB
 }
 
 type Resultant struct {
@@ -33,20 +43,24 @@ type Resultant struct {
 	EnforcementAction string
 }
 
-func keyForTemplate(template *expansionunversioned.ExpansionTemplate) string {
-	return template.ObjectMeta.Name
+type TemplateID string
+
+type IDSet map[TemplateID]bool
+
+func keyForTemplate(template *expansionunversioned.ExpansionTemplate) TemplateID {
+	return TemplateID(template.ObjectMeta.Name)
 }
 
 func (s *System) UpsertTemplate(template *expansionunversioned.ExpansionTemplate) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	log.V(1).Info("upserting ExpansionTemplate", "template name", template.GetName())
 
 	if err := ValidateTemplate(template); err != nil {
 		return err
 	}
 
-	s.templates[keyForTemplate(template)] = template.DeepCopy()
-	return nil
+	return s.db.upsert(template)
 }
 
 func (s *System) RemoveTemplate(template *expansionunversioned.ExpansionTemplate) error {
@@ -58,8 +72,12 @@ func (s *System) RemoveTemplate(template *expansionunversioned.ExpansionTemplate
 		return fmt.Errorf("cannot remove template with empty name")
 	}
 
-	delete(s.templates, k)
+	s.db.remove(template)
 	return nil
+}
+
+func (s *System) GetConflicts() IDSet {
+	return s.db.getConflicts()
 }
 
 func ValidateTemplate(template *expansionunversioned.ExpansionTemplate) error {
@@ -73,6 +91,18 @@ func ValidateTemplate(template *expansionunversioned.ExpansionTemplate) error {
 	if template.Spec.GeneratedGVK == (expansionunversioned.GeneratedGVK{}) {
 		return fmt.Errorf("ExpansionTemplate %s has empty generatedGVK field", k)
 	}
+	if len(template.Spec.ApplyTo) == 0 {
+		return fmt.Errorf("ExpansionTemplate %s must specify ApplyTo", k)
+	}
+	// Make sure template does not form a self-edge (i.e. a template configured
+	// to expand its own output)
+	genGVK := genGVKToSchemaGVK(template.Spec.GeneratedGVK)
+	for _, apply := range template.Spec.ApplyTo {
+		if apply.Matches(genGVK) {
+			return fmt.Errorf("ExpansionTemplate %s generates GVK %v, but also applies to that same GVK", k, genGVK)
+		}
+	}
+
 	return nil
 }
 
@@ -96,34 +126,54 @@ func genGVKToSchemaGVK(gvk expansionunversioned.GeneratedGVK) schema.GroupVersio
 	}
 }
 
-// templatesForGVK returns a slice of ExpansionTemplates that match a given gvk.
-func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.ExpansionTemplate {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	var templates []*expansionunversioned.ExpansionTemplate
-	for _, t := range s.templates {
-		for _, apply := range t.Spec.ApplyTo {
-			if apply.Matches(gvk) {
-				templates = append(templates, t)
-			}
-		}
-	}
-
-	return templates
-}
-
 // Expand expands `base` into resultant resources, and applies any applicable
 // mutators. If no ExpansionTemplates match `base`, an empty slice
 // will be returned. If `s.mutationSystem` is nil, no mutations will be applied.
 func (s *System) Expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	var res []*Resultant
+	if err := s.expandRecursive(base, &res, 0); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (s *System) expandRecursive(base *mutationtypes.Mutable, resultants *[]*Resultant, depth int) error {
+	if depth >= maxRecursionDepth {
+		return fmt.Errorf("maximum recursion depth of %d reached", maxRecursionDepth)
+	}
+
+	res, err := s.expand(base)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range res {
+		mut := &mutationtypes.Mutable{
+			Object:    r.Obj,
+			Namespace: base.Namespace,
+			Username:  base.Username,
+			Source:    base.Source,
+		}
+		if err := s.expandRecursive(mut, resultants, depth+1); err != nil {
+			return err
+		}
+	}
+
+	*resultants = append(*resultants, res...)
+	return nil
+}
+
+func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 	gvk := base.Object.GroupVersionKind()
 	if gvk == (schema.GroupVersionKind{}) {
 		return nil, fmt.Errorf("cannot expand resource %s with empty GVK", base.Object.GetName())
 	}
 
 	var resultants []*Resultant
-	templates := s.templatesForGVK(gvk)
+	templates := s.db.templatesForGVK(gvk)
 
 	for _, te := range templates {
 		res, err := expandResource(base.Object, base.Namespace, te)
@@ -176,7 +226,7 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 		return nil, fmt.Errorf("could not extract source field from unstructured: %w", err)
 	}
 	if !ok {
-		return nil, fmt.Errorf("could not find source field %q in Obj", srcPath)
+		return nil, fmt.Errorf("could not find source field %q in resource %s", srcPath, obj.GetName())
 	}
 
 	resource := &unstructured.Unstructured{}
@@ -205,7 +255,7 @@ func mockNameForResource(gen *unstructured.Unstructured, gvk schema.GroupVersion
 func NewSystem(mutationSystem *mutation.System) *System {
 	return &System{
 		lock:           sync.RWMutex{},
-		templates:      map[string]*expansionunversioned.ExpansionTemplate{},
 		mutationSystem: mutationSystem,
+		db:             newDB(),
 	}
 }
