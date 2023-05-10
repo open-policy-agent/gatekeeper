@@ -1,5 +1,12 @@
 package logging
 
+import (
+	"github.com/go-logr/logr"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
+	gkinstr "github.com/open-policy-agent/gatekeeper/pkg/instrumentation"
+)
+
 // Log keys.
 const (
 	Process               = "process"
@@ -26,4 +33,9 @@ const (
 	MutationApplied       = "mutation_applied"
 	Mutator               = "mutator"
 	DebugLevel            = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
+	ExecutionStats        = "execution_stats"
 )
+
+func LogStatsEntries(client *constraintclient.Client, logger logr.Logger, entries []*instrumentation.StatsEntry, msg string) {
+	logger.WithValues(ExecutionStats, gkinstr.ToStatsEntriesWithDesc(client, entries)).Info(msg)
+}
