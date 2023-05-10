@@ -1,7 +1,6 @@
 package reader
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,34 +13,11 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 type versionless interface {
 	ToVersionless() (*templates.ConstraintTemplate, error)
-}
-
-// syncAnnotationName is the name of the annotation that stores
-// GVKS that are required to be synced.
-const SyncAnnotationName = "metadata.gatekeeper.sh/requiresSyncData"
-
-// SyncAnnotationContents contains a list of ANDed requirements, each of which
-// contains an expanded set of equivalent (ORed) GVKs.
-type SyncRequirements []GVKEquivalenceSet
-
-// GVKEquivalenceSet is a set of GVKs that a template can use
-// interchangeably in its referential policy implementation.
-type GVKEquivalenceSet map[schema.GroupVersionKind]struct{}
-
-// compactGVKEquivalenceSet contains a set of equivalent GVKs, expressed
-// in the compact form [groups, versions, kinds] where any combination of
-// items from these three fields can be considered a valid equivalent.
-// Used solely for unmarshalling.
-type compactGVKEquivalenceSet struct {
-	Groups   []string `json:"groups"`
-	Versions []string `json:"versions"`
-	Kinds    []string `json:"kinds"`
 }
 
 // jsonLookaheadBytes is the number of bytes the JSON and YAML decoder will
@@ -230,46 +206,4 @@ func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
 	}
 
 	return objs, nil
-}
-
-// ReadSyncRequirements parses the sync requirements from a
-// constraint template.
-func ReadSyncRequirements(t *templates.ConstraintTemplate) (*SyncRequirements, error) {
-	syncRequirements := make(SyncRequirements, 0)
-	if t.ObjectMeta.Annotations != nil {
-		if annotation, exists := t.ObjectMeta.Annotations[SyncAnnotationName]; exists {
-			annotation = strings.Trim(annotation, "\n\"")
-			compactSyncRequirements := make([][]compactGVKEquivalenceSet, 0)
-			decoder := json.NewDecoder(bytes.NewReader([]byte(annotation)))
-			decoder.DisallowUnknownFields()
-			err := decoder.Decode(&compactSyncRequirements)
-			if err != nil {
-				return nil, err
-			}
-			for _, compactRequirement := range compactSyncRequirements {
-				requirement := GVKEquivalenceSet{}
-				for _, compactEquivalenceSet := range compactRequirement {
-					for equivalentGVK := range expandCompactEquivalenceSet(compactEquivalenceSet) {
-						requirement[equivalentGVK] = struct{}{}
-					}
-				}
-				syncRequirements = append(syncRequirements, requirement)
-			}
-		}
-	}
-	return &syncRequirements, nil
-}
-
-// Takes a compactGVKSet and expands and unions it with the set of
-// GVKs pointed to by the 'expandedEquivalentSet' argument.
-func expandCompactEquivalenceSet(compactEquivalenceSet compactGVKEquivalenceSet) GVKEquivalenceSet {
-	equivalenceSet := GVKEquivalenceSet{}
-	for _, group := range compactEquivalenceSet.Groups {
-		for _, version := range compactEquivalenceSet.Versions {
-			for _, kind := range compactEquivalenceSet.Kinds {
-				equivalenceSet[schema.GroupVersionKind{Group: group, Version: version, Kind: kind}] = struct{}{}
-			}
-		}
-	}
-	return equivalenceSet
 }
