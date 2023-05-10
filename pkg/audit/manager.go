@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -486,7 +487,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			Object:    obj,
 			Namespace: ns,
 		}
-		resp, err := am.opa.Review(ctx, au)
+		resp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
 		if err != nil {
 			am.log.Error(err, "Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
 			continue
@@ -576,7 +577,8 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				Namespace: ns,
 				Source:    mutationtypes.SourceTypeOriginal,
 			}
-			resp, err := am.opa.Review(ctx, augmentedObj)
+
+			resp, err := am.opa.Review(ctx, augmentedObj, drivers.Stats(*logStatsAudit))
 			if err != nil {
 				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
 				continue
@@ -600,7 +602,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					Namespace: ns,
 					Source:    mutationtypes.SourceTypeGenerated,
 				}
-				resultantResp, err := am.opa.Review(ctx, au)
+				resultantResp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
 				if err != nil {
 					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
 					continue
