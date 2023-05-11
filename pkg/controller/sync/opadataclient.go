@@ -19,7 +19,7 @@ import (
 	"context"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

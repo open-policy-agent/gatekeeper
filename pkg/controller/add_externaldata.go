@@ -13,7 +13,7 @@ limitations under the License.
 package controller
 
 import (
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/externaldata"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/externaldata"
 )
 
 func init() {

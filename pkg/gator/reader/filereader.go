@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/oci"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/oci"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 

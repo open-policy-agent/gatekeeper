@@ -1,0 +1,29 @@
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-cronjobs
+spec:
+  applyTo:
+  - groups: [ "batch" ]
+    kinds: [ "CronJob" ]
+    versions: [ "v1" ]
+  templateSource: "spec.jobTemplate"
+  generatedGVK:
+    kind: "Job"
+    group: "batch"
+    version: "v1"
+---
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-jobs
+spec:
+  applyTo:
+  - groups: [ "batch" ]
+    kinds: [ "Job" ]
+    versions: [ "v1" ]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Pod"
+    group: ""
+    version: "v1"

@@ -3,7 +3,7 @@ package core
 import (
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 )
 
 // Setter tells the mutate function what to do once we have found the

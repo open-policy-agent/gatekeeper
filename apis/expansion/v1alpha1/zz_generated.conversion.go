@@ -22,9 +22,9 @@ package v1alpha1
 import (
 	unsafe "unsafe"
 
-	unversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
-	v1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
-	match "github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	unversioned "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
+	v1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	match "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )

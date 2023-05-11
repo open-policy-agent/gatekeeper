@@ -14,12 +14,13 @@ import (
 
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
-	"github.com/open-policy-agent/gatekeeper/pkg/logging"
-	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -62,6 +63,7 @@ var (
 	auditMatchKindOnly           = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	apiCacheDir                  = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
 	emptyAuditResults            []updateListEntry
+	logStatsAudit                = flag.Bool("log-stats-audit", false, "(alpha) log stats metrics for the audit run")
 )
 
 // Manager allows us to audit resources periodically.
@@ -485,10 +487,19 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			Object:    obj,
 			Namespace: ns,
 		}
-		resp, err := am.opa.Review(ctx, au)
+		resp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
 		if err != nil {
 			am.log.Error(err, "Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
 			continue
+		}
+
+		if *logStatsAudit {
+			logging.LogStatsEntries(
+				am.opa,
+				am.log,
+				resp.StatsEntries,
+				"audit from cache review request stats",
+			)
 		}
 
 		for _, r := range resp.Results() {
@@ -566,7 +577,8 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				Namespace: ns,
 				Source:    mutationtypes.SourceTypeOriginal,
 			}
-			resp, err := am.opa.Review(ctx, augmentedObj)
+
+			resp, err := am.opa.Review(ctx, augmentedObj, drivers.Stats(*logStatsAudit))
 			if err != nil {
 				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
 				continue
@@ -590,13 +602,23 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					Namespace: ns,
 					Source:    mutationtypes.SourceTypeGenerated,
 				}
-				resultantResp, err := am.opa.Review(ctx, au)
+				resultantResp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
 				if err != nil {
 					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
 					continue
 				}
 				expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
 				expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
+				expansion.AggregateStats(resultant.TemplateName, resp, resultantResp)
+			}
+
+			if *logStatsAudit {
+				logging.LogStatsEntries(
+					am.opa,
+					am.log,
+					resp.StatsEntries,
+					"audit review request stats",
+				)
 			}
 
 			if len(resp.Results()) > 0 {

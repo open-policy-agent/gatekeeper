@@ -18,6 +18,77 @@ spec:
     version: "v1"
 `
 
+	TempExpReplicaDeploymentExpandsPods = `
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-deployments-replicas
+spec:
+  applyTo:
+    - groups: ["apps"]
+      kinds: ["Deployment", "ReplicaSet"]
+      versions: ["v1"]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Pod"
+    group: ""
+    version: "v1"
+`
+
+	TempExpMultipleApplyTo = `
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-many-things
+spec:
+  applyTo:
+    - groups: ["apps", "traps"]
+      kinds: ["Deployment", "ReplicaSet"]
+      versions: ["v1", "v1beta1"]
+    - groups: [""]
+      kinds: ["CoreKind"]
+      versions: ["v1"]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Pod"
+    group: ""
+    version: "v1"
+`
+
+	TempExpCronJob = `
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-cronjobs
+spec:
+  applyTo:
+    - groups: ["batch"]
+      kinds: ["CronJob"]
+      versions: ["v1"]
+  templateSource: "spec.jobTemplate"
+  generatedGVK:
+    kind: "Job"
+    group: "batch"
+    version: "v1"
+`
+
+	TempExpJob = `
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-jobs
+spec:
+  applyTo:
+    - groups: ["batch"]
+      kinds: ["Job"]
+      versions: ["v1"]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Pod"
+    group: ""
+    version: "v1"
+`
+
 	TempExpDeploymentExpandsPodsEnforceDryrun = `
 apiVersion: expansion.gatekeeper.sh/v1alpha1
 kind: ExpansionTemplate
@@ -418,5 +489,64 @@ metadata:
   namespace: default
 spec:
   loud: very
+`
+
+	GeneratorCronJob = `
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-cronjob
+spec:
+  schedule: "* * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - args:
+            - "/bin/sh"
+            image: nginx:1.14.2
+            imagePullPolicy: Always
+            name: nginx
+            ports:
+            - containerPort: '80'
+`
+
+	ResultantJob = `
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-cronjob-job
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+      - args:
+        - "/bin/sh"
+        image: nginx:1.14.2
+        imagePullPolicy: Always
+        name: nginx
+        ports:
+        - containerPort: '80'
+`
+
+	ResultantRecursivePod = `
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    owner: admin
+  name: my-cronjob-job-pod
+  namespace: default
+spec:
+  containers:
+  - args:
+    - "/bin/sh"
+    image: nginx:1.14.2
+    imagePullPolicy: Always
+    name: nginx
+    ports:
+    - containerPort: '80'
 `
 )

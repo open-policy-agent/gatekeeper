@@ -6,7 +6,7 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 )
 
 // Condition describes whether the path either MustExist or MustNotExist in the original object

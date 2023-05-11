@@ -1,11 +1,11 @@
 package mutators
 
 import (
-	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignimage"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignimage"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignmeta"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/modifyset"
 )
 
 // MutatorForAssign returns an AssignMutator built from
