@@ -85,7 +85,7 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 		}
 	}
 
-	b.store[k] = b.makeSet(gvks)
+	b.store[k] = makeSet(gvks)
 
 	// add reverse links
 	for _, gvk := range gvks {
@@ -96,15 +96,6 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 	}
 
 	return nil
-}
-
-func (b *GVKAgreggator) makeSet(gvks []schema.GroupVersionKind) map[schema.GroupVersionKind]struct{} {
-	gvkSet := make(map[schema.GroupVersionKind]struct{})
-	for _, gvk := range gvks {
-		gvkSet[gvk] = struct{}{}
-	}
-
-	return gvkSet
 }
 
 func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struct{}, k Key) error {
@@ -127,6 +118,15 @@ func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struc
 	}
 
 	return nil
+}
+
+func makeSet(gvks []schema.GroupVersionKind) map[schema.GroupVersionKind]struct{} {
+	gvkSet := make(map[schema.GroupVersionKind]struct{})
+	for _, gvk := range gvks {
+		gvkSet[gvk] = struct{}{}
+	}
+
+	return gvkSet
 }
 
 func unreferencedOldGVKsToPrune(newGVKs []schema.GroupVersionKind, oldGVKs map[schema.GroupVersionKind]struct{}) map[schema.GroupVersionKind]struct{} {
