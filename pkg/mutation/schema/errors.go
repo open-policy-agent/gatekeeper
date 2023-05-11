@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 )
 
 // ErrNilMutator reports that a method which expected an actual Mutator was

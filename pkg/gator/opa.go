@@ -3,7 +3,7 @@ package gator
 import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 )
 
 func NewOPAClient(includeTrace bool) (Client, error) {

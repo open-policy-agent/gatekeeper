@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator/verify"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/verify"
 	"github.com/spf13/cobra"
 )
 

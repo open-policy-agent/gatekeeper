@@ -3,11 +3,11 @@ package testhelpers
 import (
 	"reflect"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/core"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
-	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/core"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
+	path "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 )
 
 var _ types.Mutator = &DummyMutator{}

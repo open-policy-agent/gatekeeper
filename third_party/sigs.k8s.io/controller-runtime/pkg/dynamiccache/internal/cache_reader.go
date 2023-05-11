@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/internal/field/selector"
+	"github.com/open-policy-agent/gatekeeper/v3/third_party/sigs.k8s.io/controller-runtime/pkg/internal/field/selector"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"

@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"k8s.io/utils/pointer"
 )
 

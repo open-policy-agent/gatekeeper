@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"go.opencensus.io/stats/view"
 )
 

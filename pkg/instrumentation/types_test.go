@@ -7,7 +7,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	cfinstr "github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

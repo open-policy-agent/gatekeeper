@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
-	cmdutils "github.com/open-policy-agent/gatekeeper/cmd/gator/util"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	cmdutils "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/test"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -172,7 +172,7 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 		var buf bytes.Buffer
 		if len(results) > 0 {
 			for _, result := range results {
-				buf.WriteString(fmt.Sprintf("[%q] Message: %q \n", result.Constraint.GetName(), result.Msg))
+				buf.WriteString(fmt.Sprintf("[%q] Message: %q\n", result.Constraint.GetName(), result.Msg))
 
 				if result.Trace != nil {
 					buf.WriteString(fmt.Sprintf("Trace: %v", *result.Trace))

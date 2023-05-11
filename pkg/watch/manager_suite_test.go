@@ -20,7 +20,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/apis"
+	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"

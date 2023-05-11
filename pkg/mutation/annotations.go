@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 

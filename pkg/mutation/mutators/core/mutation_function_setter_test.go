@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 

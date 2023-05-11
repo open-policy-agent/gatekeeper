@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/open-policy-agent/gatekeeper/cmd/gator/expand"
-	"github.com/open-policy-agent/gatekeeper/cmd/gator/test"
-	"github.com/open-policy-agent/gatekeeper/cmd/gator/verify"
-	"github.com/open-policy-agent/gatekeeper/pkg/version"
+	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/expand"
+	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/test"
+	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/verify"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/version"
 	"github.com/spf13/cobra"
 	k8sVersion "sigs.k8s.io/release-utils/version"
 )

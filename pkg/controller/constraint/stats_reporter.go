@@ -3,7 +3,7 @@ package constraint
 import (
 	"context"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"

@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
-	"github.com/open-policy-agent/gatekeeper/pkg/expansion/fixtures"
+	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion/fixtures"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )

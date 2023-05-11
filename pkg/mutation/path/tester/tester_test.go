@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 )
 
 func TestPrefix(t *testing.T) {

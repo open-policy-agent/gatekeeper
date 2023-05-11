@@ -21,8 +21,8 @@ limitations under the License.
 package v1
 
 import (
-	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 

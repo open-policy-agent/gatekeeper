@@ -4,7 +4,7 @@ import (
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
-	gkinstr "github.com/open-policy-agent/gatekeeper/pkg/instrumentation"
+	gkinstr "github.com/open-policy-agent/gatekeeper/v3/pkg/instrumentation"
 )
 
 // Log keys.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dominikbraun/graph"
-	expansionunversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
+	expansionunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 

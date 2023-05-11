@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )

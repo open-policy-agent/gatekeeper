@@ -11,9 +11,9 @@ import (
 
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 )
