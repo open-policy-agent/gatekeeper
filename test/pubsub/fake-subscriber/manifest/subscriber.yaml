@@ -3,7 +3,7 @@ apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: pubsub
-  namespace: dummy-subscriber
+  namespace: fake-subscriber
 spec:
   type: pubsub.redis
   version: v1
@@ -19,7 +19,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: sub
-  namespace: dummy-subscriber
+  namespace: fake-subscriber
   labels:
     app: sub
 spec:
@@ -39,5 +39,5 @@ spec:
     spec:
       containers:
       - name: go-sub
-        image: dummy-subscriber:latest
+        image: fake-subscriber:latest
         imagePullPolicy: Never

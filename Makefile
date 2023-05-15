@@ -40,7 +40,7 @@ GOLANGCI_LINT_VERSION := v1.51.2
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
 
 BENCHMARK_FILE_NAME ?= benchmarks.txt
-DUMMY_SUBSCRIBER_IMAGE ?= dummy-subscriber:latest
+FAKE_SUBSCRIBER_IMAGE ?= fake-subscriber:latest
 
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
@@ -270,13 +270,13 @@ e2e-helm-upgrade:
 		--set mutationAnnotations=true;\
 
 e2e-subscriber-build-load-image:
-	docker buildx build --platform="linux/amd64" -t ${DUMMY_SUBSCRIBER_IMAGE} --load -f test/pubsub/dummy-subscriber/Dockerfile test/pubsub/dummy-subscriber
-	kind load docker-image --name kind ${DUMMY_SUBSCRIBER_IMAGE}
+	docker buildx build --platform="linux/amd64" -t ${FAKE_SUBSCRIBER_IMAGE} --load -f test/pubsub/fake-subscriber/Dockerfile test/pubsub/fake-subscriber
+	kind load docker-image --name kind ${FAKE_SUBSCRIBER_IMAGE}
 
 e2e-subscriber-deploy:
-	kubectl create ns dummy-subscriber
-	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: dummy-subscriber/' | kubectl apply -f -
-	kubectl apply -f test/pubsub/dummy-subscriber/manifest/subscriber.yaml
+	kubectl create ns fake-subscriber
+	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: fake-subscriber/' | kubectl apply -f -
+	kubectl apply -f test/pubsub/fake-subscriber/manifest/subscriber.yaml
 
 e2e-publisher-deploy:
 	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -

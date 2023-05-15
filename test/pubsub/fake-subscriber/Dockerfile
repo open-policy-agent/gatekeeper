@@ -16,7 +16,7 @@ ENV GO111MODULE=on \
     GOARCH=${TARGETARCH} \
     GOARM=${TARGETVARIANT}
 
-WORKDIR /go/src/github.com/open-policy-agent/gatekeeper/test/pubsub/dummy-subscriber
+WORKDIR /go/src/github.com/open-policy-agent/gatekeeper/test/pubsub/fake-subscriber
 
 COPY . .
 
@@ -28,7 +28,7 @@ FROM $BASEIMAGE
 
 WORKDIR /
 
-COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/test/pubsub/dummy-subscriber/main  .
+COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/test/pubsub/fake-subscriber/main  .
 
 USER 65532:65532
 
