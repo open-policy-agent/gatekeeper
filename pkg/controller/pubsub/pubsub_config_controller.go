@@ -8,6 +8,13 @@ import (
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,15 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
-	psClient "github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/provider"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 )
 
 var (

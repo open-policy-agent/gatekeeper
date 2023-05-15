@@ -4,9 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/connection"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNewConnection(t *testing.T) {

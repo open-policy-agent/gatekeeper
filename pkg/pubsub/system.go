@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/connection"
 	prvd "github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/provider"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var log = logf.Log.WithName("pubsub-system")
