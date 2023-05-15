@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/pubsub/dapr"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/dapr"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"

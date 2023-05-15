@@ -16,6 +16,13 @@ import (
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,14 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
-	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 )
 
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "audit")

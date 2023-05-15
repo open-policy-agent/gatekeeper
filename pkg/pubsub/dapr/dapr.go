@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	daprClient "github.com/dapr/go-sdk/client"
-
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/connection"
 )
 
