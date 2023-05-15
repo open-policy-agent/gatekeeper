@@ -142,6 +142,6 @@ mutator_enforced() {
 total_violations() {
   ct_total_violations="$(kubectl get k8srequiredlabels pod-must-have-test -n gatekeeper-system -ojson | jq '.status.totalViolations')"
   audit_id="$(kubectl get k8srequiredlabels pod-must-have-test -n gatekeeper-system -ojson | jq '.status.auditTimestamp')"
-  violations="$(kubectl logs -n dummy-subscriber -l app=sub -c go-sub --tail=-1 | grep $audit_id | grep violation_audited | wc -l)"
+  violations="$(kubectl logs -n fake-subscriber -l app=sub -c go-sub --tail=-1 | grep $audit_id | grep violation_audited | wc -l)"
   [[ "${ct_total_violations}" -eq "${violations}" ]]
 }

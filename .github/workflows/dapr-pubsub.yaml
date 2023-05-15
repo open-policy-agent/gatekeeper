@@ -55,7 +55,7 @@ jobs:
     - name: Save logs
       if: ${{ always() }}
       run: |
-        kubectl logs -n dummy-subscriber -l app=sub --tail=-1 > logs-audit-subscribe.json
+        kubectl logs -n fake-subscriber -l app=sub --tail=-1 > logs-audit-subscribe.json
         kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-publish.json
 
     - name: Upload artifacts
