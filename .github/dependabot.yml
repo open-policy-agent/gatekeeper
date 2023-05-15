@@ -26,3 +26,31 @@ updates:
         update-types:
         - "version-update:semver-major"
         - "version-update:semver-minor"
+
+  - package-ecosystem: "docker"
+    directory: /
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "docker"
+    directory: "/build/tooling"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "docker"
+    directory: "/test/externaldata/dummy-provider"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "docker"
+    directory: "/test/image"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
