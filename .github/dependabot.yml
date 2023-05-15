@@ -27,22 +27,30 @@ updates:
         - "version-update:semver-major"
         - "version-update:semver-minor"
 
-  - package-ecosystem: docker
+  - package-ecosystem: "docker"
     directory: /
     schedule:
-      interval: daily
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
 
-  - package-ecosystem: docker
-    directory: /build/tooling
+  - package-ecosystem: "docker"
+    directory: "/build/tooling"
     schedule:
-      interval: daily
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
 
-  - package-ecosystem: docker
-    directory: /test/externaldata/dummy-provider
+  - package-ecosystem: "docker"
+    directory: "/test/externaldata/dummy-provider"
     schedule:
-      interval: daily
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
 
-  - package-ecosystem: docker
-    directory: /test/image
+  - package-ecosystem: "docker"
+    directory: "/test/image"
     schedule:
-      interval: daily
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
