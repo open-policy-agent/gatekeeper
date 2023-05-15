@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/test"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -41,7 +41,7 @@ func Test_formatOutput(t *testing.T) {
 				ViolatingObject: barObject,
 				Trace:           nil,
 			}},
-			expectedOutput: `[""] Message: "" 
+			expectedOutput: `[""] Message: ""
 `,
 		},
 		{
@@ -89,7 +89,7 @@ func Test_formatOutput(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			output := formatOutput(tc.inputFormat, tc.input)
+			output := formatOutput(tc.inputFormat, tc.input, nil)
 			if diff := cmp.Diff(tc.expectedOutput, output); diff != "" {
 				t.Fatal(diff)
 			}

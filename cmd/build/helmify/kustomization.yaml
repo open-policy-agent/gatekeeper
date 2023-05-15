@@ -150,6 +150,9 @@ patchesJson6902:
       - op: replace
         path: /metadata/name
         value: "{{ .Values.validatingWebhookName }}"
+      - op: replace
+        path: /webhooks/0/clientConfig
+        value: { "HELMSUBST_VALIDATING_WEBHOOK_CLIENT_CONFIG": "" }
   - target:
       kind: MutatingWebhookConfiguration
       name: gatekeeper-mutating-webhook-configuration
@@ -157,3 +160,7 @@ patchesJson6902:
       - op: replace
         path: /metadata/name
         value: "{{ .Values.mutatingWebhookName }}"
+      - op: replace
+        path: /webhooks/0/clientConfig
+        value: { "HELMSUBST_MUTATING_WEBHOOK_CLIENT_CONFIG": "" }
+        

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 )
 
 func TestFilter_Error(t *testing.T) {

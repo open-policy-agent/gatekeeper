@@ -74,7 +74,7 @@ def build_crds():
         context=".staging/crds/",
         target="build",
         only="crds",
-        build_args={"KUBE_VERSION": "1.26.0"},
+        build_args={"KUBE_VERSION": "1.27.1"},
         live_update=[
             sync(".staging/crds/", "/crds"),
         ],

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 )
 
 func TestCache_TallyStatus(t *testing.T) {

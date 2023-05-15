@@ -5,8 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
-	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/v3/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/rest"

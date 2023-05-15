@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

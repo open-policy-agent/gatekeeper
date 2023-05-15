@@ -3,7 +3,7 @@ package fakes
 import (
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

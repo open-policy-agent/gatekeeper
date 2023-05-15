@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-cronjob
+  namespace: "loadbalancers"
+spec:
+  schedule: "* * * * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          namespace: "loadbalancers"
+        spec:
+          containers:
+          - args:
+            - "/bin/sh"
+            image: nginx:1.14.2
+            imagePullPolicy: Always
+            name: nginx
+            ports:
+            - containerPort: 80
+          restartPolicy: OnFailure
+

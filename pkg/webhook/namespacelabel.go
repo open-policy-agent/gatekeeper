@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

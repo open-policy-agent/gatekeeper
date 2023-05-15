@@ -16,7 +16,7 @@ limitations under the License.
 package controller
 
 import (
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config"
 )
 
 func init() {

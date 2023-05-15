@@ -6,7 +6,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
