@@ -40,9 +40,9 @@ type SyncSetStatus struct {
 	ByPod []SyncSetStatusStatus `json:"byPod,omitempty"`
 }
 
-type SyncSetStatusStatus struct{
-	ID string `json:"id,omitempty"`
-	Ingested bool `json:"ingested,omitempty"`
+type SyncSetStatusStatus struct {
+	ID       string `json:"id,omitempty"`
+	Ingested bool   `json:"ingested,omitempty"`
 }
 
 func init() {
