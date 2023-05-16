@@ -16,6 +16,7 @@ type GVKEntry struct {
 
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // SyncSet is the Schema for the SyncSet API.
 type SyncSet struct {
@@ -23,6 +24,7 @@ type SyncSet struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   SyncSetSpec   `json:"spec,omitempty"`
+	Status SyncSetStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -32,6 +34,15 @@ type SyncSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []SyncSet `json:"items"`
+}
+
+type SyncSetStatus struct {
+	ByPod []SyncSetStatusStatus `json:"byPod,omitempty"`
+}
+
+type SyncSetStatusStatus struct{
+	ID string `json:"id,omitempty"`
+	Ingested bool `json:"ingested,omitempty"`
 }
 
 func init() {

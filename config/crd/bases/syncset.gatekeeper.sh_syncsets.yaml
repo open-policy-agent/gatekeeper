@@ -46,6 +46,20 @@ spec:
                   type: object
                 type: array
             type: object
+          status:
+            properties:
+              byPod:
+                items:
+                  properties:
+                    id:
+                      type: string
+                    ingested:
+                      type: boolean
+                  type: object
+                type: array
+            type: object
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}
