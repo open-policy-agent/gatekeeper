@@ -31,6 +31,7 @@ func Test_LogStatsEntries(t *testing.T) {
 	defer require.NoError(t, zapLogger.Sync())
 	testLogger := zapr.NewLogger(zapLogger)
 
+	// test log lines show up
 	LogStatsEntries(
 		&constraintclient.Client{},
 		testLogger,
@@ -64,6 +65,15 @@ func Test_LogStatsEntries(t *testing.T) {
 		"\"source\":{\"type\":\"someType\",\"value\":\"someValue\"},\"description\":\"%s\"}],"+
 		"\"labels\":[{\"name\":\"someLabel\",\"value\":\"someLabelValue\"}]}]}\n", instrumentation.UnknownDescription)
 	require.Contains(t, testBuf.String(), expectedLogLine)
+
+	// test that empty stats don't log
+	LogStatsEntries(
+		&constraintclient.Client{},
+		testLogger,
+		[]*instrumentation.StatsEntry{},
+		"this message should not be logged",
+	)
+	require.NotContains(t, testBuf.String(), "this message should not be logged")
 }
 
 //// logging utilities for testing below /////

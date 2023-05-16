@@ -37,5 +37,9 @@ const (
 )
 
 func LogStatsEntries(client *constraintclient.Client, logger logr.Logger, entries []*instrumentation.StatsEntry, msg string) {
+	if len(entries) == 0 {
+		return
+	}
+
 	logger.WithValues(ExecutionStats, gkinstr.ToStatsEntriesWithDesc(client, entries)).Info(msg)
 }
