@@ -1,11 +1,87 @@
 ---
 id: metrics
-title: Metrics
+title: Metrics & Observability
 ---
+## Observability
+
+We want to enable operators to glean information about how Gatekeeper is performing, as a system. To that end, operators can choose to enable execution stats that are gathered when Constraints are evaluated in the engine. At present these stats can only be logged.
+
+### Logging Constraint Execution Stats
+
+- set `--log-stats-audit`. This flag enables logging the stats for the audit process.
+
+- set `--log-stats-admission`. This flag enables logging the stats for the admission review process.
+
+By default, these new logging features are disabled due to their high-volume data generation. 
+
+#### Example Log Line
+
+Let's say we want to know how long it takes to review a constraint kind at admission time. By setting the `--log-stats-admission` and watching the logs for a constraint kind `K8sRequiredLabels`, we could see a sample log line like
+
+```json
+{
+  "level": "info",
+  "ts": 1683692576.9093642,
+  "logger": "webhook",
+  "msg": "admission review request stats",
+  "hookType": "validation",
+  "process": "admission",
+  "event_type": "review_response_stats",
+  "resource_group": "",
+  "resource_api_version": "v1",
+  "resource_kind": "Namespace",
+  "resource_namespace": "",
+  "request_username": "kubernetes-admin",
+  "execution_stats": [
+    {
+      "scope": "template",
+      "statsFor": "K8sRequiredLabels",
+      "stats": [
+        {
+          "name": "templateRunTimeNS",
+          "value": 762561,
+          "source": {
+            "type": "engine",
+            "value": "Rego"
+          },
+          "description": "the number of nanoseconds it took to evaluate all constraints for a template"
+        },
+        {
+          "name": "constraintCount",
+          "value": 1,
+          "source": {
+            "type": "engine",
+            "value": "Rego"
+          },
+          "description": "the number of constraints that were evaluated for the given constraint kind"
+        }
+      ],
+      "labels": [
+        {
+          "name": "TracingEnabled",
+          "value": false
+        },
+        {
+          "name": "PrintEnabled",
+          "value": false
+        },
+        {
+          "name": "target",
+          "value": "admission.k8s.gatekeeper.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+In the excerpt above, notice `templateRunTimeNS` and `constraintCount`. The former indicates the time it takes to evaluate the number of constraints of kind `K8sRequiredLabels`, while the latter surfaces how many such constraints where evaluated at once. Labels provide additional information about the execution environemnt setup, like whether tracing was enabled (`TraceEnabled`).
+
+## Metrics
 
 Below are the list of metrics provided by Gatekeeper:
 
-## Constraint
+### Constraint
 
 - Name: `gatekeeper_constraints`
 
@@ -19,7 +95,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
-## Constraint Template
+### Constraint Template
 
 - Name: `gatekeeper_constraint_templates`
 
@@ -51,7 +127,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Distribution`
 
-## Expansion Template
+### Expansion Template
 
 - Name: `gatekeeper_expansion_templates`
 
@@ -59,7 +135,7 @@ Below are the list of metrics provided by Gatekeeper:
 
   Aggregation: `LastValue`
 
-## Webhook
+### Webhook
 
 - Name: `gatekeeper_validation_request_count`
 
@@ -103,7 +179,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Distribution`
 
-## Audit
+### Audit
 
 - Name: `gatekeeper_violations`
 
@@ -133,7 +209,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
-## Mutation
+### Mutation
 
 - Name: `gatekeeper_mutator_ingestion_count`
 
@@ -175,7 +251,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Count`
 
-## Sync
+### Sync
 
 - Name: `gatekeeper_sync`
 
@@ -201,7 +277,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
-## Watch
+### Watch
 
 - Name: `gatekeeper_watch_manager_watched_gvk`
 
