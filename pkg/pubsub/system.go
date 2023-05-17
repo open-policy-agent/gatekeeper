@@ -29,11 +29,9 @@ func (s *System) Publish(ctx context.Context, connection string, topic string, m
 		if c, ok := s.connections[connection]; ok {
 			return c.Publish(context.Background(), msg, topic)
 		}
-		log.Info("Connection is not initialized", "name", connection)
-	} else {
-		log.Info("No pub sub tools are enabled")
+		return fmt.Errorf("connection is not initialized, name: %s ", connection)
 	}
-	return nil
+	return fmt.Errorf("No connections are established")
 }
 
 func (s *System) UpsertConnection(ctx context.Context, config interface{}, name string, provider string) error {

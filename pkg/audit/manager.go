@@ -17,6 +17,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	pubsubController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
@@ -813,11 +814,12 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 
 		totalViolationsPerEnforcementAction[ea]++
 		logViolation(am.log, r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels())
-		err := am.pubsubSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels(), timestamp))
-		if err != nil {
-			errs = errors.Join(errs, err)
+		if *pubsubController.PubsubEnabled {
+			err := am.pubsubSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels(), timestamp))
+			if err != nil {
+				errs = errors.Join(errs, err)
+			}
 		}
-
 		if *emitAuditEvents {
 			emitEvent(r.Constraint, timestamp, ea, gvk, namespace, name, rv, r.Msg, am.gkNamespace, uid, am.eventRecorder)
 		}
