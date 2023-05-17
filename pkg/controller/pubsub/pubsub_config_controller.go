@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	pubsubEnabled = flag.Bool("enable-pub-sub", false, "Enabled pubsub to publish messages")
+	PubsubEnabled = flag.Bool("enable-pub-sub", false, "Enabled pubsub to publish messages")
 	log           = logf.Log.WithName("controller").WithValues(logging.Process, "pubsub_controller")
 )
 
@@ -39,7 +39,7 @@ type Adder struct {
 }
 
 func (a *Adder) Add(mgr manager.Manager) error {
-	if !*pubsubEnabled {
+	if !*PubsubEnabled {
 		return nil
 	}
 	r := newReconciler(mgr, a.PubsubSystem)
