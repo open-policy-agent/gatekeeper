@@ -17,8 +17,6 @@ package sync
 
 import (
 	"context"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -28,6 +26,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cmt"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,9 +44,8 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
 type Adder struct {
-	Opa             OpaDataClient
+	CMT *cmt.CacheManagerTracker
 	Events          <-chan event.GenericEvent
-	MetricsCache    *MetricsCache
 	Tracker         *readiness.Tracker
 	ProcessExcluder *process.Excluder
 }
@@ -57,34 +56,32 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.HasValidationOperations() {
 		return nil
 	}
-	reporter, err := NewStatsReporter()
+	reporter, err := syncutil.NewStatsReporter()
 	if err != nil {
 		log.Error(err, "Sync metrics reporter could not start")
 		return err
 	}
 
-	r := newReconciler(mgr, a.Opa, *reporter, a.MetricsCache, a.Tracker, a.ProcessExcluder)
+	r := newReconciler(mgr, *reporter, a.Tracker, a.ProcessExcluder, a.CMT)
 	return add(mgr, r, a.Events)
 }
 
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
-	opa OpaDataClient,
-	reporter Reporter,
-	metricsCache *MetricsCache,
+	reporter syncutil.Reporter,
 	tracker *readiness.Tracker,
 	processExcluder *process.Excluder,
+	cmt *cmt.CacheManagerTracker,
 ) reconcile.Reconciler {
 	return &ReconcileSync{
 		reader:          mgr.GetCache(),
 		scheme:          mgr.GetScheme(),
-		opa:             opa,
 		log:             log,
 		reporter:        reporter,
-		metricsCache:    metricsCache,
 		tracker:         tracker,
 		processExcluder: processExcluder,
+		cmt: cmt,
 	}
 }
 
@@ -108,26 +105,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 var _ reconcile.Reconciler = &ReconcileSync{}
 
-type MetricsCache struct {
-	mux        sync.RWMutex
-	Cache      map[string]Tags
-	KnownKinds map[string]bool
-}
-
-type Tags struct {
-	Kind   string
-	Status metrics.Status
-}
-
 // ReconcileSync reconciles an arbitrary object described by Kind.
 type ReconcileSync struct {
 	reader client.Reader
 
 	scheme          *runtime.Scheme
-	opa             OpaDataClient
 	log             logr.Logger
-	reporter        Reporter
-	metricsCache    *MetricsCache
+	reporter        syncutil.Reporter
+	cmt *cmt.CacheManagerTracker
 	tracker         *readiness.Tracker
 	processExcluder *process.Excluder
 }
@@ -147,17 +132,17 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		return reconcile.Result{}, nil
 	}
 
-	syncKey := r.metricsCache.GetSyncKey(unpackedRequest.Namespace, unpackedRequest.Name)
+	syncKey := r.cmt.SyncMetricsCache.GetSyncKey(unpackedRequest.Namespace, unpackedRequest.Name)
 	reportMetrics := false
 	defer func() {
 		if reportMetrics {
-			if err := r.reporter.reportSyncDuration(time.Since(timeStart)); err != nil {
+			if err := r.reporter.ReportSyncDuration(time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report sync duration")
 			}
 
-			r.metricsCache.ReportSync(&r.reporter)
+			r.cmt.SyncMetricsCache.ReportSync(&r.reporter, log)
 
-			if err := r.reporter.reportLastSync(); err != nil {
+			if err := r.reporter.ReportLastSync(); err != nil {
 				log.Error(err, "failed to report last sync timestamp")
 			}
 		}
@@ -171,7 +156,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 			// This is a deletion; remove the data
 			instance.SetNamespace(unpackedRequest.Namespace)
 			instance.SetName(unpackedRequest.Name)
-			if _, err := r.opa.RemoveData(ctx, instance); err != nil {
+			if _, err := r.cmt.RemoveData(ctx, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 
@@ -179,7 +164,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 			t := r.tracker.ForData(instance.GroupVersionKind())
 			t.CancelExpect(instance)
 
-			r.metricsCache.DeleteObject(syncKey)
+			r.cmt.SyncMetricsCache.DeleteObject(syncKey)
 			reportMetrics = true
 			return reconcile.Result{}, nil
 		}
@@ -201,7 +186,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	}
 
 	if !instance.GetDeletionTimestamp().IsZero() {
-		if _, err := r.opa.RemoveData(ctx, instance); err != nil {
+		if _, err := r.cmt.RemoveData(ctx, instance); err != nil {
 			return reconcile.Result{}, err
 		}
 
@@ -209,7 +194,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		t := r.tracker.ForData(instance.GroupVersionKind())
 		t.CancelExpect(instance)
 
-		r.metricsCache.DeleteObject(syncKey)
+		r.cmt.SyncMetricsCache.DeleteObject(syncKey)
 		reportMetrics = true
 		return reconcile.Result{}, nil
 	}
@@ -222,8 +207,8 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		logging.ResourceName, instance.GetName(),
 	)
 
-	if _, err := r.opa.AddData(ctx, instance); err != nil {
-		r.metricsCache.AddObject(syncKey, Tags{
+	if _, err := r.cmt.AddData(ctx, instance); err != nil {
+		r.cmt.SyncMetricsCache.AddObject(syncKey, syncutil.Tags{
 			Kind:   instance.GetKind(),
 			Status: metrics.ErrorStatus,
 		})
@@ -234,12 +219,12 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	r.tracker.ForData(gvk).Observe(instance)
 	log.V(1).Info("[readiness] observed data", "gvk", gvk, "namespace", instance.GetNamespace(), "name", instance.GetName())
 
-	r.metricsCache.AddObject(syncKey, Tags{
+	r.cmt.SyncMetricsCache.AddObject(syncKey, syncutil.Tags{
 		Kind:   instance.GetKind(),
 		Status: metrics.ActiveStatus,
 	})
 
-	r.metricsCache.addKind(instance.GetKind())
+	r.cmt.SyncMetricsCache.AddKind(instance.GetKind())
 
 	reportMetrics = true
 
@@ -253,75 +238,4 @@ func (r *ReconcileSync) skipExcludedNamespace(obj *unstructured.Unstructured) (b
 	}
 
 	return isNamespaceExcluded, err
-}
-
-func NewMetricsCache() *MetricsCache {
-	return &MetricsCache{
-		Cache:      make(map[string]Tags),
-		KnownKinds: make(map[string]bool),
-	}
-}
-
-func (c *MetricsCache) GetSyncKey(namespace string, name string) string {
-	return strings.Join([]string{namespace, name}, "/")
-}
-
-// need to know encountered kinds to reset metrics for that kind
-// this is a known memory leak
-// footprint should naturally reset on Pod upgrade b/c the container restarts.
-func (c *MetricsCache) addKind(key string) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-
-	c.KnownKinds[key] = true
-}
-
-func (c *MetricsCache) ResetCache() {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-
-	c.Cache = make(map[string]Tags)
-}
-
-func (c *MetricsCache) AddObject(key string, t Tags) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-
-	c.Cache[key] = Tags{
-		Kind:   t.Kind,
-		Status: t.Status,
-	}
-}
-
-func (c *MetricsCache) DeleteObject(key string) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-
-	delete(c.Cache, key)
-}
-
-func (c *MetricsCache) ReportSync(reporter *Reporter) {
-	c.mux.RLock()
-	defer c.mux.RUnlock()
-
-	totals := make(map[Tags]int)
-	for _, v := range c.Cache {
-		totals[v]++
-	}
-
-	for kind := range c.KnownKinds {
-		for _, status := range metrics.AllStatuses {
-			if err := reporter.reportSync(
-				Tags{
-					Kind:   kind,
-					Status: status,
-				},
-				int64(totals[Tags{
-					Kind:   kind,
-					Status: status,
-				}])); err != nil {
-				log.Error(err, "failed to report sync")
-			}
-		}
-	}
 }

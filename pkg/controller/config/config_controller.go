@@ -29,6 +29,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	syncutil "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cmt"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -109,16 +111,16 @@ func (a *Adder) InjectWatchSet(watchSet *watch.Set) {
 // events is the channel from which sync controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // events and regEvents point to same event channel except for testing.
-func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, watchSet *watch.Set, regEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
-	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
-	syncMetricsCache := syncc.NewMetricsCache()
+func newReconciler(mgr manager.Manager, opa syncutil.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, watchSet *watch.Set, regEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
+	filteredOpa := syncutil.NewFilteredOpaDataClient(opa, watchSet)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cmt := cmt.NewCacheManager(opa, syncMetricsCache)
 
 	syncAdder := syncc.Adder{
-		Opa:             filteredOpa,
 		Events:          events,
-		MetricsCache:    syncMetricsCache,
 		Tracker:         tracker,
 		ProcessExcluder: processExcluder,
+		CMT: cmt,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {
@@ -176,8 +178,8 @@ type ReconcileConfig struct {
 	statusClient client.StatusClient
 
 	scheme           *runtime.Scheme
-	opa              syncc.OpaDataClient
-	syncMetricsCache *syncc.MetricsCache
+	opa              syncutil.OpaDataClient
+	syncMetricsCache *syncutil.MetricsCache
 	cs               *watch.ControllerSwitch
 	watcher          *watch.Registrar
 
@@ -327,7 +329,7 @@ func (r *ReconcileConfig) wipeCacheIfNeeded(ctx context.Context) error {
 
 		// reset sync cache before sending the metric
 		r.syncMetricsCache.ResetCache()
-		r.syncMetricsCache.ReportSync(&syncc.Reporter{})
+		r.syncMetricsCache.ReportSync(&syncutil.Reporter{}, log)
 
 		r.needsWipe = false
 	}
@@ -352,7 +354,7 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 			return fmt.Errorf("replaying data for %+v: %w", gvk, err)
 		}
 
-		defer r.syncMetricsCache.ReportSync(&syncc.Reporter{})
+		defer r.syncMetricsCache.ReportSync(&syncutil.Reporter{}, log)
 
 		for i := range u.Items {
 			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())
@@ -367,14 +369,14 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 			}
 
 			if _, err := r.opa.AddData(ctx, &u.Items[i]); err != nil {
-				r.syncMetricsCache.AddObject(syncKey, syncc.Tags{
+				r.syncMetricsCache.AddObject(syncKey, syncutil.Tags{
 					Kind:   u.Items[i].GetKind(),
 					Status: metrics.ErrorStatus,
 				})
 				return fmt.Errorf("adding data for %+v: %w", gvk, err)
 			}
 
-			r.syncMetricsCache.AddObject(syncKey, syncc.Tags{
+			r.syncMetricsCache.AddObject(syncKey, syncutil.Tags{
 				Kind:   u.Items[i].GetKind(),
 				Status: metrics.ActiveStatus,
 			})
