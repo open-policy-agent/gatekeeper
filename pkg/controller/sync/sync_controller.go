@@ -25,9 +25,9 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cmt"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,7 +44,7 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
 type Adder struct {
-	CMT *cmt.CacheManagerTracker
+	CMT             *cmt.CacheManagerTracker
 	Events          <-chan event.GenericEvent
 	Tracker         *readiness.Tracker
 	ProcessExcluder *process.Excluder
@@ -81,7 +81,7 @@ func newReconciler(
 		reporter:        reporter,
 		tracker:         tracker,
 		processExcluder: processExcluder,
-		cmt: cmt,
+		cmt:             cmt,
 	}
 }
 
@@ -112,7 +112,7 @@ type ReconcileSync struct {
 	scheme          *runtime.Scheme
 	log             logr.Logger
 	reporter        syncutil.Reporter
-	cmt *cmt.CacheManagerTracker
+	cmt             *cmt.CacheManagerTracker
 	tracker         *readiness.Tracker
 	processExcluder *process.Excluder
 }
@@ -132,7 +132,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		return reconcile.Result{}, nil
 	}
 
-	syncKey := r.cmt.SyncMetricsCache.GetSyncKey(unpackedRequest.Namespace, unpackedRequest.Name)
+	syncKey := syncutil.GetKeyForSyncMetrics(unpackedRequest.Namespace, unpackedRequest.Name)
 	reportMetrics := false
 	defer func() {
 		if reportMetrics {

@@ -120,7 +120,7 @@ func newReconciler(mgr manager.Manager, opa syncutil.OpaDataClient, wm *watch.Ma
 		Events:          events,
 		Tracker:         tracker,
 		ProcessExcluder: processExcluder,
-		CMT: cmt,
+		CMT:             cmt,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {
@@ -357,7 +357,7 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 		defer r.syncMetricsCache.ReportSync(&syncutil.Reporter{}, log)
 
 		for i := range u.Items {
-			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())
+			syncKey := syncutil.GetKeyForSyncMetrics(u.Items[i].GetNamespace(), u.Items[i].GetName())
 
 			isExcludedNamespace, err := r.skipExcludedNamespace(&u.Items[i])
 			if err != nil {

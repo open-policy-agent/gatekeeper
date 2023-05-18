@@ -68,7 +68,7 @@ func NewMetricsCache() *MetricsCache {
 	}
 }
 
-func (c *MetricsCache) GetSyncKey(namespace string, name string) string {
+func GetKeyForSyncMetrics(namespace string, name string) string {
 	return strings.Join([]string{namespace, name}, "/")
 }
 
