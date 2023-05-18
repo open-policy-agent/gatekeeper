@@ -191,7 +191,7 @@ e2e-helm-install:
 
 e2e-helm-deploy: e2e-helm-install
 ifeq ($(ENABLE_PUBSUB),true)
-	@echo 'podPubsubAnnotations: {dapr.io/enabled: "true", dapr.io/app-id: "audit", dapr.io/metrics-port: "9999"}' > annotations.yaml
+	@echo 'podPubsubAnnotations: {dapr.io/enabled: "true", dapr.io/app-id: "audit", dapr.io/metrics-port: "9999"}' > .tmp/annotations.yaml
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
@@ -211,7 +211,7 @@ ifeq ($(ENABLE_PUBSUB),true)
 		--set audit.enablePubsub=${ENABLE_PUBSUB} \
 		--set audit.connection=${AUDIT_CONNECTION} \
 		--set audit.channel=${AUDIT_CHANNEL} \
-		--values annotations.yaml \
+		--values .tmp/annotations.yaml \
 		--set mutationAnnotations=true;
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \

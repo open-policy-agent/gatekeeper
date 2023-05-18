@@ -30,6 +30,7 @@ jobs:
     - name: Bootstrap e2e
       run: |
         mkdir -p $GITHUB_WORKSPACE/bin
+        mkdir .tmp
         echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
         make e2e-bootstrap
         make e2e-helm-install
