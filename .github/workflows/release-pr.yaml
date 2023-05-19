@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@6b3083af2869dc3314a0257a42f4af696cc79ba3 # v2.3.1
+        uses: step-security/harden-runner@128a63446a954579617e875aaab7d2978154e969 # v2.4.0
         with:
           egress-policy: audit
 
@@ -77,7 +77,7 @@ jobs:
         run: make version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x
 
       - name: Create release pull request
-        uses: peter-evans/create-pull-request@5b4a9f6a9e2af26e5f02351490b90d01eb8ec1e5 # v5.0.0
+        uses: peter-evans/create-pull-request@284f54f989303d2699d373481a0cfa13ad5a6666 # v5.0.1
         with:
           commit-message: "chore: Prepare ${{ env.NEWVERSION }} release"
           title: "chore: Prepare ${{ env.NEWVERSION }} release"
