@@ -10,7 +10,7 @@ import (
 
 // syncAnnotationName is the name of the annotation that stores
 // GVKS that are required to be synced.
-const SyncAnnotationName = "metadata.gatekeeper.sh/requiresSyncData"
+const SyncAnnotationName = "metadata.gatekeeper.sh/requires-sync-data"
 
 // SyncRequirements contains a list of ANDed requirements, each of which
 // contains an expanded set of equivalent (ORed) GVKs.
