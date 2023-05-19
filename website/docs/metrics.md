@@ -14,7 +14,7 @@ This section covers how to gather more detailed statistics about Gatekeeper's qu
 
 #### Example Log Line
 
-Let's say we want to know how long it takes to review a constraint kind at admission time. By setting the `--log-stats-admission` and watching the logs for a constraint kind `K8sRequiredLabels`, we could see a sample log line like
+To see how long it takes to review a constraint kind at admission time, enable the `--log-stats-admission` flag and watch the logs for a constraint kind `K8sRequiredLabels`,  for example:
 
 ```json
 {
