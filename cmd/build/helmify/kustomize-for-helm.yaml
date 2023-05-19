@@ -147,7 +147,7 @@ spec:
     metadata:
       annotations:
         HELMSUBST_ANNOTATIONS: ""
-        HELMSUBST_PUBSUB_ANNOTATIONS: ""
+        AUDIT_POD_ANNOTATIONS: ""
     spec:
       containers:
         - name: manager

@@ -75,8 +75,8 @@ var replacements = map[string]string{
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
         {{- end }}`,
 
-	`HELMSUBST_PUBSUB_ANNOTATIONS: ""`: `{{- if .Values.podPubsubAnnotations }}
-        {{- toYaml .Values.podPubsubAnnotations | trim | nindent 8 }}
+	`AUDIT_POD_ANNOTATIONS: ""`: `{{- if .Values.auditPodAnnotations }}
+        {{- toYaml .Values.auditPodAnnotations | trim | nindent 8 }}
         {{- end }}`,
 
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
