@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 )
 
 type IDSet map[types.ID]bool

@@ -21,7 +21,7 @@ limitations under the License.
 package match
 
 import (
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

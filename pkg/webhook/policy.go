@@ -33,22 +33,22 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/gatekeeper/apis"
-	expansionunversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
-	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
-	"github.com/open-policy-agent/gatekeeper/pkg/keys"
-	"github.com/open-policy-agent/gatekeeper/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignimage"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
-	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
-	"github.com/open-policy-agent/gatekeeper/pkg/operations"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/apis"
+	expansionunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignimage"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignmeta"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/modifyset"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -192,6 +192,22 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		log.Error(err, "error executing query")
 		requestResponse = errorResponse
 		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
+	if *logStatsAdmission {
+		logging.LogStatsEntries(
+			h.opa,
+			log.WithValues(
+				logging.Process, "admission",
+				logging.EventType, "review_response_stats",
+				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
+				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
+				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
+				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
+				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
+			),
+			resp.StatsEntries, "admission review request stats",
+		)
 	}
 
 	res := resp.Results()
@@ -578,13 +594,14 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		}
 		expansion.OverrideEnforcementAction(res.EnforcementAction, resultantResp)
 		expansion.AggregateResponses(res.TemplateName, resp, resultantResp)
+		expansion.AggregateStats(res.TemplateName, resp, resultantResp)
 	}
 
 	return resp, nil
 }
 
 func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {
-	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace))
+	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace), drivers.Stats(*logStatsAdmission))
 	if resp != nil && trace {
 		log.Info(resp.TraceDump())
 	}

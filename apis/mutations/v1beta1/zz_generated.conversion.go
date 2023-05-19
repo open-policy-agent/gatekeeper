@@ -22,11 +22,11 @@ package v1beta1
 import (
 	unsafe "unsafe"
 
-	unversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
-	match "github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
-	tester "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
-	types "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	unversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	match "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	tester "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
+	types "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )

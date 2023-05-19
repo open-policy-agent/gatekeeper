@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 )
 
 // ExternalData describes the external data source to use for the mutation.

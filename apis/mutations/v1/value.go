@@ -1,8 +1,8 @@
 package v1
 
 import (
-	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 )
 
 type AssignField struct {

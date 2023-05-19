@@ -24,7 +24,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache/internal"
+	"github.com/open-policy-agent/gatekeeper/v3/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache/internal"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"

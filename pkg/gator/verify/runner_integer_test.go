@@ -6,7 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 )
 
 const templateV1Beta1Integer = `

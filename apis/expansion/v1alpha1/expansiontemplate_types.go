@@ -16,8 +16,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	status "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	status "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

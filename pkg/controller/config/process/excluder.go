@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"sync"
 
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

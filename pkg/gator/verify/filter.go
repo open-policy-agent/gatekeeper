@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 )
 
 type Filter interface {

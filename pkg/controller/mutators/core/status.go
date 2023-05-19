@@ -3,8 +3,8 @@ package core
 import (
 	"errors"
 
-	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/schema"
 	apiTypes "k8s.io/apimachinery/pkg/types"
 )
 

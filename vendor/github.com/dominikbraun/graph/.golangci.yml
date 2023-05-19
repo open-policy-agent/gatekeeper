@@ -1,0 +1,25 @@
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - gofumpt
+    - errcheck
+    - gosimple
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - stdmethods
+      - fieldalignment
+
+  gofumpt:
+    extra-rules: false
+    module-path: github.com/dominikbraun/graph
