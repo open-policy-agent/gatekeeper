@@ -4,15 +4,13 @@ title: Metrics & Observability
 ---
 ## Observability
 
-We want to enable operators to glean information about how Gatekeeper is performing, as a system. To that end, operators can choose to enable execution stats that are gathered when Constraints are evaluated in the engine. At present these stats can only be logged.
+This section covers how to gather more detailed statistics about Gatekeeper's query performance. This can be helpful in diagnosing situations such as identifying a constraint template with a long execution time. Statistics are written to Gatekeeper's stdout logs.
 
 ### Logging Constraint Execution Stats
 
 - set `--log-stats-audit`. This flag enables logging the stats for the audit process.
 
 - set `--log-stats-admission`. This flag enables logging the stats for the admission review process.
-
-By default, these new logging features are disabled due to their high-volume data generation. 
 
 #### Example Log Line
 
@@ -75,8 +73,11 @@ Let's say we want to know how long it takes to review a constraint kind at admis
 }
 ```
 
-In the excerpt above, notice `templateRunTimeNS` and `constraintCount`. The former indicates the time it takes to evaluate the number of constraints of kind `K8sRequiredLabels`, while the latter surfaces how many such constraints where evaluated at once. Labels provide additional information about the execution environemnt setup, like whether tracing was enabled (`TraceEnabled`).
+In the excerpt above, notice `templateRunTimeNS` and `constraintCount`. The former indicates the time it takes to evaluate the number of constraints of kind `K8sRequiredLabels`, while the latter surfaces how many such constraints were evaluated for this template. Labels provide additional information about the execution environemnt setup, like whether tracing was enabled (`TraceEnabled`).
 
+#### Caveats
+
+The additional log volume from enabling the stats logging can be quite high.
 ## Metrics
 
 Below are the list of metrics provided by Gatekeeper:
