@@ -22,7 +22,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
@@ -74,6 +73,8 @@ func newReconciler(
 	processExcluder *process.Excluder,
 	cmt *cmt.CacheManagerTracker,
 ) reconcile.Reconciler {
+	cmt.WithTracker(tracker)
+
 	return &ReconcileSync{
 		reader:          mgr.GetCache(),
 		scheme:          mgr.GetScheme(),
@@ -132,7 +133,10 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		return reconcile.Result{}, nil
 	}
 
-	syncKey := syncutil.GetKeyForSyncMetrics(unpackedRequest.Namespace, unpackedRequest.Name)
+	// todo acpana -- double check that request namespace & name match instance namespace & name
+	// syncKey := syncutil.GetKeyForSyncMetrics(unpackedRequest.Namespace, unpackedRequest.Name)
+
+	// todo FRICTION -- reportMetricsForRenconcileRun should not be part of the sync controller w all the new cmt changes
 	reportMetricsForRenconcileRun := false
 	defer func() {
 		if reportMetricsForRenconcileRun {
@@ -156,13 +160,9 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 			// This is a deletion; remove the data
 			instance.SetNamespace(unpackedRequest.Namespace)
 			instance.SetName(unpackedRequest.Name)
-			if _, err := r.cmt.RemoveData(ctx, instance, &syncKey); err != nil {
+			if _, err := r.cmt.RemoveGVKFromSync(ctx, instance); err != nil {
 				return reconcile.Result{}, err
 			}
-
-			// cancel expectations
-			t := r.tracker.ForData(instance.GroupVersionKind())
-			t.CancelExpect(instance)
 
 			reportMetricsForRenconcileRun = true
 			return reconcile.Result{}, nil
@@ -179,19 +179,17 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 
 	if isExcludedNamespace {
 		// cancel expectations
+		// todo FRICTION -- when process exclusion is moved out of sync controller
+		// then we can fully remove the tracker out of the sync controller.
 		t := r.tracker.ForData(instance.GroupVersionKind())
 		t.CancelExpect(instance)
 		return reconcile.Result{}, nil
 	}
 
 	if !instance.GetDeletionTimestamp().IsZero() {
-		if _, err := r.cmt.RemoveData(ctx, instance, &syncKey); err != nil {
+		if _, err := r.cmt.RemoveGVKFromSync(ctx, instance); err != nil {
 			return reconcile.Result{}, err
 		}
-
-		// cancel expectations
-		t := r.tracker.ForData(instance.GroupVersionKind())
-		t.CancelExpect(instance)
 
 		reportMetricsForRenconcileRun = true
 		return reconcile.Result{}, nil
@@ -205,24 +203,14 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		logging.ResourceName, instance.GetName(),
 	)
 
-	if _, err := r.cmt.AddData(ctx, instance, &syncKey); err != nil {
+	if _, err := r.cmt.AddGVKToSync(ctx, instance); err != nil {
 		reportMetricsForRenconcileRun = true
 
 		return reconcile.Result{}, err
 	}
-	r.tracker.ForData(gvk).Observe(instance)
+
+	// todo FRICTION -- this log line should move if readiness tracker is not part of sync controlle anymore
 	log.V(1).Info("[readiness] observed data", "gvk", gvk, "namespace", instance.GetNamespace(), "name", instance.GetName())
-
-	// FRICTION:
-	// it would be great to abstract away these two funcs
-	// but that will require the readiness tracker to be moved to
-	// the CMT thing. Should the
-	r.cmt.AddObjectForSyncMetrics(syncKey, syncutil.Tags{
-		Kind:   instance.GetKind(),
-		Status: metrics.ActiveStatus,
-	})
-
-	r.cmt.AddKindForSyncMetrics(instance.GetKind())
 
 	reportMetricsForRenconcileRun = true
 

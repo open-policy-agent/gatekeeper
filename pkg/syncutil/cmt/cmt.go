@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -16,6 +17,7 @@ type CacheManagerTracker struct {
 
 	opa              syncutil.OpaDataClient
 	syncMetricsCache *syncutil.MetricsCache
+	tracker          *readiness.Tracker
 }
 
 func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.MetricsCache) *CacheManagerTracker {
@@ -25,32 +27,55 @@ func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.Metr
 	}
 }
 
-func (c *CacheManagerTracker) AddData(ctx context.Context, instance *unstructured.Unstructured, syncMetricKey *string) (*types.Responses, error) {
+func (c *CacheManagerTracker) WithTracker(newTracker *readiness.Tracker) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	c.tracker = newTracker
+}
+
+func (c *CacheManagerTracker) AddGVKToSync(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	syncKey := syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName())
 	resp, err := c.opa.AddData(ctx, instance)
-	if err != nil && syncMetricKey != nil {
-		c.AddObjectForSyncMetrics(*syncMetricKey, syncutil.Tags{
-			Kind:   instance.GetKind(),
-			Status: metrics.ErrorStatus,
-		})
+	if err != nil {
+		c.syncMetricsCache.AddObject(
+			syncKey,
+			syncutil.Tags{
+				Kind:   instance.GetKind(),
+				Status: metrics.ErrorStatus,
+			},
+		)
+
+		return resp, err
 	}
+
+	c.tracker.ForData(instance.GroupVersionKind()).Observe(instance)
+
+	c.syncMetricsCache.AddObject(syncKey, syncutil.Tags{
+		Kind:   instance.GetKind(),
+		Status: metrics.ActiveStatus,
+	})
+	c.syncMetricsCache.AddKind(instance.GetKind())
 
 	return resp, err
 }
 
-// todo call this instance not data.
-func (c *CacheManagerTracker) RemoveData(ctx context.Context, instance *unstructured.Unstructured, syncMetricKey *string) (*types.Responses, error) {
+func (c *CacheManagerTracker) RemoveGVKFromSync(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	resp, err := c.opa.RemoveData(ctx, instance)
 	// only delete from metrics map if the data removal was succcesful
-	if err != nil && syncMetricKey != nil {
-		c.syncMetricsCache.DeleteObject(*syncMetricKey)
+	if err != nil {
+		c.syncMetricsCache.DeleteObject(syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName()))
+
+		return resp, err
 	}
 
+	c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
 	return resp, err
 }
 
@@ -59,20 +84,4 @@ func (c *CacheManagerTracker) ReportSyncMetrics(reporter *syncutil.Reporter, log
 	defer c.lock.RUnlock()
 
 	c.syncMetricsCache.ReportSync(reporter, log)
-}
-
-// when/ if readyness tracker becomes part of CMT, then we won't need to have this func.
-func (c *CacheManagerTracker) AddObjectForSyncMetrics(syncMetricKey string, tag syncutil.Tags) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.syncMetricsCache.AddObject(syncMetricKey, tag)
-}
-
-// when/ if readyness tracker becomes part of CMT, then we won't need to have this func.
-func (c *CacheManagerTracker) AddKindForSyncMetrics(syncMetricKind string) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.syncMetricsCache.AddKind(syncMetricKind)
 }
