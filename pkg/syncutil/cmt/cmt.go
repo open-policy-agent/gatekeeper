@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
@@ -18,6 +19,9 @@ type CacheManagerTracker struct {
 	opa              syncutil.OpaDataClient
 	syncMetricsCache *syncutil.MetricsCache
 	tracker          *readiness.Tracker
+	processExcluder  *process.Excluder
+
+	// todo acpana -- integrate gvkaggregator
 }
 
 func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.MetricsCache) *CacheManagerTracker {
@@ -34,9 +38,31 @@ func (c *CacheManagerTracker) WithTracker(newTracker *readiness.Tracker) {
 	c.tracker = newTracker
 }
 
+func (c *CacheManagerTracker) WithProcessExcluder(newExcluder *process.Excluder) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.processExcluder = newExcluder
+}
+
 func (c *CacheManagerTracker) AddGVKToSync(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	isNamespaceExcluded, err := c.processExcluder.IsNamespaceExcluded(process.Sync, instance)
+	if err != nil { //nolint:staticcheck
+		// todo figure out logging
+	}
+
+	// bail because it means we should not be
+	// syncing this gvk
+	if isNamespaceExcluded {
+		// todo acpana -- consider actually calling RemoveGVKToSync in this case
+		// as we should not be tracking this GVK anymore
+		c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
+
+		return &types.Responses{}, nil
+	}
 
 	syncKey := syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName())
 	resp, err := c.opa.AddData(ctx, instance)

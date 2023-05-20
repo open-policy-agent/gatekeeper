@@ -74,15 +74,14 @@ func newReconciler(
 	cmt *cmt.CacheManagerTracker,
 ) reconcile.Reconciler {
 	cmt.WithTracker(tracker)
+	cmt.WithProcessExcluder(processExcluder)
 
 	return &ReconcileSync{
-		reader:          mgr.GetCache(),
-		scheme:          mgr.GetScheme(),
-		log:             log,
-		reporter:        reporter,
-		tracker:         tracker,
-		processExcluder: processExcluder,
-		cmt:             cmt,
+		reader:   mgr.GetCache(),
+		scheme:   mgr.GetScheme(),
+		log:      log,
+		reporter: reporter,
+		cmt:      cmt,
 	}
 }
 
@@ -110,12 +109,10 @@ var _ reconcile.Reconciler = &ReconcileSync{}
 type ReconcileSync struct {
 	reader client.Reader
 
-	scheme          *runtime.Scheme
-	log             logr.Logger
-	reporter        syncutil.Reporter
-	cmt             *cmt.CacheManagerTracker
-	tracker         *readiness.Tracker
-	processExcluder *process.Excluder
+	scheme   *runtime.Scheme
+	log      logr.Logger
+	reporter syncutil.Reporter
+	cmt      *cmt.CacheManagerTracker
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -171,21 +168,15 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		return reconcile.Result{}, err
 	}
 
+	// todo FRICTION -- logging may be out of place now that process exclusion happens in cmt
 	// namespace is excluded from sync
-	isExcludedNamespace, err := r.skipExcludedNamespace(instance)
-	if err != nil {
-		log.Error(err, "error while excluding namespaces")
-	}
+	// isExcludedNamespace, err := r.skipExcludedNamespace(instance)
+	// if err != nil {
+	// 	log.Error(err, "error while excluding namespaces")
+	// }
 
-	if isExcludedNamespace {
-		// cancel expectations
-		// todo FRICTION -- when process exclusion is moved out of sync controller
-		// then we can fully remove the tracker out of the sync controller.
-		t := r.tracker.ForData(instance.GroupVersionKind())
-		t.CancelExpect(instance)
-		return reconcile.Result{}, nil
-	}
-
+	// todo acpana -- double check that it is okay to remove what has been
+	// namespace excluded now (but was not namesapced excluded before)
 	if !instance.GetDeletionTimestamp().IsZero() {
 		if _, err := r.cmt.RemoveGVKFromSync(ctx, instance); err != nil {
 			return reconcile.Result{}, err
@@ -215,13 +206,4 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	reportMetricsForRenconcileRun = true
 
 	return reconcile.Result{}, nil
-}
-
-func (r *ReconcileSync) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, error) {
-	isNamespaceExcluded, err := r.processExcluder.IsNamespaceExcluded(process.Sync, obj)
-	if err != nil {
-		return false, err
-	}
-
-	return isNamespaceExcluded, err
 }
