@@ -1,4 +1,4 @@
-package syncutil
+package parser
 
 import (
 	"encoding/json"
