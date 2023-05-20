@@ -20,10 +20,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cmt"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -43,10 +41,8 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
 type Adder struct {
-	CMT             *cmt.CacheManagerTracker
-	Events          <-chan event.GenericEvent
-	Tracker         *readiness.Tracker
-	ProcessExcluder *process.Excluder
+	CMT    *cmt.CacheManagerTracker
+	Events <-chan event.GenericEvent
 }
 
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -61,7 +57,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r := newReconciler(mgr, *reporter, a.Tracker, a.ProcessExcluder, a.CMT)
+	r := newReconciler(mgr, *reporter, a.CMT)
 	return add(mgr, r, a.Events)
 }
 
@@ -69,13 +65,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 func newReconciler(
 	mgr manager.Manager,
 	reporter syncutil.Reporter,
-	tracker *readiness.Tracker,
-	processExcluder *process.Excluder,
 	cmt *cmt.CacheManagerTracker,
 ) reconcile.Reconciler {
-	cmt.WithTracker(tracker)
-	cmt.WithProcessExcluder(processExcluder)
-
 	return &ReconcileSync{
 		reader:   mgr.GetCache(),
 		scheme:   mgr.GetScheme(),

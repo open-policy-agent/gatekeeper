@@ -114,13 +114,11 @@ func (a *Adder) InjectWatchSet(watchSet *watch.Set) {
 func newReconciler(mgr manager.Manager, opa syncutil.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, watchSet *watch.Set, regEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
 	filteredOpa := syncutil.NewFilteredOpaDataClient(opa, watchSet)
 	syncMetricsCache := syncutil.NewMetricsCache()
-	cmt := cmt.NewCacheManager(opa, syncMetricsCache)
+	cmt := cmt.NewCacheManager(opa, syncMetricsCache, tracker, processExcluder)
 
 	syncAdder := syncc.Adder{
-		Events:          events,
-		Tracker:         tracker,
-		ProcessExcluder: processExcluder,
-		CMT:             cmt,
+		Events: events,
+		CMT:    cmt,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {

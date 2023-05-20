@@ -24,25 +24,13 @@ type CacheManagerTracker struct {
 	// todo acpana -- integrate gvkaggregator
 }
 
-func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.MetricsCache) *CacheManagerTracker {
+func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.MetricsCache, tracker *readiness.Tracker, processExcluder *process.Excluder) *CacheManagerTracker {
 	return &CacheManagerTracker{
 		opa:              opa,
 		syncMetricsCache: syncMetricsCache,
+		tracker:          tracker,
+		processExcluder:  processExcluder,
 	}
-}
-
-func (c *CacheManagerTracker) WithTracker(newTracker *readiness.Tracker) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.tracker = newTracker
-}
-
-func (c *CacheManagerTracker) WithProcessExcluder(newExcluder *process.Excluder) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.processExcluder = newExcluder
 }
 
 func (c *CacheManagerTracker) AddGVKToSync(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
