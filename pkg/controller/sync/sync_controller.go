@@ -133,14 +133,14 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	}
 
 	syncKey := syncutil.GetKeyForSyncMetrics(unpackedRequest.Namespace, unpackedRequest.Name)
-	reportMetrics := false
+	reportMetricsForRenconcileRun := false
 	defer func() {
-		if reportMetrics {
+		if reportMetricsForRenconcileRun {
 			if err := r.reporter.ReportSyncDuration(time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report sync duration")
 			}
 
-			r.cmt.SyncMetricsCache.ReportSync(&r.reporter, log)
+			r.cmt.ReportSyncMetrics(&r.reporter, log)
 
 			if err := r.reporter.ReportLastSync(); err != nil {
 				log.Error(err, "failed to report last sync timestamp")
@@ -156,7 +156,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 			// This is a deletion; remove the data
 			instance.SetNamespace(unpackedRequest.Namespace)
 			instance.SetName(unpackedRequest.Name)
-			if _, err := r.cmt.RemoveData(ctx, instance); err != nil {
+			if _, err := r.cmt.RemoveData(ctx, instance, &syncKey); err != nil {
 				return reconcile.Result{}, err
 			}
 
@@ -164,8 +164,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 			t := r.tracker.ForData(instance.GroupVersionKind())
 			t.CancelExpect(instance)
 
-			r.cmt.SyncMetricsCache.DeleteObject(syncKey)
-			reportMetrics = true
+			reportMetricsForRenconcileRun = true
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -186,7 +185,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	}
 
 	if !instance.GetDeletionTimestamp().IsZero() {
-		if _, err := r.cmt.RemoveData(ctx, instance); err != nil {
+		if _, err := r.cmt.RemoveData(ctx, instance, &syncKey); err != nil {
 			return reconcile.Result{}, err
 		}
 
@@ -194,8 +193,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		t := r.tracker.ForData(instance.GroupVersionKind())
 		t.CancelExpect(instance)
 
-		r.cmt.SyncMetricsCache.DeleteObject(syncKey)
-		reportMetrics = true
+		reportMetricsForRenconcileRun = true
 		return reconcile.Result{}, nil
 	}
 
@@ -207,26 +205,26 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		logging.ResourceName, instance.GetName(),
 	)
 
-	if _, err := r.cmt.AddData(ctx, instance); err != nil {
-		r.cmt.SyncMetricsCache.AddObject(syncKey, syncutil.Tags{
-			Kind:   instance.GetKind(),
-			Status: metrics.ErrorStatus,
-		})
-		reportMetrics = true
+	if _, err := r.cmt.AddData(ctx, instance, &syncKey); err != nil {
+		reportMetricsForRenconcileRun = true
 
 		return reconcile.Result{}, err
 	}
 	r.tracker.ForData(gvk).Observe(instance)
 	log.V(1).Info("[readiness] observed data", "gvk", gvk, "namespace", instance.GetNamespace(), "name", instance.GetName())
 
-	r.cmt.SyncMetricsCache.AddObject(syncKey, syncutil.Tags{
+	// FRICTION:
+	// it would be great to abstract away these two funcs
+	// but that will require the readiness tracker to be moved to
+	// the CMT thing. Should the
+	r.cmt.AddObjectForSyncMetrics(syncKey, syncutil.Tags{
 		Kind:   instance.GetKind(),
 		Status: metrics.ActiveStatus,
 	})
 
-	r.cmt.SyncMetricsCache.AddKind(instance.GetKind())
+	r.cmt.AddKindForSyncMetrics(instance.GetKind())
 
-	reportMetrics = true
+	reportMetricsForRenconcileRun = true
 
 	return reconcile.Result{}, nil
 }
