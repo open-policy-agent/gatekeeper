@@ -25,8 +25,8 @@ spec:
   template:
     metadata:
       annotations:
-        {{- if .Values.auditPodAnnotations }}
-        {{- toYaml .Values.auditPodAnnotations | trim | nindent 8 }}
+        {{- if .Values.pubsubAnnotations }}
+        {{- toYaml .Values.pubsubAnnotations | trim | nindent 8 }}
         {{- end }}
         {{- if .Values.podAnnotations }}
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
