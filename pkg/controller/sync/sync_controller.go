@@ -159,13 +159,6 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		return reconcile.Result{}, err
 	}
 
-	// todo FRICTION -- logging may be out of place now that process exclusion happens in cmt
-	// namespace is excluded from sync
-	// isExcludedNamespace, err := r.skipExcludedNamespace(instance)
-	// if err != nil {
-	// 	log.Error(err, "error while excluding namespaces")
-	// }
-
 	// todo acpana -- double check that it is okay to remove what has been
 	// namespace excluded now (but was not namesapced excluded before)
 	if !instance.GetDeletionTimestamp().IsZero() {

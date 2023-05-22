@@ -7,11 +7,15 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("data-replication").WithValues("metaKind", "CacheManagerTracker")
 
 type CacheManagerTracker struct {
 	lock sync.RWMutex
@@ -38,8 +42,8 @@ func (c *CacheManagerTracker) AddGVKToSync(ctx context.Context, instance *unstru
 	defer c.lock.Unlock()
 
 	isNamespaceExcluded, err := c.processExcluder.IsNamespaceExcluded(process.Sync, instance)
-	if err != nil { //nolint:staticcheck
-		// todo figure out logging
+	if err != nil {
+		log.Error(err, "error while excluding namespaces")
 	}
 
 	// bail because it means we should not be
@@ -74,6 +78,7 @@ func (c *CacheManagerTracker) AddGVKToSync(ctx context.Context, instance *unstru
 	})
 	c.syncMetricsCache.AddKind(instance.GetKind())
 
+	log.V(logging.DebugLevel).Info("[readiness] observed data", "gvk", instance.GroupVersionKind(), "namespace", instance.GetNamespace(), "name", instance.GetName())
 	return resp, err
 }
 
