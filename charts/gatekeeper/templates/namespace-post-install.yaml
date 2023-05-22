@@ -5,11 +5,8 @@ metadata:
   name: gatekeeper-update-namespace-label
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
-    gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
+    {{- include "gatekeeper.mandatory_labels" . | nindent 4 }}
+    {{- include "gatekeeper.common_labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": post-install
     "helm.sh/hook-weight": "-5"
@@ -23,12 +20,9 @@ spec:
       annotations:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
-        {{- include "gatekeeper.podLabels" . }}
-        app: '{{ template "gatekeeper.name" . }}'
-        chart: '{{ template "gatekeeper.name" . }}'
-        gatekeeper.sh/system: "yes"
-        heritage: '{{ .Release.Service }}'
-        release: '{{ .Release.Name }}'
+        {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "gatekeeper.mandatory_labels" . | nindent 8 }}
+        {{- include "gatekeeper.common_labels" . | nindent 8 }}
     spec:
       restartPolicy: OnFailure
       {{- if .Values.postInstall.labelNamespace.image.pullSecrets }}
@@ -99,6 +93,7 @@ metadata:
   name: gatekeeper-update-namespace-label
   namespace: {{ .Release.Namespace | quote }}
   labels:
+    {{- include "gatekeeper.common_labels" . | nindent 4 }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
   annotations:
@@ -112,6 +107,7 @@ kind: ClusterRole
 metadata:
   name: gatekeeper-update-namespace-label
   labels:
+    {{- include "gatekeeper.common_labels" . | nindent 4 }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
   annotations:
@@ -143,6 +139,7 @@ kind: ClusterRoleBinding
 metadata:
   name: gatekeeper-update-namespace-label
   labels:
+    {{- include "gatekeeper.common_labels" . | nindent 4 }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
   annotations:

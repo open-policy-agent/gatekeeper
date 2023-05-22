@@ -2,26 +2,20 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
+    {{- include "gatekeeper.mandatory_labels" . | nindent 4 }}
+    {{- include "gatekeeper.common_labels" . | nindent 4 }}
     control-plane: audit-controller
     gatekeeper.sh/operation: audit
-    gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
   name: gatekeeper-audit
   namespace: '{{ .Release.Namespace }}'
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: '{{ template "gatekeeper.name" . }}'
-      chart: '{{ template "gatekeeper.name" . }}'
+      {{- include "gatekeeper.mandatory_labels" . | nindent 6 }}
+      {{- include "gatekeeper.selector_labels" . | nindent 6 }}
       control-plane: audit-controller
       gatekeeper.sh/operation: audit
-      gatekeeper.sh/system: "yes"
-      heritage: '{{ .Release.Service }}'
-      release: '{{ .Release.Name }}'
   template:
     metadata:
       annotations:
@@ -29,14 +23,10 @@ spec:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
         {{- end }}
       labels:
-{{- include "gatekeeper.podLabels" . }}
-        app: '{{ template "gatekeeper.name" . }}'
-        chart: '{{ template "gatekeeper.name" . }}'
+        {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "gatekeeper.mandatory_labels" . | nindent 8 }}
         control-plane: audit-controller
         gatekeeper.sh/operation: audit
-        gatekeeper.sh/system: "yes"
-        heritage: '{{ .Release.Service }}'
-        release: '{{ .Release.Name }}'
     spec:
       affinity:
         {{- toYaml .Values.audit.affinity | nindent 8 }}

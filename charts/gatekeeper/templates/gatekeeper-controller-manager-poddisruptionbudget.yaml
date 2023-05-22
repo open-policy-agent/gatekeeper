@@ -4,21 +4,15 @@ apiVersion: policy/v1{{- if and (not $v1) $v1beta1 -}}beta1{{- end }}
 kind: PodDisruptionBudget
 metadata:
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
-    gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
+    {{- include "gatekeeper.mandatory_labels" . | nindent 4 }}
+    {{- include "gatekeeper.common_labels" . | nindent 4 }}
   name: gatekeeper-controller-manager
   namespace: '{{ .Release.Namespace }}'
 spec:
   minAvailable: {{ .Values.pdb.controllerManager.minAvailable }}
   selector:
     matchLabels:
-      app: '{{ template "gatekeeper.name" . }}'
-      chart: '{{ template "gatekeeper.name" . }}'
+      {{- include "gatekeeper.mandatory_labels" . | nindent 6 }}
+      {{- include "gatekeeper.common_labels" . | nindent 6 }}
       control-plane: controller-manager
       gatekeeper.sh/operation: webhook
-      gatekeeper.sh/system: "yes"
-      heritage: '{{ .Release.Service }}'
-      release: '{{ .Release.Name }}'

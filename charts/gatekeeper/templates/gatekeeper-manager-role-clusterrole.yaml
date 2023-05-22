@@ -4,11 +4,8 @@ kind: ClusterRole
 metadata:
   creationTimestamp: null
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
-    gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
+    {{- include "gatekeeper.mandatory_labels" . | nindent 4 }}
+    {{- include "gatekeeper.common_labels" . | nindent 4 }}
   name: gatekeeper-manager-role
 rules:
 - apiGroups:
