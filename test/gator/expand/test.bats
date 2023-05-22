@@ -53,7 +53,7 @@ test_dir () {
 }
 
 @test "generator with a custom namespace but namespace config missing" {
- test_dir "expand-with-missing-ns" 1
+ test_dir "expand-with-missing-ns" 0
 }
 
 @test "expand into 2 resultants and write to file" {

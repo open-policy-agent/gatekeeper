@@ -38,3 +38,6 @@ spec:
         args:
         - "/bin/sh"
 ---
+# while this is missing the "my-ns" namespace
+# since there are no namespace selectors
+# this test will pass.

@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
-	expansionv1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
+	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
-	mutationsv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1alpha1"
+	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assign"
@@ -28,12 +28,13 @@ var mutatorKinds = map[string]bool{
 }
 
 type Expander struct {
-	mutators           []types.Mutator
-	templateExpansions []*unversioned.ExpansionTemplate
-	objects            []*unstructured.Unstructured
-	namespaces         map[string]*corev1.Namespace
-	expSystem          *expansion.System
-	mutSystem          *mutation.System
+	mutators              []types.Mutator
+	templateExpansions    []*unversioned.ExpansionTemplate
+	objects               []*unstructured.Unstructured
+	namespaces            map[string]*corev1.Namespace
+	expSystem             *expansion.System
+	mutSystem             *mutation.System
+	hasNamespaceSelectors bool
 }
 
 func Expand(resources []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
@@ -97,7 +98,11 @@ func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*expansion.Re
 		return nil, fmt.Errorf("error mutating base resource %s: %w", resource.GetName(), err)
 	}
 
-	resultants, err := er.expSystem.Expand(base)
+	var opts []expansion.ExpandOption
+	if !er.hasNamespaceSelectors {
+		opts = append(opts, expansion.RelaxNamespaceNullability())
+	}
+	resultants, err := er.expSystem.Expand(base, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error expanding resource %s: %w", resource.GetName(), err)
 	}
@@ -180,13 +185,25 @@ func (er *Expander) add(u *unstructured.Unstructured) error {
 	case isNamespace(u):
 		err = er.addNamespace(u)
 	}
-
 	if err == nil {
 		// Any resource can technically be a generator
 		er.objects = append(er.objects, u)
 	}
 
+	err = er.checkNamespaceSelector(u)
 	return err
+}
+
+func (er *Expander) checkNamespaceSelector(u *unstructured.Unstructured) error {
+	_, exists, err := unstructured.NestedFieldNoCopy(u.Object, "spec", "match", "namespaces")
+	if err != nil {
+		return err
+	}
+
+	if !er.hasNamespaceSelectors {
+		er.hasNamespaceSelectors = exists
+	}
+	return nil
 }
 
 func (er *Expander) addExpansionTemplate(u *unstructured.Unstructured) error {
@@ -208,14 +225,14 @@ func (er *Expander) addNamespace(u *unstructured.Unstructured) error {
 }
 
 func isExpansion(u *unstructured.Unstructured) bool {
-	return u.GroupVersionKind().Group == expansionv1.GroupVersion.Group && u.GetKind() == "ExpansionTemplate"
+	return u.GroupVersionKind().Group == expansionv1alpha1.GroupVersion.Group && u.GetKind() == "ExpansionTemplate"
 }
 
 func isMutator(obj *unstructured.Unstructured) bool {
 	if _, exists := mutatorKinds[obj.GetKind()]; !exists {
 		return false
 	}
-	return obj.GroupVersionKind().Group == mutationsv1.GroupVersion.Group
+	return obj.GroupVersionKind().Group == mutationsv1alpha1.GroupVersion.Group
 }
 
 func isNamespace(obj *unstructured.Unstructured) bool {

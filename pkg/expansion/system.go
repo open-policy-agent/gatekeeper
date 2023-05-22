@@ -126,26 +126,39 @@ func genGVKToSchemaGVK(gvk expansionunversioned.GeneratedGVK) schema.GroupVersio
 	}
 }
 
+// functional options for the Expand() calls.
+type ExpandOption func(*ExpandOptions)
+
+type ExpandOptions struct {
+	RelaxNamespaceNullabilityCheck bool
+}
+
+func RelaxNamespaceNullability() ExpandOption {
+	return func(options *ExpandOptions) {
+		options.RelaxNamespaceNullabilityCheck = true
+	}
+}
+
 // Expand expands `base` into resultant resources, and applies any applicable
 // mutators. If no ExpansionTemplates match `base`, an empty slice
 // will be returned. If `s.mutationSystem` is nil, no mutations will be applied.
-func (s *System) Expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
+func (s *System) Expand(base *mutationtypes.Mutable, opts ...ExpandOption) ([]*Resultant, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	var res []*Resultant
-	if err := s.expandRecursive(base, &res, 0); err != nil {
+	if err := s.expandRecursive(base, &res, 0, opts...); err != nil {
 		return nil, err
 	}
 	return res, nil
 }
 
-func (s *System) expandRecursive(base *mutationtypes.Mutable, resultants *[]*Resultant, depth int) error {
+func (s *System) expandRecursive(base *mutationtypes.Mutable, resultants *[]*Resultant, depth int, opts ...ExpandOption) error {
 	if depth >= maxRecursionDepth {
 		return fmt.Errorf("maximum recursion depth of %d reached", maxRecursionDepth)
 	}
 
-	res, err := s.expand(base)
+	res, err := s.expand(base, opts...)
 	if err != nil {
 		return err
 	}
@@ -157,7 +170,7 @@ func (s *System) expandRecursive(base *mutationtypes.Mutable, resultants *[]*Res
 			Username:  base.Username,
 			Source:    base.Source,
 		}
-		if err := s.expandRecursive(mut, resultants, depth+1); err != nil {
+		if err := s.expandRecursive(mut, resultants, depth+1, opts...); err != nil {
 			return err
 		}
 	}
@@ -166,7 +179,7 @@ func (s *System) expandRecursive(base *mutationtypes.Mutable, resultants *[]*Res
 	return nil
 }
 
-func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
+func (s *System) expand(base *mutationtypes.Mutable, opts ...ExpandOption) ([]*Resultant, error) {
 	gvk := base.Object.GroupVersionKind()
 	if gvk == (schema.GroupVersionKind{}) {
 		return nil, fmt.Errorf("cannot expand resource %s with empty GVK", base.Object.GetName())
@@ -176,7 +189,7 @@ func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 	templates := s.db.templatesForGVK(gvk)
 
 	for _, te := range templates {
-		res, err := expandResource(base.Object, base.Namespace, te)
+		res, err := expandResource(base.Object, base.Namespace, te, opts...)
 		resultants = append(resultants, &Resultant{
 			Obj:               res,
 			TemplateName:      te.ObjectMeta.Name,
@@ -207,8 +220,13 @@ func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 	return resultants, nil
 }
 
-func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, template *expansionunversioned.ExpansionTemplate) (*unstructured.Unstructured, error) {
-	if ns == nil {
+func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, template *expansionunversioned.ExpansionTemplate, opts ...ExpandOption) (*unstructured.Unstructured, error) {
+	options := &ExpandOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if !options.RelaxNamespaceNullabilityCheck && ns == nil {
 		return nil, fmt.Errorf("cannot expand resource with nil namespace")
 	}
 
@@ -232,7 +250,9 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 	resource := &unstructured.Unstructured{}
 	resource.SetUnstructuredContent(src)
 	resource.SetGroupVersionKind(resultantGVK)
-	resource.SetNamespace(ns.Name)
+	if !options.RelaxNamespaceNullabilityCheck || ns != nil {
+		resource.SetNamespace(ns.Name)
+	}
 	resource.SetName(mockNameForResource(obj, resultantGVK))
 
 	return resource, nil

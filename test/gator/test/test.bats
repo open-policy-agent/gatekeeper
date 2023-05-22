@@ -245,3 +245,26 @@ match_yaml_msg () {
   want_msg="you must provide labels: {\"geo\"}"
   match_yaml_msg "${output[*]}" "${want_msg}"
 }
+
+@test "expansion with gator test namespace selector" {
+  # First run without the namespace and expect an err
+  run bin/gator test \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/expansion/expansion-w-ns-selector.yaml" \
+    -o=yaml
+
+  [ "$status" -eq 1 ]
+
+  want_msg="cannot expand resource with nil namespace" 
+  match_substring "${output[*]}" "${want_msg}"
+
+  # Now expect a violation
+  run bin/gator test \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/expansion/expansion-w-ns-selector.yaml" \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/expansion/ns.yaml" \
+    -o=yaml
+
+  [ "$status" -eq 1 ]
+
+  want_msg="[Implied by expand-deployments] All pods must have an \`owner\` label that points to your company username" 
+  match_substring "${output[*]}" "${want_msg}"
+}
