@@ -124,7 +124,6 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	// todo acpana -- double check that request namespace & name match instance namespace & name
 	// syncKey := syncutil.GetKeyForSyncMetrics(unpackedRequest.Namespace, unpackedRequest.Name)
 
-	// todo FRICTION -- reportMetricsForRenconcileRun should not be part of the sync controller w all the new cmt changes
 	reportMetricsForRenconcileRun := false
 	defer func() {
 		if reportMetricsForRenconcileRun {
@@ -183,9 +182,6 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 
 		return reconcile.Result{}, err
 	}
-
-	// todo FRICTION -- this log line should move if readiness tracker is not part of sync controlle anymore
-	log.V(1).Info("[readiness] observed data", "gvk", gvk, "namespace", instance.GetNamespace(), "name", instance.GetName())
 
 	reportMetricsForRenconcileRun = true
 

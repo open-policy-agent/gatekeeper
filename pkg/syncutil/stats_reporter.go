@@ -51,7 +51,7 @@ var (
 )
 
 type MetricsCache struct {
-	mux        sync.RWMutex // todo FRICTION, gate metrics cache under mux from cmt
+	mux        sync.RWMutex
 	Cache      map[string]Tags
 	KnownKinds map[string]bool
 }
