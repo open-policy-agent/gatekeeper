@@ -3292,7 +3292,7 @@ spec:
     plural: syncsets
     singular: syncset
   preserveUnknownFields: false
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1alpha1
     schema:
@@ -3325,11 +3325,13 @@ spec:
             properties:
               byPod:
                 items:
+                  description: SyncSetPodStatusStatus defines the observed state of SyncSetPodStatus.
                   properties:
                     id:
                       type: string
-                    ingested:
-                      type: boolean
+                    observedGeneration:
+                      format: int64
+                      type: integer
                   type: object
                 type: array
             type: object

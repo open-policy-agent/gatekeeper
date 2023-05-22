@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -14,7 +15,7 @@ type GVKEntry struct {
 	Kind    string `json:"kind,omitempty"`
 }
 
-// +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:resource:scope=Cluster
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
@@ -37,12 +38,7 @@ type SyncSetList struct {
 }
 
 type SyncSetStatus struct {
-	ByPod []SyncSetStatusStatus `json:"byPod,omitempty"`
-}
-
-type SyncSetStatusStatus struct {
-	ID       string `json:"id,omitempty"`
-	Ingested bool   `json:"ingested,omitempty"`
+	ByPod []v1beta1.SyncSetPodStatusStatus `json:"byPod,omitempty"`
 }
 
 func init() {
