@@ -2,8 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    {{- include "gatekeeper.mandatory_labels" . | nindent 4 }}
-    {{- include "gatekeeper.common_labels" . | nindent 4 }}
+    {{- include "gatekeeper.mandatoryLabels" . | nindent 4 }}
+    {{- include "gatekeeper.commonLabels" . | nindent 4 }}
     control-plane: audit-controller
     gatekeeper.sh/operation: audit
   name: gatekeeper-audit
@@ -12,8 +12,8 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "gatekeeper.mandatory_labels" . | nindent 6 }}
-      {{- include "gatekeeper.selector_labels" . | nindent 6 }}
+      {{- include "gatekeeper.mandatoryLabels" . | nindent 6 }}
+      {{- include "gatekeeper.selectorLabels" . | nindent 6 }}
       control-plane: audit-controller
       gatekeeper.sh/operation: audit
   template:
@@ -24,7 +24,8 @@ spec:
         {{- end }}
       labels:
         {{- include "gatekeeper.podLabels" . | nindent 8 }}
-        {{- include "gatekeeper.mandatory_labels" . | nindent 8 }}
+        {{- include "gatekeeper.mandatoryLabels" . | nindent 8 }}
+        {{- include "gatekeeper.commonLabels" . | nindent 8 }}
         control-plane: audit-controller
         gatekeeper.sh/operation: audit
     spec:

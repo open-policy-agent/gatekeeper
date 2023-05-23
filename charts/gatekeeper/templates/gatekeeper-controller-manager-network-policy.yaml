@@ -3,8 +3,8 @@ kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
 metadata:
   labels:
-    {{- include "gatekeeper.mandatory_labels" . | nindent 4 }}
-    {{- include "gatekeeper.common_labels" . | nindent 4 }}
+    {{- include "gatekeeper.mandatoryLabels" . | nindent 4 }}
+    {{- include "gatekeeper.commonLabels" . | nindent 4 }}
   name: gatekeeper-controller-manager
 spec:
   ingress:
@@ -18,8 +18,8 @@ spec:
     {{- end }}
   podSelector:
     matchLabels:
-      {{- include "gatekeeper.mandatory_labels" . | nindent 6 }}
-      {{- include "gatekeeper.common_labels" . | nindent 6 }}
+      {{- include "gatekeeper.mandatoryLabels" . | nindent 6 }}
+      {{- include "gatekeeper.commonLabels" . | nindent 6 }}
       control-plane: controller-manager
       gatekeeper.sh/operation: webhook
 {{- end -}}

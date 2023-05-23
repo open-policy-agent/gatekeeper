@@ -43,7 +43,7 @@ Adds additional pod labels to the common ones
 {{/*
 Mandatory labels
 */}}
-{{- define "gatekeeper.mandatory_labels" -}}
+{{- define "gatekeeper.mandatoryLabels" -}}
 app: '{{ "gatekeeper.name" . }}'
 chart: '{{ "gatekeeper.name" . }}'
 gatekeeper.sh/system: "yes"
@@ -54,7 +54,7 @@ release: '{{ .Release.Name }}'
 {{/*
 Common labels
 */}}
-{{- define "gatekeeper.common_labels" -}}
+{{- define "gatekeeper.commonLabels" -}}
 helm.sh/chart: {{ include "gatekeeper.chart" . }}
 {{ include "gatekeeper.selectorLabels" . }}
 {{- if .Chart.Version }}
@@ -73,7 +73,6 @@ Selector labels
 app.kubernetes.io/name: {{ include "gatekeeper.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
-
 
 {{/*
 Output post install webhook probe container entry

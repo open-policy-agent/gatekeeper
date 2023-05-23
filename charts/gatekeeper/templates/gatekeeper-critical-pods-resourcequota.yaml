@@ -3,8 +3,8 @@ apiVersion: v1
 kind: ResourceQuota
 metadata:
   labels:
-    {{- include "gatekeeper.mandatory_labels" . | nindent 4 }}
-    {{- include "gatekeeper.common_labels" . | nindent 4 }}
+    {{- include "gatekeeper.mandatoryLabels" . | nindent 4 }}
+    {{- include "gatekeeper.commonLabels" . | nindent 4 }}
   name: gatekeeper-critical-pods
   namespace: '{{ .Release.Namespace }}'
 spec:
