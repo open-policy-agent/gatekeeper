@@ -5,15 +5,18 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -31,12 +34,57 @@ func init() {
 // options for the Test func.
 type Opts struct {
 	// Driver specific options
-	IncludeTrace bool
-	GatherStats  bool
-	UseK8sCEL    bool
+	IncludeTrace              bool
+	GatherStats               bool
+	UseK8sCEL                 bool
+	ExternalDataProviderCache *frameworksexternaldata.ProviderCache
+	EnableExternalData        bool
 }
 
 func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error) {
+	if tOpts.EnableExternalData {
+		// search for external data providers.
+		// this has to happen before creating the client, because rego.AddExternalDataProviderCache arg to the driver must have
+		// a ProviderCache already set up
+		providerCache := frameworksexternaldata.NewCache()
+		for _, obj := range objs {
+			if !isExternalDataProvider(obj) {
+				continue
+			}
+
+			url, _, err := unstructured.NestedString(obj.Object, "spec", "url")
+			if err != nil {
+				return nil, err
+			}
+
+			timeout, _, err := unstructured.NestedFloat64(obj.Object, "spec", "timeout")
+			if err != nil {
+				return nil, err
+			}
+
+			caBundle, _, err := unstructured.NestedString(obj.Object, "spec", "caBundle")
+			if err != nil {
+				return nil, err
+			}
+
+			provider := externaldataUnversioned.Provider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: obj.GetName(),
+				},
+				Spec: externaldataUnversioned.ProviderSpec{
+					URL:      url,
+					Timeout:  int(timeout),
+					CABundle: caBundle,
+				},
+			}
+			err = providerCache.Upsert(&provider)
+			if err != nil {
+				return nil, err
+			}
+		}
+		tOpts.ExternalDataProviderCache = providerCache
+	}
+
 	args := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 	k8sDriver, err := k8scel.New()
 	if err != nil {
@@ -183,6 +231,11 @@ func isConstraint(u *unstructured.Unstructured) bool {
 	return gvk.Group == "constraints.gatekeeper.sh"
 }
 
+func isExternalDataProvider(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == "externaldata.gatekeeper.sh"
+}
+
 func makeRegoDriver(tOpts Opts) (*rego.Driver, error) {
 	var args []rego.Arg
 	if tOpts.GatherStats {
@@ -190,6 +243,10 @@ func makeRegoDriver(tOpts Opts) (*rego.Driver, error) {
 	}
 	if tOpts.IncludeTrace {
 		args = append(args, rego.Tracing(tOpts.IncludeTrace))
+	}
+
+	if tOpts.EnableExternalData {
+		args = append(args, rego.AddExternalDataProviderCache(tOpts.ExternalDataProviderCache))
 	}
 
 	return rego.New(args...)

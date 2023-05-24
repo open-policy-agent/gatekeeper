@@ -12,7 +12,7 @@ import (
 
 var allowedExtensions = []string{".yaml", ".yml", ".json"}
 
-func ReadSources(filenames []string, images []string, tempDir string) ([]*unstructured.Unstructured, error) {
+func ReadSources(filenames []string, images []string, tempDir string, externalDataProviderFiles []string) ([]*unstructured.Unstructured, error) {
 	var sources []*source
 
 	// Read from --filename flag
@@ -20,6 +20,8 @@ func ReadSources(filenames []string, images []string, tempDir string) ([]*unstru
 	if err != nil {
 		return nil, fmt.Errorf("reading from filenames: %w", err)
 	}
+	// Remove any obj with "externaldata.gatekeeper.sh" group
+	filterObjsByGroup(s, "externaldata.gatekeeper.sh", false)
 	sources = append(sources, s...)
 
 	// Read from --image flag
@@ -28,6 +30,15 @@ func ReadSources(filenames []string, images []string, tempDir string) ([]*unstru
 		return nil, fmt.Errorf("pulling image: %w", err)
 	}
 	sources = append(sources, s...)
+
+	// Read from --external-data-providers flag
+	e, err := readFiles(externalDataProviderFiles)
+	if err != nil {
+		return nil, fmt.Errorf("reading from filenames: %w", err)
+	}
+	// Only keep objs with "externaldata.gatekeeper.sh" group
+	filterObjsByGroup(e, "externaldata.gatekeeper.sh", true)
+	sources = append(sources, e...)
 
 	// Read stdin
 	stdinUnstructs, err := readStdin()
@@ -221,4 +232,28 @@ func sourcesToUnstruct(sources []*source) []*unstructured.Unstructured {
 		us = append(us, s.objs...)
 	}
 	return us
+}
+
+func filterObjsByGroup(sources []*source, groupToFilter string, include bool) {
+	for _, src := range sources {
+		// Create a new slice to hold the filtered objs
+		var filteredObjs []*unstructured.Unstructured
+
+		for _, obj := range src.objs {
+			if include {
+				if obj.GroupVersionKind().Group == groupToFilter {
+					// If include is true and the object's group matches the specified group, add it to the filteredObjs slice
+					filteredObjs = append(filteredObjs, obj)
+				}
+			} else {
+				if obj.GroupVersionKind().Group != groupToFilter {
+					// If include is false and the object's group does not match the specified group, add it to the filteredObjs slice
+					filteredObjs = append(filteredObjs, obj)
+				}
+			}
+		}
+
+		// Replace the source.objs with the filteredObjs slice
+		src.objs = filteredObjs
+	}
 }

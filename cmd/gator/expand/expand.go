@@ -67,7 +67,7 @@ func init() {
 }
 
 func run(cmd *cobra.Command, args []string) {
-	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
+	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, []string{})
 	if err != nil {
 		util.ErrFatalf("reading: %v", err)
 	}

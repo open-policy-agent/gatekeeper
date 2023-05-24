@@ -94,6 +94,30 @@ a `1` exit status with an error message printed to stderr.
 Policy violations will generate a `1` exit status as well, but violation
 information will be printed to stdout.
 
+#### External Data
+In order to use `gator test` command with policies that use the `external_data()` function, `--enable-external-data` 
+along with `--external-data-providers` flags can be used. The former flag explicitly enables/disables this feature while
+the latter flag loads the External Data Provider manifests (`externaldata.gatekeeper.sh` group) from a dedicated
+directory/file for security purposes (to avoid loading malicious configurations). For example:
+
+```
+cat my-manifest.yaml | gator test --filename=template-and-constraints/ --enable-external-data --external-data-providers=external-data-providers/provider.yaml
+```
+
+provider.yaml:
+```
+apiVersion: externaldata.gatekeeper.sh/v1beta1
+kind: Provider
+metadata:
+  name: my-provider
+spec:
+  url: https://localhost:8090/
+  timeout: 5
+  caBundle: ...
+```
+This requires the External Data Provider server to be available at `https://localhost:8090/` when `gator test` command
+is executed.
+
 ##### Enforcement Actions
 
 While violation data will always be returned when an object is found to be
