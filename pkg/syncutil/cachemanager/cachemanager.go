@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
@@ -35,10 +34,10 @@ func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.Metr
 	}
 }
 
-func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
+func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Unstructured) error {
 	isNamespaceExcluded, err := c.processExcluder.IsNamespaceExcluded(process.Sync, instance)
 	if err != nil {
-		return nil, fmt.Errorf("error while excluding namespaces: %w", err)
+		return fmt.Errorf("error while excluding namespaces: %w", err)
 	}
 
 	// bail because it means we should not be
@@ -48,11 +47,11 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 		// as we should not be tracking this GVK anymore
 		c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
 
-		return &types.Responses{}, nil
+		return nil
 	}
 
 	syncKey := syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName())
-	resp, err := c.opa.AddData(ctx, instance)
+	_, err = c.opa.AddData(ctx, instance)
 	if err != nil {
 		c.syncMetricsCache.AddObject(
 			syncKey,
@@ -62,7 +61,7 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 			},
 		)
 
-		return resp, err
+		return err
 	}
 
 	c.tracker.ForData(instance.GroupVersionKind()).Observe(instance)
@@ -74,20 +73,20 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 	c.syncMetricsCache.AddKind(instance.GetKind())
 
 	log.V(logging.DebugLevel).Info("[readiness] observed data", "gvk", instance.GroupVersionKind(), "namespace", instance.GetNamespace(), "name", instance.GetName())
-	return resp, err
+	return err
 }
 
-func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
-	resp, err := c.opa.RemoveData(ctx, instance)
+func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.Unstructured) error {
+	_, err := c.opa.RemoveData(ctx, instance)
 	// only delete from metrics map if the data removal was succcesful
 	if err != nil {
 		c.syncMetricsCache.DeleteObject(syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName()))
 
-		return resp, err
+		return err
 	}
 
 	c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
-	return resp, err
+	return err
 }
 
 func (c *CacheManager) ReportSyncMetrics(reporter *syncutil.Reporter, log logr.Logger) {
