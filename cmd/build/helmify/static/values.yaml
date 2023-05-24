@@ -141,7 +141,7 @@ preUninstall:
     runAsNonRoot: true
     runAsUser: 1000
 podAnnotations: {}
-pubsubAnnotations: {}
+auditPodAnnotations: {}
 podLabels: {}
 podCountLimit: "100"
 secretAnnotations: {}
