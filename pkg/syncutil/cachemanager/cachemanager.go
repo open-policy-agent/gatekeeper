@@ -2,7 +2,6 @@ package cachemanager
 
 import (
 	"context"
-	"sync"
 
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -18,8 +17,6 @@ import (
 var log = logf.Log.WithName("data-replication").WithValues("metaKind", "CacheManagerTracker")
 
 type CacheManager struct {
-	lock sync.RWMutex
-
 	opa              syncutil.OpaDataClient
 	syncMetricsCache *syncutil.MetricsCache
 	tracker          *readiness.Tracker
@@ -37,10 +34,7 @@ func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.Metr
 	}
 }
 
-func (c *CacheManager) AddGVKToSync(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
+func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
 	isNamespaceExcluded, err := c.processExcluder.IsNamespaceExcluded(process.Sync, instance)
 	if err != nil {
 		log.Error(err, "error while excluding namespaces")
@@ -82,10 +76,7 @@ func (c *CacheManager) AddGVKToSync(ctx context.Context, instance *unstructured.
 	return resp, err
 }
 
-func (c *CacheManager) RemoveGVKFromSync(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
+func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
 	resp, err := c.opa.RemoveData(ctx, instance)
 	// only delete from metrics map if the data removal was succcesful
 	if err != nil {
@@ -99,8 +90,5 @@ func (c *CacheManager) RemoveGVKFromSync(ctx context.Context, instance *unstruct
 }
 
 func (c *CacheManager) ReportSyncMetrics(reporter *syncutil.Reporter, log logr.Logger) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
 	c.syncMetricsCache.ReportSync(reporter, log)
 }

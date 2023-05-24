@@ -72,7 +72,7 @@ func newReconciler(
 		scheme:   mgr.GetScheme(),
 		log:      log,
 		reporter: reporter,
-		cm:      cmt,
+		cm:       cmt,
 	}
 }
 
@@ -103,7 +103,7 @@ type ReconcileSync struct {
 	scheme   *runtime.Scheme
 	log      logr.Logger
 	reporter syncutil.Reporter
-	cm      *cm.CacheManager
+	cm       *cm.CacheManager
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -147,7 +147,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 			// This is a deletion; remove the data
 			instance.SetNamespace(unpackedRequest.Namespace)
 			instance.SetName(unpackedRequest.Name)
-			if _, err := r.cm.RemoveGVKFromSync(ctx, instance); err != nil {
+			if _, err := r.cm.RemoveObject(ctx, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 
@@ -161,7 +161,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	// todo acpana -- double check that it is okay to remove what has been
 	// namespace excluded now (but was not namesapced excluded before)
 	if !instance.GetDeletionTimestamp().IsZero() {
-		if _, err := r.cm.RemoveGVKFromSync(ctx, instance); err != nil {
+		if _, err := r.cm.RemoveObject(ctx, instance); err != nil {
 			return reconcile.Result{}, err
 		}
 
@@ -177,7 +177,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		logging.ResourceName, instance.GetName(),
 	)
 
-	if _, err := r.cm.AddGVKToSync(ctx, instance); err != nil {
+	if _, err := r.cm.AddObject(ctx, instance); err != nil {
 		reportMetricsForRenconcileRun = true
 
 		return reconcile.Result{}, err
