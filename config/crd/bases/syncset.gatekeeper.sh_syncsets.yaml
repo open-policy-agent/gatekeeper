@@ -46,23 +46,6 @@ spec:
                   type: object
                 type: array
             type: object
-          status:
-            properties:
-              byPod:
-                items:
-                  description: SyncSetPodStatusStatus defines the observed state of
-                    SyncSetPodStatus.
-                  properties:
-                    id:
-                      type: string
-                    observedGeneration:
-                      format: int64
-                      type: integer
-                  type: object
-                type: array
-            type: object
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}

@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -17,15 +16,13 @@ type GVKEntry struct {
 
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 
 // SyncSet is the Schema for the SyncSet API.
 type SyncSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   SyncSetSpec   `json:"spec,omitempty"`
-	Status SyncSetStatus `json:"status,omitempty"`
+	Spec SyncSetSpec `json:"spec,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -35,10 +32,6 @@ type SyncSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []SyncSet `json:"items"`
-}
-
-type SyncSetStatus struct {
-	ByPod []v1beta1.SyncSetPodStatusStatus `json:"byPod,omitempty"`
 }
 
 func init() {
