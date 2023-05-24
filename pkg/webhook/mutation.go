@@ -64,7 +64,7 @@ func AddMutatingWebhook(mgr manager.Manager, deps Dependencies) error {
 	eventBroadcaster := record.NewBroadcaster()
 	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 
-	logger := log
+	log := log.WithValues("hookType", "mutation")
 	eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(
 		scheme.Scheme,
@@ -82,13 +82,13 @@ func AddMutatingWebhook(mgr manager.Manager, deps Dependencies) error {
 			},
 			mutationSystem: deps.MutationSystem,
 			deserializer:   codecs.UniversalDeserializer(),
-			logger:         logger.WithValues("hookType", "mutation"),
+			log:            log,
 		},
 	}
 
 	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
 	// Otherwise we risk having unstable logger names for the webhook.
-	if err := wh.InjectLogger(logger); err != nil {
+	if err := wh.InjectLogger(log); err != nil {
 		return err
 	}
 	congifureWebhookServer(mgr.GetWebhookServer()).Register("/v1/mutate", wh)
@@ -102,7 +102,7 @@ type mutationHandler struct {
 	webhookHandler
 	mutationSystem *mutation.System
 	deserializer   runtime.Decoder
-	logger         logr.Logger
+	log            logr.Logger
 }
 
 // Handle the mutation request
@@ -127,7 +127,7 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 	defer func() {
 		if h.reporter != nil {
 			if err := h.reporter.ReportMutationRequest(ctx, requestResponse, time.Since(timeStart)); err != nil {
-				h.logger.Error(err, "failed to report request")
+				h.log.Error(err, "failed to report request")
 			}
 		}
 	}()
@@ -135,7 +135,7 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 	// namespace is excluded from webhook using config
 	isExcludedNamespace, err := h.skipExcludedNamespace(&req.AdmissionRequest, process.Mutation)
 	if err != nil {
-		h.logger.Error(err, "error while excluding namespace")
+		h.log.Error(err, "error while excluding namespace")
 	}
 
 	if isExcludedNamespace {
@@ -167,13 +167,13 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 	case req.AdmissionRequest.Namespace != "":
 		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
 			if !k8serrors.IsNotFound(err) {
-				h.logger.Error(err, "error retrieving namespace", "name", req.AdmissionRequest.Namespace)
+				h.log.Error(err, "error retrieving namespace", "name", req.AdmissionRequest.Namespace)
 				return admission.Errored(int32(http.StatusInternalServerError), err)
 			}
 			// bypass cached client and ask api-server directly
 			err = h.reader.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns)
 			if err != nil {
-				h.logger.Error(err, "error retrieving namespace from API server", "name", req.AdmissionRequest.Namespace)
+				h.log.Error(err, "error retrieving namespace from API server", "name", req.AdmissionRequest.Namespace)
 				return admission.Errored(int32(http.StatusInternalServerError), err)
 			}
 		}
@@ -183,7 +183,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(req.Object.Raw)
 	if err != nil {
-		h.logger.Error(err, "failed to unmarshal", "object", string(req.Object.Raw))
+		h.log.Error(err, "failed to unmarshal", "object", string(req.Object.Raw))
 		return admission.Errored(int32(http.StatusInternalServerError), err)
 	}
 
@@ -201,7 +201,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 	}
 	mutated, err := h.mutationSystem.Mutate(mutable)
 	if err != nil {
-		h.logger.Error(err, "failed to mutate object", "object", string(req.Object.Raw))
+		h.log.Error(err, "failed to mutate object", "object", string(req.Object.Raw))
 		return admission.Errored(int32(http.StatusInternalServerError), err)
 	}
 	if !mutated {
@@ -212,7 +212,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 
 	newJSON, err := mutable.Object.MarshalJSON()
 	if err != nil {
-		h.logger.Error(err, "failed to marshal mutated object", "object", obj)
+		h.log.Error(err, "failed to marshal mutated object", "object", obj)
 		return admission.Errored(int32(http.StatusInternalServerError), err)
 	}
 	resp := admission.PatchResponseFromRaw(req.Object.Raw, newJSON)

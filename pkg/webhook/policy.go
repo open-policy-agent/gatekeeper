@@ -93,7 +93,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 	if err != nil {
 		return err
 	}
-	logger := log
+	log := log.WithValues("hookType", "validation")
 	eventBroadcaster := record.NewBroadcaster()
 	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 	eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
@@ -112,7 +112,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 			eventRecorder:   recorder,
 			gkNamespace:     util.GetNamespace(),
 		},
-		logger: logger.WithValues("hookType", "validation"),
+		log: log,
 	}
 	threadCount := *maxServingThreads
 	if threadCount < 1 {
@@ -122,7 +122,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 	wh := &admission.Webhook{Handler: handler}
 	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
 	// Otherwise we risk having unstable logger names for the webhook.
-	if err := wh.InjectLogger(logger); err != nil {
+	if err := wh.InjectLogger(log); err != nil {
 		return err
 	}
 	congifureWebhookServer(mgr.GetWebhookServer()).Register("/v1/admit", wh)
@@ -137,7 +137,7 @@ type validationHandler struct {
 	mutationSystem  *mutation.System
 	expansionSystem *expansion.System
 	semaphore       chan struct{}
-	logger          logr.Logger
+	log             logr.Logger
 }
 
 // Handle the validation request
@@ -173,7 +173,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 				isDryRun = "true"
 			}
 			if err := h.reporter.ReportValidationRequest(ctx, requestResponse, isDryRun, time.Since(timeStart)); err != nil {
-				h.logger.Error(err, "failed to report request")
+				h.log.Error(err, "failed to report request")
 			}
 		}
 	}()
@@ -181,7 +181,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	// namespace is excluded from webhook using config
 	isExcludedNamespace, err := h.skipExcludedNamespace(&req.AdmissionRequest, process.Webhook)
 	if err != nil {
-		h.logger.Error(err, "error while excluding namespace")
+		h.log.Error(err, "error while excluding namespace")
 	}
 
 	if isExcludedNamespace {
@@ -191,7 +191,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 
 	resp, err := h.reviewRequest(ctx, &req)
 	if err != nil {
-		h.logger.Error(err, "error executing query")
+		h.log.Error(err, "error executing query")
 		requestResponse = errorResponse
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
@@ -199,7 +199,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	if *logStatsAdmission {
 		logging.LogStatsEntries(
 			h.opa,
-			h.logger.WithValues(
+			h.log.WithValues(
 				logging.Process, "admission",
 				logging.EventType, "review_response_stats",
 				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
@@ -268,7 +268,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 			continue
 		}
 		if *logDenies {
-			h.logger.WithValues(
+			h.log.WithValues(
 				logging.Process, "admission",
 				logging.EventType, "violation",
 				logging.ConstraintName, r.Constraint.GetName(),
@@ -606,14 +606,14 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {
 	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace), drivers.Stats(*logStatsAdmission))
 	if resp != nil && trace {
-		h.logger.Info(resp.TraceDump())
+		h.log.Info(resp.TraceDump())
 	}
 	if dump {
 		dump, err := h.opa.Dump(ctx)
 		if err != nil {
-			h.logger.Error(err, "dump error")
+			h.log.Error(err, "dump error")
 		} else {
-			h.logger.Info(dump)
+			h.log.Info(dump)
 		}
 	}
 

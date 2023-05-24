@@ -308,7 +308,7 @@ func BenchmarkValidationHandler(b *testing.B) {
 					client:          c,
 					injectedConfig:  cfg,
 				},
-				logger: log,
+				log: log,
 			}
 
 			// create T templates
