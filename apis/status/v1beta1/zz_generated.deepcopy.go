@@ -444,7 +444,7 @@ func (in *SyncSetPodStatus) DeepCopyObject() runtime.Object {
 func (in *SyncSetPodStatusList) DeepCopyInto(out *SyncSetPodStatusList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]SyncSetPodStatus, len(*in))

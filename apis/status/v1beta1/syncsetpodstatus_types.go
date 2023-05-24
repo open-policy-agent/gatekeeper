@@ -21,11 +21,11 @@ type SyncSetPodStatus struct {
 
 // +kubebuilder:object:root=true
 
-// SyncSetPodStatusList contains a lit of SyncSetPodStatus.
+// SyncSetPodStatusList contains a list of SyncSetPodStatus.
 type SyncSetPodStatusList struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Items             []SyncSetPodStatus `json:"items"`
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []SyncSetPodStatus `json:"items"`
 }
 
 func init() {
