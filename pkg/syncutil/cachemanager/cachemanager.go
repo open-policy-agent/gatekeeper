@@ -2,6 +2,7 @@ package cachemanager
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -37,7 +38,7 @@ func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.Metr
 func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
 	isNamespaceExcluded, err := c.processExcluder.IsNamespaceExcluded(process.Sync, instance)
 	if err != nil {
-		log.Error(err, "error while excluding namespaces")
+		return nil, fmt.Errorf("error while excluding namespaces: %w", err)
 	}
 
 	// bail because it means we should not be
