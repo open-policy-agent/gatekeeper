@@ -30,7 +30,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	syncutil "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cmt"
+	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -114,11 +114,11 @@ func (a *Adder) InjectWatchSet(watchSet *watch.Set) {
 func newReconciler(mgr manager.Manager, opa syncutil.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, watchSet *watch.Set, regEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
 	filteredOpa := syncutil.NewFilteredOpaDataClient(opa, watchSet)
 	syncMetricsCache := syncutil.NewMetricsCache()
-	cmt := cmt.NewCacheManager(opa, syncMetricsCache, tracker, processExcluder)
+	cm := cm.NewCacheManager(opa, syncMetricsCache, tracker, processExcluder)
 
 	syncAdder := syncc.Adder{
-		Events: events,
-		CMT:    cmt,
+		Events:       events,
+		CacheManager: cm,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {

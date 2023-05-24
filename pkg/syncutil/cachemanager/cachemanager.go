@@ -1,4 +1,4 @@
-package cmt
+package cachemanager
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 
 var log = logf.Log.WithName("data-replication").WithValues("metaKind", "CacheManagerTracker")
 
-type CacheManagerTracker struct {
+type CacheManager struct {
 	lock sync.RWMutex
 
 	opa              syncutil.OpaDataClient
@@ -28,8 +28,8 @@ type CacheManagerTracker struct {
 	// todo acpana -- integrate gvkaggregator
 }
 
-func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.MetricsCache, tracker *readiness.Tracker, processExcluder *process.Excluder) *CacheManagerTracker {
-	return &CacheManagerTracker{
+func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.MetricsCache, tracker *readiness.Tracker, processExcluder *process.Excluder) *CacheManager {
+	return &CacheManager{
 		opa:              opa,
 		syncMetricsCache: syncMetricsCache,
 		tracker:          tracker,
@@ -37,7 +37,7 @@ func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.Metr
 	}
 }
 
-func (c *CacheManagerTracker) AddGVKToSync(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
+func (c *CacheManager) AddGVKToSync(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -82,7 +82,7 @@ func (c *CacheManagerTracker) AddGVKToSync(ctx context.Context, instance *unstru
 	return resp, err
 }
 
-func (c *CacheManagerTracker) RemoveGVKFromSync(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
+func (c *CacheManager) RemoveGVKFromSync(ctx context.Context, instance *unstructured.Unstructured) (*types.Responses, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -98,7 +98,7 @@ func (c *CacheManagerTracker) RemoveGVKFromSync(ctx context.Context, instance *u
 	return resp, err
 }
 
-func (c *CacheManagerTracker) ReportSyncMetrics(reporter *syncutil.Reporter, log logr.Logger) {
+func (c *CacheManager) ReportSyncMetrics(reporter *syncutil.Reporter, log logr.Logger) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 

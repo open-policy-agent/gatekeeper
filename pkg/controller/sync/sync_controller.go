@@ -23,7 +23,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cmt"
+	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -41,8 +41,8 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
 type Adder struct {
-	CMT    *cmt.CacheManagerTracker
-	Events <-chan event.GenericEvent
+	CacheManager *cm.CacheManager
+	Events       <-chan event.GenericEvent
 }
 
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -57,7 +57,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r := newReconciler(mgr, *reporter, a.CMT)
+	r := newReconciler(mgr, *reporter, a.CacheManager)
 	return add(mgr, r, a.Events)
 }
 
@@ -65,14 +65,14 @@ func (a *Adder) Add(mgr manager.Manager) error {
 func newReconciler(
 	mgr manager.Manager,
 	reporter syncutil.Reporter,
-	cmt *cmt.CacheManagerTracker,
+	cmt *cm.CacheManager,
 ) reconcile.Reconciler {
 	return &ReconcileSync{
 		reader:   mgr.GetCache(),
 		scheme:   mgr.GetScheme(),
 		log:      log,
 		reporter: reporter,
-		cmt:      cmt,
+		cm:      cmt,
 	}
 }
 
@@ -103,7 +103,7 @@ type ReconcileSync struct {
 	scheme   *runtime.Scheme
 	log      logr.Logger
 	reporter syncutil.Reporter
-	cmt      *cmt.CacheManagerTracker
+	cm      *cm.CacheManager
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -131,7 +131,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 				log.Error(err, "failed to report sync duration")
 			}
 
-			r.cmt.ReportSyncMetrics(&r.reporter, log)
+			r.cm.ReportSyncMetrics(&r.reporter, log)
 
 			if err := r.reporter.ReportLastSync(); err != nil {
 				log.Error(err, "failed to report last sync timestamp")
@@ -147,7 +147,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 			// This is a deletion; remove the data
 			instance.SetNamespace(unpackedRequest.Namespace)
 			instance.SetName(unpackedRequest.Name)
-			if _, err := r.cmt.RemoveGVKFromSync(ctx, instance); err != nil {
+			if _, err := r.cm.RemoveGVKFromSync(ctx, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 
@@ -161,7 +161,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	// todo acpana -- double check that it is okay to remove what has been
 	// namespace excluded now (but was not namesapced excluded before)
 	if !instance.GetDeletionTimestamp().IsZero() {
-		if _, err := r.cmt.RemoveGVKFromSync(ctx, instance); err != nil {
+		if _, err := r.cm.RemoveGVKFromSync(ctx, instance); err != nil {
 			return reconcile.Result{}, err
 		}
 
@@ -177,7 +177,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		logging.ResourceName, instance.GetName(),
 	)
 
-	if _, err := r.cmt.AddGVKToSync(ctx, instance); err != nil {
+	if _, err := r.cm.AddGVKToSync(ctx, instance); err != nil {
 		reportMetricsForRenconcileRun = true
 
 		return reconcile.Result{}, err
