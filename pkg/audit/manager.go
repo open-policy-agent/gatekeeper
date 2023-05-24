@@ -525,7 +525,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		if *logStatsAudit {
 			logging.LogStatsEntries(
 				am.opa,
-				am.log,
+				am.log.WithValues(logging.EventType, "audit_cache_stats"),
 				resp.StatsEntries,
 				"audit from cache review request stats",
 			)
@@ -644,7 +644,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			if *logStatsAudit {
 				logging.LogStatsEntries(
 					am.opa,
-					am.log,
+					am.log.WithValues(logging.EventType, "audit_stats"),
 					resp.StatsEntries,
 					"audit review request stats",
 				)
