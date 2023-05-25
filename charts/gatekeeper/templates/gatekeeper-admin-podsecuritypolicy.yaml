@@ -5,8 +5,11 @@ metadata:
   annotations:
     seccomp.security.alpha.kubernetes.io/allowedProfileNames: '*'
   labels:
-    {{- include "gatekeeper.mandatoryLabels" . | nindent 4 }}
-    {{- include "gatekeeper.commonLabels" . | nindent 4 }}
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   name: gatekeeper-admin
 spec:
   allowPrivilegeEscalation: false

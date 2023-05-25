@@ -5,8 +5,11 @@ kind: Job
 metadata:
   name: gatekeeper-probe-webhook-post-install
   labels:
-    {{- include "gatekeeper.mandatoryLabels" . | nindent 4 }}
-    {{- include "gatekeeper.commonLabels" . | nindent 4 }}
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   annotations:
     "helm.sh/hook": post-install
     "helm.sh/hook-weight": "-5"
@@ -17,9 +20,12 @@ spec:
       annotations:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
-        {{- include "gatekeeper.podLabels" . | nindent 8 }}
-        {{- include "gatekeeper.mandatoryLabels" . | nindent 8 }}
-        {{- include "gatekeeper.commonLabels" . | nindent 8 }}
+        {{- include "gatekeeper.podLabels" . }}
+        app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
+        release: '{{ .Release.Name }}'
     spec:
       restartPolicy: Never
       {{- if .Values.postInstall.probeWebhook.image.pullSecrets }}
