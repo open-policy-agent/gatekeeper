@@ -2,26 +2,20 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
+    {{- include "gatekeeper.mandatoryLabels" . | nindent 4 }}
+    {{- include "gatekeeper.commonLabels" . | nindent 4 }}
     control-plane: controller-manager
     gatekeeper.sh/operation: webhook
-    gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
   name: gatekeeper-controller-manager
   namespace: '{{ .Release.Namespace }}'
 spec:
   replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
-      app: '{{ template "gatekeeper.name" . }}'
-      chart: '{{ template "gatekeeper.name" . }}'
+      {{- include "gatekeeper.mandatoryLabels" . | nindent 6 }}
+      {{- include "gatekeeper.selectorLabels" . | nindent 6 }}
       control-plane: controller-manager
       gatekeeper.sh/operation: webhook
-      gatekeeper.sh/system: "yes"
-      heritage: '{{ .Release.Service }}'
-      release: '{{ .Release.Name }}'
   template:
     metadata:
       annotations:
@@ -29,14 +23,11 @@ spec:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
         {{- end }}
       labels:
-{{- include "gatekeeper.podLabels" . }}
-        app: '{{ template "gatekeeper.name" . }}'
-        chart: '{{ template "gatekeeper.name" . }}'
+        {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "gatekeeper.mandatoryLabels" . | nindent 8 }}
+        {{- include "gatekeeper.commonLabels" . | nindent 8 }}
         control-plane: controller-manager
         gatekeeper.sh/operation: webhook
-        gatekeeper.sh/system: "yes"
-        heritage: '{{ .Release.Service }}'
-        release: '{{ .Release.Name }}'
     spec:
       affinity:
         {{- toYaml .Values.controllerManager.affinity | nindent 8 }}
