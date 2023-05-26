@@ -10,7 +10,6 @@ Generally, design docs are on Google docs:
 * [Namespace-Scoped Constraints](https://docs.google.com/document/d/1QqHp1exW-YZQE1p4RqRqwsfqCEFHzo3P0EzEGMPcv6A/edit?usp=drive_link)
 * [Sync Resource](https://docs.google.com/document/d/1fdDmjcvASJ72aBTJnRa-AmM-NGDyh4NAvH7Zc5LxeuU/edit?usp=drive_link)
 * [External Data Response Cache](https://docs.google.com/document/d/1XeOFbSCqLA0y93GZN0EdeXmH6ueRUOCpX5XxkaghJ2E/edit?usp=drive_link)
-* [Export violations using pub-sub](https://docs.google.com/document/d/1xu6c99m_qBOpztAc8uUnoY6ST8UiXyyJzrXOmMmJQ9I/edit?usp=drive_link)
 
 ## Implemented
 * [Gatekeeper V3 Accepted Design](https://docs.google.com/document/d/1qsfeCx-Rx61Xm6JqJK-i67Gk_y__lNebdakmnhCdM7w/edit?usp=drive_link)
@@ -36,6 +35,7 @@ Generally, design docs are on Google docs:
 * [External Data](https://docs.google.com/document/d/1tXsoXWFzoCdWY8BqxXCNr5qXkTbGgEf2-sEpvGSE4ZQ/edit?usp=drive_link)
 * [gator validate](https://docs.google.com/document/d/1LG-GfOlXjWzz0wNCb8jdzIMplZqkyrkMmTLYx05CKY4/edit?usp=drive_link)
 * [External Data TLS Support](https://docs.google.com/document/d/1z43LI38twxPiUHPuktWPB1xMnsYr7SaVgczq-WsBhck/edit?usp=drive_link)
+* [Export violations using pub-sub](https://docs.google.com/document/d/1xu6c99m_qBOpztAc8uUnoY6ST8UiXyyJzrXOmMmJQ9I/edit?usp=drive_link)
 
 ## Roadmap (in development)
 * See [milestones](https://github.com/open-policy-agent/gatekeeper/milestones?direction=asc&sort=due_date)
