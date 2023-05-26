@@ -141,6 +141,7 @@ preUninstall:
     runAsNonRoot: true
     runAsUser: 1000
 podAnnotations: {}
+auditPodAnnotations: {}
 podLabels: {}
 podCountLimit: "100"
 secretAnnotations: {}
@@ -201,6 +202,7 @@ controllerManager:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
 audit:
+  enablePubsub: false
   hostNetwork: false
   dnsPolicy: ClusterFirst
   metricsPort: 8888
