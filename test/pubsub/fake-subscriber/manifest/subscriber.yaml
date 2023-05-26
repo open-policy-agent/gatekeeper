@@ -1,0 +1,43 @@
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+  namespace: fake-subscriber
+spec:
+  type: pubsub.redis
+  version: v1
+  metadata:
+  - name: redisHost
+    value: redis-master.default.svc.cluster.local:6379
+  - name: redisPassword
+    secretKeyRef: 
+      name: redis
+      key: redis-password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sub
+  namespace: fake-subscriber
+  labels:
+    app: sub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sub
+  template:
+    metadata:
+      labels:
+        app: sub
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "subscriber"
+        dapr.io/enable-api-logging: "true"
+        dapr.io/app-port: "6002"
+    spec:
+      containers:
+      - name: go-sub
+        image: fake-subscriber:latest
+        imagePullPolicy: Never
