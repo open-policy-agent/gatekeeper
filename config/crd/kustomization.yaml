@@ -3,7 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/config.gatekeeper.sh_configs.yaml
-- bases/syncset.gatekeeper.sh_syncsets.yaml
+#- bases/syncset.gatekeeper.sh_syncsets.yaml
 - bases/status.gatekeeper.sh_constraintpodstatuses.yaml
 - bases/status.gatekeeper.sh_constrainttemplatepodstatuses.yaml
 - bases/status.gatekeeper.sh_mutatorpodstatuses.yaml
