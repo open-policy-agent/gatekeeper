@@ -157,7 +157,6 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 		gkNamespace:     util.GetNamespace(),
 		auditCache:      deps.CacheLister,
 		expansionSystem: deps.ExpansionSystem,
-		log:             log,
 	}
 	return am, nil
 }
@@ -166,7 +165,7 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 func (am *Manager) audit(ctx context.Context) error {
 	startTime := time.Now()
 	timestamp := startTime.UTC().Format(time.RFC3339)
-	am.log = am.log.WithValues(logging.AuditID, timestamp)
+	am.log = log.WithValues(logging.AuditID, timestamp)
 	logStart(am.log)
 	// record audit latency
 	defer func() {
@@ -417,7 +416,7 @@ func (am *Manager) auditResources(
 				for index := range objList.Items {
 					isExcludedNamespace, err := am.skipExcludedNamespace(&objList.Items[index])
 					if err != nil {
-						am.log.Error(err, "error while excluding namespaces")
+						log.Error(err, "error while excluding namespaces")
 					}
 
 					if isExcludedNamespace {
@@ -429,11 +428,11 @@ func (am *Manager) auditResources(
 					item := objList.Items[index]
 					jsonBytes, err := item.MarshalJSON()
 					if err != nil {
-						am.log.Error(err, "error while marshaling unstructured object to JSON")
+						log.Error(err, "error while marshaling unstructured object to JSON")
 						continue
 					}
 					if err := os.WriteFile(destFile, jsonBytes, 0o600); err != nil {
-						am.log.Error(err, "error writing data to file")
+						log.Error(err, "error writing data to file")
 						continue
 					}
 				}
@@ -697,12 +696,12 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			am.log.Info("Audit Manager close")
+			log.Info("Audit Manager close")
 			close(am.stopper)
 			return
 		case <-ticker.C:
 			if err := am.audit(ctx); err != nil {
-				am.log.Error(err, "audit manager audit() failed")
+				log.Error(err, "audit manager audit() failed")
 			}
 		}
 	}
@@ -710,10 +709,10 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 
 // Start implements controller.Controller.
 func (am *Manager) Start(ctx context.Context) error {
-	am.log.Info("Starting Audit Manager")
+	log.Info("Starting Audit Manager")
 	go am.auditManagerLoop(ctx)
 	<-ctx.Done()
-	am.log.Info("Stopping audit manager workers")
+	log.Info("Stopping audit manager workers")
 	return nil
 }
 
