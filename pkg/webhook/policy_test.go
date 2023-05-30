@@ -242,7 +242,7 @@ func TestTemplateValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
+			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}, log: log}
 
 			b, err := json.Marshal(tt.Template)
 			if err != nil {
@@ -359,6 +359,7 @@ func TestReviewRequest(t *testing.T) {
 					client:         tt.CachedClient,
 					reader:         tt.APIReader,
 				},
+				log: log,
 			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
@@ -431,6 +432,7 @@ func TestReviewDefaultNS(t *testing.T) {
 				reader:          &nsGetter{},
 				processExcluder: pe,
 			},
+			log: log,
 		}
 		if maxThreads > 0 {
 			handler.semaphore = make(chan struct{}, maxThreads)
@@ -522,6 +524,7 @@ func TestConstraintValidation(t *testing.T) {
 				opa:             opa,
 				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{},
+				log:             log,
 			}
 			b, err := yaml.YAMLToJSON([]byte(tt.Constraint))
 			if err != nil {
@@ -649,6 +652,7 @@ func TestTracing(t *testing.T) {
 				opa:             opa,
 				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{injectedConfig: tt.Cfg},
+				log:             log,
 			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
@@ -825,6 +829,7 @@ func TestGetValidationMessages(t *testing.T) {
 				opa:             opa,
 				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{},
+				log:             log,
 			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
@@ -875,7 +880,7 @@ func TestValidateConfigResource(t *testing.T) {
 
 	for _, tt := range tc {
 		t.Run(tt.TestName, func(t *testing.T) {
-			handler := validationHandler{}
+			handler := validationHandler{log: log}
 			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Name: tt.Name,
@@ -922,7 +927,7 @@ func TestValidateProvider(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := &validationHandler{}
+			h := &validationHandler{log: log}
 			b, err := yaml.YAMLToJSON([]byte(tt.provider))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
