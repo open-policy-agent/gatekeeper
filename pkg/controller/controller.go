@@ -27,6 +27,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -64,6 +65,10 @@ type WatchSetInjector interface {
 	InjectWatchSet(watchSet *watch.Set)
 }
 
+type PubsubInjector interface {
+	InjectPubsubSystem(pubsubSystem *pubsub.System)
+}
+
 // Injectors is a list of adder structs that need injection. We can convert this
 // to an interface once we create controllers for things like data sync.
 var Injectors []Injector
@@ -83,6 +88,7 @@ type Dependencies struct {
 	ExpansionSystem  *expansion.System
 	ProviderCache    *externaldata.ProviderCache
 	WatchSet         *watch.Set
+	PubsubSystem     *pubsub.System
 }
 
 type defaultPodGetter struct {
@@ -170,6 +176,9 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		}
 		if a2, ok := a.(WatchSetInjector); ok {
 			a2.InjectWatchSet(deps.WatchSet)
+		}
+		if a2, ok := a.(PubsubInjector); ok {
+			a2.InjectPubsubSystem(deps.PubsubSystem)
 		}
 		if err := a.Add(m); err != nil {
 			return err
