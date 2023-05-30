@@ -14,6 +14,7 @@ validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookObjectSelector: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
+validatingWebhookURL: null
 enableDeleteOperations: false
 enableExternalData: true
 enableGeneratorResourceExpansion: false
@@ -27,6 +28,7 @@ mutatingWebhookExemptNamespacesLabels: {}
 mutatingWebhookObjectSelector: {}
 mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
+mutatingWebhookURL: null
 mutationAnnotations: false
 auditChunkSize: 500
 logLevel: INFO
@@ -40,20 +42,20 @@ resourceQuota: true
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.13.0-beta.0
+  release: v3.13.0-beta.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.13.0-beta.0
+      tag: v3.13.0-beta.1
 postUpgrade:
   labelNamespace:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.0-beta.0
+      tag: v3.13.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -83,7 +85,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.0-beta.0
+      tag: v3.13.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -122,7 +124,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.0-beta.0
+      tag: v3.13.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
   affinity: {}
@@ -139,6 +141,7 @@ preUninstall:
     runAsNonRoot: true
     runAsUser: 1000
 podAnnotations: {}
+auditPodAnnotations: {}
 podLabels: {}
 podCountLimit: "100"
 secretAnnotations: {}
@@ -199,6 +202,7 @@ controllerManager:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
 audit:
+  enablePubsub: false
   hostNetwork: false
   dnsPolicy: ClusterFirst
   metricsPort: 8888
