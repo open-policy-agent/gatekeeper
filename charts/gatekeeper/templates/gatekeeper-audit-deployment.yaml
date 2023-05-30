@@ -28,6 +28,9 @@ spec:
         {{- if .Values.podAnnotations }}
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
         {{- end }}
+        {{- if .Values.auditPodAnnotations }}
+        {{- toYaml .Values.auditPodAnnotations | trim | nindent 8 }}
+        {{- end }}
       labels:
 {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
@@ -60,6 +63,11 @@ spec:
         - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
         - --operation=audit
         - --operation=status
+        {{ if .Values.audit.enablePubsub}}
+        - --enable-pub-sub={{ .Values.audit.enablePubsub }}
+        - --audit-connection={{ .Values.audit.connection }}
+        - --audit-channel={{ .Values.audit.channel }}
+        {{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}
         - --logtostderr
         - --health-addr=:{{ .Values.audit.healthPort }}
