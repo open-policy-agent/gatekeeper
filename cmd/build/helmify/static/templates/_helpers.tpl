@@ -44,11 +44,11 @@ Adds additional pod labels to the common ones
 Mandatory labels
 */}}
 {{- define "gatekeeper.mandatoryLabels" -}}
-app: '{{ "gatekeeper.name" . }}'
-chart: '{{ "gatekeeper.name" . }}'
+app: {{ include "gatekeeper.name" . }}
+chart: {{ include "gatekeeper.name" . }}
 gatekeeper.sh/system: "yes"
-heritage: '{{ .Release.Service }}'
-release: '{{ .Release.Name }}'
+heritage: {{ .Release.Service }}
+release: {{ .Release.Name }}
 {{- end }}
 
 {{/*
