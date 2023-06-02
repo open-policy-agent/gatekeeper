@@ -3,7 +3,23 @@ id: pubsub
 title: Pubsub
 ---
 
-This feature allows to export audit violations over a broker that can be consumed by a subscriber independently.
+`Feature State`: Gatekeeper version v3.13+ (alpha)
+
+> ❗ This feature is still in alpha stage, so the final form can still change (feedback is welcome!).
+
+## Motivation
+
+Prior to this feature, there were two ways to get audit violations. One is to look at constraints status and the other is to look at audit pod logs and get the logged audit violations. Both of these approach have limitations as described below.
+
+Limitations of getting audit violations from constraint status:
+
+- To reduce in memory consumption of audit and avoid violating etcd limit of 1.5MB per resource, gatekeeper only reports up-to 500 violations on constraint template. In other words, one might not get all the violations from looking at constraint.
+
+Limitations of getting audit violations from audit logs:
+
+- It could be difficult to parse audit logs and look for violation messages as violation logs would be scrambled together with other log statements. Additionally, when there are huge number of violations, the pod logs might get pruned and it might not be possible to get the logs for whole audit. In other words, it is possible to look at logs to fetch audit violation and still not get all the violations that were caught during audit.
+
+This feature that uses publish and subscribe model, allows Gatekeeper to export audit violations over a broker that can be consumed by a subscriber independently. Therefore, it allows users to get all the audit violations.
 
 ## Enabling Gatekeeper to export audit violations
 
