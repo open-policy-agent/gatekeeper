@@ -16,6 +16,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -24,6 +25,7 @@ type Dependencies struct {
 	ProcessExcluder *process.Excluder
 	CacheLister     *CacheLister
 	ExpansionSystem *expansion.System
+	PubSubSystem    *pubsub.System
 }
 
 // AddToManager adds audit manager to the Manager.

@@ -46,6 +46,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/upgrade"
@@ -381,6 +382,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
 	expansionSystem := expansion.NewSystem(mutationSystem)
+	pubsubSystem := pubsub.NewSystem()
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -416,6 +418,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		ExpansionSystem:  expansionSystem,
 		ProviderCache:    providerCache,
 		WatchSet:         watchSet,
+		PubsubSystem:     pubsubSystem,
 	}
 
 	if err := controller.AddToManager(mgr, &opts); err != nil {
@@ -445,6 +448,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 			ProcessExcluder: processExcluder,
 			CacheLister:     auditCache,
 			ExpansionSystem: expansionSystem,
+			PubSubSystem:    pubsubSystem,
 		}
 		if err := audit.AddToManager(mgr, &auditDeps); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
@@ -463,6 +467,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		setupLog.Error(err, "unable to register metrics with the manager")
 		return err
 	}
+
 	return nil
 }
 
