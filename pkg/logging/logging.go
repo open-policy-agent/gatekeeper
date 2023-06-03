@@ -34,6 +34,7 @@ const (
 	Mutator               = "mutator"
 	DebugLevel            = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
 	ExecutionStats        = "execution_stats"
+	ViolationMetadata     = "violation_metadata"
 )
 
 func LogStatsEntries(client *constraintclient.Client, logger logr.Logger, entries []*instrumentation.StatsEntry, msg string) {
