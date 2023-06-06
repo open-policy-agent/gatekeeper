@@ -53,8 +53,7 @@ func TestCacheManager_AddObject_RemoveObject(t *testing.T) {
 	require.False(t, opaClient.HasGVK(pod.GroupVersionKind()))
 }
 
-// TestCacheManager_processExclusion makes sure that we don't add objects that are process excluded
-// and remove any objects that were previously not process excluded but have become so now.
+// TestCacheManager_processExclusion makes sure that we don't add objects that are process excluded.
 func TestCacheManager_processExclusion(t *testing.T) {
 	mgr, _ := testutils.SetupManager(t, cfg)
 	opaClient := &fakes.FakeOpa{}
@@ -62,7 +61,7 @@ func TestCacheManager_processExclusion(t *testing.T) {
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	assert.NoError(t, err)
 
-	// exclude "test-ns-excluded" namespace as excluded
+	// exclude "test-ns-excluded" namespace
 	processExcluder := process.Get()
 	processExcluder.Add([]configv1alpha1.MatchEntry{
 		{
@@ -84,32 +83,6 @@ func TestCacheManager_processExclusion(t *testing.T) {
 
 	// test that pod from excluded namespace is not cache managed
 	require.False(t, opaClient.HasGVK(pod.GroupVersionKind()))
-
-	// now add a new pod that IS NOT name space excluded at the time
-	// of addition but becomes exlcluded later.
-	pod2 := fakes.Pod(
-		fakes.WithNamespace("test-ns-excluded-2"),
-		fakes.WithName("test-name-2"),
-	)
-	unstructuredPod2, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod2)
-	require.NoError(t, err)
-	require.NoError(t, cm.AddObject(ctx, &unstructured.Unstructured{Object: unstructuredPod2}))
-
-	// test that pod is cache managed
-	require.True(t, opaClient.HasGVK(pod2.GroupVersionKind()))
-
-	// now namespace exclude and attempt to re-add, this sequence should
-	// remove the object from the cache altogether.
-	processExcluder.Add([]configv1alpha1.MatchEntry{
-		{
-			ExcludedNamespaces: []util.Wildcard{"test-ns-excluded-2"},
-			Processes:          []string{"sync"},
-		},
-	})
-	require.NoError(t, cm.AddObject(ctx, &unstructured.Unstructured{Object: unstructuredPod2}))
-
-	// test that pod is now NOT cache managed
-	require.False(t, opaClient.HasGVK(pod2.GroupVersionKind()))
 }
 
 // TestCacheManager_errors tests that we cache manager responds to errors from the opa client.

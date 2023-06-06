@@ -21,8 +21,6 @@ type CacheManager struct {
 	syncMetricsCache *syncutil.MetricsCache
 	tracker          *readiness.Tracker
 	processExcluder  *process.Excluder
-
-	// todo acpana -- integrate gvkaggregator
 }
 
 func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.MetricsCache, tracker *readiness.Tracker, processExcluder *process.Excluder) *CacheManager {
@@ -44,8 +42,7 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 	// syncing this gvk
 	if isNamespaceExcluded {
 		c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
-
-		return c.RemoveObject(ctx, instance)
+		return nil
 	}
 
 	syncKey := syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName())
@@ -75,16 +72,15 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 }
 
 func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.Unstructured) error {
-	_, err := c.opa.RemoveData(ctx, instance)
-	// only delete from metrics map if the data removal was succcesful
-	if err != nil {
-		c.syncMetricsCache.DeleteObject(syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName()))
-
+	if _, err := c.opa.RemoveData(ctx, instance); err != nil {
 		return err
 	}
 
+	// only delete from metrics map if the data removal was succcesful
+	c.syncMetricsCache.DeleteObject(syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName()))
 	c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
-	return err
+
+	return nil
 }
 
 func (c *CacheManager) ReportSyncMetrics(reporter *syncutil.Reporter, log logr.Logger) {
