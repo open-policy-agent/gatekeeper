@@ -32,8 +32,9 @@ type OpaKey struct {
 
 // FakeOpa is an OpaDataClient for testing.
 type FakeOpa struct {
-	mu   gosync.Mutex
-	data map[OpaKey]interface{}
+	mu           gosync.Mutex
+	data         map[OpaKey]interface{}
+	needsToError bool
 }
 
 var _ syncutil.OpaDataClient = &FakeOpa{}
@@ -58,6 +59,10 @@ func (f *FakeOpa) AddData(ctx context.Context, data interface{}) (*constraintTyp
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if f.needsToError {
+		return nil, fmt.Errorf("test error")
+	}
+
 	key, err := f.keyFor(data)
 	if err != nil {
 		return nil, err
@@ -74,6 +79,10 @@ func (f *FakeOpa) AddData(ctx context.Context, data interface{}) (*constraintTyp
 func (f *FakeOpa) RemoveData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if f.needsToError {
+		return nil, fmt.Errorf("test error")
+	}
 
 	if target.IsWipeData(data) {
 		f.data = make(map[OpaKey]interface{})
@@ -120,4 +129,11 @@ func (f *FakeOpa) Len() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.data)
+}
+
+// SetErroring will error out on AddObject or RemoveObject.
+func (f *FakeOpa) SetErroring(enabled bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.needsToError = enabled
 }

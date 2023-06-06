@@ -111,3 +111,28 @@ func TestCacheManager_processExclusion(t *testing.T) {
 	// test that pod is now NOT cache managed
 	require.False(t, opaClient.HasGVK(pod2.GroupVersionKind()))
 }
+
+// TestCacheManager_errors tests that we cache manager responds to errors from the opa client.
+func TestCacheManager_errors(t *testing.T) {
+	mgr, _ := testutils.SetupManager(t, cfg)
+	opaClient := &fakes.FakeOpa{}
+	opaClient.SetErroring(true) // AddObject, RemoveObject will error out now.
+
+	tracker, err := readiness.SetupTracker(mgr, false, false, false)
+	assert.NoError(t, err)
+
+	processExcluder := process.Get()
+	cm := NewCacheManager(opaClient, syncutil.NewMetricsCache(), tracker, processExcluder)
+	ctx := context.Background()
+
+	pod := fakes.Pod(
+		fakes.WithNamespace("test-ns"),
+		fakes.WithName("test-name"),
+	)
+	unstructuredPod, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
+	require.NoError(t, err)
+
+	// test that cm bubbles up the errors
+	require.ErrorContains(t, cm.AddObject(ctx, &unstructured.Unstructured{Object: unstructuredPod}), "test error")
+	require.ErrorContains(t, cm.RemoveObject(ctx, &unstructured.Unstructured{Object: unstructuredPod}), "test error")
+}
