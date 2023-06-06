@@ -43,11 +43,9 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 	// bail because it means we should not be
 	// syncing this gvk
 	if isNamespaceExcluded {
-		// todo acpana -- consider actually calling RemoveGVKToSync in this case
-		// as we should not be tracking this GVK anymore
 		c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
 
-		return nil
+		return c.RemoveObject(ctx, instance)
 	}
 
 	syncKey := syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName())
