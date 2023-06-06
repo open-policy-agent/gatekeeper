@@ -121,8 +121,6 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		return reconcile.Result{}, nil
 	}
 
-	// todo acpana -- double check that request namespace & name match instance namespace & name
-	// syncKey := syncutil.GetKeyForSyncMetrics(unpackedRequest.Namespace, unpackedRequest.Name)
 
 	reportMetricsForRenconcileRun := false
 	defer func() {
@@ -158,8 +156,6 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		return reconcile.Result{}, err
 	}
 
-	// todo acpana -- double check that it is okay to remove what has been
-	// namespace excluded now (but was not namesapced excluded before)
 	if !instance.GetDeletionTimestamp().IsZero() {
 		if err := r.cm.RemoveObject(ctx, instance); err != nil {
 			return reconcile.Result{}, err

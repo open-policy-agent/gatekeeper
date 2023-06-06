@@ -142,7 +142,6 @@ func TestReconcile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// todo acpana this is how you can set up a process excluder
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 	events := make(chan event.GenericEvent, 1024)
