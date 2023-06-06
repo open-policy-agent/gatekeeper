@@ -121,7 +121,6 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		return reconcile.Result{}, nil
 	}
 
-
 	reportMetricsForRenconcileRun := false
 	defer func() {
 		if reportMetricsForRenconcileRun {
