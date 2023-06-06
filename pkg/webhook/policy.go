@@ -270,13 +270,13 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 		if *logDenies {
 			h.log.WithValues(
 				logging.Process, "admission",
+				logging.Details, r.Metadata,
 				logging.EventType, "violation",
 				logging.ConstraintName, r.Constraint.GetName(),
 				logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
 				logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
 				logging.ConstraintKind, r.Constraint.GetKind(),
 				logging.ConstraintAction, r.EnforcementAction,
-				logging.ViolationMetadata, r.Metadata,
 				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
 				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
 				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
