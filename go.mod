@@ -11,7 +11,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dominikbraun/graph v0.16.2
 	github.com/go-logr/logr v1.2.4
-	github.com/go-logr/zapr v1.2.3
+	github.com/go-logr/zapr v1.2.4
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/onsi/ginkgo/v2 v2.9.5
