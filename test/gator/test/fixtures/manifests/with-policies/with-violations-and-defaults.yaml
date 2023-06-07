@@ -1,0 +1,75 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabelsdefault
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabelsDefault
+      validation:
+        legacySchema: false
+        openAPIV3Schema:
+          properties:
+            labels:
+              description: A list of labels and values the object must specify.
+              default:
+                - key: "aRequiredLabel"
+              items:
+                properties:
+                  key:
+                    description: The required label.
+                    type: string
+                type: object
+              type: array
+            message:
+              default: "aRequiredMessage"
+              type: string
+            placeholder: # needed to showcase defaulting of the other two props above.
+              type: string
+          type: object
+  targets:
+  - rego: |
+      package k8srequiredlabels
+
+      get_message(parameters, _default) = msg {
+        not parameters.message
+        msg := _default
+      }
+
+      get_message(parameters, _default) = msg {
+        msg := parameters.message
+      }
+
+      violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+        provided := {label | input.review.object.metadata.labels[label]}
+        required := {label | label := input.parameters.labels[_].key}
+        missing := required - provided
+        count(missing) > 0
+
+        msg := input.parameters.message
+      }
+
+    target: admission.k8s.gatekeeper.sh
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabelsDefault
+metadata:
+  name: all-must-have-owner
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    placeholder: "placeholder"
+# notice no parameters that are used in the validaiton code are defined, 
+# the defaults are applied from the ConstraintTemplate's open api v3 schema definition
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-ns
+# Missing owner label
+#  labels:
+#    owner: user.agilebank.demo
