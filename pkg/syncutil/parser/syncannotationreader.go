@@ -10,7 +10,7 @@ import (
 
 // syncAnnotationName is the name of the annotation that stores
 // GVKS that are required to be synced.
-const SyncAnnotationName = "metadata.gatekeeper.sh/requires-sync-data"
+const SyncAnnotationName = "metadata.gatekeeper.sh/requiresSyncData"
 
 // SyncRequirements contains a list of ANDed requirements, each of which
 // contains an expanded set of equivalent (ORed) GVKs.
@@ -57,7 +57,8 @@ func ReadSyncRequirements(t *templates.ConstraintTemplate) (SyncRequirements, er
 	return SyncRequirements{}, nil
 }
 
-// Takes a compactGVKSet and expands it into a GVKEquivalenceSet.
+// ExpandCompactEquivalenceSet takes a compactGVKSet and expands it into a
+// GVKEquivalenceSet.
 func ExpandCompactEquivalenceSet(compactEquivalenceSet CompactGVKEquivalenceSet) GVKEquivalenceSet {
 	equivalenceSet := GVKEquivalenceSet{}
 	for _, group := range compactEquivalenceSet.Groups {
@@ -70,8 +71,8 @@ func ExpandCompactEquivalenceSet(compactEquivalenceSet CompactGVKEquivalenceSet)
 	return equivalenceSet
 }
 
-// Takes a CompactSyncRequirements (the json form provided in the template
-// annotation) and expands it into a SyncRequirements.
+// ExpandCompactRequirements takes a CompactSyncRequirements (the json form
+// provided in the template annotation) and expands it into a SyncRequirements.
 func ExpandCompactRequirements(compactSyncRequirements CompactSyncRequirements) (SyncRequirements, error) {
 	syncRequirements := SyncRequirements{}
 	for _, compactRequirement := range compactSyncRequirements {

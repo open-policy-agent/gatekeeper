@@ -20,7 +20,7 @@ func TestReadSyncRequirements(t *testing.T) {
 			template: &templates.ConstraintTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						"metadata.gatekeeper.sh/requires-sync-data": "\n\"[[{\"groups\": [\"group1\"], \"versions\": [\"version1\"], \"kinds\": [\"kind1\"]}]]\"",
+						"metadata.gatekeeper.sh/requiresSyncData": "\n\"[[{\"groups\": [\"group1\"], \"versions\": [\"version1\"], \"kinds\": [\"kind1\"]}]]\"",
 					},
 				},
 			},
@@ -39,7 +39,7 @@ func TestReadSyncRequirements(t *testing.T) {
 			template: &templates.ConstraintTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						"metadata.gatekeeper.sh/requires-sync-data": "\n\"[[{\"groups\": [\"group1\", \"group2\"], \"versions\": [\"version1\", \"version2\"], \"kinds\": [\"kind1\", \"kind2\"]}]]\"",
+						"metadata.gatekeeper.sh/requiresSyncData": "\n\"[[{\"groups\": [\"group1\", \"group2\"], \"versions\": [\"version1\", \"version2\"], \"kinds\": [\"kind1\", \"kind2\"]}]]\"",
 					},
 				},
 			},
@@ -93,7 +93,7 @@ func TestReadSyncRequirements(t *testing.T) {
 			template: &templates.ConstraintTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						"metadata.gatekeeper.sh/requires-sync-data": "\n\"[[{\"groups\": [\"group1\"], \"versions\": [\"version1\"], \"kinds\": [\"kind1\"]}, {\"groups\": [\"group2\"], \"versions\": [\"version2\"], \"kinds\": [\"kind2\"]}]]\"",
+						"metadata.gatekeeper.sh/requiresSyncData": "\n\"[[{\"groups\": [\"group1\"], \"versions\": [\"version1\"], \"kinds\": [\"kind1\"]}, {\"groups\": [\"group2\"], \"versions\": [\"version2\"], \"kinds\": [\"kind2\"]}]]\"",
 					},
 				},
 			},
@@ -117,7 +117,7 @@ func TestReadSyncRequirements(t *testing.T) {
 			template: &templates.ConstraintTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						"metadata.gatekeeper.sh/requires-sync-data": "\n\"[[{\"groups\": [\"group1\"], \"versions\": [\"version1\"], \"kinds\": [\"kind1\"]}], [{\"groups\": [\"group2\"], \"versions\": [\"version2\"], \"kinds\": [\"kind2\"]}]]\"",
+						"metadata.gatekeeper.sh/requiresSyncData": "\n\"[[{\"groups\": [\"group1\"], \"versions\": [\"version1\"], \"kinds\": [\"kind1\"]}], [{\"groups\": [\"group2\"], \"versions\": [\"version2\"], \"kinds\": [\"kind2\"]}]]\"",
 					},
 				},
 			},
@@ -139,7 +139,7 @@ func TestReadSyncRequirements(t *testing.T) {
 			},
 		},
 		{
-			name: "test with no requires-sync-data annotation",
+			name: "test with no requiresSyncData annotation",
 			template: &templates.ConstraintTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{},
@@ -148,33 +148,33 @@ func TestReadSyncRequirements(t *testing.T) {
 			want: SyncRequirements{},
 		},
 		{
-			name: "test with empty requires-sync-data annotation",
+			name: "test with empty requiresSyncData annotation",
 			template: &templates.ConstraintTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						"metadata.gatekeeper.sh/requires-sync-data": "",
+						"metadata.gatekeeper.sh/requiresSyncData": "",
 					},
 				},
 			},
 			wantErr: true,
 		},
 		{
-			name: "test with invalid requires-sync-data annotation",
+			name: "test with invalid requiresSyncData annotation",
 			template: &templates.ConstraintTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						"metadata.gatekeeper.sh/requires-sync-data": "invalid",
+						"metadata.gatekeeper.sh/requiresSyncData": "invalid",
 					},
 				},
 			},
 			wantErr: true,
 		},
 		{
-			name: "test with requires-sync-data annotation with invalid keys",
+			name: "test with requiresSyncData annotation with invalid keys",
 			template: &templates.ConstraintTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						"metadata.gatekeeper.sh/requires-sync-data": "\n\"[[{\"group\": [\"group1\"], \"version\": [\"version1\"], \"kind\": [\"kind1\"]}]]\"",
+						"metadata.gatekeeper.sh/requiresSyncData": "\n\"[[{\"group\": [\"group1\"], \"version\": [\"version1\"], \"kind\": [\"kind1\"]}]]\"",
 					},
 				},
 			},
