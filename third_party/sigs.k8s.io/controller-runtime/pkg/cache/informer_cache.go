@@ -124,14 +124,14 @@ func (ic *informerCache) objectTypeForListObject(list client.ObjectList) (*schem
 }
 
 // GetInformerForKind returns the informer for the GroupVersionKind.
-func (ic *informerCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind) (Informer, error) {
+func (ic *informerCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, opts ...InformerGetOption) (Informer, error) {
 	// Map the gvk to an object
 	obj, err := ic.scheme.New(gvk)
 	if err != nil {
 		return nil, err
 	}
 
-	_, i, err := ic.Informers.Get(ctx, gvk, obj)
+	_, i, err := ic.Informers.Get(ctx, gvk, obj, castInformerGetOptions(opts)...)
 	if err != nil {
 		return nil, err
 	}
@@ -139,13 +139,13 @@ func (ic *informerCache) GetInformerForKind(ctx context.Context, gvk schema.Grou
 }
 
 // GetInformer returns the informer for the obj.
-func (ic *informerCache) GetInformer(ctx context.Context, obj client.Object) (Informer, error) {
+func (ic *informerCache) GetInformer(ctx context.Context, obj client.Object, opts ...InformerGetOption) (Informer, error) {
 	gvk, err := apiutil.GVKForObject(obj, ic.scheme)
 	if err != nil {
 		return nil, err
 	}
 
-	_, i, err := ic.Informers.Get(ctx, gvk, obj)
+	_, i, err := ic.Informers.Get(ctx, gvk, obj, castInformerGetOptions(opts)...)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +169,17 @@ func (ic *informerCache) IndexField(ctx context.Context, obj client.Object, fiel
 		return err
 	}
 	return indexByField(informer, field, extractValue)
+}
+
+// Remove removes an informer specified by the obj argument from the cache and stops it if it existed.
+func (ic *informerCache) Remove(obj client.Object) error {
+	gvk, err := apiutil.GVKForObject(obj, ic.scheme)
+	if err != nil {
+		return err
+	}
+
+	ic.Informers.Remove(gvk, obj)
+	return nil
 }
 
 func indexByField(indexer Informer, field string, extractor client.IndexerFunc) error {

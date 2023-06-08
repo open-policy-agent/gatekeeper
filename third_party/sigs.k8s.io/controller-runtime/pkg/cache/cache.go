@@ -41,7 +41,22 @@ import (
 var (
 	log               = logf.RuntimeLog.WithName("object-cache")
 	defaultSyncPeriod = 10 * time.Hour
+
+	// BlockUntilSynced determines whether a get request for an informer should block
+	// until the informer's cache has synced.
+	BlockUntilSynced = internal.BlockUntilSynced
 )
+
+// InformerGetOption defines an option that alters the behavior of how informers are retrieved.
+type InformerGetOption internal.InformerGetOption
+
+func castInformerGetOptions(opts []InformerGetOption) []internal.InformerGetOption {
+	out := make([]internal.InformerGetOption, len(opts))
+	for i := range opts {
+		out[i] = internal.InformerGetOption(opts[i])
+	}
+	return out
+}
 
 // Cache knows how to load Kubernetes objects, fetch informers to request
 // to receive events for Kubernetes objects (at a low-level),
@@ -60,11 +75,11 @@ type Cache interface {
 type Informers interface {
 	// GetInformer fetches or constructs an informer for the given object that corresponds to a single
 	// API kind and resource.
-	GetInformer(ctx context.Context, obj client.Object) (Informer, error)
+	GetInformer(ctx context.Context, obj client.Object, opts ...InformerGetOption) (Informer, error)
 
 	// GetInformerForKind is similar to GetInformer, except that it takes a group-version-kind, instead
 	// of the underlying object.
-	GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind) (Informer, error)
+	GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, opts ...InformerGetOption) (Informer, error)
 
 	// Start runs all the informers known to this cache until the context is closed.
 	// It blocks.

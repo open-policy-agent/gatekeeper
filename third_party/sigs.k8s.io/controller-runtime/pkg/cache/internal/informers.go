@@ -36,6 +36,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/internal/syncs"
 )
 
 // InformersOpts configures an InformerMap.
@@ -84,12 +85,45 @@ type Cache struct {
 
 	// CacheReader wraps Informer and implements the CacheReader interface for a single type
 	Reader CacheReader
+
+	// Stop can be used to stop this individual informer.
+	stop chan struct{}
+}
+
+// Start starts the informer managed by a MapEntry.
+// Blocks until the informer stops. The informer can be stopped
+// either individually (via the entry's stop channel) or globally
+// via the provided stop argument.
+func (c *Cache) Start(stop <-chan struct{}) {
+	// Stop on either the whole map stopping or just this informer being removed.
+	internalStop, cancel := syncs.MergeChans(stop, c.stop)
+	defer cancel()
+	c.Informer.Run(internalStop)
 }
 
 type tracker struct {
 	Structured   map[schema.GroupVersionKind]*Cache
 	Unstructured map[schema.GroupVersionKind]*Cache
 	Metadata     map[schema.GroupVersionKind]*Cache
+}
+
+// GetOptions provides configuration to customize the behavior when
+// getting an informer.
+type GetOptions struct {
+	// DoNotBlockUntilSynced tells Get() to return the informer immediately,
+	// without waiting for its cache to sync.
+	DoNotBlockUntilSynced bool
+}
+
+// InformerGetOption defines an option that alters the behavior of how informers are retrieved.
+type InformerGetOption func(*GetOptions)
+
+// BlockUntilSynced determines whether a get request for an informer should block
+// until the informer's cache has synced.
+func BlockUntilSynced(shouldBlock bool) InformerGetOption {
+	return func(opts *GetOptions) {
+		opts.DoNotBlockUntilSynced = !shouldBlock
+	}
 }
 
 // Informers create and caches Informers for (runtime.Object, schema.GroupVersionKind) pairs.
@@ -198,13 +232,13 @@ func (ip *Informers) Start(ctx context.Context) error {
 
 		// Start each informer
 		for _, i := range ip.tracker.Structured {
-			ip.startInformerLocked(i.Informer)
+			ip.startInformerLocked(i)
 		}
 		for _, i := range ip.tracker.Unstructured {
-			ip.startInformerLocked(i.Informer)
+			ip.startInformerLocked(i)
 		}
 		for _, i := range ip.tracker.Metadata {
-			ip.startInformerLocked(i.Informer)
+			ip.startInformerLocked(i)
 		}
 
 		// Set started to true so we immediately start any informers added later.
@@ -219,7 +253,7 @@ func (ip *Informers) Start(ctx context.Context) error {
 	return nil
 }
 
-func (ip *Informers) startInformerLocked(informer cache.SharedIndexInformer) {
+func (ip *Informers) startInformerLocked(cacheEntry *Cache) {
 	// Don't start the informer in case we are already waiting for the items in
 	// the waitGroup to finish, since waitGroups don't support waiting and adding
 	// at the same time.
@@ -230,7 +264,7 @@ func (ip *Informers) startInformerLocked(informer cache.SharedIndexInformer) {
 	ip.waitGroup.Add(1)
 	go func() {
 		defer ip.waitGroup.Done()
-		informer.Run(ip.ctx.Done())
+		cacheEntry.Start(ip.ctx.Done())
 	}()
 }
 
@@ -280,7 +314,7 @@ func (ip *Informers) get(gvk schema.GroupVersionKind, obj runtime.Object) (res *
 
 // Get will create a new Informer and add it to the map of specificInformersMap if none exists.  Returns
 // the Informer from the map.
-func (ip *Informers) Get(ctx context.Context, gvk schema.GroupVersionKind, obj runtime.Object) (bool, *Cache, error) {
+func (ip *Informers) Get(ctx context.Context, gvk schema.GroupVersionKind, obj runtime.Object, opts ...InformerGetOption) (bool, *Cache, error) {
 	// Return the informer if it is found
 	i, started, ok := ip.get(gvk, obj)
 	if !ok {
@@ -290,7 +324,12 @@ func (ip *Informers) Get(ctx context.Context, gvk schema.GroupVersionKind, obj r
 		}
 	}
 
-	if started && !i.Informer.HasSynced() {
+	cfg := &GetOptions{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	if started && !i.Informer.HasSynced() && !cfg.DoNotBlockUntilSynced {
 		// Wait for it to sync before returning the Informer so that folks don't read from a stale cache.
 		if !cache.WaitForCacheSync(ctx.Done(), i.Informer.HasSynced) {
 			return started, nil, apierrors.NewTimeoutError(fmt.Sprintf("failed waiting for %T Informer to sync", obj), 0)
@@ -298,6 +337,21 @@ func (ip *Informers) Get(ctx context.Context, gvk schema.GroupVersionKind, obj r
 	}
 
 	return started, i, nil
+}
+
+// Remove removes an informer entry and stops it if it was running.
+func (ip *Informers) Remove(gvk schema.GroupVersionKind, obj runtime.Object) {
+	ip.mu.Lock()
+	defer ip.mu.Unlock()
+
+	informerMap := ip.informersByType(obj)
+
+	entry, ok := informerMap[gvk]
+	if !ok {
+		return
+	}
+	close(entry.stop)
+	delete(informerMap, gvk)
 }
 
 func (ip *Informers) informersByType(obj runtime.Object) map[schema.GroupVersionKind]*Cache {
@@ -360,13 +414,14 @@ func (ip *Informers) addInformerToMap(gvk schema.GroupVersionKind, obj runtime.O
 			scopeName:        mapping.Scope.Name(),
 			disableDeepCopy:  ip.getDisableDeepCopy(gvk),
 		},
+		stop: make(chan struct{}),
 	}
 	ip.informersByType(obj)[gvk] = i
 
 	// Start the informer in case the InformersMap has started, otherwise it will be
 	// started when the InformersMap starts.
 	if ip.started {
-		ip.startInformerLocked(i.Informer)
+		ip.startInformerLocked(i)
 	}
 	return i, ip.started, nil
 }
