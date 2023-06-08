@@ -17,7 +17,6 @@ package core
 
 import (
 	"fmt"
-	"net/http"
 	"testing"
 	"time"
 
@@ -40,12 +39,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiTypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -67,10 +64,8 @@ func setupManager(t *testing.T) manager.Manager {
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
-		MapperProvider: func(c *rest.Config, cli *http.Client) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c, cli)
-		},
-		Logger: testutils.NewLogger(t),
+		MapperProvider:     apiutil.NewDynamicRESTMapper,
+		Logger:             testutils.NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)

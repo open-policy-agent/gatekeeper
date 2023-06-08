@@ -21,4 +21,3 @@ type gkReview struct {
 func (g *gkReview) GetAdmissionRequest() *admissionv1.AdmissionRequest {
 	return &g.AdmissionRequest
 }
-

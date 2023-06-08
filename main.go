@@ -59,12 +59,10 @@ import (
 	_ "go.uber.org/automaxprocs" // set GOMAXPROCS to the number of container cores, if known.
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
@@ -235,9 +233,7 @@ func innerMain() int {
 		WebhookServer:          crWebhook.NewServer(serverOpts),
 		CertDir:                *certDir,
 		HealthProbeBindAddress: *healthAddr,
-		MapperProvider: func(c *rest.Config, cli *http.Client) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c, cli)
-		},
+		MapperProvider:         apiutil.NewDynamicRESTMapper,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

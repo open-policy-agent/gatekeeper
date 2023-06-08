@@ -2,13 +2,11 @@ package testutils
 
 import (
 	"context"
-	"net/http"
 	"sync"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"github.com/prometheus/client_golang/prometheus"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -45,10 +43,8 @@ func SetupManager(t *testing.T, cfg *rest.Config) (manager.Manager, *watch.Manag
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
-		MapperProvider: func(c *rest.Config, cli *http.Client) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c, cli)
-		},
-		Logger: NewLogger(t),
+		MapperProvider:     apiutil.NewDynamicRESTMapper,
+		Logger:             NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)

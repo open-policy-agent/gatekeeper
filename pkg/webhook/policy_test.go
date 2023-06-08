@@ -194,17 +194,6 @@ func validRegoTemplateConstraint() *unstructured.Unstructured {
 	return u
 }
 
-func invalidRegoTemplate() *templates.ConstraintTemplate {
-	template := validRegoTemplate()
-
-	template.Spec.Targets[0].Rego = `package badrego
-
-        violation[{"msg": msg}] {
-        msg := "I'm sure this will work"`
-
-	return template
-}
-
 func makeOpaClient() (*constraintclient.Client, error) {
 	t := &target.K8sValidationTarget{}
 	driver, err := rego.New(rego.Tracing(false))

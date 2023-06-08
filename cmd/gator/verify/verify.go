@@ -49,7 +49,6 @@ func init() {
 		`include a trace for the underlying constraint framework evaluation`)
 	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "prototype-enable-k8s-native-validation", "", false,
 		`PROTOTYPE (not stable): enable the validating admission policy driver`)
-
 }
 
 // Cmd is the gator verify subcommand.
