@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
@@ -78,6 +77,6 @@ func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.
 	return nil
 }
 
-func (c *CacheManager) ReportSyncMetrics(reporter *syncutil.Reporter, log logr.Logger) {
-	c.syncMetricsCache.ReportSync(reporter, log)
+func (c *CacheManager) ReportSyncMetrics(reporter *syncutil.Reporter) {
+	c.syncMetricsCache.ReportSync(reporter)
 }

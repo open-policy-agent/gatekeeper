@@ -6,12 +6,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("reporter").WithValues("metaKind", "Sync")
 
 const (
 	syncMetricName         = "sync"
@@ -106,7 +108,7 @@ func (c *MetricsCache) DeleteObject(key string) {
 	delete(c.Cache, key)
 }
 
-func (c *MetricsCache) ReportSync(reporter *Reporter, log logr.Logger) {
+func (c *MetricsCache) ReportSync(reporter *Reporter) {
 	c.mux.RLock()
 	defer c.mux.RUnlock()
 
