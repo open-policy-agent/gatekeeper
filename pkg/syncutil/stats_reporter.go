@@ -108,9 +108,15 @@ func (c *MetricsCache) DeleteObject(key string) {
 	delete(c.Cache, key)
 }
 
-func (c *MetricsCache) ReportSync(reporter *Reporter) {
+func (c *MetricsCache) ReportSync() {
 	c.mux.RLock()
 	defer c.mux.RUnlock()
+
+	reporter, err := NewStatsReporter()
+	if err != nil {
+		log.Error(err, "failed to initialize reporter")
+		return
+	}
 
 	totals := make(map[Tags]int)
 	for _, v := range c.Cache {

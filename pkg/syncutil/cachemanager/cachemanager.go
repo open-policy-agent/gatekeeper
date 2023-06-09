@@ -77,6 +77,6 @@ func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.
 	return nil
 }
 
-func (c *CacheManager) ReportSyncMetrics(reporter *syncutil.Reporter) {
-	c.syncMetricsCache.ReportSync(reporter)
+func (c *CacheManager) ReportSyncMetrics() {
+	c.syncMetricsCache.ReportSync()
 }

@@ -327,7 +327,7 @@ func (r *ReconcileConfig) wipeCacheIfNeeded(ctx context.Context) error {
 
 		// reset sync cache before sending the metric
 		r.syncMetricsCache.ResetCache()
-		r.syncMetricsCache.ReportSync(&syncutil.Reporter{})
+		r.syncMetricsCache.ReportSync()
 
 		r.needsWipe = false
 	}
@@ -352,7 +352,7 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 			return fmt.Errorf("replaying data for %+v: %w", gvk, err)
 		}
 
-		defer r.syncMetricsCache.ReportSync(&syncutil.Reporter{})
+		defer r.syncMetricsCache.ReportSync()
 
 		for i := range u.Items {
 			syncKey := syncutil.GetKeyForSyncMetrics(u.Items[i].GetNamespace(), u.Items[i].GetName())

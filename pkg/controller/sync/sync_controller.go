@@ -128,7 +128,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 				log.Error(err, "failed to report sync duration")
 			}
 
-			r.cm.ReportSyncMetrics(&r.reporter)
+			r.cm.ReportSyncMetrics()
 
 			if err := r.reporter.ReportLastSync(); err != nil {
 				log.Error(err, "failed to report last sync timestamp")
