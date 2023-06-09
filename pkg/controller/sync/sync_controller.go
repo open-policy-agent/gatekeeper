@@ -121,9 +121,9 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		return reconcile.Result{}, nil
 	}
 
-	reportMetricsForRenconcileRun := false
+	reportMetrics := false
 	defer func() {
-		if reportMetricsForRenconcileRun {
+		if reportMetrics {
 			if err := r.reporter.ReportSyncDuration(time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report sync duration")
 			}
@@ -148,7 +148,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 				return reconcile.Result{}, err
 			}
 
-			reportMetricsForRenconcileRun = true
+			reportMetrics = true
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -160,7 +160,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 			return reconcile.Result{}, err
 		}
 
-		reportMetricsForRenconcileRun = true
+		reportMetrics = true
 		return reconcile.Result{}, nil
 	}
 
@@ -173,12 +173,12 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	)
 
 	if err := r.cm.AddObject(ctx, instance); err != nil {
-		reportMetricsForRenconcileRun = true
+		reportMetrics = true
 
 		return reconcile.Result{}, err
 	}
 
-	reportMetricsForRenconcileRun = true
+	reportMetrics = true
 
 	return reconcile.Result{}, nil
 }
