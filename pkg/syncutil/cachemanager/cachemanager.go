@@ -6,15 +6,11 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-var log = logf.Log.WithName("data-replication").WithValues("metaKind", "CacheManagerTracker")
 
 type CacheManager struct {
 	opa              syncutil.OpaDataClient
@@ -67,7 +63,6 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 	})
 	c.syncMetricsCache.AddKind(instance.GetKind())
 
-	log.V(logging.DebugLevel).Info("[readiness] observed data", "gvk", instance.GroupVersionKind(), "namespace", instance.GetNamespace(), "name", instance.GetName())
 	return err
 }
 
