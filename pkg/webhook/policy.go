@@ -270,7 +270,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 		if *logDenies {
 			h.log.WithValues(
 				logging.Process, "admission",
-				logging.Details, r.Metadata,
+				logging.Details, r.Metadata["details"],
 				logging.EventType, "violation",
 				logging.ConstraintName, r.Constraint.GetName(),
 				logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
