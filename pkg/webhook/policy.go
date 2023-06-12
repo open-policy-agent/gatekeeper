@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -92,6 +93,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 	if err != nil {
 		return err
 	}
+	log := log.WithValues("hookType", "validation")
 	eventBroadcaster := record.NewBroadcaster()
 	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 	eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
@@ -110,6 +112,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 			eventRecorder:   recorder,
 			gkNamespace:     util.GetNamespace(),
 		},
+		log: log,
 	}
 	threadCount := *maxServingThreads
 	if threadCount < 1 {
@@ -134,13 +137,12 @@ type validationHandler struct {
 	mutationSystem  *mutation.System
 	expansionSystem *expansion.System
 	semaphore       chan struct{}
+	log             logr.Logger
 }
 
 // Handle the validation request
 // nolint: gocritic // Must accept admission.Request as a struct to satisfy Handler interface.
 func (h *validationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
-	log := log.WithValues("hookType", "validation")
-
 	timeStart := time.Now()
 
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
@@ -171,7 +173,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 				isDryRun = "true"
 			}
 			if err := h.reporter.ReportValidationRequest(ctx, requestResponse, isDryRun, time.Since(timeStart)); err != nil {
-				log.Error(err, "failed to report request")
+				h.log.Error(err, "failed to report request")
 			}
 		}
 	}()
@@ -179,7 +181,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	// namespace is excluded from webhook using config
 	isExcludedNamespace, err := h.skipExcludedNamespace(&req.AdmissionRequest, process.Webhook)
 	if err != nil {
-		log.Error(err, "error while excluding namespace")
+		h.log.Error(err, "error while excluding namespace")
 	}
 
 	if isExcludedNamespace {
@@ -189,7 +191,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 
 	resp, err := h.reviewRequest(ctx, &req)
 	if err != nil {
-		log.Error(err, "error executing query")
+		h.log.Error(err, "error executing query")
 		requestResponse = errorResponse
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
@@ -197,7 +199,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	if *logStatsAdmission {
 		logging.LogStatsEntries(
 			h.opa,
-			log.WithValues(
+			h.log.WithValues(
 				logging.Process, "admission",
 				logging.EventType, "review_response_stats",
 				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
@@ -266,7 +268,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 			continue
 		}
 		if *logDenies {
-			log.WithValues(
+			h.log.WithValues(
 				logging.Process, "admission",
 				logging.EventType, "violation",
 				logging.ConstraintName, r.Constraint.GetName(),
@@ -280,7 +282,8 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
 				logging.ResourceName, resourceName,
 				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
-			).Info(fmt.Sprintf("denied admission: %s", r.Msg))
+			).Info(
+				fmt.Sprintf("denied admission: %s", r.Msg))
 		}
 		if *emitAdmissionEvents {
 			annotations := map[string]string{
@@ -603,14 +606,14 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {
 	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace), drivers.Stats(*logStatsAdmission))
 	if resp != nil && trace {
-		log.Info(resp.TraceDump())
+		h.log.Info(resp.TraceDump())
 	}
 	if dump {
 		dump, err := h.opa.Dump(ctx)
 		if err != nil {
-			log.Error(err, "dump error")
+			h.log.Error(err, "dump error")
 		} else {
-			log.Info(dump)
+			h.log.Info(dump)
 		}
 	}
 
