@@ -10,6 +10,8 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
+	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema/defaulting"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -58,6 +60,19 @@ func (e *templateClient) ValidateConstraint(constraint *unstructured.Unstructure
 	}
 
 	return crds.ValidateCR(constraint, e.crd)
+}
+
+// ApplyDefaultParams will apply any default parameters defined in the CRD of the constraint's
+// corresponding template.
+// Assumes ValidateConstraint() is called so the constraint is a valid CRD.
+func (e *templateClient) ApplyDefaultParams(constraint *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	structural, err := schema.NewStructural(e.crd.Spec.Validation.OpenAPIV3Schema)
+	if err != nil {
+		return nil, err
+	}
+
+	defaulting.Default(constraint.Object, structural)
+	return constraint, nil
 }
 
 func (e *templateClient) getTemplate() *templates.ConstraintTemplate {

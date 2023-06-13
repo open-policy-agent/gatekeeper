@@ -1,0 +1,28 @@
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+  namespace: gatekeeper-system
+spec:
+  type: pubsub.redis
+  version: v1
+  metadata:
+  - name: redisHost
+    value: redis-master.default.svc.cluster.local:6379
+  - name: redisPassword
+    secretKeyRef:
+      name: redis
+      key: redis-password
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit
+  namespace: gatekeeper-system
+data:
+  provider: "dapr"
+  config: |
+    {
+      "component": "pubsub"
+    }

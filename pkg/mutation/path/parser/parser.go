@@ -18,7 +18,7 @@ package parser
 import (
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/token"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/token"
 )
 
 type parser struct {

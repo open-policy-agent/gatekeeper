@@ -5,15 +5,15 @@ import (
 	"reflect"
 	"testing"
 
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
-	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignmeta"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -64,6 +64,7 @@ func TestWebhookAssign(t *testing.T) {
 		},
 		mutationSystem: sys,
 		deserializer:   codecs.UniversalDeserializer(),
+		log:            log,
 	}
 
 	raw := []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`)
@@ -130,6 +131,7 @@ func TestWebhookAssignMetadata(t *testing.T) {
 		},
 		mutationSystem: sys,
 		deserializer:   codecs.UniversalDeserializer(),
+		log:            log,
 	}
 
 	raw := []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`)

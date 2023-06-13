@@ -64,7 +64,7 @@ module.exports = {
             },
             {
               label: 'Meetings',
-              href: 'https://docs.google.com/document/d/1A1-Q-1OMw3QODs1wT6eqfLTagcGmgzAJAjJihiO3T48/edit)',
+              href: 'https://docs.google.com/document/d/1A1-Q-1OMw3QODs1wT6eqfLTagcGmgzAJAjJihiO3T48/edit',
             },
           ],
         },

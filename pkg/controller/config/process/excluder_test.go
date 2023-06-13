@@ -3,7 +3,7 @@ package process
 import (
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 )
 
 func TestExactOrWildcardMatch(t *testing.T) {

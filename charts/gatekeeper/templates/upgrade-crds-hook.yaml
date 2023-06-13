@@ -71,7 +71,7 @@ metadata:
     helm.sh/hook-weight: "1"
     helm.sh/hook-delete-policy: "hook-succeeded,before-hook-creation"
 spec:
-  backoffLimit: 0
+  backoffLimit: 3
   template:
     metadata:
       name: gatekeeper-update-crds-hook

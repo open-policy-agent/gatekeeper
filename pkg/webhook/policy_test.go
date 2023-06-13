@@ -5,20 +5,19 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ghodss/yaml"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	testclients "github.com/open-policy-agent/gatekeeper/test/clients"
+	"github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	testclients "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -29,6 +28,7 @@ import (
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -242,7 +242,7 @@ func TestTemplateValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
+			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}, log: log}
 
 			b, err := json.Marshal(tt.Template)
 			if err != nil {
@@ -359,6 +359,7 @@ func TestReviewRequest(t *testing.T) {
 					client:         tt.CachedClient,
 					reader:         tt.APIReader,
 				},
+				log: log,
 			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
@@ -431,6 +432,7 @@ func TestReviewDefaultNS(t *testing.T) {
 				reader:          &nsGetter{},
 				processExcluder: pe,
 			},
+			log: log,
 		}
 		if maxThreads > 0 {
 			handler.semaphore = make(chan struct{}, maxThreads)
@@ -522,6 +524,7 @@ func TestConstraintValidation(t *testing.T) {
 				opa:             opa,
 				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{},
+				log:             log,
 			}
 			b, err := yaml.YAMLToJSON([]byte(tt.Constraint))
 			if err != nil {
@@ -649,6 +652,7 @@ func TestTracing(t *testing.T) {
 				opa:             opa,
 				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{injectedConfig: tt.Cfg},
+				log:             log,
 			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
@@ -825,6 +829,7 @@ func TestGetValidationMessages(t *testing.T) {
 				opa:             opa,
 				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{},
+				log:             log,
 			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
@@ -875,7 +880,7 @@ func TestValidateConfigResource(t *testing.T) {
 
 	for _, tt := range tc {
 		t.Run(tt.TestName, func(t *testing.T) {
-			handler := validationHandler{}
+			handler := validationHandler{log: log}
 			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Name: tt.Name,
@@ -922,7 +927,7 @@ func TestValidateProvider(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := &validationHandler{}
+			h := &validationHandler{log: log}
 			b, err := yaml.YAMLToJSON([]byte(tt.provider))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)

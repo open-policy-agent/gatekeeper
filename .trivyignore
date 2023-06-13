@@ -1,0 +1,3 @@
+# false positive due to prometheus versioning
+# https://github.com/aquasecurity/trivy/issues/2992
+CVE-2019-3826

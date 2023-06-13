@@ -23,13 +23,14 @@ import (
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
-	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
-	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -64,6 +65,10 @@ type WatchSetInjector interface {
 	InjectWatchSet(watchSet *watch.Set)
 }
 
+type PubsubInjector interface {
+	InjectPubsubSystem(pubsubSystem *pubsub.System)
+}
+
 // Injectors is a list of adder structs that need injection. We can convert this
 // to an interface once we create controllers for things like data sync.
 var Injectors []Injector
@@ -83,6 +88,7 @@ type Dependencies struct {
 	ExpansionSystem  *expansion.System
 	ProviderCache    *externaldata.ProviderCache
 	WatchSet         *watch.Set
+	PubsubSystem     *pubsub.System
 }
 
 type defaultPodGetter struct {
@@ -170,6 +176,9 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		}
 		if a2, ok := a.(WatchSetInjector); ok {
 			a2.InjectWatchSet(deps.WatchSet)
+		}
+		if a2, ok := a.(PubsubInjector); ok {
+			a2.InjectPubsubSystem(deps.PubsubSystem)
 		}
 		if err := a.Add(m); err != nil {
 			return err

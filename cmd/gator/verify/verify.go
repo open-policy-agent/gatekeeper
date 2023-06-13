@@ -10,27 +10,27 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator/verify"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/verify"
 	"github.com/spf13/cobra"
 )
 
 const (
-	examples = `  # Run all tests in label-tests.yaml
-  gator verify label-tests.yaml
+	examples = `# Run all tests in label-tests.yaml
+gator verify label-tests.yaml
 
-  # Run all tests whose names contain "forbid-labels".
-  gator verify tests/... --run forbid-labels//
+# Run all tests whose names contain "forbid-labels".
+gator verify tests/... --run forbid-labels//
 
-  # Run all cases whose names contain "nginx-deployment".
-  gator verify tests/... --run //nginx-deployment
+# Run all cases whose names contain "nginx-deployment".
+gator verify tests/... --run //nginx-deployment
 
-  # Run all cases whose names exactly match "nginx-deployment".
-  gator verify tests/... --run '//^nginx-deployment$'
+# Run all cases whose names exactly match "nginx-deployment".
+gator verify tests/... --run '//^nginx-deployment$'
 
-  # Run all cases that are either named "forbid-labels" or are
-  # in tests named "forbid-labels".
-  gator verify tests/... --run '^forbid-labels$'`
+# Run all cases that are either named "forbid-labels" or are
+# in tests named "forbid-labels".
+gator verify tests/... --run '^forbid-labels$'`
 )
 
 var (

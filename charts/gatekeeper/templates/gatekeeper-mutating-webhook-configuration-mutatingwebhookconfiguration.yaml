@@ -15,10 +15,14 @@ webhooks:
   - v1
   - v1beta1
   clientConfig:
+    {{- if .Values.mutatingWebhookURL }}
+    url: https://{{ .Values.mutatingWebhookURL }}/v1/mutate
+    {{- else }}
     service:
       name: gatekeeper-webhook-service
       namespace: '{{ .Release.Namespace }}'
       path: /v1/mutate
+    {{- end }}
   failurePolicy: {{ .Values.mutatingWebhookFailurePolicy }}
   matchPolicy: Exact
   name: mutation.gatekeeper.sh

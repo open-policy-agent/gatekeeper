@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ghodss/yaml"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/yaml"
 )
 
 func TestAssignMetaValidation(t *testing.T) {
@@ -97,7 +97,7 @@ spec:
 	}
 	for _, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {
-			handler := validationHandler{webhookHandler: webhookHandler{}}
+			handler := validationHandler{webhookHandler: webhookHandler{}, log: log}
 			b, err := yaml.YAMLToJSON([]byte(tt.AssignMeta))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
@@ -348,7 +348,7 @@ spec:
 	}
 	for _, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {
-			handler := validationHandler{webhookHandler: webhookHandler{}}
+			handler := validationHandler{webhookHandler: webhookHandler{}, log: log}
 			b, err := yaml.YAMLToJSON([]byte(tt.Assign))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)

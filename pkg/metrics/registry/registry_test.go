@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/open-policy-agent/gatekeeper/pkg/metrics/exporters/prometheus"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/prometheus"
 )
 
 // Validates flags parsing for metrics reporters.
