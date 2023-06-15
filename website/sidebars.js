@@ -59,7 +59,8 @@ module.exports = {
       items: [
         'developers',
         'help',
-        'security'
+        'security',
+        'pubsub-driver'
       ],
     }
   ]
