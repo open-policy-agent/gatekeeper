@@ -77,6 +77,18 @@ func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.
 	return nil
 }
 
+func (c *CacheManager) WipeData(ctx context.Context, target interface{}) error {
+	if _, err := c.opa.RemoveData(ctx, target); err != nil {
+		return err
+	}
+
+	// reset sync cache before sending the metric
+	c.syncMetricsCache.ResetCache()
+	c.syncMetricsCache.ReportSync()
+
+	return nil
+}
+
 func (c *CacheManager) ReportSyncMetrics() {
 	c.syncMetricsCache.ReportSync()
 }
