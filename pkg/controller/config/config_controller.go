@@ -30,7 +30,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	syncutil "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cachemanager"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -134,17 +133,23 @@ func newReconciler(mgr manager.Manager, opa syncutil.OpaDataClient, wm *watch.Ma
 	if err != nil {
 		return nil, err
 	}
+
+	waca := &WatchAwareCacheAccuator{
+		registrar:    w,
+		watchedSet:   watchSet,
+		cacheManager: cm,
+	}
+
 	return &ReconcileConfig{
 		reader:          mgr.GetCache(),
 		writer:          mgr.GetClient(),
 		statusClient:    mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		cs:              cs,
-		watcher:         w,
-		watched:         watchSet,
 		cacheManager:    cm,
 		tracker:         tracker,
 		processExcluder: processExcluder,
+		waca:            waca,
 	}, nil
 }
 
@@ -173,17 +178,12 @@ type ReconcileConfig struct {
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	scheme       *runtime.Scheme
-	cacheManager *cm.CacheManager
-	cs           *watch.ControllerSwitch
-	watcher      *watch.Registrar
-
-	watched *watch.Set
-
-	needsReplay     *watch.Set
-	needsWipe       bool
+	scheme          *runtime.Scheme
+	cacheManager    *cm.CacheManager
+	cs              *watch.ControllerSwitch
 	tracker         *readiness.Tracker
 	processExcluder *process.Excluder
+	waca            *WatchAwareCacheAccuator
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -234,18 +234,15 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		}
 	}
 
-	newSyncOnly := watch.NewSet()
-	newExcluder := process.New()
 	var statsEnabled bool
+	gvks := make([]schema.GroupVersionKind, 0)
 	// If the config is being deleted the user is saying they don't want to
 	// sync anything
 	if exists && instance.GetDeletionTimestamp().IsZero() {
 		for _, entry := range instance.Spec.Sync.SyncOnly {
-			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
-			newSyncOnly.Add(gvk)
+			gvks = append(gvks, schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind})
 		}
 
-		newExcluder.Add(instance.Spec.Match)
 		statsEnabled = instance.Spec.Readiness.StatsEnabled
 	}
 
@@ -258,124 +255,11 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		r.tracker.DisableStats()
 	}
 
-	// Remove expectations for resources we no longer watch.
-	diff := r.watched.Difference(newSyncOnly)
-	r.removeStaleExpectations(diff)
-
-	// If the watch set has not changed, we're done here.
-	if r.watched.Equals(newSyncOnly) && r.processExcluder.Equals(newExcluder) {
-		// ...unless we have pending wipe / replay operations from a previous reconcile.
-		if !(r.needsWipe || r.needsReplay != nil) {
-			return reconcile.Result{}, nil
-		}
-
-		// If we reach here, the watch set hasn't changed since last reconcile, but we
-		// have unfinished wipe/replay business from the last change.
-	} else {
-		// The watch set _has_ changed, so recalculate the replay set.
-		r.needsReplay = nil
-		r.needsWipe = true
-	}
-
-	// --- Start watching the new set ---
-
-	// This must happen first - signals to the opa client in the sync controller
-	// to drop events from no-longer-watched resources that may be in its queue.
-	if r.needsReplay == nil {
-		r.needsReplay = r.watched.Intersection(newSyncOnly)
-	}
-
-	// Wipe all data to avoid stale state if needed. Happens once per watch-set-change.
-	if err := r.wipeCacheIfNeeded(ctx); err != nil {
-		return reconcile.Result{}, fmt.Errorf("wiping opa data cache: %w", err)
-	}
-
-	r.watched.Replace(newSyncOnly, func() {
-		// swapping with the new excluder
-		r.cacheManager.ReplaceExcluder(newExcluder)
-
-		// *Note the following steps are not transactional with respect to admission control*
-
-		// Important: dynamic watches update must happen *after* updating our watchSet.
-		// Otherwise, the sync controller will drop events for the newly watched kinds.
-		// Defer error handling so object re-sync happens even if the watch is hard
-		// errored due to a missing GVK in the watch set.
-		err = r.watcher.ReplaceWatch(newSyncOnly.Items())
-	})
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Replay cached data for any resources that were previously watched and still in the watch set.
-	// This is necessary because we wipe their data from Opa above.
-	// TODO(OREN): Improve later by selectively removing subtrees of data instead of a full wipe.
-	if err := r.replayData(ctx); err != nil {
-		return reconcile.Result{}, fmt.Errorf("replaying data: %w", err)
+	if err := r.waca.HandleGVKsToSync(ctx, gvks, instance.Spec.Match, r.tracker, r.reader); err != nil {
+		return reconcile.Result{}, fmt.Errorf("error handling syncOnly update: %w", err)
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func (r *ReconcileConfig) wipeCacheIfNeeded(ctx context.Context) error {
-	if r.needsWipe {
-		if _, err := r.opa.RemoveData(ctx, target.WipeData()); err != nil {
-			return err
-		}
-
-		// reset sync cache before sending the metric
-		r.syncMetricsCache.ResetCache()
-		r.syncMetricsCache.ReportSync()
-
-		r.needsWipe = false
-	}
-	return nil
-}
-
-// replayData replays all watched and cached data into Opa following a config set change.
-// In the future we can rework this to avoid the full opa data cache wipe.
-func (r *ReconcileConfig) replayData(ctx context.Context) error {
-	if r.needsReplay == nil {
-		return nil
-	}
-	for _, gvk := range r.needsReplay.Items() {
-		u := &unstructured.UnstructuredList{}
-		u.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   gvk.Group,
-			Version: gvk.Version,
-			Kind:    gvk.Kind + "List",
-		})
-		err := r.reader.List(ctx, u)
-		if err != nil {
-			return fmt.Errorf("replaying data for %+v: %w", gvk, err)
-		}
-
-		defer r.cacheManager.ReportSyncMetrics()
-
-		for i := range u.Items {
-			if err := r.cacheManager.AddObject(ctx, &u.Items[i]); err != nil {
-				return fmt.Errorf("adding data for %+v: %w", gvk, err)
-			}
-		}
-		r.needsReplay.Remove(gvk)
-	}
-	r.needsReplay = nil
-	return nil
-}
-
-// removeStaleExpectations stops tracking data for any resources that are no longer watched.
-func (r *ReconcileConfig) removeStaleExpectations(stale *watch.Set) {
-	for _, gvk := range stale.Items() {
-		r.tracker.CancelData(gvk)
-	}
-}
-
-func (r *ReconcileConfig) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, error) {
-	isNamespaceExcluded, err := r.processExcluder.IsNamespaceExcluded(process.Sync, obj)
-	if err != nil {
-		return false, err
-	}
-
-	return isNamespaceExcluded, err
 }
 
 func containsString(s string, items []string) bool {
@@ -403,4 +287,114 @@ func hasFinalizer(instance *configv1alpha1.Config) bool {
 
 func removeFinalizer(instance *configv1alpha1.Config) {
 	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
+}
+
+type WatchAwareCacheAccuator struct {
+	registrar      *watch.Registrar
+	watchedSet     *watch.Set
+	needsReplaySet *watch.Set
+	needsWipe      bool
+
+	cacheManager *cm.CacheManager
+}
+
+func (w *WatchAwareCacheAccuator) HandleGVKsToSync(ctx context.Context, gvks []schema.GroupVersionKind, matchers []configv1alpha1.MatchEntry, tracker *readiness.Tracker, reader client.Reader) error {
+	newSyncOnly := watch.NewSet()
+	newExcluder := process.New()
+
+	for _, gvk := range gvks {
+		newSyncOnly.Add(gvk)
+	}
+	newExcluder.Add(matchers)
+
+	// Remove expectations for resources we no longer watch.
+	diff := w.watchedSet.Difference(newSyncOnly)
+	for _, gvk := range diff.Items() {
+		tracker.CancelData(gvk)
+	}
+
+	// If the watch set has not changed, we're done here...
+	if w.watchedSet.Equals(newSyncOnly) {
+		// ...unless we have pending wipe / replay operations from a previous reconcile.
+		if !(w.needsWipe || w.needsReplaySet != nil) {
+			return nil
+		}
+
+		// If we reach here, the watch set hasn't changed since last reconcile, but we
+		// have unfinished wipe/replay business from the last change.
+	} else {
+		// The watch set _has_ changed, so recalculate the replay set.
+		w.needsReplaySet = nil
+		w.needsWipe = true
+	}
+
+	// --- Start watching the new set ---
+
+	// This must happen first - signals to the opa client in the sync controller
+	// to drop events from no-longer-watched resources that may be in its queue.
+	if w.needsReplaySet == nil {
+		w.needsReplaySet = w.watchedSet.Intersection(newSyncOnly)
+	}
+
+	// Wipe all data to avoid stale state if needed. Happens once per watch-set-change.
+	if err := w.cacheManager.WipeData(ctx); err != nil {
+		return fmt.Errorf("wiping opa data cache: %w", err)
+	}
+
+	var err error
+	w.watchedSet.Replace(newSyncOnly, func() {
+		// swapping with the new excluder
+		w.cacheManager.ReplaceExcluder(newExcluder)
+
+		// *Note the following steps are not transactional with respect to admission control*
+
+		// Important: dynamic watches update must happen *after* updating our watchSet.
+		// Otherwise, the sync controller will drop events for the newly watched kinds.
+		// Defer error handling so object re-sync happens even if the watch is hard
+		// errored due to a missing GVK in the watch set.
+		err = w.registrar.ReplaceWatch(newSyncOnly.Items())
+	})
+	if err != nil {
+		return err
+	}
+
+	// Replay cached data for any resources that were previously watched and still in the watch set.
+	// This is necessary because we wipe their data from Opa above.
+	// TODO(OREN): Improve later by selectively removing subtrees of data instead of a full wipe.
+	if err := w.replayData(ctx, reader); err != nil {
+		return fmt.Errorf("replaying data: %w", err)
+	}
+
+	return nil
+}
+
+// replayData replays all watched and cached data into Opa following a config set change.
+// In the future we can rework this to avoid the full opa data cache wipe.
+func (w *WatchAwareCacheAccuator) replayData(ctx context.Context, reader client.Reader) error {
+	if w.needsReplaySet == nil {
+		return nil
+	}
+	for _, gvk := range w.needsReplaySet.Items() {
+		u := &unstructured.UnstructuredList{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   gvk.Group,
+			Version: gvk.Version,
+			Kind:    gvk.Kind + "List",
+		})
+		err := reader.List(ctx, u)
+		if err != nil {
+			return fmt.Errorf("replaying data for %+v: %w", gvk, err)
+		}
+
+		defer w.cacheManager.ReportSyncMetrics()
+
+		for i := range u.Items {
+			if err := w.cacheManager.AddObject(ctx, &u.Items[i]); err != nil {
+				return fmt.Errorf("adding data for %+v: %w", gvk, err)
+			}
+		}
+		w.needsReplaySet.Remove(gvk)
+	}
+	w.needsReplaySet = nil
+	return nil
 }
