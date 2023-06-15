@@ -1,4 +1,4 @@
-package sync
+package syncutil
 
 import (
 	"testing"
@@ -22,7 +22,7 @@ func TestReportSync(t *testing.T) {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
 
-	err = r.reportSync(wantTags, wantValue)
+	err = r.ReportSync(wantTags, wantValue)
 	if err != nil {
 		t.Fatalf("got reportSync() error %v", err)
 	}
@@ -62,12 +62,12 @@ func TestReportSyncLatency(t *testing.T) {
 		t.Fatalf("got newStatsReporter() error %v, want nil", err)
 	}
 
-	err = r.reportSyncDuration(minLatency)
+	err = r.ReportSyncDuration(minLatency)
 	if err != nil {
 		t.Fatalf("got reportSyncDuration() error %v, want nil", err)
 	}
 
-	err = r.reportSyncDuration(maxLatency)
+	err = r.ReportSyncDuration(maxLatency)
 	if err != nil {
 		t.Fatalf("got reportSyncDuration error %v, want nil", err)
 	}
@@ -105,7 +105,7 @@ func TestLastRunSync(t *testing.T) {
 	}
 
 	r.now = fakeNow
-	err = r.reportLastSync()
+	err = r.ReportLastSync()
 	if err != nil {
 		t.Fatalf("got reportLastSync() error %v, want nil", err)
 	}

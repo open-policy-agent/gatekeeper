@@ -429,7 +429,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	opaClient := &fakeOpa{}
+	opaClient := &fakes.FakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
@@ -503,9 +503,9 @@ func TestConfig_CacheContents(t *testing.T) {
 		}
 	}()
 
-	expected := map[opaKey]interface{}{
-		{gvk: nsGVK, key: "default"}:                      nil,
-		{gvk: configMapGVK, key: "default/config-test-1"}: nil,
+	expected := map[fakes.OpaKey]interface{}{
+		{Gvk: nsGVK, Key: "default"}:                      nil,
+		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
 		// kube-system namespace is being excluded, it should not be in opa cache
 	}
 	g.Eventually(func() bool {
@@ -535,20 +535,20 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	// Expect our configMap to return at some point
 	// TODO: In the future it will remain instead of having to repopulate.
-	expected = map[opaKey]interface{}{
+	expected = map[fakes.OpaKey]interface{}{
 		{
-			gvk: configMapGVK,
-			key: "default/config-test-1",
+			Gvk: configMapGVK,
+			Key: "default/config-test-1",
 		}: nil,
 	}
 	g.Eventually(func() bool {
 		return opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "waiting for ConfigMap to repopulate in cache")
 
-	expected = map[opaKey]interface{}{
+	expected = map[fakes.OpaKey]interface{}{
 		{
-			gvk: configMapGVK,
-			key: "kube-system/config-test-2",
+			Gvk: configMapGVK,
+			Key: "kube-system/config-test-2",
 		}: nil,
 	}
 	g.Eventually(func() bool {
@@ -590,7 +590,7 @@ func TestConfig_Retries(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	opaClient := &fakeOpa{}
+	opaClient := &fakes.FakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
@@ -665,8 +665,8 @@ func TestConfig_Retries(t *testing.T) {
 		}
 	}()
 
-	expected := map[opaKey]interface{}{
-		{gvk: configMapGVK, key: "default/config-test-1"}: nil,
+	expected := map[fakes.OpaKey]interface{}{
+		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
 	}
 	g.Eventually(func() bool {
 		return opaClient.Contains(expected)
