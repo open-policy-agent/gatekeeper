@@ -8,6 +8,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -77,8 +78,8 @@ func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.
 	return nil
 }
 
-func (c *CacheManager) WipeData(ctx context.Context, target interface{}) error {
-	if _, err := c.opa.RemoveData(ctx, target); err != nil {
+func (c *CacheManager) WipeData(ctx context.Context) error {
+	if _, err := c.opa.RemoveData(ctx, target.WipeData()); err != nil {
 		return err
 	}
 
