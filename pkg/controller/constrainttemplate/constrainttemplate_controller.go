@@ -441,7 +441,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	// Mark for readiness tracking
 	t := r.tracker.For(gvkConstraintTemplate)
 	t.Observe(unversionedCT)
-	logger.Info("[readiness] observed ConstraintTemplate", "name", unversionedCT.GetName())
 
 	var newCRD *apiextensionsv1.CustomResourceDefinition
 	if currentCRD == nil {
