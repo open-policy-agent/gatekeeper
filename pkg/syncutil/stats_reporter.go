@@ -1,14 +1,19 @@
-package sync
+package syncutil
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("reporter").WithValues("metaKind", "Sync")
 
 const (
 	syncMetricName         = "sync"
@@ -47,6 +52,94 @@ var (
 	}
 )
 
+type MetricsCache struct {
+	mux        sync.RWMutex
+	Cache      map[string]Tags
+	KnownKinds map[string]bool
+}
+
+type Tags struct {
+	Kind   string
+	Status metrics.Status
+}
+
+func NewMetricsCache() *MetricsCache {
+	return &MetricsCache{
+		Cache:      make(map[string]Tags),
+		KnownKinds: make(map[string]bool),
+	}
+}
+
+func GetKeyForSyncMetrics(namespace string, name string) string {
+	return strings.Join([]string{namespace, name}, "/")
+}
+
+// need to know encountered kinds to reset metrics for that kind
+// this is a known memory leak
+// footprint should naturally reset on Pod upgrade b/c the container restarts.
+func (c *MetricsCache) AddKind(key string) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	c.KnownKinds[key] = true
+}
+
+func (c *MetricsCache) ResetCache() {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	c.Cache = make(map[string]Tags)
+}
+
+func (c *MetricsCache) AddObject(key string, t Tags) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	c.Cache[key] = Tags{
+		Kind:   t.Kind,
+		Status: t.Status,
+	}
+}
+
+func (c *MetricsCache) DeleteObject(key string) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	delete(c.Cache, key)
+}
+
+func (c *MetricsCache) ReportSync() {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
+
+	reporter, err := NewStatsReporter()
+	if err != nil {
+		log.Error(err, "failed to initialize reporter")
+		return
+	}
+
+	totals := make(map[Tags]int)
+	for _, v := range c.Cache {
+		totals[v]++
+	}
+
+	for kind := range c.KnownKinds {
+		for _, status := range metrics.AllStatuses {
+			if err := reporter.ReportSync(
+				Tags{
+					Kind:   kind,
+					Status: status,
+				},
+				int64(totals[Tags{
+					Kind:   kind,
+					Status: status,
+				}])); err != nil {
+				log.Error(err, "failed to report sync")
+			}
+		}
+	}
+}
+
 func init() {
 	if err := register(); err != nil {
 		panic(err)
@@ -66,17 +159,17 @@ func NewStatsReporter() (*Reporter, error) {
 	return &Reporter{now: now}, nil
 }
 
-func (r *Reporter) reportSyncDuration(d time.Duration) error {
+func (r *Reporter) ReportSyncDuration(d time.Duration) error {
 	ctx := context.Background()
 	return metrics.Record(ctx, syncDurationM.M(d.Seconds()))
 }
 
-func (r *Reporter) reportLastSync() error {
+func (r *Reporter) ReportLastSync() error {
 	ctx := context.Background()
 	return metrics.Record(ctx, lastRunSyncM.M(r.now()))
 }
 
-func (r *Reporter) reportSync(t Tags, v int64) error {
+func (r *Reporter) ReportSync(t Tags, v int64) error {
 	ctx, err := tag.New(
 		context.Background(),
 		tag.Insert(kindKey, t.Kind),

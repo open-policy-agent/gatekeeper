@@ -22,6 +22,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -250,6 +251,8 @@ func (t *objectTracker) Observe(o runtime.Object) {
 
 	// Track for future expectation.
 	t.seen[k] = struct{}{}
+
+	log.V(logging.DebugLevel).Info("[readiness] observed data", "gvk", o.GetObjectKind().GroupVersionKind())
 }
 
 func (t *objectTracker) Populated() bool {
