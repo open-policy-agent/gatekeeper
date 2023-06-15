@@ -107,7 +107,7 @@ var (
 	certServiceName      = flag.String("cert-service-name", "gatekeeper-webhook-service", "The service name used to generate the TLS cert's hostname. Defaults to gatekeeper-webhook-service")
 	enableTLSHealthcheck = flag.Bool("enable-tls-healthcheck", false, "enable probing webhook API with certificate stored in certDir")
 	disabledBuiltins     = util.NewFlagSet()
-	enableK8sCel         = flag.Bool("prototype-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
+	enableK8sCel         = flag.Bool("experimental-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
 )
 
 func init() {

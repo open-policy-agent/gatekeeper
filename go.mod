@@ -2,6 +2,7 @@ module github.com/open-policy-agent/gatekeeper/v3
 
 go 1.20
 
+// We are forking from commit 116a1b831fffe7ccc3c8145306c3e1a3b1b14ffa (tag: v0.15.0) to enable dynamic informer caching
 replace sigs.k8s.io/controller-runtime => ./third_party/sigs.k8s.io/controller-runtime
 
 require (
