@@ -92,3 +92,7 @@ func (c *CacheManager) WipeData(ctx context.Context, target interface{}) error {
 func (c *CacheManager) ReportSyncMetrics() {
 	c.syncMetricsCache.ReportSync()
 }
+
+func (c *CacheManager) ReplaceExcluder(p *process.Excluder) {
+	c.processExcluder.Replace(p)
+}

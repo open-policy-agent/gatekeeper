@@ -292,7 +292,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 	r.watched.Replace(newSyncOnly, func() {
 		// swapping with the new excluder
-		r.processExcluder.Replace(newExcluder)
+		r.cacheManager.ReplaceExcluder(newExcluder)
 
 		// *Note the following steps are not transactional with respect to admission control*
 
