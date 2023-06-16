@@ -170,7 +170,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	upsertErr := r.system.UpsertTemplate(et)
 	if upsertErr == nil {
-		log.Info("[readiness] observed ExpansionTemplate", "template name", et.GetName())
 		r.getTracker().Observe(versionedET)
 		r.registry.add(request.NamespacedName, metrics.ActiveStatus)
 	} else {

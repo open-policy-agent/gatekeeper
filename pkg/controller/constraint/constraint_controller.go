@@ -424,7 +424,6 @@ func (r *ReconcileConstraint) cacheConstraint(ctx context.Context, instance *uns
 
 	// Track for readiness
 	t.Observe(instance)
-	log.Info("[readiness] observed Constraint", "name", instance.GetName())
 
 	return nil
 }
