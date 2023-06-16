@@ -6,7 +6,11 @@ import "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/re
 
 const (
 	// scope constants.
+
+	// TemplateScope means the stat is associated with a template.
 	TemplateScope = "template"
+	// ConstraintScope means the state is associated with a constraint.
+	ConstraintScope = "constraint"
 
 	// description constants.
 	UnknownDescription = "unknown description"

@@ -17,6 +17,7 @@ package syncutil
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -31,7 +32,7 @@ import (
 // 1. the condition check returns true or an error, or
 // 2. the context is canceled.
 // In case (1) the returned error is what the condition function returned.
-// In all other cases, ErrWaitTimeout is returned.
+// In all other cases, wait.ErrorInterrupted is returned.
 //
 // Adapted from wait.ExponentialBackoff in https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apimachinery/pkg/util/wait/wait.go
 func BackoffWithContext(ctx context.Context, backoff wait.Backoff, condition wait.ConditionFunc) error {
@@ -42,8 +43,8 @@ func BackoffWithContext(ctx context.Context, backoff wait.Backoff, condition wai
 		select {
 		case <-time.After(backoff.Step()):
 		case <-ctx.Done():
-			return wait.ErrWaitTimeout
+			return wait.ErrorInterrupted(errors.New("context canceled during backoff"))
 		}
 	}
-	return wait.ErrWaitTimeout
+	return wait.ErrorInterrupted(errors.New("maximum backoff retries exceeded"))
 }

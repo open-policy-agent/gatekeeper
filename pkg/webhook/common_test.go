@@ -15,13 +15,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 type chanWriter chan string
@@ -31,41 +29,8 @@ func (w chanWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func TestCongifureWebhookServer(t *testing.T) {
-	expectedServer := &webhook.Server{
-		TLSMinVersion: "1.3",
-	}
-
-	if *clientCAName != "" {
-		expectedServer.ClientCAName = *clientCAName
-	}
-
-	tc := []struct {
-		Name           string
-		Server         *webhook.Server
-		ExpectedServer *webhook.Server
-	}{
-		{
-			Name:           "Wbhook server config",
-			Server:         &webhook.Server{},
-			ExpectedServer: expectedServer,
-		},
-	}
-
-	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
-			server := congifureWebhookServer(tt.Server)
-			expectedServer.TLSOpts = server.TLSOpts
-
-			if !reflect.DeepEqual(tt.ExpectedServer, server) {
-				t.Errorf(fmt.Sprintf("got %#v, want %#v", server, tt.ExpectedServer))
-			}
-		})
-	}
-}
-
 func TestTLSConfig(t *testing.T) {
-	ca, caPEM, caPrivKey, err := getCA(*certCNName)
+	ca, caPEM, caPrivKey, err := getCA(*CertCNName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +38,7 @@ func TestTLSConfig(t *testing.T) {
 	certpool := x509.NewCertPool()
 	certpool.AppendCertsFromPEM(caPEM.Bytes())
 
-	serverTLSConf, err := serverCertSetup(*certCNName, ca, caPrivKey, certpool)
+	serverTLSConf, err := serverCertSetup(*CertCNName, ca, caPrivKey, certpool)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +52,7 @@ func TestTLSConfig(t *testing.T) {
 	ts.StartTLS()
 	defer ts.Close()
 
-	goodHTTPClient, err := getClient(*certCNName, ca, caPrivKey, certpool)
+	goodHTTPClient, err := getClient(*CertCNName, ca, caPrivKey, certpool)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +62,7 @@ func TestTLSConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	diffCa, diffCaPEM, diffCaPrivKey, err := getCA(*certCNName)
+	diffCa, diffCaPEM, diffCaPrivKey, err := getCA(*CertCNName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +70,7 @@ func TestTLSConfig(t *testing.T) {
 	diffCertpool := x509.NewCertPool()
 	diffCertpool.AppendCertsFromPEM(diffCaPEM.Bytes())
 
-	diffHTTPClient, err := getClient(*certCNName, diffCa, diffCaPrivKey, diffCertpool)
+	diffHTTPClient, err := getClient(*CertCNName, diffCa, diffCaPrivKey, diffCertpool)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,8 +125,8 @@ func TestTLSConfig(t *testing.T) {
 
 	select {
 	case v := <-errc:
-		if !strings.Contains(v, fmt.Sprintf("x509: subject with cn=test do not identify as %s", *certCNName)) {
-			t.Errorf("expected an error log message containing '%s'; got %q", fmt.Sprintf("x509: subject with cn=test do not identify as %s", *certCNName), v)
+		if !strings.Contains(v, fmt.Sprintf("x509: subject with cn=test do not identify as %s", *CertCNName)) {
+			t.Errorf("expected an error log message containing '%s'; got %q", fmt.Sprintf("x509: subject with cn=test do not identify as %s", *CertCNName), v)
 		}
 	case <-time.After(5 * time.Second):
 		t.Errorf("timeout waiting for logged error")
@@ -269,7 +234,7 @@ func serverCertSetup(s string, ca *x509.Certificate, caPrivKey *rsa.PrivateKey, 
 
 	serverTLSConf = &tls.Config{
 		Certificates:     []tls.Certificate{serverCert},
-		VerifyConnection: getCertNameVerifier(),
+		VerifyConnection: GetCertNameVerifier(),
 		ClientCAs:        certPool,
 		ClientAuth:       tls.RequireAndVerifyClientCert,
 		MinVersion:       tls.VersionTLS13,
