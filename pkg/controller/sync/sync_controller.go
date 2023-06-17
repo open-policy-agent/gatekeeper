@@ -20,11 +20,17 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,6 +49,35 @@ var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 type Adder struct {
 	CacheManager *cm.CacheManager
 	Events       <-chan event.GenericEvent
+}
+
+// InjectControllerSwitch implements controller.Injector.
+func (*Adder) InjectControllerSwitch(*watch.ControllerSwitch) {}
+
+// InjectExpansionSystem implements controller.Injector.
+func (*Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
+
+// InjectMutationSystem implements controller.Injector.
+func (*Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
+
+// InjectOpa implements controller.Injector.
+func (*Adder) InjectOpa(*constraintclient.Client) {}
+
+// InjectProviderCache implements controller.Injector.
+func (*Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
+
+// InjectTracker implements controller.Injector.
+func (*Adder) InjectTracker(tracker *readiness.Tracker) {}
+
+// InjectWatchManager implements controller.Injector.
+func (*Adder) InjectWatchManager(*watch.Manager) {}
+
+func (a *Adder) InjectEventsCh(events chan event.GenericEvent) {
+	a.Events = events
+}
+
+func (a *Adder) InjectCacheManager(cm *cm.CacheManager) {
+	a.CacheManager = cm
 }
 
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller

@@ -27,8 +27,11 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
+	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -36,6 +39,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/open-policy-agent/gatekeeper/v3/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -146,13 +150,20 @@ func TestReconcile(t *testing.T) {
 	processExcluder.Add(instance.Spec.Match)
 	events := make(chan event.GenericEvent, 1024)
 	watchSet := watch.NewSet()
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cm := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+
+	rec, err := newReconciler(mgr, cm, wm, cs, tracker, processExcluder, events, watchSet, events)
+	require.NoError(t, err)
 
 	recFn, requests := SetupTestReconcile(rec)
 	err = add(mgr, recFn)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	syncAdder := syncc.Adder{CacheManager: cm, Events: events}
+	require.NoError(t, syncAdder.Add(mgr))
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	testutils.StartManager(ctx, t, mgr)
@@ -395,15 +406,27 @@ func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.
 	// ControllerSwitch will be used to disable controllers during our teardown process,
 	// avoiding conflicts in finalizer cleanup.
 	cs := watch.NewSwitch()
-
 	processExcluder := process.Get()
-
 	watchSet := watch.NewSet()
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, nil)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cm := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+
+	rec, err := newReconciler(mgr, cm, wm, cs, tracker, processExcluder, events, watchSet, nil)
+	if err != nil {
+		return fmt.Errorf("error creating reconciler: %w", err)
+	}
+
 	err = add(mgr, rec)
 	if err != nil {
 		return fmt.Errorf("adding reconciler to manager: %w", err)
 	}
+
+	syncAdder := syncc.Adder{CacheManager: cm, Events: events}
+	err = syncAdder.Add(mgr)
+	if err != nil {
+		return fmt.Errorf("adding sync controller to manager: %w", err)
+	}
+
 	return nil
 }
 
@@ -440,11 +463,19 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	events := make(chan event.GenericEvent, 1024)
 	watchSet := watch.NewSet()
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cacheManager := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+
+	rec, err := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, events, watchSet, events)
+	require.NoError(t, err)
+
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	syncAdder := syncc.Adder{CacheManager: cacheManager, Events: events}
+	require.NoError(t, syncAdder.Add(mgr))
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	testutils.StartManager(ctx, t, mgr)
@@ -601,11 +632,19 @@ func TestConfig_Retries(t *testing.T) {
 
 	events := make(chan event.GenericEvent, 1024)
 	watchSet := watch.NewSet()
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cacheManager := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+
+	rec, err := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, events, watchSet, events)
+	require.NoError(t, err)
+
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	syncAdder := syncc.Adder{CacheManager: cacheManager, Events: events}
+	require.NoError(t, syncAdder.Add(mgr))
 
 	// Use our special hookReader to inject controlled failures
 	failPlease := make(chan string, 1)

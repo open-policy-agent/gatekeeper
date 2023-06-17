@@ -29,6 +29,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
+	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -67,6 +70,14 @@ type WatchSetInjector interface {
 
 type PubsubInjector interface {
 	InjectPubsubSystem(pubsubSystem *pubsub.System)
+}
+
+type EventsChInjector interface {
+	InjectEventsCh(events chan event.GenericEvent)
+}
+
+type CacheManagerInjector interface {
+	InjectCacheManager(cm *cm.CacheManager)
 }
 
 // Injectors is a list of adder structs that need injection. We can convert this
@@ -160,6 +171,13 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		}
 		deps.GetPod = fakePodGetter
 	}
+	// Events will be used to receive events from dynamic watches registered
+	// in registrar with the watch set below.
+	events := make(chan event.GenericEvent, 1024)
+	filteredOpa := syncutil.NewFilteredOpaDataClient(deps.Opa, deps.WatchSet)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cm := cm.NewCacheManager(filteredOpa, syncMetricsCache, deps.Tracker, deps.ProcessExcluder)
+
 	for _, a := range Injectors {
 		a.InjectOpa(deps.Opa)
 		a.InjectWatchManager(deps.WatchManger)
@@ -180,6 +198,15 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		if a2, ok := a.(PubsubInjector); ok {
 			a2.InjectPubsubSystem(deps.PubsubSystem)
 		}
+		if a2, ok := a.(EventsChInjector); ok {
+			// this is used by the config controller to sync
+			a2.InjectEventsCh(events)
+		}
+		if a2, ok := a.(CacheManagerInjector); ok {
+			// this is used by the config controller to sync
+			a2.InjectCacheManager(cm)
+		}
+
 		if err := a.Add(m); err != nil {
 			return err
 		}
