@@ -7,6 +7,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/expand"
@@ -32,16 +33,24 @@ type Opts struct {
 	// Driver specific options
 	IncludeTrace bool
 	GatherStats  bool
+	UseK8sCEL    bool
 }
 
 func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error) {
-	// create the client
+	args := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
+	k8sDriver, err := k8scel.New()
+	if err != nil {
+		return nil, fmt.Errorf("creating K8s native driver: %w", err)
+	}
+	args = append(args, constraintclient.Driver(k8sDriver))
+
 	driver, err := makeRegoDriver(tOpts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating Rego driver: %w", err)
 	}
+	args = append(args, constraintclient.Driver(driver))
 
-	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	client, err := constraintclient.NewClient(args...)
 	if err != nil {
 		return nil, fmt.Errorf("creating OPA client: %w", err)
 	}

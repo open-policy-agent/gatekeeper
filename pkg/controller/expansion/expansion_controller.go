@@ -125,7 +125,7 @@ func add(mgr manager.Manager, r *Reconciler) error {
 
 	// Watch for changes to ExpansionTemplates
 	return c.Watch(
-		&source.Kind{Type: &expansionv1alpha1.ExpansionTemplate{}},
+		source.Kind(mgr.GetCache(), &expansionv1alpha1.ExpansionTemplate{}),
 		&handler.EnqueueRequestForObject{})
 }
 

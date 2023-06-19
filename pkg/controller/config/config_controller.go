@@ -159,7 +159,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to Config
-	err = c.Watch(&source.Kind{Type: &configv1alpha1.Config{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &configv1alpha1.Config{}), &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -303,7 +303,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		// Otherwise, the sync controller will drop events for the newly watched kinds.
 		// Defer error handling so object re-sync happens even if the watch is hard
 		// errored due to a missing GVK in the watch set.
-		err = r.watcher.ReplaceWatch(newSyncOnly.Items())
+		err = r.watcher.ReplaceWatch(ctx, newSyncOnly.Items())
 	})
 	if err != nil {
 		return reconcile.Result{}, err
