@@ -297,7 +297,9 @@ func (w *WatchAwareCacheAccuator) HandleGVKsToSync(ctx context.Context, gvks []s
 	for _, gvk := range gvks {
 		newSyncOnly.Add(gvk)
 	}
-	newExcluder.Add(matchers)
+	if matchers != nil {
+		newExcluder.Add(matchers)
+	}
 
 	// Remove expectations for resources we no longer watch.
 	diff := w.WatchedSet.Difference(newSyncOnly)
@@ -335,8 +337,10 @@ func (w *WatchAwareCacheAccuator) HandleGVKsToSync(ctx context.Context, gvks []s
 
 	var err error
 	w.WatchedSet.Replace(newSyncOnly, func() {
-		// swapping with the new excluder
-		w.CacheManager.ReplaceExcluder(newExcluder)
+		if matchers != nil {
+			// swapping with the new excluder
+			w.CacheManager.ReplaceExcluder(newExcluder)
+		}
 
 		// *Note the following steps are not transactional with respect to admission control*
 
