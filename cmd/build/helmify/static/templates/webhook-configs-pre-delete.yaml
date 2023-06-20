@@ -49,7 +49,7 @@ spec:
             - mutatingwebhookconfiguration/{{ .Values.mutatingWebhookName }}
             {{- end }}
           resources:
-            {{- toYaml .Values.preUninstall.resources | nindent 10 }}
+            {{- toYaml .Values.preUninstall.resources | nindent 12 }}
           securityContext:
             {{- if .Values.enableRuntimeDefaultSeccompProfile }}
             seccompProfile:
