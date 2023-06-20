@@ -1,0 +1,36 @@
+# To get started with Dependabot version updates, you'll need to specify which
+# package ecosystems to update and where the package manifests are located.
+# Please see the documentation for all configuration options:
+# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+
+version: 2
+updates:
+
+  # Maintain dependencies for GitHub Actions
+  - package-ecosystem: "github-actions"
+    # Workflow files stored in the
+    # default location of `.github/workflows`
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: ":seedling:"
+    labels:
+      - "ok-to-test"
+
+  # Maintain dependencies for go
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: ":seedling:"
+    # Ignore K8 packages as these are done manually
+    ignore:
+      - dependency-name: "k8s.io/api"
+      - dependency-name: "k8s.io/apiextensions-apiserver"
+      - dependency-name: "k8s.io/apimachinery"
+      - dependency-name: "k8s.io/client-go"
+      - dependency-name: "k8s.io/component-base"
+    labels:
+      - "ok-to-test"
