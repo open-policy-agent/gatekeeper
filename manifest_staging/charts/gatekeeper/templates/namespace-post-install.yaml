@@ -31,6 +31,9 @@ spec:
         release: '{{ .Release.Name }}'
     spec:
       restartPolicy: OnFailure
+      {{- if .Values.postInstall.labelNamespace.priorityClassName }}
+      priorityClassName: {{ .Values.postInstall.labelNamespace.priorityClassName }}
+      {{- end }}
       {{- if .Values.postInstall.labelNamespace.image.pullSecrets }}
       imagePullSecrets:
       {{- .Values.postInstall.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}

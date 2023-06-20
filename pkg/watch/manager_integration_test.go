@@ -30,14 +30,12 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
-	"github.com/open-policy-agent/gatekeeper/v3/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -62,11 +60,8 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
-		NewCache:           dynamiccache.New,
-		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c)
-		},
-		Logger: testutils.NewLogger(t),
+		MapperProvider:     apiutil.NewDynamicRESTMapper,
+		Logger:             testutils.NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -121,7 +116,7 @@ func TestRegistrar_AddUnknown(t *testing.T) {
 		t.Fatalf("creating registrar: %v", err)
 	}
 
-	err = r.AddWatch(schema.GroupVersionKind{
+	err = r.AddWatch(ctx, schema.GroupVersionKind{
 		Group:   "i",
 		Version: "donot",
 		Kind:    "exist",
@@ -197,7 +192,7 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 	// Setup another watch. Show that both the error resource (in a backoff-requeue loop)
 	// and other resources can reconcile in an interleaving fashion.
 	err = c.Watch(
-		&source.Kind{Type: &corev1.Namespace{}},
+		source.Kind(mgr.GetCache(), &corev1.Namespace{}),
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
@@ -273,7 +268,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 		t.Fatalf("applying CRD: %v", err)
 	}
 
-	err = r.AddWatch(gvk)
+	err = r.AddWatch(ctx, gvk)
 	if err != nil {
 		t.Fatalf("adding watch: %v", err)
 	}
@@ -371,7 +366,7 @@ func Test_Registrar_Replay(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = r.AddWatch(gvk)
+		err = r.AddWatch(ctx, gvk)
 		if err != nil {
 			t.Fatal(err)
 		}

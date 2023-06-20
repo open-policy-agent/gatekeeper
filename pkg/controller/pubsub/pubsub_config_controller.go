@@ -85,7 +85,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	return c.Watch(
-		&source.Kind{Type: &corev1.ConfigMap{}},
+		source.Kind(mgr.GetCache(), &corev1.ConfigMap{}),
 		&handler.EnqueueRequestForObject{},
 		predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
