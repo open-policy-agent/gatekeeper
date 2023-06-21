@@ -30,7 +30,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	syncutil "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cachemanager"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -318,15 +317,9 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 func (r *ReconcileConfig) wipeCacheIfNeeded(ctx context.Context) error {
 	if r.needsWipe {
-		if _, err := r.opa.RemoveData(ctx, target.WipeData()); err != nil {
+		if err := r.cacheManager.WipeData(ctx); err != nil {
 			return err
 		}
-
-		// reset sync cache before sending the metric
-		r.syncMetricsCache.ResetCache()
-		r.syncMetricsCache.ReportSync()
-
-		r.needsWipe = false
 	}
 	return nil
 }
