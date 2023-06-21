@@ -12,6 +12,13 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+type CacheManagerConfig struct {
+	Opa              syncutil.OpaDataClient
+	SyncMetricsCache *syncutil.MetricsCache
+	Tracker          *readiness.Tracker
+	ProcessExcluder  *process.Excluder
+}
+
 type CacheManager struct {
 	opa              syncutil.OpaDataClient
 	syncMetricsCache *syncutil.MetricsCache
@@ -19,12 +26,12 @@ type CacheManager struct {
 	processExcluder  *process.Excluder
 }
 
-func NewCacheManager(opa syncutil.OpaDataClient, syncMetricsCache *syncutil.MetricsCache, tracker *readiness.Tracker, processExcluder *process.Excluder) *CacheManager {
+func NewCacheManager(config *CacheManagerConfig) *CacheManager {
 	return &CacheManager{
-		opa:              opa,
-		syncMetricsCache: syncMetricsCache,
-		tracker:          tracker,
-		processExcluder:  processExcluder,
+		opa:              config.Opa,
+		syncMetricsCache: config.SyncMetricsCache,
+		tracker:          config.Tracker,
+		processExcluder:  config.ProcessExcluder,
 	}
 }
 

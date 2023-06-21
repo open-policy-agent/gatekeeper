@@ -169,7 +169,7 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 
 	filteredOpa := syncutil.NewFilteredOpaDataClient(deps.Opa, deps.WatchSet)
 	syncMetricsCache := syncutil.NewMetricsCache()
-	cm := cm.NewCacheManager(filteredOpa, syncMetricsCache, deps.Tracker, deps.ProcessExcluder)
+	cm := cm.NewCacheManager(&cm.CacheManagerConfig{Opa: filteredOpa, SyncMetricsCache: syncMetricsCache, Tracker: deps.Tracker, ProcessExcluder: deps.ProcessExcluder})
 
 	for _, a := range Injectors {
 		a.InjectOpa(deps.Opa)

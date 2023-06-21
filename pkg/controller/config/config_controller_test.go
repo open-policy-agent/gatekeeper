@@ -143,7 +143,7 @@ func TestReconcile(t *testing.T) {
 	events := make(chan event.GenericEvent, 1024)
 	watchSet := watch.NewSet()
 	syncMetricsCache := syncutil.NewMetricsCache()
-	cacheManager := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+	cacheManager := cm.NewCacheManager(&cm.CacheManagerConfig{Opa: opaClient, SyncMetricsCache: syncMetricsCache, Tracker: tracker, ProcessExcluder: processExcluder})
 	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, events, watchSet, events)
 
 	recFn, requests := SetupTestReconcile(rec)
@@ -396,7 +396,7 @@ func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.
 	processExcluder := process.Get()
 	watchSet := watch.NewSet()
 	syncMetricsCache := syncutil.NewMetricsCache()
-	cacheManager := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+	cacheManager := cm.NewCacheManager(&cm.CacheManagerConfig{Opa: opaClient, SyncMetricsCache: syncMetricsCache, Tracker: tracker, ProcessExcluder: processExcluder})
 
 	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, events, watchSet, nil)
 	err = add(mgr, rec)
@@ -440,7 +440,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	events := make(chan event.GenericEvent, 1024)
 	watchSet := watch.NewSet()
 	syncMetricsCache := syncutil.NewMetricsCache()
-	cacheManager := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+	cacheManager := cm.NewCacheManager(&cm.CacheManagerConfig{Opa: opaClient, SyncMetricsCache: syncMetricsCache, Tracker: tracker, ProcessExcluder: processExcluder})
 
 	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, events, watchSet, events)
 	err = add(mgr, rec)
@@ -604,7 +604,7 @@ func TestConfig_Retries(t *testing.T) {
 	events := make(chan event.GenericEvent, 1024)
 	watchSet := watch.NewSet()
 	syncMetricsCache := syncutil.NewMetricsCache()
-	cacheManager := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+	cacheManager := cm.NewCacheManager(&cm.CacheManagerConfig{Opa: opaClient, SyncMetricsCache: syncMetricsCache, Tracker: tracker, ProcessExcluder: processExcluder})
 
 	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, events, watchSet, events)
 	err = add(mgr, rec)

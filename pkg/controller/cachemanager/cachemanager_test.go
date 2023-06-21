@@ -33,7 +33,7 @@ func TestCacheManager_AddObject_RemoveObject(t *testing.T) {
 	assert.NoError(t, err)
 
 	processExcluder := process.Get()
-	cm := NewCacheManager(opaClient, syncutil.NewMetricsCache(), tracker, processExcluder)
+	cm := NewCacheManager(&CacheManagerConfig{opaClient, syncutil.NewMetricsCache(), tracker, processExcluder})
 	ctx := context.Background()
 
 	pod := fakes.Pod(
@@ -70,7 +70,7 @@ func TestCacheManager_processExclusion(t *testing.T) {
 		},
 	})
 
-	cm := NewCacheManager(opaClient, syncutil.NewMetricsCache(), tracker, processExcluder)
+	cm := NewCacheManager(&CacheManagerConfig{opaClient, syncutil.NewMetricsCache(), tracker, processExcluder})
 	ctx := context.Background()
 
 	pod := fakes.Pod(
@@ -95,7 +95,7 @@ func TestCacheManager_errors(t *testing.T) {
 	assert.NoError(t, err)
 
 	processExcluder := process.Get()
-	cm := NewCacheManager(opaClient, syncutil.NewMetricsCache(), tracker, processExcluder)
+	cm := NewCacheManager(&CacheManagerConfig{opaClient, syncutil.NewMetricsCache(), tracker, processExcluder})
 	ctx := context.Background()
 
 	pod := fakes.Pod(
