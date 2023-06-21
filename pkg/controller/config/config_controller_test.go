@@ -29,6 +29,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
+	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
@@ -140,7 +142,9 @@ func TestReconcile(t *testing.T) {
 	processExcluder.Add(instance.Spec.Match)
 	events := make(chan event.GenericEvent, 1024)
 	watchSet := watch.NewSet()
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cacheManager := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, events, watchSet, events)
 
 	recFn, requests := SetupTestReconcile(rec)
 	err = add(mgr, recFn)
@@ -389,11 +393,12 @@ func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.
 	// ControllerSwitch will be used to disable controllers during our teardown process,
 	// avoiding conflicts in finalizer cleanup.
 	cs := watch.NewSwitch()
-
 	processExcluder := process.Get()
-
 	watchSet := watch.NewSet()
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, nil)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cacheManager := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+
+	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, events, watchSet, nil)
 	err = add(mgr, rec)
 	if err != nil {
 		return fmt.Errorf("adding reconciler to manager: %w", err)
@@ -434,7 +439,10 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	events := make(chan event.GenericEvent, 1024)
 	watchSet := watch.NewSet()
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cacheManager := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+
+	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, events, watchSet, events)
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)
@@ -595,7 +603,10 @@ func TestConfig_Retries(t *testing.T) {
 
 	events := make(chan event.GenericEvent, 1024)
 	watchSet := watch.NewSet()
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cacheManager := cm.NewCacheManager(opaClient, syncMetricsCache, tracker, processExcluder)
+
+	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, events, watchSet, events)
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)

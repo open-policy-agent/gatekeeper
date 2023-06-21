@@ -28,7 +28,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
-	syncutil "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -59,6 +58,7 @@ type Adder struct {
 	Tracker          *readiness.Tracker
 	ProcessExcluder  *process.Excluder
 	WatchSet         *watch.Set
+	CacheManager     *cm.CacheManager
 }
 
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -67,7 +67,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	// Events will be used to receive events from dynamic watches registered
 	// via the registrar below.
 	events := make(chan event.GenericEvent, 1024)
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker, a.ProcessExcluder, events, a.WatchSet, events)
+	r, err := newReconciler(mgr, a.CacheManager, a.WatchManager, a.ControllerSwitch, a.Tracker, a.ProcessExcluder, events, a.WatchSet, events)
 	if err != nil {
 		return err
 	}
@@ -105,15 +105,15 @@ func (a *Adder) InjectWatchSet(watchSet *watch.Set) {
 	a.WatchSet = watchSet
 }
 
+func (a *Adder) InjectCacheManager(cm *cm.CacheManager) {
+	a.CacheManager = cm
+}
+
 // newReconciler returns a new reconcile.Reconciler
 // events is the channel from which sync controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // events and regEvents point to same event channel except for testing.
-func newReconciler(mgr manager.Manager, opa syncutil.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, watchSet *watch.Set, regEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
-	filteredOpa := syncutil.NewFilteredOpaDataClient(opa, watchSet)
-	syncMetricsCache := syncutil.NewMetricsCache()
-	cm := cm.NewCacheManager(filteredOpa, syncMetricsCache, tracker, processExcluder)
-
+func newReconciler(mgr manager.Manager, cm *cm.CacheManager, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, watchSet *watch.Set, regEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
 	syncAdder := syncc.Adder{
 		Events:       events,
 		CacheManager: cm,
