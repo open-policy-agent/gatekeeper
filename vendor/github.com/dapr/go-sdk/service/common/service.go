@@ -38,7 +38,10 @@ type Service interface {
 	// AddBindingInvocationHandler appends provided binding invocation handler with its name to the service.
 	AddBindingInvocationHandler(name string, fn BindingInvocationHandler) error
 	// RegisterActorImplFactory Register a new actor to actor runtime of go sdk
+	// Deprecated: use RegisterActorImplFactoryContext instead
 	RegisterActorImplFactory(f actor.Factory, opts ...config.Option)
+	// RegisterActorImplFactoryContext Register a new actor to actor runtime of go sdk
+	RegisterActorImplFactoryContext(f actor.FactoryContext, opts ...config.Option)
 	// Start starts service.
 	Start() error
 	// Stop stops the previously started service.

@@ -15,8 +15,8 @@ package client
 
 import (
 	"context"
-
-	"github.com/pkg/errors"
+	"errors"
+	"fmt"
 
 	pb "github.com/dapr/go-sdk/dapr/proto/runtime/v1"
 )
@@ -24,10 +24,10 @@ import (
 // GetSecret retrieves preconfigured secret from specified store using key.
 func (c *GRPCClient) GetSecret(ctx context.Context, storeName, key string, meta map[string]string) (data map[string]string, err error) {
 	if storeName == "" {
-		return nil, errors.New("nil storeName")
+		return nil, errors.New("empty storeName")
 	}
 	if key == "" {
-		return nil, errors.New("nil key")
+		return nil, errors.New("empty key")
 	}
 
 	req := &pb.GetSecretRequest{
@@ -38,7 +38,7 @@ func (c *GRPCClient) GetSecret(ctx context.Context, storeName, key string, meta 
 
 	resp, err := c.protoClient.GetSecret(c.withAuthToken(ctx), req)
 	if err != nil {
-		return nil, errors.Wrap(err, "error invoking service")
+		return nil, fmt.Errorf("error invoking service: %w", err)
 	}
 
 	if resp != nil {
@@ -51,7 +51,7 @@ func (c *GRPCClient) GetSecret(ctx context.Context, storeName, key string, meta 
 // GetBulkSecret retrieves all preconfigured secrets for this application.
 func (c *GRPCClient) GetBulkSecret(ctx context.Context, storeName string, meta map[string]string) (data map[string]map[string]string, err error) {
 	if storeName == "" {
-		return nil, errors.New("nil storeName")
+		return nil, errors.New("empty storeName")
 	}
 
 	req := &pb.GetBulkSecretRequest{
@@ -61,7 +61,7 @@ func (c *GRPCClient) GetBulkSecret(ctx context.Context, storeName string, meta m
 
 	resp, err := c.protoClient.GetBulkSecret(c.withAuthToken(ctx), req)
 	if err != nil {
-		return nil, errors.Wrap(err, "error invoking service")
+		return nil, fmt.Errorf("error invoking service: %w", err)
 	}
 
 	if resp != nil {

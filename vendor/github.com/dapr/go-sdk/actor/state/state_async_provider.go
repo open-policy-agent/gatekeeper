@@ -15,8 +15,7 @@ package state
 
 import (
 	"context"
-
-	"github.com/pkg/errors"
+	"fmt"
 
 	"github.com/dapr/go-sdk/actor/codec"
 	"github.com/dapr/go-sdk/actor/codec/constant"
@@ -28,8 +27,13 @@ type DaprStateAsyncProvider struct {
 	stateSerializer codec.Codec
 }
 
+// Deprecated: use ContainsContext instead.
 func (d *DaprStateAsyncProvider) Contains(actorType string, actorID string, stateName string) (bool, error) {
-	result, err := d.daprClient.GetActorState(context.Background(), &client.GetActorStateRequest{
+	return d.ContainsContext(context.Background(), actorType, actorID, stateName)
+}
+
+func (d *DaprStateAsyncProvider) ContainsContext(ctx context.Context, actorType string, actorID string, stateName string) (bool, error) {
+	result, err := d.daprClient.GetActorState(ctx, &client.GetActorStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		KeyName:   stateName,
@@ -40,25 +44,35 @@ func (d *DaprStateAsyncProvider) Contains(actorType string, actorID string, stat
 	return len(result.Data) > 0, err
 }
 
+// Deprecated: use LoadContext instead.
 func (d *DaprStateAsyncProvider) Load(actorType, actorID, stateName string, reply interface{}) error {
-	result, err := d.daprClient.GetActorState(context.Background(), &client.GetActorStateRequest{
+	return d.LoadContext(context.Background(), actorType, actorID, stateName, reply)
+}
+
+func (d *DaprStateAsyncProvider) LoadContext(ctx context.Context, actorType, actorID, stateName string, reply interface{}) error {
+	result, err := d.daprClient.GetActorState(ctx, &client.GetActorStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		KeyName:   stateName,
 	})
 	if err != nil {
-		return errors.Errorf("get actor state error = %s", err.Error())
+		return fmt.Errorf("get actor state error = %w", err)
 	}
 	if len(result.Data) == 0 {
-		return errors.Errorf("get actor state result empty, with actorType: %s, actorID: %s, stateName %s", actorType, actorID, stateName)
+		return fmt.Errorf("get actor state result empty, with actorType: %s, actorID: %s, stateName %s", actorType, actorID, stateName)
 	}
 	if err := d.stateSerializer.Unmarshal(result.Data, reply); err != nil {
-		return errors.Errorf("unmarshal state data error = %s", err.Error())
+		return fmt.Errorf("unmarshal state data error = %w", err)
 	}
 	return nil
 }
 
+// Deprecated: use ApplyContext instead.
 func (d *DaprStateAsyncProvider) Apply(actorType, actorID string, changes []*ActorStateChange) error {
+	return d.ApplyContext(context.Background(), actorType, actorID, changes)
+}
+
+func (d *DaprStateAsyncProvider) ApplyContext(ctx context.Context, actorType, actorID string, changes []*ActorStateChange) error {
 	if len(changes) == 0 {
 		return nil
 	}
@@ -86,6 +100,7 @@ func (d *DaprStateAsyncProvider) Apply(actorType, actorID string, changes []*Act
 			OperationType: daprOperationName,
 			Key:           stateChange.stateName,
 			Value:         value,
+			TTLInSeconds:  stateChange.ttlInSeconds,
 		})
 	}
 
@@ -93,7 +108,7 @@ func (d *DaprStateAsyncProvider) Apply(actorType, actorID string, changes []*Act
 		return nil
 	}
 
-	return d.daprClient.SaveStateTransactionally(context.Background(), actorType, actorID, operations)
+	return d.daprClient.SaveStateTransactionally(ctx, actorType, actorID, operations)
 }
 
 // TODO(@laurence) the daprClient may be nil.
