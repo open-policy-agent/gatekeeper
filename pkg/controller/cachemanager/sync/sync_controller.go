@@ -172,13 +172,10 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		logging.ResourceName, instance.GetName(),
 	)
 
+	reportMetrics = true
 	if err := r.cm.AddObject(ctx, instance); err != nil {
-		reportMetrics = true
-
 		return reconcile.Result{}, err
 	}
-
-	reportMetrics = true
 
 	return reconcile.Result{}, nil
 }

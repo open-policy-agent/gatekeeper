@@ -46,7 +46,7 @@ func (b *GVKAgreggator) IsPresent(gvk schema.GroupVersionKind) bool {
 	return found
 }
 
-// Remove deletes the any associations that Key k has in the GVKAggregator.
+// Remove deletes any associations that Key k has in the GVKAggregator.
 // For any GVK in the association k --> [GVKs], we also delete any associations
 // between the GVK and the Key k stored in the reverse map.
 func (b *GVKAgreggator) Remove(k Key) error {
@@ -97,6 +97,35 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 
 	return nil
 }
+
+// List returnes the gvk set for a given Key.
+func (b *GVKAgreggator) List(k Key) map[schema.GroupVersionKind]struct{} {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	gvks, _ := b.store[k]
+	return gvks
+}
+
+func (b *GVKAgreggator) ListAllGVKs() []schema.GroupVersionKind {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	allGVKs := []schema.GroupVersionKind{}
+	for gvk := range b.reverseStore {
+		allGVKs = append(allGVKs, gvk)
+	}
+	return allGVKs
+}
+
+func (b *GVKAgreggator) Clear() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.store =       make(map[Key]map[schema.GroupVersionKind]struct{})
+		b.reverseStore = make(map[schema.GroupVersionKind]map[Key]struct{})
+}
+
 
 func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struct{}, k Key) error {
 	for gvk := range gvks {
