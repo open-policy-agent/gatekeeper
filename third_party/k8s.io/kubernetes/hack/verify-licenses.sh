@@ -74,7 +74,12 @@ do
 	then
 		if [[ "${LICENSE_URL}" == 'Unknown' ]];
 		then
-			if  [[ "${GO_PACKAGE}" != k8s.io/* ]];
+            if [[ "${GO_PACKAGE}" == "sigs.k8s.io/controller-runtime" ]] && [[ "${LICENSE_NAME}" == "Apache-2.0" ]];
+            then
+                # temporary for our latest fork changes
+                LICENSE_URL='https://github.com/kubernetes-sigs/controller-runtime'
+                echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses.dump
+            elif  [[ "${GO_PACKAGE}" != k8s.io/* ]];
 			then
 				echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses_with_missing_urls.dump
 				packages_url_missing+=("${GO_PACKAGE}")
