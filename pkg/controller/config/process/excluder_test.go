@@ -3,19 +3,19 @@ package process
 import (
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 )
 
 func TestExactOrWildcardMatch(t *testing.T) {
 	tcs := []struct {
 		name     string
-		nsMap    map[util.Wildcard]bool
+		nsMap    map[wildcard.Wildcard]bool
 		ns       string
 		excluded bool
 	}{
 		{
 			name: "exact text match",
-			nsMap: map[util.Wildcard]bool{
+			nsMap: map[wildcard.Wildcard]bool{
 				"kube-system": true,
 				"foobar":      true,
 			},
@@ -24,7 +24,7 @@ func TestExactOrWildcardMatch(t *testing.T) {
 		},
 		{
 			name: "wildcard prefix match",
-			nsMap: map[util.Wildcard]bool{
+			nsMap: map[wildcard.Wildcard]bool{
 				"kube-*": true,
 				"foobar": true,
 			},
@@ -33,7 +33,7 @@ func TestExactOrWildcardMatch(t *testing.T) {
 		},
 		{
 			name: "wildcard suffix match",
-			nsMap: map[util.Wildcard]bool{
+			nsMap: map[wildcard.Wildcard]bool{
 				"*-system": true,
 				"foobar":   true,
 			},
@@ -42,7 +42,7 @@ func TestExactOrWildcardMatch(t *testing.T) {
 		},
 		{
 			name: "lack of asterisk prevents globbing",
-			nsMap: map[util.Wildcard]bool{
+			nsMap: map[wildcard.Wildcard]bool{
 				"kube-": true,
 			},
 			ns:       "kube-system",

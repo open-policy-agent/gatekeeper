@@ -15,7 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclients "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -347,7 +347,7 @@ func TestReviewDefaultNS(t *testing.T) {
 		Spec: v1alpha1.ConfigSpec{
 			Match: []v1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []util.Wildcard{"default"},
+					ExcludedNamespaces: []wildcard.Wildcard{"default"},
 					Processes:          []string{"*"},
 				},
 			},
