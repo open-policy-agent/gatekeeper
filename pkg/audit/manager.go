@@ -253,7 +253,7 @@ func (am *Manager) audit(ctx context.Context) error {
 
 		err := am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 		if errs != nil {
-			return err
+			am.log.Error(err, "Auditing")
 		}
 	} else {
 		am.log.Info("Auditing via discovery client")
@@ -655,7 +655,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				err = am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 				if err != nil {
 					// updated to not return err immediately
-					errs = append(errs, err)
+					am.log.Error(err, "Auditing")
 					continue
 				}
 			}

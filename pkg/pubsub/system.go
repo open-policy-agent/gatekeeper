@@ -7,10 +7,7 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/connection"
 	prvd "github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/provider"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-var log = logf.Log.WithName("pubsub-system")
 
 type System struct {
 	mux         sync.RWMutex
@@ -34,7 +31,7 @@ func (s *System) Publish(ctx context.Context, connection string, topic string, m
 	return fmt.Errorf("No connections are established")
 }
 
-func (s *System) UpsertConnection(ctx context.Context, config interface{}, name string, provider string) error {
+func (s *System) UpsertConnection(ctx context.Context, config interface{}, name string, provider string, newConnFunc prvd.InitiateConnection) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	// Check if the connection already exists.
@@ -49,23 +46,19 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, name 
 		}
 	}
 	// Check if the provider is supported.
-	if newConnFunc, ok := prvd.List()[provider]; ok {
-		newConn, err := newConnFunc(ctx, config)
-		if err != nil {
-			return err
-		}
-		// Add the new connection and provider to the maps.
-		if s.connections == nil {
-			s.connections = map[string]connection.Connection{}
-		}
-		if s.providers == nil {
-			s.providers = map[string]string{}
-		}
-		s.connections[name] = newConn
-		s.providers[name] = provider
-		return nil
+	newConn, err := newConnFunc(ctx, config)
+	if err != nil {
+		return err
 	}
-	log.Info(fmt.Sprintf("Pub-sub provider %s is not supported", provider))
+	// Add the new connection and provider to the maps.
+	if s.connections == nil {
+		s.connections = map[string]connection.Connection{}
+	}
+	if s.providers == nil {
+		s.providers = map[string]string{}
+	}
+	s.connections[name] = newConn
+	s.providers[name] = provider
 	return nil
 }
 

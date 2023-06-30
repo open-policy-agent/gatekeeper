@@ -2,13 +2,39 @@ package pubsub
 
 import (
 	"context"
+	"os"
 	"sync"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/connection"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/dapr"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/provider"
 	"github.com/stretchr/testify/assert"
 )
+
+var testSystem *System
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+	tmp := provider.ListFakeProviders()
+	testSystem = NewSystem()
+	testSystem.connections = make(map[string]connection.Connection)
+	testSystem.providers = make(map[string]string)
+	cfg := map[string]interface{}{
+		dapr.Name: map[string]interface{}{
+			"component": "pubsub",
+		},
+	}
+	for name, fakeConn := range tmp {
+		testSystem.providers[name] = name
+		testSystem.connections[name], _ = fakeConn(ctx, cfg[name])
+	}
+	r := m.Run()
+
+	if r != 0 {
+		os.Exit(r)
+	}
+}
 
 func TestNewSystem(t *testing.T) {
 	tests := []struct {
@@ -34,43 +60,99 @@ func TestSystem_UpsertConnection(t *testing.T) {
 	type fields struct {
 		connections map[string]connection.Connection
 		providers   map[string]string
+		s           *System
 	}
 	type args struct {
 		ctx      context.Context
 		config   interface{}
 		name     string
 		provider string
+		f        provider.InitiateConnection
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
 		wantErr bool
+		match   bool
 	}{
 		{
-			name: "Updating connections for unsupported provider",
+			name: "Create a new connection with dapr provider",
 			fields: fields{
-				connections: map[string]connection.Connection{},
-				providers:   map[string]string{"audit": "dapr"},
+				connections: testSystem.connections,
+				providers:   testSystem.providers,
+				s: &System{
+					mux: sync.RWMutex{},
+				},
 			},
 			args: args{
-				ctx:      context.Background(),
-				config:   nil,
-				name:     "audit",
-				provider: "test",
+				ctx: context.Background(),
+				config: map[string]interface{}{
+					"component": "pubsub",
+				},
+				name:     "dapr",
+				provider: "dapr",
+				f:        dapr.FakeNewConnection,
 			},
 			wantErr: false,
+			match:   true,
+		},
+		{
+			name: "Update a connection to use test provider",
+			fields: fields{
+				connections: testSystem.connections,
+				providers:   map[string]string{"audit": "dapr"},
+				s: &System{
+					mux:       sync.RWMutex{},
+					providers: map[string]string{"audit": "dapr"},
+				},
+			},
+			args: args{
+				ctx: context.Background(),
+				config: map[string]interface{}{
+					"component": "pubsub",
+				},
+				name:     "audit",
+				provider: "test",
+				f:        dapr.FakeNewConnection,
+			},
+			wantErr: false,
+			match:   false,
+		},
+		{
+			name: "Update a connection using same provider",
+			fields: fields{
+				connections: testSystem.connections,
+				providers:   map[string]string{"dapr": "dapr"},
+				s: &System{
+					mux:         sync.RWMutex{},
+					providers:   testSystem.providers,
+					connections: testSystem.connections,
+				},
+			},
+			args: args{
+				ctx: context.Background(),
+				config: map[string]interface{}{
+					"component": "test",
+				},
+				name:     "audit",
+				provider: "dapr",
+				f:        dapr.FakeNewConnection,
+			},
+			wantErr: false,
+			match:   false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &System{
-				mux:         sync.RWMutex{},
-				connections: tt.fields.connections,
-				providers:   tt.fields.providers,
-			}
-			if err := s.UpsertConnection(tt.args.ctx, tt.args.config, tt.args.name, tt.args.provider); (err != nil) != tt.wantErr {
+			if err := tt.fields.s.UpsertConnection(tt.args.ctx, tt.args.config, tt.args.name, tt.args.provider, tt.args.f); (err != nil) != tt.wantErr {
 				t.Errorf("System.UpsertConnection() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			assert.NotEqual(t, nil, tt.fields.s.connections)
+			if tt.match {
+				assert.Equal(t, tt.fields.providers, tt.fields.s.providers)
+			} else {
+				assert.NotEqual(t, tt.fields.providers, tt.fields.s.providers)
 			}
 		})
 	}
@@ -150,6 +232,15 @@ func TestSystem_Publish(t *testing.T) {
 			},
 			args:    args{ctx: context.Background(), connection: "test", topic: "test", msg: nil},
 			wantErr: true,
+		},
+		{
+			name: "Publishing to a connection that does exist",
+			fields: fields{
+				connections: testSystem.connections,
+				providers:   testSystem.providers,
+			},
+			args:    args{ctx: context.Background(), connection: "dapr", topic: "test", msg: nil},
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
