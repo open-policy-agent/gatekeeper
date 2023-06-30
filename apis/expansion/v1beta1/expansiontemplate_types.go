@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1beta1
 
 import (
 	status "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
@@ -58,6 +58,7 @@ type GeneratedGVK struct {
 // +kubebuilder:resource:path="expansiontemplate"
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
+// +kubebuilder:storageversion
 
 // ExpansionTemplate is the Schema for the ExpansionTemplate API.
 type ExpansionTemplate struct {
