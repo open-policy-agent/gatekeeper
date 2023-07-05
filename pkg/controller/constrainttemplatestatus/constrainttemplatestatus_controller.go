@@ -76,7 +76,7 @@ func newReconciler(
 // PodStatusToConstraintTemplateMapper correlates a ConstraintTemplatePodStatus with its corresponding constraint template
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
 func PodStatusToConstraintTemplateMapper(selfOnly bool) handler.MapFunc {
-	return func(obj client.Object) []reconcile.Request {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConstraintTemplateNameLabel]
 		if !ok {
@@ -107,7 +107,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
-		&source.Kind{Type: &v1beta1.ConstraintTemplatePodStatus{}},
+		source.Kind(mgr.GetCache(), &v1beta1.ConstraintTemplatePodStatus{}),
 		handler.EnqueueRequestsFromMapFunc(PodStatusToConstraintTemplateMapper(false)),
 	)
 	if err != nil {
@@ -116,7 +116,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to the provided constraint
 	// Watch for changes to ConstraintTemplate
-	err = c.Watch(&source.Kind{Type: &constrainttemplatev1beta1.ConstraintTemplate{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &constrainttemplatev1beta1.ConstraintTemplate{}), &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}

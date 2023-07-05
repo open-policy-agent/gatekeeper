@@ -66,6 +66,7 @@ postUpgrade:
       "pod-security.kubernetes.io/enforce=restricted",
       "pod-security.kubernetes.io/enforce-version=v1.24"]
     extraAnnotations: {}
+    priorityClassName: ""
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -96,6 +97,7 @@ postInstall:
       "pod-security.kubernetes.io/enforce=restricted",
       "pod-security.kubernetes.io/enforce-version=v1.24"]
     extraAnnotations: {}
+    priorityClassName: ""
   probeWebhook:
     enabled: true
     image:
@@ -106,6 +108,7 @@ postInstall:
     waitTimeout: 60
     httpTimeout: 2
     insecureHTTPS: false
+    priorityClassName: ""
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -127,6 +130,7 @@ preUninstall:
       tag: v3.13.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
+    priorityClassName: ""
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -259,6 +263,7 @@ psp:
 upgradeCRDs:
   enabled: true
   extraRules: []
+  priorityClassName: ""
 rbac:
   create: true
 externalCertInjection:

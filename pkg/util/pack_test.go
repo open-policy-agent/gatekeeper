@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -91,7 +92,7 @@ func TestEventPackerMapFunc(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := EventPackerMapFunc()(tc.obj)
+			got := EventPackerMapFunc()(context.Background(), tc.obj)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("got EventPackerMapFunc()(obj) diff: %v", diff)
 			}

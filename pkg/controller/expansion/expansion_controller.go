@@ -17,7 +17,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -125,7 +124,7 @@ func add(mgr manager.Manager, r *Reconciler) error {
 
 	// Watch for changes to ExpansionTemplates
 	return c.Watch(
-		&source.Kind{Type: &expansionv1alpha1.ExpansionTemplate{}},
+		source.Kind(mgr.GetCache(), &expansionv1alpha1.ExpansionTemplate{}),
 		&handler.EnqueueRequestForObject{})
 }
 
@@ -137,7 +136,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	versionedET := &expansionv1alpha1.ExpansionTemplate{}
 	err := r.Get(ctx, request.NamespacedName, versionedET)
 	if err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
 		deleted = true
