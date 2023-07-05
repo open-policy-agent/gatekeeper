@@ -94,7 +94,9 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 }
 
 func TestReconcile(t *testing.T) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	g := gomega.NewGomegaWithT(t)
+
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "config",
@@ -151,15 +153,16 @@ func TestReconcile(t *testing.T) {
 		Reader:           c,
 	})
 	require.NoError(t, err)
-	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, watchSet)
+
+	// start the cache manager
+	go cacheManager.Start(ctx)
+
+	rec, err := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, watchSet)
+	require.NoError(t, err)
 
 	recFn, requests := SetupTestReconcile(rec)
-	err = add(mgr, recFn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, add(mgr, recFn))
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
 	testutils.StartManager(ctx, t, mgr)
 	once := gosync.Once{}
 	testMgrStopped := func() {
@@ -185,8 +188,10 @@ func TestReconcile(t *testing.T) {
 	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
+	g.Eventually(func() int {
+		return len(wm.GetManagedGVK())
+	}).WithTimeout(timeout).ShouldNot(gomega.Equal(0))
 	gvks := wm.GetManagedGVK()
-	g.Eventually(len(gvks), timeout).ShouldNot(gomega.Equal(0))
 
 	wantGVKs := []schema.GroupVersionKind{
 		{Group: "", Version: "v1", Kind: "Namespace"},

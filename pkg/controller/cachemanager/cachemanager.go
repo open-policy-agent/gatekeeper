@@ -3,6 +3,7 @@ package cachemanager
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
@@ -32,18 +33,22 @@ type CacheManagerConfig struct {
 }
 
 type CacheManager struct {
+	// the processExcluder and the gvkAggregator define what the underlying
+	// cache should look like. we refer to those two as "the spec"
+	processExcluder *process.Excluder
+	gvkAggregator   *aggregator.GVKAgreggator
+	// mu guards access to any part of the spec above
+	mu sync.RWMutex
+
 	opa              syncutil.OpaDataClient
 	syncMetricsCache *syncutil.MetricsCache
 	tracker          *readiness.Tracker
-	processExcluder  *process.Excluder
 	registrar        *watch.Registrar
 	watchedSet       *watch.Set
-	gvkAggregator    *aggregator.GVKAgreggator
-	gvksToRemove     *watch.Set
-	gvksToSync       *watch.Set
 	replayErrChan    chan error
 	replayTicker     time.Ticker
 	reader           client.Reader
+	excluderChanged  bool
 }
 
 func NewCacheManager(config *CacheManagerConfig) (*CacheManager, error) {
@@ -74,8 +79,6 @@ func NewCacheManager(config *CacheManagerConfig) (*CacheManager, error) {
 	}
 
 	cm.gvkAggregator = aggregator.NewGVKAggregator()
-	cm.gvksToRemove = watch.NewSet()
-	cm.gvksToSync = watch.NewSet()
 
 	cm.replayTicker = *time.NewTicker(3 * time.Second)
 
@@ -89,106 +92,43 @@ func (c *CacheManager) Start(ctx context.Context) error {
 	return nil
 }
 
-// WatchGVKsToSync adjusts the watched set of gvks according to the newGVKs passed in
+// AddSource adjusts the watched set of gvks according to the newGVKs passed in
 // for a given {syncSourceType, syncSourceName}.
-func (c *CacheManager) WatchGVKsToSync(ctx context.Context, newGVKs []schema.GroupVersionKind, newExcluder *process.Excluder, syncSourceType, syncSourceName string) error {
-	netNewGVKs := []schema.GroupVersionKind{}
-	for _, gvk := range newGVKs {
-		if !c.gvkAggregator.IsPresent(gvk) {
-			netNewGVKs = append(netNewGVKs, gvk)
-		}
-	}
-	// mark these gvks for the background goroutine to sync
-	c.gvksToSync.Add(netNewGVKs...)
+func (c *CacheManager) AddSource(ctx context.Context, newGVKs []schema.GroupVersionKind, syncSourceType, syncSourceName string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	opKey := aggregator.Key{Source: syncSourceType, ID: syncSourceName}
-	currentGVKsForKey := c.gvkAggregator.List(opKey)
 
-	if len(newGVKs) == 0 {
-		// we are not syncing anything for this key anymore
-		if err := c.gvkAggregator.Remove(opKey); err != nil {
-			return fmt.Errorf("internal error removing gvks for aggregation: %w", err)
-		}
-	} else {
-		if err := c.gvkAggregator.Upsert(opKey, newGVKs); err != nil {
-			return fmt.Errorf("internal error upserting gvks for aggregation: %w", err)
-		}
-	}
-
-	// stage the new watch set for events for the sync_controller to be
-	// the current watch set ... [1/3]
-	newGvkWatchSet := watch.NewSet()
-	newGvkWatchSet.AddSet(c.watchedSet)
-	// ... plus the net new gvks we are adding ... [2/3]
-	newGvkWatchSet.Add(netNewGVKs...)
-
-	gvksToDeleteCandidates := getGVKsToDeleteCandidates(newGVKs, currentGVKsForKey)
-	gvksToDeleteSet := watch.NewSet()
-	for _, gvk := range gvksToDeleteCandidates {
-		// if this gvk is no longer required by any source, schedule it to be deleted
-		if !c.gvkAggregator.IsPresent(gvk) {
-			// Remove expectations for resources we no longer watch.
-			c.tracker.CancelData(gvk)
-			// mark these gvks for the background goroutine to un-sync
-			gvksToDeleteSet.Add(gvk)
-		}
-	}
-	c.gvksToRemove.AddSet(gvksToDeleteSet)
-
-	// ... less the gvks to delete. [3/3]
-	newGvkWatchSet.RemoveSet(gvksToDeleteSet)
-
-	// If the watch set has not changed AND the process excluder is the same we're done here.
-	if c.watchedSet.Equals(newGvkWatchSet) && newExcluder != nil {
-		if c.processExcluder.Equals(newExcluder) {
-			return nil
-		} else {
-			// there is a new excluder which means we need to schedule a wipe for any
-			// previously watched GVKs to be re-added to get a chance to be evaluated
-			// for this new process excluder.
-
-			c.gvksToRemove.AddSet(newGvkWatchSet)
-		}
-	}
-
-	// Start watching the newly added gvks set
-	var innerError error
-	c.watchedSet.Replace(newGvkWatchSet, func() {
-		// swapping with the new excluder
-		if newExcluder != nil {
-			c.processExcluder.Replace(newExcluder)
-		}
-
-		// *Note the following steps are not transactional with respect to admission control*
-
-		// Important: dynamic watches update must happen *after* updating our watchSet.
-		// Otherwise, the sync controller will drop events for the newly watched kinds.
-		// Defer error handling so object re-sync happens even if the watch is hard
-		// errored due to a missing GVK in the watch set.
-		innerError = c.registrar.ReplaceWatch(ctx, newGvkWatchSet.Items())
-	})
-	if innerError != nil {
-		return innerError
+	if err := c.gvkAggregator.Upsert(opKey, newGVKs); err != nil {
+		return fmt.Errorf("internal error adding source: %w", err)
 	}
 
 	return nil
 }
 
-// returns GVKs that are in currentGVKsForKey but not in newGVKs.
-func getGVKsToDeleteCandidates(newGVKs []schema.GroupVersionKind, currentGVKsForKey map[schema.GroupVersionKind]struct{}) []schema.GroupVersionKind {
-	newGVKSet := make(map[schema.GroupVersionKind]struct{})
-	for _, gvk := range newGVKs {
-		newGVKSet[gvk] = struct{}{}
+func (c *CacheManager) RemoveSource(ctx context.Context, syncSourceType, syncSourceName string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.gvkAggregator.Remove(aggregator.Key{Source: syncSourceType, ID: syncSourceName}); err != nil {
+		return fmt.Errorf("internal error removing source: %w", err)
 	}
 
-	var toDelete []schema.GroupVersionKind
-	for gvk := range currentGVKsForKey {
-		if _, found := newGVKSet[gvk]; !found {
-			toDelete = append(toDelete, gvk)
-		}
+	return nil
+}
+
+func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
+	if c.processExcluder.Equals(newExcluder) {
+		return
 	}
 
-	return toDelete
+	c.mu.Lock()
+	c.processExcluder.Replace(newExcluder)
+	// there is a new excluder which means we need to schedule a wipe for any
+	// previously watched GVKs to be re-added to get a chance to be evaluated
+	// for this new process excluder.
+	c.excluderChanged = true
+	c.mu.Unlock()
 }
 
 func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Unstructured) error {
@@ -241,7 +181,7 @@ func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.
 	return nil
 }
 
-func (c *CacheManager) WipeData(ctx context.Context) error {
+func (c *CacheManager) wipeData(ctx context.Context) error {
 	if _, err := c.opa.RemoveData(ctx, target.WipeData()); err != nil {
 		return err
 	}
@@ -287,7 +227,13 @@ func (c *CacheManager) updateDatastore(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-c.replayTicker.C:
-			c.makeUpdates(ctx)
+			c.mu.RLock()
+			currentGVKsInAgg := watch.NewSet()
+			currentGVKsInAgg.Add(c.gvkAggregator.ListAllGVKs()...)
+			excluderChanged := c.excluderChanged
+			c.mu.RUnlock()
+
+			c.makeUpdates(ctx, currentGVKsInAgg, excluderChanged)
 		}
 	}
 }
@@ -310,27 +256,62 @@ func (c *CacheManager) listAndSyncData(ctx context.Context, gvks []schema.GroupV
 }
 
 // makeUpdates performs a conditional wipe followed by a replay if necessary.
-func (c *CacheManager) makeUpdates(ctx context.Context) {
-	// first, wipe the cache if needed
-	gvksToDelete := c.gvksToRemove.Items()
-	if len(gvksToDelete) > 0 {
-		// "checkpoint save" what needs to be replayed
-		gvksToReplay := c.gvkAggregator.ListAllGVKs()
-		// and add it to be synced below
-		c.gvksToSync.Add(gvksToReplay...)
-
-		if err := c.WipeData(ctx); err != nil {
-			log.Error(err, "internal: error wiping cache")
-			// don't alter the toRemove set, we will try again
-		} else {
-			c.gvksToRemove.Remove(gvksToDelete...)
-			// any gvks that were just removed shouldn't be synced
-			c.gvksToSync.Remove(gvksToDelete...)
-		}
+func (c *CacheManager) makeUpdates(ctx context.Context, currentGVKsInAgg *watch.Set, excluderChanged bool) {
+	if c.watchedSet.Equals(currentGVKsInAgg) && !excluderChanged {
+		return // nothing to do if both sets are the same and the excluder didn't change
 	}
 
-	// sync net new gvks
-	gvksToSyncList := c.gvksToSync.Items()
-	gvksSynced := c.listAndSyncData(ctx, gvksToSyncList, c.reader)
-	c.gvksToSync.RemoveSet(gvksSynced)
+	// replace the current watch set for the sync_controller to pick up
+	// any updates on said GVKs.
+	// also save the current watch set to make cache changes later
+	oldWatchSet := watch.NewSet()
+	oldWatchSet.AddSet(c.watchedSet)
+
+	var innerError error
+	c.watchedSet.Replace(currentGVKsInAgg, func() {
+		// *Note the following steps are not transactional with respect to admission control*
+
+		// Important: dynamic watches update must happen *after* updating our watchSet.
+		// Otherwise, the sync controller will drop events for the newly watched kinds.
+		// Defer error handling so object re-sync happens even if the watch is hard
+		// errored due to a missing GVK in the watch set.
+		innerError = c.registrar.ReplaceWatch(ctx, currentGVKsInAgg.Items())
+	})
+	if innerError != nil {
+		log.Error(innerError, "internal: error replacing watch set")
+	}
+
+	gvksToDelete := oldWatchSet.Difference(currentGVKsInAgg).Items()
+	newGVKsToSync := currentGVKsInAgg.Difference(oldWatchSet)
+
+	// remove any gvks not needing to be synced anymore
+	// or re evaluate all if the excluder changed.
+	if len(gvksToDelete) > 0 || excluderChanged {
+		if err := c.wipeData(ctx); err != nil {
+			log.Error(err, "internal: error wiping cache")
+		}
+
+		if excluderChanged {
+			c.unsetExcluderChanged()
+		}
+
+		// everything that gets wiped needs to be readded
+		newGVKsToSync.AddSet(currentGVKsInAgg)
+	}
+
+	// sync net new gvks and potentially replayed gvks from the cache wipe above
+	gvksSynced := c.listAndSyncData(ctx, newGVKsToSync.Items(), c.reader)
+
+	gvksNotSynced := gvksSynced.Difference(newGVKsToSync)
+	for _, gvk := range gvksNotSynced.Items() {
+		log.Info(fmt.Sprintf("failed to sync gvk: %s; will retry", gvk))
+	}
+}
+
+func (c *CacheManager) unsetExcluderChanged() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// unset the excluderChanged bool now
+	c.excluderChanged = false
 }

@@ -225,8 +225,15 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		r.tracker.DisableStats()
 	}
 
-	if err := r.cacheManager.WatchGVKsToSync(ctx, gvksToSync, newExcluder, "config", request.NamespacedName.Name); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error establishing watches for new syncOny: %w", err)
+	r.cacheManager.ExcludeProcesses(newExcluder)
+	if len(gvksToSync) > 0 {
+		if err := r.cacheManager.AddSource(ctx, gvksToSync, "config", request.NamespacedName.Name); err != nil {
+			return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error establishing watches for new syncOny: %w", err)
+		}
+	} else {
+		if err := r.cacheManager.RemoveSource(ctx, "config", request.NamespacedName.Name); err != nil {
+			return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error removing syncOny gvks from sync process: %w", err)
+		}
 	}
 
 	return reconcile.Result{}, nil
