@@ -9,7 +9,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -241,7 +241,7 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 		{
 			"differentMatch",
 			func(a *mutationsunversioned.AssignMetadata) {
-				a.Spec.Match.Namespaces = []util.Wildcard{"foo", "bar"}
+				a.Spec.Match.Namespaces = []wildcard.Wildcard{"foo", "bar"}
 			},
 			true,
 		},
