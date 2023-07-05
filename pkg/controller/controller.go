@@ -186,8 +186,11 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 	if err != nil {
 		return err
 	}
-	if err := cm.Start(context.TODO()); err != nil {
-		return fmt.Errorf("error starting cache manager: %w", err)
+
+	// Adding the CacheManager as a runnable;
+	// manager will start CacheManager.
+	if err := m.Add(cm); err != nil {
+		return fmt.Errorf("error adding cache manager as a runnable: %w", err)
 	}
 
 	syncAdder := syncc.Adder{
