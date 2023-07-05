@@ -5,7 +5,6 @@ import (
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	cfinstr "github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/stretchr/testify/assert"
@@ -22,19 +21,19 @@ func Test_ToStatsEntriesWithDesc(t *testing.T) {
 	testCases := []struct {
 		name      string
 		client    *constraintclient.Client
-		cfentries []*instrumentation.StatsEntry
+		cfentries []*cfinstr.StatsEntry
 		expected  []*StatsEntryWithDesc
 	}{
 		{
 			name:      "Empty input",
 			client:    nil,
-			cfentries: []*instrumentation.StatsEntry{},
+			cfentries: []*cfinstr.StatsEntry{},
 			expected:  nil,
 		},
 		{
 			name:   "Single entry with one stat, unknown description",
 			client: nil,
-			cfentries: []*instrumentation.StatsEntry{
+			cfentries: []*cfinstr.StatsEntry{
 				{
 					Scope:    "scope1",
 					StatsFor: "statsFor1",
@@ -77,7 +76,7 @@ func Test_ToStatsEntriesWithDesc(t *testing.T) {
 		{
 			name:   "actual client, stat",
 			client: actualClient,
-			cfentries: []*instrumentation.StatsEntry{
+			cfentries: []*cfinstr.StatsEntry{
 				{
 					Scope:    "scope1",
 					StatsFor: "statsFor1",
@@ -86,7 +85,7 @@ func Test_ToStatsEntriesWithDesc(t *testing.T) {
 							Name:  "templateRunTimeNS",
 							Value: "value1",
 							Source: cfinstr.Source{
-								Type:  instrumentation.EngineSourceType,
+								Type:  cfinstr.EngineSourceType,
 								Value: "Rego",
 							},
 						},
@@ -94,7 +93,7 @@ func Test_ToStatsEntriesWithDesc(t *testing.T) {
 							Name:  "constraintCount",
 							Value: "value1",
 							Source: cfinstr.Source{
-								Type:  instrumentation.EngineSourceType,
+								Type:  cfinstr.EngineSourceType,
 								Value: "Rego",
 							},
 						},
@@ -117,7 +116,7 @@ func Test_ToStatsEntriesWithDesc(t *testing.T) {
 								Name:  "templateRunTimeNS",
 								Value: "value1",
 								Source: cfinstr.Source{
-									Type:  instrumentation.EngineSourceType,
+									Type:  cfinstr.EngineSourceType,
 									Value: "Rego",
 								},
 							},
@@ -128,7 +127,7 @@ func Test_ToStatsEntriesWithDesc(t *testing.T) {
 								Name:  "constraintCount",
 								Value: "value1",
 								Source: cfinstr.Source{
-									Type:  instrumentation.EngineSourceType,
+									Type:  cfinstr.EngineSourceType,
 									Value: "Rego",
 								},
 							},
