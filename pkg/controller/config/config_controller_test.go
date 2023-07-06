@@ -30,8 +30,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/prometheus/client_golang/prometheus"
@@ -104,11 +104,11 @@ func TestReconcile(t *testing.T) {
 			},
 			Match: []configv1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []util.Wildcard{"foo"},
+					ExcludedNamespaces: []wildcard.Wildcard{"foo"},
 					Processes:          []string{"*"},
 				},
 				{
-					ExcludedNamespaces: []util.Wildcard{"bar"},
+					ExcludedNamespaces: []wildcard.Wildcard{"bar"},
 					Processes:          []string{"audit", "webhook"},
 				},
 			},
@@ -719,7 +719,7 @@ func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 			},
 			Match: []configv1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []util.Wildcard{"kube-system"},
+					ExcludedNamespaces: []wildcard.Wildcard{"kube-system"},
 					Processes:          []string{"sync"},
 				},
 			},

@@ -3,7 +3,7 @@
 package match
 
 import (
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,14 +26,14 @@ type Match struct {
 	// prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both
 	// `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both
 	// `kube-system` and `gatekeeper-system`.
-	Namespaces []util.Wildcard `json:"namespaces,omitempty"`
+	Namespaces []wildcard.Wildcard `json:"namespaces,omitempty"`
 	// ExcludedNamespaces is a list of namespace names. If defined, a
 	// constraint only applies to resources not in a listed namespace.
 	// ExcludedNamespaces also supports a prefix or suffix based glob.  For example,
 	// `excludedNamespaces: [kube-*]` matches both `kube-system` and
 	// `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and
 	// `gatekeeper-system`.
-	ExcludedNamespaces []util.Wildcard `json:"excludedNamespaces,omitempty"`
+	ExcludedNamespaces []wildcard.Wildcard `json:"excludedNamespaces,omitempty"`
 	// LabelSelector is the combination of two optional fields: `matchLabels`
 	// and `matchExpressions`.  These two fields provide different methods of
 	// selecting or excluding k8s objects based on the label keys and values
@@ -47,7 +47,7 @@ type Match struct {
 	// Name is the name of an object.  If defined, it will match against objects with the specified
 	// name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match
 	// both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.
-	Name util.Wildcard `json:"name,omitempty"`
+	Name wildcard.Wildcard `json:"name,omitempty"`
 }
 
 // Kinds accepts a list of objects with apiGroups and kinds fields

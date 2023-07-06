@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -188,7 +188,7 @@ func TestMatch(t *testing.T) {
 			name:   "namespace matches",
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name"),
 			matcher: Match{
-				Namespaces: []util.Wildcard{"nonmatching", "namespace"},
+				Namespaces: []wildcard.Wildcard{"nonmatching", "namespace"},
 			},
 			namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "namespace"}},
 			source:    types.SourceTypeOriginal,
@@ -198,7 +198,7 @@ func TestMatch(t *testing.T) {
 			name:   "is a matching Namespace",
 			object: makeNamespace("matching"),
 			matcher: Match{
-				Namespaces: []util.Wildcard{"matching"},
+				Namespaces: []wildcard.Wildcard{"matching"},
 			},
 			namespace: nil,
 			source:    types.SourceTypeOriginal,
@@ -208,7 +208,7 @@ func TestMatch(t *testing.T) {
 			name:   "is not a matching Namespace",
 			object: makeNamespace("non-matching"),
 			matcher: Match{
-				Namespaces: []util.Wildcard{"matching"},
+				Namespaces: []wildcard.Wildcard{"matching"},
 			},
 			namespace: nil,
 			source:    types.SourceTypeOriginal,
@@ -219,7 +219,7 @@ func TestMatch(t *testing.T) {
 			name:   "namespaces configured, but cluster scoped",
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
 			matcher: Match{
-				Namespaces: []util.Wildcard{"nonmatching", "namespace"},
+				Namespaces: []wildcard.Wildcard{"nonmatching", "namespace"},
 			},
 			namespace: nil,
 			source:    types.SourceTypeOriginal,
@@ -229,7 +229,7 @@ func TestMatch(t *testing.T) {
 			name:   "namespace prefix matches",
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "kube-system", "name"),
 			matcher: Match{
-				Namespaces: []util.Wildcard{"nonmatching", "kube-*"},
+				Namespaces: []wildcard.Wildcard{"nonmatching", "kube-*"},
 			},
 			namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
 			source:    types.SourceTypeOriginal,
@@ -239,7 +239,7 @@ func TestMatch(t *testing.T) {
 			name:   "namespace is not in the matches list",
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace2", "name"),
 			matcher: Match{
-				Namespaces: []util.Wildcard{"nonmatching", "notmatchingeither"},
+				Namespaces: []wildcard.Wildcard{"nonmatching", "notmatchingeither"},
 			},
 			namespace: nil,
 			source:    types.SourceTypeOriginal,
@@ -319,7 +319,7 @@ func TestMatch(t *testing.T) {
 			name:   "object's namespace is excluded",
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name"),
 			matcher: Match{
-				ExcludedNamespaces: []util.Wildcard{"namespace"},
+				ExcludedNamespaces: []wildcard.Wildcard{"namespace"},
 			},
 			namespace: nil,
 			source:    types.SourceTypeOriginal,
@@ -329,7 +329,7 @@ func TestMatch(t *testing.T) {
 			name:   "object is an excluded Namespace",
 			object: makeNamespace("excluded"),
 			matcher: Match{
-				ExcludedNamespaces: []util.Wildcard{"excluded"},
+				ExcludedNamespaces: []wildcard.Wildcard{"excluded"},
 			},
 			namespace: nil,
 			source:    types.SourceTypeOriginal,
@@ -339,7 +339,7 @@ func TestMatch(t *testing.T) {
 			name:   "object is not an excluded Namespace",
 			object: makeNamespace("not-excluded"),
 			matcher: Match{
-				ExcludedNamespaces: []util.Wildcard{"excluded"},
+				ExcludedNamespaces: []wildcard.Wildcard{"excluded"},
 			},
 			namespace: nil,
 			source:    types.SourceTypeOriginal,
@@ -350,7 +350,7 @@ func TestMatch(t *testing.T) {
 			name:   "a namespace is excluded, but object is cluster scoped",
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
 			matcher: Match{
-				ExcludedNamespaces: []util.Wildcard{"namespace"},
+				ExcludedNamespaces: []wildcard.Wildcard{"namespace"},
 			},
 			namespace: nil,
 			source:    types.SourceTypeOriginal,
@@ -360,7 +360,7 @@ func TestMatch(t *testing.T) {
 			name:   "namespace is excluded by wildcard match",
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "kube-system", "name"),
 			matcher: Match{
-				ExcludedNamespaces: []util.Wildcard{"kube-*"},
+				ExcludedNamespaces: []wildcard.Wildcard{"kube-*"},
 			},
 			namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
 			source:    types.SourceTypeOriginal,
@@ -598,7 +598,7 @@ func TestMatch(t *testing.T) {
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name-foo"),
 			matcher: Match{
 				Name:       "name-foo",
-				Namespaces: []util.Wildcard{"other-namespace"},
+				Namespaces: []wildcard.Wildcard{"other-namespace"},
 			},
 			namespace: nil,
 			source:    types.SourceTypeOriginal,
@@ -609,7 +609,7 @@ func TestMatch(t *testing.T) {
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name-foo"),
 			matcher: Match{
 				Name:       "name-foo",
-				Namespaces: []util.Wildcard{"my-ns"},
+				Namespaces: []wildcard.Wildcard{"my-ns"},
 				Source:     string(types.SourceTypeGenerated),
 			},
 			source: types.SourceTypeGenerated,
@@ -625,7 +625,7 @@ func TestMatch(t *testing.T) {
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name-foo"),
 			matcher: Match{
 				Name:       "name-foo",
-				Namespaces: []util.Wildcard{"my-ns"},
+				Namespaces: []wildcard.Wildcard{"my-ns"},
 			},
 			source: types.SourceTypeGenerated,
 			namespace: &corev1.Namespace{
@@ -640,7 +640,7 @@ func TestMatch(t *testing.T) {
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name-foo"),
 			matcher: Match{
 				Name:       "name-foo",
-				Namespaces: []util.Wildcard{"my-ns"},
+				Namespaces: []wildcard.Wildcard{"my-ns"},
 				Source:     string(types.SourceTypeOriginal),
 			},
 			source: types.SourceTypeGenerated,
@@ -656,7 +656,7 @@ func TestMatch(t *testing.T) {
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name-foo"),
 			matcher: Match{
 				Name:       "name-foo",
-				Namespaces: []util.Wildcard{"my-ns"},
+				Namespaces: []wildcard.Wildcard{"my-ns"},
 				Source:     string(types.SourceTypeOriginal),
 			},
 			namespace: &corev1.Namespace{

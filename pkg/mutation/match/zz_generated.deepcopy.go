@@ -21,7 +21,7 @@ limitations under the License.
 package match
 
 import (
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -110,12 +110,12 @@ func (in *Match) DeepCopyInto(out *Match) {
 	}
 	if in.Namespaces != nil {
 		in, out := &in.Namespaces, &out.Namespaces
-		*out = make([]util.Wildcard, len(*in))
+		*out = make([]wildcard.Wildcard, len(*in))
 		copy(*out, *in)
 	}
 	if in.ExcludedNamespaces != nil {
 		in, out := &in.ExcludedNamespaces, &out.ExcludedNamespaces
-		*out = make([]util.Wildcard, len(*in))
+		*out = make([]wildcard.Wildcard, len(*in))
 		copy(*out, *in)
 	}
 	if in.LabelSelector != nil {
