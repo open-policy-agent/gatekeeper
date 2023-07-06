@@ -188,7 +188,7 @@ func TestCacheManager_makeUpdates(t *testing.T) {
 
 	gvksInAgg := watch.NewSet()
 	gvksInAgg.Add(cacheManager.gvkAggregator.ListAllGVKs()...)
-	cacheManager.makeUpdates(ctx, gvksInAgg, false)
+	cacheManager.makeUpdatesForSpecInTime(ctx, gvksInAgg, false)
 
 	// expect the following instances to be in the data store
 	expected := map[fakes.OpaKey]interface{}{
