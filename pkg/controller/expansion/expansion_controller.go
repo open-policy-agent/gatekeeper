@@ -7,7 +7,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
-	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
+	expansionv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -125,7 +125,7 @@ func add(mgr manager.Manager, r *Reconciler) error {
 
 	// Watch for changes to ExpansionTemplates
 	return c.Watch(
-		source.Kind(mgr.GetCache(), &expansionv1alpha1.ExpansionTemplate{}),
+		source.Kind(mgr.GetCache(), &expansionv1beta1.ExpansionTemplate{}),
 		&handler.EnqueueRequestForObject{})
 }
 
@@ -134,7 +134,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	log.V(logging.DebugLevel).Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
 
 	deleted := false
-	versionedET := &expansionv1alpha1.ExpansionTemplate{}
+	versionedET := &expansionv1beta1.ExpansionTemplate{}
 	err := r.Get(ctx, request.NamespacedName, versionedET)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -185,7 +185,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 func (r *Reconciler) queueConflicts(old expansion.IDSet) {
 	for tID := range symmetricDiff(old, r.system.GetConflicts()) {
 		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
+		u.SetGroupVersionKind(expansionv1beta1.GroupVersion.WithKind("ExpansionTemplate"))
 		// ExpansionTemplate is cluster-scoped, so we do not set namespace
 		u.SetName(string(tID))
 
@@ -275,7 +275,7 @@ func (r *Reconciler) newETStatus(pod *corev1.Pod, et *unversioned.ExpansionTempl
 }
 
 func (r *Reconciler) getTracker() readiness.Expectations {
-	return r.tracker.For(expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
+	return r.tracker.For(expansionv1beta1.GroupVersion.WithKind("ExpansionTemplate"))
 }
 
 func setStatusError(status *statusv1beta1.ExpansionTemplatePodStatus, etErr error) {
