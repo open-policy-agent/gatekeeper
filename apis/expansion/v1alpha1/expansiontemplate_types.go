@@ -58,6 +58,7 @@ type GeneratedGVK struct {
 // +kubebuilder:resource:path="expansiontemplate"
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
+// +kubebuilder:storageversion
 
 // ExpansionTemplate is the Schema for the ExpansionTemplate API.
 type ExpansionTemplate struct {

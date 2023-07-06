@@ -17,7 +17,7 @@ validatingWebhookCustomRules: {}
 validatingWebhookURL: null
 enableDeleteOperations: false
 enableExternalData: true
-enableGeneratorResourceExpansion: true
+enableGeneratorResourceExpansion: false
 enableTLSHealthcheck: false
 maxServingThreads: -1
 mutatingWebhookName: gatekeeper-mutating-webhook-configuration
