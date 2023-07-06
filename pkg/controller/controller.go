@@ -182,7 +182,15 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 	if err != nil {
 		return err
 	}
-	cm, err := cm.NewCacheManager(&cm.CacheManagerConfig{Opa: filteredOpa, SyncMetricsCache: syncMetricsCache, Tracker: deps.Tracker, ProcessExcluder: deps.ProcessExcluder, Registrar: w, WatchedSet: deps.WatchSet})
+	cm, err := cm.NewCacheManager(&cm.CacheManagerConfig{
+		Opa:              filteredOpa,
+		SyncMetricsCache: syncMetricsCache,
+		Tracker:          deps.Tracker,
+		ProcessExcluder:  deps.ProcessExcluder,
+		Registrar:        w,
+		WatchedSet:       deps.WatchSet,
+		Reader:           m.GetCache(),
+	})
 	if err != nil {
 		return err
 	}
