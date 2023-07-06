@@ -93,24 +93,22 @@ func (c *CacheManager) Start(ctx context.Context) error {
 }
 
 // AddSource adjusts the watched set of gvks according to the newGVKs passed in
-// for a given {syncSourceType, syncSourceName}.
-func (c *CacheManager) AddSource(ctx context.Context, newGVKs []schema.GroupVersionKind, syncSourceType, syncSourceName string) error {
+// for a given sourceKey.
+func (c *CacheManager) AddSource(ctx context.Context, sourceKey aggregator.Key, newGVKs []schema.GroupVersionKind) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	opKey := aggregator.Key{Source: syncSourceType, ID: syncSourceName}
-
-	if err := c.gvkAggregator.Upsert(opKey, newGVKs); err != nil {
+	if err := c.gvkAggregator.Upsert(sourceKey, newGVKs); err != nil {
 		return fmt.Errorf("internal error adding source: %w", err)
 	}
 
 	return nil
 }
 
-func (c *CacheManager) RemoveSource(ctx context.Context, syncSourceType, syncSourceName string) error {
+func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Key) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.gvkAggregator.Remove(aggregator.Key{Source: syncSourceType, ID: syncSourceName}); err != nil {
+	if err := c.gvkAggregator.Remove(sourceKey); err != nil {
 		return fmt.Errorf("internal error removing source: %w", err)
 	}
 
@@ -197,7 +195,7 @@ func (c *CacheManager) ReportSyncMetrics() {
 	c.syncMetricsCache.ReportSync()
 }
 
-func (c *CacheManager) listAndSyncDataForGVK(ctx context.Context, gvk schema.GroupVersionKind, reader client.Reader) error {
+func (c *CacheManager) listAndSyncDataForGVK(ctx context.Context, gvk schema.GroupVersionKind) error {
 	u := &unstructured.UnstructuredList{}
 	u.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   gvk.Group,
@@ -205,7 +203,7 @@ func (c *CacheManager) listAndSyncDataForGVK(ctx context.Context, gvk schema.Gro
 		Kind:    gvk.Kind + "List",
 	})
 
-	err := reader.List(ctx, u)
+	err := c.reader.List(ctx, u)
 	if err != nil {
 		return fmt.Errorf("replaying data for %+v: %w", gvk, err)
 	}
@@ -244,7 +242,7 @@ func (c *CacheManager) updateDatastore(ctx context.Context) {
 func (c *CacheManager) listAndSyncData(ctx context.Context, gvks []schema.GroupVersionKind, reader client.Reader) *watch.Set {
 	gvksSuccessfullySynced := watch.NewSet()
 	for _, gvk := range gvks {
-		err := c.listAndSyncDataForGVK(ctx, gvk, c.reader)
+		err := c.listAndSyncDataForGVK(ctx, gvk)
 		if err != nil {
 			log.Error(err, "internal: error syncing gvks cache data")
 			// we don't remove this gvk as we will try to re-add it later

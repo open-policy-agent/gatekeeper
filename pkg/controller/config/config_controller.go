@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -226,12 +227,13 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	r.cacheManager.ExcludeProcesses(newExcluder)
+	configSourceKey := aggregator.Key{Source: "config", ID: request.NamespacedName.String()}
 	if len(gvksToSync) > 0 {
-		if err := r.cacheManager.AddSource(ctx, gvksToSync, "config", request.NamespacedName.Name); err != nil {
+		if err := r.cacheManager.AddSource(ctx, configSourceKey, gvksToSync); err != nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error establishing watches for new syncOny: %w", err)
 		}
 	} else {
-		if err := r.cacheManager.RemoveSource(ctx, "config", request.NamespacedName.Name); err != nil {
+		if err := r.cacheManager.RemoveSource(ctx, configSourceKey); err != nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error removing syncOny gvks from sync process: %w", err)
 		}
 	}
