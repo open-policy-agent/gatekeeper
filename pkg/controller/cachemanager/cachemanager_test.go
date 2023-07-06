@@ -9,10 +9,9 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/aggregator"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/require"
@@ -344,7 +343,7 @@ func TestCacheManager_ExcludeProcesses(t *testing.T) {
 	sameExcluder.Add([]configv1alpha1.MatchEntry{
 		// same excluder as the one in makeCacheManagerForTest
 		{
-			ExcludedNamespaces: []util.Wildcard{"kube-system"},
+			ExcludedNamespaces: []wildcard.Wildcard{"kube-system"},
 			Processes:          []string{"sync"},
 		},
 	})
@@ -356,11 +355,11 @@ func TestCacheManager_ExcludeProcesses(t *testing.T) {
 	excluder.Add([]configv1alpha1.MatchEntry{
 		// exclude the "default" namespace
 		{
-			ExcludedNamespaces: []util.Wildcard{"default"},
+			ExcludedNamespaces: []wildcard.Wildcard{"default"},
 			Processes:          []string{"sync"},
 		},
 		{
-			ExcludedNamespaces: []util.Wildcard{"kube-system"},
+			ExcludedNamespaces: []wildcard.Wildcard{"kube-system"},
 			Processes:          []string{"sync"},
 		},
 	})
@@ -417,7 +416,7 @@ func makeCacheManagerForTest(t *testing.T, startCache, startManager bool) (*Cach
 	processExcluder := process.Get()
 	processExcluder.Add([]configv1alpha1.MatchEntry{
 		{
-			ExcludedNamespaces: []util.Wildcard{"kube-system"},
+			ExcludedNamespaces: []wildcard.Wildcard{"kube-system"},
 			Processes:          []string{"sync"},
 		},
 	})
