@@ -103,8 +103,7 @@ func (b *GVKAgreggator) List(k Key) map[schema.GroupVersionKind]struct{} {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	gvks, _ := b.store[k]
-	return gvks
+	return b.store[k]
 }
 
 func (b *GVKAgreggator) ListAllGVKs() []schema.GroupVersionKind {
@@ -117,15 +116,6 @@ func (b *GVKAgreggator) ListAllGVKs() []schema.GroupVersionKind {
 	}
 	return allGVKs
 }
-
-func (b *GVKAgreggator) Clear() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.store =       make(map[Key]map[schema.GroupVersionKind]struct{})
-		b.reverseStore = make(map[schema.GroupVersionKind]map[Key]struct{})
-}
-
 
 func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struct{}, k Key) error {
 	for gvk := range gvks {

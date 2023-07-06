@@ -42,7 +42,6 @@ import (
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -143,7 +142,7 @@ func TestReconcile(t *testing.T) {
 		CtrlName,
 		events)
 	require.NoError(t, err)
-	cacheManager, err := cm.NewCacheManager(&cm.CacheManagerConfig{
+	cacheManager, err := cm.NewCacheManager(&cm.Config{
 		Opa:              opaClient,
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
@@ -155,7 +154,9 @@ func TestReconcile(t *testing.T) {
 	require.NoError(t, err)
 
 	// start the cache manager
-	go cacheManager.Start(ctx)
+	go func() {
+		require.NoError(t, cacheManager.Start(ctx))
+	}()
 
 	rec, err := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, watchSet)
 	require.NoError(t, err)
@@ -435,7 +436,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 	if err != nil {
 		return nil, fmt.Errorf("cannot create registrar: %w", err)
 	}
-	cacheManager, err := cm.NewCacheManager(&cm.CacheManagerConfig{
+	cacheManager, err := cm.NewCacheManager(&cm.Config{
 		Opa:              opaClient,
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
@@ -447,7 +448,10 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 	if err != nil {
 		return nil, fmt.Errorf("error creating cache manager: %w", err)
 	}
-	go cacheManager.Start(ctx)
+	go func() {
+		_ = cacheManager.Start(ctx)
+	}()
+
 	rec, err := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, watchSet)
 	if err != nil {
 		return nil, fmt.Errorf("creating reconciler: %w", err)
@@ -614,7 +618,7 @@ func TestConfig_Retries(t *testing.T) {
 		CtrlName,
 		events)
 	require.NoError(t, err)
-	cacheManager, err := cm.NewCacheManager(&cm.CacheManagerConfig{
+	cacheManager, err := cm.NewCacheManager(&cm.Config{
 		Opa:              opaClient,
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
@@ -624,7 +628,9 @@ func TestConfig_Retries(t *testing.T) {
 		Reader:           c,
 	})
 	require.NoError(t, err)
-	go cacheManager.Start(ctx)
+	go func() {
+		require.NoError(t, cacheManager.Start(ctx))
+	}()
 
 	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, watchSet)
 	err = add(mgr, rec)
@@ -763,67 +769,4 @@ func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Uns
 // This interface is getting used by tests to check the private objects of objectTracker.
 type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
-}
-
-// ensureDeleted
-//
-// This package uses the same API server process across multiple test functions.
-// The residual state from a previous test function can cause flakes.
-//
-// To ensure a clean slate, we must verify that any previously applied Config object
-// has been fully removed before applying our new object.
-func ensureDeleted(ctx context.Context, c client.Client, toDelete client.Object) func() error {
-	gvk := toDelete.GetObjectKind().GroupVersionKind()
-	key := client.ObjectKeyFromObject(toDelete)
-
-	return func() error {
-		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(gvk)
-
-		err := c.Get(ctx, key, u)
-		if apierrors.IsNotFound(err) {
-			return nil
-		} else if err != nil {
-			return err
-		}
-
-		if !u.GetDeletionTimestamp().IsZero() {
-			return fmt.Errorf("waiting for deletion: %v %v", gvk, key)
-		}
-
-		err = c.Delete(ctx, u)
-		if err != nil {
-			return fmt.Errorf("deleting %v %v: %w", gvk, key, err)
-		}
-
-		return fmt.Errorf("queued %v %v for deletion", gvk, key)
-	}
-}
-
-// ensureCreated attempts to create toCreate in Client c as toCreate existed when ensureCreated was called.
-func ensureCreated(ctx context.Context, c client.Client, toCreate client.Object) func() error {
-	gvk := toCreate.GetObjectKind().GroupVersionKind()
-	key := client.ObjectKeyFromObject(toCreate)
-
-	// As ensureCreated returns a closure, it is possible that the value toCreate will be modified after ensureCreated
-	// is called but before the closure is called. Creating a copy here ensures the object to be created is consistent
-	// with the way it existed when ensureCreated was called.
-	toCreateCopy := toCreate.DeepCopyObject()
-
-	return func() error {
-		instance, ok := toCreateCopy.(client.Object)
-		if !ok {
-			return fmt.Errorf("instance was %T which is not a client.Object", instance)
-		}
-
-		err := c.Create(ctx, instance)
-		if apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("a copy of %v %v already exists - run ensureDeleted to ensure a fresh copy exists for testing",
-				gvk, key)
-		} else if err != nil {
-			return fmt.Errorf("creating %v %v: %w", gvk, key, err)
-		}
-
-		return nil
-	}
 }

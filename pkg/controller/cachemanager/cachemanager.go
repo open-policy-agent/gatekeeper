@@ -21,7 +21,7 @@ import (
 
 var log = logf.Log.WithName("cache-manager")
 
-type CacheManagerConfig struct {
+type Config struct {
 	Opa              syncutil.OpaDataClient
 	SyncMetricsCache *syncutil.MetricsCache
 	Tracker          *readiness.Tracker
@@ -45,13 +45,12 @@ type CacheManager struct {
 	tracker          *readiness.Tracker
 	registrar        *watch.Registrar
 	watchedSet       *watch.Set
-	replayErrChan    chan error
 	replayTicker     time.Ticker
 	reader           client.Reader
 	excluderChanged  bool
 }
 
-func NewCacheManager(config *CacheManagerConfig) (*CacheManager, error) {
+func NewCacheManager(config *Config) (*CacheManager, error) {
 	if config.WatchedSet == nil {
 		return nil, fmt.Errorf("watchedSet must be non-nil")
 	}
@@ -116,17 +115,18 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 }
 
 func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.processExcluder.Equals(newExcluder) {
 		return
 	}
 
-	c.mu.Lock()
 	c.processExcluder.Replace(newExcluder)
 	// there is a new excluder which means we need to schedule a wipe for any
 	// previously watched GVKs to be re-added to get a chance to be evaluated
 	// for this new process excluder.
 	c.excluderChanged = true
-	c.mu.Unlock()
 }
 
 func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Unstructured) error {

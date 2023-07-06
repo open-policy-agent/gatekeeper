@@ -184,7 +184,7 @@ func TestCacheManager_makeUpdates(t *testing.T) {
 	require.NoError(t, c.Create(ctx, pod), "creating Pod pod-1")
 
 	// prep gvkAggregator for updates to be picked up in makeUpdates
-	cacheManager.gvkAggregator.Upsert(aggregator.Key{Source: "foo", ID: "bar"}, []schema.GroupVersionKind{podGVK})
+	require.NoError(t, cacheManager.gvkAggregator.Upsert(aggregator.Key{Source: "foo", ID: "bar"}, []schema.GroupVersionKind{podGVK}))
 
 	gvksInAgg := watch.NewSet()
 	gvksInAgg.Add(cacheManager.gvkAggregator.ListAllGVKs()...)
@@ -234,7 +234,7 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 		{Gvk: podGVK, Key: "default/pod-1"}:               nil,
 	}
 
-	require.Eventually(t, expectedCheck(opaClient, expected), testutils.TenSecond, testutils.OneSecond)
+	require.Eventually(t, expectedCheck(opaClient, expected), testutils.EventuallyTimeout, testutils.EventuallyTicker)
 
 	// now assert that the gvkAggregator looks as expected
 	cacheManager.gvkAggregator.IsPresent(configMapGVK)
@@ -252,7 +252,7 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
 		{Gvk: configMapGVK, Key: "default/config-test-2"}: nil,
 	}
-	require.Eventually(t, expectedCheck(opaClient, expected), testutils.TenSecond, testutils.OneSecond)
+	require.Eventually(t, expectedCheck(opaClient, expected), testutils.EventuallyTimeout, testutils.EventuallyTicker)
 	// now assert that the gvkAggregator looks as expected
 	cacheManager.gvkAggregator.IsPresent(configMapGVK)
 	gvks = cacheManager.gvkAggregator.List(syncSourceOne)
@@ -282,13 +282,9 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 			return false
 		}
 		_, found2 := gvks2[configMapGVK]
-		if !found2 {
-			return false
-		}
-
-		return true
+		return found2
 	}
-	require.Eventually(t, reqConditionForAgg, testutils.TenSecond, testutils.OneSecond)
+	require.Eventually(t, reqConditionForAgg, testutils.EventuallyTimeout, testutils.EventuallyTicker)
 
 	require.NoError(t, cacheManager.AddSource(ctx, syncSourceOne, []schema.GroupVersionKind{podGVK}))
 	expected2 := map[fakes.OpaKey]interface{}{
@@ -296,24 +292,24 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 		{Gvk: configMapGVK, Key: "default/config-test-2"}: nil,
 		{Gvk: podGVK, Key: "default/pod-1"}:               nil,
 	}
-	require.Eventually(t, expectedCheck(opaClient, expected2), testutils.TenSecond, testutils.OneSecond)
+	require.Eventually(t, expectedCheck(opaClient, expected2), testutils.EventuallyTimeout, testutils.EventuallyTicker)
 
 	// now go on and unreference sourceTwo's gvks; this should schedule the config maps to be removed
 	require.NoError(t, cacheManager.AddSource(ctx, syncSourceTwo, []schema.GroupVersionKind{}))
 	expected3 := map[fakes.OpaKey]interface{}{
 		// config maps no longer required by any sync source
-		//{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
-		//{Gvk: configMapGVK, Key: "default/config-test-2"}: nil,
+		// {Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
+		// {Gvk: configMapGVK, Key: "default/config-test-2"}: nil,
 		{Gvk: podGVK, Key: "default/pod-1"}: nil,
 	}
-	require.Eventually(t, expectedCheck(opaClient, expected3), testutils.TenSecond, testutils.OneSecond)
+	require.Eventually(t, expectedCheck(opaClient, expected3), testutils.EventuallyTimeout, testutils.EventuallyTicker)
 
 	// now remove all the sources
 	require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceTwo))
 	require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceOne))
 
 	// and expect an empty cache and empty aggregator
-	require.Eventually(t, expectedCheck(opaClient, map[fakes.OpaKey]interface{}{}), testutils.TenSecond, testutils.OneSecond)
+	require.Eventually(t, expectedCheck(opaClient, map[fakes.OpaKey]interface{}{}), testutils.EventuallyTimeout, testutils.EventuallyTicker)
 	require.True(t, len(cacheManager.gvkAggregator.ListAllGVKs()) == 0)
 
 	// cleanup
@@ -341,7 +337,7 @@ func TestCacheManager_ExcludeProcesses(t *testing.T) {
 	syncSource := aggregator.Key{Source: "source_b", ID: "ID_b"}
 	require.NoError(t, cacheManager.AddSource(ctx, syncSource, []schema.GroupVersionKind{configMapGVK}))
 	// check that everything is well added at first
-	require.Eventually(t, expectedCheck(opaClient, expected), testutils.TenSecond, testutils.OneSecond)
+	require.Eventually(t, expectedCheck(opaClient, expected), testutils.EventuallyTimeout, testutils.EventuallyTicker)
 
 	// make sure that replacing w same process excluder is a no op
 	sameExcluder := process.New()
@@ -370,7 +366,7 @@ func TestCacheManager_ExcludeProcesses(t *testing.T) {
 	})
 	cacheManager.ExcludeProcesses(excluder)
 
-	require.Eventually(t, expectedCheck(opaClient, map[fakes.OpaKey]interface{}{}), testutils.TenSecond, testutils.ThreeSecond)
+	require.Eventually(t, expectedCheck(opaClient, map[fakes.OpaKey]interface{}{}), testutils.EventuallyTimeout, testutils.EventuallyTicker)
 	// make sure the gvk is still in gvkAggregator
 	require.True(t, len(cacheManager.gvkAggregator.ListAllGVKs()) == 1)
 	require.True(t, cacheManager.gvkAggregator.IsPresent(configMapGVK))
@@ -429,7 +425,8 @@ func makeCacheManagerForTest(t *testing.T, startCache, startManager bool) (*Cach
 	w, err := wm.NewRegistrar(
 		"test-cache-manager",
 		events)
-	cacheManager, err := NewCacheManager(&CacheManagerConfig{
+	require.NoError(t, err)
+	cacheManager, err := NewCacheManager(&Config{
 		Opa:              opaClient,
 		SyncMetricsCache: syncutil.NewMetricsCache(),
 		Tracker:          tracker,
@@ -441,7 +438,10 @@ func makeCacheManagerForTest(t *testing.T, startCache, startManager bool) (*Cach
 	require.NoError(t, err)
 
 	if startCache {
-		go cacheManager.Start(ctx)
+		go func() {
+			require.NoError(t, cacheManager.Start(ctx))
+		}()
+
 		t.Cleanup(func() {
 			ctx.Done()
 		})
