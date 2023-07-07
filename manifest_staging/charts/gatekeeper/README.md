@@ -27,7 +27,8 @@ _See [helm install](https://helm.sh/docs/helm/helm_install/) for command documen
 ## Upgrade Chart
 
 **Upgrading from < v3.4.0**
-Chart 3.4.0 deprecates support for Helm 2 and also removes the creation of the `gatekeeper-system` Namespace from within the chart. This follows Helm 3 Best Practices.
+Chart 3.4.0 deprecates support for Helm 2 and also removes the creation of the `gatekeeper-system` Namespace from within
+the chart. This follows Helm 3 Best Practices.
 
 Option 1:
 A simple way to upgrade is to uninstall first and re-install with 3.4.0 or greater.
@@ -39,7 +40,9 @@ $ helm install -n gatekeeper-system [RELEASE_NAME] gatekeeper/gatekeeper --creat
 ```
 
 Option 2:
-Run the `helm_migrate.sh` script before installing the 3.4.0 or greater chart. This will remove the Helm secret for the original release, while keeping all of the resources. It then updates the annotations of the resources so that the new chart can import and manage them.
+Run the `helm_migrate.sh` script before installing the 3.4.0 or greater chart. This will remove the Helm secret for the
+original release, while keeping all of the resources. It then updates the annotations of the resources so that the new
+chart can import and manage them.
 
 ```console
 $ helm_migrate.sh
@@ -56,9 +59,12 @@ _See [helm 2 to 3](https://helm.sh/docs/topics/v2_v3_migration/) for Helm 2 migr
 
 ## Exempting Namespace
 
-The Helm chart automatically sets the Gatekeeper flag `--exempt-namespace={{ .Release.Namespace }}` in order to exempt the namespace where the chart is installed, and adds the `admission.gatekeeper.sh/ignore` label to the namespace during a post-install hook.
+The Helm chart automatically sets the Gatekeeper flag `--exempt-namespace={{ .Release.Namespace }}` in order to exempt
+the namespace where the chart is installed, and adds the `admission.gatekeeper.sh/ignore` label to the namespace during
+a post-install hook.
 
-_See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces) for more information._
+_See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces) for more
+information._
 
 ## Parameters
 
@@ -141,7 +147,7 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | validatingWebhookURL                                       | Custom URL for Kubernetes API server to use to reach the validating webhook pod. If not set, the default of connecting via the kubernetes service endpoint is used.                                                                                                                            | `null`                                                                                                                                                                |
 | enableDeleteOperations                                     | Enable validating webhook for delete operations. Does not work with `validatingWebhookCustomRules`                                                                                                                                                                                             | `false`                                                                                                                                                               |
 | enableExternalData                                         | Enable external data                                                                                                                                                                                                                                                                           | `true`                                                                                                                                                                |
-| enableGeneratorResourceExpansion                           | Enable generator resource expansion (alpha feature)                                                                                                                                                                                                                                            | `false`                                                                                                                                                               |
+| enableGeneratorResourceExpansion                           | Enable generator resource expansion (beta feature)                                                                                                                                                                                                                                            | `true`                                                                                                                                                               |
 | enableTLSHealthcheck                                       | Enable probing webhook API with certificate stored in certDir                                                                                                                                                                                                                                  | `false`                                                                                                                                                               |
 | maxServingThreads                                          | Limit the number of concurrent calls the validation backend made by the validation webhook. -1 limits this value to GOMAXPROCS. Configuring this value may lower max RAM usage and limit CPU throttling, Tuning it can optimize serving capacity.                                              | `-1`                                                                                                                                                                  |
 | metricsBackends                                            | Metrics exporters to use. Valid exporters are: `prometheus`, `stackdriver`, and `opencensus`                                                                                                                                                                                                   | `["prometheus"]`                                                                                                                                                      |
@@ -186,6 +192,7 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | controllerManager.extraRules                               | Extra rules for the gatekeeper-manager-role Role                                                                                                                                                                                                                                               | `[]`                                                                                                                                                                  |
 | controllerManager.networkPolicy.enabled                    | Should a network policy for the controller manager be created                                                                                                                                                                                                                                  | `false`                                                                                                                                                               |
 | controllerManager.networkPolicy.ingress                    | Additional ingress rules to be added to the controller manager network policy                                                                                                                                                                                                                  | `{}`                                                                                                                                                                  |
+| controllerManager.strategyType                             | The strategy type to use for Controller Manager deployment                                                                                                                                                                                                                                     | `RollingUpdate`                                                                                                                                                       |
 | audit.affinity                                             | The node affinity to use for audit pod scheduling                                                                                                                                                                                                                                              | `{}`                                                                                                                                                                  |
 | audit.topologySpreadConstraints                            | The topology spread constraints to use for audit pod scheduling                                                                                                                                                                                                                                | `[]`                                                                                                                                                                  |
 | audit.tolerations                                          | The tolerations to use for audit pod scheduling                                                                                                                                                                                                                                                | `[]`                                                                                                                                                                  |
@@ -214,4 +221,6 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 
 ## Contributing Changes
 
-Please refer to [Contributing to Helm Chart](https://open-policy-agent.github.io/gatekeeper/website/docs/help#contributing-to-helm-chart) for modifying the Helm chart.
+Please refer
+to [Contributing to Helm Chart](https://open-policy-agent.github.io/gatekeeper/website/docs/help#contributing-to-helm-chart)
+for modifying the Helm chart.
