@@ -3,10 +3,10 @@ id: expansion
 title: Validating Workload Resources using `ExapansionTemplate`s
 ---
 
-`Feature State:` Gatekeeper version v3.10+ (alpha)
+`Feature State:` Gatekeeper version v3.10+ (alpha), version 3.13+ (beta)
 
-> ❗This feature is in _alpha_ stage, and is not enabled by default. To
-> enable, set the `enable-generator-resource-expansion` flag.
+> ❗This feature is in _beta_ stage. It is enabled by default. To disable the feature,
+> set the `enable-generator-resource-expansion` flag to false.
 
 ## Motivation
 
