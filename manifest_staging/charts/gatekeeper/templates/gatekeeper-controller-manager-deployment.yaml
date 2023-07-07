@@ -22,6 +22,8 @@ spec:
       gatekeeper.sh/system: "yes"
       heritage: '{{ .Release.Service }}'
       release: '{{ .Release.Name }}'
+  strategy:
+    type: {{ .Values.controllerManager.strategyType }}
   template:
     metadata:
       annotations:

@@ -62,6 +62,8 @@ metadata:
   namespace: gatekeeper-system
 spec:
   replicas: HELMSUBST_DEPLOYMENT_REPLICAS
+  strategy:
+    type: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_TYPE
   template:
     metadata:
       annotations:
