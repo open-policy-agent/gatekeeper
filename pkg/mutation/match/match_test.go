@@ -831,3 +831,210 @@ func TestApplyTo(t *testing.T) {
 		})
 	}
 }
+
+func makeObjectWithGenerateName(gvk schema.GroupVersionKind, namespace, name string, options ...func(*unstructured.Unstructured)) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	obj.SetGroupVersionKind(gvk)
+	obj.SetNamespace(namespace)
+	obj.SetGenerateName(name)
+
+	for _, o := range options {
+		o(obj)
+	}
+	return obj
+}
+
+func Test_namesMatch(t *testing.T) {
+	type args struct {
+		match  *Match
+		target *Matchable
+	}
+
+	tests := []struct {
+		name    string
+		args    args
+		want    bool
+		wantErr bool
+	}{
+		{
+			name: "match name with wild card",
+			args: args{
+				match: &Match{
+					Name: "foo*",
+					Kinds: []Kinds{
+						{
+							Kinds:     []string{"Pod"},
+							APIGroups: []string{"*"},
+						},
+					},
+				},
+				target: &Matchable{
+					Object: makeObject(schema.GroupVersionKind{Kind: "Pod", Group: "*"}, "my-ns", "foo-bar"),
+					Namespace: &corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "my-ns",
+						},
+					},
+				},
+			},
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name: "match generate name with wild card",
+			args: args{
+				match: &Match{
+					Name: "foo*",
+					Kinds: []Kinds{
+						{
+							Kinds:     []string{"Pod"},
+							APIGroups: []string{"*"},
+						},
+					},
+				},
+				target: &Matchable{
+					Object: makeObjectWithGenerateName(schema.GroupVersionKind{Kind: "Pod", Group: "*"}, "my-ns", "foo-bar-"),
+					Namespace: &corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "my-ns",
+						},
+					},
+				},
+			},
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name: "match different name with wild card",
+			args: args{
+				match: &Match{
+					Name: "foo*",
+					Kinds: []Kinds{
+						{
+							Kinds:     []string{"Pod"},
+							APIGroups: []string{"*"},
+						},
+					},
+				},
+				target: &Matchable{
+					Object: makeObject(schema.GroupVersionKind{Kind: "Pod", Group: "*"}, "my-ns", "fob"),
+					Namespace: &corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "my-ns",
+						},
+					},
+				},
+			},
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "match different generate name with wild card",
+			args: args{
+				match: &Match{
+					Name: "foo*",
+					Kinds: []Kinds{
+						{
+							Kinds:     []string{"Pod"},
+							APIGroups: []string{"*"},
+						},
+					},
+				},
+				target: &Matchable{
+					Object: makeObjectWithGenerateName(schema.GroupVersionKind{Kind: "Pod", Group: "*"}, "my-ns", "fob-bar-"),
+					Namespace: &corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "my-ns",
+						},
+					},
+				},
+			},
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "match whole name with generate name",
+			args: args{
+				match: &Match{
+					Name: "foo",
+					Kinds: []Kinds{
+						{
+							Kinds:     []string{"Pod"},
+							APIGroups: []string{"*"},
+						},
+					},
+				},
+				target: &Matchable{
+					Object: makeObjectWithGenerateName(schema.GroupVersionKind{Kind: "Pod", Group: "*"}, "my-ns", "foo"),
+					Namespace: &corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "my-ns",
+						},
+					},
+				},
+			},
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "match prefix wildcard with generate name",
+			args: args{
+				match: &Match{
+					Name: "*foo",
+					Kinds: []Kinds{
+						{
+							Kinds:     []string{"Pod"},
+							APIGroups: []string{"*"},
+						},
+					},
+				},
+				target: &Matchable{
+					Object: makeObjectWithGenerateName(schema.GroupVersionKind{Kind: "Pod", Group: "*"}, "my-ns", "foo"),
+					Namespace: &corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "my-ns",
+						},
+					},
+				},
+			},
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "match later half of the name with wild card with generate name",
+			args: args{
+				match: &Match{
+					Name: "*-bar*",
+					Kinds: []Kinds{
+						{
+							Kinds:     []string{"Pod"},
+							APIGroups: []string{"*"},
+						},
+					},
+				},
+				target: &Matchable{
+					Object: makeObjectWithGenerateName(schema.GroupVersionKind{Kind: "Pod", Group: "*"}, "my-ns", "fob-bar"),
+					Namespace: &corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "my-ns",
+						},
+					},
+				},
+			},
+			want:    true,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := namesMatch(tt.args.match, tt.args.target)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("namesMatch() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("namesMatch() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
