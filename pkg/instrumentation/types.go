@@ -2,7 +2,6 @@ package instrumentation
 
 import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	cfinstr "github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 )
 
@@ -26,7 +25,7 @@ type StatsEntryWithDesc struct {
 
 // ToStatsEntriesWithDesc will use the client passed in to adorn constraint framework instrumentation.StatsEntry structs
 // with a description and returns an array of StatsEntryWithDesc.
-func ToStatsEntriesWithDesc(client *constraintclient.Client, cfentries []*instrumentation.StatsEntry) []*StatsEntryWithDesc {
+func ToStatsEntriesWithDesc(client *constraintclient.Client, cfentries []*cfinstr.StatsEntry) []*StatsEntryWithDesc {
 	var entriesWithDesc []*StatsEntryWithDesc
 	for _, se := range cfentries {
 		sewd := &StatsEntryWithDesc{

@@ -1,4 +1,4 @@
-package util
+package wildcard
 
 import "testing"
 
