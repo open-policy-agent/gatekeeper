@@ -364,7 +364,7 @@ func (r *FakeDapr) UpdateConnection(_ context.Context, config interface{}) error
 	return nil
 }
 
-// Returns a new client for dapr.
+// Returns a fake client for dapr.
 func FakeNewConnection(ctx context.Context, config interface{}) (connection.Connection, error) {
 	var cfg ClientConfig
 	m, ok := config.(map[string]interface{})

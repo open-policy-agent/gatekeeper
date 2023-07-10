@@ -144,11 +144,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			return reconcile.Result{}, err
 		}
 	} else {
-		err := r.system.CloseConnection(request.Name)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, err
-		}
-		log.Info("removed connection", "name", request.Name)
 		return reconcile.Result{}, fmt.Errorf("pub-sub provider %s is not supported", cfg.Data["provider"])
 	}
 	log.Info("Connection upsert successful", "name", request.Name, "provider", cfg.Data["provider"])

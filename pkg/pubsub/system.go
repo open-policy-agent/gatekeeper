@@ -40,16 +40,18 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, name 
 		if s.providers[name] == provider {
 			return conn.UpdateConnection(ctx, config)
 		}
-		// Otherwise, close the existing connection and create a new one.
-		if err := s.CloseConnection(name); err != nil {
-			return err
-		}
 	}
 	// Check if the provider is supported.
 	newConn, err := newConnFunc(ctx, config)
 	if err != nil {
 		return err
 	}
+
+	// Close the existing connection after successfully creating the new one.
+	if err := s.CloseConnection(name); err != nil {
+		return err
+	}
+
 	// Add the new connection and provider to the maps.
 	if s.connections == nil {
 		s.connections = map[string]connection.Connection{}
