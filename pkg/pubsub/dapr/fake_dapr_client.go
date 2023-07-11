@@ -338,7 +338,7 @@ type FakeDapr struct {
 	// Name of the pubsub component
 	pubSubComponent string
 
-	// Name of the state store component
+	// closing function
 	f func()
 }
 
@@ -347,6 +347,7 @@ func (r *FakeDapr) Publish(ctx context.Context, data interface{}, topic string) 
 }
 
 func (r *FakeDapr) CloseConnection() error {
+	r.f()
 	return nil
 }
 

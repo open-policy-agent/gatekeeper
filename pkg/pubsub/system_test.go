@@ -16,7 +16,8 @@ var testSystem *System
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	tmp := provider.ListFakeProviders()
+	provider.FakeProviders()
+	tmp := provider.List()
 	testSystem = NewSystem()
 	testSystem.connections = make(map[string]connection.Connection)
 	testSystem.providers = make(map[string]string)
@@ -30,6 +31,9 @@ func TestMain(m *testing.M) {
 		testSystem.connections[name], _ = fakeConn(ctx, cfg[name])
 	}
 	r := m.Run()
+	for _, fakeConn := range testSystem.connections {
+		_ = fakeConn.CloseConnection()
+	}
 
 	if r != 0 {
 		os.Exit(r)
@@ -57,6 +61,7 @@ func TestNewSystem(t *testing.T) {
 }
 
 func TestSystem_UpsertConnection(t *testing.T) {
+	// provider.FakeEmptyProviders()
 	type fields struct {
 		connections map[string]connection.Connection
 		providers   map[string]string
@@ -67,7 +72,6 @@ func TestSystem_UpsertConnection(t *testing.T) {
 		config   interface{}
 		name     string
 		provider string
-		f        provider.InitiateConnection
 	}
 	tests := []struct {
 		name    string
@@ -92,7 +96,6 @@ func TestSystem_UpsertConnection(t *testing.T) {
 				},
 				name:     "dapr",
 				provider: "dapr",
-				f:        dapr.FakeNewConnection,
 			},
 			wantErr: false,
 			match:   true,
@@ -100,7 +103,7 @@ func TestSystem_UpsertConnection(t *testing.T) {
 		{
 			name: "Update a connection to use test provider",
 			fields: fields{
-				connections: testSystem.connections,
+				connections: nil,
 				providers:   map[string]string{"audit": "dapr"},
 				s: &System{
 					mux:       sync.RWMutex{},
@@ -114,10 +117,9 @@ func TestSystem_UpsertConnection(t *testing.T) {
 				},
 				name:     "audit",
 				provider: "test",
-				f:        dapr.FakeNewConnection,
 			},
-			wantErr: false,
-			match:   false,
+			wantErr: true,
+			match:   true,
 		},
 		{
 			name: "Update a connection using same provider",
@@ -137,7 +139,6 @@ func TestSystem_UpsertConnection(t *testing.T) {
 				},
 				name:     "audit",
 				provider: "dapr",
-				f:        dapr.FakeNewConnection,
 			},
 			wantErr: false,
 			match:   false,
@@ -145,7 +146,7 @@ func TestSystem_UpsertConnection(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.fields.s.UpsertConnection(tt.args.ctx, tt.args.config, tt.args.name, tt.args.provider, tt.args.f); (err != nil) != tt.wantErr {
+			if err := tt.fields.s.UpsertConnection(tt.args.ctx, tt.args.config, tt.args.name, tt.args.provider); (err != nil) != tt.wantErr {
 				t.Errorf("System.UpsertConnection() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			assert.NotEqual(t, nil, tt.fields.s.connections)

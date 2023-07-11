@@ -31,9 +31,8 @@ func (s *System) Publish(ctx context.Context, connection string, topic string, m
 	return fmt.Errorf("No connections are established")
 }
 
-func (s *System) UpsertConnection(ctx context.Context, config interface{}, name string, provider string, newConnFunc prvd.InitiateConnection) error {
+func (s *System) UpsertConnection(ctx context.Context, config interface{}, name string, provider string) error {
 	s.mux.Lock()
-	defer s.mux.Unlock()
 	// Check if the connection already exists.
 	if conn, ok := s.connections[name]; ok {
 		// If the provider is the same, update the existing connection.
@@ -41,27 +40,32 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, name 
 			return conn.UpdateConnection(ctx, config)
 		}
 	}
+	s.mux.Unlock()
 	// Check if the provider is supported.
-	newConn, err := newConnFunc(ctx, config)
-	if err != nil {
-		return err
-	}
+	if newConnFunc, ok := prvd.List()[provider]; ok {
+		newConn, err := newConnFunc(ctx, config)
+		if err != nil {
+			return err
+		}
 
-	// Close the existing connection after successfully creating the new one.
-	if err := s.CloseConnection(name); err != nil {
-		return err
+		// Close the existing connection after successfully creating the new one.
+		if err := s.CloseConnection(name); err != nil {
+			return err
+		}
+		s.mux.Lock()
+		defer s.mux.Unlock()
+		// Add the new connection and provider to the maps.
+		if s.connections == nil {
+			s.connections = map[string]connection.Connection{}
+		}
+		if s.providers == nil {
+			s.providers = map[string]string{}
+		}
+		s.connections[name] = newConn
+		s.providers[name] = provider
+		return nil
 	}
-
-	// Add the new connection and provider to the maps.
-	if s.connections == nil {
-		s.connections = map[string]connection.Connection{}
-	}
-	if s.providers == nil {
-		s.providers = map[string]string{}
-	}
-	s.connections[name] = newConn
-	s.providers[name] = provider
-	return nil
+	return fmt.Errorf("pub-sub provider %s is not supported", provider)
 }
 
 func (s *System) CloseConnection(connection string) error {

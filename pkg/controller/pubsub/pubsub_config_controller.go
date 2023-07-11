@@ -12,7 +12,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
-	prvd "github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/provider"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -138,14 +137,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if newConnFunc, ok := prvd.List()[cfg.Data["provider"]]; ok {
-		err = r.system.UpsertConnection(ctx, config, request.Name, cfg.Data["provider"], newConnFunc)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	} else {
-		return reconcile.Result{}, fmt.Errorf("pub-sub provider %s is not supported", cfg.Data["provider"])
+
+	err = r.system.UpsertConnection(ctx, config, request.Name, cfg.Data["provider"])
+	if err != nil {
+		return reconcile.Result{}, err
 	}
+
 	log.Info("Connection upsert successful", "name", request.Name, "provider", cfg.Data["provider"])
 	return reconcile.Result{}, nil
 }
