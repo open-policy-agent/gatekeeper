@@ -64,14 +64,14 @@ func (a *Adder) Add(mgr manager.Manager) error {
 func newReconciler(
 	mgr manager.Manager,
 	reporter syncutil.Reporter,
-	cmt syncutil.CacheManagerMediator,
+	cm syncutil.CacheManagerMediator,
 ) reconcile.Reconciler {
 	return &ReconcileSync{
 		reader:   mgr.GetCache(),
 		scheme:   mgr.GetScheme(),
 		log:      log,
 		reporter: reporter,
-		cm:       cmt,
+		cm:       cm,
 	}
 }
 

@@ -174,7 +174,6 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 	// Events will be used to receive events from dynamic watches registered
 	// via the registrar below.
 	events := make(chan event.GenericEvent, 1024)
-	filteredOpa := syncutil.NewFilteredOpaDataClient(deps.Opa, deps.WatchSet)
 	syncMetricsCache := syncutil.NewMetricsCache()
 	w, err := deps.WatchManger.NewRegistrar(
 		config.CtrlName,
@@ -183,7 +182,7 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		return err
 	}
 	cm, err := cm.NewCacheManager(&cm.Config{
-		Opa:              filteredOpa,
+		Opa:              deps.Opa,
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          deps.Tracker,
 		ProcessExcluder:  deps.ProcessExcluder,

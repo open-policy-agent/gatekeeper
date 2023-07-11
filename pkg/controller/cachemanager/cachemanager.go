@@ -15,6 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -33,21 +34,20 @@ type Config struct {
 }
 
 type CacheManager struct {
-	// the processExcluder and the gvkAggregator define what the underlying
-	// cache should look like. we refer to those two as "the spec"
 	processExcluder *process.Excluder
 	gvkAggregator   *aggregator.GVKAgreggator
-	// mu guards access to any part of the spec above
+	gvksToRelist    *watch.Set
+	excluderChanged bool
+	// mu guards access to any of the fields above
 	mu sync.RWMutex
 
-	opa              syncutil.OpaDataClient
-	syncMetricsCache *syncutil.MetricsCache
-	tracker          *readiness.Tracker
-	registrar        *watch.Registrar
-	watchedSet       *watch.Set
-	replayTicker     time.Ticker
-	reader           client.Reader
-	excluderChanged  bool
+	opa                   syncutil.OpaDataClient
+	syncMetricsCache      *syncutil.MetricsCache
+	tracker               *readiness.Tracker
+	registrar             *watch.Registrar
+	watchedSet            *watch.Set
+	cacheManagementTicker time.Ticker
+	reader                client.Reader
 }
 
 func NewCacheManager(config *Config) (*CacheManager, error) {
@@ -78,14 +78,14 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 	}
 
 	cm.gvkAggregator = aggregator.NewGVKAggregator()
-
-	cm.replayTicker = *time.NewTicker(3 * time.Second)
+	cm.gvksToRelist = watch.NewSet()
+	cm.cacheManagementTicker = *time.NewTicker(3 * time.Second)
 
 	return cm, nil
 }
 
 func (c *CacheManager) Start(ctx context.Context) error {
-	go c.updateDatastore(ctx)
+	go c.manageCache(ctx)
 
 	<-ctx.Done()
 	return nil
@@ -97,8 +97,51 @@ func (c *CacheManager) AddSource(ctx context.Context, sourceKey aggregator.Key, 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// for this source, find the net new gvks;
+	// we will establish new watches for them.
+	netNewGVKs := []schema.GroupVersionKind{}
+	for _, gvk := range newGVKs {
+		if !c.gvkAggregator.IsPresent(gvk) {
+			netNewGVKs = append(netNewGVKs, gvk)
+		}
+	}
+
 	if err := c.gvkAggregator.Upsert(sourceKey, newGVKs); err != nil {
 		return fmt.Errorf("internal error adding source: %w", err)
+	}
+	// as a result of upserting the new gvks for the source key, some gvks
+	// may become unreferenced and need to be deleted; this will be handled async
+	// in the manageCache loop.
+
+	newGvkWatchSet := watch.NewSet()
+	newGvkWatchSet.AddSet(c.watchedSet)
+	newGvkWatchSet.Add(netNewGVKs...)
+
+	if newGvkWatchSet.Size() != 0 {
+		// watch the net new gvks
+		if err := c.replaceWatchSet(ctx, newGvkWatchSet); err != nil {
+			return fmt.Errorf("error watching new gvks: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (c *CacheManager) replaceWatchSet(ctx context.Context, newWatchSet *watch.Set) error {
+	// assumes caller has lock
+
+	var innerError error
+	c.watchedSet.Replace(newWatchSet, func() {
+		// *Note the following steps are not transactional with respect to admission control
+
+		// Important: dynamic watches update must happen *after* updating our watchSet.
+		// Otherwise, the sync controller will drop events for the newly watched kinds.
+		// Defer error handling so object re-sync happens even if the watch is hard
+		// errored due to a missing GVK in the watch set.
+		innerError = c.registrar.ReplaceWatch(ctx, newWatchSet.Items())
+	})
+	if innerError != nil {
+		return innerError
 	}
 
 	return nil
@@ -107,9 +150,11 @@ func (c *CacheManager) AddSource(ctx context.Context, sourceKey aggregator.Key, 
 func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Key) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	if err := c.gvkAggregator.Remove(sourceKey); err != nil {
 		return fmt.Errorf("internal error removing source: %w", err)
 	}
+	// watchSet update will happen async-ly in manageCache
 
 	return nil
 }
@@ -130,6 +175,11 @@ func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
 }
 
 func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Unstructured) error {
+	// only perform work for watched gvks
+	if gvk := instance.GroupVersionKind(); !c.watchedSet.Contains(gvk) {
+		return nil
+	}
+
 	isNamespaceExcluded, err := c.processExcluder.IsNamespaceExcluded(process.Sync, instance)
 	if err != nil {
 		return fmt.Errorf("error while excluding namespaces: %w", err)
@@ -168,6 +218,11 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 }
 
 func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.Unstructured) error {
+	// only perform work for watched gvks
+	if gvk := instance.GroupVersionKind(); !c.watchedSet.Contains(gvk) {
+		return nil
+	}
+
 	if _, err := c.opa.RemoveData(ctx, instance); err != nil {
 		return err
 	}
@@ -219,27 +274,95 @@ func (c *CacheManager) listAndSyncDataForGVK(ctx context.Context, gvk schema.Gro
 	return nil
 }
 
-func (c *CacheManager) updateDatastore(ctx context.Context) {
+func (c *CacheManager) manageCache(ctx context.Context) {
+	stopChan := make(chan bool, 1)
+	gvkErrdChan := make(chan schema.GroupVersionKind, 1024)
+	gvksFailingTolist := watch.NewSet()
+
+	gvksFailingToListReconciler := func(stopChan <-chan bool) {
+		for {
+			select {
+			case <-stopChan:
+				return
+			case gvk := <-gvkErrdChan:
+				gvksFailingTolist.Add(gvk)
+			}
+		}
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
+			close(stopChan)
+			close(gvkErrdChan)
 			return
-		case <-c.replayTicker.C:
-			// snapshot the current spec so we can make a point in
-			// time change to the contents of the opa cache.
-			c.mu.RLock()
-			currentGVKsInAgg := watch.NewSet()
-			currentGVKsInAgg.Add(c.gvkAggregator.ListAllGVKs()...)
-			excluderChanged := c.excluderChanged
-			c.mu.RUnlock()
+		case <-c.cacheManagementTicker.C:
+			c.mu.Lock()
+			c.makeUpdates(ctx)
 
-			c.makeUpdatesForSpec(ctx, currentGVKsInAgg, excluderChanged)
+			// spin up new goroutines to relist if new gvks to relist are
+			// populated from makeUpdates.
+			if c.gvksToRelist.Size() != 0 {
+				// stop any goroutines that were relisting before
+				stopChan <- true
+
+				// also try to catch any gvks that are in the aggregator
+				// but are failing to list from a previous replay.
+				for _, gvk := range gvksFailingTolist.Items() {
+					if c.gvkAggregator.IsPresent(gvk) {
+						c.gvksToRelist.Add(gvk)
+					}
+				}
+
+				// save all gvks that need relisting
+				gvksToRelistForLoop := c.gvksToRelist.Items()
+
+				// clean state
+				gvksFailingTolist = watch.NewSet()
+				c.gvksToRelist = watch.NewSet()
+
+				stopChan = make(chan bool)
+
+				go c.replayLoop(ctx, gvksToRelistForLoop, stopChan)
+				go gvksFailingToListReconciler(stopChan)
+			}
+			c.mu.Unlock()
+		}
+	}
+}
+
+func (c *CacheManager) replayLoop(ctx context.Context, gvksToRelist []schema.GroupVersionKind, stopChan <-chan bool) {
+	for _, gvk := range gvksToRelist {
+		select {
+		case <-ctx.Done():
+			return
+		case <-stopChan:
+			return
+		default:
+			backoff := wait.Backoff{
+				Duration: time.Second,
+				Factor:   2,
+				Jitter:   0.1,
+				Steps:    3,
+			}
+
+			operation := func() (bool, error) {
+				if err := c.listAndSyncDataForGVK(ctx, gvk); err != nil {
+					return false, err
+				}
+
+				return true, nil
+			}
+
+			if err := wait.ExponentialBackoff(backoff, operation); err != nil {
+				log.Error(err, "internal: error listings gvk cache data", "gvk", gvk)
+			}
 		}
 	}
 }
 
 // listAndSyncData returns a set of gvks that were successfully listed and synced.
-func (c *CacheManager) listAndSyncData(ctx context.Context, gvks []schema.GroupVersionKind, reader client.Reader) *watch.Set {
+func (c *CacheManager) listAndSyncData(ctx context.Context, gvks []schema.GroupVersionKind) *watch.Set {
 	gvksSuccessfullySynced := watch.NewSet()
 	for _, gvk := range gvks {
 		err := c.listAndSyncDataForGVK(ctx, gvk)
@@ -255,64 +378,40 @@ func (c *CacheManager) listAndSyncData(ctx context.Context, gvks []schema.GroupV
 	return gvksSuccessfullySynced
 }
 
-// makeUpdatesForSpec performs a conditional wipe followed by a replay if necessary as
+// makeUpdates performs a conditional wipe followed by a replay if necessary as
 // given by the current spec (currentGVKsInAgg, excluderChanged) at the time of the call.
-func (c *CacheManager) makeUpdatesForSpec(ctx context.Context, currentGVKsInAgg *watch.Set, excluderChanged bool) {
-	if c.watchedSet.Equals(currentGVKsInAgg) && !excluderChanged {
-		return // nothing to do if both sets are the same and the excluder didn't change
+func (c *CacheManager) makeUpdates(ctx context.Context) {
+	// assumes the caller has lock
+
+	currentGVKsInAgg := watch.NewSet()
+	currentGVKsInAgg.Add(c.gvkAggregator.ListAllGVKs()...)
+
+	if c.watchedSet.Equals(currentGVKsInAgg) && !c.excluderChanged {
+		// nothing to do if both sets are the same and the excluder didn't change
+		// and there are no gvks that need relisting from a previous wipe
+		return
 	}
 
-	// replace the current watch set for the sync_controller to pick up
-	// any updates on said GVKs.
-	// also save the current watch set to make cache changes later
-	oldWatchSet := watch.NewSet()
-	oldWatchSet.AddSet(c.watchedSet)
+	gvksToDelete := c.watchedSet.Difference(currentGVKsInAgg)
+	newGVKsToSync := currentGVKsInAgg.Difference(c.watchedSet)
+	gvksToReplay := c.watchedSet.Intersection(currentGVKsInAgg)
 
-	var innerError error
-	c.watchedSet.Replace(currentGVKsInAgg, func() {
-		// *Note the following steps are not transactional with respect to admission control*
-
-		// Important: dynamic watches update must happen *after* updating our watchSet.
-		// Otherwise, the sync controller will drop events for the newly watched kinds.
-		// Defer error handling so object re-sync happens even if the watch is hard
-		// errored due to a missing GVK in the watch set.
-		innerError = c.registrar.ReplaceWatch(ctx, currentGVKsInAgg.Items())
-	})
-	if innerError != nil {
-		log.Error(innerError, "internal: error replacing watch set")
+	if gvksToDelete.Size() != 0 || newGVKsToSync.Size() != 0 {
+		// in this case we need to replace the watch set again since there
+		// is drift between the aggregator and the currently watched gvks
+		if err := c.replaceWatchSet(ctx, currentGVKsInAgg); err != nil {
+			log.Error(err, "internal: error replacing watch set")
+		}
 	}
-
-	gvksToDelete := oldWatchSet.Difference(currentGVKsInAgg).Items()
-	newGVKsToSync := currentGVKsInAgg.Difference(oldWatchSet)
 
 	// remove any gvks not needing to be synced anymore
 	// or re evaluate all if the excluder changed.
-	if len(gvksToDelete) > 0 || excluderChanged {
+	if gvksToDelete.Size() > 0 || c.excluderChanged {
 		if err := c.wipeData(ctx); err != nil {
 			log.Error(err, "internal: error wiping cache")
+		} else {
+			c.excluderChanged = false
 		}
-
-		if excluderChanged {
-			c.unsetExcluderChanged()
-		}
-
-		// everything that gets wiped needs to be readded
-		newGVKsToSync.AddSet(currentGVKsInAgg)
+		c.gvksToRelist.AddSet(gvksToReplay)
 	}
-
-	// sync net new gvks and potentially replayed gvks from the cache wipe above
-	gvksSynced := c.listAndSyncData(ctx, newGVKsToSync.Items(), c.reader)
-
-	gvksNotSynced := gvksSynced.Difference(newGVKsToSync)
-	for _, gvk := range gvksNotSynced.Items() {
-		log.Info(fmt.Sprintf("failed to sync gvk: %s; will retry", gvk))
-	}
-}
-
-func (c *CacheManager) unsetExcluderChanged() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// unset the excluderChanged bool now
-	c.excluderChanged = false
 }

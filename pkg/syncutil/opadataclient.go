@@ -19,9 +19,7 @@ import (
 	"context"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CacheManagerMediator is an interface for mediating
@@ -37,43 +35,4 @@ type CacheManagerMediator interface {
 type OpaDataClient interface {
 	AddData(ctx context.Context, data interface{}) (*types.Responses, error)
 	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
-}
-
-// FilteredDataClient is an OpaDataClient which drops any unwatched resources.
-type FilteredDataClient struct {
-	watched *watch.Set
-	opa     OpaDataClient
-}
-
-func NewFilteredOpaDataClient(opa OpaDataClient, watchSet *watch.Set) *FilteredDataClient {
-	return &FilteredDataClient{
-		watched: watchSet,
-		opa:     opa,
-	}
-}
-
-// AddData adds data to the opa cache if that data is currently being watched.
-// Unwatched data is silently dropped with no error.
-func (f *FilteredDataClient) AddData(ctx context.Context, data interface{}) (*types.Responses, error) {
-	if obj, ok := data.(client.Object); ok {
-		gvk := obj.GetObjectKind().GroupVersionKind()
-		if !f.watched.Contains(gvk) {
-			return &types.Responses{}, nil
-		}
-	}
-
-	return f.opa.AddData(ctx, data)
-}
-
-// RemoveData removes data from the opa cache if that data is currently being watched.
-// Unwatched data is silently dropped with no error.
-func (f *FilteredDataClient) RemoveData(ctx context.Context, data interface{}) (*types.Responses, error) {
-	if obj, ok := data.(client.Object); ok {
-		gvk := obj.GetObjectKind().GroupVersionKind()
-		if !f.watched.Contains(gvk) {
-			return &types.Responses{}, nil
-		}
-	}
-
-	return f.opa.RemoveData(ctx, data)
 }
