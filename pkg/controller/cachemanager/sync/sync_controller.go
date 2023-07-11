@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
@@ -41,7 +40,7 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
 type Adder struct {
-	CacheManager *cm.CacheManager
+	CacheManager syncutil.CacheManagerMediator
 	Events       <-chan event.GenericEvent
 }
 
@@ -65,7 +64,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 func newReconciler(
 	mgr manager.Manager,
 	reporter syncutil.Reporter,
-	cmt *cm.CacheManager,
+	cmt syncutil.CacheManagerMediator,
 ) reconcile.Reconciler {
 	return &ReconcileSync{
 		reader:   mgr.GetCache(),
@@ -103,7 +102,7 @@ type ReconcileSync struct {
 	scheme   *runtime.Scheme
 	log      logr.Logger
 	reporter syncutil.Reporter
-	cm       *cm.CacheManager
+	cm       syncutil.CacheManagerMediator
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
