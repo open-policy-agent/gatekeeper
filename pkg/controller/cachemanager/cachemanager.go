@@ -225,15 +225,15 @@ func (c *CacheManager) updateDatastore(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-c.replayTicker.C:
-			// snapshot the current spec so we can make a step upgrade
-			// to the contests of the opa cache.
+			// snapshot the current spec so we can make a point in
+			// time change to the contents of the opa cache.
 			c.mu.RLock()
 			currentGVKsInAgg := watch.NewSet()
 			currentGVKsInAgg.Add(c.gvkAggregator.ListAllGVKs()...)
 			excluderChanged := c.excluderChanged
 			c.mu.RUnlock()
 
-			c.makeUpdatesForSpecInTime(ctx, currentGVKsInAgg, excluderChanged)
+			c.makeUpdatesForSpec(ctx, currentGVKsInAgg, excluderChanged)
 		}
 	}
 }
@@ -255,9 +255,9 @@ func (c *CacheManager) listAndSyncData(ctx context.Context, gvks []schema.GroupV
 	return gvksSuccessfullySynced
 }
 
-// makeUpdatesForSpecInTime performs a conditional wipe followed by a replay if necessary as
+// makeUpdatesForSpec performs a conditional wipe followed by a replay if necessary as
 // given by the current spec (currentGVKsInAgg, excluderChanged) at the time of the call.
-func (c *CacheManager) makeUpdatesForSpecInTime(ctx context.Context, currentGVKsInAgg *watch.Set, excluderChanged bool) {
+func (c *CacheManager) makeUpdatesForSpec(ctx context.Context, currentGVKsInAgg *watch.Set, excluderChanged bool) {
 	if c.watchedSet.Equals(currentGVKsInAgg) && !excluderChanged {
 		return // nothing to do if both sets are the same and the excluder didn't change
 	}
