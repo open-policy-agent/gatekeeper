@@ -69,6 +69,39 @@ To ensure that any changes made to the code do not negatively impact its perform
 
 If you are introducing a new feature, doing a big refactor, or fixing a critical bug, it's especially important to run benchmark tests on the changes you are trying to merge. This will help ensure that the changes do not negatively impact the performance of the code and that it continues to function as expected.
 
+Below is the sample output that will be commented on the pull request:
+
+```
+name                                              old time/op  new time/op  delta
+pkg:github.com/open-policy-agent/gatekeeper/v3/pkg/mutation goos:linux goarch:amd64
+System_Mutate                                     1.48µs ± 5%  1.50µs ± 4%    ~     (p=0.468 n=10+10)
+pkg:github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assign goos:linux goarch:amd64
+AssignMutator_Mutate/always_mutate_1-depth         235ns ± 5%   234ns ± 5%    ~     (p=0.726 n=10+10)
+AssignMutator_Mutate/always_mutate_2-depth         287ns ± 6%   279ns ± 5%    ~     (p=0.190 n=10+10)
+AssignMutator_Mutate/always_mutate_5-depth         420ns ± 2%   416ns ± 3%    ~     (p=0.297 n=9+9)
+AssignMutator_Mutate/always_mutate_10-depth        556ns ± 4%   570ns ± 6%    ~     (p=0.123 n=10+10)
+AssignMutator_Mutate/always_mutate_20-depth        977ns ± 3%   992ns ± 2%    ~     (p=0.063 n=10+10)
+AssignMutator_Mutate/never_mutate_1-depth          196ns ± 4%   197ns ± 6%    ~     (p=0.724 n=10+10)
+AssignMutator_Mutate/never_mutate_2-depth          221ns ± 4%   222ns ± 4%    ~     (p=0.971 n=10+10)
+AssignMutator_Mutate/never_mutate_5-depth          294ns ± 4%   296ns ± 4%    ~     (p=0.436 n=10+10)
+AssignMutator_Mutate/never_mutate_10-depth         424ns ± 2%   425ns ± 3%    ~     (p=0.905 n=9+10)
+AssignMutator_Mutate/never_mutate_20-depth         682ns ± 3%   680ns ± 5%    ~     (p=0.859 n=9+10)
+pkg:github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignimage goos:linux goarch:amd64
+AssignImageMutator_Mutate/always_mutate_1-depth    579ns ± 7%   573ns ± 3%    ~     (p=0.650 n=9+9)
+AssignImageMutator_Mutate/always_mutate_2-depth    625ns ± 5%   627ns ± 2%    ~     (p=0.536 n=10+9)
+AssignImageMutator_Mutate/always_mutate_5-depth    758ns ± 5%   768ns ± 6%    ~     (p=0.631 n=10+10)
+AssignImageMutator_Mutate/always_mutate_10-depth  1.06µs ± 8%  1.08µs ± 5%    ~     (p=0.143 n=10+10)
+AssignImageMutator_Mutate/always_mutate_20-depth  1.38µs ± 3%  1.42µs ± 3%  +2.80%  (p=0.003 n=9+10)
+AssignImageMutator_Mutate/never_mutate_1-depth     237ns ± 3%   233ns ± 3%    ~     (p=0.107 n=10+9)
+AssignImageMutator_Mutate/never_mutate_2-depth     266ns ± 4%   266ns ± 3%    ~     (p=1.000 n=10+10)
+AssignImageMutator_Mutate/never_mutate_5-depth     336ns ± 6%   342ns ± 2%  +1.85%  (p=0.037 n=10+9)
+AssignImageMutator_Mutate/never_mutate_10-depth    463ns ± 3%   479ns ± 5%  +3.53%  (p=0.013 n=9+10)
+AssignImageMutator_Mutate/never_mutate_20-depth    727ns ± 3%   727ns ± 2%    ~     (p=0.897 n=10+8)
+...
+```
+
+If a significantly positive increase in the delta occurs, it could suggest that the changes being implemented have a negative impact on the respective package. However, there might be cases where the delta may be higher even without significant changes. In such situations, it is advisable to rerun the benchmarks for more precise and accurate results.
+
 ## Contributing to Docs
 
 If you want to contribute to docs, Gatekeeper auto-generates versioned docs. If you have any doc changes for a particular version, please update in [website/docs](https://github.com/open-policy-agent/gatekeeper/tree/master/website/docs) as well as in [website/versioned_docs/version-vx.y.z](https://github.com/open-policy-agent/gatekeeper/tree/master/website/versioned_docs) directory. If the change is for next release, please update in [website/docs](https://github.com/open-policy-agent/gatekeeper/tree/master/website/docs), then the change will be part of next versioned doc when we do a new release.

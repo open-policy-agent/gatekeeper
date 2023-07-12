@@ -63,12 +63,6 @@ For code updates, to ensure high quality commits, we require that all pull reque
 1. **Tests:** We require all the code in Gatekeeper to have at least unit test coverage.
 2. **Green CI Tests:** We require these test runs to succeed on every pull request before being merged.
 
-#### Optional benchmarking of changes
-
-To ensure that any changes made to the code do not negatively impact its performance, you can run benchmark tests on the changes included in a pull request. To do this, simply comment `/benchmark` on the pull request. This will trigger the benchmark tests to run on both the current HEAD and the code changes in the pull request. The results of the benchmark tests will then be commented on the pull request using [benchstat](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat).
-
-If you are introducing a new feature, doing a big refactor, or fixing a critical bug, it's especially important to run benchmark tests on the changes you are trying to merge. This will help ensure that the changes do not negatively impact the performance of the code and that it continues to function as expected.
-
 ## Contributing to Docs
 
 If you want to contribute to docs, Gatekeeper auto-generates versioned docs. If you have any doc changes for a particular version, please update in [website/docs](https://github.com/open-policy-agent/gatekeeper/tree/master/website/docs) as well as in [website/versioned_docs/version-vx.y.z](https://github.com/open-policy-agent/gatekeeper/tree/master/website/versioned_docs) directory. If the change is for next release, please update in [website/docs](https://github.com/open-policy-agent/gatekeeper/tree/master/website/docs), then the change will be part of next versioned doc when we do a new release.
