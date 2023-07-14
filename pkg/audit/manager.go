@@ -568,7 +568,6 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
 ) error {
-	var errs []error
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
 		// apiCacheDir/kind_folderIndex/fileIndex
@@ -660,9 +659,6 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				}
 			}
 		}
-	}
-	if len(errs) > 0 {
-		return mergeErrors(errs)
 	}
 	return nil
 }
