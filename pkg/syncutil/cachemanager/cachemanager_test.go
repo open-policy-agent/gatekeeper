@@ -9,7 +9,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,7 +65,7 @@ func TestCacheManager_processExclusion(t *testing.T) {
 	processExcluder := process.Get()
 	processExcluder.Add([]configv1alpha1.MatchEntry{
 		{
-			ExcludedNamespaces: []util.Wildcard{"test-ns-excluded"},
+			ExcludedNamespaces: []wildcard.Wildcard{"test-ns-excluded"},
 			Processes:          []string{"sync"},
 		},
 	})

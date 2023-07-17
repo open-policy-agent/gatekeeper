@@ -538,7 +538,7 @@ gator: bin/gator-$(GOOS)-$(GOARCH)
 	mv bin/gator-$(GOOS)-$(GOARCH) bin/gator
 
 bin/gator-$(GOOS)-$(GOARCH):
-	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(BIN_DIR)/gator-$(GOOS)-$(GOARCH) -ldflags $(LDFLAGS) ./cmd/gator
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 GO111MODULE=on go build -o $(BIN_DIR)/gator-$(GOOS)-$(GOARCH) -ldflags $(LDFLAGS) ./cmd/gator
 
 tilt-prepare:
 	mkdir -p .tiltbuild/charts

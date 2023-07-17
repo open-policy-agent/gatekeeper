@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -93,7 +94,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// First, get the ET
-			et := &v1alpha1.ExpansionTemplate{}
+			et := &v1beta1.ExpansionTemplate{}
 			nsName := types.NamespacedName{Name: etName}
 			if err := c.Get(ctx, nsName, et); err != nil {
 				return err
@@ -182,17 +183,17 @@ func TestAddStatusError(t *testing.T) {
 	}
 }
 
-func newET(name string) *v1alpha1.ExpansionTemplate {
-	et := &v1alpha1.ExpansionTemplate{
+func newET(name string) *v1beta1.ExpansionTemplate {
+	et := &v1beta1.ExpansionTemplate{
 		ObjectMeta: v1.ObjectMeta{Name: name},
-		Spec: v1alpha1.ExpansionTemplateSpec{
+		Spec: v1beta1.ExpansionTemplateSpec{
 			ApplyTo: []match.ApplyTo{{
 				Groups:   []string{"apps"},
 				Kinds:    []string{"Deployment"},
 				Versions: []string{"v1"},
 			}},
 			TemplateSource: "spec.template",
-			GeneratedGVK: v1alpha1.GeneratedGVK{
+			GeneratedGVK: v1beta1.GeneratedGVK{
 				Kind:    "Pod",
 				Version: "v1",
 			},
