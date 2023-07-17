@@ -61,7 +61,9 @@ data:
     helm upgrade --install dapr dapr/dapr --version=1.10 --namespace dapr-system --create-namespace --wait --debug
     ```
 
-    To install dapr with specific requirements and configuration, please refer to [dapr docs](https://docs.dapr.io/getting-started/)
+    To install dapr with specific requirements and configuration, please refer to [dapr docs](https://docs.dapr.io/getting-started/). 
+    
+    > Dapr is installed with mtls enabled by default, for more details on the same plaase refer to [dapr security](https://docs.dapr.io/operations/security/mtls/#setting-up-mtls-with-the-configuration-resource).
 
 2. Install Redis
 
@@ -69,6 +71,8 @@ data:
     helm repo add bitnami https://charts.bitnami.com/bitnami
     helm upgrade --install redis bitnami/redis --namespace default --set image.tag=7.0-debian-11 --wait --debug
     ```
+
+    > To install redis with TLS, please refer to [this](https://docs.bitnami.com/kubernetes/infrastructure/redis-cluster/administration/enable-tls/) doc.
 
 #### Configure a fake subscriber to receive violations
 
@@ -98,6 +102,7 @@ spec:
       name: redis
       key: redis-password
 ```
+> Please use [this guide](https://docs.dapr.io/reference/components-reference/supported-state-stores/setup-redis/) to properly configure redis pubsub component for Dapr.
 
 3. Deploy subscriber application
 ```
@@ -128,7 +133,7 @@ spec:
         image: fake-subscriber:latest
         imagePullPolicy: Never
 ```
-**Note:** Dockerfile to build image for fake-subscriber is under [gatekeeper/test/fake-subscriber](https://github.com/open-policy-agent/gatekeeper/tree/master/test/pubsub/fake-subscriber). You can find make rule to build and deploy subscriber in [Makefile](../../Makefile) under name `e2e-subscriber-build-load-image` and `e2e-subscriber-deploy`.
+**Note:** Dockerfile to build image for fake-subscriber is under [gatekeeper/test/fake-subscriber](https://github.com/open-policy-agent/gatekeeper/tree/master/test/pubsub/fake-subscriber). You can find make rule to build and deploy subscriber in [Makefile](https://github.com/open-policy-agent/gatekeeper/blob/master/Makefile) under name `e2e-subscriber-build-load-image` and `e2e-subscriber-deploy`.
 
 #### Configure Gatekeeper with Pubsub enabled
 

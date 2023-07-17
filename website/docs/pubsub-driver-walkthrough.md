@@ -22,7 +22,7 @@ type Connection interface {
 }
 ```
 
-Dapr driver implements these three methods to publish message, close connection, and update connection respectively. Please refer to [dapr.go](../../pkg/pubsub/dapr/dapr.go) to understand the logic that goes in each of these methods. Additionally, Dapr driver also implements a method `func NewConnection(_ context.Context, config interface{}) (connection.Connection, error)` that returns a new client for dapr.
+Dapr driver implements these three methods to publish message, close connection, and update connection respectively. Please refer to [dapr.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/pubsub/dapr/dapr.go) to understand the logic that goes in each of these methods. Additionally, Dapr driver also implements a method `func NewConnection(_ context.Context, config interface{}) (connection.Connection, error)` that returns a new client for dapr.
 
 ### How to add new drivers
 
@@ -32,7 +32,7 @@ Any new driver has to implement the methods of `Connection` interface and additi
 
 > The name of the method that returns client could change, but the signature of the method must be the same.
 
-This newly added driver's `NewConnection` method has to be added in `pubSubs` variable in [provider.go](../../pkg/pubsub/provider/provider.go). For example,
+This newly added driver's `NewConnection` method has to be added in `pubSubs` variable in [provider.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/pubsub/provider/provider.go). For example,
 
 ```
 var pubSubs = newPubSubSet(map[string]InitiateConnection{
