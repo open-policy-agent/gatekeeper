@@ -105,7 +105,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to Provider
 	return c.Watch(
-		&source.Kind{Type: &externaldatav1beta1.Provider{}},
+		source.Kind(mgr.GetCache(), &externaldatav1beta1.Provider{}),
 		&handler.EnqueueRequestForObject{})
 }
 

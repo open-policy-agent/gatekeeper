@@ -34,9 +34,10 @@ gator verify tests/... --run '^forbid-labels$'`
 )
 
 var (
-	run          string
-	verbose      bool
-	includeTrace bool
+	run              string
+	verbose          bool
+	includeTrace     bool
+	flagEnableK8sCel bool
 )
 
 func init() {
@@ -46,6 +47,8 @@ func init() {
 		`print extended test output`)
 	Cmd.Flags().BoolVarP(&includeTrace, "trace", "t", false,
 		`include a trace for the underlying constraint framework evaluation`)
+	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "experimental-enable-k8s-native-validation", "", false,
+		`PROTOTYPE (not stable): enable the validating admission policy driver`)
 }
 
 // Cmd is the gator verify subcommand.
@@ -109,7 +112,7 @@ func runE(cmd *cobra.Command, args []string) error {
 func runSuites(ctx context.Context, fileSystem fs.FS, suites []*verify.Suite, filter verify.Filter) error {
 	isFailure := false
 
-	runner, err := verify.NewRunner(fileSystem, gator.NewOPAClient, verify.IncludeTrace(includeTrace))
+	runner, err := verify.NewRunner(fileSystem, gator.NewOPAClient, verify.IncludeTrace(includeTrace), verify.UseK8sCEL(flagEnableK8sCel))
 	if err != nil {
 		return err
 	}

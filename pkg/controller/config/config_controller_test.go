@@ -30,21 +30,18 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
-	"github.com/open-policy-agent/gatekeeper/v3/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -71,10 +68,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
-		NewCache:           dynamiccache.New,
-		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c)
-		},
+		MapperProvider:     apiutil.NewDynamicRESTMapper,
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -110,11 +104,11 @@ func TestReconcile(t *testing.T) {
 			},
 			Match: []configv1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []util.Wildcard{"foo"},
+					ExcludedNamespaces: []wildcard.Wildcard{"foo"},
 					Processes:          []string{"*"},
 				},
 				{
-					ExcludedNamespaces: []util.Wildcard{"bar"},
+					ExcludedNamespaces: []wildcard.Wildcard{"bar"},
 					Processes:          []string{"audit", "webhook"},
 				},
 			},
@@ -429,7 +423,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	opaClient := &fakeOpa{}
+	opaClient := &fakes.FakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
@@ -503,9 +497,9 @@ func TestConfig_CacheContents(t *testing.T) {
 		}
 	}()
 
-	expected := map[opaKey]interface{}{
-		{gvk: nsGVK, key: "default"}:                      nil,
-		{gvk: configMapGVK, key: "default/config-test-1"}: nil,
+	expected := map[fakes.OpaKey]interface{}{
+		{Gvk: nsGVK, Key: "default"}:                      nil,
+		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
 		// kube-system namespace is being excluded, it should not be in opa cache
 	}
 	g.Eventually(func() bool {
@@ -535,20 +529,20 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	// Expect our configMap to return at some point
 	// TODO: In the future it will remain instead of having to repopulate.
-	expected = map[opaKey]interface{}{
+	expected = map[fakes.OpaKey]interface{}{
 		{
-			gvk: configMapGVK,
-			key: "default/config-test-1",
+			Gvk: configMapGVK,
+			Key: "default/config-test-1",
 		}: nil,
 	}
 	g.Eventually(func() bool {
 		return opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "waiting for ConfigMap to repopulate in cache")
 
-	expected = map[opaKey]interface{}{
+	expected = map[fakes.OpaKey]interface{}{
 		{
-			gvk: configMapGVK,
-			key: "kube-system/config-test-2",
+			Gvk: configMapGVK,
+			Key: "kube-system/config-test-2",
 		}: nil,
 	}
 	g.Eventually(func() bool {
@@ -590,7 +584,7 @@ func TestConfig_Retries(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	opaClient := &fakeOpa{}
+	opaClient := &fakes.FakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
@@ -665,8 +659,8 @@ func TestConfig_Retries(t *testing.T) {
 		}
 	}()
 
-	expected := map[opaKey]interface{}{
-		{gvk: configMapGVK, key: "default/config-test-1"}: nil,
+	expected := map[fakes.OpaKey]interface{}{
+		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
 	}
 	g.Eventually(func() bool {
 		return opaClient.Contains(expected)
@@ -725,7 +719,7 @@ func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 			},
 			Match: []configv1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []util.Wildcard{"kube-system"},
+					ExcludedNamespaces: []wildcard.Wildcard{"kube-system"},
 					Processes:          []string{"sync"},
 				},
 			},
