@@ -16,7 +16,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -63,8 +63,8 @@ type SyncOnlyEntry struct {
 }
 
 type MatchEntry struct {
-	Processes          []string        `json:"processes,omitempty"`
-	ExcludedNamespaces []util.Wildcard `json:"excludedNamespaces,omitempty"`
+	Processes          []string            `json:"processes,omitempty"`
+	ExcludedNamespaces []wildcard.Wildcard `json:"excludedNamespaces,omitempty"`
 }
 
 type ReadinessSpec struct {

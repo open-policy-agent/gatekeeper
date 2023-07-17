@@ -2,7 +2,6 @@ package webhook
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
@@ -16,7 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclients "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -194,17 +193,6 @@ func validRegoTemplateConstraint() *unstructured.Unstructured {
 	return u
 }
 
-func invalidRegoTemplate() *templates.ConstraintTemplate {
-	template := validRegoTemplate()
-
-	template.Spec.Targets[0].Rego = `package badrego
-
-        violation[{"msg": msg}] {
-        msg := "I'm sure this will work"`
-
-	return template
-}
-
 func makeOpaClient() (*constraintclient.Client, error) {
 	t := &target.K8sValidationTarget{}
 	driver, err := rego.New(rego.Tracing(false))
@@ -219,64 +207,16 @@ func makeOpaClient() (*constraintclient.Client, error) {
 	return c, nil
 }
 
-func TestTemplateValidation(t *testing.T) {
-	tc := []struct {
-		Name          string
-		Template      *templates.ConstraintTemplate
-		ErrorExpected bool
-	}{
-		{
-			Name:          "Valid Template",
-			Template:      validRegoTemplate(),
-			ErrorExpected: false,
-		},
-		{
-			Name:          "Invalid Template",
-			Template:      invalidRegoTemplate(),
-			ErrorExpected: true,
-		},
-	}
-	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
-			opa, err := makeOpaClient()
-			if err != nil {
-				t.Fatalf("Could not initialize OPA: %s", err)
-			}
-			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
-
-			b, err := json.Marshal(tt.Template)
-			if err != nil {
-				t.Fatalf("Error parsing yaml: %s", err)
-			}
-
-			review := &admission.Request{
-				AdmissionRequest: admissionv1.AdmissionRequest{
-					Kind: metav1.GroupVersionKind{
-						Group:   "templates.gatekeeper.sh",
-						Version: "v1beta1",
-						Kind:    "ConstraintTemplate",
-					},
-					Object: runtime.RawExtension{
-						Raw: b,
-					},
-				},
-			}
-
-			ctx := context.Background()
-			_, err = handler.validateGatekeeperResources(ctx, review)
-			if err != nil && !tt.ErrorExpected {
-				t.Errorf("err = %s; want nil", err)
-			}
-
-			if err == nil && tt.ErrorExpected {
-				t.Error("err = nil; want non-nil")
-			}
-		})
-	}
-}
-
 type nsGetter struct {
 	testclients.NoopClient
+}
+
+func (f *nsGetter) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return false, nil
+}
+
+func (f *nsGetter) GroupVersionKindFor(obj runtime.Object) (k8schema.GroupVersionKind, error) {
+	return k8schema.GroupVersionKind{}, nil
 }
 
 func (f *nsGetter) SubResource(_ string) ctrlclient.SubResourceClient {
@@ -296,6 +236,14 @@ func (f *nsGetter) Get(_ context.Context, key ctrlclient.ObjectKey, obj ctrlclie
 
 type errorNSGetter struct {
 	testclients.NoopClient
+}
+
+func (f *errorNSGetter) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return false, nil
+}
+
+func (f *errorNSGetter) GroupVersionKindFor(obj runtime.Object) (k8schema.GroupVersionKind, error) {
+	return k8schema.GroupVersionKind{}, nil
 }
 
 func (f *errorNSGetter) SubResource(_ string) ctrlclient.SubResourceClient {
@@ -359,6 +307,7 @@ func TestReviewRequest(t *testing.T) {
 					client:         tt.CachedClient,
 					reader:         tt.APIReader,
 				},
+				log: log,
 			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
@@ -397,7 +346,7 @@ func TestReviewDefaultNS(t *testing.T) {
 		Spec: v1alpha1.ConfigSpec{
 			Match: []v1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []util.Wildcard{"default"},
+					ExcludedNamespaces: []wildcard.Wildcard{"default"},
 					Processes:          []string{"*"},
 				},
 			},
@@ -431,6 +380,7 @@ func TestReviewDefaultNS(t *testing.T) {
 				reader:          &nsGetter{},
 				processExcluder: pe,
 			},
+			log: log,
 		}
 		if maxThreads > 0 {
 			handler.semaphore = make(chan struct{}, maxThreads)
@@ -522,6 +472,7 @@ func TestConstraintValidation(t *testing.T) {
 				opa:             opa,
 				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{},
+				log:             log,
 			}
 			b, err := yaml.YAMLToJSON([]byte(tt.Constraint))
 			if err != nil {
@@ -649,6 +600,7 @@ func TestTracing(t *testing.T) {
 				opa:             opa,
 				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{injectedConfig: tt.Cfg},
+				log:             log,
 			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
@@ -825,6 +777,7 @@ func TestGetValidationMessages(t *testing.T) {
 				opa:             opa,
 				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{},
+				log:             log,
 			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
@@ -875,7 +828,7 @@ func TestValidateConfigResource(t *testing.T) {
 
 	for _, tt := range tc {
 		t.Run(tt.TestName, func(t *testing.T) {
-			handler := validationHandler{}
+			handler := validationHandler{log: log}
 			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Name: tt.Name,
@@ -922,7 +875,7 @@ func TestValidateProvider(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := &validationHandler{}
+			h := &validationHandler{log: log}
 			b, err := yaml.YAMLToJSON([]byte(tt.provider))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)

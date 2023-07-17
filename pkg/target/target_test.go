@@ -15,7 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -512,7 +512,7 @@ func fooMatch() *match.Match {
 			},
 		},
 		Scope:              "Namespaced",
-		Namespaces:         []util.Wildcard{"my-ns"},
+		Namespaces:         []wildcard.Wildcard{"my-ns"},
 		ExcludedNamespaces: nil,
 		LabelSelector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{

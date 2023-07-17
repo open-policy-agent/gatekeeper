@@ -7,9 +7,11 @@ Generally, design docs are on Google docs:
 ## In Development
 
 ## Proposed
-* [Namespace-Scoped Constraints](https://docs.google.com/document/d/1QqHp1exW-YZQE1p4RqRqwsfqCEFHzo3P0EzEGMPcv6A/edit?usp=drive_link)
-* [Sync Resource](https://docs.google.com/document/d/1fdDmjcvASJ72aBTJnRa-AmM-NGDyh4NAvH7Zc5LxeuU/edit?usp=drive_link)
-* [External Data Response Cache](https://docs.google.com/document/d/1XeOFbSCqLA0y93GZN0EdeXmH6ueRUOCpX5XxkaghJ2E/edit?usp=drive_link)
+* [Namespace-Scoped Constraints](https://docs.google.com/document/d/1-pY7B5C6R0fjUbDu8izlcP7MSUDVDHv5XK16BFyTGRc/edit#heading=h.w8j68o8vjdts)
+* [Sync Resource](https://docs.google.com/document/d/1ZbXaEh7v_HcgrRu7N-kEucU2pXyq1Rt7cSmmFOBN2q8/edit)
+* [External Data Response Cache](https://docs.google.com/document/d/1nl6iWMmh9CRT0A6cr-Nkfofv9wp210Bkf6ilLq9LLBo/edit)
+* [Export violations using pub-sub](https://docs.google.com/document/d/14QVzdn_fncYLIfZUusCpzrFGWR_aBth_OsR1EsynQeA/edit?usp=sharing)
+* [Gator SyncSet Support](https://docs.google.com/document/d/1mBvy6Y7TDyZswdYlFBHB3Mi2irLVqga_7ZoZvfPIU0A/edit)
 
 ## Implemented
 * [Gatekeeper V3 Accepted Design](https://docs.google.com/document/d/1qsfeCx-Rx61Xm6JqJK-i67Gk_y__lNebdakmnhCdM7w/edit?usp=drive_link)

@@ -41,6 +41,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -74,6 +75,14 @@ func getFiles(dir string) ([]string, error) {
 		filePaths = append(filePaths, filepath.Join(dir, file.Name()))
 	}
 	return filePaths, nil
+}
+
+func (f *fakeNsGetter) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return false, nil
+}
+
+func (f *fakeNsGetter) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	return schema.GroupVersionKind{}, nil
 }
 
 func (f *fakeNsGetter) SubResource(_ string) client.SubResourceClient {
@@ -308,6 +317,7 @@ func BenchmarkValidationHandler(b *testing.B) {
 					client:          c,
 					injectedConfig:  cfg,
 				},
+				log: log,
 			}
 
 			// create T templates

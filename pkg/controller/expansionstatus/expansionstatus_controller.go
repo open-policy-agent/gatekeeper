@@ -23,7 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
+	expansionv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -90,7 +90,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 // PodStatusToExpansionTemplateMapper correlates a ExpansionTemplatePodStatus with its corresponding expansion template.
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
 func PodStatusToExpansionTemplateMapper(selfOnly bool) handler.MapFunc {
-	return func(obj client.Object) []reconcile.Request {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ExpansionTemplateNameLabel]
 		if !ok {
@@ -121,7 +121,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to ExpansionTemplateStatus
 	err = c.Watch(
-		&source.Kind{Type: &v1beta1.ExpansionTemplatePodStatus{}},
+		source.Kind(mgr.GetCache(), &v1beta1.ExpansionTemplatePodStatus{}),
 		handler.EnqueueRequestsFromMapFunc(PodStatusToExpansionTemplateMapper(false)),
 	)
 	if err != nil {
@@ -129,7 +129,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to ExpansionTemplate
-	err = c.Watch(&source.Kind{Type: &expansionv1alpha1.ExpansionTemplate{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &expansionv1beta1.ExpansionTemplate{}), &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ type ReconcileExpansionStatus struct {
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec.
 func (r *ReconcileExpansionStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	et := &expansionv1alpha1.ExpansionTemplate{}
+	et := &expansionv1beta1.ExpansionTemplate{}
 	err := r.reader.Get(ctx, request.NamespacedName, et)
 	if err != nil {
 		// If the ExpansionTemplate does not exist then we are done

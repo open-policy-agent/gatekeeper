@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -23,7 +23,7 @@ const (
 
 type Excluder struct {
 	mux                sync.RWMutex
-	excludedNamespaces map[Process]map[util.Wildcard]bool
+	excludedNamespaces map[Process]map[wildcard.Wildcard]bool
 }
 
 var allProcesses = []Process{
@@ -34,7 +34,7 @@ var allProcesses = []Process{
 }
 
 var processExcluder = &Excluder{
-	excludedNamespaces: make(map[Process]map[util.Wildcard]bool),
+	excludedNamespaces: make(map[Process]map[wildcard.Wildcard]bool),
 }
 
 func Get() *Excluder {
@@ -43,7 +43,7 @@ func Get() *Excluder {
 
 func New() *Excluder {
 	return &Excluder{
-		excludedNamespaces: make(map[Process]map[util.Wildcard]bool),
+		excludedNamespaces: make(map[Process]map[wildcard.Wildcard]bool),
 	}
 }
 
@@ -58,13 +58,13 @@ func (s *Excluder) Add(entry []configv1alpha1.MatchEntry) {
 				if Process(op) == Star {
 					for _, o := range allProcesses {
 						if s.excludedNamespaces[o] == nil {
-							s.excludedNamespaces[o] = make(map[util.Wildcard]bool)
+							s.excludedNamespaces[o] = make(map[wildcard.Wildcard]bool)
 						}
 						s.excludedNamespaces[o][ns] = true
 					}
 				} else {
 					if s.excludedNamespaces[Process(op)] == nil {
-						s.excludedNamespaces[Process(op)] = make(map[util.Wildcard]bool)
+						s.excludedNamespaces[Process(op)] = make(map[wildcard.Wildcard]bool)
 					}
 					s.excludedNamespaces[Process(op)][ns] = true
 				}
@@ -96,7 +96,7 @@ func (s *Excluder) IsNamespaceExcluded(process Process, obj client.Object) (bool
 	return exactOrWildcardMatch(s.excludedNamespaces[process], obj.GetNamespace()), nil
 }
 
-func exactOrWildcardMatch(boolMap map[util.Wildcard]bool, ns string) bool {
+func exactOrWildcardMatch(boolMap map[wildcard.Wildcard]bool, ns string) bool {
 	for k := range boolMap {
 		if k.Matches(ns) {
 			return true

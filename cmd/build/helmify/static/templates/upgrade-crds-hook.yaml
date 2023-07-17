@@ -91,6 +91,9 @@ spec:
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       {{- end }}
+      {{- if .Values.upgradeCRDs.priorityClassName }}
+      priorityClassName: {{ .Values.upgradeCRDs.priorityClassName }}
+      {{- end }}
       containers:
       - name: crds-upgrade
         {{- if .Values.preInstall.crdRepository.image.repository }}

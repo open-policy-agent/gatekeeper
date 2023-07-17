@@ -48,7 +48,7 @@ spec:
                     Ex: "kube-*" will match "kube-system" or "kube-public", "*-system"
                     will match "kube-system" or "gatekeeper-system".  The asterisk
                     is required for wildcard matching.'
-                  pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                  pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                   type: string
                 type: array
               kinds:
@@ -126,7 +126,7 @@ spec:
                   a prefix or suffix glob.  For example, `+"`"+`name: pod-*`+"`"+` would match
                   both `+"`"+`pod-a`+"`"+` and `+"`"+`pod-b`+"`"+`, and `+"`"+`name: *-pod`+"`"+` would match both `+"`"+`a-pod`+"`"+`
                   and `+"`"+`b-pod`+"`"+`.'
-                pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                 type: string
               namespaceSelector:
                 description: NamespaceSelector is a label selector against an object's
@@ -184,7 +184,7 @@ spec:
                     Ex: "kube-*" will match "kube-system" or "kube-public", "*-system"
                     will match "kube-system" or "gatekeeper-system".  The asterisk
                     is required for wildcard matching.'
-                  pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                  pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                   type: string
                 type: array
               scope:
