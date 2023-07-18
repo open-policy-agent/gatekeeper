@@ -31,7 +31,7 @@ In the audit deployment, set the `--enable-pub-sub` flag to `true` to publish au
 
 Create a connection configMap that supplies appropriate set of configurations for a connection to get established. For instance, to establish a connection that uses Dapr to publish messages this configMap is appropriate:
 
-```
+```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -51,6 +51,36 @@ data:
 #### Available Pubsub drivers
 Dapr: https://dapr.io/
 
+### Violations
+
+The audit pod publishes violations in following format:
+
+```json
+{
+  "id": "2023-07-18T21:21:52Z",
+  "details": {
+    "missing_labels": [
+      "test"
+    ]
+  },
+  "eventType": "violation_audited",
+  "group": "constraints.gatekeeper.sh",
+  "version": "v1beta1",
+  "kind": "K8sRequiredLabels",
+  "name": "pod-must-have-test",
+  "message": "you must provide labels: {\"test\"}",
+  "enforcementAction": "deny",
+  "resourceAPIVersion": "v1",
+  "resourceKind": "Pod",
+  "resourceNamespace": "nginx",
+  "resourceName": "nginx-deployment-cd55c47f5-2b84x",
+  "resourceLabels": {
+    "app": "nginx",
+    "pod-template-hash": "cd55c47f5"
+  }
+}
+```
+
 ### Quick start with publishing violations using Dapr and Redis
 
 > Redis is used for example purposes only. Dapr supports [many different state store options](https://docs.dapr.io/reference/components-reference/supported-state-stores/).
@@ -59,7 +89,7 @@ Dapr: https://dapr.io/
 
 1. Install Dapr
 
-    ```
+    ```shell
     helm repo add dapr https://dapr.github.io/helm-charts/
     DAPR_VERSION=1.10
     helm upgrade --install dapr dapr/dapr --version=${DAPR_VERSION} --namespace dapr-system --create-namespace --wait --debug
@@ -70,13 +100,13 @@ Dapr: https://dapr.io/
 
 2. Install Redis
 
-    ```
+    ```shell
     helm repo add bitnami https://charts.bitnami.com/bitnami
     REDIS_IMAGE_TAG=7.0-debian-11
     helm upgrade --install redis bitnami/redis --namespace default --set image.tag=${REDIS_IMAGE_TAG} --wait --debug
     ```
 
-    > To install redis with TLS, please refer to [this](https://docs.bitnami.com/kubernetes/infrastructure/redis-cluster/administration/enable-tls/) doc.
+    > To install Redis with TLS, please refer to [this](https://docs.bitnami.com/kubernetes/infrastructure/redis-cluster/administration/enable-tls/) doc.
 
 #### Configure a sample subscriber to receive violations
 
@@ -88,7 +118,7 @@ kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/name
 ```
 
 2. Create Dapr pubsub component
-```
+```shell
 kubectl apply -f <<EOF
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -106,10 +136,10 @@ spec:
       name: redis
       key: redis-password
 ```
-> Please use [this guide](https://docs.dapr.io/reference/components-reference/supported-state-stores/setup-redis/) to properly configure redis pubsub component for Dapr.
+> Please use [this guide](https://docs.dapr.io/reference/components-reference/supported-state-stores/setup-redis/) to properly configure Redis pubsub component for Dapr.
 
 3. Deploy subscriber application
-```
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -141,9 +171,9 @@ spec:
 
 #### Configure Gatekeeper with Pubsub enabled
 
-1. Create Dapr pubsub component and redis secret in `gatekeeper-system` (i.e. the namespace where gatekeeper will be installed).
+1. Create Dapr pubsub component and Redis secret in Gatekeeper's namespace (`gatekeeper-system` by default). Please make sure to update `gatekeeper-system` namespace for the next steps if your cluster's Gatekeeper namespace is different.
 
-```
+```shell
 kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -
 kubectl apply -f - <<EOF
 apiVersion: dapr.io/v1alpha1
@@ -164,13 +194,13 @@ spec:
 EOF
 ```
 
-2. Install gatekeeper with `--enable-pub-sub` set to `true`, `--audit-connection` set to `audit`, `--audit-channel` set to `audit` on audit pod.
+2. Install Gatekeeper with `--enable-pub-sub` set to `true`, `--audit-connection` set to `audit`, `--audit-channel` set to `audit` on audit pod.
 
 **Note:** Verify that after the audit pod is running there is a dapr sidecar injected and running along side `manager` container.
 
 3. Create connection config to establish a connection.
 
-```
+```shell
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
@@ -185,8 +215,21 @@ data:
     }
 EOF
 ```
-**Note:** Name of the connection configMap must match the value of `--audit-connection` for it to be used by audit to publish violation. Hence, right now only one connection config can exists for audit.
+**Note:** Name of the connection configMap must match the value of `--audit-connection` for it to be used by audit to publish violation. At the moment, now only one connection config can exists for audit.
 
-4. Create the constraint templates and constraints, and let the audit run it's course.
+4. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constaint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran atleast once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while lising constraints also indicates that audit has ran at least once.
 
-Finally, check the subscriber logs to see the violations received.
+```log
+kubctl get constraint
+NAME                 ENFORCEMENT-ACTION   TOTAL-VIOLATIONS
+pod-must-have-test                        0
+```
+
+
+5. Finally, check the subscriber logs to see the violations received.
+
+```log
+kubectl logs pod/sub-57bd5d694-7lvzf -c go-sub -n fake-subscriber 
+2023/07/18 20:16:41 Listening...
+2023/07/18 20:37:20 main.PubsubMsg{ID:"2023-07-18T20:37:19Z", Details:map[string]interface {}{"missing_labels":[]interface {}{"test"}}, EventType:"violation_audited", Group:"constraints.gatekeeper.sh", Version:"v1beta1", Kind:"K8sRequiredLabels", Name:"pod-must-have-test", Namespace:"", Message:"you must provide labels: {\"test\"}", EnforcementAction:"deny", ConstraintAnnotations:map[string]string(nil), ResourceGroup:"", ResourceAPIVersion:"v1", ResourceKind:"Pod", ResourceNamespace:"nginx", ResourceName:"nginx-deployment-58899467f5-j85bs", ResourceLabels:map[string]string{"app":"nginx", "owner":"admin", "pod-template-hash":"58899467f5"}}
+```
