@@ -1,11 +1,11 @@
 ---
 id: pubsub-driver
-title: Pubsub Interface/Driver walk through
+title: Pubsub Interface/Driver walkthrough
 ---
 
-This guide provides an overview of the pubsub interface, including details on its structure and functionality. Additionally, it offers instructions on adding a new driver and utilizing providers other than Dapr.
+This guide provides an overview of the pubsub interface, including details on its structure and functionality. Additionally, it offers instructions on adding a new driver and utilizing providers other than the default provider Dapr.
 
-## Pubsub interface and Driver walk through
+## Pubsub interface and Driver walkthrough
 
 Pubsub's connection interface looks like
 ```
@@ -22,22 +22,22 @@ type Connection interface {
 }
 ```
 
-Dapr driver implements these three methods to publish message, close connection, and update connection respectively. Please refer to [dapr.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/pubsub/dapr/dapr.go) to understand the logic that goes in each of these methods. Additionally, Dapr driver also implements a method `func NewConnection(_ context.Context, config interface{}) (connection.Connection, error)` that returns a new client for dapr.
+As an example, the Dapr driver implements these three methods to publish message, close connection, and update connection respectively. Please refer to [dapr.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/pubsub/dapr/dapr.go) to understand the logic that goes in each of these methods. Additionally, the Dapr driver also implements a method `func NewConnection(_ context.Context, config interface{}) (connection.Connection, error)` that returns a new client for dapr.
 
 ### How to add new drivers
 
-**Note:** For this exercise, let's say we are trying to add a driver to use `RabbitMQ` instead of Dapr as a tool to publish violations.
+**Note:** For example, if we are trying to add a new driver to use `RabbitMQ` instead of Dapr as a tool to publish violations.
 
-Any new driver has to implement the methods of `Connection` interface and additionally a new method  `func NewConnection(_ context.Context, config interface{}) (connection.Connection, error)` that returns client for respective tool.
+A driver must implement the `Connection` interface and a new method  `func NewConnection(_ context.Context, config interface{}) (connection.Connection, error)` that returns a client for the respective tool.
 
-> The name of the method that returns client could change, but the signature of the method must be the same.
+> The name of the method that returns a client could change, but the signature of the method must be the same.
 
-This newly added driver's `NewConnection` method has to be added in `pubSubs` variable in [provider.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/pubsub/provider/provider.go). For example,
+This newly added driver's `NewConnection` method must be used to create a new `pubSubs` object in [provider.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/pubsub/provider/provider.go). For example,
 
 ```
 var pubSubs = newPubSubSet(map[string]InitiateConnection{
 	dapr.Name: dapr.NewConnection,
-    rabbitmq.Name: rabbitmq.NewConnection,
+  rabbitmq.Name: rabbitmq.NewConnection,
 },
 )
 ```
@@ -59,3 +59,5 @@ data:
       <config needed for rabbitmq connection>
     }
 ```
+
+> The `data.provider` field must exists and must match one of the key of `pubSubs` map that was defined earlier to use the corresponding driver. The `data.config` field in the configuration can vary depending on the driver being used. For dapr driver, `data.config` must be `{"component": "pubsub"}`.
