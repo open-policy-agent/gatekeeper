@@ -28,13 +28,12 @@ var mutatorKinds = map[string]bool{
 }
 
 type Expander struct {
-	mutators              []types.Mutator
-	templateExpansions    []*unversioned.ExpansionTemplate
-	objects               []*unstructured.Unstructured
-	namespaces            map[string]*corev1.Namespace
-	expSystem             *expansion.System
-	mutSystem             *mutation.System
-	hasNamespaceSelectors bool
+	mutators           []types.Mutator
+	templateExpansions []*unversioned.ExpansionTemplate
+	objects            []*unstructured.Unstructured
+	namespaces         map[string]*corev1.Namespace
+	expSystem          *expansion.System
+	mutSystem          *mutation.System
 }
 
 func Expand(resources []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
@@ -98,11 +97,7 @@ func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*expansion.Re
 		return nil, fmt.Errorf("error mutating base resource %s: %w", resource.GetName(), err)
 	}
 
-	var opts []expansion.ExpandOption
-	if !er.hasNamespaceSelectors {
-		opts = append(opts, expansion.RelaxNamespaceNullability())
-	}
-	resultants, err := er.expSystem.Expand(base, opts...)
+	resultants, err := er.expSystem.Expand(base)
 	if err != nil {
 		return nil, fmt.Errorf("error expanding resource %s: %w", resource.GetName(), err)
 	}
@@ -190,20 +185,7 @@ func (er *Expander) add(u *unstructured.Unstructured) error {
 		er.objects = append(er.objects, u)
 	}
 
-	err = er.checkNamespaceSelector(u)
 	return err
-}
-
-func (er *Expander) checkNamespaceSelector(u *unstructured.Unstructured) error {
-	_, exists, err := unstructured.NestedFieldNoCopy(u.Object, "spec", "match", "namespaces")
-	if err != nil {
-		return err
-	}
-
-	if !er.hasNamespaceSelectors {
-		er.hasNamespaceSelectors = exists
-	}
-	return nil
 }
 
 func (er *Expander) addExpansionTemplate(u *unstructured.Unstructured) error {
