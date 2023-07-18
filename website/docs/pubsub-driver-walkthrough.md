@@ -26,7 +26,7 @@ As an example, the Dapr driver implements these three methods to publish message
 
 ### How to add new drivers
 
-**Note:** For example, if we are trying to add a new driver to use `foo` instead of Dapr as a tool to publish violations.
+**Note:** For example, if we want to add a new driver to use `foo` instead of Dapr as a tool to publish violations.
 
 A driver must implement the `Connection` interface and a new `func NewConnection(_ context.Context, config interface{}) (connection.Connection, error)` method that returns a client for the respective tool.
 
