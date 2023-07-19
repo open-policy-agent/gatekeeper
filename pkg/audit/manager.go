@@ -245,16 +245,16 @@ func (am *Manager) audit(ctx context.Context) error {
 		var res []Result
 		am.log.Info("Auditing from cache")
 		res, errs := am.auditFromCache(ctx)
+		if errs != nil {
+			am.log.Error(err, "Auditing")
+		}
 
 		am.log.Info("Audit from cache results", "violations", len(res))
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
 		}
 
-		err := am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
-		if errs != nil {
-			am.log.Error(err, "Auditing")
-		}
+		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 	} else {
 		am.log.Info("Auditing via discovery client")
 		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
@@ -651,12 +651,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 
 			if len(resp.Results()) > 0 {
 				results := ToResults(&augmentedObj.Object, resp)
-				err = am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
-				if err != nil {
-					// updated to not return err immediately
-					am.log.Error(err, "Auditing")
-					continue
-				}
+				am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 			}
 		}
 	}
@@ -776,8 +771,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-) error {
-	var errs error
+) {
 	for _, r := range res {
 		key := util.GetUniqueKey(*r.Constraint)
 		totalViolationsPerConstraint[key]++
@@ -813,17 +807,13 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		if *pubsubController.PubsubEnabled {
 			err := am.pubsubSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels(), timestamp))
 			if err != nil {
-				errs = errors.Join(errs, err)
+				am.log.Error(err, "Audit Publishing")
 			}
 		}
 		if *emitAuditEvents {
 			emitEvent(r.Constraint, timestamp, ea, gvk, namespace, name, rv, r.Msg, am.gkNamespace, uid, am.eventRecorder)
 		}
 	}
-	if errs != nil {
-		return fmt.Errorf("encountered errors in publishing messages, errors: %w", errs)
-	}
-	return nil
 }
 
 func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName][]updateListEntry, timestamp string, totalViolations map[util.KindVersionName]int64) {
