@@ -47,5 +47,6 @@ spec:
       nodeSelector:
         {{- toYaml .nodeSelector | nindent 8 }}
       {{- end }}
+  backoffLimit: 3
 {{- end }}
 {{- end }}
