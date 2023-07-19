@@ -10,6 +10,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
@@ -80,8 +81,11 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 			continue
 		}
 
-		_, err := client.AddConstraint(context.Background(), obj)
-		if err != nil {
+		if err := gator.ValidateConstraint(obj); err != nil {
+			return nil, err
+		}
+
+		if _, err := client.AddConstraint(context.Background(), obj); err != nil {
 			return nil, fmt.Errorf("adding constraint %q: %w", obj.GetName(), err)
 		}
 	}

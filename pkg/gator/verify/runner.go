@@ -161,6 +161,10 @@ func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) 
 		return err
 	}
 
+	if err := gator.ValidateConstraint(cObj); err != nil {
+		return err
+	}
+
 	_, err = client.AddConstraint(ctx, cObj)
 	return err
 }
