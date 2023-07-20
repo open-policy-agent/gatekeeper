@@ -33,6 +33,7 @@ func (s *System) Publish(ctx context.Context, connection string, topic string, m
 
 func (s *System) UpsertConnection(ctx context.Context, config interface{}, name string, provider string) error {
 	s.mux.Lock()
+	defer s.mux.Unlock()
 	// Check if the connection already exists.
 	if conn, ok := s.connections[name]; ok {
 		// If the provider is the same, update the existing connection.
@@ -40,7 +41,6 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, name 
 			return conn.UpdateConnection(ctx, config)
 		}
 	}
-	s.mux.Unlock()
 	// Check if the provider is supported.
 	if newConnFunc, ok := prvd.List()[provider]; ok {
 		newConn, err := newConnFunc(ctx, config)
@@ -49,11 +49,9 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, name 
 		}
 
 		// Close the existing connection after successfully creating the new one.
-		if err := s.CloseConnection(name); err != nil {
+		if err := s.closeConnection(name); err != nil {
 			return err
 		}
-		s.mux.Lock()
-		defer s.mux.Unlock()
 		// Add the new connection and provider to the maps.
 		if s.connections == nil {
 			s.connections = map[string]connection.Connection{}
@@ -71,6 +69,10 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, name 
 func (s *System) CloseConnection(connection string) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
+	return s.closeConnection(connection)
+}
+
+func (s *System) closeConnection(connection string) error {
 	if len(s.connections) > 0 {
 		if c, ok := s.connections[connection]; ok {
 			err := c.CloseConnection()
