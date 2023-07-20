@@ -245,10 +245,6 @@ func (am *Manager) audit(ctx context.Context) error {
 		var res []Result
 		am.log.Info("Auditing from cache")
 		res, errs := am.auditFromCache(ctx)
-		if errs != nil {
-			am.log.Error(err, "Auditing")
-		}
-
 		am.log.Info("Audit from cache results", "violations", len(res))
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
