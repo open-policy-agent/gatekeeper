@@ -3,6 +3,8 @@ id: exempt-namespaces
 title: Exempting Namespaces
 ---
 
+`Feature State`: The `Config` resource is currently alpha.
+
 ## Exempting Namespaces from Gatekeeper using config resource
 
 > The "Config" resource must be named `config` for it to be reconciled by Gatekeeper. Gatekeeper will ignore the resource if you do not name it `config`.
