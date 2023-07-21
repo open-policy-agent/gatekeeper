@@ -92,6 +92,14 @@ func AddExternalDataProviderCache(providerCache *externaldata.ProviderCache) Arg
 	}
 }
 
+func AddExternalDataProviderResponseCache(providerResponseCache *externaldata.ProviderResponseCache) Arg {
+	return func(d *Driver) error {
+		d.providerResponseCache = providerResponseCache
+
+		return nil
+	}
+}
+
 func DisableBuiltins(builtins ...string) Arg {
 	return func(d *Driver) error {
 		if d.compilers.capabilities == nil {
