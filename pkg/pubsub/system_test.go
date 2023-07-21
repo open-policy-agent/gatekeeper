@@ -61,7 +61,6 @@ func TestNewSystem(t *testing.T) {
 }
 
 func TestSystem_UpsertConnection(t *testing.T) {
-	// provider.FakeEmptyProviders()
 	type fields struct {
 		connections map[string]connection.Connection
 		providers   map[string]string
@@ -86,7 +85,6 @@ func TestSystem_UpsertConnection(t *testing.T) {
 				connections: testSystem.connections,
 				providers:   testSystem.providers,
 				s: &System{
-					mux: sync.RWMutex{},
 				},
 			},
 			args: args{

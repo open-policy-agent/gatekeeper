@@ -803,7 +803,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		if *pubsubController.PubsubEnabled {
 			err := am.pubsubSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels(), timestamp))
 			if err != nil {
-				am.log.Error(err, "Audit Publishing")
+				am.log.Error(err, "pubsub audit Publishing")
 			}
 		}
 		if *emitAuditEvents {
