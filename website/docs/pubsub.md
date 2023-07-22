@@ -7,19 +7,11 @@ title: Consuming violations using Pubsub
 
 > ❗ This feature is alpha, subject to change (feedback is welcome!).
 
-## Motivation
+## Description
 
-Prior to this feature, there were two ways to get audit violations. One is to look at constraints status and the other is to look at audit pod logs to get the logged audit violations. Both of these approaches have limitations as described below.
+This feature pushes audit violations to a pubsub service. Users can subscribe to pubsub service to consume violations.
 
-Limitations of getting audit violations from constraint status:
-
-- To reduce in-memory consumption of Gatekeeper audit pod and to avoid hitting [default etcd limit](https://etcd.io/docs/v3.5/dev-guide/limit/#request-size-limit) of 1.5MB per resource, gatekeeper recommends configuring a [limit up-to 500 violations](https://open-policy-agent.github.io/gatekeeper/website/docs/audit/#configuring-audit)(by default 20) on constraint template. Because of these limitations, users might not get all the violations from a Constraint resource.
-
-Limitations of getting audit violations from audit logs:
-
-- It could be difficult to parse audit pod logs to look for violation messages, as violation logs would be mixed together with other log statements. Additionally, when there are huge number of violations, it’s possible to miss part of the log as the pod logs get rotated.
-
-This feature uses publish and subscribe (pubsub) model that allows Gatekeeper to export audit violations over a broker that can be consumed by a subscriber independently. Therefore, it allows users to get all the audit violations.
+> To gain insights into different methods of obtaining audit violations and the respective trade-offs for each approach, please refer to [Reading Audit Results](audit.md#reading-audit-results).
 
 ## Enabling Gatekeeper to export audit violations
 
@@ -35,7 +27,7 @@ Create a connection configMap that supplies appropriate set of configurations fo
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: audit
+  name: audit-pubsub-connection
   namespace: gatekeeper-system
 data:
   provider: "dapr"
@@ -45,8 +37,8 @@ data:
     }
 ```
 
-- `provider` field in `configMap.data` determined which tool/driver should be used to establish a connection. Valid values are: `dapr`
-- `config` field in `configMap.data` is a json data that allows users to pass appropriate information to establish connection to use respective provider.
+- `provider` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`
+- `config` field is a json object that configures how the connection is made. E.g. which queue messages should be sent to.
 
 #### Available Pubsub drivers
 Dapr: https://dapr.io/
@@ -194,7 +186,7 @@ spec:
 EOF
 ```
 
-2. Install Gatekeeper with `--enable-pub-sub` set to `true`, `--audit-connection` set to `audit`, `--audit-channel` set to `audit` on audit pod.
+2. Install Gatekeeper with `--enable-pub-sub` set to `true`, `--audit-connection` set to `audit-pubsub-connection`, `--audit-channel` set to `audit` on audit pod.
 
 **Note:** Verify that after the audit pod is running there is a dapr sidecar injected and running along side `manager` container.
 
@@ -205,7 +197,7 @@ kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: audit
+  name: audit-pubsub-connection
   namespace: gatekeeper-system
 data:
   provider: "dapr"
