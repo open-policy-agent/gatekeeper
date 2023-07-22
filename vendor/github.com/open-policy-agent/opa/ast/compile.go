@@ -873,6 +873,7 @@ func (c *Compiler) checkRuleConflicts() {
 		arities := make(map[int]struct{}, len(node.Values))
 		name := ""
 		var singleValueConflicts []Ref
+		var multiValueConflicts []Ref
 
 		for _, rule := range node.Values {
 			r := rule.(*Rule)
@@ -891,6 +892,9 @@ func (c *Compiler) checkRuleConflicts() {
 			//
 			//   data.p.q[r] { r := input.r } # data.p.q could be { "r": true }
 			//   data.p.q.r.s { true }
+			//
+			// data.p[r] := x { r = input.key; x = input.bar }
+			// data.p.q[r] := x { r = input.key; x = input.bar }
 
 			// But this is allowed:
 			//   data.p.q[r] = 1 { r := "r" }
@@ -899,7 +903,25 @@ func (c *Compiler) checkRuleConflicts() {
 			if r.Head.RuleKind() == SingleValue && len(node.Children) > 0 {
 				if len(ref) > 1 && !ref[len(ref)-1].IsGround() { // p.q[x] and p.q.s.t => check grandchildren
 					for _, c := range node.Children {
+						grandchildrenFound := false
+
+						if len(c.Values) > 0 {
+							childRules := extractRules(c.Values)
+							for _, childRule := range childRules {
+								childRef := childRule.Ref()
+								if childRule.Head.RuleKind() == SingleValue && !childRef[len(childRef)-1].IsGround() {
+									// The child is a partial object rule, so it's effectively "generating" grandchildren.
+									grandchildrenFound = true
+									break
+								}
+							}
+						}
+
 						if len(c.Children) > 0 {
+							grandchildrenFound = true
+						}
+
+						if grandchildrenFound {
 							singleValueConflicts = node.flattenChildren()
 							break
 						}
@@ -908,11 +930,23 @@ func (c *Compiler) checkRuleConflicts() {
 					singleValueConflicts = node.flattenChildren()
 				}
 			}
+
+			// Multi-value rules may not have any other rules in their extent; e.g.:
+			//
+			// data.p[v] { v := ... }
+			// data.p.q := 42 # In direct conflict with data.p[v], which is constructing a set and cannot have values assigned to a sub-path.
+
+			if r.Head.RuleKind() == MultiValue && len(node.Children) > 0 {
+				multiValueConflicts = node.flattenChildren()
+			}
 		}
 
 		switch {
 		case singleValueConflicts != nil:
 			c.err(NewError(TypeErr, node.Values[0].(*Rule).Loc(), "single-value rule %v conflicts with %v", name, singleValueConflicts))
+
+		case multiValueConflicts != nil:
+			c.err(NewError(TypeErr, node.Values[0].(*Rule).Loc(), "multi-value rule %v conflicts with %v", name, multiValueConflicts))
 
 		case len(kinds) > 1 || len(arities) > 1:
 			c.err(NewError(TypeErr, node.Values[0].(*Rule).Loc(), "conflicting rules %v found", name))
@@ -1890,7 +1924,7 @@ func isPrintCall(x *Expr) bool {
 	return x.IsCall() && x.Operator().Equal(Print.Ref())
 }
 
-// rewriteTermsInHead will rewrite rules so that the head does not contain any
+// rewriteRefsInHead will rewrite rules so that the head does not contain any
 // terms that require evaluation (e.g., refs or comprehensions). If the key or
 // value contains one or more of these terms, the key or value will be moved
 // into the body and assigned to a new variable. The new variable will replace
