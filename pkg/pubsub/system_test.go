@@ -84,8 +84,7 @@ func TestSystem_UpsertConnection(t *testing.T) {
 			fields: fields{
 				connections: testSystem.connections,
 				providers:   testSystem.providers,
-				s: &System{
-				},
+				s:           &System{},
 			},
 			args: args{
 				ctx: context.Background(),
