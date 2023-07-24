@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
-	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/cachemanager/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"

@@ -14,8 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// TestCacheManager_makeUpdates tests that we can add gvks to the data store.
-func TestCacheManager_makeUpdates(t *testing.T) {
+// TestCacheManager_wipeCacheIfNeeded.
+func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 	cacheManager, ctx := makeUnitCacheManagerForTest(t)
 	opaClient, ok := cacheManager.opa.(*fakes.FakeOpa)
 	require.True(t, ok)
@@ -25,23 +25,20 @@ func TestCacheManager_makeUpdates(t *testing.T) {
 	cm := unstructuredFor(configMapGVK, "config-test-1")
 	_, err := opaClient.AddData(ctx, cm)
 	require.NoError(t, err, "adding ConfigMap config-test-1 in opa")
-	cacheManager.watchedSet.Add(configMapGVK)
 
 	// prep gvkAggregator for updates to be picked up in makeUpdates
 	podGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
-	require.NoError(t, cacheManager.gvkAggregator.Upsert(aggregator.Key{Source: "foo", ID: "bar"}, []schema.GroupVersionKind{podGVK}))
+	require.NoError(t, cacheManager.specifiedGVKs.Upsert(aggregator.Key{Source: "foo", ID: "bar"}, []schema.GroupVersionKind{podGVK}))
 
-	cacheManager.makeUpdates(ctx)
+	cacheManager.gvksToDeleteFromCache.Add(configMapGVK)
+	cacheManager.wipeCacheIfNeeded(ctx)
 
-	// two things should happen:
-	// - the cache manager starts watching the pod gvk
-	// - the cache manager stops watching the configMap gvk
 	require.False(t, opaClient.HasGVK(configMapGVK))
-	require.ElementsMatch(t, cacheManager.watchedSet.Items(), []schema.GroupVersionKind{podGVK})
+	require.ElementsMatch(t, cacheManager.specifiedGVKs.ListAllGVKs(), []schema.GroupVersionKind{podGVK})
 }
 
-// TestCacheManager_makeUpdates_excluderChanges tests that we can remove gvks that were not previously process excluded but are now.
-func TestCacheManager_makeUpdates_excluderChanges(t *testing.T) {
+// TestCacheManager_wipeCacheIfNeeded_excluderChanges tests that we can remove gvks that were not previously process excluded but are now.
+func TestCacheManager_wipeCacheIfNeeded_excluderChanges(t *testing.T) {
 	cacheManager, ctx := makeUnitCacheManagerForTest(t)
 	opaClient, ok := cacheManager.opa.(*fakes.FakeOpa)
 	require.True(t, ok)
@@ -60,14 +57,14 @@ func TestCacheManager_makeUpdates_excluderChanges(t *testing.T) {
 	_, err = opaClient.AddData(ctx, pod)
 	require.NoError(t, err, "adding Pod pod-test-1 in opa")
 	cacheManager.watchedSet.Add(podGVK)
-	require.NoError(t, cacheManager.gvkAggregator.Upsert(aggregator.Key{Source: "foo", ID: "bar"}, []schema.GroupVersionKind{podGVK, configMapGVK}))
 
 	cacheManager.ExcludeProcesses(newSyncExcluderFor("excluded-ns"))
-	cacheManager.makeUpdates(ctx)
+	cacheManager.wipeCacheIfNeeded(ctx)
 
 	// the cache manager should not be watching any of the gvks that are now excluded
 	require.False(t, opaClient.HasGVK(configMapGVK))
 	require.False(t, opaClient.HasGVK(podGVK))
+	require.False(t, cacheManager.excluderChanged)
 }
 
 // TestCacheManager_AddObject_RemoveObject tests that we can add/ remove objects in the cache.
@@ -128,8 +125,8 @@ func TestCacheManager_AddObject_processExclusion(t *testing.T) {
 	require.False(t, opaClient.Contains(map[fakes.OpaKey]interface{}{{Gvk: podGVK, Key: "default/config-test-1"}: nil}))
 }
 
-// TestCacheManager_errors tests that the cache manager responds to errors from the opa client.
-func TestCacheManager_errors(t *testing.T) {
+// TestCacheManager_opaClient_errors tests that the cache manager responds to errors from the opa client.
+func TestCacheManager_opaClient_errors(t *testing.T) {
 	cm, ctx := makeUnitCacheManagerForTest(t)
 	opaClient, ok := cm.opa.(*fakes.FakeOpa)
 	require.True(t, ok)
@@ -150,7 +147,7 @@ func TestCacheManager_errors(t *testing.T) {
 
 // TestCacheManager_AddSource tests that we can modify the gvk aggregator and watched set when adding a new source.
 func TestCacheManager_AddSource(t *testing.T) {
-	cacheManager, ctx := makeUnitCacheManagerForTest(t)
+	cacheManager, _, ctx := makeCacheManagerForTest(t, false, true)
 	configMapGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 	podGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 	nsGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
@@ -162,43 +159,43 @@ func TestCacheManager_AddSource(t *testing.T) {
 	require.NoError(t, cacheManager.AddSource(ctx, sourceB, []schema.GroupVersionKind{podGVK, configMapGVK}))
 
 	// ... expect the aggregator to dedup
-	require.True(t, cacheManager.gvkAggregator.IsPresent(configMapGVK))
-	require.True(t, cacheManager.gvkAggregator.IsPresent(podGVK))
+	require.True(t, cacheManager.specifiedGVKs.IsPresent(configMapGVK))
+	require.True(t, cacheManager.specifiedGVKs.IsPresent(podGVK))
 	require.ElementsMatch(t, cacheManager.watchedSet.Items(), []schema.GroupVersionKind{podGVK, configMapGVK})
 
 	// adding a source without a previously added gvk ...
 	require.NoError(t, cacheManager.AddSource(ctx, sourceB, []schema.GroupVersionKind{configMapGVK}))
 	// ... should not remove any gvks that are still referenced by other sources
-	require.True(t, cacheManager.gvkAggregator.IsPresent(configMapGVK))
-	require.True(t, cacheManager.gvkAggregator.IsPresent(podGVK))
+	require.True(t, cacheManager.specifiedGVKs.IsPresent(configMapGVK))
+	require.True(t, cacheManager.specifiedGVKs.IsPresent(podGVK))
 
 	// adding a source that modifies the only reference to a gvk ...
 	require.NoError(t, cacheManager.AddSource(ctx, sourceB, []schema.GroupVersionKind{nsGVK}))
 
 	// ... will effectively remove the gvk from the aggregator
-	require.False(t, cacheManager.gvkAggregator.IsPresent(configMapGVK))
-	require.True(t, cacheManager.gvkAggregator.IsPresent(podGVK))
-	require.True(t, cacheManager.gvkAggregator.IsPresent(nsGVK))
+	require.False(t, cacheManager.specifiedGVKs.IsPresent(configMapGVK))
+	require.True(t, cacheManager.specifiedGVKs.IsPresent(podGVK))
+	require.True(t, cacheManager.specifiedGVKs.IsPresent(nsGVK))
 }
 
 // TestCacheManager_RemoveSource tests that we can modify the gvk aggregator when removing a source.
 func TestCacheManager_RemoveSource(t *testing.T) {
-	cacheManager, ctx := makeUnitCacheManagerForTest(t)
+	cacheManager, _, ctx := makeCacheManagerForTest(t, false, true)
 	configMapGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 	podGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 	sourceA := aggregator.Key{Source: "a", ID: "source"}
 	sourceB := aggregator.Key{Source: "b", ID: "source"}
 
 	// seed the gvk aggregator
-	require.NoError(t, cacheManager.gvkAggregator.Upsert(sourceA, []schema.GroupVersionKind{podGVK}))
-	require.NoError(t, cacheManager.gvkAggregator.Upsert(sourceB, []schema.GroupVersionKind{podGVK, configMapGVK}))
+	require.NoError(t, cacheManager.specifiedGVKs.Upsert(sourceA, []schema.GroupVersionKind{podGVK}))
+	require.NoError(t, cacheManager.specifiedGVKs.Upsert(sourceB, []schema.GroupVersionKind{podGVK, configMapGVK}))
 
 	// removing a source that is not the only one referencing a gvk ...
 	require.NoError(t, cacheManager.RemoveSource(ctx, sourceB))
 	// ... should not remove any gvks that are still referenced by other sources
-	require.True(t, cacheManager.gvkAggregator.IsPresent(podGVK))
-	require.False(t, cacheManager.gvkAggregator.IsPresent(configMapGVK))
+	require.True(t, cacheManager.specifiedGVKs.IsPresent(podGVK))
+	require.False(t, cacheManager.specifiedGVKs.IsPresent(configMapGVK))
 
 	require.NoError(t, cacheManager.RemoveSource(ctx, sourceA))
-	require.False(t, cacheManager.gvkAggregator.IsPresent(podGVK))
+	require.False(t, cacheManager.specifiedGVKs.IsPresent(podGVK))
 }
