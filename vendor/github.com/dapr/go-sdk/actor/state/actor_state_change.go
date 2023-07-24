@@ -13,12 +13,22 @@ limitations under the License.
 
 package state
 
+import (
+	"time"
+)
+
 type ActorStateChange struct {
-	stateName  string
-	value      interface{}
-	changeKind ChangeKind
+	stateName    string
+	value        interface{}
+	changeKind   ChangeKind
+	ttlInSeconds *int64
 }
 
-func NewActorStateChange(stateName string, value interface{}, changeKind ChangeKind) *ActorStateChange {
-	return &ActorStateChange{stateName: stateName, value: value, changeKind: changeKind}
+func NewActorStateChange(stateName string, value any, changeKind ChangeKind, ttl *time.Duration) *ActorStateChange {
+	var ttlF *int64
+	if ttl != nil && *ttl > 0 {
+		ttlInSeconds := int64(ttl.Seconds())
+		ttlF = &ttlInSeconds
+	}
+	return &ActorStateChange{stateName: stateName, value: value, changeKind: changeKind, ttlInSeconds: ttlF}
 }

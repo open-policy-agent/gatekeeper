@@ -16,10 +16,11 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 
 	anypb "github.com/golang/protobuf/ptypes/any"
-	"github.com/pkg/errors"
 
 	v1 "github.com/dapr/go-sdk/dapr/proto/common/v1"
 	pb "github.com/dapr/go-sdk/dapr/proto/runtime/v1"
@@ -76,7 +77,7 @@ func hasRequiredInvokeArgs(appID, methodName, verb string) error {
 // InvokeMethod invokes service without raw data ([]byte).
 func (c *GRPCClient) InvokeMethod(ctx context.Context, appID, methodName, verb string) (out []byte, err error) {
 	if err := hasRequiredInvokeArgs(appID, methodName, verb); err != nil {
-		return nil, errors.Wrap(err, "missing required parameter")
+		return nil, fmt.Errorf("missing required parameter: %w", err)
 	}
 	method, query := extractMethodAndQuery(methodName)
 	req := &pb.InvokeServiceRequest{
@@ -92,7 +93,7 @@ func (c *GRPCClient) InvokeMethod(ctx context.Context, appID, methodName, verb s
 // InvokeMethodWithContent invokes service with content (data + content type).
 func (c *GRPCClient) InvokeMethodWithContent(ctx context.Context, appID, methodName, verb string, content *DataContent) (out []byte, err error) {
 	if err := hasRequiredInvokeArgs(appID, methodName, verb); err != nil {
-		return nil, errors.Wrap(err, "missing required parameter")
+		return nil, fmt.Errorf("missing required parameter: %w", err)
 	}
 	if content == nil {
 		return nil, errors.New("content required")
@@ -113,7 +114,7 @@ func (c *GRPCClient) InvokeMethodWithContent(ctx context.Context, appID, methodN
 // InvokeMethodWithCustomContent invokes service with custom content (struct + content type).
 func (c *GRPCClient) InvokeMethodWithCustomContent(ctx context.Context, appID, methodName, verb string, contentType string, content interface{}) ([]byte, error) {
 	if err := hasRequiredInvokeArgs(appID, methodName, verb); err != nil {
-		return nil, errors.Wrap(err, "missing required parameter")
+		return nil, fmt.Errorf("missing required parameter: %w", err)
 	}
 	if contentType == "" {
 		return nil, errors.New("content type required")
@@ -124,7 +125,7 @@ func (c *GRPCClient) InvokeMethodWithCustomContent(ctx context.Context, appID, m
 
 	contentData, err := json.Marshal(content)
 	if err != nil {
-		return nil, errors.WithMessage(err, "error serializing input struct")
+		return nil, fmt.Errorf("error serializing input struct: %w", err)
 	}
 
 	method, query := extractMethodAndQuery(methodName)
