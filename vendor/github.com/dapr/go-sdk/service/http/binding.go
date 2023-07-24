@@ -15,7 +15,7 @@ package http
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -39,7 +39,7 @@ func (s *Server) AddBindingInvocationHandler(route string, fn common.BindingInvo
 		func(w http.ResponseWriter, r *http.Request) {
 			var content []byte
 			if r.ContentLength > 0 {
-				body, err := ioutil.ReadAll(r.Body)
+				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return

@@ -15,10 +15,11 @@ package client
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang/protobuf/ptypes/duration"
-	"github.com/pkg/errors"
 
 	v1 "github.com/dapr/go-sdk/dapr/proto/common/v1"
 	pb "github.com/dapr/go-sdk/dapr/proto/runtime/v1"
@@ -269,7 +270,7 @@ func (c *GRPCClient) ExecuteStateTransaction(ctx context.Context, storeName stri
 	}
 	_, err := c.protoClient.ExecuteStateTransaction(c.withAuthToken(ctx), req)
 	if err != nil {
-		return errors.Wrap(err, "error executing state transaction")
+		return fmt.Errorf("error executing state transaction: %w", err)
 	}
 	return nil
 }
@@ -321,7 +322,7 @@ func (c *GRPCClient) SaveBulkState(ctx context.Context, storeName string, items 
 
 	_, err := c.protoClient.SaveState(c.withAuthToken(ctx), req)
 	if err != nil {
-		return errors.Wrap(err, "error saving state")
+		return fmt.Errorf("error saving state: %w", err)
 	}
 	return nil
 }
@@ -345,7 +346,7 @@ func (c *GRPCClient) GetBulkState(ctx context.Context, storeName string, keys []
 
 	results, err := c.protoClient.GetBulkState(c.withAuthToken(ctx), req)
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting state")
+		return nil, fmt.Errorf("error getting state: %w", err)
 	}
 
 	if results == nil || results.Items == nil {
@@ -374,7 +375,7 @@ func (c *GRPCClient) GetState(ctx context.Context, storeName, key string, meta m
 // GetStateWithConsistency retrieves state from specific store using provided state consistency.
 func (c *GRPCClient) GetStateWithConsistency(ctx context.Context, storeName, key string, meta map[string]string, sc StateConsistency) (*StateItem, error) {
 	if err := hasRequiredStateArgs(storeName, key); err != nil {
-		return nil, errors.Wrap(err, "missing required arguments")
+		return nil, fmt.Errorf("missing required arguments: %w", err)
 	}
 
 	req := &pb.GetStateRequest{
@@ -386,7 +387,7 @@ func (c *GRPCClient) GetStateWithConsistency(ctx context.Context, storeName, key
 
 	result, err := c.protoClient.GetState(c.withAuthToken(ctx), req)
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting state")
+		return nil, fmt.Errorf("error getting state: %w", err)
 	}
 
 	return &StateItem{
@@ -412,7 +413,7 @@ func (c *GRPCClient) QueryStateAlpha1(ctx context.Context, storeName, query stri
 	}
 	resp, err := c.protoClient.QueryStateAlpha1(c.withAuthToken(ctx), req)
 	if err != nil {
-		return nil, errors.Wrap(err, "error querying state")
+		return nil, fmt.Errorf("error querying state: %w", err)
 	}
 
 	ret := &QueryResponse{
@@ -438,7 +439,7 @@ func (c *GRPCClient) DeleteState(ctx context.Context, storeName, key string, met
 // DeleteStateWithETag deletes content from store using provided state options and etag.
 func (c *GRPCClient) DeleteStateWithETag(ctx context.Context, storeName, key string, etag *ETag, meta map[string]string, opts *StateOptions) error {
 	if err := hasRequiredStateArgs(storeName, key); err != nil {
-		return errors.Wrap(err, "missing required arguments")
+		return fmt.Errorf("missing required arguments: %w", err)
 	}
 
 	req := &pb.DeleteStateRequest{
@@ -456,7 +457,7 @@ func (c *GRPCClient) DeleteStateWithETag(ctx context.Context, storeName, key str
 
 	_, err := c.protoClient.DeleteState(c.withAuthToken(ctx), req)
 	if err != nil {
-		return errors.Wrap(err, "error deleting state")
+		return fmt.Errorf("error deleting state: %w", err)
 	}
 
 	return nil
@@ -490,7 +491,7 @@ func (c *GRPCClient) DeleteBulkStateItems(ctx context.Context, storeName string,
 	for i := 0; i < len(items); i++ {
 		item := items[i]
 		if err := hasRequiredStateArgs(storeName, item.Key); err != nil {
-			return errors.Wrap(err, "missing required arguments")
+			return fmt.Errorf("missing required arguments: %w", err)
 		}
 
 		state := &v1.StateItem{
