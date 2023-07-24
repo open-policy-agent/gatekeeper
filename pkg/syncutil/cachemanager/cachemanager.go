@@ -171,14 +171,11 @@ func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
 }
 
 func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Unstructured) error {
-	// only perform work for watched gvks
-	if gvk := instance.GroupVersionKind(); !c.watchedSet.Contains(gvk) {
-		return nil
-	}
+	gvk := instance.GroupVersionKind()
 
 	isNamespaceExcluded, err := c.processExcluder.IsNamespaceExcluded(process.Sync, instance)
 	if err != nil {
-		return fmt.Errorf("error while excluding namespaces: %w", err)
+		return fmt.Errorf("error while excluding namespaces for gvk: %s: %w", gvk, err)
 	}
 
 	// bail because it means we should not be
@@ -189,17 +186,19 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 	}
 
 	syncKey := syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName())
-	_, err = c.opa.AddData(ctx, instance)
-	if err != nil {
-		c.syncMetricsCache.AddObject(
-			syncKey,
-			syncutil.Tags{
-				Kind:   instance.GetKind(),
-				Status: metrics.ErrorStatus,
-			},
-		)
+	if c.watchedSet.Contains(gvk) {
+		_, err = c.opa.AddData(ctx, instance)
+		if err != nil {
+			c.syncMetricsCache.AddObject(
+				syncKey,
+				syncutil.Tags{
+					Kind:   instance.GetKind(),
+					Status: metrics.ErrorStatus,
+				},
+			)
 
-		return err
+			return err
+		}
 	}
 
 	c.tracker.ForData(instance.GroupVersionKind()).Observe(instance)
@@ -214,13 +213,12 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 }
 
 func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.Unstructured) error {
-	// only perform work for watched gvks
-	if gvk := instance.GroupVersionKind(); !c.watchedSet.Contains(gvk) {
-		return nil
-	}
+	gvk := instance.GroupVersionKind()
 
-	if _, err := c.opa.RemoveData(ctx, instance); err != nil {
-		return err
+	if c.watchedSet.Contains(gvk) {
+		if _, err := c.opa.RemoveData(ctx, instance); err != nil {
+			return err
+		}
 	}
 
 	// only delete from metrics map if the data removal was succcesful
