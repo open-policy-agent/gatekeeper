@@ -270,28 +270,17 @@ func (c *CacheManager) syncGVKInstances(ctx context.Context, gvk schema.GroupVer
 	return nil
 }
 
+var gvksFailingTolist *watch.Set
+
 func (c *CacheManager) manageCache(ctx context.Context) {
 	// stopChan is used to stop any list operations still in progress
 	stopChan := make(chan bool, 1)
-	gvkErrdChan := make(chan schema.GroupVersionKind, 1024)
-	gvksFailingTolist := watch.NewSet()
-
-	gvksFailingToListReconciler := func(stopChan <-chan bool) {
-		for {
-			select {
-			case <-stopChan:
-				return
-			case gvk := <-gvkErrdChan:
-				gvksFailingTolist.Add(gvk)
-			}
-		}
-	}
+	gvksFailingTolist = watch.NewSet()
 
 	for {
 		select {
 		case <-ctx.Done():
 			close(stopChan)
-			close(gvkErrdChan)
 			return
 		case <-c.backgroundManagementTicker.C:
 			c.mu.Lock()
@@ -322,7 +311,6 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 				stopChan = make(chan bool, 1)
 
 				go c.replayLoop(ctx, gvksToRelistForLoop, stopChan)
-				go gvksFailingToListReconciler(stopChan)
 			}
 			c.mu.Unlock()
 		}
@@ -354,6 +342,7 @@ func (c *CacheManager) replayLoop(ctx context.Context, gvksToRelist []schema.Gro
 
 			if err := wait.ExponentialBackoff(backoff, operation); err != nil {
 				log.Error(err, "internal: error listings gvk cache data", "gvk", gvk)
+				gvksFailingTolist.Add(gvk)
 			}
 		}
 	}
