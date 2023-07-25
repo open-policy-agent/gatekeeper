@@ -97,7 +97,7 @@ spec:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -147,7 +147,7 @@ spec:
                     type: object
                   name:
                     description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
@@ -183,7 +183,7 @@ spec:
                     description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -342,7 +342,7 @@ spec:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -392,7 +392,7 @@ spec:
                     type: object
                   name:
                     description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
@@ -428,7 +428,7 @@ spec:
                     description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -587,7 +587,7 @@ spec:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -637,7 +637,7 @@ spec:
                     type: object
                   name:
                     description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
@@ -673,7 +673,7 @@ spec:
                     description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -855,7 +855,7 @@ spec:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -905,7 +905,7 @@ spec:
                     type: object
                   name:
                     description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
@@ -941,7 +941,7 @@ spec:
                     description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -1073,7 +1073,7 @@ spec:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -1123,7 +1123,7 @@ spec:
                     type: object
                   name:
                     description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
@@ -1159,7 +1159,7 @@ spec:
                     description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -1284,7 +1284,7 @@ spec:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -1334,7 +1334,7 @@ spec:
                     type: object
                   name:
                     description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
@@ -1370,7 +1370,7 @@ spec:
                     description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -1495,7 +1495,7 @@ spec:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -1545,7 +1545,7 @@ spec:
                     type: object
                   name:
                     description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
@@ -1581,7 +1581,7 @@ spec:
                     description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -1723,7 +1723,7 @@ spec:
                     excludedNamespaces:
                       items:
                         description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                        pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                        pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                         type: string
                       type: array
                     processes:
@@ -2390,6 +2390,97 @@ spec:
     storage: true
     subresources:
       status: {}
+  - name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: ExpansionTemplate is the Schema for the ExpansionTemplate API.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ExpansionTemplateSpec defines the desired state of ExpansionTemplate.
+            properties:
+              applyTo:
+                description: ApplyTo lists the specific groups, versions and kinds of generator resources which will be expanded.
+                items:
+                  description: ApplyTo determines what GVKs items the mutation should apply to. Globs are not allowed.
+                  properties:
+                    groups:
+                      items:
+                        type: string
+                      type: array
+                    kinds:
+                      items:
+                        type: string
+                      type: array
+                    versions:
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                type: array
+              enforcementAction:
+                description: EnforcementAction specifies the enforcement action to be used for resources matching the ExpansionTemplate. Specifying an empty value will use the enforcement action specified by the Constraint in violation.
+                type: string
+              generatedGVK:
+                description: GeneratedGVK specifies the GVK of the resources which the generator resource creates.
+                properties:
+                  group:
+                    type: string
+                  kind:
+                    type: string
+                  version:
+                    type: string
+                type: object
+              templateSource:
+                description: TemplateSource specifies the source field on the generator resource to use as the base for expanded resource. For Pod-creating generators, this is usually spec.template
+                type: string
+            type: object
+          status:
+            description: ExpansionTemplateStatus defines the observed state of ExpansionTemplate.
+            properties:
+              byPod:
+                items:
+                  description: ExpansionTemplatePodStatusStatus defines the observed state of ExpansionTemplatePodStatus.
+                  properties:
+                    errors:
+                      items:
+                        properties:
+                          message:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                        - message
+                        type: object
+                      type: array
+                    id:
+                      description: 'Important: Run "make" to regenerate code after modifying this file'
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    operations:
+                      items:
+                        type: string
+                      type: array
+                    templateUID:
+                      description: UID is a type that holds unique ID values, including UUIDs.  Because we don't ONLY use UUIDs, this is an alias to string.  Being a type captures intent and helps make sure that UIDs and names do not get conflated.
+                      type: string
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -2521,7 +2612,7 @@ spec:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -2571,7 +2662,7 @@ spec:
                     type: object
                   name:
                     description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
@@ -2607,7 +2698,7 @@ spec:
                     description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -2739,7 +2830,7 @@ spec:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -2789,7 +2880,7 @@ spec:
                     type: object
                   name:
                     description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
@@ -2825,7 +2916,7 @@ spec:
                     description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -2957,7 +3048,7 @@ spec:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -3007,7 +3098,7 @@ spec:
                     type: object
                   name:
                     description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
@@ -3043,7 +3134,7 @@ spec:
                     description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
                     items:
                       description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -3599,7 +3690,7 @@ spec:
               fieldPath: metadata.namespace
         - name: CONTAINER_NAME
           value: manager
-        image: openpolicyagent/gatekeeper:v3.13.0-beta.1
+        image: openpolicyagent/gatekeeper:v3.13.0-rc.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -3716,7 +3807,7 @@ spec:
               fieldPath: metadata.namespace
         - name: CONTAINER_NAME
           value: manager
-        image: openpolicyagent/gatekeeper:v3.13.0-beta.1
+        image: openpolicyagent/gatekeeper:v3.13.0-rc.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
