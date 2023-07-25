@@ -29,7 +29,6 @@ var (
 		Steps:    3,
 	}
 )
-var gvksFailingTolist *watch.Set
 
 type Config struct {
 	Opa              syncutil.OpaDataClient
@@ -43,9 +42,10 @@ type Config struct {
 }
 
 type CacheManager struct {
+	watchedSet            *watch.Set
 	processExcluder       *process.Excluder
 	specifiedGVKs         *aggregator.GVKAgreggator
-	gvksToList            *watch.Set
+	needToList            bool
 	gvksToDeleteFromCache *watch.Set
 	excluderChanged       bool
 	// mu guards access to any of the fields above
@@ -55,7 +55,6 @@ type CacheManager struct {
 	syncMetricsCache           *syncutil.MetricsCache
 	tracker                    *readiness.Tracker
 	registrar                  *watch.Registrar
-	watchedSet                 *watch.Set
 	backgroundManagementTicker time.Ticker
 	reader                     client.Reader
 
@@ -89,7 +88,6 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 		watchedSet:                 config.WatchedSet,
 		reader:                     config.Reader,
 		specifiedGVKs:              aggregator.NewGVKAggregator(),
-		gvksToList:                 watch.NewSet(),
 		backgroundManagementTicker: *time.NewTicker(3 * time.Second),
 		gvksToDeleteFromCache:      watch.NewSet(),
 		stopChan:                   make(chan bool, 1),
@@ -105,7 +103,7 @@ func (c *CacheManager) Start(ctx context.Context) error {
 
 // AddSource adjusts the watched set of gvks according to the newGVKs passed in
 // for a given sourceKey.
-// It errors out if there is an issue removing the Key internally or replacing the watches.
+// It errors out if there is an issue adding the Key internally or replacing the watches.
 func (c *CacheManager) AddSource(ctx context.Context, sourceKey aggregator.Key, newGVKs []schema.GroupVersionKind) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -172,7 +170,7 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 }
 
 // ExcludeProcesses swaps the current process excluder with the new *process.Excluder.
-// It's a no-op if the two excluder are equal.
+// It's a no-op if the two excluders are equal.
 func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -285,8 +283,6 @@ func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind)
 }
 
 func (c *CacheManager) manageCache(ctx context.Context) {
-	gvksFailingTolist = watch.NewSet()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -298,26 +294,16 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 
 			// spin up new goroutines to relist if new gvks to relist are
 			// populated from makeUpdates.
-			if c.gvksToList.Size() != 0 {
+			if c.needToList {
 				// stop any goroutines that were relisting before
 				// as we may no longer be interested in those gvks
 				c.stopChan <- true
 
-				// also try to catch any gvks that are in the aggregator
-				// but are failing to list from a previous replay.
-				for _, gvk := range gvksFailingTolist.Items() {
-					if c.specifiedGVKs.IsPresent(gvk) {
-						c.gvksToList.Add(gvk)
-					}
-				}
-
-				// save all gvks that need relisting
-				gvksToRelistForLoop := c.gvksToList.Items()
+				// assume all gvks need to be relist
+				gvksToRelistForLoop := c.specifiedGVKs.GVKs()
 
 				// clean state
-				gvksFailingTolist = watch.NewSet()
-				c.gvksToList = watch.NewSet()
-
+				c.needToList = false
 				c.stopChan = make(chan bool, 1)
 
 				go c.replayGVKs(ctx, gvksToRelistForLoop)
@@ -345,7 +331,7 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 
 			if err := wait.ExponentialBackoff(backoff, operation); err != nil {
 				log.Error(err, "internal: error listings gvk cache data", "gvk", gvk)
-				gvksFailingTolist.Add(gvk)
+				// this gvk will be retried next time we relist from manageCache
 			}
 		}
 	}
@@ -366,7 +352,7 @@ func (c *CacheManager) wipeCacheIfNeeded(ctx context.Context) {
 		} else {
 			c.gvksToDeleteFromCache = watch.NewSet()
 			c.excluderChanged = false
-			c.gvksToList.AddSet(c.watchedSet)
+			c.needToList = true
 		}
 	}
 }
