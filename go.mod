@@ -26,7 +26,7 @@ require (
 	github.com/spf13/cobra v1.7.0
 	github.com/stretchr/testify v1.8.3
 	go.opencensus.io v0.24.0
-	go.uber.org/automaxprocs v1.5.2
+	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/zap v1.24.0
 	golang.org/x/net v0.11.0
 	golang.org/x/oauth2 v0.7.0
