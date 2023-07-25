@@ -13,7 +13,9 @@ limitations under the License.
 
 package codec
 
-import perrors "github.com/pkg/errors"
+import (
+	"fmt"
+)
 
 // Codec is serializer interface.
 type Codec interface {
@@ -36,7 +38,7 @@ func SetActorCodec(name string, f Factory) {
 func GetActorCodec(name string) (Codec, error) {
 	f, ok := codecFactoryMap[name]
 	if !ok {
-		return nil, perrors.Errorf("no actor codec implement named %s", name)
+		return nil, fmt.Errorf("no actor codec implement named %s", name)
 	}
 	return f(), nil
 }

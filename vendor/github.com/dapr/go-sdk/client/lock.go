@@ -15,8 +15,8 @@ package client
 
 import (
 	"context"
-
-	"github.com/pkg/errors"
+	"errors"
+	"fmt"
 
 	pb "github.com/dapr/go-sdk/dapr/proto/runtime/v1"
 )
@@ -64,7 +64,7 @@ func (c *GRPCClient) TryLockAlpha1(ctx context.Context, storeName string, reques
 
 	resp, err := c.protoClient.TryLockAlpha1(ctx, &req)
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting lock")
+		return nil, fmt.Errorf("error getting lock: %w", err)
 	}
 
 	return &LockResponse{
@@ -90,7 +90,7 @@ func (c *GRPCClient) UnlockAlpha1(ctx context.Context, storeName string, request
 
 	resp, err := c.protoClient.UnlockAlpha1(ctx, &req)
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting lock")
+		return nil, fmt.Errorf("error getting lock: %w", err)
 	}
 
 	return &UnlockResponse{
