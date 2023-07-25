@@ -34,7 +34,7 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 	cacheManager.wipeCacheIfNeeded(ctx)
 
 	require.False(t, opaClient.HasGVK(configMapGVK))
-	require.ElementsMatch(t, cacheManager.specifiedGVKs.ListAllGVKs(), []schema.GroupVersionKind{podGVK})
+	require.ElementsMatch(t, cacheManager.specifiedGVKs.GVKs(), []schema.GroupVersionKind{podGVK})
 }
 
 // TestCacheManager_wipeCacheIfNeeded_excluderChanges tests that we can remove gvks that were not previously process excluded but are now.

@@ -20,7 +20,16 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var log = logf.Log.WithName("cache-manager")
+var (
+	log     = logf.Log.WithName("cache-manager")
+	backoff = wait.Backoff{
+		Duration: time.Second,
+		Factor:   2,
+		Jitter:   0.1,
+		Steps:    3,
+	}
+)
+var gvksFailingTolist *watch.Set
 
 type Config struct {
 	Opa              syncutil.OpaDataClient
@@ -49,6 +58,9 @@ type CacheManager struct {
 	watchedSet                 *watch.Set
 	backgroundManagementTicker time.Ticker
 	reader                     client.Reader
+
+	// stopChan is used to stop any list operations still in progress
+	stopChan chan bool
 }
 
 func NewCacheManager(config *Config) (*CacheManager, error) {
@@ -80,6 +92,7 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 		gvksToList:                 watch.NewSet(),
 		backgroundManagementTicker: *time.NewTicker(3 * time.Second),
 		gvksToDeleteFromCache:      watch.NewSet(),
+		stopChan:                   make(chan bool, 1),
 	}, nil
 }
 
@@ -92,6 +105,7 @@ func (c *CacheManager) Start(ctx context.Context) error {
 
 // AddSource adjusts the watched set of gvks according to the newGVKs passed in
 // for a given sourceKey.
+// It errors out if there is an issue removing the Key internally or replacing the watches.
 func (c *CacheManager) AddSource(ctx context.Context, sourceKey aggregator.Key, newGVKs []schema.GroupVersionKind) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -115,7 +129,7 @@ func (c *CacheManager) AddSource(ctx context.Context, sourceKey aggregator.Key, 
 // assumes caller has lock.
 func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	newWatchSet := watch.NewSet()
-	newWatchSet.Add(c.specifiedGVKs.ListAllGVKs()...)
+	newWatchSet.Add(c.specifiedGVKs.GVKs()...)
 
 	if newWatchSet.Equals(c.watchedSet) {
 		// nothing to do as the sets are equal
@@ -139,6 +153,8 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	return innerError
 }
 
+// RemoveSource removes the watches of the GVKs for a given aggregator.Key.
+// It errors out if there is an issue removing the Key internally or replacing the watches.
 func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Key) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -149,12 +165,14 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 
 	// make changes to the watches
 	if err := c.replaceWatchSet(ctx); err != nil {
-		return fmt.Errorf("error removing watches for source %s: %w", sourceKey, err)
+		return fmt.Errorf("error removing watches for source %v: %w", sourceKey, err)
 	}
 
 	return nil
 }
 
+// ExcludeProcesses swaps the current process excluder with the new *process.Excluder.
+// It's a no-op if the two excluder are equal.
 func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -175,11 +193,11 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 
 	isNamespaceExcluded, err := c.processExcluder.IsNamespaceExcluded(process.Sync, instance)
 	if err != nil {
-		return fmt.Errorf("error while excluding namespaces for gvk: %s: %w", gvk, err)
+		return fmt.Errorf("error while excluding namespaces for gvk: %v: %w", gvk.String(), err)
 	}
 
 	// bail because it means we should not be
-	// syncing this gvk
+	// syncing this gvk's objects as it is namespace excluded.
 	if isNamespaceExcluded {
 		c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
 		return nil
@@ -244,7 +262,7 @@ func (c *CacheManager) ReportSyncMetrics() {
 	c.syncMetricsCache.ReportSync()
 }
 
-func (c *CacheManager) syncGVKInstances(ctx context.Context, gvk schema.GroupVersionKind) error {
+func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind) error {
 	u := &unstructured.UnstructuredList{}
 	u.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   gvk.Group,
@@ -257,8 +275,6 @@ func (c *CacheManager) syncGVKInstances(ctx context.Context, gvk schema.GroupVer
 		return fmt.Errorf("replaying data for %+v: %w", gvk, err)
 	}
 
-	defer c.ReportSyncMetrics()
-
 	for i := range u.Items {
 		if err := c.AddObject(ctx, &u.Items[i]); err != nil {
 			return fmt.Errorf("adding data for %+v: %w", gvk, err)
@@ -268,17 +284,13 @@ func (c *CacheManager) syncGVKInstances(ctx context.Context, gvk schema.GroupVer
 	return nil
 }
 
-var gvksFailingTolist *watch.Set
-
 func (c *CacheManager) manageCache(ctx context.Context) {
-	// stopChan is used to stop any list operations still in progress
-	stopChan := make(chan bool, 1)
 	gvksFailingTolist = watch.NewSet()
 
 	for {
 		select {
 		case <-ctx.Done():
-			close(stopChan)
+			close(c.stopChan)
 			return
 		case <-c.backgroundManagementTicker.C:
 			c.mu.Lock()
@@ -289,7 +301,7 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 			if c.gvksToList.Size() != 0 {
 				// stop any goroutines that were relisting before
 				// as we may no longer be interested in those gvks
-				stopChan <- true
+				c.stopChan <- true
 
 				// also try to catch any gvks that are in the aggregator
 				// but are failing to list from a previous replay.
@@ -306,32 +318,25 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 				gvksFailingTolist = watch.NewSet()
 				c.gvksToList = watch.NewSet()
 
-				stopChan = make(chan bool, 1)
+				c.stopChan = make(chan bool, 1)
 
-				go c.replayLoop(ctx, gvksToRelistForLoop, stopChan)
+				go c.replayGVKs(ctx, gvksToRelistForLoop)
 			}
 			c.mu.Unlock()
 		}
 	}
 }
 
-func (c *CacheManager) replayLoop(ctx context.Context, gvksToRelist []schema.GroupVersionKind, stopChan <-chan bool) {
+func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.GroupVersionKind) {
 	for _, gvk := range gvksToRelist {
 		select {
 		case <-ctx.Done():
 			return
-		case <-stopChan:
+		case <-c.stopChan:
 			return
 		default:
-			backoff := wait.Backoff{
-				Duration: time.Second,
-				Factor:   2,
-				Jitter:   0.1,
-				Steps:    3,
-			}
-
 			operation := func() (bool, error) {
-				if err := c.syncGVKInstances(ctx, gvk); err != nil {
+				if err := c.syncGVK(ctx, gvk); err != nil {
 					return false, err
 				}
 
@@ -344,6 +349,8 @@ func (c *CacheManager) replayLoop(ctx context.Context, gvksToRelist []schema.Gro
 			}
 		}
 	}
+
+	c.ReportSyncMetrics()
 }
 
 // wipeCacheIfNeeded performs a cache wipe if there are any gvks needing to be removed
@@ -359,8 +366,7 @@ func (c *CacheManager) wipeCacheIfNeeded(ctx context.Context) {
 		} else {
 			c.gvksToDeleteFromCache = watch.NewSet()
 			c.excluderChanged = false
+			c.gvksToList.AddSet(c.watchedSet)
 		}
-
-		c.gvksToList.AddSet(c.watchedSet)
 	}
 }

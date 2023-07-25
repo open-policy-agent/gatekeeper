@@ -106,7 +106,8 @@ func (b *GVKAgreggator) List(k Key) map[schema.GroupVersionKind]struct{} {
 	return b.store[k]
 }
 
-func (b *GVKAgreggator) ListAllGVKs() []schema.GroupVersionKind {
+// GVKs returns a list of all of the schema.GroupVersionKind that are aggregated.
+func (b *GVKAgreggator) GVKs() []schema.GroupVersionKind {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
