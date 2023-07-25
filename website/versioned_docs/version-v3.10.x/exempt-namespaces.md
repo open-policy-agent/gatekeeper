@@ -67,6 +67,8 @@ If it becomes necessary to exempt a namespace from Gatekeeper webhook entirely (
    3. Add the `admission.gatekeeper.sh/ignore` label to the namespace. The value attached
       to the label is ignored, so it can be used to annotate the reason for the exemption.
 
+Similarly, you can also enable the exemption of entire groups of namespaces using the `--exempt-namespace-prefix` and `--exempt-namespace-suffix` flags. Using these flags allows the `admission.gatekeeper.sh/ignore` label to be added to any namespace that matches the supplied prefix or suffix.
+
 ## Difference between exclusion using config resource and `--exempt-namespace` flag
 
 The difference is at what point in the admission process an exemption occurs.
