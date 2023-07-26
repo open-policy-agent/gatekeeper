@@ -81,12 +81,12 @@ The audit pod publishes violations in following format:
 
 1. Install Dapr
 
-    To install dapr with specific requirements and configuration, please refer to [dapr docs](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-deploy/).
-    > Dapr is installed with mtls enabled by default, for more details on the same plaase refer to [dapr security](https://docs.dapr.io/operations/security/mtls/#setting-up-mtls-with-the-configuration-resource).
+    To install Dapr with specific requirements and configuration, please refer to [Dapr docs](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-deploy/).
+    > Dapr is installed with mtls enabled by default, for more details on the same plaase refer to [Dapr security](https://docs.dapr.io/operations/security/mtls/#setting-up-mtls-with-the-configuration-resource).
 
 2. Install Redis
 
-  Please refer to [this](https://docs.dapr.io/getting-started/tutorials/configure-state-pubsub/#step-1-create-a-redis-store) guide to install redis.
+    Please refer to [this](https://docs.dapr.io/getting-started/tutorials/configure-state-pubsub/#step-1-create-a-redis-store) guide to install Redis.
 
     > To install Redis with TLS, please refer to [this](https://docs.bitnami.com/kubernetes/infrastructure/redis-cluster/administration/enable-tls/) doc.
 
