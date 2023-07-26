@@ -186,8 +186,8 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 	require.Eventually(t, expectedCheck(opaClient, expected), eventuallyTimeout, eventuallyTicker)
 
 	// now assert that the gvkAggregator looks as expected
-	cacheManager.specifiedGVKs.IsPresent(configMapGVK)
-	gvks := cacheManager.specifiedGVKs.List(syncSourceOne)
+	cacheManager.gvksToSync.IsPresent(configMapGVK)
+	gvks := cacheManager.gvksToSync.List(syncSourceOne)
 	require.Len(t, gvks, 2)
 	_, foundConfigMap := gvks[configMapGVK]
 	require.True(t, foundConfigMap)
@@ -203,8 +203,8 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 	}
 	require.Eventually(t, expectedCheck(opaClient, expected), eventuallyTimeout, eventuallyTicker)
 	// now assert that the gvkAggregator looks as expected
-	cacheManager.specifiedGVKs.IsPresent(configMapGVK)
-	gvks = cacheManager.specifiedGVKs.List(syncSourceOne)
+	cacheManager.gvksToSync.IsPresent(configMapGVK)
+	gvks = cacheManager.gvksToSync.List(syncSourceOne)
 	require.Len(t, gvks, 1)
 	_, foundConfigMap = gvks[configMapGVK]
 	require.True(t, foundConfigMap)
@@ -216,8 +216,8 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 	require.NoError(t, cacheManager.AddSource(ctx, syncSourceTwo, []schema.GroupVersionKind{configMapGVK}))
 
 	reqConditionForAgg := func() bool {
-		cacheManager.specifiedGVKs.IsPresent(configMapGVK)
-		gvks := cacheManager.specifiedGVKs.List(syncSourceOne)
+		cacheManager.gvksToSync.IsPresent(configMapGVK)
+		gvks := cacheManager.gvksToSync.List(syncSourceOne)
 		if len(gvks) != 1 {
 			return false
 		}
@@ -226,7 +226,7 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 			return false
 		}
 
-		gvks2 := cacheManager.specifiedGVKs.List(syncSourceTwo)
+		gvks2 := cacheManager.gvksToSync.List(syncSourceTwo)
 		if len(gvks2) != 1 {
 			return false
 		}
@@ -259,7 +259,7 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 
 	// and expect an empty cache and empty aggregator
 	require.Eventually(t, expectedCheck(opaClient, map[fakes.OpaKey]interface{}{}), eventuallyTimeout, eventuallyTicker)
-	require.True(t, len(cacheManager.specifiedGVKs.GVKs()) == 0)
+	require.True(t, len(cacheManager.gvksToSync.GVKs()) == 0)
 
 	// cleanup
 	require.NoError(t, c.Delete(ctx, cm), "deleting ConfigMap config-test-1")
@@ -317,8 +317,8 @@ func TestCacheManager_ExcludeProcesses(t *testing.T) {
 
 	require.Eventually(t, expectedCheck(opaClient, map[fakes.OpaKey]interface{}{}), eventuallyTimeout, eventuallyTicker)
 	// make sure the gvk is still in gvkAggregator
-	require.True(t, len(cacheManager.specifiedGVKs.GVKs()) == 1)
-	require.True(t, cacheManager.specifiedGVKs.IsPresent(configMapGVK))
+	require.True(t, len(cacheManager.gvksToSync.GVKs()) == 1)
+	require.True(t, cacheManager.gvksToSync.IsPresent(configMapGVK))
 
 	// cleanup
 	require.NoError(t, c.Delete(ctx, cm), "deleting ConfigMap config-test-1")
