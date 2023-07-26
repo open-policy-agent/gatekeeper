@@ -7,7 +7,6 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -31,7 +30,7 @@ func makeCacheManagerForTest(t *testing.T, startCache, startManager bool) (*Cach
 	mgr, wm := testutils.SetupManager(t, cfg)
 
 	c := testclient.NewRetryClient(mgr.GetClient())
-	opaClient := &fakes.FakeOpa{}
+	opaClient := &FakeOpa{}
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	require.NoError(t, err)
 	processExcluder := process.Get()

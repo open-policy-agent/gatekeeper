@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
@@ -31,7 +32,7 @@ var (
 )
 
 type Config struct {
-	Opa              syncutil.OpaDataClient
+	Opa              OpaDataClient
 	SyncMetricsCache *syncutil.MetricsCache
 	Tracker          *readiness.Tracker
 	ProcessExcluder  *process.Excluder
@@ -51,7 +52,7 @@ type CacheManager struct {
 	// mu guards access to any of the fields above
 	mu sync.RWMutex
 
-	opa                        syncutil.OpaDataClient
+	opa                        OpaDataClient
 	syncMetricsCache           *syncutil.MetricsCache
 	tracker                    *readiness.Tracker
 	registrar                  *watch.Registrar
@@ -60,6 +61,12 @@ type CacheManager struct {
 
 	// stopChan is used to stop any list operations still in progress
 	stopChan chan bool
+}
+
+// OpaDataClient is an interface for caching data.
+type OpaDataClient interface {
+	AddData(ctx context.Context, data interface{}) (*types.Responses, error)
+	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
 }
 
 func NewCacheManager(config *Config) (*CacheManager, error) {

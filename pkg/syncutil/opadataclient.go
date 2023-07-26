@@ -18,21 +18,13 @@ package syncutil
 import (
 	"context"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// CacheManagerMediator is an interface for mediating
-// with a CacheManager but not actually depending on an instance.
+// CacheManagerMediator interface to use the CacheManager and avoid import cycles.
 type CacheManagerMediator interface {
 	AddObject(ctx context.Context, instance *unstructured.Unstructured) error
 	RemoveObject(ctx context.Context, instance *unstructured.Unstructured) error
 
 	ReportSyncMetrics()
-}
-
-// OpaDataClient is an interface for caching data.
-type OpaDataClient interface {
-	AddData(ctx context.Context, data interface{}) (*types.Responses, error)
-	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
 }

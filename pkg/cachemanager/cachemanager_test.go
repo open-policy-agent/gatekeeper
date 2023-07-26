@@ -17,7 +17,7 @@ import (
 // TestCacheManager_wipeCacheIfNeeded.
 func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 	cacheManager, ctx := makeUnitCacheManagerForTest(t)
-	opaClient, ok := cacheManager.opa.(*fakes.FakeOpa)
+	opaClient, ok := cacheManager.opa.(*FakeOpa)
 	require.True(t, ok)
 
 	// seed one gvk
@@ -26,7 +26,7 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 	_, err := opaClient.AddData(ctx, cm)
 	require.NoError(t, err, "adding ConfigMap config-test-1 in opa")
 
-	// prep gvkAggregator for updates to be picked up in makeUpdates
+	// prep cachemanager for updates to be picked up in makeUpdates
 	podGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 	require.NoError(t, cacheManager.gvksToSync.Upsert(aggregator.Key{Source: "foo", ID: "bar"}, []schema.GroupVersionKind{podGVK}))
 
@@ -40,7 +40,7 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 // TestCacheManager_wipeCacheIfNeeded_excluderChanges tests that we can remove gvks that were not previously process excluded but are now.
 func TestCacheManager_wipeCacheIfNeeded_excluderChanges(t *testing.T) {
 	cacheManager, ctx := makeUnitCacheManagerForTest(t)
-	opaClient, ok := cacheManager.opa.(*fakes.FakeOpa)
+	opaClient, ok := cacheManager.opa.(*FakeOpa)
 	require.True(t, ok)
 
 	// seed gvks
@@ -71,7 +71,7 @@ func TestCacheManager_wipeCacheIfNeeded_excluderChanges(t *testing.T) {
 func TestCacheManager_AddObject_RemoveObject(t *testing.T) {
 	cm, ctx := makeUnitCacheManagerForTest(t)
 
-	opaClient, ok := cm.opa.(*fakes.FakeOpa)
+	opaClient, ok := cm.opa.(*FakeOpa)
 	require.True(t, ok)
 
 	pod := fakes.Pod(
@@ -119,16 +119,16 @@ func TestCacheManager_AddObject_processExclusion(t *testing.T) {
 	require.NoError(t, cm.AddObject(ctx, &unstructured.Unstructured{Object: unstructuredPod}))
 
 	// test that pod from excluded namespace is not cache managed
-	opaClient, ok := cm.opa.(*fakes.FakeOpa)
+	opaClient, ok := cm.opa.(*FakeOpa)
 	require.True(t, ok)
 	require.False(t, opaClient.HasGVK(pod.GroupVersionKind()))
-	require.False(t, opaClient.Contains(map[fakes.OpaKey]interface{}{{Gvk: podGVK, Key: "default/config-test-1"}: nil}))
+	require.False(t, opaClient.Contains(map[OpaKey]interface{}{{Gvk: podGVK, Key: "default/config-test-1"}: nil}))
 }
 
 // TestCacheManager_opaClient_errors tests that the cache manager responds to errors from the opa client.
 func TestCacheManager_opaClient_errors(t *testing.T) {
 	cm, ctx := makeUnitCacheManagerForTest(t)
-	opaClient, ok := cm.opa.(*fakes.FakeOpa)
+	opaClient, ok := cm.opa.(*FakeOpa)
 	require.True(t, ok)
 	opaClient.SetErroring(true) // This will cause AddObject, RemoveObject to err
 

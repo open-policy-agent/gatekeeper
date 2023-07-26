@@ -11,7 +11,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package fakes
+package cachemanager
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 	gosync "sync"
 
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,7 +36,7 @@ type FakeOpa struct {
 	needsToError bool
 }
 
-var _ syncutil.OpaDataClient = &FakeOpa{}
+var _ OpaDataClient = &FakeOpa{}
 
 // keyFor returns an opaKey for the provided resource.
 // Returns error if the resource is not a runtime.Object w/ metadata.

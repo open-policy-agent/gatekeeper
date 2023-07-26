@@ -26,7 +26,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
-	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -126,7 +126,7 @@ func TestReconcile(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	opaClient := &fakes.FakeOpa{}
+	opaClient := &cachemanager.FakeOpa{}
 
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
@@ -142,7 +142,7 @@ func TestReconcile(t *testing.T) {
 		CtrlName,
 		events)
 	require.NoError(t, err)
-	cacheManager, err := cm.NewCacheManager(&cm.Config{
+	cacheManager, err := cachemanager.NewCacheManager(&cachemanager.Config{
 		Opa:              opaClient,
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
@@ -284,7 +284,7 @@ func TestReconcile(t *testing.T) {
 	}
 	require.NoError(t, c.Create(ctx, fooPod))
 	// fooPod should be namespace excluded, hence not synced
-	g.Eventually(opaClient.Contains(map[fakes.OpaKey]interface{}{{Gvk: fooPod.GroupVersionKind(), Key: "default"}: struct{}{}}), timeout).ShouldNot(gomega.BeTrue())
+	g.Eventually(opaClient.Contains(map[cachemanager.OpaKey]interface{}{{Gvk: fooPod.GroupVersionKind(), Key: "default"}: struct{}{}}), timeout).ShouldNot(gomega.BeTrue())
 
 	require.NoError(t, c.Delete(ctx, fooPod))
 	testMgrStopped()
@@ -407,11 +407,11 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}, timeout).Should(gomega.BeTrue())
 }
 
-func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager, tracker *readiness.Tracker, events chan event.GenericEvent, reader client.Reader, useFakeOpa bool) (syncutil.OpaDataClient, error) {
+func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager, tracker *readiness.Tracker, events chan event.GenericEvent, reader client.Reader, useFakeOpa bool) (cachemanager.OpaDataClient, error) {
 	// initialize OPA
-	var opaClient syncutil.OpaDataClient
+	var opaClient cachemanager.OpaDataClient
 	if useFakeOpa {
-		opaClient = &fakes.FakeOpa{}
+		opaClient = &cachemanager.FakeOpa{}
 	} else {
 		driver, err := rego.New(rego.Tracing(true))
 		if err != nil {
@@ -436,7 +436,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 	if err != nil {
 		return nil, fmt.Errorf("cannot create registrar: %w", err)
 	}
-	cacheManager, err := cm.NewCacheManager(&cm.Config{
+	cacheManager, err := cachemanager.NewCacheManager(&cachemanager.Config{
 		Opa:              opaClient,
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
@@ -505,7 +505,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	opa, err := setupController(ctx, mgr, wm, tracker, events, c, true)
 	require.NoError(t, err, "failed to set up controller")
 
-	opaClient, ok := opa.(*fakes.FakeOpa)
+	opaClient, ok := opa.(*cachemanager.FakeOpa)
 	require.True(t, ok)
 
 	testutils.StartManager(ctx, t, mgr)
@@ -521,7 +521,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	config := configFor([]schema.GroupVersionKind{nsGVK, configMapGVK})
 	require.NoError(t, c.Create(ctx, config), "creating Config config")
 
-	expected := map[fakes.OpaKey]interface{}{
+	expected := map[cachemanager.OpaKey]interface{}{
 		{Gvk: nsGVK, Key: "default"}:                      nil,
 		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
 		// kube-system namespace is being excluded, it should not be in opa cache
@@ -547,7 +547,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	// Expect our configMap to return at some point
 	// TODO: In the future it will remain instead of having to repopulate.
-	expected = map[fakes.OpaKey]interface{}{
+	expected = map[cachemanager.OpaKey]interface{}{
 		{
 			Gvk: configMapGVK,
 			Key: "default/config-test-1",
@@ -557,7 +557,7 @@ func TestConfig_CacheContents(t *testing.T) {
 		return opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "waiting for ConfigMap to repopulate in cache")
 
-	expected = map[fakes.OpaKey]interface{}{
+	expected = map[cachemanager.OpaKey]interface{}{
 		{
 			Gvk: configMapGVK,
 			Key: "kube-system/config-test-2",
@@ -602,7 +602,7 @@ func TestConfig_Retries(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	opaClient := &fakes.FakeOpa{}
+	opaClient := &cachemanager.FakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
@@ -618,7 +618,7 @@ func TestConfig_Retries(t *testing.T) {
 		CtrlName,
 		events)
 	require.NoError(t, err)
-	cacheManager, err := cm.NewCacheManager(&cm.Config{
+	cacheManager, err := cachemanager.NewCacheManager(&cachemanager.Config{
 		Opa:              opaClient,
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
@@ -699,7 +699,7 @@ func TestConfig_Retries(t *testing.T) {
 		}
 	}()
 
-	expected := map[fakes.OpaKey]interface{}{
+	expected := map[cachemanager.OpaKey]interface{}{
 		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
 	}
 	g.Eventually(func() bool {
