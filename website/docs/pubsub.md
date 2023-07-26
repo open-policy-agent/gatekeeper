@@ -81,22 +81,12 @@ The audit pod publishes violations in following format:
 
 1. Install Dapr
 
-    ```shell
-    helm repo add dapr https://dapr.github.io/helm-charts/
-    DAPR_VERSION=1.10
-    helm upgrade --install dapr dapr/dapr --version=${DAPR_VERSION} --namespace dapr-system --create-namespace --wait --debug
-    ```
-
-    To install dapr with specific requirements and configuration, please refer to [dapr docs](https://docs.dapr.io/getting-started/).
+    To install dapr with specific requirements and configuration, please refer to [dapr docs](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-deploy/).
     > Dapr is installed with mtls enabled by default, for more details on the same plaase refer to [dapr security](https://docs.dapr.io/operations/security/mtls/#setting-up-mtls-with-the-configuration-resource).
 
 2. Install Redis
 
-    ```shell
-    helm repo add bitnami https://charts.bitnami.com/bitnami
-    REDIS_IMAGE_TAG=7.0-debian-11
-    helm upgrade --install redis bitnami/redis --namespace default --set image.tag=${REDIS_IMAGE_TAG} --wait --debug
-    ```
+  Please refer to [this](https://docs.dapr.io/getting-started/tutorials/configure-state-pubsub/#step-1-create-a-redis-store) guide to install redis.
 
     > To install Redis with TLS, please refer to [this](https://docs.bitnami.com/kubernetes/infrastructure/redis-cluster/administration/enable-tls/) doc.
 
