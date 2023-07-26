@@ -12,13 +12,13 @@ Pubsub's connection interface looks like
 // Connection is the interface that wraps pubsub methods.
 type Connection interface {
 	// Publish single message over a specific topic/channel
-	Publish(ctx context.Context, data interface{}, topic string) error
+	Publish(ctx context.Context, message interface{}, topic string) error
 
 	// Close connections
 	CloseConnection() error
 
 	// Update an existing connection with new configuration
-	UpdateConnection(ctx context.Context, data interface{}) error
+	UpdateConnection(ctx context.Context, config interface{}) error
 }
 ```
 
@@ -40,7 +40,7 @@ var pubSubs = newPubSubSet(map[string]InitiateConnection{
 )
 ```
 
-### How to use different providers
+### How to use different  providers
 
 To enable audit to use this driver to publish messages, a connection configMap with appropriate `config` and `provider` is needed. For example,
 
