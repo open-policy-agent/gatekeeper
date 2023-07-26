@@ -134,7 +134,7 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 		return nil
 	}
 
-	// record any gvks that need to be deleted
+	// record any gvks that need to be deleted from the opa cache.
 	c.gvksToDeleteFromCache.AddSet(c.watchedSet.Difference(newWatchSet))
 
 	var innerError error
@@ -292,8 +292,7 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 			c.mu.Lock()
 			c.wipeCacheIfNeeded(ctx)
 
-			// spin up new goroutines to relist if new gvks to relist are
-			// populated from makeUpdates.
+			// spin up new goroutines to relist gvks as there has been a wipe
 			if c.needToList {
 				// stop any goroutines that were relisting before
 				// as we may no longer be interested in those gvks
@@ -314,29 +313,36 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 }
 
 func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.GroupVersionKind) {
-	for _, gvk := range gvksToRelist {
-		select {
-		case <-ctx.Done():
-			return
-		case <-c.stopChan:
-			return
-		default:
-			operation := func() (bool, error) {
-				if err := c.syncGVK(ctx, gvk); err != nil {
-					return false, err
+	gvksSet := watch.NewSet()
+	gvksSet.Add(gvksToRelist...)
+
+	for gvksSet.Size() != 0 {
+		gvkItems := gvksSet.Items()
+
+		for _, gvk := range gvkItems {
+			select {
+			case <-ctx.Done():
+				return
+			case <-c.stopChan:
+				return
+			default:
+				operation := func() (bool, error) {
+					if err := c.syncGVK(ctx, gvk); err != nil {
+						return false, err
+					}
+					return true, nil
 				}
 
-				return true, nil
-			}
-
-			if err := wait.ExponentialBackoff(backoff, operation); err != nil {
-				log.Error(err, "internal: error listings gvk cache data", "gvk", gvk)
-				// this gvk will be retried next time we relist from manageCache
+				if err := wait.ExponentialBackoff(backoff, operation); err != nil {
+					log.Error(err, "internal: error listings gvk cache data", "gvk", gvk)
+				} else {
+					gvksSet.Remove(gvk)
+				}
 			}
 		}
-	}
 
-	c.ReportSyncMetrics()
+		c.ReportSyncMetrics()
+	}
 }
 
 // wipeCacheIfNeeded performs a cache wipe if there are any gvks needing to be removed
