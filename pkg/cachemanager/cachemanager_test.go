@@ -4,9 +4,9 @@ import (
 	"testing"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

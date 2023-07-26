@@ -23,7 +23,7 @@ import (
 var cfg *rest.Config
 
 func TestMain(m *testing.M) {
-	testutils.StartControlPlane(m, &cfg, 3)
+	testutils.StartControlPlane(m, &cfg, 2)
 }
 
 func makeCacheManagerForTest(t *testing.T, startCache, startManager bool) (*CacheManager, client.Client, context.Context) {

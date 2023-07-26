@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -267,7 +267,7 @@ func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind)
 	var err error
 	c.mu.Lock()
 	if !c.watchedSet.Contains(gvk) {
-		// we are not actually wathcing the gvk
+		// we are not actually watching this gvk anymore
 		// so don't list instances for it.
 		err = nil
 	} else {
