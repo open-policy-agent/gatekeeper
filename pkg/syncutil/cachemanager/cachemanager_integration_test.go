@@ -1,6 +1,8 @@
 package cachemanager
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,12 +14,73 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	eventuallyTimeout = 10 * time.Second
 	eventuallyTicker  = 2 * time.Second
 )
+
+// TestCacheManager_replay_retries tests that we can retry GVKs that error out in the reply goroutine.
+func TestCacheManager_replay_retries(t *testing.T) {
+	cacheManager, c, ctx := makeCacheManagerForTest(t, true, true)
+
+	failPlease := make(chan string, 2)
+	cacheManager.reader = fakes.HookReader{
+		Reader: c,
+		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+			// Return an error the first go-around.
+			var failKind string
+			select {
+			case failKind = <-failPlease:
+			default:
+			}
+			if failKind != "" && list.GetObjectKind().GroupVersionKind().Kind == failKind {
+				return fmt.Errorf("synthetic failure")
+			}
+			return c.List(ctx, list, opts...)
+		},
+	}
+
+	opaClient, ok := cacheManager.opa.(*fakes.FakeOpa)
+	require.True(t, ok)
+
+	// seed one gvk
+	configMapGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
+	cm := unstructuredFor(configMapGVK, "config-test-1")
+	require.NoError(t, c.Create(ctx, cm), "creating ConfigMap config-test-1")
+
+	podGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+	pod := unstructuredFor(podGVK, "pod-1")
+	require.NoError(t, c.Create(ctx, pod), "creating Pod pod-1")
+
+	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
+	require.NoError(t, cacheManager.AddSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK, podGVK}))
+
+	expected := map[fakes.OpaKey]interface{}{
+		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
+		{Gvk: podGVK, Key: "default/pod-1"}:               nil,
+	}
+
+	require.Eventually(t, expectedCheck(opaClient, expected), eventuallyTimeout, eventuallyTicker)
+
+	// set up a scenario where the list from replay will fail a few times
+	failPlease <- "ConfigMapList"
+	failPlease <- "ConfigMapList"
+
+	// this call should make schedule a cache wipe and a replay for the configMapGVK
+	require.NoError(t, cacheManager.AddSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
+
+	expected2 := map[fakes.OpaKey]interface{}{
+		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
+	}
+	require.Eventually(t, expectedCheck(opaClient, expected2), eventuallyTimeout, eventuallyTicker)
+
+	// cleanup
+	require.NoError(t, c.Delete(ctx, cm), "creating ConfigMap config-test-1")
+	require.NoError(t, c.Delete(ctx, pod), "creating ConfigMap pod-1")
+}
 
 // TestCacheManager_syncGVKInstances tests that GVK instances can be listed and added to the opa client.
 func TestCacheManager_syncGVKInstances(t *testing.T) {

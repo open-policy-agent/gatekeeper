@@ -645,7 +645,7 @@ func TestConfig_Retries(t *testing.T) {
 
 	// Use our special hookReader to inject controlled failures
 	failPlease := make(chan string, 1)
-	rec.reader = hookReader{
+	rec.reader = fakes.HookReader{
 		Reader: mgr.GetCache(),
 		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 			// Return an error the first go-around.
