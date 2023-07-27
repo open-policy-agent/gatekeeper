@@ -60,7 +60,7 @@ type CacheManager struct {
 	reader                     client.Reader
 
 	// relistStopChan is used to stop any list operations still in progress
-	relistStopChan chan bool
+	relistStopChan chan struct{}
 }
 
 // OpaDataClient is an interface for caching data.
@@ -101,7 +101,7 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 		gvksToSync:                 config.GVKAggregator,
 		backgroundManagementTicker: *time.NewTicker(3 * time.Second),
 		gvksToDeleteFromCache:      watch.NewSet(),
-		relistStopChan:             make(chan bool, 1),
+		relistStopChan:             make(chan struct{}),
 	}
 
 	return cm, nil
@@ -305,7 +305,6 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			close(c.relistStopChan)
 			return
 		case <-c.backgroundManagementTicker.C:
 			func() {
@@ -318,14 +317,14 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 				if c.needToList {
 					// stop any goroutines that were relisting before
 					// as we may no longer be interested in those gvks
-					c.relistStopChan <- true
+					close(c.relistStopChan)
 
 					// assume all gvks need to be relisted
 					gvksToRelist := c.gvksToSync.GVKs()
 
 					// clean state
 					c.needToList = false
-					c.relistStopChan = make(chan bool, 1)
+					c.relistStopChan = make(chan struct{})
 
 					go c.replayGVKs(ctx, gvksToRelist)
 				}
@@ -345,8 +344,10 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 			select {
 			case <-ctx.Done():
 				return
-			case <-c.relistStopChan:
-				return
+			case _, ok := <-c.relistStopChan:
+				if !ok {
+					return
+				}
 			default:
 				operation := func() (bool, error) {
 					if err := c.syncGVK(ctx, gvk); err != nil {
