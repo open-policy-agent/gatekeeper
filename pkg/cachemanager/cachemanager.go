@@ -86,7 +86,11 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 		return nil, fmt.Errorf("reader must be non-nil")
 	}
 
-	return &CacheManager{
+	if config.GVKAggregator == nil {
+		config.GVKAggregator = aggregator.NewGVKAggregator()
+	}
+
+	cm := &CacheManager{
 		opa:                        config.Opa,
 		syncMetricsCache:           config.SyncMetricsCache,
 		tracker:                    config.Tracker,
@@ -94,11 +98,13 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 		registrar:                  config.Registrar,
 		watchedSet:                 config.WatchedSet,
 		reader:                     config.Reader,
-		gvksToSync:                 aggregator.NewGVKAggregator(),
+		gvksToSync:                 config.GVKAggregator,
 		backgroundManagementTicker: *time.NewTicker(3 * time.Second),
 		gvksToDeleteFromCache:      watch.NewSet(),
 		stopChan:                   make(chan bool, 1),
-	}, nil
+	}
+
+	return cm, nil
 }
 
 func (c *CacheManager) Start(ctx context.Context) error {
