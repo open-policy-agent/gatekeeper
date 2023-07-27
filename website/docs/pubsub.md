@@ -21,7 +21,7 @@ Install prerequisites such as a pubsub tool, a message broker etc.
 
 In the audit deployment, set the `--enable-pub-sub` flag to `true` to publish audit violations. Additionally, `--audit-connection` and `--audit-channel` flags must be set to allow audit to publish violations. `--audit-connection` must be set to the name of the connection config, and `--audit-channel` must be set to name of the channel where violations should get published.
 
-Create a connection configMap that supplies [predefined set of configurations](pubsub-driver-walkthrough.md#how-to-use-different-providers) for a connection to get established. For instance, to establish a connection that uses Dapr to publish messages this configMap is appropriate:
+Create a connection configMap that supplies [a provider-specific configuration](pubsub-driver-walkthrough.md#how-to-use-different-providers) for a connection to get established. For instance, to establish a connection that uses Dapr to publish messages this configMap is appropriate:
 
 ```yaml
 apiVersion: v1
