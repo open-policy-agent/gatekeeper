@@ -246,7 +246,7 @@ func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.
 		}
 	}
 
-	// only delete from metrics map if the data removal was succesful
+	// only delete from metrics map if the data removal was successful
 	c.syncMetricsCache.DeleteObject(syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName()))
 	c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
 
