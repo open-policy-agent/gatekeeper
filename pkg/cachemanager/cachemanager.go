@@ -59,8 +59,8 @@ type CacheManager struct {
 	backgroundManagementTicker time.Ticker
 	reader                     client.Reader
 
-	// stopChan is used to stop any list operations still in progress
-	stopChan chan bool
+	// relistStopChan is used to stop any list operations still in progress
+	relistStopChan chan bool
 }
 
 // OpaDataClient is an interface for caching data.
@@ -101,7 +101,7 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 		gvksToSync:                 config.GVKAggregator,
 		backgroundManagementTicker: *time.NewTicker(3 * time.Second),
 		gvksToDeleteFromCache:      watch.NewSet(),
-		stopChan:                   make(chan bool, 1),
+		relistStopChan:             make(chan bool, 1),
 	}
 
 	return cm, nil
@@ -224,17 +224,17 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 
 			return err
 		}
+
+		c.syncMetricsCache.AddObject(syncKey, syncutil.Tags{
+			Kind:   instance.GetKind(),
+			Status: metrics.ActiveStatus,
+		})
+		c.syncMetricsCache.AddKind(instance.GetKind())
 	}
 
 	c.tracker.ForData(instance.GroupVersionKind()).Observe(instance)
 
-	c.syncMetricsCache.AddObject(syncKey, syncutil.Tags{
-		Kind:   instance.GetKind(),
-		Status: metrics.ActiveStatus,
-	})
-	c.syncMetricsCache.AddKind(instance.GetKind())
-
-	return err
+	return nil
 }
 
 func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.Unstructured) error {
@@ -246,7 +246,7 @@ func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.
 		}
 	}
 
-	// only delete from metrics map if the data removal was succcesful
+	// only delete from metrics map if the data removal was succesful
 	c.syncMetricsCache.DeleteObject(syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName()))
 	c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
 
@@ -278,15 +278,15 @@ func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind)
 	})
 
 	var err error
-	c.mu.Lock()
-	if !c.watchedSet.Contains(gvk) {
-		// we are not actually watching this gvk anymore
-		// so don't list instances for it.
-		err = nil
-	} else {
-		err = c.reader.List(ctx, u)
-	}
-	c.mu.Unlock()
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		// only call List if we are still watching the gvk.
+		if c.watchedSet.Contains(gvk) {
+			err = c.reader.List(ctx, u)
+		}
+	}()
 
 	if err != nil {
 		return fmt.Errorf("replaying data for %+v: %w", gvk, err)
@@ -305,28 +305,31 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			close(c.stopChan)
+			close(c.relistStopChan)
 			return
 		case <-c.backgroundManagementTicker.C:
-			c.mu.Lock()
-			c.wipeCacheIfNeeded(ctx)
+			func() {
+				c.mu.Lock()
+				defer c.mu.Unlock()
 
-			// spin up new goroutines to relist gvks as there has been a wipe
-			if c.needToList {
-				// stop any goroutines that were relisting before
-				// as we may no longer be interested in those gvks
-				c.stopChan <- true
+				c.wipeCacheIfNeeded(ctx)
 
-				// assume all gvks need to be relisted
-				gvksToRelist := c.gvksToSync.GVKs()
+				// spin up new goroutines to relist gvks as there has been a wipe
+				if c.needToList {
+					// stop any goroutines that were relisting before
+					// as we may no longer be interested in those gvks
+					c.relistStopChan <- true
 
-				// clean state
-				c.needToList = false
-				c.stopChan = make(chan bool, 1)
+					// assume all gvks need to be relisted
+					gvksToRelist := c.gvksToSync.GVKs()
 
-				go c.replayGVKs(ctx, gvksToRelist)
-			}
-			c.mu.Unlock()
+					// clean state
+					c.needToList = false
+					c.relistStopChan = make(chan bool, 1)
+
+					go c.replayGVKs(ctx, gvksToRelist)
+				}
+			}()
 		}
 	}
 }
@@ -342,7 +345,7 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 			select {
 			case <-ctx.Done():
 				return
-			case <-c.stopChan:
+			case <-c.relistStopChan:
 				return
 			default:
 				operation := func() (bool, error) {
