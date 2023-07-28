@@ -103,7 +103,12 @@ func (b *GVKAgreggator) List(k Key) map[schema.GroupVersionKind]struct{} {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	return b.store[k]
+	v := b.store[k]
+	cpy := make(map[schema.GroupVersionKind]struct{}, len(v))
+	for key, value := range v {
+		cpy[key] = value
+	}
+	return cpy
 }
 
 // GVKs returns a list of all of the schema.GroupVersionKind that are aggregated.
