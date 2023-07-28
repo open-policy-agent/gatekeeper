@@ -40,7 +40,7 @@ func makeCacheManager(t *testing.T) (*CacheManager, client.Client, context.Conte
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
-	opaClient := &FakeOpa{}
+	cfClient := &FakeCfClient{}
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	require.NoError(t, err)
 	processExcluder := process.Get()
@@ -57,7 +57,7 @@ func makeCacheManager(t *testing.T) (*CacheManager, client.Client, context.Conte
 	require.NoError(t, err)
 
 	cacheManager, err := NewCacheManager(&Config{
-		Opa:              opaClient,
+		CfClient:         cfClient,
 		SyncMetricsCache: syncutil.NewMetricsCache(),
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
@@ -84,14 +84,14 @@ func makeCacheManager(t *testing.T) (*CacheManager, client.Client, context.Conte
 // TestCacheManager_wipeCacheIfNeeded.
 func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 	cacheManager, ctx := unitCacheManagerForTest(t)
-	opaClient, ok := cacheManager.opa.(*FakeOpa)
+	cfClient, ok := cacheManager.cfClient.(*FakeCfClient)
 	require.True(t, ok)
 
 	// seed one gvk
 	configMapGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 	cm := unstructuredFor(configMapGVK, "config-test-1")
-	_, err := opaClient.AddData(ctx, cm)
-	require.NoError(t, err, "adding ConfigMap config-test-1 in opa")
+	_, err := cfClient.AddData(ctx, cm)
+	require.NoError(t, err, "adding ConfigMap config-test-1 in cfClient")
 
 	podGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 	require.NoError(t, cacheManager.gvksToSync.Upsert(aggregator.Key{Source: "foo", ID: "bar"}, []schema.GroupVersionKind{podGVK}))
@@ -99,11 +99,11 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 	cacheManager.gvksToDeleteFromCache.Add(configMapGVK)
 	cacheManager.wipeCacheIfNeeded(ctx)
 
-	require.False(t, opaClient.HasGVK(configMapGVK))
+	require.False(t, cfClient.HasGVK(configMapGVK))
 	require.ElementsMatch(t, cacheManager.gvksToSync.GVKs(), []schema.GroupVersionKind{podGVK})
 }
 
-// TestCacheManager_syncGVKInstances tests that GVK instances can be listed and added to the opa client.
+// TestCacheManager_syncGVKInstances tests that GVK instances can be listed and added to the cfClient client.
 func TestCacheManager_syncGVKInstances(t *testing.T) {
 	cacheManager, c, ctx := makeCacheManager(t)
 
@@ -121,19 +121,19 @@ func TestCacheManager_syncGVKInstances(t *testing.T) {
 	cacheManager.watchedSet.Add(configMapGVK)
 	require.NoError(t, cacheManager.syncGVK(ctx, configMapGVK))
 
-	opaClient, ok := cacheManager.opa.(*FakeOpa)
+	cfClient, ok := cacheManager.cfClient.(*FakeCfClient)
 	require.True(t, ok)
-	expected := map[OpaKey]interface{}{
+	expected := map[CfDataKey]interface{}{
 		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
 		{Gvk: configMapGVK, Key: "default/config-test-2"}: nil,
 	}
 
-	require.Equal(t, 2, opaClient.Len())
-	require.True(t, opaClient.Contains(expected))
+	require.Equal(t, 2, cfClient.Len())
+	require.True(t, cfClient.Contains(expected))
 
 	// wipe cache
 	require.NoError(t, cacheManager.wipeData(ctx))
-	require.False(t, opaClient.Contains(expected))
+	require.False(t, cfClient.Contains(expected))
 
 	// create a second GVK
 	podGVK := schema.GroupVersionKind{
@@ -155,7 +155,7 @@ func TestCacheManager_syncGVKInstances(t *testing.T) {
 	require.NoError(t, cacheManager.syncGVK(ctx, configMapGVK))
 	require.NoError(t, cacheManager.syncGVK(ctx, podGVK))
 
-	expected = map[OpaKey]interface{}{
+	expected = map[CfDataKey]interface{}{
 		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
 		{Gvk: configMapGVK, Key: "default/config-test-2"}: nil,
 		{Gvk: podGVK, Key: "default/pod-1"}:               nil,
@@ -163,8 +163,8 @@ func TestCacheManager_syncGVKInstances(t *testing.T) {
 		{Gvk: podGVK, Key: "default/pod-3"}:               nil,
 	}
 
-	require.Equal(t, 5, opaClient.Len())
-	require.True(t, opaClient.Contains(expected))
+	require.Equal(t, 5, cfClient.Len())
+	require.True(t, cfClient.Contains(expected))
 
 	// cleanup
 	require.NoError(t, c.Delete(ctx, cm), "deleting ConfigMap config-test-1")
@@ -177,30 +177,30 @@ func TestCacheManager_syncGVKInstances(t *testing.T) {
 // TestCacheManager_wipeCacheIfNeeded_excluderChanges tests that we can remove gvks that were not previously process excluded but are now.
 func TestCacheManager_wipeCacheIfNeeded_excluderChanges(t *testing.T) {
 	cacheManager, ctx := unitCacheManagerForTest(t)
-	opaClient, ok := cacheManager.opa.(*FakeOpa)
+	cfClient, ok := cacheManager.cfClient.(*FakeCfClient)
 	require.True(t, ok)
 
 	// seed gvks
 	configMapGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 	cm := unstructuredFor(configMapGVK, "config-test-1")
 	cm.SetNamespace("excluded-ns")
-	_, err := opaClient.AddData(ctx, cm)
-	require.NoError(t, err, "adding ConfigMap config-test-1 in opa")
+	_, err := cfClient.AddData(ctx, cm)
+	require.NoError(t, err, "adding ConfigMap config-test-1 in cfClient")
 	cacheManager.watchedSet.Add(configMapGVK)
 
 	podGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 	pod := unstructuredFor(configMapGVK, "pod-test-1")
 	pod.SetNamespace("excluded-ns")
-	_, err = opaClient.AddData(ctx, pod)
-	require.NoError(t, err, "adding Pod pod-test-1 in opa")
+	_, err = cfClient.AddData(ctx, pod)
+	require.NoError(t, err, "adding Pod pod-test-1 in cfClient")
 	cacheManager.watchedSet.Add(podGVK)
 
 	cacheManager.ExcludeProcesses(newSyncExcluderFor("excluded-ns"))
 	cacheManager.wipeCacheIfNeeded(ctx)
 
 	// the cache manager should not be watching any of the gvks that are now excluded
-	require.False(t, opaClient.HasGVK(configMapGVK))
-	require.False(t, opaClient.HasGVK(podGVK))
+	require.False(t, cfClient.HasGVK(configMapGVK))
+	require.False(t, cfClient.HasGVK(podGVK))
 	require.False(t, cacheManager.excluderChanged)
 }
 
@@ -208,7 +208,7 @@ func TestCacheManager_wipeCacheIfNeeded_excluderChanges(t *testing.T) {
 func TestCacheManager_AddObject_RemoveObject(t *testing.T) {
 	cm, ctx := unitCacheManagerForTest(t)
 
-	opaClient, ok := cm.opa.(*FakeOpa)
+	cfClient, ok := cm.cfClient.(*FakeCfClient)
 	require.True(t, ok)
 
 	pod := fakes.Pod(
@@ -222,15 +222,15 @@ func TestCacheManager_AddObject_RemoveObject(t *testing.T) {
 	cm.watchedSet.Add(pod.GroupVersionKind())
 
 	require.NoError(t, cm.AddObject(ctx, &unstructured.Unstructured{Object: unstructuredPod}))
-	require.True(t, opaClient.HasGVK(pod.GroupVersionKind()))
+	require.True(t, cfClient.HasGVK(pod.GroupVersionKind()))
 
 	// now remove the object and verify it's removed
 	require.NoError(t, cm.RemoveObject(ctx, &unstructured.Unstructured{Object: unstructuredPod}))
-	require.False(t, opaClient.HasGVK(pod.GroupVersionKind()))
+	require.False(t, cfClient.HasGVK(pod.GroupVersionKind()))
 
 	cm.watchedSet.Remove(pod.GroupVersionKind())
 	require.NoError(t, cm.AddObject(ctx, &unstructured.Unstructured{Object: unstructuredPod}))
-	require.False(t, opaClient.HasGVK(pod.GroupVersionKind())) // we drop calls for gvks that are not watched
+	require.False(t, cfClient.HasGVK(pod.GroupVersionKind())) // we drop calls for gvks that are not watched
 }
 
 // TestCacheManager_AddObject_processExclusion makes sure that we don't add objects that are process excluded.
@@ -255,19 +255,19 @@ func TestCacheManager_AddObject_processExclusion(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, cm.AddObject(ctx, &unstructured.Unstructured{Object: unstructuredPod}))
 
-	// test that pod from excluded namespace is not cache managed
-	opaClient, ok := cm.opa.(*FakeOpa)
+	// test that pod from excluded namespace is not added to the cache
+	cfClient, ok := cm.cfClient.(*FakeCfClient)
 	require.True(t, ok)
-	require.False(t, opaClient.HasGVK(pod.GroupVersionKind()))
-	require.False(t, opaClient.Contains(map[OpaKey]interface{}{{Gvk: podGVK, Key: "default/config-test-1"}: nil}))
+	require.False(t, cfClient.HasGVK(pod.GroupVersionKind()))
+	require.False(t, cfClient.Contains(map[CfDataKey]interface{}{{Gvk: podGVK, Key: "default/config-test-1"}: nil}))
 }
 
-// TestCacheManager_opaClient_errors tests that the cache manager responds to errors from the opa client.
-func TestCacheManager_opaClient_errors(t *testing.T) {
+// TestCacheManager_cfClient_errors tests that the cache manager responds to errors from the cfClient client.
+func TestCacheManager_cfClient_errors(t *testing.T) {
 	cm, ctx := unitCacheManagerForTest(t)
-	opaClient, ok := cm.opa.(*FakeOpa)
+	cfClient, ok := cm.cfClient.(*FakeCfClient)
 	require.True(t, ok)
-	opaClient.SetErroring(true) // This will cause AddObject, RemoveObject to err
+	cfClient.SetErroring(true) // This will cause AddObject, RemoveObject to err
 
 	pod := fakes.Pod(
 		fakes.WithNamespace("test-ns"),

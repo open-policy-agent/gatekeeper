@@ -32,7 +32,7 @@ var (
 )
 
 type Config struct {
-	Opa              OpaDataClient
+	CfClient         CFDataClient
 	SyncMetricsCache *syncutil.MetricsCache
 	Tracker          *readiness.Tracker
 	ProcessExcluder  *process.Excluder
@@ -52,7 +52,7 @@ type CacheManager struct {
 	// mu guards access to any of the fields above
 	mu sync.RWMutex
 
-	opa                        OpaDataClient
+	cfClient                   CFDataClient
 	syncMetricsCache           *syncutil.MetricsCache
 	tracker                    *readiness.Tracker
 	registrar                  *watch.Registrar
@@ -63,8 +63,8 @@ type CacheManager struct {
 	relistStopChan chan struct{}
 }
 
-// OpaDataClient is an interface for caching data.
-type OpaDataClient interface {
+// CFDataClient is an interface for caching data.
+type CFDataClient interface {
 	AddData(ctx context.Context, data interface{}) (*types.Responses, error)
 	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
 }
@@ -91,7 +91,7 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 	}
 
 	cm := &CacheManager{
-		opa:                        config.Opa,
+		cfClient:                   config.CfClient,
 		syncMetricsCache:           config.SyncMetricsCache,
 		tracker:                    config.Tracker,
 		processExcluder:            config.ProcessExcluder,
@@ -116,8 +116,7 @@ func (c *CacheManager) Start(ctx context.Context) error {
 
 // AddSource adjusts the watched set of gvks according to the newGVKs passed in
 // for a given sourceKey.
-// It errors out if there is an issue adding the Key internally or replacing the watches.
-// Consumers are encouraged to retry on error.
+// Callers are responsible for retrying on error.
 func (c *CacheManager) AddSource(ctx context.Context, sourceKey aggregator.Key, newGVKs []schema.GroupVersionKind) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -129,7 +128,6 @@ func (c *CacheManager) AddSource(ctx context.Context, sourceKey aggregator.Key, 
 	// may become unreferenced and need to be deleted; this will be handled async
 	// in the manageCache loop.
 
-	// make changes to the watches
 	if err := c.replaceWatchSet(ctx); err != nil {
 		return fmt.Errorf("error watching new gvks: %w", err)
 	}
@@ -137,14 +135,13 @@ func (c *CacheManager) AddSource(ctx context.Context, sourceKey aggregator.Key, 
 	return nil
 }
 
-// replaceWatchSet looks at the specifiedGVKs and makes changes to the registrar's watch set.
+// replaceWatchSet looks at the gvksToSync and makes changes to the registrar's watch set.
 // assumes caller has lock.
-// replaceWatchSet may error out and that error is retryable.
+// On error, actual watch state may not align with intended watch state.
 func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	newWatchSet := watch.NewSet()
 	newWatchSet.Add(c.gvksToSync.GVKs()...)
 
-	// record any gvks that need to be deleted from the opa cache.
 	c.gvksToDeleteFromCache.AddSet(c.watchedSet.Difference(newWatchSet))
 
 	var innerError error
@@ -160,8 +157,7 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 }
 
 // RemoveSource removes the watches of the GVKs for a given aggregator.Key.
-// It errors out if there is an issue removing the Key internally or replacing the watches.
-// Consumers are encouraged to retry on error.
+// Callers are responsible for retrying on error.
 func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Key) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -170,7 +166,6 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 		return fmt.Errorf("internal error removing source: %w", err)
 	}
 
-	// make changes to the watches
 	if err := c.replaceWatchSet(ctx); err != nil {
 		return fmt.Errorf("error removing watches for source %v: %w", sourceKey, err)
 	}
@@ -195,6 +190,13 @@ func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
 	c.excluderChanged = true
 }
 
+func (c *CacheManager) watchesGVK(gvk schema.GroupVersionKind) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.watchedSet.Contains(gvk)
+}
+
 func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Unstructured) error {
 	gvk := instance.GroupVersionKind()
 
@@ -203,16 +205,14 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 		return fmt.Errorf("error while excluding namespaces for gvk: %+v: %w", gvk, err)
 	}
 
-	// bail because it means we should not be
-	// syncing this gvk's objects as it is namespace excluded.
 	if isNamespaceExcluded {
 		c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
 		return nil
 	}
 
 	syncKey := syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName())
-	if c.watchedSet.Contains(gvk) {
-		_, err = c.opa.AddData(ctx, instance)
+	if c.watchesGVK(gvk) {
+		_, err = c.cfClient.AddData(ctx, instance)
 		if err != nil {
 			c.syncMetricsCache.AddObject(
 				syncKey,
@@ -240,8 +240,8 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.Unstructured) error {
 	gvk := instance.GroupVersionKind()
 
-	if c.watchedSet.Contains(gvk) {
-		if _, err := c.opa.RemoveData(ctx, instance); err != nil {
+	if c.watchesGVK(gvk) {
+		if _, err := c.cfClient.RemoveData(ctx, instance); err != nil {
 			return err
 		}
 	}
@@ -254,7 +254,7 @@ func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.
 }
 
 func (c *CacheManager) wipeData(ctx context.Context) error {
-	if _, err := c.opa.RemoveData(ctx, target.WipeData()); err != nil {
+	if _, err := c.cfClient.RemoveData(ctx, target.WipeData()); err != nil {
 		return err
 	}
 
@@ -344,10 +344,8 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 			select {
 			case <-ctx.Done():
 				return
-			case _, ok := <-c.relistStopChan:
-				if !ok {
-					return
-				}
+			case <-c.relistStopChan:
+				return
 			default:
 				operation := func() (bool, error) {
 					if err := c.syncGVK(ctx, gvk); err != nil {
@@ -370,7 +368,7 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 
 // wipeCacheIfNeeded performs a cache wipe if there are any gvks needing to be removed
 // from the cache or if the excluder has changed. It also marks which gvks need to be
-// re listed again in the opa cache after the wipe.
+// re listed again in the cf data cache after the wipe.
 // assumes the caller has lock.
 func (c *CacheManager) wipeCacheIfNeeded(ctx context.Context) {
 	// remove any gvks not needing to be synced anymore

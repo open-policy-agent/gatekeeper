@@ -182,7 +182,7 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		return err
 	}
 	cm, err := cm.NewCacheManager(&cm.Config{
-		Opa:              deps.Opa,
+		CfClient:         deps.Opa,
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          deps.Tracker,
 		ProcessExcluder:  deps.ProcessExcluder,

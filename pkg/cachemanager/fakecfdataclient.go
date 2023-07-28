@@ -24,37 +24,37 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type OpaKey struct {
+type CfDataKey struct {
 	Gvk schema.GroupVersionKind
 	Key string
 }
 
-// FakeOpa is an OpaDataClient for testing.
-type FakeOpa struct {
+// FakeCfClient is an CfDataClient for testing.
+type FakeCfClient struct {
 	mu           gosync.Mutex
-	data         map[OpaKey]interface{}
+	data         map[CfDataKey]interface{}
 	needsToError bool
 }
 
-var _ OpaDataClient = &FakeOpa{}
+var _ CFDataClient = &FakeCfClient{}
 
-// keyFor returns an opaKey for the provided resource.
+// keyFor returns a cfDataKey for the provided resource.
 // Returns error if the resource is not a runtime.Object w/ metadata.
-func (f *FakeOpa) keyFor(obj interface{}) (OpaKey, error) {
+func (f *FakeCfClient) keyFor(obj interface{}) (CfDataKey, error) {
 	o, ok := obj.(client.Object)
 	if !ok {
-		return OpaKey{}, fmt.Errorf("expected runtime.Object, got: %T", obj)
+		return CfDataKey{}, fmt.Errorf("expected runtime.Object, got: %T", obj)
 	}
 	gvk := o.GetObjectKind().GroupVersionKind()
 	ns := o.GetNamespace()
 	if ns == "" {
-		return OpaKey{Gvk: gvk, Key: o.GetName()}, nil
+		return CfDataKey{Gvk: gvk, Key: o.GetName()}, nil
 	}
 
-	return OpaKey{Gvk: gvk, Key: fmt.Sprintf("%s/%s", ns, o.GetName())}, nil
+	return CfDataKey{Gvk: gvk, Key: fmt.Sprintf("%s/%s", ns, o.GetName())}, nil
 }
 
-func (f *FakeOpa) AddData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
+func (f *FakeCfClient) AddData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -68,14 +68,14 @@ func (f *FakeOpa) AddData(ctx context.Context, data interface{}) (*constraintTyp
 	}
 
 	if f.data == nil {
-		f.data = make(map[OpaKey]interface{})
+		f.data = make(map[CfDataKey]interface{})
 	}
 
 	f.data[key] = data
 	return &constraintTypes.Responses{}, nil
 }
 
-func (f *FakeOpa) RemoveData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
+func (f *FakeCfClient) RemoveData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -84,7 +84,7 @@ func (f *FakeOpa) RemoveData(ctx context.Context, data interface{}) (*constraint
 	}
 
 	if target.IsWipeData(data) {
-		f.data = make(map[OpaKey]interface{})
+		f.data = make(map[CfDataKey]interface{})
 		return &constraintTypes.Responses{}, nil
 	}
 
@@ -98,7 +98,7 @@ func (f *FakeOpa) RemoveData(ctx context.Context, data interface{}) (*constraint
 }
 
 // Contains returns true if all expected resources are in the cache.
-func (f *FakeOpa) Contains(expected map[OpaKey]interface{}) bool {
+func (f *FakeCfClient) Contains(expected map[CfDataKey]interface{}) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -111,7 +111,7 @@ func (f *FakeOpa) Contains(expected map[OpaKey]interface{}) bool {
 }
 
 // HasGVK returns true if the cache has any data of the requested kind.
-func (f *FakeOpa) HasGVK(gvk schema.GroupVersionKind) bool {
+func (f *FakeCfClient) HasGVK(gvk schema.GroupVersionKind) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -124,14 +124,14 @@ func (f *FakeOpa) HasGVK(gvk schema.GroupVersionKind) bool {
 }
 
 // Len returns the number of items in the cache.
-func (f *FakeOpa) Len() int {
+func (f *FakeCfClient) Len() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.data)
 }
 
 // SetErroring will error out on AddObject or RemoveObject.
-func (f *FakeOpa) SetErroring(enabled bool) {
+func (f *FakeCfClient) SetErroring(enabled bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.needsToError = enabled
