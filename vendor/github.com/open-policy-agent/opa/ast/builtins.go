@@ -210,10 +210,12 @@ var DefaultBuiltins = [...]*Builtin{
 	CryptoSha256,
 	CryptoX509ParseCertificateRequest,
 	CryptoX509ParseRSAPrivateKey,
+	CryptoX509ParseKeyPair,
 	CryptoHmacMd5,
 	CryptoHmacSha1,
 	CryptoHmacSha256,
 	CryptoHmacSha512,
+	CryptoHmacEqual,
 
 	// Graphs
 	WalkBuiltin,
@@ -2158,7 +2160,7 @@ var Format = &Builtin{
 				types.N,
 				types.NewArray([]types.Type{types.N, types.S}, nil),
 				types.NewArray([]types.Type{types.N, types.S, types.S}, nil),
-			)).Description("a number representing the nanoseconds since the epoch (UTC); or a two-element array of the nanoseconds, and a timezone string; or a three-element array of ns, timezone string and a layout string (see golang supported time formats)"),
+			)).Description("a number representing the nanoseconds since the epoch (UTC); or a two-element array of the nanoseconds, and a timezone string; or a three-element array of ns, timezone string and a layout string or golang defined formatting constant (see golang supported time formats)"),
 		),
 		types.Named("formatted timestamp", types.S).Description("the formatted timestamp represented for the nanoseconds since the epoch in the supplied timezone (or UTC)"),
 	),
@@ -2288,6 +2290,17 @@ var CryptoX509ParseCertificateRequest = &Builtin{
 	),
 }
 
+var CryptoX509ParseKeyPair = &Builtin{
+	Name:        "crypto.x509.parse_keypair",
+	Description: "Returns a valid key pair",
+	Decl: types.NewFunction(
+		types.Args(
+			types.Named("cert", types.S).Description("string containing PEM or base64 encoded DER certificates"),
+			types.Named("pem", types.S).Description("string containing PEM or base64 encoded DER keys"),
+		),
+		types.Named("output", types.NewObject(nil, types.NewDynamicProperty(types.S, types.A))).Description("if key pair is valid, returns the tls.certificate(https://pkg.go.dev/crypto/tls#Certificate) as an object. If the key pair is invalid, nil and an error are returned."),
+	),
+}
 var CryptoX509ParseRSAPrivateKey = &Builtin{
 	Name:        "crypto.x509.parse_rsa_private_key",
 	Description: "Returns a JWK for signing a JWT from the given PEM-encoded RSA private key.",
@@ -2377,6 +2390,18 @@ var CryptoHmacSha512 = &Builtin{
 			types.Named("key", types.S).Description("key to use"),
 		),
 		types.Named("y", types.S).Description("SHA512-HMAC of `x`"),
+	),
+}
+
+var CryptoHmacEqual = &Builtin{
+	Name:        "crypto.hmac.equal",
+	Description: "Returns a boolean representing the result of comparing two MACs for equality without leaking timing information.",
+	Decl: types.NewFunction(
+		types.Args(
+			types.Named("mac1", types.S).Description("mac1 to compare"),
+			types.Named("mac2", types.S).Description("mac2 to compare"),
+		),
+		types.Named("result", types.B).Description("`true` if the MACs are equals, `false` otherwise"),
 	),
 }
 

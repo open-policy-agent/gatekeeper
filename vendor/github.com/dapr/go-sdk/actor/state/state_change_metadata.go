@@ -13,6 +13,8 @@ limitations under the License.
 
 package state
 
+import "time"
+
 type ChangeKind string
 
 const (
@@ -24,12 +26,18 @@ const (
 
 type ChangeMetadata struct {
 	Kind  ChangeKind
-	Value interface{}
+	Value any
+	TTL   *time.Duration
 }
 
-func NewChangeMetadata(kind ChangeKind, value interface{}) *ChangeMetadata {
+func NewChangeMetadata(kind ChangeKind, value any) *ChangeMetadata {
 	return &ChangeMetadata{
 		Kind:  kind,
 		Value: value,
 	}
+}
+
+func (c *ChangeMetadata) WithTTL(ttl time.Duration) *ChangeMetadata {
+	c.TTL = &ttl
+	return c
 }

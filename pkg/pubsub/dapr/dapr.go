@@ -45,7 +45,7 @@ func (r *Dapr) CloseConnection() error {
 	return nil
 }
 
-func (r *Dapr) UpdateConnection(ctx context.Context, config interface{}) error {
+func (r *Dapr) UpdateConnection(_ context.Context, config interface{}) error {
 	var cfg ClientConfig
 	m, ok := config.(map[string]interface{})
 	if !ok {

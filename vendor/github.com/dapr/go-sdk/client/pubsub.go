@@ -16,9 +16,11 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 
-	"github.com/pkg/errors"
+	"github.com/google/uuid"
 
 	pb "github.com/dapr/go-sdk/dapr/proto/runtime/v1"
 )
@@ -59,14 +61,14 @@ func (c *GRPCClient) PublishEvent(ctx context.Context, pubsubName, topicName str
 			request.DataContentType = "application/json"
 			request.Data, err = json.Marshal(d)
 			if err != nil {
-				return errors.WithMessage(err, "error serializing input struct")
+				return fmt.Errorf("error serializing input struct: %w", err)
 			}
 		}
 	}
 
 	_, err := c.protoClient.PublishEvent(c.withAuthToken(ctx), request)
 	if err != nil {
-		return errors.Wrapf(err, "error publishing event unto %s topic", topicName)
+		return fmt.Errorf("error publishing event unto %s topic: %w", topicName, err)
 	}
 
 	return nil
@@ -105,8 +107,158 @@ func (c *GRPCClient) PublishEventfromCustomContent(ctx context.Context, pubsubNa
 	// Perform the JSON marshaling here just in case someone passed a []byte or string as data
 	enc, err := json.Marshal(data)
 	if err != nil {
-		return errors.WithMessage(err, "error serializing input struct")
+		return fmt.Errorf("error serializing input struct: %w", err)
 	}
 
 	return c.PublishEvent(ctx, pubsubName, topicName, enc, PublishEventWithContentType("application/json"))
+}
+
+// PublishEventsEvent is a type of event that can be published using PublishEvents.
+type PublishEventsEvent struct {
+	EntryID     string
+	Data        []byte
+	ContentType string
+	Metadata    map[string]string
+}
+
+// PublishEventsResponse is the response type for PublishEvents.
+type PublishEventsResponse struct {
+	Error        error
+	FailedEvents []interface{}
+}
+
+// PublishEventsOption is the type for the functional option.
+type PublishEventsOption func(*pb.BulkPublishRequest)
+
+// PublishEvents publishes multiple events onto topic in specific pubsub component.
+// If all events are successfully published, response Error will be nil.
+// The FailedEvents field will contain all events that failed to publish.
+func (c *GRPCClient) PublishEvents(ctx context.Context, pubsubName, topicName string, events []interface{}, opts ...PublishEventsOption) PublishEventsResponse {
+	if pubsubName == "" {
+		return PublishEventsResponse{
+			Error:        errors.New("pubsubName name required"),
+			FailedEvents: events,
+		}
+	}
+	if topicName == "" {
+		return PublishEventsResponse{
+			Error:        errors.New("topic name required"),
+			FailedEvents: events,
+		}
+	}
+
+	failedEvents := make([]interface{}, 0, len(events))
+	eventMap := make(map[string]interface{}, len(events))
+	entries := make([]*pb.BulkPublishRequestEntry, 0, len(events))
+	for _, event := range events {
+		entry, err := createBulkPublishRequestEntry(event)
+		if err != nil {
+			failedEvents = append(failedEvents, event)
+			continue
+		}
+		eventMap[entry.EntryId] = event
+		entries = append(entries, entry)
+	}
+
+	request := &pb.BulkPublishRequest{
+		PubsubName: pubsubName,
+		Topic:      topicName,
+		Entries:    entries,
+	}
+	for _, o := range opts {
+		o(request)
+	}
+
+	res, err := c.protoClient.BulkPublishEventAlpha1(c.withAuthToken(ctx), request)
+	// If there is an error, all events failed to publish.
+	if err != nil {
+		return PublishEventsResponse{
+			Error:        fmt.Errorf("error publishing events unto %s topic: %w", topicName, err),
+			FailedEvents: events,
+		}
+	}
+
+	for _, failedEntry := range res.FailedEntries {
+		event, ok := eventMap[failedEntry.EntryId]
+		if !ok {
+			// This should never happen.
+			failedEvents = append(failedEvents, failedEntry.EntryId)
+		}
+		failedEvents = append(failedEvents, event)
+	}
+
+	if len(failedEvents) != 0 {
+		return PublishEventsResponse{
+			Error:        fmt.Errorf("error publishing events unto %s topic: %w", topicName, err),
+			FailedEvents: failedEvents,
+		}
+	}
+
+	return PublishEventsResponse{
+		Error:        nil,
+		FailedEvents: make([]interface{}, 0),
+	}
+}
+
+// createBulkPublishRequestEntry creates a BulkPublishRequestEntry from an interface{}.
+func createBulkPublishRequestEntry(data interface{}) (*pb.BulkPublishRequestEntry, error) {
+	entry := &pb.BulkPublishRequestEntry{}
+
+	switch d := data.(type) {
+	case PublishEventsEvent:
+		entry.EntryId = d.EntryID
+		entry.Event = d.Data
+		entry.ContentType = d.ContentType
+		entry.Metadata = d.Metadata
+	case []byte:
+		entry.Event = d
+		entry.ContentType = "application/octet-stream"
+	case string:
+		entry.Event = []byte(d)
+		entry.ContentType = "text/plain"
+	default:
+		var err error
+		entry.ContentType = "application/json"
+		entry.Event, err = json.Marshal(d)
+		if err != nil {
+			return &pb.BulkPublishRequestEntry{}, fmt.Errorf("error serializing input struct: %w", err)
+		}
+
+		if isCloudEvent(entry.Event) {
+			entry.ContentType = "application/cloudevents+json"
+		}
+	}
+
+	if entry.EntryId == "" {
+		entry.EntryId = uuid.New().String()
+	}
+
+	return entry, nil
+}
+
+// PublishEventsWithContentType can be passed as option to PublishEvents to explicitly set the same Content-Type for all events.
+func PublishEventsWithContentType(contentType string) PublishEventsOption {
+	return func(r *pb.BulkPublishRequest) {
+		for _, entry := range r.Entries {
+			entry.ContentType = contentType
+		}
+	}
+}
+
+// PublishEventsWithMetadata can be passed as option to PublishEvents to set request metadata.
+func PublishEventsWithMetadata(metadata map[string]string) PublishEventsOption {
+	return func(r *pb.BulkPublishRequest) {
+		r.Metadata = metadata
+	}
+}
+
+// PublishEventsWithRawPayload can be passed as option to PublishEvents to set rawPayload request metadata.
+func PublishEventsWithRawPayload() PublishEventsOption {
+	return func(r *pb.BulkPublishRequest) {
+		if r.Metadata == nil {
+			r.Metadata = map[string]string{rawPayload: trueValue}
+		} else {
+			r.Metadata[rawPayload] = trueValue
+		}
+	}
 }
