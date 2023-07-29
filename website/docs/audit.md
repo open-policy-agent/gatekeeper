@@ -73,7 +73,7 @@ status:
 
 Limitations of getting violations from constraint status:
 
-- To reduce in-memory consumption of Gatekeeper audit pod and to avoid hitting [default etcd limit](https://etcd.io/docs/v3.5/dev-guide/limit/#request-size-limit) of 1.5MB per resource, gatekeeper recommends configuring a [limit up-to 500 violations](https://open-policy-agent.github.io/gatekeeper/website/docs/audit/#configuring-audit)(by default 20) on constraint template. Because of these limitations, users might not get all the violations from a Constraint resource.
+- To reduce in-memory consumption of Gatekeeper audit pod and to avoid hitting [default etcd limit](https://etcd.io/docs/v3.5/dev-guide/limit/#request-size-limit) of 1.5MB per resource, gatekeeper recommends configuring a [limit up-to 500 violations](https://open-policy-agent.github.io/gatekeeper/website/docs/audit/#configuring-audit)(by default 20) on constraint. Because of these limitations, users might not get all the violations from a Constraint resource.
 
 ### Audit Logs
 
@@ -147,7 +147,7 @@ number of instances to run, please refer to [operations audit](operations.md#aud
 
 ## Configuring Audit
 
-- Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`). To get violations using pubsub model, please refer to [this](pubsub.md) guide.
+- Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`). To get violations using pubsub model, please refer to [this](pubsub.md) guide. Both approaches for getting audit violations can be configured independently and work simultaneously without any interference. Changes or settings applied to one approach do not affect the other.
 - Audit chunk size: set `--audit-chunk-size=400` (defaults to `500`, `0` = infinite) Lower chunk size can reduce memory consumption of the auditing `Pod` but can increase the number requests to the Kubernetes API server.
 - Audit interval: set `--audit-interval=123` (defaults to every `60` seconds). Disable audit interval by setting `--audit-interval=0`
 - Audit api server cache write to disk (Gatekeeper v3.7.0+): Starting from v3.7.0, by default, audit writes api server cache to the disk attached to the node. This reduces the memory consumption of the audit `pod`. If there are concerns with high IOPS, then switch audit to write cache to a tmpfs ramdisk instead. NOTE: write to ramdisk will increase memory footprint of the audit `pod`.  

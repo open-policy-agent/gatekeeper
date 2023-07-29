@@ -58,4 +58,4 @@ data:
     }
 ```
 
-> The `data.provider` field must exists and must match one of the keys of the `pubSubs` map that was defined earlier to use the corresponding driver. The `data.config` field in the configuration can vary depending on the driver being used. For dapr driver, `data.config` must be `{"component": "pubsub"}`.
+> The `data.provider` field must exist and must match one of the keys of the `pubSubs` map that was defined earlier to use the corresponding driver. The `data.config` field in the configuration can vary depending on the driver being used. For dapr driver, `data.config` must be `{"component": "pubsub"}`.

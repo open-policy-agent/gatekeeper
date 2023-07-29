@@ -178,6 +178,16 @@ EOF
 
 2. Install Gatekeeper with `--enable-pub-sub` set to `true`, `--audit-connection` set to `audit-pubsub-connection`, `--audit-channel` set to `audit` on audit pod.
 
+
+```shell
+echo 'auditPodAnnotations: {dapr.io/enabled: "true", dapr.io/app-id: "audit", dapr.io/metrics-port: "9999"}' > .tmp/annotations.yaml # auditPodAnnotations is used to add annotations required by Dapr to inject sidecar to audit pod
+helm install gatekeeper/gatekeeper --name-template=gatekeeper --namespace gatekeeper-system \
+--set audit.enablePubsub=true \
+--set audit.connection=audit-pubsub-connection \
+--set audit.channel=audit \
+--values .tmp/annotations.yaml
+```
+
 **Note:** Verify that after the audit pod is running there is a dapr sidecar injected and running along side `manager` container.
 
 3. Create connection config to establish a connection.
