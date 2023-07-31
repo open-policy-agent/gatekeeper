@@ -83,10 +83,10 @@ func TestExpand(t *testing.T) {
 		},
 		{
 			name:      "expand with nil namespace returns error",
-			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginxWithNs, t),
 			ns:        nil,
 			mutators: []types.Mutator{
-				fixtures.LoadAssign(fixtures.AssignPullImage, t),
+				fixtures.LoadAssign(fixtures.AssignPullImageWithNs, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
 				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),

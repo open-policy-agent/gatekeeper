@@ -230,7 +230,18 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 	resource.SetGroupVersionKind(resultantGVK)
 	if ns != nil {
 		resource.SetNamespace(ns.Name)
+	} else {
+		nsFromUn, ok, err := unstructured.NestedString(obj.Object, "metadata", "namespace")
+		if err != nil {
+			return nil, fmt.Errorf("could not extract namespace field %q in resource %s", srcPath, obj.GetName())
+		}
+		if !ok {
+			return nil, fmt.Errorf("could not find namespace field %q in resource %s", srcPath, obj.GetName())
+		}
+
+		resource.SetNamespace(nsFromUn)
 	}
+
 	resource.SetName(mockNameForResource(obj, resultantGVK))
 
 	return resource, nil

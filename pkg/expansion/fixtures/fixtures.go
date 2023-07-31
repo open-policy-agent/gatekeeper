@@ -133,6 +133,33 @@ spec:
         - "/bin/sh"
 `
 
+	DeploymentNginxWithNs = `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+  namespace: does-not-exist
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14.2
+        ports:
+        - containerPort: '80'
+        args:
+        - "/bin/sh"
+`
+
 	DeploymentNoGVK = `
 metadata:
   name: nginx-deployment
@@ -252,6 +279,33 @@ spec:
     kinds:
       - apiGroups: []
         kinds: []
+`
+
+	AssignPullImageWithNs = `
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: always-pull-image
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  location: "spec.containers[name: *].imagePullPolicy"
+  parameters:
+    assign:
+      value: "Always"
+  match:
+    source: "Generated"
+    scope: Namespaced
+    kinds:
+      - apiGroups: []
+        kinds: []
+    namespaceSelector:
+      matchExpressions:
+        - key: admission.gatekeeper.sh/ignore
+          operator: DoesNotExist
+
 `
 
 	AssignPullImageSourceAll = `
