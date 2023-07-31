@@ -58,9 +58,6 @@ type CacheManager struct {
 	registrar                  *watch.Registrar
 	backgroundManagementTicker time.Ticker
 	reader                     client.Reader
-
-	// relistStopChan is used to stop any list operations still in progress
-	relistStopChan chan struct{}
 }
 
 // CFDataClient is an interface for caching data.
@@ -101,7 +98,6 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 		gvksToSync:                 config.GVKAggregator,
 		backgroundManagementTicker: *time.NewTicker(3 * time.Second),
 		gvksToDeleteFromCache:      watch.NewSet(),
-		relistStopChan:             make(chan struct{}),
 	}
 
 	return cm, nil
@@ -309,6 +305,9 @@ func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind)
 }
 
 func (c *CacheManager) manageCache(ctx context.Context) {
+	// relistStopChan is used to stop any list operations still in progress
+	relistStopChan := make(chan struct{})
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -331,7 +330,7 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 
 				// stop any goroutines that were relisting before
 				// as we may no longer be interested in those gvks
-				close(c.relistStopChan)
+				close(relistStopChan)
 
 				// assume all gvks need to be relisted
 				// and while under lock, make a copy of
@@ -341,15 +340,15 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 
 				// clean state
 				c.needToList = false
-				c.relistStopChan = make(chan struct{})
+				relistStopChan = make(chan struct{})
 
-				go c.replayGVKs(ctx, gvksToRelist)
+				go c.replayGVKs(ctx, gvksToRelist, relistStopChan)
 			}()
 		}
 	}
 }
 
-func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.GroupVersionKind) {
+func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.GroupVersionKind, stopCh <-chan struct{}) {
 	gvksSet := watch.NewSet()
 	gvksSet.Add(gvksToRelist...)
 
@@ -360,7 +359,7 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 			select {
 			case <-ctx.Done():
 				return
-			case <-c.relistStopChan:
+			case <-stopCh:
 				return
 			default:
 				operation := func() (bool, error) {
