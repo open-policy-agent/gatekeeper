@@ -114,16 +114,23 @@ func (c *CacheManager) Start(ctx context.Context) error {
 	return nil
 }
 
-// AddSource adjusts the watched set of gvks according to the newGVKs passed in
+// UpsertSource adjusts the watched set of gvks according to the newGVKs passed in
 // for a given sourceKey.
 // Callers are responsible for retrying on error.
-func (c *CacheManager) AddSource(ctx context.Context, sourceKey aggregator.Key, newGVKs []schema.GroupVersionKind) error {
+func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Key, newGVKs []schema.GroupVersionKind) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if err := c.gvksToSync.Upsert(sourceKey, newGVKs); err != nil {
-		return fmt.Errorf("internal error adding source: %w", err)
+	if len(newGVKs) > 0 {
+		if err := c.gvksToSync.Upsert(sourceKey, newGVKs); err != nil {
+			return fmt.Errorf("internal error adding source: %w", err)
+		}
+	} else {
+		if err := c.gvksToSync.Remove(sourceKey); err != nil {
+			return fmt.Errorf("internal error removing source: %w", err)
+		}
 	}
+
 	// as a result of upserting the new gvks for the source key, some gvks
 	// may become unreferenced and need to be deleted; this will be handled async
 	// in the manageCache loop.
@@ -289,7 +296,7 @@ func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind)
 	}()
 
 	if err != nil {
-		return fmt.Errorf("replaying data for %+v: %w", gvk, err)
+		return fmt.Errorf("listing data for %+v: %w", gvk, err)
 	}
 
 	for i := range u.Items {
@@ -313,21 +320,30 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 
 				c.wipeCacheIfNeeded(ctx)
 
-				// spin up new goroutines to relist gvks as there has been a wipe
-				if c.needToList {
-					// stop any goroutines that were relisting before
-					// as we may no longer be interested in those gvks
-					close(c.relistStopChan)
-
-					// assume all gvks need to be relisted
-					gvksToRelist := c.gvksToSync.GVKs()
-
-					// clean state
-					c.needToList = false
-					c.relistStopChan = make(chan struct{})
-
-					go c.replayGVKs(ctx, gvksToRelist)
+				if !c.needToList {
+					// this means that there are no changes needed
+					// such that any gvks need to be relisted.
+					// any in flight goroutines can finish relisiting.
+					return
 				}
+
+				// otherwise, spin up new goroutines to relist gvks as there has been a wipe
+
+				// stop any goroutines that were relisting before
+				// as we may no longer be interested in those gvks
+				close(c.relistStopChan)
+
+				// assume all gvks need to be relisted
+				// and while under lock, make a copy of
+				// all gvks so we can pass it in the goroutine
+				// without needing to read lock this data
+				gvksToRelist := c.gvksToSync.GVKs()
+
+				// clean state
+				c.needToList = false
+				c.relistStopChan = make(chan struct{})
+
+				go c.replayGVKs(ctx, gvksToRelist)
 			}()
 		}
 	}
@@ -376,10 +392,11 @@ func (c *CacheManager) wipeCacheIfNeeded(ctx context.Context) {
 	if c.gvksToDeleteFromCache.Size() > 0 || c.excluderChanged {
 		if err := c.wipeData(ctx); err != nil {
 			log.Error(err, "internal: error wiping cache")
-		} else {
-			c.gvksToDeleteFromCache = watch.NewSet()
-			c.excluderChanged = false
-			c.needToList = true
+			return
 		}
+
+		c.gvksToDeleteFromCache = watch.NewSet()
+		c.excluderChanged = false
+		c.needToList = true
 	}
 }

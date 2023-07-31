@@ -75,7 +75,7 @@ func TestCacheManager_replay_retries(t *testing.T) {
 	require.NoError(t, c.Create(ctx, pod), "creating Pod pod-1")
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
-	require.NoError(t, cacheManager.AddSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK, podGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK, podGVK}))
 
 	expected := map[cachemanager.CfDataKey]interface{}{
 		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
@@ -89,7 +89,7 @@ func TestCacheManager_replay_retries(t *testing.T) {
 	failPlease <- "ConfigMapList"
 
 	// this call should schedule a cache wipe and a replay for the configMapGVK
-	require.NoError(t, cacheManager.AddSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
 
 	expected2 := map[cachemanager.CfDataKey]interface{}{
 		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
@@ -125,7 +125,7 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 	require.True(t, ok)
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
-	require.NoError(t, cacheManager.AddSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK, podGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK, podGVK}))
 
 	expected := map[cachemanager.CfDataKey]interface{}{
 		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
@@ -145,7 +145,7 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 	require.True(t, foundPod)
 
 	// now remove the podgvk and make sure we don't have pods in the cache anymore
-	require.NoError(t, cacheManager.AddSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
 
 	expected = map[cachemanager.CfDataKey]interface{}{
 		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
@@ -163,14 +163,14 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 
 	// now make sure that adding another sync source with the same gvk has no side effects
 	syncSourceTwo := aggregator.Key{Source: "source_b", ID: "ID_b"}
-	require.NoError(t, cacheManager.AddSource(ctx, syncSourceTwo, []schema.GroupVersionKind{configMapGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{configMapGVK}))
 	agg.IsPresent(configMapGVK)
 	gvks = agg.List(syncSourceTwo)
 	require.Len(t, gvks, 1)
 	_, foundConfigMap = gvks[configMapGVK]
 	require.True(t, foundConfigMap)
 
-	require.NoError(t, cacheManager.AddSource(ctx, syncSourceOne, []schema.GroupVersionKind{podGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{podGVK}))
 	expected2 := map[cachemanager.CfDataKey]interface{}{
 		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
 		{Gvk: configMapGVK, Key: "default/config-test-2"}: nil,
@@ -179,7 +179,7 @@ func TestCacheManager_AddSourceRemoveSource(t *testing.T) {
 	require.Eventually(t, expectedCheck(cfClient, expected2), eventuallyTimeout, eventuallyTicker)
 
 	// now go on and unreference sourceTwo's gvks; this should schedule the config maps to be removed
-	require.NoError(t, cacheManager.AddSource(ctx, syncSourceTwo, []schema.GroupVersionKind{}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{}))
 	expected3 := map[cachemanager.CfDataKey]interface{}{
 		// config maps no longer required by any sync source
 		// {Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
@@ -221,7 +221,7 @@ func TestCacheManager_ExcludeProcesses(t *testing.T) {
 	}
 
 	syncSource := aggregator.Key{Source: "source_b", ID: "ID_b"}
-	require.NoError(t, cacheManager.AddSource(ctx, syncSource, []schema.GroupVersionKind{configMapGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, syncSource, []schema.GroupVersionKind{configMapGVK}))
 	// check that everything is correctly added at first
 	require.Eventually(t, expectedCheck(cfClient, expected), eventuallyTimeout, eventuallyTicker)
 

@@ -292,8 +292,8 @@ func TestCacheManager_AddSource(t *testing.T) {
 	sourceB := aggregator.Key{Source: "b", ID: "source"}
 
 	// given two sources with overlapping gvks ...
-	require.NoError(t, cacheManager.AddSource(ctx, sourceA, []schema.GroupVersionKind{podGVK}))
-	require.NoError(t, cacheManager.AddSource(ctx, sourceB, []schema.GroupVersionKind{podGVK, configMapGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, sourceA, []schema.GroupVersionKind{podGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, sourceB, []schema.GroupVersionKind{podGVK, configMapGVK}))
 
 	// ... expect the aggregator to dedup
 	require.True(t, cacheManager.gvksToSync.IsPresent(configMapGVK))
@@ -301,13 +301,13 @@ func TestCacheManager_AddSource(t *testing.T) {
 	require.ElementsMatch(t, cacheManager.watchedSet.Items(), []schema.GroupVersionKind{podGVK, configMapGVK})
 
 	// adding a source without a previously added gvk ...
-	require.NoError(t, cacheManager.AddSource(ctx, sourceB, []schema.GroupVersionKind{configMapGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, sourceB, []schema.GroupVersionKind{configMapGVK}))
 	// ... should not remove any gvks that are still referenced by other sources
 	require.True(t, cacheManager.gvksToSync.IsPresent(configMapGVK))
 	require.True(t, cacheManager.gvksToSync.IsPresent(podGVK))
 
 	// adding a source that modifies the only reference to a gvk ...
-	require.NoError(t, cacheManager.AddSource(ctx, sourceB, []schema.GroupVersionKind{nsGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, sourceB, []schema.GroupVersionKind{nsGVK}))
 
 	// ... will effectively remove the gvk from the aggregator
 	require.False(t, cacheManager.gvksToSync.IsPresent(configMapGVK))

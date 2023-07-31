@@ -228,14 +228,8 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 	r.cacheManager.ExcludeProcesses(newExcluder)
 	configSourceKey := aggregator.Key{Source: "config", ID: request.NamespacedName.String()}
-	if len(gvksToSync) > 0 {
-		if err := r.cacheManager.AddSource(ctx, configSourceKey, gvksToSync); err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error establishing watches for new syncOny: %w", err)
-		}
-	} else {
-		if err := r.cacheManager.RemoveSource(ctx, configSourceKey); err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error removing syncOny gvks from sync process: %w", err)
-		}
+	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error establishing watches for new syncOny: %w", err)
 	}
 
 	return reconcile.Result{}, nil
