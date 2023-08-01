@@ -17,10 +17,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 
 	actorErr "github.com/dapr/go-sdk/actor/error"
 	"github.com/dapr/go-sdk/actor/runtime"
@@ -86,11 +86,11 @@ func (s *Server) registerBaseHandler() {
 	fHealth := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
-	s.mux.HandleFunc("/healthz", fHealth).Methods(http.MethodGet)
+	s.mux.Get("/healthz", fHealth)
 
 	// register actor config handler
 	fRegister := func(w http.ResponseWriter, r *http.Request) {
-		data, err := runtime.GetActorRuntimeInstance().GetJSONSerializedConfig()
+		data, err := runtime.GetActorRuntimeInstanceContext().GetJSONSerializedConfig()
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -100,16 +100,15 @@ func (s *Server) registerBaseHandler() {
 			return
 		}
 	}
-	s.mux.HandleFunc("/dapr/config", fRegister).Methods(http.MethodGet)
+	s.mux.Get("/dapr/config", fRegister)
 
 	// register actor method invoke handler
 	fInvoke := func(w http.ResponseWriter, r *http.Request) {
-		varsMap := mux.Vars(r)
-		actorType := varsMap["actorType"]
-		actorID := varsMap["actorId"]
-		methodName := varsMap["methodName"]
-		reqData, _ := ioutil.ReadAll(r.Body)
-		rspData, err := runtime.GetActorRuntimeInstance().InvokeActorMethod(actorType, actorID, methodName, reqData)
+		actorType := chi.URLParam(r, "actorType")
+		actorID := chi.URLParam(r, "actorId")
+		methodName := chi.URLParam(r, "methodName")
+		reqData, _ := io.ReadAll(r.Body)
+		rspData, err := runtime.GetActorRuntimeInstanceContext().InvokeActorMethod(r.Context(), actorType, actorID, methodName, reqData)
 		if err == actorErr.ErrActorTypeNotFound {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -121,14 +120,13 @@ func (s *Server) registerBaseHandler() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(rspData)
 	}
-	s.mux.HandleFunc("/actors/{actorType}/{actorId}/method/{methodName}", fInvoke).Methods(http.MethodPut)
+	s.mux.Put("/actors/{actorType}/{actorId}/method/{methodName}", fInvoke)
 
 	// register deactivate actor handler
 	fDelete := func(w http.ResponseWriter, r *http.Request) {
-		varsMap := mux.Vars(r)
-		actorType := varsMap["actorType"]
-		actorID := varsMap["actorId"]
-		err := runtime.GetActorRuntimeInstance().Deactivate(actorType, actorID)
+		actorType := chi.URLParam(r, "actorType")
+		actorID := chi.URLParam(r, "actorId")
+		err := runtime.GetActorRuntimeInstanceContext().Deactivate(r.Context(), actorType, actorID)
 		if err == actorErr.ErrActorTypeNotFound || err == actorErr.ErrActorIDNotFound {
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -137,16 +135,15 @@ func (s *Server) registerBaseHandler() {
 		}
 		w.WriteHeader(http.StatusOK)
 	}
-	s.mux.HandleFunc("/actors/{actorType}/{actorId}", fDelete).Methods(http.MethodDelete)
+	s.mux.Delete("/actors/{actorType}/{actorId}", fDelete)
 
 	// register actor reminder invoke handler
 	fReminder := func(w http.ResponseWriter, r *http.Request) {
-		varsMap := mux.Vars(r)
-		actorType := varsMap["actorType"]
-		actorID := varsMap["actorId"]
-		reminderName := varsMap["reminderName"]
-		reqData, _ := ioutil.ReadAll(r.Body)
-		err := runtime.GetActorRuntimeInstance().InvokeReminder(actorType, actorID, reminderName, reqData)
+		actorType := chi.URLParam(r, "actorType")
+		actorID := chi.URLParam(r, "actorId")
+		reminderName := chi.URLParam(r, "reminderName")
+		reqData, _ := io.ReadAll(r.Body)
+		err := runtime.GetActorRuntimeInstanceContext().InvokeReminder(r.Context(), actorType, actorID, reminderName, reqData)
 		if err == actorErr.ErrActorTypeNotFound {
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -155,16 +152,15 @@ func (s *Server) registerBaseHandler() {
 		}
 		w.WriteHeader(http.StatusOK)
 	}
-	s.mux.HandleFunc("/actors/{actorType}/{actorId}/method/remind/{reminderName}", fReminder).Methods(http.MethodPut)
+	s.mux.Put("/actors/{actorType}/{actorId}/method/remind/{reminderName}", fReminder)
 
 	// register actor timer invoke handler
 	fTimer := func(w http.ResponseWriter, r *http.Request) {
-		varsMap := mux.Vars(r)
-		actorType := varsMap["actorType"]
-		actorID := varsMap["actorId"]
-		timerName := varsMap["timerName"]
-		reqData, _ := ioutil.ReadAll(r.Body)
-		err := runtime.GetActorRuntimeInstance().InvokeTimer(actorType, actorID, timerName, reqData)
+		actorType := chi.URLParam(r, "actorType")
+		actorID := chi.URLParam(r, "actorId")
+		timerName := chi.URLParam(r, "timerName")
+		reqData, _ := io.ReadAll(r.Body)
+		err := runtime.GetActorRuntimeInstanceContext().InvokeTimer(r.Context(), actorType, actorID, timerName, reqData)
 		if err == actorErr.ErrActorTypeNotFound {
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -173,7 +169,7 @@ func (s *Server) registerBaseHandler() {
 		}
 		w.WriteHeader(http.StatusOK)
 	}
-	s.mux.HandleFunc("/actors/{actorType}/{actorId}/method/timer/{timerName}", fTimer).Methods(http.MethodPut)
+	s.mux.Put("/actors/{actorType}/{actorId}/method/timer/{timerName}", fTimer)
 }
 
 // AddTopicEventHandler appends provided event handler with it's name to the service.
