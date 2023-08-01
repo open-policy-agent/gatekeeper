@@ -231,15 +231,15 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 	if ns != nil {
 		resource.SetNamespace(ns.Name)
 	} else {
-		nsFromUn, ok, err := unstructured.NestedString(obj.Object, "metadata", "namespace")
+		nsFromUn, found, err := unstructured.NestedString(obj.Object, "metadata", "namespace")
 		if err != nil {
 			return nil, fmt.Errorf("could not extract namespace field %q in resource %s", srcPath, obj.GetName())
 		}
-		if !ok {
-			return nil, fmt.Errorf("could not find namespace field %q in resource %s", srcPath, obj.GetName())
-		}
 
-		resource.SetNamespace(nsFromUn)
+		if found {
+			resource.SetNamespace(nsFromUn)
+		}
+		// if not found, then the resulting resource may be cluster scoped.
 	}
 
 	resource.SetName(mockNameForResource(obj, resultantGVK))
