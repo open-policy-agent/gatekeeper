@@ -215,7 +215,7 @@ audit:
   readinessTimeout: 1
   livenessTimeout: 1
   priorityClassName: system-cluster-critical
-  disableCertRotation: true
+  disableCertRotation: false
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
