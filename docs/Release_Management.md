@@ -36,7 +36,7 @@ No plan to move to 4.0.0 unless there is a major design change like an incompati
     - soak for ~ 2 weeks before cutting a stable release
     - Release candidate release, cut from master branch
 - X.Y.0 (Branch: master)
-    - Released every ~ 2 months
+    - Released every ~ 3 months
     - Stable release, cut from master when X.Y milestone is complete
 
 **Patch Releases**

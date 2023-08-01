@@ -137,10 +137,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
 	err = r.system.UpsertConnection(ctx, config, request.Name, cfg.Data["provider"])
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
 	log.Info("Connection upsert successful", "name", request.Name, "provider", cfg.Data["provider"])
 	return reconcile.Result{}, nil
 }

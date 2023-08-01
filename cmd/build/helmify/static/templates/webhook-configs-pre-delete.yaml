@@ -55,7 +55,7 @@ spec:
             seccompProfile:
               type: RuntimeDefault
             {{- end }}
-            {{- toYaml .Values.preUninstall.securityContext | nindent 10 }}
+            {{- toYaml .Values.preUninstall.securityContext | nindent 12 }}
       {{- with .Values.preUninstall }}
       nodeSelector:
         {{- toYaml .nodeSelector | nindent 8 }}

@@ -1,6 +1,6 @@
 ---
 id: expansion
-title: Validating Workload Resources using `ExapansionTemplate`s
+title: Validating Workload Resources using `ExpansionTemplate`s
 ---
 
 `Feature State:` Gatekeeper version v3.10+ (alpha), version 3.13+ (beta)
