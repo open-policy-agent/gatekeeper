@@ -1,4 +1,4 @@
-apiVersion: expansion.gatekeeper.sh/v1alpha1
+apiVersion: expansion.gatekeeper.sh/v1beta1
 kind: ExpansionTemplate
 metadata:
   name: expand-cronjobs
@@ -13,7 +13,7 @@ spec:
     group: "batch"
     version: "v1"
 ---
-apiVersion: expansion.gatekeeper.sh/v1alpha1
+apiVersion: expansion.gatekeeper.sh/v1beta1
 kind: ExpansionTemplate
 metadata:
   name: expand-jobs

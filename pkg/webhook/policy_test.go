@@ -15,7 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclients "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -24,7 +24,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -216,8 +215,8 @@ func (f *nsGetter) IsObjectNamespaced(obj runtime.Object) (bool, error) {
 	return false, nil
 }
 
-func (f *nsGetter) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
-	return schema.GroupVersionKind{}, nil
+func (f *nsGetter) GroupVersionKindFor(obj runtime.Object) (k8schema.GroupVersionKind, error) {
+	return k8schema.GroupVersionKind{}, nil
 }
 
 func (f *nsGetter) SubResource(_ string) ctrlclient.SubResourceClient {
@@ -243,8 +242,8 @@ func (f *errorNSGetter) IsObjectNamespaced(obj runtime.Object) (bool, error) {
 	return false, nil
 }
 
-func (f *errorNSGetter) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
-	return schema.GroupVersionKind{}, nil
+func (f *errorNSGetter) GroupVersionKindFor(obj runtime.Object) (k8schema.GroupVersionKind, error) {
+	return k8schema.GroupVersionKind{}, nil
 }
 
 func (f *errorNSGetter) SubResource(_ string) ctrlclient.SubResourceClient {
@@ -347,7 +346,7 @@ func TestReviewDefaultNS(t *testing.T) {
 		Spec: v1alpha1.ConfigSpec{
 			Match: []v1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []util.Wildcard{"default"},
+					ExcludedNamespaces: []wildcard.Wildcard{"default"},
 					Processes:          []string{"*"},
 				},
 			},

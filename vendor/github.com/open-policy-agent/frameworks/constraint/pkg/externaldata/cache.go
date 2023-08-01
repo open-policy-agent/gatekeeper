@@ -1,19 +1,89 @@
 package externaldata
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 type ProviderCache struct {
 	cache map[string]unversioned.Provider
 	mux   sync.RWMutex
+}
+
+type ProviderResponseCache struct {
+	cache sync.Map
+	TTL   time.Duration
+}
+
+type CacheKey struct {
+	ProviderName string
+	Key          string
+}
+
+type CacheValue struct {
+	Received   int64
+	Value      interface{}
+	Error      string
+	Idempotent bool
+}
+
+func NewProviderResponseCache(ctx context.Context, ttl time.Duration) *ProviderResponseCache {
+	providerResponseCache := &ProviderResponseCache{
+		cache: sync.Map{},
+		TTL:   ttl,
+	}
+
+	go wait.UntilWithContext(ctx, func(ctx context.Context) {
+		providerResponseCache.invalidateProviderResponseCache(providerResponseCache.TTL)
+	}, ttl)
+
+	return providerResponseCache
+}
+
+func (c *ProviderResponseCache) Get(key CacheKey) (*CacheValue, error) {
+	if v, ok := c.cache.Load(key); ok {
+		value, ok := v.(*CacheValue)
+		if !ok {
+			return nil, fmt.Errorf("value is not of type CacheValue")
+		}
+		return value, nil
+	}
+	return nil, fmt.Errorf("key '%s:%s' is not found in provider response cache", key.ProviderName, key.Key)
+}
+
+func (c *ProviderResponseCache) Upsert(key CacheKey, value CacheValue) {
+	c.cache.Store(key, &value)
+}
+
+func (c *ProviderResponseCache) Remove(key CacheKey) {
+	c.cache.Delete(key)
+}
+
+func (c *ProviderResponseCache) invalidateProviderResponseCache(ttl time.Duration) {
+	c.cache.Range(func(k, v interface{}) bool {
+		value, ok := v.(*CacheValue)
+		if !ok {
+			return false
+		}
+
+		if time.Since(time.Unix(value.Received, 0)) > ttl {
+			key, ok := k.(CacheKey)
+			if !ok {
+				return false
+			}
+			c.Remove(key)
+		}
+		return true
+	})
 }
 
 func NewCache() *ProviderCache {
