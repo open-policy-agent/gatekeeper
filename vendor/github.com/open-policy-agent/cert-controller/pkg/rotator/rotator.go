@@ -35,46 +35,63 @@ import (
 )
 
 const (
-	certName               = "tls.crt"
-	keyName                = "tls.key"
-	caCertName             = "ca.crt"
-	caKeyName              = "ca.key"
-	rotationCheckFrequency = 12 * time.Hour
-	certValidityDuration   = 10 * 365 * 24 * time.Hour
-	lookaheadInterval      = 90 * 24 * time.Hour
+	certName                    = "tls.crt"
+	keyName                     = "tls.key"
+	caCertName                  = "ca.crt"
+	caKeyName                   = "ca.key"
+	rotationCheckFrequency      = 12 * time.Hour
+	defaultCertValidityDuration = 10 * 365 * 24 * time.Hour
+	lookaheadInterval           = 90 * 24 * time.Hour
 )
 
 var crLog = logf.Log.WithName("cert-rotation")
 
-//WebhookType it the type of webhook, either validating/mutating webhook, a CRD conversion webhook, or an extension API server
+// WebhookType it the type of webhook, either validating/mutating webhook, a CRD conversion webhook, or an extension API server.
 type WebhookType int
 
 const (
-	//ValidatingWebhook indicates the webhook is a ValidatingWebhook
+	// ValidatingWebhook indicates the webhook is a ValidatingWebhook.
 	Validating WebhookType = iota
-	//MutingWebhook indicates the webhook is a MutatingWebhook
+	// MutingWebhook indicates the webhook is a MutatingWebhook.
 	Mutating
-	//CRDConversionWebhook indicates the webhook is a conversion webhook
+	// CRDConversionWebhook indicates the webhook is a conversion webhook.
 	CRDConversion
-	//APIServiceWebhook indicates the webhook is an extension API server
+	// APIServiceWebhook indicates the webhook is an extension API server.
 	APIService
+	// ExternalDataProvider indicates the webhook is a Gatekeeper External Data Provider.
+	ExternalDataProvider
 )
 
-var _ manager.Runnable = &CertRotator{}
+var (
+	_ manager.Runnable               = &CertRotator{}
+	_ manager.LeaderElectionRunnable = &CertRotator{}
+	_ manager.Runnable               = controllerWrapper{}
+	_ manager.LeaderElectionRunnable = controllerWrapper{}
+)
 
-//WebhookInfo is used by the rotator to receive info about resources to be updated with certificates
+type controllerWrapper struct {
+	controller.Controller
+	needLeaderElection bool
+}
+
+func (cw controllerWrapper) NeedLeaderElection() bool {
+	return cw.needLeaderElection
+}
+
+// WebhookInfo is used by the rotator to receive info about resources to be updated with certificates.
 type WebhookInfo struct {
-	//Name is the name of the webhook for a validating or mutating webhook, or the CRD name in case of a CRD conversion webhook
+	// Name is the name of the webhook for a validating or mutating webhook, or the CRD name in case of a CRD conversion webhook
 	Name string
 	Type WebhookType
 }
 
 func (w WebhookInfo) gvk() schema.GroupVersionKind {
 	t2g := map[WebhookType]schema.GroupVersionKind{
-		Validating:    {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "ValidatingWebhookConfiguration"},
-		Mutating:      {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "MutatingWebhookConfiguration"},
-		CRDConversion: {Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition"},
-		APIService:    {Group: "apiregistration.k8s.io", Version: "v1", Kind: "APIService"},
+		Validating:           {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "ValidatingWebhookConfiguration"},
+		Mutating:             {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "MutatingWebhookConfiguration"},
+		CRDConversion:        {Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition"},
+		APIService:           {Group: "apiregistration.k8s.io", Version: "v1", Kind: "APIService"},
+		ExternalDataProvider: {Group: "externaldata.gatekeeper.sh", Version: "v1beta1", Kind: "Provider"},
 	}
 	return t2g[w.Type]
 }
@@ -99,18 +116,22 @@ func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 	cr.certsNotMounted = make(chan struct{})
 	cr.wasCAInjected = atomic.NewBool(false)
 	cr.caNotInjected = make(chan struct{})
-	if err := mgr.Add(cr); err != nil {
-		return err
+	if !cr.testNoBackgroundRotation {
+		if err := mgr.Add(cr); err != nil {
+			return err
+		}
 	}
 
 	reconciler := &ReconcileWH{
-		cache:         cache,
-		writer:        mgr.GetClient(), // TODO
-		scheme:        mgr.GetScheme(),
-		ctx:           context.Background(),
-		secretKey:     cr.SecretKey,
-		wasCAInjected: cr.wasCAInjected,
-		webhooks:      cr.Webhooks,
+		cache:                       cache,
+		writer:                      mgr.GetClient(), // TODO
+		scheme:                      mgr.GetScheme(),
+		ctx:                         context.Background(),
+		secretKey:                   cr.SecretKey,
+		wasCAInjected:               cr.wasCAInjected,
+		webhooks:                    cr.Webhooks,
+		needLeaderElection:          cr.RequireLeaderElection,
+		refreshCertIfNeededDelegate: cr.refreshCertIfNeeded,
 	}
 	if err := addController(mgr, reconciler); err != nil {
 		return err
@@ -126,9 +147,11 @@ func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 func addNamespacedCache(mgr manager.Manager, namespace string) (cache.Cache, error) {
 	c, err := cache.New(mgr.GetConfig(),
 		cache.Options{
-			Scheme:    mgr.GetScheme(),
-			Mapper:    mgr.GetRESTMapper(),
-			Namespace: namespace,
+			Scheme: mgr.GetScheme(),
+			Mapper: mgr.GetRESTMapper(),
+			Namespaces: []string{
+				namespace,
+			},
 		})
 	if err != nil {
 		return nil, err
@@ -147,21 +170,37 @@ type SyncingReader interface {
 
 // CertRotator contains cert artifacts and a channel to close when the certs are ready.
 type CertRotator struct {
-	reader                 SyncingReader
-	writer                 client.Writer
+	reader SyncingReader
+	writer client.Writer
+
 	SecretKey              types.NamespacedName
 	CertDir                string
 	CAName                 string
 	CAOrganization         string
 	DNSName                string
+	ExtraDNSNames          []string
 	IsReady                chan struct{}
 	Webhooks               []WebhookInfo
 	RestartOnSecretRefresh bool
 	ExtKeyUsages           *[]x509.ExtKeyUsage
-	certsMounted           chan struct{}
-	certsNotMounted        chan struct{}
-	wasCAInjected          *atomic.Bool
-	caNotInjected          chan struct{}
+	// RequireLeaderElection should be set to true if the CertRotator needs to
+	// be run in the leader election mode.
+	RequireLeaderElection bool
+
+	certsMounted    chan struct{}
+	certsNotMounted chan struct{}
+	wasCAInjected   *atomic.Bool
+	caNotInjected   chan struct{}
+
+	// testNoBackgroundRotation doesn't actually start the rotator in the background.
+	// This should only be used for testing.
+	testNoBackgroundRotation bool
+	// caCertDuration sets how long a CA cert will be valid for.
+	caCertDuration time.Duration
+}
+
+func (cr *CertRotator) NeedLeaderElection() bool {
+	return cr.RequireLeaderElection
 }
 
 // Start starts the CertRotator runnable to rotate certs and ensure the certs are ready.
@@ -176,12 +215,15 @@ func (cr *CertRotator) Start(ctx context.Context) error {
 	if cr.ExtKeyUsages == nil {
 		cr.ExtKeyUsages = &[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 	}
+	if cr.caCertDuration == time.Duration(0) {
+		cr.caCertDuration = defaultCertValidityDuration
+	}
 
 	// explicitly rotate on the first round so that the certificate
 	// can be bootstrapped, otherwise manager exits before a cert can be written
 	crLog.Info("starting cert rotator controller")
 	defer crLog.Info("stopping cert rotator controller")
-	if err := cr.refreshCertIfNeeded(); err != nil {
+	if _, err := cr.refreshCertIfNeeded(); err != nil {
 		crLog.Error(err, "could not refresh cert on startup")
 		return err
 	}
@@ -196,7 +238,7 @@ tickerLoop:
 	for {
 		select {
 		case <-ticker.C:
-			if err := cr.refreshCertIfNeeded(); err != nil {
+			if _, err := cr.refreshCertIfNeeded(); err != nil {
 				crLog.Error(err, "error rotating certs")
 			}
 		case <-ctx.Done():
@@ -212,8 +254,11 @@ tickerLoop:
 	return nil
 }
 
-// refreshCertIfNeeded returns whether there's any error when refreshing the certs if needed.
-func (cr *CertRotator) refreshCertIfNeeded() error {
+// refreshCertIfNeeded returns true if the CA was rotated
+// and if there's any error when rotating the CA or refreshing the certs.
+func (cr *CertRotator) refreshCertIfNeeded() (bool, error) {
+	var rotatedCA bool
+
 	refreshFn := func() (bool, error) {
 		secret := &corev1.Secret{}
 		if err := cr.reader.Get(context.Background(), cr.SecretKey, secret); err != nil {
@@ -225,6 +270,7 @@ func (cr *CertRotator) refreshCertIfNeeded() error {
 				crLog.Error(err, "could not refresh CA and server certs")
 				return false, nil
 			}
+			rotatedCA = true
 			crLog.Info("server certs refreshed")
 			if cr.RestartOnSecretRefresh {
 				crLog.Info("Secrets have been updated; exiting so pod can be restarted (This behaviour can be changed with the option RestartOnSecretRefresh)")
@@ -255,16 +301,16 @@ func (cr *CertRotator) refreshCertIfNeeded() error {
 		Jitter:   1,
 		Steps:    10,
 	}, refreshFn); err != nil {
-		return err
+		return rotatedCA, err
 	}
-	return nil
+	return rotatedCA, nil
 }
 
 func (cr *CertRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) error {
 	var caArtifacts *KeyPairArtifacts
 	now := time.Now()
 	begin := now.Add(-1 * time.Hour)
-	end := now.Add(certValidityDuration)
+	end := now.Add(cr.caCertDuration)
 	if refreshCA {
 		var err error
 		caArtifacts, err = cr.CreateCACert(begin, end)
@@ -298,8 +344,10 @@ func injectCert(updatedResource *unstructured.Unstructured, certPem []byte, webh
 		return injectCertToConversionWebhook(updatedResource, certPem)
 	case APIService:
 		return injectCertToApiService(updatedResource, certPem)
+	case ExternalDataProvider:
+		return injectCertToExternalDataProvider(updatedResource, certPem)
 	}
-	return fmt.Errorf("Incorrect webhook type")
+	return fmt.Errorf("incorrect webhook type")
 }
 
 func injectCertToWebhook(wh *unstructured.Unstructured, certPem []byte) error {
@@ -308,7 +356,7 @@ func injectCertToWebhook(wh *unstructured.Unstructured, certPem []byte) error {
 		return err
 	}
 	if !found {
-		return errors.New("`webhooks` field not found in ValidatingWebhookConfiguration")
+		return nil
 	}
 	for i, h := range webhooks {
 		hook, ok := h.(map[string]interface{})
@@ -350,6 +398,21 @@ func injectCertToApiService(apiService *unstructured.Unstructured, certPem []byt
 		return errors.New("`spec` field not found in APIService")
 	}
 	if err := unstructured.SetNestedField(apiService.Object, base64.StdEncoding.EncodeToString(certPem), "spec", "caBundle"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func injectCertToExternalDataProvider(externalDataProvider *unstructured.Unstructured, certPem []byte) error {
+	_, found, err := unstructured.NestedMap(externalDataProvider.Object, "spec")
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errors.New("`spec` field not found in Provider")
+	}
+	if err := unstructured.SetNestedField(externalDataProvider.Object, base64.StdEncoding.EncodeToString(certPem), "spec", "caBundle"); err != nil {
 		return err
 	}
 
@@ -413,7 +476,7 @@ func buildArtifactsFromSecret(secret *corev1.Secret) (*KeyPairArtifacts, error) 
 }
 
 // CreateCACert creates the self-signed CA cert and private key that will
-// be used to sign the server certificate
+// be used to sign the server certificate.
 func (cr *CertRotator) CreateCACert(begin, end time.Time) (*KeyPairArtifacts, error) {
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(0),
@@ -451,16 +514,16 @@ func (cr *CertRotator) CreateCACert(begin, end time.Time) (*KeyPairArtifacts, er
 }
 
 // CreateCertPEM takes the results of CreateCACert and uses it to create the
-// PEM-encoded public certificate and private key, respectively
+// PEM-encoded public certificate and private key, respectively.
 func (cr *CertRotator) CreateCertPEM(ca *KeyPairArtifacts, begin, end time.Time) ([]byte, []byte, error) {
+	dnsNames := []string{cr.DNSName}
+	dnsNames = append(dnsNames, cr.ExtraDNSNames...)
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
 			CommonName: cr.DNSName,
 		},
-		DNSNames: []string{
-			cr.DNSName,
-		},
+		DNSNames:              dnsNames,
 		NotBefore:             begin,
 		NotAfter:              end,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
@@ -482,7 +545,7 @@ func (cr *CertRotator) CreateCertPEM(ca *KeyPairArtifacts, begin, end time.Time)
 	return certPEM, keyPEM, nil
 }
 
-// pemEncode takes a certificate and encodes it as PEM
+// pemEncode takes a certificate and encodes it as PEM.
 func pemEncode(certificateDER []byte, key *rsa.PrivateKey) ([]byte, []byte, error) {
 	certBuf := &bytes.Buffer{}
 	if err := pem.Encode(certBuf, &pem.Block{Type: "CERTIFICATE", Bytes: certificateDER}); err != nil {
@@ -562,8 +625,8 @@ func ValidCert(caCert, cert, key []byte, dnsName string, keyUsages *[]x509.ExtKe
 	return true, nil
 }
 
-func reconcileSecretAndWebhookMapFunc(webhook WebhookInfo, r *ReconcileWH) func(object client.Object) []reconcile.Request {
-	return func(object client.Object) []reconcile.Request {
+func reconcileSecretAndWebhookMapFunc(webhook WebhookInfo, r *ReconcileWH) func(ctx context.Context, object client.Object) []reconcile.Request {
+	return func(ctx context.Context, object client.Object) []reconcile.Request {
 		whKey := types.NamespacedName{Name: webhook.Name}
 		if object.GetNamespace() != whKey.Namespace {
 			return nil
@@ -575,16 +638,19 @@ func reconcileSecretAndWebhookMapFunc(webhook WebhookInfo, r *ReconcileWH) func(
 	}
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
+// add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func addController(mgr manager.Manager, r *ReconcileWH) error {
 	// Create a new controller
-	c, err := controller.New("cert-rotator", mgr, controller.Options{Reconciler: r})
+	c, err := controller.NewUnmanaged("cert-rotator", mgr, controller.Options{Reconciler: r})
 	if err != nil {
+		return err
+	}
+	if err := mgr.Add(controllerWrapper{c, r.needLeaderElection}); err != nil {
 		return err
 	}
 
 	err = c.Watch(
-		source.NewKindWithCache(&corev1.Secret{}, r.cache),
+		source.Kind(r.cache, &corev1.Secret{}),
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
@@ -595,7 +661,7 @@ func addController(mgr manager.Manager, r *ReconcileWH) error {
 		wh := &unstructured.Unstructured{}
 		wh.SetGroupVersionKind(webhook.gvk())
 		err = c.Watch(
-			source.NewKindWithCache(wh, r.cache),
+			source.Kind(r.cache, wh),
 			handler.EnqueueRequestsFromMapFunc(reconcileSecretAndWebhookMapFunc(webhook, r)),
 		)
 		if err != nil {
@@ -609,19 +675,21 @@ func addController(mgr manager.Manager, r *ReconcileWH) error {
 var _ reconcile.Reconciler = &ReconcileWH{}
 
 // ReconcileWH reconciles a validatingwebhookconfiguration, making sure it
-// has the appropriate CA cert
+// has the appropriate CA cert.
 type ReconcileWH struct {
-	writer        client.Writer
-	cache         cache.Cache
-	scheme        *runtime.Scheme
-	ctx           context.Context
-	secretKey     types.NamespacedName
-	webhooks      []WebhookInfo
-	wasCAInjected *atomic.Bool
+	writer                      client.Writer
+	cache                       cache.Cache
+	scheme                      *runtime.Scheme
+	ctx                         context.Context
+	secretKey                   types.NamespacedName
+	webhooks                    []WebhookInfo
+	wasCAInjected               *atomic.Bool
+	needLeaderElection          bool
+	refreshCertIfNeededDelegate func() (bool, error)
 }
 
 // Reconcile reads that state of the cluster for a validatingwebhookconfiguration
-// object and makes sure the most recent CA cert is included
+// object and makes sure the most recent CA cert is included.
 func (r *ReconcileWH) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	if request.NamespacedName != r.secretKey {
 		return reconcile.Result{}, nil
@@ -643,6 +711,19 @@ func (r *ReconcileWH) Reconcile(ctx context.Context, request reconcile.Request) 
 	}
 
 	if secret.GetDeletionTimestamp().IsZero() {
+		if r.refreshCertIfNeededDelegate != nil {
+			rotatedCA, err := r.refreshCertIfNeededDelegate()
+			if err != nil {
+				crLog.Error(err, "error rotating certs on secret reconcile")
+				return reconcile.Result{}, err
+			}
+
+			// if we did rotate the CA, the secret is stale so let's return
+			if rotatedCA {
+				return reconcile.Result{}, nil
+			}
+		}
+
 		artifacts, err := buildArtifactsFromSecret(secret)
 		if err != nil {
 			crLog.Error(err, "secret is not well-formed, cannot update webhook configurations")

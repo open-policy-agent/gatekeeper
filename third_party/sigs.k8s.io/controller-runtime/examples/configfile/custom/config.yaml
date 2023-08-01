@@ -1,0 +1,8 @@
+apiVersion: examples.x-k8s.io/v1alpha1
+kind: CustomControllerManagerConfiguration
+clusterName: example-test
+cacheNamespace: default
+metrics:
+  bindAddress: :8081
+leaderElection:
+  leaderElect: false

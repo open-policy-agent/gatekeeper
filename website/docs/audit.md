@@ -71,6 +71,10 @@ status:
     name: kube-system
 ```
 
+Limitations of getting violations from constraint status:
+
+- To reduce in-memory consumption of Gatekeeper audit pod and to avoid hitting [default etcd limit](https://etcd.io/docs/v3.5/dev-guide/limit/#request-size-limit) of 1.5MB per resource, gatekeeper recommends configuring a [limit up-to 500 violations](https://open-policy-agent.github.io/gatekeeper/website/docs/audit/#configuring-audit)(by default 20) on constraint. Because of these limitations, users might not get all the violations from a Constraint resource.
+
 ### Audit Logs
 
 #### Violations
@@ -113,6 +117,10 @@ audit log entries also contain:
 * An `audit_id` field that uniquely identifies a given audit run. This allows indexing of historical audits
 * An `event_type` field with a value of `violation_audited` to make it easy to programatically identify audit violations
 
+Limitations of getting violations from audit logs:
+
+- It could be difficult to parse audit pod logs to look for violation messages, as violation logs would be mixed together with other log statements.
+
 #### Other Event Types
 
 In addition to violations, these other audit events may be useful (all uniquely identified via the `event_type` field):
@@ -124,13 +132,22 @@ In addition to violations, these other audit events may be useful (all uniquely 
 All of these events (including `violation_audited`) are marked 
 with the same `audit_id` for a given audit run.
 
+### Pubsub channel
+
+This feature uses publish and subscribe (pubsub) model that allows Gatekeeper to export audit violations over a broker that can be consumed by a subscriber independently. Therefore, pubsub violations are not subject to reporting limits. Please refer to [this](pubsub.md) guide to configure audit to push violations over a channel.
+
+Limitations/drawbacks of getting violations using pubsub channel:
+
+- There is an inherent risk of messages getting dropped. You might not receive all the published violations.
+- Additional dependancy on pubsub broker. 
+
 ## Running Audit
 For more details on how to deploy audit and 
 number of instances to run, please refer to [operations audit](operations.md#audit). 
 
 ## Configuring Audit
 
-- Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
+- Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`). NOTE: This flag only impacts when gathering audit results using the constraint status model. If you are gathering audit results using the pubsub model, please refer to the [pubsub](pubsub.md) guide. Both approaches for getting audit violations can be configured independently and work simultaneously without any interference.
 - Audit chunk size: set `--audit-chunk-size=400` (defaults to `500`, `0` = infinite) Lower chunk size can reduce memory consumption of the auditing `Pod` but can increase the number requests to the Kubernetes API server.
 - Audit interval: set `--audit-interval=123` (defaults to every `60` seconds). Disable audit interval by setting `--audit-interval=0`
 - Audit api server cache write to disk (Gatekeeper v3.7.0+): Starting from v3.7.0, by default, audit writes api server cache to the disk attached to the node. This reduces the memory consumption of the audit `pod`. If there are concerns with high IOPS, then switch audit to write cache to a tmpfs ramdisk instead. NOTE: write to ramdisk will increase memory footprint of the audit `pod`.  

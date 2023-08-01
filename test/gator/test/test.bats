@@ -245,3 +245,18 @@ match_yaml_msg () {
   want_msg="you must provide labels: {\"geo\"}"
   match_yaml_msg "${output[*]}" "${want_msg}"
 }
+
+@test "observe open api v3 defaults being applied" {
+  run bin/gator test \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations-and-defaults.yaml" \
+    -o=yaml
+
+  [ "$status" -eq 1 ]
+
+  # these are defined in the template's default fields for the parameters
+  want_msg_1="aRequiredLabel" 
+  want_msg_2="aRequiredMessage"
+
+  match_substring "${output[*]}" "${want_msg_1}"
+  match_substring "${output[*]}" "${want_msg_2}"
+}

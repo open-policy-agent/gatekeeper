@@ -27,6 +27,9 @@ spec:
       {{- .Values.preUninstall.deleteWebhookConfigurations.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
       serviceAccount: gatekeeper-delete-webhook-configs
+      {{- if .Values.preUninstall.deleteWebhookConfigurations.priorityClassName }}
+      priorityClassName: {{ .Values.preUninstall.deleteWebhookConfigurations.priorityClassName }}
+      {{- end }}
       containers:
         - name: kubectl-delete
           image: "{{ .Values.preUninstall.deleteWebhookConfigurations.image.repository }}:{{ .Values.preUninstall.deleteWebhookConfigurations.image.tag }}"
@@ -40,13 +43,13 @@ spec:
             - mutatingwebhookconfiguration/{{ .Values.mutatingWebhookName }}
             {{- end }}
           resources:
-            {{- toYaml .Values.preUninstall.resources | nindent 10 }}
+            {{- toYaml .Values.preUninstall.resources | nindent 12 }}
           securityContext:
             {{- if .Values.enableRuntimeDefaultSeccompProfile }}
             seccompProfile:
               type: RuntimeDefault
             {{- end }}
-            {{- toYaml .Values.preUninstall.securityContext | nindent 10 }}
+            {{- toYaml .Values.preUninstall.securityContext | nindent 12 }}
       {{- with .Values.preUninstall }}
       nodeSelector:
         {{- toYaml .nodeSelector | nindent 8 }}

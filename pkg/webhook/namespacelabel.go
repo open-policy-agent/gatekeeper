@@ -36,12 +36,7 @@ const ignoreLabel = "admission.gatekeeper.sh/ignore"
 // AddLabelWebhook registers the label webhook server with the manager.
 func AddLabelWebhook(mgr manager.Manager, _ Dependencies) error {
 	wh := &admission.Webhook{Handler: &namespaceLabelHandler{}}
-	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
-	// Otherwise we risk having unstable logger names for the webhook.
-	if err := wh.InjectLogger(log); err != nil {
-		return err
-	}
-	congifureWebhookServer(mgr.GetWebhookServer()).Register("/v1/admitlabel", wh)
+	mgr.GetWebhookServer().Register("/v1/admitlabel", wh)
 	return nil
 }
 

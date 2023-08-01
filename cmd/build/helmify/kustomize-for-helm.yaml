@@ -62,6 +62,8 @@ metadata:
   namespace: gatekeeper-system
 spec:
   replicas: HELMSUBST_DEPLOYMENT_REPLICAS
+  strategy:
+    type: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_TYPE
   template:
     metadata:
       annotations:
@@ -87,6 +89,8 @@ spec:
             - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
             - --max-serving-threads={{ .Values.maxServingThreads }}
             - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
+            - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+            - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG

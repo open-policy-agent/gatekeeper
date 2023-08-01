@@ -28,6 +28,9 @@ spec:
       {{- .Values.postUpgrade.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
       serviceAccount: gatekeeper-update-namespace-label-post-upgrade
+      {{- if .Values.postUpgrade.labelNamespace.priorityClassName }}
+      priorityClassName: {{ .Values.postUpgrade.labelNamespace.priorityClassName }}
+      {{- end }}
       containers:
         - name: kubectl-label
           image: "{{ .Values.postUpgrade.labelNamespace.image.repository }}:{{ .Values.postUpgrade.labelNamespace.image.tag }}"

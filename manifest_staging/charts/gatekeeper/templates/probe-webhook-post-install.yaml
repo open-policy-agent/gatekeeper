@@ -22,6 +22,9 @@ spec:
         {{- include "gatekeeper.commonLabels" . | nindent 8 }}
     spec:
       restartPolicy: Never
+      {{- if .Values.postInstall.probeWebhook.priorityClassName }}
+      priorityClassName: {{ .Values.postInstall.probeWebhook.priorityClassName }}
+      {{- end }}
       {{- if .Values.postInstall.probeWebhook.image.pullSecrets }}
       imagePullSecrets:
       {{- .Values.postInstall.probeWebhook.image.pullSecrets | toYaml | nindent 12 }}
@@ -38,5 +41,6 @@ spec:
       nodeSelector:
         {{- toYaml .nodeSelector | nindent 8 }}
       {{- end }}
+  backoffLimit: 3
 {{- end }}
 {{- end }}

@@ -203,14 +203,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to ConstraintTemplate
-	err = c.Watch(&source.Kind{Type: &v1beta1.ConstraintTemplate{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &v1beta1.ConstraintTemplate{}), &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
-		&source.Kind{Type: &statusv1beta1.ConstraintTemplatePodStatus{}},
+		source.Kind(mgr.GetCache(), &statusv1beta1.ConstraintTemplatePodStatus{}),
 		handler.EnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper(true)),
 	)
 	if err != nil {
@@ -219,11 +219,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to Constraint CRDs
 	err = c.Watch(
-		&source.Kind{Type: &apiextensionsv1.CustomResourceDefinition{}},
-		&handler.EnqueueRequestForOwner{
-			OwnerType:    &v1beta1.ConstraintTemplate{},
-			IsController: true,
-		},
+		source.Kind(mgr.GetCache(), &apiextensionsv1.CustomResourceDefinition{}),
+		handler.EnqueueRequestForOwner(
+			mgr.GetScheme(),
+			mgr.GetRESTMapper(),
+			&v1beta1.ConstraintTemplate{},
+			handler.OnlyControllerOwner(),
+		),
 	)
 	if err != nil {
 		return err
@@ -441,7 +443,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	// Mark for readiness tracking
 	t := r.tracker.For(gvkConstraintTemplate)
 	t.Observe(unversionedCT)
-	logger.Info("[readiness] observed ConstraintTemplate", "name", unversionedCT.GetName())
 
 	var newCRD *apiextensionsv1.CustomResourceDefinition
 	if currentCRD == nil {
@@ -470,7 +471,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 	// This must go after CRD creation/update as otherwise AddWatch will always fail
 	logger.Info("making sure constraint is in watcher registry")
-	if err := r.addWatch(makeGvk(ct.Spec.CRD.Spec.Names.Kind)); err != nil {
+	if err := r.addWatch(ctx, makeGvk(ct.Spec.CRD.Spec.Names.Kind)); err != nil {
 		logger.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
@@ -488,7 +489,7 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 	logger := logger.WithValues("name", ct.GetName())
 	logger.Info("removing from watcher registry")
 	gvk := makeGvk(ct.Spec.CRD.Spec.Names.Kind)
-	if err := r.removeWatch(gvk); err != nil {
+	if err := r.removeWatch(ctx, gvk); err != nil {
 		return reconcile.Result{}, err
 	}
 	r.tracker.CancelTemplate(ct)
@@ -567,18 +568,18 @@ func (r *ReconcileConstraintTemplate) getOrCreatePodStatus(ctx context.Context, 
 	return statusObj, nil
 }
 
-func (r *ReconcileConstraintTemplate) addWatch(kind schema.GroupVersionKind) error {
-	if err := r.watcher.AddWatch(kind); err != nil {
+func (r *ReconcileConstraintTemplate) addWatch(ctx context.Context, kind schema.GroupVersionKind) error {
+	if err := r.watcher.AddWatch(ctx, kind); err != nil {
 		return err
 	}
-	return r.statusWatcher.AddWatch(kind)
+	return r.statusWatcher.AddWatch(ctx, kind)
 }
 
-func (r *ReconcileConstraintTemplate) removeWatch(kind schema.GroupVersionKind) error {
-	if err := r.watcher.RemoveWatch(kind); err != nil {
+func (r *ReconcileConstraintTemplate) removeWatch(ctx context.Context, kind schema.GroupVersionKind) error {
+	if err := r.watcher.RemoveWatch(ctx, kind); err != nil {
 		return err
 	}
-	return r.statusWatcher.RemoveWatch(kind)
+	return r.statusWatcher.RemoveWatch(ctx, kind)
 }
 
 type action string
