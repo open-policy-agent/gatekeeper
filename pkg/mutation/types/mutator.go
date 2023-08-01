@@ -48,7 +48,7 @@ func IsValidSource(src SourceType) bool {
 // Mutator represent a mutation object.
 type Mutator interface {
 	// Matches tells if the given object is eligible for this mutation.
-	Matches(mutable *Mutable) bool
+	Matches(mutable *Mutable) (bool, error)
 	// Mutate applies the mutation to the given object
 	Mutate(mutable *Mutable) (bool, error)
 	// MustTerminate returns true if the mutator requires its path to terminate
