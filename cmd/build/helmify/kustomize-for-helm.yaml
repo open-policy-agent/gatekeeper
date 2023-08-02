@@ -62,6 +62,7 @@ metadata:
   namespace: gatekeeper-system
 spec:
   replicas: HELMSUBST_DEPLOYMENT_REPLICAS
+  revisionHistoryLimit: HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT
   strategy:
     type: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_TYPE
   template:
@@ -147,6 +148,7 @@ metadata:
   name: gatekeeper-audit
   namespace: gatekeeper-system
 spec:
+  revisionHistoryLimit: HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT
   template:
     metadata:
       annotations:
