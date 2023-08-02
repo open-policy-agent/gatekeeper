@@ -13,6 +13,7 @@ metadata:
   namespace: '{{ .Release.Namespace }}'
 spec:
   replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   selector:
     matchLabels:
       app: '{{ template "gatekeeper.name" . }}'
