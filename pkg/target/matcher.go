@@ -56,7 +56,7 @@ func matchAny(m *Matcher, ns *corev1.Namespace, source types.SourceType, objs ..
 		}
 		matched, err := match.Matches(m.match, t)
 		if err != nil {
-			return false, fmt.Errorf("%w: %w", ErrMatching, err)
+			return false, fmt.Errorf("%w: %v :%w", ErrMatching, obj.GetName(), err)
 		}
 
 		if matched {
