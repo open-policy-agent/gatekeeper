@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -41,7 +42,7 @@ func UnpackRequest(r reconcile.Request) (schema.GroupVersionKind, reconcile.Requ
 // EventPackerMapFunc maps an event into a reconcile.Request with embedded GVK information. Must
 // be unpacked with UnpackRequest() before use.
 func EventPackerMapFunc() handler.MapFunc {
-	return func(obj client.Object) []reconcile.Request {
+	return func(_ context.Context, obj client.Object) []reconcile.Request {
 		if obj == nil {
 			return nil
 		}
@@ -67,11 +68,11 @@ func EventPackerMapFunc() handler.MapFunc {
 // no GVK associated with them by allowing the caller to set the expected GVK.
 func EventPackerMapFuncHardcodeGVK(gvk schema.GroupVersionKind) handler.MapFunc {
 	mf := EventPackerMapFunc()
-	return func(obj client.Object) []reconcile.Request {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(gvk)
 		u.SetNamespace(obj.GetNamespace())
 		u.SetName(obj.GetName())
-		return mf(u)
+		return mf(ctx, u)
 	}
 }

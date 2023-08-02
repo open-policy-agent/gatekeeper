@@ -21,7 +21,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -54,12 +53,12 @@ var (
 	emitAdmissionEvents                = flag.Bool("emit-admission-events", false, "(alpha) emit Kubernetes events for each admission violation")
 	admissionEventsInvolvedNamespace   = flag.Bool("admission-events-involved-namespace", false, "emit admission events for each violation in the involved objects namespace, the default (false) generates events in the namespace Gatekeeper is installed in. Admission events from cluster-scoped resources will still follow the default behavior")
 	logStatsAdmission                  = flag.Bool("log-stats-admission", false, "(alpha) log stats for admission webhook")
-	tlsMinVersion                      = flag.String("tls-min-version", "1.3", "minimum version of TLS supported")
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
-	clientCAName                       = flag.String("client-ca-name", "", "name of the certificate authority bundle to authenticate the Kubernetes API server requests against")
-	certCNName                         = flag.String("client-cn-name", "kube-apiserver", "expected CN name on the client certificate attached by apiserver in requests to the webhook")
 	VwhName                            = flag.String("validating-webhook-configuration-name", "gatekeeper-validating-webhook-configuration", "name of the ValidatingWebhookConfiguration")
 	MwhName                            = flag.String("mutating-webhook-configuration-name", "gatekeeper-mutating-webhook-configuration", "name of the MutatingWebhookConfiguration")
+	TLSMinVersion                      = flag.String("tls-min-version", "1.3", "minimum version of TLS supported")
+	ClientCAName                       = flag.String("client-ca-name", "", "name of the certificate authority bundle to authenticate the Kubernetes API server requests against")
+	CertCNName                         = flag.String("client-cn-name", "kube-apiserver", "expected CN name on the client certificate attached by apiserver in requests to the webhook")
 )
 
 func init() {
@@ -145,24 +144,11 @@ func (h *webhookHandler) skipExcludedNamespace(req *admissionv1.AdmissionRequest
 	return isNamespaceExcluded, err
 }
 
-func congifureWebhookServer(server *webhook.Server) *webhook.Server {
-	server.TLSMinVersion = *tlsMinVersion
-	if *clientCAName != "" {
-		server.ClientCAName = *clientCAName
-		server.TLSOpts = []func(*tls.Config){
-			func(cfg *tls.Config) {
-				cfg.VerifyConnection = getCertNameVerifier()
-			},
-		}
-	}
-	return server
-}
-
-func getCertNameVerifier() func(cs tls.ConnectionState) error {
+func GetCertNameVerifier() func(cs tls.ConnectionState) error {
 	return func(cs tls.ConnectionState) error {
 		if len(cs.PeerCertificates) > 0 {
-			if cs.PeerCertificates[0].Subject.CommonName != *certCNName {
-				return fmt.Errorf("x509: subject with cn=%s do not identify as %s", cs.PeerCertificates[0].Subject.CommonName, *certCNName)
+			if cs.PeerCertificates[0].Subject.CommonName != *CertCNName {
+				return fmt.Errorf("x509: subject with cn=%s do not identify as %s", cs.PeerCertificates[0].Subject.CommonName, *CertCNName)
 			}
 			return nil
 		}

@@ -33,7 +33,8 @@ module.exports = {
         'externaldata',
         'expansion',
         'gator',
-        'workload-resources'
+        'workload-resources',
+        'pubsub'
       ],
     },
     {
@@ -58,7 +59,8 @@ module.exports = {
       items: [
         'developers',
         'help',
-        'security'
+        'security',
+        'pubsub-driver'
       ],
     }
   ]

@@ -1,0 +1,69 @@
+name: dapr-pubsub
+on:
+  push:
+    paths:
+      - "pkg/pubsub/dapr"
+      - "test/pubsub/**"
+  pull_request:
+    paths:
+      - "pkg/pubsub/dapr"
+      - "test/pubsub/**"
+permissions: read-all
+
+jobs:
+  dapr_test:
+    name: "Dapr pubsub test"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        DAPR_VERSION: ["1.10"]
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9
+
+    - name: Set up Go 1.20
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.20
+
+    - name: Bootstrap e2e
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/bin
+        mkdir .tmp
+        echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+        make e2e-bootstrap
+        make e2e-helm-install
+        helm repo add dapr https://dapr.github.io/helm-charts/
+        helm repo add bitnami https://charts.bitnami.com/bitnami
+        helm repo update
+        helm upgrade --install dapr dapr/dapr --version=${{ matrix.DAPR_VERSION }} --namespace dapr-system --create-namespace --wait --debug
+        helm upgrade --install redis bitnami/redis --namespace default --set image.tag=7.0-debian-11 --wait --debug
+        make e2e-subscriber-build-load-image
+        make e2e-subscriber-deploy
+
+    - name: Run e2e
+      run: |
+        make docker-buildx IMG=gatekeeper-e2e:latest
+        make e2e-build-load-externaldata-image
+        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest
+        kind load docker-image --name kind gatekeeper-e2e:latest gatekeeper-crds:latest
+        kubectl create ns gatekeeper-system
+        make e2e-publisher-deploy
+        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_PUBSUB=true
+        make test-e2e ENABLE_PUBSUB_TESTS=1
+
+    - name: Save logs
+      if: ${{ always() }}
+      run: |
+        kubectl logs -n fake-subscriber -l app=sub --tail=-1 > logs-audit-subscribe.json
+        kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-publish.json
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      if: ${{ always() }}
+      with:
+        name: pubsub-logs
+        path: |
+          logs-*.json
+

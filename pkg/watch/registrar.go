@@ -16,6 +16,7 @@ limitations under the License.
 package watch
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -84,7 +85,7 @@ func (r *recordKeeper) RemoveRegistrar(parentName string) error {
 	if registrar == nil {
 		return nil
 	}
-	if err := registrar.ReplaceWatch(nil); err != nil {
+	if err := registrar.ReplaceWatch(context.Background(), nil); err != nil {
 		return err
 	}
 
@@ -227,7 +228,7 @@ type Registrar struct {
 //   - The consumer of the channel does not receive any unbuffered events.
 //
 // XXXX also may block if the watch manager has not been started.
-func (r *Registrar) AddWatch(gvk schema.GroupVersionKind) error {
+func (r *Registrar) AddWatch(ctx context.Context, gvk schema.GroupVersionKind) error {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 	wv := vitals{
@@ -235,11 +236,11 @@ func (r *Registrar) AddWatch(gvk schema.GroupVersionKind) error {
 		registrars: map[*Registrar]bool{r: true},
 	}
 	r.managedKinds.Update(r.parentName, vitalsByGVK{gvk: wv})
-	return r.mgr.addWatch(r, gvk)
+	return r.mgr.addWatch(ctx, r, gvk)
 }
 
 // ReplaceWatch replaces the set of watched resources.
-func (r *Registrar) ReplaceWatch(gvks []schema.GroupVersionKind) error {
+func (r *Registrar) ReplaceWatch(ctx context.Context, gvks []schema.GroupVersionKind) error {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 	roster := make(vitalsByGVK)
@@ -251,16 +252,16 @@ func (r *Registrar) ReplaceWatch(gvks []schema.GroupVersionKind) error {
 		roster[gvk] = wv
 	}
 	r.managedKinds.ReplaceRegistrarRoster(r, roster)
-	return r.mgr.replaceWatches(r)
+	return r.mgr.replaceWatches(ctx, r)
 }
 
 // RemoveWatch removes a watch for the given kind.
 // Ignores the request if the kind was not previously watched.
-func (r *Registrar) RemoveWatch(gvk schema.GroupVersionKind) error {
+func (r *Registrar) RemoveWatch(ctx context.Context, gvk schema.GroupVersionKind) error {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 	r.managedKinds.Remove(r.parentName, gvk)
-	return r.mgr.removeWatch(r, gvk)
+	return r.mgr.removeWatch(ctx, r, gvk)
 }
 
 // IfWatching executes the passed function if the provided GVK is being watched

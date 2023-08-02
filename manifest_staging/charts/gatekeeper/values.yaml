@@ -17,7 +17,7 @@ validatingWebhookCustomRules: {}
 validatingWebhookURL: null
 enableDeleteOperations: false
 enableExternalData: true
-enableGeneratorResourceExpansion: false
+enableGeneratorResourceExpansion: true
 enableTLSHealthcheck: false
 maxServingThreads: -1
 mutatingWebhookName: gatekeeper-mutating-webhook-configuration
@@ -42,20 +42,20 @@ resourceQuota: true
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.13.0-beta.0
+  release: v3.13.0-beta.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.13.0-beta.0
+      tag: v3.13.0-beta.1
 postUpgrade:
   labelNamespace:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.0-beta.0
+      tag: v3.13.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -66,6 +66,7 @@ postUpgrade:
       "pod-security.kubernetes.io/enforce=restricted",
       "pod-security.kubernetes.io/enforce-version=v1.24"]
     extraAnnotations: {}
+    priorityClassName: ""
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -85,7 +86,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.0-beta.0
+      tag: v3.13.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -96,6 +97,7 @@ postInstall:
       "pod-security.kubernetes.io/enforce=restricted",
       "pod-security.kubernetes.io/enforce-version=v1.24"]
     extraAnnotations: {}
+    priorityClassName: ""
   probeWebhook:
     enabled: true
     image:
@@ -106,6 +108,7 @@ postInstall:
     waitTimeout: 60
     httpTimeout: 2
     insecureHTTPS: false
+    priorityClassName: ""
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -124,9 +127,10 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.0-beta.0
+      tag: v3.13.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
+    priorityClassName: ""
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -141,6 +145,7 @@ preUninstall:
     runAsNonRoot: true
     runAsUser: 1000
 podAnnotations: {}
+auditPodAnnotations: {}
 podLabels: {}
 podCountLimit: "100"
 secretAnnotations: {}
@@ -159,6 +164,7 @@ controllerManager:
   disableCertRotation: false
   tlsMinVersion: 1.3
   clientCertName: ""
+  strategyType: RollingUpdate
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -201,6 +207,7 @@ controllerManager:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
 audit:
+  enablePubsub: false
   hostNetwork: false
   dnsPolicy: ClusterFirst
   metricsPort: 8888
@@ -208,7 +215,7 @@ audit:
   readinessTimeout: 1
   livenessTimeout: 1
   priorityClassName: system-cluster-critical
-  disableCertRotation: true
+  disableCertRotation: false
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -257,6 +264,7 @@ psp:
 upgradeCRDs:
   enabled: true
   extraRules: []
+  priorityClassName: ""
 rbac:
   create: true
 externalCertInjection:

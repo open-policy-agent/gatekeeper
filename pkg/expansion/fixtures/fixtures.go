@@ -2,7 +2,7 @@ package fixtures
 
 const (
 	TempExpDeploymentExpandsPods = `
-apiVersion: expansion.gatekeeper.sh/v1alpha1
+apiVersion: expansion.gatekeeper.sh/v1beta1
 kind: ExpansionTemplate
 metadata:
   name: expand-deployments
@@ -19,7 +19,7 @@ spec:
 `
 
 	TempExpReplicaDeploymentExpandsPods = `
-apiVersion: expansion.gatekeeper.sh/v1alpha1
+apiVersion: expansion.gatekeeper.sh/v1beta1
 kind: ExpansionTemplate
 metadata:
   name: expand-deployments-replicas
@@ -36,7 +36,7 @@ spec:
 `
 
 	TempExpMultipleApplyTo = `
-apiVersion: expansion.gatekeeper.sh/v1alpha1
+apiVersion: expansion.gatekeeper.sh/v1beta1
 kind: ExpansionTemplate
 metadata:
   name: expand-many-things
@@ -56,7 +56,7 @@ spec:
 `
 
 	TempExpCronJob = `
-apiVersion: expansion.gatekeeper.sh/v1alpha1
+apiVersion: expansion.gatekeeper.sh/v1beta1
 kind: ExpansionTemplate
 metadata:
   name: expand-cronjobs
@@ -73,7 +73,7 @@ spec:
 `
 
 	TempExpJob = `
-apiVersion: expansion.gatekeeper.sh/v1alpha1
+apiVersion: expansion.gatekeeper.sh/v1beta1
 kind: ExpansionTemplate
 metadata:
   name: expand-jobs
@@ -90,7 +90,7 @@ spec:
 `
 
 	TempExpDeploymentExpandsPodsEnforceDryrun = `
-apiVersion: expansion.gatekeeper.sh/v1alpha1
+apiVersion: expansion.gatekeeper.sh/v1beta1
 kind: ExpansionTemplate
 metadata:
   name: expand-deployments
@@ -424,7 +424,7 @@ spec:
 `
 
 	TemplateCatExpandsKitten = `
-apiVersion: expansion.gatekeeper.sh/v1alpha1
+apiVersion: expansion.gatekeeper.sh/v1beta1
 kind: ExpansionTemplate
 metadata:
   name: expand-cats-kitten
@@ -442,7 +442,7 @@ spec:
 `
 
 	TemplateCatExpandsPurr = `
-apiVersion: expansion.gatekeeper.sh/v1alpha1
+apiVersion: expansion.gatekeeper.sh/v1beta1
 kind: ExpansionTemplate
 metadata:
   name: expand-cats-purr

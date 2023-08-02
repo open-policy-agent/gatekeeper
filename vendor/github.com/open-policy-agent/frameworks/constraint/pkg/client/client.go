@@ -323,8 +323,8 @@ func (c *Client) GetTemplate(templ *templates.ConstraintTemplate) (*templates.Co
 	return template.getTemplate(), nil
 }
 
-// getTemplateEntry returns the template entry for a given constraint.
-func (c *Client) getTemplateForKind(kind string) *templateClient {
+// getTemplateClientForKind returns the template entry for a given constraint.
+func (c *Client) getTemplateClientForKind(kind string) *templateClient {
 	name := strings.ToLower(kind)
 
 	return c.templates[name]
@@ -345,7 +345,7 @@ func (c *Client) AddConstraint(ctx context.Context, constraint *unstructured.Uns
 	}
 
 	kind := constraint.GetKind()
-	cached := c.getTemplateForKind(kind)
+	cached := c.getTemplateClientForKind(kind)
 	if cached == nil {
 		templateName := strings.ToLower(kind)
 		return resp, templateNotFound(templateName)
@@ -358,13 +358,18 @@ func (c *Client) AddConstraint(ctx context.Context, constraint *unstructured.Uns
 		return resp, clienterrors.ErrNoDriver
 	}
 
-	changed, err := cached.AddConstraint(constraint)
+	constraintWithDefaults, err := cached.ApplyDefaultParams(constraint)
+	if err != nil {
+		return resp, err
+	}
+
+	changed, err := cached.AddConstraint(constraintWithDefaults)
 	if err != nil {
 		return resp, err
 	}
 
 	if changed {
-		err = driver.AddConstraint(ctx, constraint)
+		err = driver.AddConstraint(ctx, constraintWithDefaults)
 		if err != nil {
 			return resp, err
 		}
@@ -392,7 +397,7 @@ func (c *Client) RemoveConstraint(ctx context.Context, constraint *unstructured.
 
 	kind := constraint.GetKind()
 
-	cached := c.getTemplateForKind(kind)
+	cached := c.getTemplateClientForKind(kind)
 	if cached == nil {
 		// The Template has been deleted, so nothing to do and no reason to return
 		// error.
@@ -433,7 +438,7 @@ func (c *Client) GetConstraint(constraint *unstructured.Unstructured) (*unstruct
 	defer c.mtx.RUnlock()
 
 	kind := constraint.GetKind()
-	template := c.getTemplateForKind(kind)
+	template := c.getTemplateClientForKind(kind)
 	if template == nil {
 		templateName := strings.ToLower(kind)
 		return nil, templateNotFound(templateName)
@@ -467,7 +472,7 @@ func (c *Client) validateConstraint(constraint *unstructured.Unstructured) error
 	}
 
 	kind := constraint.GetKind()
-	template := c.getTemplateForKind(kind)
+	template := c.getTemplateClientForKind(kind)
 	if template == nil {
 		templateName := strings.ToLower(kind)
 		return templateNotFound(templateName)

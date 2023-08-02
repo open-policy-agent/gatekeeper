@@ -177,7 +177,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 	// Watch for changes to ConstraintStatus
 	err = c.Watch(
-		&source.Kind{Type: &constraintstatusv1beta1.ConstraintPodStatus{}},
+		source.Kind(mgr.GetCache(), &constraintstatusv1beta1.ConstraintPodStatus{}),
 		handler.EnqueueRequestsFromMapFunc(constraintstatus.PodStatusToConstraintMapper(true, util.EventPackerMapFunc())),
 	)
 	if err != nil {
@@ -424,7 +424,6 @@ func (r *ReconcileConstraint) cacheConstraint(ctx context.Context, instance *uns
 
 	// Track for readiness
 	t.Observe(instance)
-	log.Info("[readiness] observed Constraint", "name", instance.GetName())
 
 	return nil
 }

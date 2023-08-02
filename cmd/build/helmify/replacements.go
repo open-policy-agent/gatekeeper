@@ -55,6 +55,8 @@ var replacements = map[string]string{
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_AFFINITY: ""`: `{{- toYaml .Values.controllerManager.affinity | nindent 8 }}`,
 
+	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_TYPE": `{{ .Values.controllerManager.strategyType }}`,
+
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""`: `{{- if .Values.enableRuntimeDefaultSeccompProfile }}
           seccompProfile:
             type: RuntimeDefault
@@ -75,6 +77,10 @@ var replacements = map[string]string{
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
         {{- end }}`,
 
+	`HELMSUBST_AUDIT_POD_ANNOTATIONS: ""`: `{{- if .Values.auditPodAnnotations }}
+        {{- toYaml .Values.auditPodAnnotations | trim | nindent 8 }}
+        {{- end }}`,
+
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG": `{{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}`,
@@ -84,6 +90,12 @@ var replacements = map[string]string{
 	"- HELMSUBST_MUTATION_ENABLED_ARG": `{{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}`,
 
 	"- HELMSUBST_MUTATION_STATUS_ENABLED_ARG": `{{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}`,
+
+	"- HELMSUBST_PUBSUB_ARGS": `{{ if .Values.audit.enablePubsub}}
+        - --enable-pub-sub={{ .Values.audit.enablePubsub }}
+        - --audit-connection={{ .Values.audit.connection }}
+        - --audit-channel={{ .Values.audit.channel }}
+        {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.mutatingWebhookFailurePolicy }}`,
 
