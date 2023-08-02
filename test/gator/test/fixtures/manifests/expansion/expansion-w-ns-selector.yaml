@@ -47,7 +47,10 @@ spec:
     kinds:
       - apiGroups: [""]
         kinds: ["Pod"]
-    namespaces: ["my-ns"] # match the my-ns
+    namespaceSelector:
+      matchExpressions:
+        - key: admission.gatekeeper.sh/ignore
+          operator: DoesNotExist
   parameters:
     message: "All pods must have an `owner` label that points to your company username"
     labels:

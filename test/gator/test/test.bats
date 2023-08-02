@@ -261,7 +261,7 @@ match_yaml_msg () {
   match_substring "${output[*]}" "${want_msg_2}"
 }
 
-@test "expansion with gator test namespace selector" {
+@test "expansion with namespace selector" {
   # First run without the namespace and expect an err
   run bin/gator test \
     -f="$BATS_TEST_DIRNAME/fixtures/manifests/expansion/expansion-w-ns-selector.yaml" \
@@ -269,7 +269,7 @@ match_yaml_msg () {
 
   [ "$status" -eq 1 ]
 
-  want_msg="cannot expand resource with nil namespace" 
+  want_msg="[Implied by expand-deployments] unable to match constraints: error matching the requested object: failed to run Match criteria: namespace selector for namespace-scoped object but missing Namespace"
   match_substring "${output[*]}" "${want_msg}"
 
   # Now expect a violation
