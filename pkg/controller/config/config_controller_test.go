@@ -534,7 +534,6 @@ func TestConfig_CacheContents(t *testing.T) {
 	// Reconfigure to drop the namespace watches
 	config = configFor([]schema.GroupVersionKind{configMapGVK})
 	configUpdate := config.DeepCopy()
-	//	configUpdate.SetResourceVersion()
 
 	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(configUpdate), configUpdate))
 	configUpdate.Spec = config.Spec
