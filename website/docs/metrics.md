@@ -134,6 +134,10 @@ Below are the list of metrics provided by Gatekeeper:
 
   Description: `Number of observed expansion templates`
 
+  Tags:
+
+  - `status`: [`active`, `error`]
+
   Aggregation: `LastValue`
 
 ### Webhook

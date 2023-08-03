@@ -1,4 +1,5 @@
 replicas: 3
+revisionHistoryLimit: 10
 auditInterval: 60
 metricsBackends: ["prometheus"]
 auditMatchKindOnly: false
