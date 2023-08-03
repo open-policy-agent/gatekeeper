@@ -153,6 +153,22 @@ spec:
       value: "admin"
 ```
 
+### Mutation Annotations
+
+You can have two recording annotations applied at mutation time by enabling the `--mutation-annotations` flag.
+
+`gatekeeper.sh/mutation-id` is a UUID used to identify the mutation.
+`gatekeeper.sh/mutations` is a list of the applied mutations.
+
+For example:
+
+```yaml
+metadata:
+  annotations:
+    gatekeeper.sh/mutation-id: 2de3f251-82be-40ff-a5d0-9126d16e1379
+    gatekeeper.sh/mutations: AssignMetadata//demo-annotation-owner:1
+```
+
 ## Examples
 
 ### Adding an annotation
