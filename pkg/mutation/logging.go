@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator) {
+func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator, source types.SourceType) {
 	iterations := make([]interface{}, 0, 2*len(allAppliedMutations))
 	for i, appliedMutations := range allAppliedMutations {
 		if len(appliedMutations) == 0 {
@@ -34,6 +34,7 @@ func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructur
 			logging.ResourceAPIVersion, obj.GroupVersionKind().Version,
 			logging.ResourceNamespace, obj.GetNamespace(),
 			logging.ResourceName, obj.GetName(),
+			logging.ResourceSourceType, source,
 		}
 		logDetails = append(logDetails, iterations...)
 		log.Info(message, logDetails...)

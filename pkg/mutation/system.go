@@ -212,7 +212,7 @@ func (s *System) mutate(mutable *types.Mutable) (int, error) {
 			}
 
 			if *MutationLoggingEnabled {
-				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations)
+				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations, mutable.Source)
 			}
 
 			if *MutationAnnotationsEnabled {
@@ -228,7 +228,7 @@ func (s *System) mutate(mutable *types.Mutable) (int, error) {
 	}
 
 	if *MutationLoggingEnabled {
-		logAppliedMutations("Mutation not converging", mutationUUID, original, allAppliedMutations)
+		logAppliedMutations("Mutation not converging", mutationUUID, original, allAppliedMutations, mutable.Source)
 	}
 
 	return maxIterations, fmt.Errorf("%w: mutation %s not converging for %s %s %s %s",
