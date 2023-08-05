@@ -642,9 +642,9 @@ func TestConfig_Retries(t *testing.T) {
 	}
 	require.NoError(t, syncAdder.Add(mgr), "registering sync controller")
 
-	// Use our special hookReader to inject controlled failures
+	// Use our special reader interceptor to inject controlled failures
 	failPlease := make(chan string, 1)
-	rec.reader = fakes.HookReader{
+	rec.reader = fakes.SpyReader{
 		Reader: mgr.GetCache(),
 		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 			// Return an error the first go-around.

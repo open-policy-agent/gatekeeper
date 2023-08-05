@@ -97,6 +97,16 @@ func (f *FakeCfClient) RemoveData(ctx context.Context, data interface{}) (*const
 	return &constraintTypes.Responses{}, nil
 }
 
+// GetData returns data for a CfDataKey. It assumes that the
+// key is present in the FakeCfClient. Also the data returned is not copied
+// and it's meant only for assertions not modifications.
+func (f *FakeCfClient) GetData(key CfDataKey) interface{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.data[key]
+}
+
 // Contains returns true if all expected resources are in the cache.
 func (f *FakeCfClient) Contains(expected map[CfDataKey]interface{}) bool {
 	f.mu.Lock()
