@@ -233,7 +233,7 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 	} else {
 		nsFromUn, found, err := unstructured.NestedString(obj.Object, "metadata", "namespace")
 		if err != nil {
-			return nil, fmt.Errorf("could not extract namespace field %q in resource %s", srcPath, obj.GetName())
+			return nil, fmt.Errorf("could not extract namespace field %q in parent resource %s", srcPath, obj.GetName())
 		}
 
 		if found {
