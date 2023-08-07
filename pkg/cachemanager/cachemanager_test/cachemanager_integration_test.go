@@ -52,34 +52,69 @@ func TestMain(m *testing.M) {
 	testutils.StartControlPlane(m, &cfg, 3)
 }
 
-// TestCacheManager_replay_retries tests that we can retry GVKs that error out in the reply goroutine.
+type failureInjector struct {
+	mu       sync.Mutex
+	failures map[string]int // registers GVK.Kind and how many times to fail
+}
+
+func (f *failureInjector) setFailures(kind string, failures int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.failures[kind] = failures
+}
+
+// checkFailures looks at the count of failures and returns true
+// if there are still failures for the kind to consume, false otherwise.
+func (f *failureInjector) checkFailures(kind string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	v, ok := f.failures[kind]
+	if !ok {
+		return false
+	}
+
+	if v == 0 {
+		return false
+	}
+
+	f.failures[kind] = v - 1
+
+	return true
+}
+
+func newFailureInjector() *failureInjector {
+	return &failureInjector{
+		failures: make(map[string]int),
+	}
+}
+
+// TestCacheManager_replay_retries tests that we can retry GVKs that error out in the replay goroutine.
 func TestCacheManager_replay_retries(t *testing.T) {
 	mgr, wm := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	failPlease := make(chan string, 2)
+	fi := newFailureInjector()
 	reader := fakes.SpyReader{
 		Reader: c,
 		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-			// Return an error the first go-around.
-			var failKind string
-			select {
-			case failKind = <-failPlease:
-			default:
-			}
-			if failKind != "" && list.GetObjectKind().GroupVersionKind().Kind == failKind {
+			// return as many syntenthic failures as there are registered for this kind
+			if fi.checkFailures(list.GetObjectKind().GroupVersionKind().Kind) {
 				return fmt.Errorf("synthetic failure")
 			}
+
 			return c.List(ctx, list, opts...)
 		},
 	}
 
-	cacheManager, dataStore, _, ctx := cacheManagerForTest(t, mgr, wm, reader)
+	testResources, ctx := makeTestResources(t, mgr, wm, reader)
+	cacheManager := testResources.CacheManager
+	dataStore := testResources.CFDataClient
 
 	cfClient, ok := dataStore.(*cachemanager.FakeCfClient)
 	require.True(t, ok)
 
-	// seed one gvk
 	cm := unstructuredFor(configMapGVK, configInstancOne)
 	require.NoError(t, c.Create(ctx, cm), fmt.Sprintf("creating ConfigMap %s", configInstancOne))
 
@@ -96,9 +131,7 @@ func TestCacheManager_replay_retries(t *testing.T) {
 
 	require.Eventually(t, expectedCheck(cfClient, expected), eventuallyTimeout, eventuallyTicker)
 
-	// set up a scenario where the list from replay will fail a few times
-	failPlease <- "ConfigMapList"
-	failPlease <- "ConfigMapList"
+	fi.setFailures("ConfigMapList", 5)
 
 	// this call should schedule a cache wipe and a replay for the configMapGVK
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
@@ -118,7 +151,11 @@ func TestCacheManager_replay_retries(t *testing.T) {
 func TestCacheManager_concurrent(t *testing.T) {
 	mgr, wm := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
-	cacheManager, dataStore, agg, ctx := cacheManagerForTest(t, mgr, wm, c)
+	testResources, ctx := makeTestResources(t, mgr, wm, c)
+
+	cacheManager := testResources.CacheManager
+	dataStore := testResources.CFDataClient
+	agg := testResources.GVKAgreggator
 
 	// Create configMaps to test for
 	cm := unstructuredFor(configMapGVK, configInstancOne)
@@ -256,7 +293,10 @@ func TestCacheManager_instance_updates(t *testing.T) {
 	mgr, wm := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	cacheManager, dataStore, _, ctx := cacheManagerForTest(t, mgr, wm, c)
+	testResources, ctx := makeTestResources(t, mgr, wm, c)
+
+	cacheManager := testResources.CacheManager
+	dataStore := testResources.CFDataClient
 
 	cfClient, ok := dataStore.(*cachemanager.FakeCfClient)
 	require.True(t, ok)
@@ -323,7 +363,13 @@ func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Uns
 	return u
 }
 
-func cacheManagerForTest(t *testing.T, mgr manager.Manager, wm *watch.Manager, reader client.Reader) (*cachemanager.CacheManager, cachemanager.CFDataClient, *aggregator.GVKAgreggator, context.Context) {
+type testResources struct {
+	*cachemanager.CacheManager
+	cachemanager.CFDataClient
+	*aggregator.GVKAgreggator
+}
+
+func makeTestResources(t *testing.T, mgr manager.Manager, wm *watch.Manager, reader client.Reader) (testResources, context.Context) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	cfClient := &cachemanager.FakeCfClient{}
@@ -371,5 +417,6 @@ func cacheManagerForTest(t *testing.T, mgr manager.Manager, wm *watch.Manager, r
 		cancelFunc()
 		ctx.Done()
 	})
-	return cacheManager, cfClient, aggregator, ctx
+
+	return testResources{cacheManager, cfClient, aggregator}, ctx
 }
