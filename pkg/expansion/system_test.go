@@ -82,7 +82,7 @@ func TestExpand(t *testing.T) {
 			},
 		},
 		{
-			name:      "expand with nil namespace returns error",
+			name:      "expand with nil namespace returns error bc the namespace selector errs out",
 			generator: fixtures.LoadFixture(fixtures.DeploymentNginxWithNs, t),
 			ns:        nil,
 			mutators: []types.Mutator{
@@ -94,7 +94,7 @@ func TestExpand(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			name:      "expand with nil namespace returns error bc the namespace selector errs out",
+			name:      "expand with nil namespace does not error out if no namespace selectors",
 			generator: fixtures.LoadFixture(fixtures.DeploymentNginxWithNs, t),
 			mutators: []types.Mutator{
 				fixtures.LoadAssign(fixtures.AssignPullImageWithNs, t),
