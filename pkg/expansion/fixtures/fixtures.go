@@ -220,6 +220,25 @@ spec:
     - containerPort: '80'
 `
 
+	PodImagePullMutateWithNs = `
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: nginx
+  name: nginx-deployment-pod
+  namespace: does-not-exist
+spec:
+  containers:
+  - args:
+    - "/bin/sh"
+    image: nginx:1.14.2
+    imagePullPolicy: Always
+    name: nginx
+    ports:
+    - containerPort: '80'
+`
+
 	PodMutateImage = `
 apiVersion: v1
 kind: Pod
