@@ -19,7 +19,9 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
@@ -117,9 +119,15 @@ func TestCacheManager_replay_retries(t *testing.T) {
 
 	cm := unstructuredFor(configMapGVK, configInstancOne)
 	require.NoError(t, c.Create(ctx, cm), fmt.Sprintf("creating ConfigMap %s", configInstancOne))
+	t.Cleanup(func() {
+		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", configInstancOne))
+	})
 
 	pod := unstructuredFor(podGVK, podInstanceOne)
 	require.NoError(t, c.Create(ctx, pod), fmt.Sprintf("creating Pod %s", podInstanceOne))
+	t.Cleanup(func() {
+		assert.NoError(t, deleteResource(ctx, c, pod), fmt.Sprintf("deleting resource %s", podInstanceOne))
+	})
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK, podGVK}))
@@ -140,10 +148,6 @@ func TestCacheManager_replay_retries(t *testing.T) {
 		{Gvk: configMapGVK, Key: nsedConfigInstanceOne}: nil,
 	}
 	require.Eventually(t, expectedCheck(cfClient, expected2), eventuallyTimeout, eventuallyTicker)
-
-	// cleanup
-	require.NoError(t, c.Delete(ctx, cm), fmt.Sprintf("deleting ConfigMap %s", configInstancOne))
-	require.NoError(t, c.Delete(ctx, pod), fmt.Sprintf("deleting Pod %s", configInstancOne))
 }
 
 // TestCacheManager_concurrent makes sure that we can add and remove multiple sources
@@ -160,12 +164,21 @@ func TestCacheManager_concurrent(t *testing.T) {
 	// Create configMaps to test for
 	cm := unstructuredFor(configMapGVK, configInstancOne)
 	require.NoError(t, c.Create(ctx, cm), fmt.Sprintf("creating ConfigMap %s", configInstancOne))
+	t.Cleanup(func() {
+		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", configInstancOne))
+	})
 
 	cm2 := unstructuredFor(configMapGVK, configInstancTwo)
 	require.NoError(t, c.Create(ctx, cm2), fmt.Sprintf("creating ConfigMap %s", configInstancTwo))
+	t.Cleanup(func() {
+		assert.NoError(t, deleteResource(ctx, c, cm2), fmt.Sprintf("deleting resource %s", configInstancTwo))
+	})
 
 	pod := unstructuredFor(podGVK, podInstanceOne)
 	require.NoError(t, c.Create(ctx, pod), fmt.Sprintf("creating Pod %s", podInstanceOne))
+	t.Cleanup(func() {
+		assert.NoError(t, deleteResource(ctx, c, pod), fmt.Sprintf("deleting resource %s", podInstanceOne))
+	})
 
 	cfClient, ok := dataStore.(*cachemanager.FakeCfClient)
 	require.True(t, ok)
@@ -280,11 +293,6 @@ func TestCacheManager_concurrent(t *testing.T) {
 	// and expect an empty cache and empty aggregator
 	require.Eventually(t, expectedCheck(cfClient, map[cachemanager.CfDataKey]interface{}{}), eventuallyTimeout, eventuallyTicker)
 	require.True(t, len(agg.GVKs()) == 0)
-
-	// cleanup
-	require.NoError(t, c.Delete(ctx, cm), fmt.Sprintf("deleting ConfigMap %s", configInstancOne))
-	require.NoError(t, c.Delete(ctx, cm2), fmt.Sprintf("deleting ConfigMap %s", configInstancTwo))
-	require.NoError(t, c.Delete(ctx, pod), fmt.Sprintf("deleting Pod %s", configInstancOne))
 }
 
 // TestCacheManager_instance_updates tests that cache manager wires up dependencies correctly
@@ -303,6 +311,9 @@ func TestCacheManager_instance_updates(t *testing.T) {
 
 	cm := unstructuredFor(configMapGVK, configInstancOne)
 	require.NoError(t, c.Create(ctx, cm), fmt.Sprintf("creating ConfigMap %s", configInstancOne))
+	t.Cleanup(func() {
+		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", configInstancOne))
+	})
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
@@ -327,9 +338,16 @@ func TestCacheManager_instance_updates(t *testing.T) {
 
 		return found && "test" == value
 	}, eventuallyTimeout, eventuallyTicker)
+}
 
-	// cleanup
-	require.NoError(t, c.Delete(ctx, cm), fmt.Sprintf("deleting ConfigMap %s", configInstancOne))
+func deleteResource(ctx context.Context, c client.Client, resounce *unstructured.Unstructured) error {
+	err := c.Delete(ctx, resounce)
+	if apierrors.IsNotFound(err) {
+		// resource does not exist, this is good
+		return nil
+	}
+
+	return err
 }
 
 func expectedCheck(cfClient *cachemanager.FakeCfClient, expected map[cachemanager.CfDataKey]interface{}) func() bool {
@@ -415,7 +433,6 @@ func makeTestResources(t *testing.T, mgr manager.Manager, wm *watch.Manager, rea
 
 	t.Cleanup(func() {
 		cancelFunc()
-		ctx.Done()
 	})
 
 	return testResources{cacheManager, cfClient, aggregator}, ctx

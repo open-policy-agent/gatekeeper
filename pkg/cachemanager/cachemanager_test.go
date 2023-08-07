@@ -65,7 +65,6 @@ func makeCacheManager(t *testing.T) (*CacheManager, context.Context) {
 
 	t.Cleanup(func() {
 		cancelFunc()
-		ctx.Done()
 	})
 
 	testutils.StartManager(ctx, t, mgr)

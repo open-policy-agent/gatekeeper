@@ -38,10 +38,12 @@ import (
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -493,10 +495,16 @@ func TestConfig_CacheContents(t *testing.T) {
 	cm := unstructuredFor(configMapGVK, "config-test-1")
 	cm.SetNamespace("default")
 	require.NoError(t, c.Create(ctx, cm), "creating configMap config-test-1")
+	t.Cleanup(func() {
+		assert.NoError(t, deleteResource(ctx, c, cm), "deleting configMap config-test-1")
+	})
 
 	cm2 := unstructuredFor(configMapGVK, "config-test-2")
 	cm2.SetNamespace("kube-system")
-	require.NoError(t, c.Create(ctx, cm2), "creating configMap config-test21")
+	require.NoError(t, c.Create(ctx, cm2), "creating configMap config-test-2")
+	t.Cleanup(func() {
+		assert.NoError(t, deleteResource(ctx, c, cm2), "deleting configMap config-test-2")
+	})
 
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	require.NoError(t, err)
@@ -576,10 +584,6 @@ func TestConfig_CacheContents(t *testing.T) {
 	g.Eventually(func() int {
 		return opaClient.Len()
 	}, 10*time.Second).Should(gomega.BeZero(), "waiting for cache to empty")
-
-	// cleanup
-	require.NoError(t, c.Delete(ctx, cm), "deleting configMap config-test-1")
-	require.NoError(t, c.Delete(ctx, cm2), "deleting configMap config-test-2")
 }
 
 func TestConfig_Retries(t *testing.T) {
@@ -768,4 +772,17 @@ func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Uns
 // This interface is getting used by tests to check the private objects of objectTracker.
 type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
+}
+
+func deleteResource(ctx context.Context, c client.Client, resounce *unstructured.Unstructured) error {
+	if ctx.Err() != nil {
+		ctx = context.Background()
+	}
+	err := c.Delete(ctx, resounce)
+	if apierrors.IsNotFound(err) {
+		// resource does not exist, this is good
+		return nil
+	}
+
+	return err
 }
