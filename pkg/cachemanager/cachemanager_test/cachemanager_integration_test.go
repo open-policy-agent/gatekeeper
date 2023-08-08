@@ -3,6 +3,7 @@ package cachemanager_test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -153,6 +154,8 @@ func TestCacheManager_replay_retries(t *testing.T) {
 // TestCacheManager_concurrent makes sure that we can add and remove multiple sources
 // from separate go routines and changes to the underlying cache are reflected.
 func TestCacheManager_concurrent(t *testing.T) {
+	r := rand.New(rand.NewSource(12345)) // #nosec G404: Using weak random number generator for determinism between calls
+
 	mgr, wm := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 	testResources, ctx := makeTestResources(t, mgr, wm, c)
@@ -188,17 +191,44 @@ func TestCacheManager_concurrent(t *testing.T) {
 
 	wg := &sync.WaitGroup{}
 
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
-	}()
-	go func() {
-		defer wg.Done()
-		require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
-	}()
+	// simulate a churn-y concurrent access by swapping the gvks for the sync sources repeatedly
+	// and removing sync sources, all from different go routines.
+	for i := 1; i < 100; i++ {
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+
+			// add some jitter
+			time.Sleep(time.Duration(r.Intn(1000)) * time.Millisecond)
+
+			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
+			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
+		}()
+		go func() {
+			defer wg.Done()
+
+			// add some jitter
+			time.Sleep(time.Duration(r.Intn(1000)) * time.Millisecond)
+
+			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{podGVK}))
+			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{configMapGVK}))
+		}()
+		go func() {
+			defer wg.Done()
+
+			time.Sleep(time.Duration(r.Intn(1000)) * time.Millisecond)
+			require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceTwo))
+
+			time.Sleep(time.Duration(r.Intn(1000)) * time.Millisecond)
+			require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceOne))
+		}()
+	}
 
 	wg.Wait()
+
+	// final upsert for determinism
+	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
+	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
 
 	expected := map[cachemanager.CfDataKey]interface{}{
 		{Gvk: configMapGVK, Key: nsedConfigInstanceOne}: nil,
@@ -216,65 +246,6 @@ func TestCacheManager_concurrent(t *testing.T) {
 	gvks = agg.List(syncSourceTwo)
 	require.Len(t, gvks, 1)
 	_, foundPod := gvks[podGVK]
-	require.True(t, foundPod)
-
-	// now remove the podgvk for sync source two and make sure we don't have pods in the cache anymore
-	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{configMapGVK}))
-
-	// expect the config map instances to be repopulated eventually
-	expected = map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: nsedConfigInstanceOne}: nil,
-		{Gvk: configMapGVK, Key: nsedConfigInstanceTwo}: nil,
-	}
-	require.Eventually(t, expectedCheck(cfClient, expected), eventuallyTimeout, eventuallyTicker)
-	// now assert that the gvkAggregator looks as expected
-	agg.IsPresent(configMapGVK)
-	gvks = agg.List(syncSourceOne)
-	require.Len(t, gvks, 1)
-	_, foundConfigMap = gvks[configMapGVK]
-	require.True(t, foundConfigMap)
-	_, foundPod = gvks[podGVK]
-	require.False(t, foundPod)
-
-	// now swap the gvks for each source and do so repeatedly to generate some churn
-	for i := 1; i < 100; i++ {
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-
-			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
-			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
-		}()
-		go func() {
-			defer wg.Done()
-
-			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{podGVK}))
-			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{configMapGVK}))
-		}()
-	}
-
-	wg.Wait()
-
-	// final upsert for determinism
-	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
-	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
-
-	expected = map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: nsedConfigInstanceOne}: nil,
-		{Gvk: configMapGVK, Key: nsedConfigInstanceTwo}: nil,
-		{Gvk: podGVK, Key: nsedPodInstanceOne}:          nil,
-	}
-
-	require.Eventually(t, expectedCheck(cfClient, expected), eventuallyTimeout, eventuallyTicker)
-	// now assert that the gvkAggregator looks as expected
-	agg.IsPresent(configMapGVK)
-	gvks = agg.List(syncSourceOne)
-	require.Len(t, gvks, 1)
-	_, foundConfigMap = gvks[configMapGVK]
-	require.True(t, foundConfigMap)
-	gvks = agg.List(syncSourceTwo)
-	require.Len(t, gvks, 1)
-	_, foundPod = gvks[podGVK]
 	require.True(t, foundPod)
 
 	// now remove the sources
