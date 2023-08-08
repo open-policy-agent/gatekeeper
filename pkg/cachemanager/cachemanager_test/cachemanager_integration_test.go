@@ -34,6 +34,8 @@ import (
 const (
 	eventuallyTimeout = 10 * time.Second
 	eventuallyTicker  = 2 * time.Second
+
+	jitterUpperBound = 100
 )
 
 var cfg *rest.Config
@@ -42,55 +44,17 @@ var (
 	configMapGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 	podGVK       = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 
-	configInstancOne      = "config-test-1"
-	configInstancTwo      = "config-test-2"
-	nsedConfigInstanceOne = "default/config-test-1"
-	nsedConfigInstanceTwo = "default/config-test-2"
+	cm1Name           = "config-test-1"
+	cm2Name           = "config-test-2"
+	namespacedCm1Name = "default/config-test-1"
+	namespacedCm2Name = "default/config-test-2"
 
-	podInstanceOne     = "pod-test-1"
-	nsedPodInstanceOne = "default/pod-test-1"
+	pod1Name           = "pod-test-1"
+	namespacedPod1Name = "default/pod-test-1"
 )
 
 func TestMain(m *testing.M) {
 	testutils.StartControlPlane(m, &cfg, 3)
-}
-
-type failureInjector struct {
-	mu       sync.Mutex
-	failures map[string]int // registers GVK.Kind and how many times to fail
-}
-
-func (f *failureInjector) setFailures(kind string, failures int) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.failures[kind] = failures
-}
-
-// checkFailures looks at the count of failures and returns true
-// if there are still failures for the kind to consume, false otherwise.
-func (f *failureInjector) checkFailures(kind string) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	v, ok := f.failures[kind]
-	if !ok {
-		return false
-	}
-
-	if v == 0 {
-		return false
-	}
-
-	f.failures[kind] = v - 1
-
-	return true
-}
-
-func newFailureInjector() *failureInjector {
-	return &failureInjector{
-		failures: make(map[string]int),
-	}
 }
 
 // TestCacheManager_replay_retries tests that we can retry GVKs that error out in the replay goroutine.
@@ -98,12 +62,12 @@ func TestCacheManager_replay_retries(t *testing.T) {
 	mgr, wm := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	fi := newFailureInjector()
+	fi := fakes.NewFailureInjector()
 	reader := fakes.SpyReader{
 		Reader: c,
 		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 			// return as many syntenthic failures as there are registered for this kind
-			if fi.checkFailures(list.GetObjectKind().GroupVersionKind().Kind) {
+			if fi.CheckFailures(list.GetObjectKind().GroupVersionKind().Kind) {
 				return fmt.Errorf("synthetic failure")
 			}
 
@@ -118,35 +82,35 @@ func TestCacheManager_replay_retries(t *testing.T) {
 	cfClient, ok := dataStore.(*cachemanager.FakeCfClient)
 	require.True(t, ok)
 
-	cm := unstructuredFor(configMapGVK, configInstancOne)
-	require.NoError(t, c.Create(ctx, cm), fmt.Sprintf("creating ConfigMap %s", configInstancOne))
+	cm := unstructuredFor(configMapGVK, cm1Name)
+	require.NoError(t, c.Create(ctx, cm), fmt.Sprintf("creating ConfigMap %s", cm1Name))
 	t.Cleanup(func() {
-		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", configInstancOne))
+		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", cm1Name))
 	})
 
-	pod := unstructuredFor(podGVK, podInstanceOne)
-	require.NoError(t, c.Create(ctx, pod), fmt.Sprintf("creating Pod %s", podInstanceOne))
+	pod := unstructuredFor(podGVK, pod1Name)
+	require.NoError(t, c.Create(ctx, pod), fmt.Sprintf("creating Pod %s", pod1Name))
 	t.Cleanup(func() {
-		assert.NoError(t, deleteResource(ctx, c, pod), fmt.Sprintf("deleting resource %s", podInstanceOne))
+		assert.NoError(t, deleteResource(ctx, c, pod), fmt.Sprintf("deleting resource %s", pod1Name))
 	})
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK, podGVK}))
 
 	expected := map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: nsedConfigInstanceOne}: nil,
-		{Gvk: podGVK, Key: nsedPodInstanceOne}:          nil,
+		{Gvk: configMapGVK, Key: namespacedCm1Name}: nil,
+		{Gvk: podGVK, Key: namespacedPod1Name}:      nil,
 	}
 
 	require.Eventually(t, expectedCheck(cfClient, expected), eventuallyTimeout, eventuallyTicker)
 
-	fi.setFailures("ConfigMapList", 5)
+	fi.SetFailures("ConfigMapList", 5)
 
 	// this call should schedule a cache wipe and a replay for the configMapGVK
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
 
 	expected2 := map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: nsedConfigInstanceOne}: nil,
+		{Gvk: configMapGVK, Key: namespacedCm1Name}: nil,
 	}
 	require.Eventually(t, expectedCheck(cfClient, expected2), eventuallyTimeout, eventuallyTicker)
 }
@@ -165,22 +129,22 @@ func TestCacheManager_concurrent(t *testing.T) {
 	agg := testResources.GVKAgreggator
 
 	// Create configMaps to test for
-	cm := unstructuredFor(configMapGVK, configInstancOne)
-	require.NoError(t, c.Create(ctx, cm), fmt.Sprintf("creating ConfigMap %s", configInstancOne))
+	cm := unstructuredFor(configMapGVK, cm1Name)
+	require.NoError(t, c.Create(ctx, cm), fmt.Sprintf("creating ConfigMap %s", cm1Name))
 	t.Cleanup(func() {
-		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", configInstancOne))
+		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", cm1Name))
 	})
 
-	cm2 := unstructuredFor(configMapGVK, configInstancTwo)
-	require.NoError(t, c.Create(ctx, cm2), fmt.Sprintf("creating ConfigMap %s", configInstancTwo))
+	cm2 := unstructuredFor(configMapGVK, cm2Name)
+	require.NoError(t, c.Create(ctx, cm2), fmt.Sprintf("creating ConfigMap %s", cm2Name))
 	t.Cleanup(func() {
-		assert.NoError(t, deleteResource(ctx, c, cm2), fmt.Sprintf("deleting resource %s", configInstancTwo))
+		assert.NoError(t, deleteResource(ctx, c, cm2), fmt.Sprintf("deleting resource %s", cm2Name))
 	})
 
-	pod := unstructuredFor(podGVK, podInstanceOne)
-	require.NoError(t, c.Create(ctx, pod), fmt.Sprintf("creating Pod %s", podInstanceOne))
+	pod := unstructuredFor(podGVK, pod1Name)
+	require.NoError(t, c.Create(ctx, pod), fmt.Sprintf("creating Pod %s", pod1Name))
 	t.Cleanup(func() {
-		assert.NoError(t, deleteResource(ctx, c, pod), fmt.Sprintf("deleting resource %s", podInstanceOne))
+		assert.NoError(t, deleteResource(ctx, c, pod), fmt.Sprintf("deleting resource %s", pod1Name))
 	})
 
 	cfClient, ok := dataStore.(*cachemanager.FakeCfClient)
@@ -195,31 +159,29 @@ func TestCacheManager_concurrent(t *testing.T) {
 	// and removing sync sources, all from different go routines.
 	for i := 1; i < 100; i++ {
 		wg.Add(3)
+
+		// add some jitter between go func calls
+		time.Sleep(time.Duration(r.Intn(jitterUpperBound)) * time.Millisecond)
 		go func() {
 			defer wg.Done()
-
-			// add some jitter
-			time.Sleep(time.Duration(r.Intn(1000)) * time.Millisecond)
 
 			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
 			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
 		}()
+
+		time.Sleep(time.Duration(r.Intn(jitterUpperBound)) * time.Millisecond)
 		go func() {
 			defer wg.Done()
-
-			// add some jitter
-			time.Sleep(time.Duration(r.Intn(1000)) * time.Millisecond)
 
 			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{podGVK}))
 			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{configMapGVK}))
 		}()
+
+		time.Sleep(time.Duration(r.Intn(jitterUpperBound)) * time.Millisecond)
 		go func() {
 			defer wg.Done()
 
-			time.Sleep(time.Duration(r.Intn(1000)) * time.Millisecond)
 			require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceTwo))
-
-			time.Sleep(time.Duration(r.Intn(1000)) * time.Millisecond)
 			require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceOne))
 		}()
 	}
@@ -231,9 +193,9 @@ func TestCacheManager_concurrent(t *testing.T) {
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
 
 	expected := map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: nsedConfigInstanceOne}: nil,
-		{Gvk: configMapGVK, Key: nsedConfigInstanceTwo}: nil,
-		{Gvk: podGVK, Key: nsedPodInstanceOne}:          nil,
+		{Gvk: configMapGVK, Key: namespacedCm1Name}: nil,
+		{Gvk: configMapGVK, Key: namespacedCm2Name}: nil,
+		{Gvk: podGVK, Key: namespacedPod1Name}:      nil,
 	}
 
 	require.Eventually(t, expectedCheck(cfClient, expected), eventuallyTimeout, eventuallyTicker)
@@ -248,20 +210,10 @@ func TestCacheManager_concurrent(t *testing.T) {
 	_, foundPod := gvks[podGVK]
 	require.True(t, foundPod)
 
-	// now remove the sources
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceOne))
-	}()
-	go func() {
-		defer wg.Done()
-		require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceTwo))
-	}()
+	// do a final remove and expect the cache to clear
+	require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceOne))
+	require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceTwo))
 
-	wg.Wait()
-
-	// and expect an empty cache and empty aggregator
 	require.Eventually(t, expectedCheck(cfClient, map[cachemanager.CfDataKey]interface{}{}), eventuallyTimeout, eventuallyTicker)
 	require.True(t, len(agg.GVKs()) == 0)
 }
@@ -280,27 +232,27 @@ func TestCacheManager_instance_updates(t *testing.T) {
 	cfClient, ok := dataStore.(*cachemanager.FakeCfClient)
 	require.True(t, ok)
 
-	cm := unstructuredFor(configMapGVK, configInstancOne)
-	require.NoError(t, c.Create(ctx, cm), fmt.Sprintf("creating ConfigMap %s", configInstancOne))
+	cm := unstructuredFor(configMapGVK, cm1Name)
+	require.NoError(t, c.Create(ctx, cm), fmt.Sprintf("creating ConfigMap %s", cm1Name))
 	t.Cleanup(func() {
-		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", configInstancOne))
+		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", cm1Name))
 	})
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
 
 	expected := map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: nsedConfigInstanceOne}: nil,
+		{Gvk: configMapGVK, Key: namespacedCm1Name}: nil,
 	}
 
 	require.Eventually(t, expectedCheck(cfClient, expected), eventuallyTimeout, eventuallyTicker)
 
-	cm2 := unstructuredFor(configMapGVK, configInstancOne)
-	cm2.SetLabels(map[string]string{"testlabel": "test"}) // trigger an instance update
-	require.NoError(t, c.Update(ctx, cm2))
+	cmUpdate := unstructuredFor(configMapGVK, cm1Name)
+	cmUpdate.SetLabels(map[string]string{"testlabel": "test"}) // trigger an instance update
+	require.NoError(t, c.Update(ctx, cmUpdate))
 
 	require.Eventually(t, func() bool {
-		instance := cfClient.GetData(cachemanager.CfDataKey{Gvk: configMapGVK, Key: nsedConfigInstanceOne})
+		instance := cfClient.GetData(cachemanager.CfDataKey{Gvk: configMapGVK, Key: namespacedCm1Name})
 		unInstance, ok := instance.(*unstructured.Unstructured)
 		require.True(t, ok)
 
@@ -378,7 +330,7 @@ func makeTestResources(t *testing.T, mgr manager.Manager, wm *watch.Manager, rea
 	require.NoError(t, err)
 
 	aggregator := aggregator.NewGVKAggregator()
-	cfg := &cachemanager.Config{
+	config := &cachemanager.Config{
 		CfClient:         cfClient,
 		SyncMetricsCache: syncutil.NewMetricsCache(),
 		Tracker:          tracker,
@@ -388,7 +340,7 @@ func makeTestResources(t *testing.T, mgr manager.Manager, wm *watch.Manager, rea
 		Reader:           reader,
 		GVKAggregator:    aggregator,
 	}
-	cacheManager, err := cachemanager.NewCacheManager(cfg)
+	cacheManager, err := cachemanager.NewCacheManager(config)
 	require.NoError(t, err)
 
 	syncAdder := syncc.Adder{
