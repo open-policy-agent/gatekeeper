@@ -34,7 +34,7 @@ func newFakeMutator(id types.ID, pathStr string, usesExternalData bool, bindings
 	}
 }
 
-func (m *fakeMutator) Matches(*types.Mutable) bool {
+func (m *fakeMutator) Matches(*types.Mutable) (bool, error) {
 	panic("should not be called")
 }
 

@@ -36,13 +36,13 @@ func (d *DummyMutator) Path() parser.Path {
 	return d.path
 }
 
-func (d *DummyMutator) Matches(mutable *types.Mutable) bool {
+func (d *DummyMutator) Matches(mutable *types.Mutable) (bool, error) {
 	m := &match.Matchable{Object: mutable.Object, Namespace: mutable.Namespace}
 	matches, err := match.Matches(&d.match, m)
 	if err != nil {
-		return false
+		return false, err
 	}
-	return matches
+	return matches, nil
 }
 
 func (d *DummyMutator) Mutate(mutable *types.Mutable) (bool, error) {
