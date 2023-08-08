@@ -140,7 +140,7 @@ metadata:
   name: nginx-deployment
   labels:
     app: nginx
-  namespace: does-not-exist
+  namespace: not-default
 spec:
   replicas: 3
   selector:
@@ -227,7 +227,7 @@ metadata:
   labels:
     app: nginx
   name: nginx-deployment-pod
-  namespace: does-not-exist
+  namespace: not-default
 spec:
   containers:
   - args:
@@ -300,7 +300,7 @@ spec:
         kinds: []
 `
 
-	AssignPullImageWithNs = `
+	AssignPullImageWithNsSelector = `
 apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:

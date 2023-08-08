@@ -86,7 +86,7 @@ func TestExpand(t *testing.T) {
 			generator: fixtures.LoadFixture(fixtures.DeploymentNginxWithNs, t),
 			ns:        nil,
 			mutators: []types.Mutator{
-				fixtures.LoadAssign(fixtures.AssignPullImageWithNs, t),
+				fixtures.LoadAssign(fixtures.AssignPullImageWithNsSelector, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
 				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
@@ -96,7 +96,7 @@ func TestExpand(t *testing.T) {
 		{
 			name:      "expand with nil namespace does not error out if no namespace selectors",
 			generator: fixtures.LoadFixture(fixtures.DeploymentNginxWithNs, t),
-			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "does-not-exist"}},
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "not-default"}},
 			mutators: []types.Mutator{
 				fixtures.LoadAssign(fixtures.AssignPullImage, t),
 			},
