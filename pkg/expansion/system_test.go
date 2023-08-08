@@ -82,16 +82,31 @@ func TestExpand(t *testing.T) {
 			},
 		},
 		{
-			name:      "expand with nil namespace returns error",
-			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
+			name:      "expand with nil namespace returns error bc the namespace selector errs out",
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginxWithNs, t),
 			ns:        nil,
+			mutators: []types.Mutator{
+				fixtures.LoadAssign(fixtures.AssignPullImageWithNsSelector, t),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			expectErr: true,
+		},
+		{
+			name:      "expand with nil namespace does not error out if no namespace selectors",
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginxWithNs, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "not-default"}},
 			mutators: []types.Mutator{
 				fixtures.LoadAssign(fixtures.AssignPullImage, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
 				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			expectErr: true,
+			expectErr: false,
+			want: []*Resultant{
+				{Obj: fixtures.LoadFixture(fixtures.PodImagePullMutateWithNs, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+			},
 		},
 		{
 			name:      "1 mutator source All deployment expands pod and mutates",

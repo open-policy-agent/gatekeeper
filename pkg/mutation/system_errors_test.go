@@ -38,8 +38,8 @@ type errorMutator struct {
 
 var _ types.Mutator = &errorMutator{}
 
-func (e errorMutator) Matches(*types.Mutable) bool {
-	return true
+func (e errorMutator) Matches(*types.Mutable) (bool, error) {
+	return true, nil
 }
 
 func (e errorMutator) Mutate(*types.Mutable) (bool, error) {

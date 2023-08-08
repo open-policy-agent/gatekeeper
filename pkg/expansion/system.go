@@ -208,10 +208,6 @@ func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 }
 
 func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, template *expansionunversioned.ExpansionTemplate) (*unstructured.Unstructured, error) {
-	if ns == nil {
-		return nil, fmt.Errorf("cannot expand resource with nil namespace")
-	}
-
 	srcPath := template.Spec.TemplateSource
 	if srcPath == "" {
 		return nil, fmt.Errorf("cannot expand resource using a template with no source")
@@ -232,7 +228,20 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 	resource := &unstructured.Unstructured{}
 	resource.SetUnstructuredContent(src)
 	resource.SetGroupVersionKind(resultantGVK)
-	resource.SetNamespace(ns.Name)
+	if ns != nil {
+		resource.SetNamespace(ns.Name)
+	} else {
+		nsFromUn, found, err := unstructured.NestedString(obj.Object, "metadata", "namespace")
+		if err != nil {
+			return nil, fmt.Errorf("could not extract namespace field %q in parent resource %s", srcPath, obj.GetName())
+		}
+
+		if found {
+			resource.SetNamespace(nsFromUn)
+		}
+		// if not found, then the resulting resource may be cluster scoped.
+	}
+
 	resource.SetName(mockNameForResource(obj, resultantGVK))
 
 	return resource, nil

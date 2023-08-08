@@ -260,3 +260,26 @@ match_yaml_msg () {
   match_substring "${output[*]}" "${want_msg_1}"
   match_substring "${output[*]}" "${want_msg_2}"
 }
+
+@test "expansion with namespace selector" {
+  # First run without the namespace and expect an err
+  run bin/gator test \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/expansion/expansion-w-ns-selector.yaml" \
+    -o=yaml
+
+  [ "$status" -eq 1 ]
+
+  want_msg="Implied by expand-deployments] unable to match constraints: error matching the requested object: nginx-deployment-pod :failed to run Match criteria: namespace selector for namespace-scoped object but missing Namespace"
+  match_substring "${output[*]}" "${want_msg}"
+
+  # Now expect a violation
+  run bin/gator test \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/expansion/expansion-w-ns-selector.yaml" \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/expansion/ns.yaml" \
+    -o=yaml
+
+  [ "$status" -eq 1 ]
+
+  want_msg="[Implied by expand-deployments] All pods must have an \`owner\` label that points to your company username" 
+  match_substring "${output[*]}" "${want_msg}"
+}
