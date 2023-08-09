@@ -19,6 +19,8 @@ func (r SpyReader) List(ctx context.Context, list client.ObjectList, opts ...cli
 	return r.Reader.List(ctx, list, opts...)
 }
 
+// FailureInjector can be used in combination with the SpyReader to simulate transient
+// failures for network calls.
 type FailureInjector struct {
 	mu       sync.Mutex
 	failures map[string]int // registers GVK.Kind and how many times to fail
