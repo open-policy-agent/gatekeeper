@@ -288,7 +288,7 @@ should include the resource(s) under test, the `ExpansionTemplate`(s), and
 optionally any Mutation CRs. The command will output a manifest containing the
 expanded resources.
 
-If the mutators or constraints use `spec.match.namespaceSelector, the namespace the resource
+If the mutators or constraints use `spec.match.namespaceSelector`, the namespace the resource
 belongs to must be supplied in order to correctly evaluate the match criteria.
 If a resource is specified for expansion but its non-default namespace is not
 supplied, the command will exit 1. See the [non default namespace example](#non-default-namespace-example) below.
@@ -326,7 +326,7 @@ is a problem parsing the configs or expanding the resources.
 
 #### Non default namespace example
 
-This is an example setup where we include a `namesapace` in a `manifest.yaml` that we plan on passing to `gator expand`.
+This is an example setup where we include a `namespace` in a `manifest.yaml` that we plan on passing to `gator expand`.
 
 ```yaml
 apiVersion: expansion.gatekeeper.sh/v1alpha1
@@ -400,7 +400,7 @@ metadata:
   name: my-ns
 ```
 
-Calling `gator expand --filenmae=manifest.yaml` will produce the following output:
+Calling `gator expand --filename=manifest.yaml` will produce the following output:
 
 ```yaml
 apiVersion: v1
@@ -421,7 +421,7 @@ spec:
     - containerPort: 80
 ```
 
-However, not including the `namespace` definition in the call to `gator expand` will exit 1 and error out with:
+However, not including the `namespace` definition in the call to `gator expand` will exit with a status code of 1 and error out with:
 
 ```
 error expanding resources: error expanding resource nginx-deployment: failed to mutate resultant resource nginx-deployment-pod: matching for mutator Assign.mutations.gatekeeper.sh /always-pull-image failed for  Pod my-ns nginx-deployment-pod: failed to run Match criteria: namespace selector for namespace-scoped object but missing Namespace
