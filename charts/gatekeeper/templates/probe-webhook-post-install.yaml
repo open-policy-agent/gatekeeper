@@ -5,11 +5,8 @@ kind: Job
 metadata:
   name: gatekeeper-probe-webhook-post-install
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
-    gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
+    {{- include "gatekeeper.mandatoryLabels" . | nindent 4 }}
+    {{- include "gatekeeper.commonLabels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": post-install
     "helm.sh/hook-weight": "-5"
@@ -20,14 +17,14 @@ spec:
       annotations:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
-        {{- include "gatekeeper.podLabels" . }}
-        app: '{{ template "gatekeeper.name" . }}'
-        chart: '{{ template "gatekeeper.name" . }}'
-        gatekeeper.sh/system: "yes"
-        heritage: '{{ .Release.Service }}'
-        release: '{{ .Release.Name }}'
+        {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "gatekeeper.mandatoryLabels" . | nindent 8 }}
+        {{- include "gatekeeper.commonLabels" . | nindent 8 }}
     spec:
       restartPolicy: Never
+      {{- if .Values.postInstall.probeWebhook.priorityClassName }}
+      priorityClassName: {{ .Values.postInstall.probeWebhook.priorityClassName }}
+      {{- end }}
       {{- if .Values.postInstall.probeWebhook.image.pullSecrets }}
       imagePullSecrets:
       {{- .Values.postInstall.probeWebhook.image.pullSecrets | toYaml | nindent 12 }}
@@ -44,5 +41,6 @@ spec:
       nodeSelector:
         {{- toYaml .nodeSelector | nindent 8 }}
       {{- end }}
+  backoffLimit: 3
 {{- end }}
 {{- end }}

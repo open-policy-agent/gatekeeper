@@ -13,6 +13,7 @@ metadata:
   namespace: '{{ .Release.Namespace }}'
 spec:
   replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   selector:
     matchLabels:
       app: '{{ template "gatekeeper.name" . }}'
@@ -22,6 +23,8 @@ spec:
       gatekeeper.sh/system: "yes"
       heritage: '{{ .Release.Service }}'
       release: '{{ .Release.Name }}'
+  strategy:
+    type: {{ .Values.controllerManager.strategyType }}
   template:
     metadata:
       annotations:
@@ -65,6 +68,8 @@ spec:
         - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
         - --max-serving-threads={{ .Values.maxServingThreads }}
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
+        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+        - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}
