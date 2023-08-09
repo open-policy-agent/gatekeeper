@@ -7,10 +7,7 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/connection"
 	prvd "github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/provider"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-var log = logf.Log.WithName("pubsub-system")
 
 type System struct {
 	mux         sync.RWMutex
@@ -43,15 +40,16 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, name 
 		if s.providers[name] == provider {
 			return conn.UpdateConnection(ctx, config)
 		}
-		// Otherwise, close the existing connection and create a new one.
-		if err := s.CloseConnection(name); err != nil {
-			return err
-		}
 	}
 	// Check if the provider is supported.
 	if newConnFunc, ok := prvd.List()[provider]; ok {
 		newConn, err := newConnFunc(ctx, config)
 		if err != nil {
+			return err
+		}
+
+		// Close the existing connection after successfully creating the new one.
+		if err := s.closeConnection(name); err != nil {
 			return err
 		}
 		// Add the new connection and provider to the maps.
@@ -65,13 +63,16 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, name 
 		s.providers[name] = provider
 		return nil
 	}
-	log.Info(fmt.Sprintf("Pub-sub provider %s is not supported", provider))
-	return nil
+	return fmt.Errorf("pub-sub provider %s is not supported", provider)
 }
 
 func (s *System) CloseConnection(connection string) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
+	return s.closeConnection(connection)
+}
+
+func (s *System) closeConnection(connection string) error {
 	if len(s.connections) > 0 {
 		if c, ok := s.connections[connection]; ok {
 			err := c.CloseConnection()

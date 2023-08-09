@@ -183,7 +183,12 @@ func (s *System) mutate(mutable *types.Mutable) (int, error) {
 			}
 
 			mutator := s.mutatorsMap[id]
-			if mutator.Matches(mutable) {
+			matches, err := mutator.Matches(mutable)
+			if err != nil {
+				return iteration, matchesErr(err, mutator.ID(), mutable.Object)
+			}
+
+			if matches {
 				mutated, err := mutator.Mutate(mutable)
 				if mutated {
 					appliedMutations = append(appliedMutations, mutator)
@@ -238,6 +243,15 @@ func (s *System) mutate(mutable *types.Mutable) (int, error) {
 func mutateErr(err error, uid uuid.UUID, mID types.ID, obj *unstructured.Unstructured) error {
 	return errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s",
 		uid,
+		mID,
+		obj.GroupVersionKind().Group,
+		obj.GroupVersionKind().Kind,
+		obj.GetNamespace(),
+		obj.GetName())
+}
+
+func matchesErr(err error, mID types.ID, obj *unstructured.Unstructured) error {
+	return errors.Wrapf(err, "matching for mutator %v failed for %s %s %s %s",
 		mID,
 		obj.GroupVersionKind().Group,
 		obj.GroupVersionKind().Kind,

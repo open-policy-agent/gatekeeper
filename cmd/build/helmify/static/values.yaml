@@ -1,4 +1,5 @@
 replicas: 3
+revisionHistoryLimit: 10
 auditInterval: 60
 metricsBackends: ["prometheus"]
 auditMatchKindOnly: false
@@ -17,7 +18,7 @@ validatingWebhookCustomRules: {}
 validatingWebhookURL: null
 enableDeleteOperations: false
 enableExternalData: true
-enableGeneratorResourceExpansion: false
+enableGeneratorResourceExpansion: true
 enableTLSHealthcheck: false
 maxServingThreads: -1
 mutatingWebhookName: gatekeeper-mutating-webhook-configuration
@@ -42,20 +43,20 @@ resourceQuota: true
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.13.0-beta.1
+  release: v3.14.0-beta.0
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.13.0-beta.1
+      tag: v3.14.0-beta.0
 postUpgrade:
   labelNamespace:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.0-beta.1
+      tag: v3.14.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -86,7 +87,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.0-beta.1
+      tag: v3.14.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -127,7 +128,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.0-beta.1
+      tag: v3.14.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""
@@ -164,6 +165,7 @@ controllerManager:
   disableCertRotation: false
   tlsMinVersion: 1.3
   clientCertName: ""
+  strategyType: RollingUpdate
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -214,7 +216,7 @@ audit:
   readinessTimeout: 1
   livenessTimeout: 1
   priorityClassName: system-cluster-critical
-  disableCertRotation: true
+  disableCertRotation: false
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
