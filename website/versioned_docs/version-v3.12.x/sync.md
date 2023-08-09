@@ -3,6 +3,8 @@ id: sync
 title: Replicating Data
 ---
 
+`Feature State`: The `Config` resource is currently alpha.
+
 > The "Config" resource must be named `config` for it to be reconciled by Gatekeeper. Gatekeeper will ignore the resource if you do not name it `config`.
 
 Some constraints are impossible to write without access to more state than just the object under test. For example, it is impossible to know if an ingress's hostname is unique among all ingresses unless a rule has access to all other ingresses. To make such rules possible, we enable syncing of data into OPA.

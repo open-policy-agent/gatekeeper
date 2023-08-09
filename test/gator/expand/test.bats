@@ -52,8 +52,10 @@ test_dir () {
  test_dir "expand-with-ns" 0
 }
 
+# the matching system will not err out when the namespace for
+# a resource is not defined but we DON'T use a namespace selector.
 @test "generator with a custom namespace but namespace config missing" {
- test_dir "expand-with-missing-ns" 1
+ test_dir "expand-with-missing-ns" 0
 }
 
 @test "expand into 2 resultants and write to file" {

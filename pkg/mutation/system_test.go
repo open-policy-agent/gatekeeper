@@ -36,8 +36,8 @@ type fakeMutator struct {
 	Default       *types.Anything
 }
 
-func (m *fakeMutator) Matches(*types.Mutable) bool {
-	return true // always matches
+func (m *fakeMutator) Matches(*types.Mutable) (bool, error) {
+	return true, nil // always matches
 }
 
 func (m *fakeMutator) Mutate(mutable *types.Mutable) (bool, error) {

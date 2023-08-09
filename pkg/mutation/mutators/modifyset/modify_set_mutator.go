@@ -36,12 +36,12 @@ type Mutator struct {
 // Mutator implements mutatorWithSchema.
 var _ schema.MutatorWithSchema = &Mutator{}
 
-func (m *Mutator) Matches(mutable *types.Mutable) bool {
+func (m *Mutator) Matches(mutable *types.Mutable) (bool, error) {
 	res, err := core.MatchWithApplyTo(mutable, m.modifySet.Spec.ApplyTo, &m.modifySet.Spec.Match)
 	if err != nil {
 		log.Error(err, "Matches failed for modify set", "modifyset", m.modifySet.Name)
 	}
-	return res
+	return res, err
 }
 
 func (m *Mutator) TerminalType() parser.NodeType {
