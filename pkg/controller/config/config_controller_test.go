@@ -498,6 +498,8 @@ func TestConfig_CacheContents(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm), "deleting configMap config-test-1")
 	})
+	cmKey, err := cachemanager.KeyFor(cm)
+	require.NoError(t, err)
 
 	cm2 := unstructuredFor(configMapGVK, "config-test-2")
 	cm2.SetNamespace("kube-system")
@@ -505,6 +507,8 @@ func TestConfig_CacheContents(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm2), "deleting configMap config-test-2")
 	})
+	cm2Key, err := cachemanager.KeyFor(cm2)
+	require.NoError(t, err)
 
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	require.NoError(t, err)
@@ -530,8 +534,8 @@ func TestConfig_CacheContents(t *testing.T) {
 	require.NoError(t, c.Create(ctx, config), "creating Config config")
 
 	expected := map[cachemanager.CfDataKey]interface{}{
-		{Gvk: nsGVK, Key: "default"}:                      nil,
-		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
+		{Gvk: nsGVK, Key: "default"}: nil,
+		cmKey:                        nil,
 		// kube-system namespace is being excluded, it should not be in opa cache
 	}
 	g.Eventually(func() bool {
@@ -555,20 +559,14 @@ func TestConfig_CacheContents(t *testing.T) {
 	// Expect our configMap to return at some point
 	// TODO: In the future it will remain instead of having to repopulate.
 	expected = map[cachemanager.CfDataKey]interface{}{
-		{
-			Gvk: configMapGVK,
-			Key: "default/config-test-1",
-		}: nil,
+		cmKey: nil,
 	}
 	g.Eventually(func() bool {
 		return opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "waiting for ConfigMap to repopulate in cache")
 
 	expected = map[cachemanager.CfDataKey]interface{}{
-		{
-			Gvk: configMapGVK,
-			Key: "kube-system/config-test-2",
-		}: nil,
+		cm2Key: nil,
 	}
 	g.Eventually(func() bool {
 		return !opaClient.Contains(expected)
@@ -701,9 +699,11 @@ func TestConfig_Retries(t *testing.T) {
 			t.Error(err)
 		}
 	}()
+	cmKey, err := cachemanager.KeyFor(cm)
+	require.NoError(t, err)
 
 	expected := map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: "default/config-test-1"}: nil,
+		cmKey: nil,
 	}
 	g.Eventually(func() bool {
 		return opaClient.Contains(expected)

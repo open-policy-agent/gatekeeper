@@ -44,13 +44,10 @@ var (
 	configMapGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 	podGVK       = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 
-	cm1Name           = "config-test-1"
-	cm2Name           = "config-test-2"
-	namespacedCm1Name = "default/config-test-1"
-	namespacedCm2Name = "default/config-test-2"
+	cm1Name = "config-test-1"
+	cm2Name = "config-test-2"
 
-	pod1Name           = "pod-test-1"
-	namespacedPod1Name = "default/pod-test-1"
+	pod1Name = "pod-test-1"
 )
 
 func TestMain(m *testing.M) {
@@ -87,19 +84,23 @@ func TestCacheManager_replay_retries(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", cm1Name))
 	})
+	cmKey, err := cachemanager.KeyFor(cm)
+	require.NoError(t, err)
 
 	pod := unstructuredFor(podGVK, pod1Name)
 	require.NoError(t, c.Create(ctx, pod), fmt.Sprintf("creating Pod %s", pod1Name))
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, pod), fmt.Sprintf("deleting resource %s", pod1Name))
 	})
+	podKey, err := cachemanager.KeyFor(pod)
+	require.NoError(t, err)
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK, podGVK}))
 
 	expected := map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: namespacedCm1Name}: nil,
-		{Gvk: podGVK, Key: namespacedPod1Name}:      nil,
+		cmKey:  nil,
+		podKey: nil,
 	}
 
 	require.Eventually(t, expectedCheck(cfClient, expected), eventuallyTimeout, eventuallyTicker)
@@ -110,7 +111,7 @@ func TestCacheManager_replay_retries(t *testing.T) {
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
 
 	expected2 := map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: namespacedCm1Name}: nil,
+		cmKey: nil,
 	}
 	require.Eventually(t, expectedCheck(cfClient, expected2), eventuallyTimeout, eventuallyTicker)
 }
@@ -134,18 +135,24 @@ func TestCacheManager_concurrent(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", cm1Name))
 	})
+	cmKey, err := cachemanager.KeyFor(cm)
+	require.NoError(t, err)
 
 	cm2 := unstructuredFor(configMapGVK, cm2Name)
 	require.NoError(t, c.Create(ctx, cm2), fmt.Sprintf("creating ConfigMap %s", cm2Name))
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm2), fmt.Sprintf("deleting resource %s", cm2Name))
 	})
+	cm2Key, err := cachemanager.KeyFor(cm2)
+	require.NoError(t, err)
 
 	pod := unstructuredFor(podGVK, pod1Name)
 	require.NoError(t, c.Create(ctx, pod), fmt.Sprintf("creating Pod %s", pod1Name))
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, pod), fmt.Sprintf("deleting resource %s", pod1Name))
 	})
+	podKey, err := cachemanager.KeyFor(pod)
+	require.NoError(t, err)
 
 	cfClient, ok := dataStore.(*cachemanager.FakeCfClient)
 	require.True(t, ok)
@@ -193,9 +200,9 @@ func TestCacheManager_concurrent(t *testing.T) {
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
 
 	expected := map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: namespacedCm1Name}: nil,
-		{Gvk: configMapGVK, Key: namespacedCm2Name}: nil,
-		{Gvk: podGVK, Key: namespacedPod1Name}:      nil,
+		cmKey:  nil,
+		cm2Key: nil,
+		podKey: nil,
 	}
 
 	require.Eventually(t, expectedCheck(cfClient, expected), eventuallyTimeout, eventuallyTicker)
@@ -237,12 +244,14 @@ func TestCacheManager_instance_updates(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", cm1Name))
 	})
+	cmKey, err := cachemanager.KeyFor(cm)
+	require.NoError(t, err)
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
 
 	expected := map[cachemanager.CfDataKey]interface{}{
-		{Gvk: configMapGVK, Key: namespacedCm1Name}: nil,
+		cmKey: nil,
 	}
 
 	require.Eventually(t, expectedCheck(cfClient, expected), eventuallyTimeout, eventuallyTicker)
@@ -252,7 +261,7 @@ func TestCacheManager_instance_updates(t *testing.T) {
 	require.NoError(t, c.Update(ctx, cmUpdate))
 
 	require.Eventually(t, func() bool {
-		instance := cfClient.GetData(cachemanager.CfDataKey{Gvk: configMapGVK, Key: namespacedCm1Name})
+		instance := cfClient.GetData(cmKey)
 		unInstance, ok := instance.(*unstructured.Unstructured)
 		require.True(t, ok)
 

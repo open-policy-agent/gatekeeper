@@ -38,9 +38,9 @@ type FakeCfClient struct {
 
 var _ CFDataClient = &FakeCfClient{}
 
-// keyFor returns a cfDataKey for the provided resource.
+// KeyFor returns a CfDataKey for the provided resource.
 // Returns error if the resource is not a runtime.Object w/ metadata.
-func (f *FakeCfClient) keyFor(obj interface{}) (CfDataKey, error) {
+func KeyFor(obj interface{}) (CfDataKey, error) {
 	o, ok := obj.(client.Object)
 	if !ok {
 		return CfDataKey{}, fmt.Errorf("expected runtime.Object, got: %T", obj)
@@ -62,7 +62,7 @@ func (f *FakeCfClient) AddData(ctx context.Context, data interface{}) (*constrai
 		return nil, fmt.Errorf("test error")
 	}
 
-	key, err := f.keyFor(data)
+	key, err := KeyFor(data)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (f *FakeCfClient) RemoveData(ctx context.Context, data interface{}) (*const
 		return &constraintTypes.Responses{}, nil
 	}
 
-	key, err := f.keyFor(data)
+	key, err := KeyFor(data)
 	if err != nil {
 		return nil, err
 	}
