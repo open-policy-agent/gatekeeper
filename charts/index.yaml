@@ -2,6 +2,21 @@ apiVersion: v1
 entries:
   gatekeeper:
   - apiVersion: v2
+    appVersion: v3.14.0-beta.0
+    created: "2023-08-09T19:35:49.632299705Z"
+    description: A Helm chart for Gatekeeper
+    digest: 63b4bedbbcd2715c2f8a0f6f26a1dd4ea107e7d53b2a24f5f1a67d8683d69fb7
+    home: https://github.com/open-policy-agent/gatekeeper
+    icon: https://open-policy-agent.github.io/gatekeeper/website/img/logo.svg
+    keywords:
+    - open policy agent
+    name: gatekeeper
+    sources:
+    - https://github.com/open-policy-agent/gatekeeper.git
+    urls:
+    - https://open-policy-agent.github.io/gatekeeper/charts/gatekeeper-3.14.0-beta.0.tgz
+    version: 3.14.0-beta.0
+  - apiVersion: v2
     appVersion: v3.13.0
     created: "2023-08-08T23:37:36.503979071Z"
     description: A Helm chart for Gatekeeper
@@ -865,4 +880,4 @@ entries:
     urls:
     - https://open-policy-agent.github.io/gatekeeper/charts/gatekeeper-v3.1.0-beta.9.tgz
     version: v3.1.0-beta.9
-generated: "2023-08-08T23:37:36.500097218Z"
+generated: "2023-08-09T19:35:49.627912796Z"
