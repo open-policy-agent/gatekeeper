@@ -36,9 +36,43 @@ Adds additional pod labels to the common ones
 */}}
 {{- define "gatekeeper.podLabels" -}}
 {{- if .Values.podLabels }}
-{{- toYaml .Values.podLabels | nindent 8 }}
+{{- toYaml .Values.podLabels }}
 {{- end }}
 {{- end -}}
+
+{{/*
+Mandatory labels
+*/}}
+{{- define "gatekeeper.mandatoryLabels" -}}
+app: {{ include "gatekeeper.name" . }}
+chart: {{ include "gatekeeper.name" . }}
+gatekeeper.sh/system: "yes"
+heritage: {{ .Release.Service }}
+release: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Common labels
+*/}}
+{{- define "gatekeeper.commonLabels" -}}
+helm.sh/chart: {{ include "gatekeeper.chart" . }}
+{{ include "gatekeeper.selectorLabels" . }}
+{{- if .Chart.Version }}
+app.kubernetes.io/version: {{ .Chart.Version | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- if .Values.commonLabels }}
+{{ toYaml .Values.commonLabels }}
+{{- end }}
+{{- end }}
+
+{{/*
+Selector labels
+*/}}
+{{- define "gatekeeper.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "gatekeeper.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
 
 {{/*
 Output post install webhook probe container entry
@@ -52,6 +86,7 @@ Output post install webhook probe container entry
   args:
     - "--retry"
     - "99999"
+    - "--retry-connrefused"
     - "--retry-max-time"
     - "{{ .Values.postInstall.probeWebhook.waitTimeout }}"
     - "--retry-delay"
