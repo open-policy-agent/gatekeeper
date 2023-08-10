@@ -63,14 +63,6 @@ type GetPodInjector interface {
 	InjectGetPod(func(context.Context) (*corev1.Pod, error))
 }
 
-type GetProcessExcluderInjector interface {
-	InjectProcessExcluder(processExcluder *process.Excluder)
-}
-
-type WatchSetInjector interface {
-	InjectWatchSet(watchSet *watch.Set)
-}
-
 type PubsubInjector interface {
 	InjectPubsubSystem(pubsubSystem *pubsub.System)
 }
@@ -219,12 +211,6 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		a.InjectProviderCache(deps.ProviderCache)
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)
-		}
-		if a2, ok := a.(GetProcessExcluderInjector); ok {
-			a2.InjectProcessExcluder(deps.ProcessExcluder)
-		}
-		if a2, ok := a.(WatchSetInjector); ok {
-			a2.InjectWatchSet(deps.WatchSet)
 		}
 		if a2, ok := a.(PubsubInjector); ok {
 			a2.InjectPubsubSystem(deps.PubsubSystem)

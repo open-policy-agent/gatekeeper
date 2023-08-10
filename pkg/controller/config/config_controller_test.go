@@ -168,7 +168,7 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, cacheManager.Start(ctx))
 	}()
 
-	rec, err := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, watchSet)
+	rec, err := newReconciler(mgr, cacheManager, cs, tracker)
 	require.NoError(t, err)
 
 	recFn, requests := SetupTestReconcile(rec)
@@ -459,7 +459,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 		_ = cacheManager.Start(ctx)
 	}()
 
-	rec, err := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, watchSet)
+	rec, err := newReconciler(mgr, cacheManager, cs, tracker)
 	if err != nil {
 		return nil, fmt.Errorf("creating reconciler: %w", err)
 	}
@@ -647,7 +647,7 @@ func TestConfig_Retries(t *testing.T) {
 		assert.NoError(t, cacheManager.Start(ctx))
 	}()
 
-	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, watchSet)
+	rec, _ := newReconciler(mgr, cacheManager, cs, tracker)
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)

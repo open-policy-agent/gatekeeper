@@ -51,19 +51,15 @@ const (
 var log = logf.Log.WithName("controller").WithValues("kind", "Config")
 
 type Adder struct {
-	Opa              *constraintclient.Client
-	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
-	ProcessExcluder  *process.Excluder
-	WatchSet         *watch.Set
 	CacheManager     *cm.CacheManager
 }
 
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.CacheManager, a.WatchManager, a.ControllerSwitch, a.Tracker, a.ProcessExcluder, a.WatchSet)
+	r, err := newReconciler(mgr, a.CacheManager, a.ControllerSwitch, a.Tracker)
 	if err != nil {
 		return err
 	}
@@ -71,13 +67,9 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(o *constraintclient.Client) {
-	a.Opa = o
-}
+func (a *Adder) InjectOpa(_ *constraintclient.Client) {}
 
-func (a *Adder) InjectWatchManager(wm *watch.Manager) {
-	a.WatchManager = wm
-}
+func (a *Adder) InjectWatchManager(_ *watch.Manager) {}
 
 func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 	a.ControllerSwitch = cs
@@ -87,28 +79,20 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
 
-func (a *Adder) InjectProcessExcluder(m *process.Excluder) {
-	a.ProcessExcluder = m
-}
-
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
 
 func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
 
 func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 
-func (a *Adder) InjectWatchSet(watchSet *watch.Set) {
-	a.WatchSet = watchSet
-}
-
 func (a *Adder) InjectCacheManager(cm *cm.CacheManager) {
 	a.CacheManager = cm
 }
 
 // newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, cm *cm.CacheManager, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, watchSet *watch.Set) (*ReconcileConfig, error) {
-	if watchSet == nil {
-		return nil, fmt.Errorf("watchSet must be non-nil")
+func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.ControllerSwitch, tracker *readiness.Tracker) (*ReconcileConfig, error) {
+	if cm == nil {
+		return nil, fmt.Errorf("cacheManager must be non-nil")
 	}
 
 	return &ReconcileConfig{
