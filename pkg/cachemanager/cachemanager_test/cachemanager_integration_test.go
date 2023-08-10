@@ -76,7 +76,7 @@ func TestCacheManager_replay_retries(t *testing.T) {
 	cacheManager := testResources.CacheManager
 	dataStore := testResources.CFDataClient
 
-	cfClient, ok := dataStore.(*cachemanager.FakeCfClient)
+	cfClient, ok := dataStore.(*fakes.FakeCfClient)
 	require.True(t, ok)
 
 	cm := unstructuredFor(configMapGVK, cm1Name)
@@ -84,7 +84,7 @@ func TestCacheManager_replay_retries(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", cm1Name))
 	})
-	cmKey, err := cachemanager.KeyFor(cm)
+	cmKey, err := fakes.KeyFor(cm)
 	require.NoError(t, err)
 
 	pod := unstructuredFor(podGVK, pod1Name)
@@ -92,13 +92,13 @@ func TestCacheManager_replay_retries(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, pod), fmt.Sprintf("deleting resource %s", pod1Name))
 	})
-	podKey, err := cachemanager.KeyFor(pod)
+	podKey, err := fakes.KeyFor(pod)
 	require.NoError(t, err)
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK, podGVK}))
 
-	expected := map[cachemanager.CfDataKey]interface{}{
+	expected := map[fakes.CfDataKey]interface{}{
 		cmKey:  nil,
 		podKey: nil,
 	}
@@ -110,7 +110,7 @@ func TestCacheManager_replay_retries(t *testing.T) {
 	// this call should schedule a cache wipe and a replay for the configMapGVK
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
 
-	expected2 := map[cachemanager.CfDataKey]interface{}{
+	expected2 := map[fakes.CfDataKey]interface{}{
 		cmKey: nil,
 	}
 	require.Eventually(t, expectedCheck(cfClient, expected2), eventuallyTimeout, eventuallyTicker)
@@ -135,7 +135,7 @@ func TestCacheManager_concurrent(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", cm1Name))
 	})
-	cmKey, err := cachemanager.KeyFor(cm)
+	cmKey, err := fakes.KeyFor(cm)
 	require.NoError(t, err)
 
 	cm2 := unstructuredFor(configMapGVK, cm2Name)
@@ -143,7 +143,7 @@ func TestCacheManager_concurrent(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm2), fmt.Sprintf("deleting resource %s", cm2Name))
 	})
-	cm2Key, err := cachemanager.KeyFor(cm2)
+	cm2Key, err := fakes.KeyFor(cm2)
 	require.NoError(t, err)
 
 	pod := unstructuredFor(podGVK, pod1Name)
@@ -151,10 +151,10 @@ func TestCacheManager_concurrent(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, pod), fmt.Sprintf("deleting resource %s", pod1Name))
 	})
-	podKey, err := cachemanager.KeyFor(pod)
+	podKey, err := fakes.KeyFor(pod)
 	require.NoError(t, err)
 
-	cfClient, ok := dataStore.(*cachemanager.FakeCfClient)
+	cfClient, ok := dataStore.(*fakes.FakeCfClient)
 	require.True(t, ok)
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
@@ -199,7 +199,7 @@ func TestCacheManager_concurrent(t *testing.T) {
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
 
-	expected := map[cachemanager.CfDataKey]interface{}{
+	expected := map[fakes.CfDataKey]interface{}{
 		cmKey:  nil,
 		cm2Key: nil,
 		podKey: nil,
@@ -221,7 +221,7 @@ func TestCacheManager_concurrent(t *testing.T) {
 	require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceOne))
 	require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceTwo))
 
-	require.Eventually(t, expectedCheck(cfClient, map[cachemanager.CfDataKey]interface{}{}), eventuallyTimeout, eventuallyTicker)
+	require.Eventually(t, expectedCheck(cfClient, map[fakes.CfDataKey]interface{}{}), eventuallyTimeout, eventuallyTicker)
 	require.True(t, len(agg.GVKs()) == 0)
 }
 
@@ -236,7 +236,7 @@ func TestCacheManager_instance_updates(t *testing.T) {
 	cacheManager := testResources.CacheManager
 	dataStore := testResources.CFDataClient
 
-	cfClient, ok := dataStore.(*cachemanager.FakeCfClient)
+	cfClient, ok := dataStore.(*fakes.FakeCfClient)
 	require.True(t, ok)
 
 	cm := unstructuredFor(configMapGVK, cm1Name)
@@ -244,13 +244,13 @@ func TestCacheManager_instance_updates(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm), fmt.Sprintf("deleting resource %s", cm1Name))
 	})
-	cmKey, err := cachemanager.KeyFor(cm)
+	cmKey, err := fakes.KeyFor(cm)
 	require.NoError(t, err)
 
 	syncSourceOne := aggregator.Key{Source: "source_a", ID: "ID_a"}
 	require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
 
-	expected := map[cachemanager.CfDataKey]interface{}{
+	expected := map[fakes.CfDataKey]interface{}{
 		cmKey: nil,
 	}
 
@@ -282,7 +282,7 @@ func deleteResource(ctx context.Context, c client.Client, resounce *unstructured
 	return err
 }
 
-func expectedCheck(cfClient *cachemanager.FakeCfClient, expected map[cachemanager.CfDataKey]interface{}) func() bool {
+func expectedCheck(cfClient *fakes.FakeCfClient, expected map[fakes.CfDataKey]interface{}) func() bool {
 	return func() bool {
 		if cfClient.Len() != len(expected) {
 			return false
@@ -325,7 +325,7 @@ func makeTestResources(t *testing.T, mgr manager.Manager, wm *watch.Manager, rea
 		cancelFunc()
 	})
 
-	cfClient := &cachemanager.FakeCfClient{}
+	cfClient := &fakes.FakeCfClient{}
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	require.NoError(t, err)
 	processExcluder := process.Get()

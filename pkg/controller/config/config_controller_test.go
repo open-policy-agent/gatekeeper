@@ -136,7 +136,7 @@ func TestReconcile(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	opaClient := &cachemanager.FakeCfClient{}
+	opaClient := &fakes.FakeCfClient{}
 
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
@@ -290,7 +290,7 @@ func TestReconcile(t *testing.T) {
 	require.NoError(t, cacheManager.AddObject(ctx, fooPod))
 
 	// fooPod should be namespace excluded, hence not added to the cache
-	require.False(t, opaClient.Contains(map[cachemanager.CfDataKey]interface{}{{Gvk: fooPod.GroupVersionKind(), Key: "default"}: struct{}{}}))
+	require.False(t, opaClient.Contains(map[fakes.CfDataKey]interface{}{{Gvk: fooPod.GroupVersionKind(), Key: "default"}: struct{}{}}))
 
 	cs.Stop()
 }
@@ -418,7 +418,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 	// initialize OPA
 	var opaClient cachemanager.CFDataClient
 	if useFakeOpa {
-		opaClient = &cachemanager.FakeCfClient{}
+		opaClient = &fakes.FakeCfClient{}
 	} else {
 		driver, err := rego.New(rego.Tracing(true))
 		if err != nil {
@@ -511,7 +511,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm), "deleting configMap config-test-1")
 	})
-	cmKey, err := cachemanager.KeyFor(cm)
+	cmKey, err := fakes.KeyFor(cm)
 	require.NoError(t, err)
 
 	cm2 := unstructuredFor(configMapGVK, "config-test-2")
@@ -520,7 +520,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, deleteResource(ctx, c, cm2), "deleting configMap config-test-2")
 	})
-	cm2Key, err := cachemanager.KeyFor(cm2)
+	cm2Key, err := fakes.KeyFor(cm2)
 	require.NoError(t, err)
 
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
@@ -530,7 +530,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	opa, err := setupController(ctx, mgr, wm, tracker, events, c, true)
 	require.NoError(t, err, "failed to set up controller")
 
-	opaClient, ok := opa.(*cachemanager.FakeCfClient)
+	opaClient, ok := opa.(*fakes.FakeCfClient)
 	require.True(t, ok)
 
 	testutils.StartManager(ctx, t, mgr)
@@ -539,7 +539,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	config := configFor([]schema.GroupVersionKind{nsGVK, configMapGVK})
 	require.NoError(t, c.Create(ctx, config), "creating Config config")
 
-	expected := map[cachemanager.CfDataKey]interface{}{
+	expected := map[fakes.CfDataKey]interface{}{
 		{Gvk: nsGVK, Key: "default"}: nil,
 		cmKey:                        nil,
 		// kube-system namespace is being excluded, it should not be in opa cache
@@ -564,14 +564,14 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	// Expect our configMap to return at some point
 	// TODO: In the future it will remain instead of having to repopulate.
-	expected = map[cachemanager.CfDataKey]interface{}{
+	expected = map[fakes.CfDataKey]interface{}{
 		cmKey: nil,
 	}
 	g.Eventually(func() bool {
 		return opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "waiting for ConfigMap to repopulate in cache")
 
-	expected = map[cachemanager.CfDataKey]interface{}{
+	expected = map[fakes.CfDataKey]interface{}{
 		cm2Key: nil,
 	}
 	g.Eventually(func() bool {
@@ -617,7 +617,7 @@ func TestConfig_Retries(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	opaClient := &cachemanager.FakeCfClient{}
+	opaClient := &fakes.FakeCfClient{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
@@ -705,10 +705,10 @@ func TestConfig_Retries(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	cmKey, err := cachemanager.KeyFor(cm)
+	cmKey, err := fakes.KeyFor(cm)
 	require.NoError(t, err)
 
-	expected := map[cachemanager.CfDataKey]interface{}{
+	expected := map[fakes.CfDataKey]interface{}{
 		cmKey: nil,
 	}
 	g.Eventually(func() bool {

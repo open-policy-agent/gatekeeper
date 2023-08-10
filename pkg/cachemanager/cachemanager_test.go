@@ -35,7 +35,7 @@ func makeCacheManager(t *testing.T) (*CacheManager, context.Context) {
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
-	cfClient := &FakeCfClient{}
+	cfClient := &fakes.FakeCfClient{}
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	require.NoError(t, err)
 	processExcluder := process.Get()
@@ -75,7 +75,7 @@ func makeCacheManager(t *testing.T) (*CacheManager, context.Context) {
 func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 	configMapGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 	dataClientForTest := func() CFDataClient {
-		cfdc := &FakeCfClient{}
+		cfdc := &fakes.FakeCfClient{}
 
 		cm := unstructuredFor(configMapGVK, "config-test-1")
 		_, err := cfdc.AddData(context.Background(), cm)
@@ -88,7 +88,7 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 	tcs := []struct {
 		name         string
 		cm           *CacheManager
-		expectedData map[CfDataKey]interface{}
+		expectedData map[fakes.CfDataKey]interface{}
 	}{
 		{
 			name: "wipe cache if there are gvks to remove",
@@ -101,7 +101,7 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 				}(),
 				syncMetricsCache: syncutil.NewMetricsCache(),
 			},
-			expectedData: map[CfDataKey]interface{}{},
+			expectedData: map[fakes.CfDataKey]interface{}{},
 		},
 		{
 			name: "wipe cache if there are excluder changes",
@@ -111,7 +111,7 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 				syncMetricsCache:      syncutil.NewMetricsCache(),
 				gvksToDeleteFromCache: watch.NewSet(),
 			},
-			expectedData: map[CfDataKey]interface{}{},
+			expectedData: map[fakes.CfDataKey]interface{}{},
 		},
 		{
 			name: "don't wipe cache if no excluder changes or no gvks to delete",
@@ -120,13 +120,13 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 				syncMetricsCache:      syncutil.NewMetricsCache(),
 				gvksToDeleteFromCache: watch.NewSet(),
 			},
-			expectedData: map[CfDataKey]interface{}{{Gvk: configMapGVK, Key: "default/config-test-1"}: nil},
+			expectedData: map[fakes.CfDataKey]interface{}{{Gvk: configMapGVK, Key: "default/config-test-1"}: nil},
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			cfClient, ok := tc.cm.cfClient.(*FakeCfClient)
+			cfClient, ok := tc.cm.cfClient.(*fakes.FakeCfClient)
 			require.True(t, ok)
 
 			tc.cm.wipeCacheIfNeeded(context.Background())
@@ -151,12 +151,12 @@ func TestCacheManager_AddObject(t *testing.T) {
 		cm                   *CacheManager
 		expectSyncMetric     bool
 		expectedMetricStatus metrics.Status
-		expectedData         map[CfDataKey]interface{}
+		expectedData         map[fakes.CfDataKey]interface{}
 	}{
 		{
 			name: "AddObject happy path",
 			cm: &CacheManager{
-				cfClient: &FakeCfClient{},
+				cfClient: &fakes.FakeCfClient{},
 				watchedSet: func() *watch.Set {
 					ws := watch.NewSet()
 					ws.Add(pod.GroupVersionKind())
@@ -167,26 +167,26 @@ func TestCacheManager_AddObject(t *testing.T) {
 				syncMetricsCache: syncutil.NewMetricsCache(),
 				processExcluder:  process.Get(),
 			},
-			expectedData:         map[CfDataKey]interface{}{{Gvk: pod.GroupVersionKind(), Key: "test-ns/test-name"}: nil},
+			expectedData:         map[fakes.CfDataKey]interface{}{{Gvk: pod.GroupVersionKind(), Key: "test-ns/test-name"}: nil},
 			expectSyncMetric:     true,
 			expectedMetricStatus: metrics.ActiveStatus,
 		},
 		{
 			name: "AddObject has no effect if GVK is not watched",
 			cm: &CacheManager{
-				cfClient:         &FakeCfClient{},
+				cfClient:         &fakes.FakeCfClient{},
 				watchedSet:       watch.NewSet(),
 				tracker:          readiness.NewTracker(mgr.GetAPIReader(), false, false, false),
 				syncMetricsCache: syncutil.NewMetricsCache(),
 				processExcluder:  process.Get(),
 			},
-			expectedData:     map[CfDataKey]interface{}{},
+			expectedData:     map[fakes.CfDataKey]interface{}{},
 			expectSyncMetric: false,
 		},
 		{
 			name: "AddObject has no effect if GVK is process excluded",
 			cm: &CacheManager{
-				cfClient: &FakeCfClient{},
+				cfClient: &fakes.FakeCfClient{},
 				watchedSet: func() *watch.Set {
 					ws := watch.NewSet()
 					ws.Add(pod.GroupVersionKind())
@@ -206,14 +206,14 @@ func TestCacheManager_AddObject(t *testing.T) {
 					return processExcluder
 				}(),
 			},
-			expectedData:     map[CfDataKey]interface{}{},
+			expectedData:     map[fakes.CfDataKey]interface{}{},
 			expectSyncMetric: false,
 		},
 		{
 			name: "AddObject sets metrics on error from cfdataclient",
 			cm: &CacheManager{
 				cfClient: func() CFDataClient {
-					c := &FakeCfClient{}
+					c := &fakes.FakeCfClient{}
 					c.SetErroring(true)
 					return c
 				}(),
@@ -227,7 +227,7 @@ func TestCacheManager_AddObject(t *testing.T) {
 				syncMetricsCache: syncutil.NewMetricsCache(),
 				processExcluder:  process.Get(),
 			},
-			expectedData:         map[CfDataKey]interface{}{},
+			expectedData:         map[fakes.CfDataKey]interface{}{},
 			expectSyncMetric:     true,
 			expectedMetricStatus: metrics.ErrorStatus,
 		},
@@ -245,10 +245,10 @@ func TestCacheManager_AddObject(t *testing.T) {
 	}
 }
 
-func assertExpecations(t *testing.T, cm *CacheManager, instance *unstructured.Unstructured, expectedData map[CfDataKey]interface{}, expectSyncMetric bool, expectedMetricStatus *metrics.Status) {
+func assertExpecations(t *testing.T, cm *CacheManager, instance *unstructured.Unstructured, expectedData map[fakes.CfDataKey]interface{}, expectSyncMetric bool, expectedMetricStatus *metrics.Status) {
 	t.Helper()
 
-	cfClient, ok := cm.cfClient.(*FakeCfClient)
+	cfClient, ok := cm.cfClient.(*fakes.FakeCfClient)
 	require.True(t, ok)
 
 	require.True(t, cfClient.Contains(expectedData))
@@ -273,8 +273,8 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 
 	mgr, _ := testutils.SetupManager(t, cfg)
 	tracker := readiness.NewTracker(mgr.GetAPIReader(), false, false, false)
-	makeDataClient := func() *FakeCfClient {
-		c := &FakeCfClient{}
+	makeDataClient := func() *fakes.FakeCfClient {
+		c := &fakes.FakeCfClient{}
 		_, err := c.AddData(context.Background(), &unstructured.Unstructured{Object: unstructuredPod})
 		require.NoError(t, err)
 
@@ -285,7 +285,7 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 		name             string
 		cm               *CacheManager
 		expectSyncMetric bool
-		expectedData     map[CfDataKey]interface{}
+		expectedData     map[fakes.CfDataKey]interface{}
 	}{
 		{
 			name: "RemoveObject happy path",
@@ -301,7 +301,7 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 				syncMetricsCache: syncutil.NewMetricsCache(),
 				processExcluder:  process.Get(),
 			},
-			expectedData:     map[CfDataKey]interface{}{},
+			expectedData:     map[fakes.CfDataKey]interface{}{},
 			expectSyncMetric: false,
 		},
 		{
@@ -313,7 +313,7 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 				syncMetricsCache: syncutil.NewMetricsCache(),
 				processExcluder:  process.Get(),
 			},
-			expectedData:     map[CfDataKey]interface{}{},
+			expectedData:     map[fakes.CfDataKey]interface{}{},
 			expectSyncMetric: false,
 		},
 		{
@@ -339,7 +339,7 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 					return processExcluder
 				}(),
 			},
-			expectedData:     map[CfDataKey]interface{}{},
+			expectedData:     map[fakes.CfDataKey]interface{}{},
 			expectSyncMetric: false,
 		},
 	}
