@@ -305,7 +305,7 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 			expectSyncMetric: false,
 		},
 		{
-			name: "RemoveObject has no effect if GVK is not watched",
+			name: "RemoveObject succeeds even if GVK is not watched",
 			cm: &CacheManager{
 				cfClient:         makeDataClient(),
 				watchedSet:       watch.NewSet(),
@@ -313,7 +313,7 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 				syncMetricsCache: syncutil.NewMetricsCache(),
 				processExcluder:  process.Get(),
 			},
-			expectedData:     map[CfDataKey]interface{}{{Gvk: pod.GroupVersionKind(), Key: "test-ns/test-name"}: nil},
+			expectedData:     map[CfDataKey]interface{}{},
 			expectSyncMetric: false,
 		},
 		{

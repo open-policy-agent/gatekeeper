@@ -172,24 +172,24 @@ func TestCacheManager_concurrent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
-			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
+			assert.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{configMapGVK}))
+			assert.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{podGVK}))
 		}()
 
 		time.Sleep(time.Duration(r.Intn(jitterUpperBound)) * time.Millisecond)
 		go func() {
 			defer wg.Done()
 
-			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{podGVK}))
-			require.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{configMapGVK}))
+			assert.NoError(t, cacheManager.UpsertSource(ctx, syncSourceOne, []schema.GroupVersionKind{podGVK}))
+			assert.NoError(t, cacheManager.UpsertSource(ctx, syncSourceTwo, []schema.GroupVersionKind{configMapGVK}))
 		}()
 
 		time.Sleep(time.Duration(r.Intn(jitterUpperBound)) * time.Millisecond)
 		go func() {
 			defer wg.Done()
 
-			require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceTwo))
-			require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceOne))
+			assert.NoError(t, cacheManager.RemoveSource(ctx, syncSourceTwo))
+			assert.NoError(t, cacheManager.RemoveSource(ctx, syncSourceOne))
 		}()
 	}
 
@@ -321,6 +321,9 @@ type testResources struct {
 
 func makeTestResources(t *testing.T, mgr manager.Manager, wm *watch.Manager, reader client.Reader) (testResources, context.Context) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancelFunc()
+	})
 
 	cfClient := &cachemanager.FakeCfClient{}
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
@@ -358,14 +361,10 @@ func makeTestResources(t *testing.T, mgr manager.Manager, wm *watch.Manager, rea
 	}
 	require.NoError(t, syncAdder.Add(mgr), "registering sync controller")
 	go func() {
-		require.NoError(t, cacheManager.Start(ctx))
+		assert.NoError(t, cacheManager.Start(ctx))
 	}()
 
 	testutils.StartManager(ctx, t, mgr)
-
-	t.Cleanup(func() {
-		cancelFunc()
-	})
 
 	return testResources{cacheManager, cfClient, aggregator}, ctx
 }

@@ -97,6 +97,14 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 func TestReconcile(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	g := gomega.NewGomegaWithT(t)
+	once := gosync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			cancelFunc()
+		})
+	}
+
+	defer testMgrStopped()
 
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
@@ -157,7 +165,7 @@ func TestReconcile(t *testing.T) {
 
 	// start the cache manager
 	go func() {
-		require.NoError(t, cacheManager.Start(ctx))
+		assert.NoError(t, cacheManager.Start(ctx))
 	}()
 
 	rec, err := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, watchSet)
@@ -167,14 +175,6 @@ func TestReconcile(t *testing.T) {
 	require.NoError(t, add(mgr, recFn))
 
 	testutils.StartManager(ctx, t, mgr)
-	once := gosync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-		})
-	}
-
-	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
 	err = c.Create(ctx, instance)
@@ -284,12 +284,14 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, c.Create(ctx, fooPod))
-	// fooPod should be namespace excluded, hence not synced
-	g.Eventually(opaClient.Contains(map[cachemanager.CfDataKey]interface{}{{Gvk: fooPod.GroupVersionKind(), Key: "default"}: struct{}{}}), timeout).ShouldNot(gomega.BeTrue())
 
-	require.NoError(t, c.Delete(ctx, fooPod))
-	testMgrStopped()
+	// directly call cacheManager to avoid any race condition
+	// between adding the pod and the sync_controller calling AddObject
+	require.NoError(t, cacheManager.AddObject(ctx, fooPod))
+
+	// fooPod should be namespace excluded, hence not added to the cache
+	require.False(t, opaClient.Contains(map[cachemanager.CfDataKey]interface{}{{Gvk: fooPod.GroupVersionKind(), Key: "default"}: struct{}{}}))
+
 	cs.Stop()
 }
 
@@ -319,7 +321,15 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 			},
 		},
 	}
+
 	ctx, cancelFunc := context.WithCancel(context.Background())
+	once := gosync.Once{}
+	defer func() {
+		once.Do(func() {
+			cancelFunc()
+		})
+	}()
+
 	err := c.Create(ctx, instance)
 	if err != nil {
 		t.Fatal(err)
@@ -367,12 +377,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 
 	// start manager that will start tracker and controller
 	testutils.StartManager(ctx, t, mgr)
-	once := gosync.Once{}
-	defer func() {
-		once.Do(func() {
-			cancelFunc()
-		})
-	}()
+
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 
 	// get the object tracker for the synconly pod resource
@@ -477,6 +482,14 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 // Verify the Opa cache is populated based on the config resource.
 func TestConfig_CacheContents(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
+	once := gosync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			cancelFunc()
+		})
+	}
+	defer testMgrStopped()
+
 	// Setup the Manager and Controller.
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
@@ -521,13 +534,6 @@ func TestConfig_CacheContents(t *testing.T) {
 	require.True(t, ok)
 
 	testutils.StartManager(ctx, t, mgr)
-	once := gosync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-		})
-	}
-	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
 	config := configFor([]schema.GroupVersionKind{nsGVK, configMapGVK})
@@ -586,6 +592,14 @@ func TestConfig_CacheContents(t *testing.T) {
 
 func TestConfig_Retries(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
+	once := gosync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			cancelFunc()
+		})
+	}
+	defer testMgrStopped()
+
 	g := gomega.NewGomegaWithT(t)
 	nsGVK := schema.GroupVersionKind{
 		Group:   "",
@@ -630,7 +644,7 @@ func TestConfig_Retries(t *testing.T) {
 	})
 	require.NoError(t, err)
 	go func() {
-		require.NoError(t, cacheManager.Start(ctx))
+		assert.NoError(t, cacheManager.Start(ctx))
 	}()
 
 	rec, _ := newReconciler(mgr, cacheManager, wm, cs, tracker, processExcluder, watchSet)
@@ -663,14 +677,6 @@ func TestConfig_Retries(t *testing.T) {
 	}
 
 	testutils.StartManager(ctx, t, mgr)
-	once := gosync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-		})
-	}
-
-	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
 	g.Eventually(func() error {

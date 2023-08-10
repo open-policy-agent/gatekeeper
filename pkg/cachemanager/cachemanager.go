@@ -111,8 +111,7 @@ func (c *CacheManager) Start(ctx context.Context) error {
 }
 
 // UpsertSource adjusts the watched set of gvks according to the newGVKs passed in
-// for a given sourceKey.
-// Callers are responsible for retrying on error.
+// for a given sourceKey. Callers are responsible for retrying on error.
 func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Key, newGVKs []schema.GroupVersionKind) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -139,8 +138,7 @@ func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Ke
 }
 
 // replaceWatchSet looks at the gvksToSync and makes changes to the registrar's watch set.
-// assumes caller has lock.
-// On error, actual watch state may not align with intended watch state.
+// Assumes caller has lock. On error, actual watch state may not align with intended watch state.
 func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	newWatchSet := watch.NewSet()
 	newWatchSet.Add(c.gvksToSync.GVKs()...)
@@ -159,8 +157,7 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	return innerError
 }
 
-// RemoveSource removes the watches of the GVKs for a given aggregator.Key.
-// Callers are responsible for retrying on error.
+// RemoveSource removes the watches of the GVKs for a given aggregator.Key. Callers are responsible for retrying on error.
 func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Key) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -241,12 +238,8 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 }
 
 func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.Unstructured) error {
-	gvk := instance.GroupVersionKind()
-
-	if c.watchesGVK(gvk) {
-		if _, err := c.cfClient.RemoveData(ctx, instance); err != nil {
-			return err
-		}
+	if _, err := c.cfClient.RemoveData(ctx, instance); err != nil {
+		return err
 	}
 
 	// only delete from metrics map if the data removal was successful
@@ -383,8 +376,7 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 
 // wipeCacheIfNeeded performs a cache wipe if there are any gvks needing to be removed
 // from the cache or if the excluder has changed. It also marks which gvks need to be
-// re listed again in the cf data cache after the wipe.
-// assumes the caller has lock.
+// re listed again in the cf data cache after the wipe. Assumes the caller has lock.
 func (c *CacheManager) wipeCacheIfNeeded(ctx context.Context) {
 	// remove any gvks not needing to be synced anymore
 	// or re evaluate all if the excluder changed.
