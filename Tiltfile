@@ -16,8 +16,6 @@ allow_k8s_contexts(settings.get("allowed_contexts", []))
 if settings.get("trigger_mode", "auto").lower() == "manual":
     trigger_mode(TRIGGER_MODE_MANUAL)
 
-LDFLAGS = "-X github.com/open-policy-agent/gatekeeper/pkg/version.Version=latest"
-
 TILT_DOCKERFILE = """
 FROM golang:1.20-bullseye as tilt-helper
 # Support live reloading with Tilt
@@ -36,8 +34,7 @@ COPY bin/manager .
 def build_manager():
     cmd = [
         "make tilt-prepare",
-        "GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod vendor -a -ldflags \"" +
-        LDFLAGS + "\" -o .tiltbuild/bin/manager",
+        "GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod vendor -a -o .tiltbuild/bin/manager",
     ]
     local_resource(
         "manager",
@@ -90,7 +87,8 @@ def deploy_gatekeeper():
         name="gatekeeper",
         namespace="gatekeeper-system",
         values=[".tiltbuild/charts/gatekeeper/values.yaml"],
-        set=["{}={}".format(k, str(v).lower()) for k, v in helm_values.items()],
+        set=["{}={}".format(k, str(v).lower())
+             for k, v in helm_values.items()],
     ))
 
     # add label to resources
@@ -102,15 +100,18 @@ def deploy_gatekeeper():
         port = int(helm_values["audit.metricsPort"])
         k8s_resource(
             workload="gatekeeper-audit",
-            port_forwards=[port_forward(port, name="View metrics", link_path="/metrics")],
+            port_forwards=[port_forward(
+                port, name="View metrics", link_path="/metrics")],
         )
 
     if "controllerManager.metricsPort" in helm_values:
         port = int(helm_values["controllerManager.metricsPort"])
         k8s_resource(
             workload="gatekeeper-controller-manager",
-            port_forwards=[port_forward(port, name="View metrics", link_path="/metrics")],
+            port_forwards=[port_forward(
+                port, name="View metrics", link_path="/metrics")],
         )
+
 
 build_manager()
 

@@ -22,7 +22,7 @@ ENV GO111MODULE=on \
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper
 COPY . .
 
-RUN go build -mod vendor -a -ldflags "${LDFLAGS:--X github.com/open-policy-agent/gatekeeper/pkg/version.Version=latest}" -o manager
+RUN go build -mod vendor -a -ldflags "${LDFLAGS}" -o manager
 
 FROM $BASEIMAGE
 

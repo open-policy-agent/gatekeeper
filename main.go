@@ -204,7 +204,8 @@ func innerMain() int {
 	}
 
 	config := ctrl.GetConfigOrDie()
-	config.UserAgent = version.GetUserAgent()
+	config.UserAgent = version.GetUserAgent("gatekeeper")
+	setupLog.Info("setting up manager", "user agent", config.UserAgent)
 
 	var webhooks []rotator.WebhookInfo
 	webhooks = webhook.AppendValidationWebhookIfEnabled(webhooks)
