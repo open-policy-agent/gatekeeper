@@ -6,18 +6,21 @@ import (
 	"runtime/debug"
 )
 
-const gatorState = "beta"
+const (
+	gatorState = "beta"
+	unknown    = "unknown"
+)
 
 // Version is the gatekeeper version.
 var Version string
 
 // GetUserAgent returns Gatekeeper and Gator version information.
 func GetUserAgent(name string) string {
-	vcsrevision := "unknown"
-	vcstimestamp := "unknown"
+	vcsrevision := unknown
+	vcstimestamp := unknown
 	vcsdirty := ""
-	opaVersion := "unknown"
-	frameworksVersion := "unknown"
+	opaVersion := unknown
+	frameworksVersion := unknown
 
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, v := range info.Settings {
