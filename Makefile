@@ -26,8 +26,6 @@ BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
 YQ_VERSION ?= 4.30.6
-FRAMEWORKS_VERSION ?= $(shell go list -f '{{ .Version }}' -m github.com/open-policy-agent/frameworks/constraint)
-OPA_VERSION ?= $(shell go list -f '{{ .Version }}' -m github.com/open-policy-agent/opa)
 
 HELM_ARGS ?=
 GATEKEEPER_NAMESPACE ?= gatekeeper-system
@@ -45,9 +43,7 @@ FAKE_SUBSCRIBER_IMAGE ?= fake-subscriber:latest
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
 
-LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/pkg/version.Version=$(VERSION) \
-	-X main.frameworksVersion=$(FRAMEWORKS_VERSION) \
-	-X main.opaVersion=$(OPA_VERSION)"
+LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/v3/pkg/version.Version=$(VERSION)"
 
 PLATFORM ?= linux/amd64
 OUTPUT_TYPE ?= type=docker
@@ -284,11 +280,11 @@ e2e-publisher-deploy:
 
 # Build manager binary
 manager: generate
-	GO111MODULE=on go build -mod vendor -o bin/manager -ldflags $(LDFLAGS) main.go
+	GO111MODULE=on go build -mod vendor -o bin/manager -ldflags $(LDFLAGS)
 
 # Build manager binary
 manager-osx: generate
-	GO111MODULE=on go build -mod vendor -o bin/manager GOOS=darwin -ldflags $(LDFLAGS) main.go
+	GO111MODULE=on go build -mod vendor -o bin/manager GOOS=darwin -ldflags $(LDFLAGS)
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate manifests

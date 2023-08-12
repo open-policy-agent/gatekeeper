@@ -21,7 +21,7 @@ ENV GO111MODULE=on \
 COPY . /go/src/github.com/open-policy-agent/gatekeeper
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper/cmd/gator
 
-RUN go build -mod vendor -a -ldflags "${LDFLAGS:--X github.com/open-policy-agent/gatekeeper/pkg/version.Version=latest -X main.frameworksVersion=latest -X main.opaVersion=latest}" -o /gator
+RUN go build -mod vendor -a -ldflags "${LDFLAGS}" -o /gator
 
 FROM --platform=$BUILDPLATFORM $BASEIMAGE as build
 USER 65532:65532
