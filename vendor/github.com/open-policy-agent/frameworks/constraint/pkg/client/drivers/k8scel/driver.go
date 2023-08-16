@@ -9,15 +9,18 @@ import (
 	"sync"
 	"time"
 
+	rawCEL "github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types/ref"
+	celInterpreter "github.com/google/cel-go/interpreter"
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	pSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/temporarydeleteme"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/opa/storage"
 	admissionv1 "k8s.io/api/admission/v1"
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
-	admissionv1alpha1 "k8s.io/api/admissionregistration/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -48,69 +51,77 @@ import (
 //   Other friction points are commented with the keyword FRICTION.
 
 const (
-	Name = "K8sNativeValidation"
+	variablesKey = ctxKey("variables")
 
 	runTimeNS            = "runTimeNS"
 	runTimeNSDescription = "the number of nanoseconds it took to evaluate the constraint"
 )
 
+type ctxKey string
+
 var _ drivers.Driver = &Driver{}
 
 type Driver struct {
-	mux            sync.RWMutex
-	validators     map[string]validatingadmissionpolicy.Validator
-	filterCompiler cel.FilterCompiler
-	gatherStats    bool
+	mux         sync.RWMutex
+	validators  map[string]validatingadmissionpolicy.Validator
+	gatherStats bool
 }
 
 func (d *Driver) Name() string {
-	return Name
+	return pSchema.Name
 }
 
 func (d *Driver) AddTemplate(ctx context.Context, ct *templates.ConstraintTemplate) error {
 	if len(ct.Spec.Targets) != 1 {
 		return errors.New("wrong number of targets defined, only 1 target allowed")
 	}
-	var rawCode map[string]interface{}
+
+	var source *pSchema.Source
 	for _, code := range ct.Spec.Targets[0].Code {
-		if code.Engine != Name {
+		if code.Engine != pSchema.Name {
 			continue
 		}
-		objMap, ok := code.Source.Value.(map[string]interface{})
-		if !ok {
-			return errors.New("K8sNativeValidation code malformed")
+		var err error
+		source, err = pSchema.GetSource(code)
+		if err != nil {
+			return err
 		}
-		rawCode = objMap
 		break
 	}
-	if rawCode == nil {
+	if source == nil {
 		return errors.New("K8sNativeValidation code not defined")
-	}
-
-	validatorCode := &admissionv1alpha1.ValidatingAdmissionPolicy{}
-	if err := runtime.DefaultUnstructuredConverter.FromUnstructuredWithValidation(rawCode, validatorCode, true); err != nil {
-		return err
 	}
 
 	// FRICTION: Note that compilation errors are possible, but we cannot introspect to see whether any
 	// occurred
-	// TODO can set this based on whether params is defined on a constraint
-	celVars := cel.OptionalVariableDeclarations{HasParams: true}
-	failurePolicy := convertv1alpha1FailurePolicyTypeTov1FailurePolicyType(validatorCode.Spec.FailurePolicy)
-	var matcher matchconditions.Matcher
-	matchConditions := validatorCode.Spec.MatchConditions
-	if len(matchConditions) > 0 {
-		matchExpressionAccessors := make([]cel.ExpressionAccessor, len(matchConditions))
-		for i := range matchConditions {
-			matchExpressionAccessors[i] = (*matchconditions.MatchCondition)(&matchConditions[i])
-		}
-		matcher = matchconditions.NewMatcher(d.filterCompiler.Compile(matchExpressionAccessors, celVars, celAPI.PerCallLimit), nil, failurePolicy, "validatingadmissionpolicy", validatorCode.Name)
+	celVars := cel.OptionalVariableDeclarations{}
+
+	failurePolicy, err := source.GetFailurePolicy()
+	if err != nil {
+		return err
 	}
+
+	matchAccessors, err := source.GetMatchConditions()
+	if err != nil {
+		return err
+	}
+	matcher := matchconditions.NewMatcher(compileWrappedFilter(matchAccessors, celVars, celAPI.PerCallLimit), nil, failurePolicy, "validatingadmissionpolicy", ct.GetName())
+
+	validationAccessors, err := source.GetValidations()
+	if err != nil {
+		return err
+	}
+
+	messageAccessors, err := source.GetMessageExpressions()
+	if err != nil {
+		return err
+	}
+
 	validator := validatingadmissionpolicy.NewValidator(
-		d.filterCompiler.Compile(convertv1alpha1Validations(validatorCode.Spec.Validations), celVars, celAPI.PerCallLimit),
+		compileWrappedFilter(validationAccessors, celVars, celAPI.PerCallLimit),
 		matcher,
-		d.filterCompiler.Compile(convertv1alpha1AuditAnnotations(validatorCode.Spec.AuditAnnotations), celVars, celAPI.PerCallLimit),
-		d.filterCompiler.Compile(convertV1Alpha1MessageExpressions(validatorCode.Spec.Validations), celVars, celAPI.PerCallLimit),
+		compileWrappedFilter(nil, celVars, celAPI.PerCallLimit),
+		compileWrappedFilter(messageAccessors, celVars, celAPI.PerCallLimit),
 		failurePolicy,
 		nil,
 	)
@@ -186,6 +197,11 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 			VersionedOldObject: request.GetOldObject(),
 			VersionedObject:    request.GetObject(),
 		}
+		parameters, _, err := unstructured.NestedMap(constraint.Object, "spec", "parameters")
+		if err != nil {
+			return nil, err
+		}
+		ctx := context.WithValue(ctx, variablesKey, map[string]interface{}{"params": parameters})
 		response := validator.Validate(ctx, versionedAttr, constraint, celAPI.PerCallLimit)
 
 		enforcementAction, found, err := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
@@ -217,7 +233,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 							Value: uint64(evalElapsedTime.Nanoseconds()),
 							Source: instrumentation.Source{
 								Type:  instrumentation.EngineSourceType,
-								Value: Name,
+								Value: pSchema.Name,
 							},
 						},
 					},
@@ -373,54 +389,54 @@ func (w *RequestWrapper) GetReinvocationContext() admission.ReinvocationContext 
 	return nil
 }
 
-func convertv1alpha1FailurePolicyTypeTov1FailurePolicyType(policyType *admissionv1alpha1.FailurePolicyType) *admissionregistrationv1.FailurePolicyType {
-	if policyType == nil {
-		return nil
-	}
+// temporary code that can go away after `variables` functionality is included (comes with k8s 1.28).
 
-	var v1FailPolicy admissionregistrationv1.FailurePolicyType
-	if *policyType == admissionv1alpha1.Fail {
-		v1FailPolicy = admissionregistrationv1.Fail
-	} else if *policyType == admissionv1alpha1.Ignore {
-		v1FailPolicy = admissionregistrationv1.Ignore
-	}
-	return &v1FailPolicy
+var _ rawCEL.Program = &wrappedProgram{}
+
+// wrapProgram injects the ability to extract the value of the CEL environment variable `variables` from a golang context.
+type wrappedProgram struct {
+	rawCEL.Program
 }
 
-func convertv1alpha1Validations(inputValidations []admissionv1alpha1.Validation) []cel.ExpressionAccessor {
-	celExpressionAccessor := make([]cel.ExpressionAccessor, len(inputValidations))
-	for i, validation := range inputValidations {
-		celValidation := validatingadmissionpolicy.ValidationCondition{
-			Expression: validation.Expression,
-			Message:    validation.Message,
-			Reason:     validation.Reason,
-		}
-		celExpressionAccessor[i] = &celValidation
+func (w *wrappedProgram) ContextEval(ctx context.Context, vars interface{}) (ref.Val, *rawCEL.EvalDetails, error) {
+	activation, ok := vars.(celInterpreter.Activation)
+	if !ok {
+		return nil, nil, errors.New("not an activation")
 	}
-	return celExpressionAccessor
+	variables := ctx.Value(variablesKey)
+	if variables == nil {
+		return nil, nil, errors.New("No variables were provided to the CEL invocation")
+	}
+	mergedActivation := celInterpreter.NewHierarchicalActivation(activation, &varsActivation{vars: variables})
+	return w.Program.ContextEval(ctx, mergedActivation)
 }
 
-func convertV1Alpha1MessageExpressions(inputValidations []admissionv1alpha1.Validation) []cel.ExpressionAccessor {
-	celExpressionAccessor := make([]cel.ExpressionAccessor, len(inputValidations))
-	for i, validation := range inputValidations {
-		if validation.MessageExpression != "" {
-			condition := validatingadmissionpolicy.MessageExpressionCondition{
-				MessageExpression: validation.MessageExpression,
-			}
-			celExpressionAccessor[i] = &condition
-		}
-	}
-	return celExpressionAccessor
+var _ celInterpreter.Activation = &varsActivation{}
+
+type varsActivation struct {
+	vars interface{}
 }
 
-func convertv1alpha1AuditAnnotations(inputValidations []admissionv1alpha1.AuditAnnotation) []cel.ExpressionAccessor {
-	celExpressionAccessor := make([]cel.ExpressionAccessor, len(inputValidations))
-	for i, validation := range inputValidations {
-		celValidation := validatingadmissionpolicy.AuditAnnotationCondition{
-			Key:             validation.Key,
-			ValueExpression: validation.ValueExpression,
-		}
-		celExpressionAccessor[i] = &celValidation
+func (a *varsActivation) ResolveName(name string) (interface{}, bool) {
+	if name == temporarydeleteme.VariablesName {
+		return a.vars, true
 	}
-	return celExpressionAccessor
+	return nil, false
+}
+
+func (a *varsActivation) Parent() celInterpreter.Activation {
+	return nil
+}
+
+func compileWrappedFilter(expressionAccessors []cel.ExpressionAccessor, options cel.OptionalVariableDeclarations, perCallLimit uint64) cel.Filter {
+	compilationResults := make([]cel.CompilationResult, len(expressionAccessors))
+	for i, expressionAccessor := range expressionAccessors {
+		if expressionAccessor == nil {
+			continue
+		}
+		result := temporarydeleteme.CompileCELExpression(expressionAccessor, options, perCallLimit)
+		result.Program = &wrappedProgram{Program: result.Program}
+		compilationResults[i] = result
+	}
+	return cel.NewFilter(compilationResults)
 }
