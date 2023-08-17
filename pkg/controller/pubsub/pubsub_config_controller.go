@@ -25,9 +25,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+const defaultConnection = "audit-connection"
+
 var (
-	PubsubEnabled = flag.Bool("enable-pub-sub", false, "Enabled pubsub to publish messages")
-	log           = logf.Log.WithName("controller").WithValues(logging.Process, "pubsub_controller")
+	PubsubEnabled   = flag.Bool("enable-pub-sub", false, "Enabled pubsub to publish messages")
+	AuditConnection = flag.String("audit-connection", defaultConnection, "Connection name for publishing audit violation messages")
+	log             = logf.Log.WithName("controller").WithValues(logging.Process, "pubsub_controller")
 )
 
 type Adder struct {
@@ -75,16 +78,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		&handler.EnqueueRequestForObject{},
 		predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
-				return e.Object.GetNamespace() == util.GetNamespace()
+				return e.Object.GetNamespace() == util.GetNamespace() && AuditConnection != nil && e.Object.GetName() == *AuditConnection
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				return e.ObjectNew.GetNamespace() == util.GetNamespace()
+				return e.ObjectNew.GetNamespace() == util.GetNamespace() && AuditConnection != nil && e.ObjectNew.GetName() == *AuditConnection
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool {
-				return e.Object.GetNamespace() == util.GetNamespace()
+				return e.Object.GetNamespace() == util.GetNamespace() && AuditConnection != nil && e.Object.GetName() == *AuditConnection
 			},
 			GenericFunc: func(e event.GenericEvent) bool {
-				return e.Object.GetNamespace() == util.GetNamespace()
+				return e.Object.GetNamespace() == util.GetNamespace() && AuditConnection != nil && e.Object.GetName() == *AuditConnection
 			},
 		},
 	)
