@@ -21,6 +21,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const RegName = "cachemanager"
+
 var (
 	log     = logf.Log.WithName("cache-manager")
 	backoff = wait.Backoff{
@@ -37,7 +39,6 @@ type Config struct {
 	Tracker          *readiness.Tracker
 	ProcessExcluder  *process.Excluder
 	Registrar        *watch.Registrar
-	WatchedSet       *watch.Set
 	GVKAggregator    *aggregator.GVKAgreggator
 	Reader           client.Reader
 }
@@ -67,9 +68,6 @@ type CFDataClient interface {
 }
 
 func NewCacheManager(config *Config) (*CacheManager, error) {
-	if config.WatchedSet == nil {
-		return nil, fmt.Errorf("watchedSet must be non-nil")
-	}
 	if config.Registrar == nil {
 		return nil, fmt.Errorf("registrar must be non-nil")
 	}
@@ -93,7 +91,7 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 		tracker:                    config.Tracker,
 		processExcluder:            config.ProcessExcluder,
 		registrar:                  config.Registrar,
-		watchedSet:                 config.WatchedSet,
+		watchedSet:                 watch.NewSet(),
 		reader:                     config.Reader,
 		gvksToSync:                 config.GVKAggregator,
 		backgroundManagementTicker: *time.NewTicker(3 * time.Second),
@@ -188,6 +186,15 @@ func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
 	// previously watched GVKs to be re-added to get a chance to be evaluated
 	// for this new process excluder.
 	c.excluderChanged = true
+}
+
+// DoForEach runs fn function for each GVK that is being watched by the cache manager.
+func (c *CacheManager) DoForEach(fn func(gvk schema.GroupVersionKind) error) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	err := c.watchedSet.DoForEach(fn)
+	return err
 }
 
 func (c *CacheManager) watchesGVK(gvk schema.GroupVersionKind) bool {

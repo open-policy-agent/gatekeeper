@@ -25,7 +25,6 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
@@ -33,7 +32,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
@@ -89,8 +87,9 @@ type Dependencies struct {
 	MutationSystem   *mutation.System
 	ExpansionSystem  *expansion.System
 	ProviderCache    *externaldata.ProviderCache
-	WatchSet         *watch.Set
 	PubsubSystem     *pubsub.System
+	EventsCh         chan event.GenericEvent
+	CacheMgr         *cm.CacheManager
 }
 
 type defaultPodGetter struct {
@@ -163,38 +162,15 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		deps.GetPod = fakePodGetter
 	}
 
-	// Events will be used to receive events from dynamic watches registered
-	// via the registrar below.
-	events := make(chan event.GenericEvent, 1024)
-	syncMetricsCache := syncutil.NewMetricsCache()
-	w, err := deps.WatchManger.NewRegistrar(
-		config.CtrlName,
-		events)
-	if err != nil {
-		return err
-	}
-	cm, err := cm.NewCacheManager(&cm.Config{
-		CfClient:         deps.Opa,
-		SyncMetricsCache: syncMetricsCache,
-		Tracker:          deps.Tracker,
-		ProcessExcluder:  deps.ProcessExcluder,
-		Registrar:        w,
-		WatchedSet:       deps.WatchSet,
-		Reader:           m.GetCache(),
-	})
-	if err != nil {
-		return err
-	}
-
 	// Adding the CacheManager as a runnable;
 	// manager will start CacheManager.
-	if err := m.Add(cm); err != nil {
+	if err := m.Add(deps.CacheMgr); err != nil {
 		return fmt.Errorf("error adding cache manager as a runnable: %w", err)
 	}
 
 	syncAdder := syncc.Adder{
-		Events:       events,
-		CacheManager: cm,
+		Events:       deps.EventsCh,
+		CacheManager: deps.CacheMgr,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(m); err != nil {
@@ -217,7 +193,7 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		}
 		if a2, ok := a.(CacheManagerInjector); ok {
 			// this is used by the config controller to sync
-			a2.InjectCacheManager(cm)
+			a2.InjectCacheManager(deps.CacheMgr)
 		}
 
 		if err := a.Add(m); err != nil {

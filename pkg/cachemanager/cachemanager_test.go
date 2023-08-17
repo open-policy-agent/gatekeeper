@@ -56,7 +56,6 @@ func makeCacheManager(t *testing.T) (*CacheManager, context.Context) {
 		SyncMetricsCache: syncutil.NewMetricsCache(),
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		WatchedSet:       watch.NewSet(),
 		Registrar:        w,
 		Reader:           c,
 		GVKAggregator:    aggregator.NewGVKAggregator(),

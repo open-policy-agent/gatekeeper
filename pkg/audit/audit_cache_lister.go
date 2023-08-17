@@ -3,7 +3,6 @@ package audit
 import (
 	"context"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -11,10 +10,10 @@ import (
 
 // NewAuditCacheLister instantiates a new AuditCache which will read objects in
 // watched from auditCache.
-func NewAuditCacheLister(auditCache client.Reader, watched *watch.Set) *CacheLister {
+func NewAuditCacheLister(auditCache client.Reader, lister Delegate) *CacheLister {
 	return &CacheLister{
 		auditCache: auditCache,
-		watched:    watched,
+		lister:     lister,
 	}
 }
 
@@ -25,14 +24,19 @@ type CacheLister struct {
 	// Caution: only to be read from while watched is locked, such as through
 	// DoForEach.
 	auditCache client.Reader
-	// watched is the set of objects watched by the audit cache.
-	watched *watch.Set
+	// lister is a delegate like cachemanager that we can use to query a watched set of GKVs.
+	lister Delegate
+}
+
+// wraps DoForEach from a watch.Set.
+type Delegate interface {
+	DoForEach(listFunc func(gvk schema.GroupVersionKind) error) error
 }
 
 // ListObjects lists all objects from the audit cache.
 func (l *CacheLister) ListObjects(ctx context.Context) ([]unstructured.Unstructured, error) {
 	var objs []unstructured.Unstructured
-	err := l.watched.DoForEach(func(gvk schema.GroupVersionKind) error {
+	err := l.lister.DoForEach(func(gvk schema.GroupVersionKind) error {
 		gvkObjects, err := listObjects(ctx, l.auditCache, gvk)
 		if err != nil {
 			return err

@@ -43,8 +43,7 @@ import (
 )
 
 const (
-	CtrlName = "config-controller"
-
+	ctrlName      = "config-controller"
 	finalizerName = "finalizers.gatekeeper.sh/config"
 )
 
@@ -109,7 +108,7 @@ func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.Controlle
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New(CtrlName, mgr, controller.Options{Reconciler: r})
+	c, err := controller.New(ctrlName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}

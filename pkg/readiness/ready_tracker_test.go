@@ -30,6 +30,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
@@ -37,6 +38,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -49,6 +51,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -102,7 +105,7 @@ func setupOpa(t *testing.T) *constraintclient.Client {
 func setupController(
 	mgr manager.Manager,
 	wm *watch.Manager,
-	opa *constraintclient.Client,
+	cfClient *constraintclient.Client,
 	mutationSystem *mutation.System,
 	expansionSystem *expansion.System,
 	providerCache *frameworksexternaldata.ProviderCache,
@@ -125,9 +128,29 @@ func setupController(
 
 	processExcluder := process.Get()
 
+	events := make(chan event.GenericEvent, 1024)
+	syncMetricsCache := syncutil.NewMetricsCache()
+	w, err := wm.NewRegistrar(
+		cachemanager.RegName,
+		events)
+	if err != nil {
+		return fmt.Errorf("setting up watch manager: %w", err)
+	}
+	cacheManager, err := cachemanager.NewCacheManager(&cachemanager.Config{
+		CfClient:         cfClient,
+		SyncMetricsCache: syncMetricsCache,
+		Tracker:          tracker,
+		ProcessExcluder:  processExcluder,
+		Registrar:        w,
+		Reader:           mgr.GetCache(),
+	})
+	if err != nil {
+		return fmt.Errorf("setting up cache manager: %w", err)
+	}
+
 	// Setup all Controllers
 	opts := controller.Dependencies{
-		Opa:              opa,
+		Opa:              cfClient,
 		WatchManger:      wm,
 		ControllerSwitch: sw,
 		Tracker:          tracker,
@@ -136,7 +159,8 @@ func setupController(
 		MutationSystem:   mutationSystem,
 		ExpansionSystem:  expansionSystem,
 		ProviderCache:    providerCache,
-		WatchSet:         watch.NewSet(),
+		CacheMgr:         cacheManager,
+		EventsCh:         events,
 	}
 	if err := controller.AddToManager(mgr, &opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)

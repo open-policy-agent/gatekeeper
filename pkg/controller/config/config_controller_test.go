@@ -146,10 +146,9 @@ func TestReconcile(t *testing.T) {
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 	events := make(chan event.GenericEvent, 1024)
-	watchSet := watch.NewSet()
 	syncMetricsCache := syncutil.NewMetricsCache()
 	w, err := wm.NewRegistrar(
-		CtrlName,
+		cachemanager.RegName,
 		events)
 	require.NoError(t, err)
 	cacheManager, err := cachemanager.NewCacheManager(&cachemanager.Config{
@@ -157,7 +156,6 @@ func TestReconcile(t *testing.T) {
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		WatchedSet:       watchSet,
 		Registrar:        w,
 		Reader:           c,
 	})
@@ -435,10 +433,9 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 	// avoiding conflicts in finalizer cleanup.
 	cs := watch.NewSwitch()
 	processExcluder := process.Get()
-	watchSet := watch.NewSet()
 	syncMetricsCache := syncutil.NewMetricsCache()
 	w, err := wm.NewRegistrar(
-		CtrlName,
+		cachemanager.RegName,
 		events)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create registrar: %w", err)
@@ -448,7 +445,6 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		WatchedSet:       watchSet,
 		Registrar:        w,
 		Reader:           reader,
 	})
@@ -627,10 +623,9 @@ func TestConfig_Retries(t *testing.T) {
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
-	watchSet := watch.NewSet()
 	syncMetricsCache := syncutil.NewMetricsCache()
 	w, err := wm.NewRegistrar(
-		CtrlName,
+		cachemanager.RegName,
 		events)
 	require.NoError(t, err)
 	cacheManager, err := cachemanager.NewCacheManager(&cachemanager.Config{
@@ -638,7 +633,6 @@ func TestConfig_Retries(t *testing.T) {
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		WatchedSet:       watchSet,
 		Registrar:        w,
 		Reader:           c,
 	})

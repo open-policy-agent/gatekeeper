@@ -347,7 +347,6 @@ func makeTestResources(t *testing.T, mgr manager.Manager, wm *watch.Manager, rea
 		SyncMetricsCache: syncutil.NewMetricsCache(),
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		WatchedSet:       watch.NewSet(),
 		Registrar:        w,
 		Reader:           reader,
 		GVKAggregator:    aggregator,
