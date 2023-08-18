@@ -148,7 +148,7 @@ func TestReconcile(t *testing.T) {
 	events := make(chan event.GenericEvent, 1024)
 	syncMetricsCache := syncutil.NewMetricsCache()
 	w, err := wm.NewRegistrar(
-		cachemanager.RegName,
+		cachemanager.RegistrarName,
 		events)
 	require.NoError(t, err)
 	cacheManager, err := cachemanager.NewCacheManager(&cachemanager.Config{
@@ -435,7 +435,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 	processExcluder := process.Get()
 	syncMetricsCache := syncutil.NewMetricsCache()
 	w, err := wm.NewRegistrar(
-		cachemanager.RegName,
+		cachemanager.RegistrarName,
 		events)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create registrar: %w", err)
@@ -625,7 +625,7 @@ func TestConfig_Retries(t *testing.T) {
 	events := make(chan event.GenericEvent, 1024)
 	syncMetricsCache := syncutil.NewMetricsCache()
 	w, err := wm.NewRegistrar(
-		cachemanager.RegName,
+		cachemanager.RegistrarName,
 		events)
 	require.NoError(t, err)
 	cacheManager, err := cachemanager.NewCacheManager(&cachemanager.Config{

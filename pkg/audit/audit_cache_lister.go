@@ -10,7 +10,7 @@ import (
 
 // NewAuditCacheLister instantiates a new AuditCache which will read objects in
 // watched from auditCache.
-func NewAuditCacheLister(auditCache client.Reader, lister Delegate) *CacheLister {
+func NewAuditCacheLister(auditCache client.Reader, lister WatchIterator) *CacheLister {
 	return &CacheLister{
 		auditCache: auditCache,
 		lister:     lister,
@@ -25,11 +25,11 @@ type CacheLister struct {
 	// DoForEach.
 	auditCache client.Reader
 	// lister is a delegate like cachemanager that we can use to query a watched set of GKVs.
-	lister Delegate
+	lister WatchIterator
 }
 
 // wraps DoForEach from a watch.Set.
-type Delegate interface {
+type WatchIterator interface {
 	DoForEach(listFunc func(gvk schema.GroupVersionKind) error) error
 }
 

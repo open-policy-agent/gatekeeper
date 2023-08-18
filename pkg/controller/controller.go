@@ -88,7 +88,7 @@ type Dependencies struct {
 	ExpansionSystem  *expansion.System
 	ProviderCache    *externaldata.ProviderCache
 	PubsubSystem     *pubsub.System
-	EventsCh         chan event.GenericEvent
+	SyncEventsCh     chan event.GenericEvent
 	CacheMgr         *cm.CacheManager
 }
 
@@ -169,7 +169,7 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 	}
 
 	syncAdder := syncc.Adder{
-		Events:       deps.EventsCh,
+		Events:       deps.SyncEventsCh,
 		CacheManager: deps.CacheMgr,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch

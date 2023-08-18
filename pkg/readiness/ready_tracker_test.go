@@ -131,7 +131,7 @@ func setupController(
 	events := make(chan event.GenericEvent, 1024)
 	syncMetricsCache := syncutil.NewMetricsCache()
 	w, err := wm.NewRegistrar(
-		cachemanager.RegName,
+		cachemanager.RegistrarName,
 		events)
 	if err != nil {
 		return fmt.Errorf("setting up watch manager: %w", err)
@@ -160,7 +160,7 @@ func setupController(
 		ExpansionSystem:  expansionSystem,
 		ProviderCache:    providerCache,
 		CacheMgr:         cacheManager,
-		EventsCh:         events,
+		SyncEventsCh:     events,
 	}
 	if err := controller.AddToManager(mgr, &opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)

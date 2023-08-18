@@ -455,7 +455,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	// via the registrar below.
 	events := make(chan event.GenericEvent, 1024)
 	w, err := wm.NewRegistrar(
-		cachemanager.RegName,
+		cachemanager.RegistrarName,
 		events)
 	if err != nil {
 		setupLog.Error(err, "unable to set up watch registrar for cache manager")
@@ -479,7 +479,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	opts := controller.Dependencies{
 		Opa:              client,
 		WatchManger:      wm,
-		EventsCh:         events,
+		SyncEventsCh:     events,
 		CacheMgr:         cm,
 		ControllerSwitch: sw,
 		Tracker:          tracker,
