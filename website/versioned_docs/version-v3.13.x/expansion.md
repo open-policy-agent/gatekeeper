@@ -1,6 +1,6 @@
 ---
 id: expansion
-title: Validating Workload Resources using `ExpansionTemplate`s
+title: Validating Workload Resources using ExpansionTemplate
 ---
 
 `Feature State:` Gatekeeper version v3.10+ (alpha), version 3.13+ (beta)
@@ -14,7 +14,7 @@ A workload resource is a resource that creates other resources, such as a
 [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) or [Job](https://kubernetes.io/docs/concepts/workloads/controllers/job/). Gatekeeper can be configured to reject workload resources
 that create a resource that violates a constraint. 
 
-## `ExpansionTemplate`s explained
+## `ExpansionTemplate` explained
 
 An `ExpansionTemplate` is a custom resource that Gatekeeper will use to create temporary, fake resources and validate the constraints against them. We refer to these resources that Gatekeeper creates for validation purposes as `expanded resources`. We refer to the `Deployment` or other workload resource as the `parent resource` and the act of creating those `expanded` resources as `expansion`.
 
