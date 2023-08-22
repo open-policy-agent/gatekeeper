@@ -336,7 +336,7 @@ func makeTestResources(t *testing.T, mgr manager.Manager, wm *watch.Manager, rea
 		},
 	})
 	events := make(chan event.GenericEvent, 1024)
-	w, err := wm.NewRegistrar(
+	reg, err := wm.NewRegistrar(
 		"test-cache-manager",
 		events)
 	require.NoError(t, err)
@@ -347,7 +347,7 @@ func makeTestResources(t *testing.T, mgr manager.Manager, wm *watch.Manager, rea
 		SyncMetricsCache: syncutil.NewMetricsCache(),
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		Registrar:        w,
+		Registrar:        reg,
 		Reader:           reader,
 		GVKAggregator:    aggregator,
 	}

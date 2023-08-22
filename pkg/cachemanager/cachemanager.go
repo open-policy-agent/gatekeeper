@@ -188,7 +188,8 @@ func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
 	c.excluderChanged = true
 }
 
-// DoForEach runs fn function for each GVK that is being watched by the cache manager.
+// DoForEach runs fn for each GVK that is being watched by the cache manager.
+// This is handy when we want to take actions while holding the lock on the watched.Set.
 func (c *CacheManager) DoForEach(fn func(gvk schema.GroupVersionKind) error) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

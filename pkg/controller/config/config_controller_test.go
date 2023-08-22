@@ -17,7 +17,6 @@ package config
 
 import (
 	"fmt"
-	gosync "sync"
 	"testing"
 	"time"
 
@@ -96,15 +95,9 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 
 func TestReconcile(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	g := gomega.NewGomegaWithT(t)
-	once := gosync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-		})
-	}
+	defer cancelFunc()
 
-	defer testMgrStopped()
+	g := gomega.NewGomegaWithT(t)
 
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
@@ -147,7 +140,7 @@ func TestReconcile(t *testing.T) {
 	processExcluder.Add(instance.Spec.Match)
 	events := make(chan event.GenericEvent, 1024)
 	syncMetricsCache := syncutil.NewMetricsCache()
-	w, err := wm.NewRegistrar(
+	reg, err := wm.NewRegistrar(
 		cachemanager.RegistrarName,
 		events)
 	require.NoError(t, err)
@@ -156,7 +149,7 @@ func TestReconcile(t *testing.T) {
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		Registrar:        w,
+		Registrar:        reg,
 		Reader:           c,
 	})
 	require.NoError(t, err)
@@ -321,12 +314,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	once := gosync.Once{}
-	defer func() {
-		once.Do(func() {
-			cancelFunc()
-		})
-	}()
+	defer cancelFunc()
 
 	err := c.Create(ctx, instance)
 	if err != nil {
@@ -434,7 +422,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 	cs := watch.NewSwitch()
 	processExcluder := process.Get()
 	syncMetricsCache := syncutil.NewMetricsCache()
-	w, err := wm.NewRegistrar(
+	reg, err := wm.NewRegistrar(
 		cachemanager.RegistrarName,
 		events)
 	if err != nil {
@@ -445,7 +433,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		Registrar:        w,
+		Registrar:        reg,
 		Reader:           reader,
 	})
 	if err != nil {
@@ -478,13 +466,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 // Verify the Opa cache is populated based on the config resource.
 func TestConfig_CacheContents(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	once := gosync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-		})
-	}
-	defer testMgrStopped()
+	defer cancelFunc()
 
 	// Setup the Manager and Controller.
 	mgr, wm := setupManager(t)
@@ -588,13 +570,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 func TestConfig_Retries(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	once := gosync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-		})
-	}
-	defer testMgrStopped()
+	defer cancelFunc()
 
 	g := gomega.NewGomegaWithT(t)
 	nsGVK := schema.GroupVersionKind{
@@ -624,7 +600,7 @@ func TestConfig_Retries(t *testing.T) {
 
 	events := make(chan event.GenericEvent, 1024)
 	syncMetricsCache := syncutil.NewMetricsCache()
-	w, err := wm.NewRegistrar(
+	reg, err := wm.NewRegistrar(
 		cachemanager.RegistrarName,
 		events)
 	require.NoError(t, err)
@@ -633,7 +609,7 @@ func TestConfig_Retries(t *testing.T) {
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		Registrar:        w,
+		Registrar:        reg,
 		Reader:           c,
 	})
 	require.NoError(t, err)

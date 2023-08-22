@@ -24,7 +24,10 @@ type CacheLister struct {
 	// Caution: only to be read from while watched is locked, such as through
 	// DoForEach.
 	auditCache client.Reader
-	// lister is a delegate like cachemanager that we can use to query a watched set of GKVs.
+	// lister is a delegate like CacheManager that we can use to query a watched set of GKVs.
+	// Passing our logic as a callback to a watched.Set allows us to take actions while
+	// holding the lock on the watched.Set. This prevents us from querying the API server
+	// for kinds that aren't currently being watched by the CacheManager.
 	lister WatchIterator
 }
 

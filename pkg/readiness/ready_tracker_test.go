@@ -130,7 +130,7 @@ func setupController(
 
 	events := make(chan event.GenericEvent, 1024)
 	syncMetricsCache := syncutil.NewMetricsCache()
-	w, err := wm.NewRegistrar(
+	reg, err := wm.NewRegistrar(
 		cachemanager.RegistrarName,
 		events)
 	if err != nil {
@@ -141,7 +141,7 @@ func setupController(
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		Registrar:        w,
+		Registrar:        reg,
 		Reader:           mgr.GetCache(),
 	})
 	if err != nil {

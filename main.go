@@ -454,7 +454,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	// Events ch will be used to receive events from dynamic watches registered
 	// via the registrar below.
 	events := make(chan event.GenericEvent, 1024)
-	w, err := wm.NewRegistrar(
+	reg, err := wm.NewRegistrar(
 		cachemanager.RegistrarName,
 		events)
 	if err != nil {
@@ -468,7 +468,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		Registrar:        w,
+		Registrar:        reg,
 		Reader:           mgr.GetCache(),
 	})
 	if err != nil {

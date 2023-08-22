@@ -46,7 +46,7 @@ func makeCacheManager(t *testing.T) (*CacheManager, context.Context) {
 		},
 	})
 	events := make(chan event.GenericEvent, 1024)
-	w, err := wm.NewRegistrar(
+	reg, err := wm.NewRegistrar(
 		"test-cache-manager",
 		events)
 	require.NoError(t, err)
@@ -56,7 +56,7 @@ func makeCacheManager(t *testing.T) (*CacheManager, context.Context) {
 		SyncMetricsCache: syncutil.NewMetricsCache(),
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		Registrar:        w,
+		Registrar:        reg,
 		Reader:           c,
 		GVKAggregator:    aggregator.NewGVKAggregator(),
 	})
