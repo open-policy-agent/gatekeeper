@@ -109,8 +109,8 @@ func (c *MetricsCache) DeleteObject(key string) {
 }
 
 func (c *MetricsCache) GetTags(key string) *Tags {
-	c.mux.Lock()
-	defer c.mux.Unlock()
+	c.mux.RLock()
+	defer c.mux.RUnlock()
 
 	cpy := &Tags{}
 	v, ok := c.Cache[key]
@@ -123,8 +123,8 @@ func (c *MetricsCache) GetTags(key string) *Tags {
 }
 
 func (c *MetricsCache) HasObject(key string) bool {
-	c.mux.Lock()
-	defer c.mux.Unlock()
+	c.mux.RLock()
+	defer c.mux.RUnlock()
 
 	_, ok := c.Cache[key]
 	return ok

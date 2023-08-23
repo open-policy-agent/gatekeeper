@@ -12,8 +12,8 @@ import (
 // watched from auditCache.
 func NewAuditCacheLister(auditCache client.Reader, lister WatchIterator) *CacheLister {
 	return &CacheLister{
-		auditCache: auditCache,
-		lister:     lister,
+		auditCache:    auditCache,
+		watchIterator: lister,
 	}
 }
 
@@ -24,11 +24,11 @@ type CacheLister struct {
 	// Caution: only to be read from while watched is locked, such as through
 	// DoForEach.
 	auditCache client.Reader
-	// lister is a delegate like CacheManager that we can use to query a watched set of GKVs.
+	// watchIterator is a delegate like CacheManager that we can use to query a watched set of GKVs.
 	// Passing our logic as a callback to a watched.Set allows us to take actions while
 	// holding the lock on the watched.Set. This prevents us from querying the API server
 	// for kinds that aren't currently being watched by the CacheManager.
-	lister WatchIterator
+	watchIterator WatchIterator
 }
 
 // wraps DoForEach from a watch.Set.
@@ -39,7 +39,7 @@ type WatchIterator interface {
 // ListObjects lists all objects from the audit cache.
 func (l *CacheLister) ListObjects(ctx context.Context) ([]unstructured.Unstructured, error) {
 	var objs []unstructured.Unstructured
-	err := l.lister.DoForEach(func(gvk schema.GroupVersionKind) error {
+	err := l.watchIterator.DoForEach(func(gvk schema.GroupVersionKind) error {
 		gvkObjects, err := listObjects(ctx, l.auditCache, gvk)
 		if err != nil {
 			return err

@@ -100,8 +100,8 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 
 // List returnes the gvk set for a given Key.
 func (b *GVKAgreggator) List(k Key) map[schema.GroupVersionKind]struct{} {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 
 	v := b.store[k]
 	cpy := make(map[schema.GroupVersionKind]struct{}, len(v))
@@ -113,8 +113,8 @@ func (b *GVKAgreggator) List(k Key) map[schema.GroupVersionKind]struct{} {
 
 // GVKs returns a list of all of the schema.GroupVersionKind that are aggregated.
 func (b *GVKAgreggator) GVKs() []schema.GroupVersionKind {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 
 	allGVKs := []schema.GroupVersionKind{}
 	for gvk := range b.reverseStore {

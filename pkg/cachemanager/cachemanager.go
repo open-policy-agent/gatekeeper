@@ -191,8 +191,8 @@ func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
 // DoForEach runs fn for each GVK that is being watched by the cache manager.
 // This is handy when we want to take actions while holding the lock on the watched.Set.
 func (c *CacheManager) DoForEach(fn func(gvk schema.GroupVersionKind) error) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	err := c.watchedSet.DoForEach(fn)
 	return err
@@ -283,8 +283,8 @@ func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind)
 
 	var err error
 	func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
+		c.mu.RLock()
+		defer c.mu.RUnlock()
 
 		// only call List if we are still watching the gvk.
 		if c.watchedSet.Contains(gvk) {
