@@ -7,6 +7,12 @@ on:
     paths:
       - ".github/workflows/website.yaml"
       - "website/**"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/website.yaml"
+      - "website/**"
 
 permissions:
   contents: write
@@ -45,7 +51,9 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: yarn build
 
+      # deploy only after PR is merged to master
       - name: Deploy
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
         uses: peaceiris/actions-gh-pages@373f7f263a76c20808c831209c920827a82a2847 # v3.9.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
