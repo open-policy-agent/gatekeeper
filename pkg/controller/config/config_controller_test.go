@@ -629,19 +629,15 @@ func TestConfig_Retries(t *testing.T) {
 	require.NoError(t, syncAdder.Add(mgr), "registering sync controller")
 
 	// Use our special reader interceptor to inject controlled failures
-	failPlease := make(chan string, 1)
+	fi := fakes.NewFailureInjector()
 	rec.reader = fakes.SpyReader{
 		Reader: mgr.GetCache(),
 		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-			// Return an error the first go-around.
-			var failKind string
-			select {
-			case failKind = <-failPlease:
-			default:
-			}
-			if failKind != "" && list.GetObjectKind().GroupVersionKind().Kind == failKind {
+			// return as many syntenthic failures as there are registered for this kind
+			if fi.CheckFailures(list.GetObjectKind().GroupVersionKind().Kind) {
 				return fmt.Errorf("synthetic failure")
 			}
+
 			return mgr.GetCache().List(ctx, list, opts...)
 		},
 	}
@@ -685,8 +681,7 @@ func TestConfig_Retries(t *testing.T) {
 		return opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial opa cache contents")
 
-	// Make List fail once for ConfigMaps as the replay occurs following the reconfig below.
-	failPlease <- "ConfigMapList"
+	fi.SetFailures("ConfigMapList", 2)
 
 	// Reconfigure to force an internal replay.
 	instance = configFor([]schema.GroupVersionKind{configMapGVK})
