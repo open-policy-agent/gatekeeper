@@ -108,6 +108,11 @@ func (t *objectTracker) Expect(o runtime.Object) {
 		return
 	}
 
+	// Satisfied objects cannot be expected again.
+	if _, ok := t.satisfied[k]; ok {
+		return
+	}
+
 	// We may have seen it before starting to expect it
 	if _, ok := t.seen[k]; ok {
 		delete(t.seen, k)

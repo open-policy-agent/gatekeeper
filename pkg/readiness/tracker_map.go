@@ -66,6 +66,10 @@ func (t *trackerMap) Get(gvk schema.GroupVersionKind) Expectations {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	// re-retrieve map entry in case it was added after releasing the read lock.
+	if e, ok := t.m[gvk]; ok {
+		return e
+	}
 	entry := newObjTracker(gvk, t.fn)
 	t.m[gvk] = entry
 	return entry
