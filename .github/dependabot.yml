@@ -4,16 +4,20 @@ updates:
   - package-ecosystem: "npm"
     directory: "/website"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     commit-message:
       prefix: "chore"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     commit-message:
       prefix: "chore"
+    groups:
+      all:
+        patterns:
+        - "*"
 
   - package-ecosystem: "gomod"
     directory: "/"
@@ -26,6 +30,11 @@ updates:
         update-types:
         - "version-update:semver-major"
         - "version-update:semver-minor"
+    groups:
+      k8s:
+        patterns:
+        - "k8s.io/*"
+        - "sigs.k8s.io/*"
 
   - package-ecosystem: "docker"
     directory: /
