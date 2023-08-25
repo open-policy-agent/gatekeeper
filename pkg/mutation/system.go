@@ -237,7 +237,7 @@ func (s *System) mutate(mutable *types.Mutable) (int, error) {
 		mutable.Object.GroupVersionKind().Group,
 		mutable.Object.GroupVersionKind().Kind,
 		mutable.Object.GetNamespace(),
-		mutable.Object.GetName())
+		getNameOrGenerateName(mutable.Object))
 }
 
 func mutateErr(err error, uid uuid.UUID, mID types.ID, obj *unstructured.Unstructured) error {
@@ -247,7 +247,7 @@ func mutateErr(err error, uid uuid.UUID, mID types.ID, obj *unstructured.Unstruc
 		obj.GroupVersionKind().Group,
 		obj.GroupVersionKind().Kind,
 		obj.GetNamespace(),
-		obj.GetName())
+		getNameOrGenerateName(obj))
 }
 
 func matchesErr(err error, mID types.ID, obj *unstructured.Unstructured) error {
@@ -256,5 +256,5 @@ func matchesErr(err error, mID types.ID, obj *unstructured.Unstructured) error {
 		obj.GroupVersionKind().Group,
 		obj.GroupVersionKind().Kind,
 		obj.GetNamespace(),
-		obj.GetName())
+		getNameOrGenerateName(obj))
 }

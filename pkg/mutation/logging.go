@@ -33,10 +33,21 @@ func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructur
 			logging.ResourceKind, obj.GroupVersionKind().Kind,
 			logging.ResourceAPIVersion, obj.GroupVersionKind().Version,
 			logging.ResourceNamespace, obj.GetNamespace(),
-			logging.ResourceName, obj.GetName(),
+			logging.ResourceName, getNameOrGenerateName(obj),
 			logging.ResourceSourceType, source,
 		}
 		logDetails = append(logDetails, iterations...)
 		log.Info(message, logDetails...)
 	}
+}
+
+func getNameOrGenerateName(obj *unstructured.Unstructured) string {
+	resourceName := obj.GetName()
+	// for generated resources on CREATE, like a pod from a deployment,
+	// the name has not been populated yet, so we use the GeneratedName instead.
+	if resourceName == "" {
+		resourceName = obj.GetGenerateName()
+	}
+
+	return resourceName
 }
