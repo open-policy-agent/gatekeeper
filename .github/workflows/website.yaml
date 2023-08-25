@@ -7,6 +7,12 @@ on:
     paths:
       - ".github/workflows/website.yaml"
       - "website/**"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/website.yaml"
+      - "website/**"
 
 permissions:
   contents: write
@@ -19,14 +25,14 @@ jobs:
         working-directory: website
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@cba0d00b1fc9a034e1e642ea0f1103c282990604 # v2.5.0
+        uses: step-security/harden-runner@8ca2b8b2ece13480cda6dacd3511b49857a23c09 # v2.5.1
         with:
           egress-policy: audit
 
       - uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9
 
       - name: Setup Node
-        uses: actions/setup-node@e33196f7422957bea03ed53f6fbb155025ffc7b8 # v3.7.0
+        uses: actions/setup-node@5e21ff4d9bc1a8cf6de233a3057d20ec6b3fb69d # v3.8.1
         with:
           node-version: "16"
 
@@ -45,7 +51,9 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: yarn build
 
+      # deploy only after PR is merged to master
       - name: Deploy
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
         uses: peaceiris/actions-gh-pages@373f7f263a76c20808c831209c920827a82a2847 # v3.9.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

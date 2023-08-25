@@ -178,6 +178,28 @@ func Test_ObjectTracker_Duplicate_Expectations(t *testing.T) {
 	}
 }
 
+// Verify that that satisfied expectations cannot be re-established.
+func Test_ObjectTracker_Satisfaction_Final(t *testing.T) {
+	ot := newObjTracker(schema.GroupVersionKind{}, nil)
+
+	const count = 10
+	ct := makeCTSlice("ct-", count)
+	for i := 0; i < len(ct); i++ {
+		ot.Expect(ct[i])
+		ot.Observe(ct[i])
+		ot.Expect(ct[i])
+	}
+	if ot.Satisfied() {
+		t.Fatal("should not be satisfied before ExpectationsDone")
+	}
+
+	ot.ExpectationsDone()
+
+	if !ot.Satisfied() {
+		t.Fatal("should be satisfied")
+	}
+}
+
 // Verify that an expectation can be canceled before it's first expected.
 func Test_ObjectTracker_CancelBeforeExpect(t *testing.T) {
 	ot := newObjTracker(schema.GroupVersionKind{}, nil)
