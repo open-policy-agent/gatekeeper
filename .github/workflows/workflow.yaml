@@ -36,10 +36,10 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Set up Go 1.20
+      - name: Set up Go
         uses: actions/setup-go@v4 # v4.0.1
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9
@@ -61,10 +61,10 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Set up Go 1.20
+      - name: Set up Go
         uses: actions/setup-go@v4 # v4.0.1
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9
@@ -91,10 +91,10 @@ jobs:
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3.5.2
-      - name: Set up Go 1.20
+      - name: Set up Go
         uses: actions/setup-go@v4 # v4.0.1
         with:
-          go-version: "1.20"
+          go-version: "1.21"
       - name: Check go.mod and manifests
         run: |
           # there should be no additional manifest or go.mod changes
@@ -113,10 +113,10 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Set up Go 1.20
+      - name: Set up Go
         uses: actions/setup-go@v4 # v4.0.1
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9
@@ -136,7 +136,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        KUBERNETES_VERSION: ["1.24.12", "1.25.8", "1.26.3", "1.27.1"]
+        KUBERNETES_VERSION: ["1.25.8", "1.26.3", "1.27.1", "1.28.0"]
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@8ca2b8b2ece13480cda6dacd3511b49857a23c09 # v2.5.1
@@ -146,10 +146,10 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9
 
-      - name: Set up Go 1.20
+      - name: Set up Go
         uses: actions/setup-go@v4 # v4.0.1
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: Bootstrap e2e
         run: |
@@ -266,10 +266,10 @@ jobs:
     - name: Check out code into the Go module directory
       uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9
 
-    - name: Set up Go 1.20
+    - name: Set up Go
       uses: actions/setup-go@v4 # v4.0.1
       with:
-        go-version: "1.20"
+        go-version: "1.21"
 
     - name: Bootstrap e2e
       run: |
