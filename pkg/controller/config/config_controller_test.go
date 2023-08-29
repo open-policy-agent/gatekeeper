@@ -58,11 +58,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
-	Name:      "config",
-	Namespace: "gatekeeper-system",
-}}
-
 const timeout = time.Second * 20
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
@@ -123,9 +118,6 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 	}
-
-	// Set up the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
-	// channel when it is finished.
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
@@ -162,6 +154,7 @@ func TestReconcile(t *testing.T) {
 	rec, err := newReconciler(mgr, cacheManager, cs, tracker)
 	require.NoError(t, err)
 
+	// Wrap the Controller Reconcile function so it writes each request to a map when it is finished reconciling.
 	recFn, requests := SetupTestReconcile(rec)
 	require.NoError(t, add(mgr, recFn))
 
@@ -180,7 +173,15 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}()
-	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+	g.Eventually(func() bool {
+		expectedReq := reconcile.Request{NamespacedName: types.NamespacedName{
+			Name:      "config",
+			Namespace: "gatekeeper-system",
+		}}
+		_, ok := requests.Load(expectedReq)
+
+		return ok
+	}).WithTimeout(timeout).Should(gomega.BeTrue())
 
 	g.Eventually(func() int {
 		return len(wm.GetManagedGVK())
