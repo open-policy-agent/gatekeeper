@@ -141,7 +141,10 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	newWatchSet := watch.NewSet()
 	newWatchSet.Add(c.gvksToSync.GVKs()...)
 
-	c.gvksToDeleteFromCache.AddSet(c.watchedSet.Difference(newWatchSet))
+	diff := c.watchedSet.Difference(newWatchSet)
+	c.removeStaleExpectations(diff)
+
+	c.gvksToDeleteFromCache.AddSet(diff)
 
 	var innerError error
 	c.watchedSet.Replace(newWatchSet, func() {
@@ -153,6 +156,13 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	})
 
 	return innerError
+}
+
+// removeStaleExpectations stops tracking data for any resources that are no longer watched.
+func (c *CacheManager) removeStaleExpectations(stale *watch.Set) {
+	for _, gvk := range stale.Items() {
+		c.tracker.CancelData(gvk)
+	}
 }
 
 // RemoveSource removes the watches of the GVKs for a given aggregator.Key. Callers are responsible for retrying on error.
