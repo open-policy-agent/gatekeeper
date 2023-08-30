@@ -94,6 +94,17 @@
     },
     {
       "type": "category",
+      "label": "Architecture",
+      "collapsed": false,
+      "items": [
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/opa-versions"
+        }
+      ]
+    },
+    {
+      "type": "category",
       "label": "Contributing",
       "collapsed": false,
       "items": [
