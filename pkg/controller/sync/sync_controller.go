@@ -20,10 +20,10 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
-	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -41,7 +41,7 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
 type Adder struct {
-	CacheManager *cm.CacheManager
+	CacheManager *cachemanager.CacheManager
 	Events       <-chan event.GenericEvent
 }
 
@@ -65,14 +65,14 @@ func (a *Adder) Add(mgr manager.Manager) error {
 func newReconciler(
 	mgr manager.Manager,
 	reporter syncutil.Reporter,
-	cmt *cm.CacheManager,
+	cm *cachemanager.CacheManager,
 ) reconcile.Reconciler {
 	return &ReconcileSync{
 		reader:   mgr.GetCache(),
 		scheme:   mgr.GetScheme(),
 		log:      log,
 		reporter: reporter,
-		cm:       cmt,
+		cm:       cm,
 	}
 }
 
@@ -103,7 +103,7 @@ type ReconcileSync struct {
 	scheme   *runtime.Scheme
 	log      logr.Logger
 	reporter syncutil.Reporter
-	cm       *cm.CacheManager
+	cm       *cachemanager.CacheManager
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -172,13 +172,10 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		logging.ResourceName, instance.GetName(),
 	)
 
+	reportMetrics = true
 	if err := r.cm.AddObject(ctx, instance); err != nil {
-		reportMetrics = true
-
 		return reconcile.Result{}, err
 	}
-
-	reportMetrics = true
 
 	return reconcile.Result{}, nil
 }
