@@ -18,12 +18,15 @@ package controller
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"sync"
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
@@ -37,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -57,16 +61,12 @@ type GetPodInjector interface {
 	InjectGetPod(func(context.Context) (*corev1.Pod, error))
 }
 
-type GetProcessExcluderInjector interface {
-	InjectProcessExcluder(processExcluder *process.Excluder)
-}
-
-type WatchSetInjector interface {
-	InjectWatchSet(watchSet *watch.Set)
-}
-
 type PubsubInjector interface {
 	InjectPubsubSystem(pubsubSystem *pubsub.System)
+}
+
+type CacheManagerInjector interface {
+	InjectCacheManager(cm *cm.CacheManager)
 }
 
 // Injectors is a list of adder structs that need injection. We can convert this
@@ -87,8 +87,9 @@ type Dependencies struct {
 	MutationSystem   *mutation.System
 	ExpansionSystem  *expansion.System
 	ProviderCache    *externaldata.ProviderCache
-	WatchSet         *watch.Set
 	PubsubSystem     *pubsub.System
+	SyncEventsCh     chan event.GenericEvent
+	CacheMgr         *cm.CacheManager
 }
 
 type defaultPodGetter struct {
@@ -160,6 +161,22 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		}
 		deps.GetPod = fakePodGetter
 	}
+
+	// Adding the CacheManager as a runnable;
+	// manager will start CacheManager.
+	if err := m.Add(deps.CacheMgr); err != nil {
+		return fmt.Errorf("error adding cache manager as a runnable: %w", err)
+	}
+
+	syncAdder := syncc.Adder{
+		Events:       deps.SyncEventsCh,
+		CacheManager: deps.CacheMgr,
+	}
+	// Create subordinate controller - we will feed it events dynamically via watch
+	if err := syncAdder.Add(m); err != nil {
+		return fmt.Errorf("registering sync controller: %w", err)
+	}
+
 	for _, a := range Injectors {
 		a.InjectOpa(deps.Opa)
 		a.InjectWatchManager(deps.WatchManger)
@@ -171,15 +188,14 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)
 		}
-		if a2, ok := a.(GetProcessExcluderInjector); ok {
-			a2.InjectProcessExcluder(deps.ProcessExcluder)
-		}
-		if a2, ok := a.(WatchSetInjector); ok {
-			a2.InjectWatchSet(deps.WatchSet)
-		}
 		if a2, ok := a.(PubsubInjector); ok {
 			a2.InjectPubsubSystem(deps.PubsubSystem)
 		}
+		if a2, ok := a.(CacheManagerInjector); ok {
+			// this is used by the config controller to sync
+			a2.InjectCacheManager(deps.CacheMgr)
+		}
+
 		if err := a.Add(m); err != nil {
 			return err
 		}

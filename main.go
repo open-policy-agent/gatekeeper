@@ -43,6 +43,7 @@ import (
 	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/audit"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
@@ -52,6 +53,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -69,6 +71,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 	crWebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -448,17 +451,43 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 
 	// Setup all Controllers
 	setupLog.Info("setting up controllers")
-	watchSet := watch.NewSet()
+
+	// Events ch will be used to receive events from dynamic watches registered
+	// via the registrar below.
+	events := make(chan event.GenericEvent, 1024)
+	reg, err := wm.NewRegistrar(
+		cachemanager.RegistrarName,
+		events)
+	if err != nil {
+		setupLog.Error(err, "unable to set up watch registrar for cache manager")
+		return err
+	}
+
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cm, err := cachemanager.NewCacheManager(&cachemanager.Config{
+		CfClient:         client,
+		SyncMetricsCache: syncMetricsCache,
+		Tracker:          tracker,
+		ProcessExcluder:  processExcluder,
+		Registrar:        reg,
+		Reader:           mgr.GetCache(),
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to create cache manager")
+		return err
+	}
+
 	opts := controller.Dependencies{
 		Opa:              client,
 		WatchManger:      wm,
+		SyncEventsCh:     events,
+		CacheMgr:         cm,
 		ControllerSwitch: sw,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
 		ExpansionSystem:  expansionSystem,
 		ProviderCache:    providerCache,
-		WatchSet:         watchSet,
 		PubsubSystem:     pubsubSystem,
 	}
 
@@ -483,7 +512,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 
 	if operations.IsAssigned(operations.Audit) {
 		setupLog.Info("setting up audit")
-		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), watchSet)
+		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), cm)
 		auditDeps := audit.Dependencies{
 			Client:          client,
 			ProcessExcluder: processExcluder,
