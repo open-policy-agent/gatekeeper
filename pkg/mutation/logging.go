@@ -35,6 +35,7 @@ func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructur
 			logging.ResourceNamespace, obj.GetNamespace(),
 			logging.ResourceName, getNameOrGenerateName(obj),
 			logging.ResourceSourceType, source,
+			logging.ResourceLabels, obj.GetLabels(),
 		}
 		logDetails = append(logDetails, iterations...)
 		log.Info(message, logDetails...)
