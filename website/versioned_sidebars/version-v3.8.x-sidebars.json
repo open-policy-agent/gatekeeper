@@ -40,7 +40,8 @@
       "label": "Architecture",
       "collapsed": false,
       "items": [
-        "operations"
+        "operations",
+        "opa-versions"
       ]
     },
     {
