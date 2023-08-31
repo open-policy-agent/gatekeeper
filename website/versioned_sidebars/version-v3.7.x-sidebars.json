@@ -108,6 +108,10 @@
         {
           "type": "doc",
           "id": "version-v3.7.x/operations"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.7.x/opa-versions"
         }
       ]
     },
