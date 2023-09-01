@@ -318,7 +318,7 @@ func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind)
 func (c *CacheManager) manageCache(ctx context.Context) {
 	// relistStopChan is used to stop any list operations still in progress
 	relistStopChan := make(chan struct{})
-	// waitToCloseChan time is used to wait on the relist goroutine to end
+	// waitToCloseChan is used to wait on the relist goroutine to end
 	// when needing to create another one. This ensures that we are essentially
 	// only using a singleton routine to relist gvks.
 	waitToCloseChan := make(chan struct{})
