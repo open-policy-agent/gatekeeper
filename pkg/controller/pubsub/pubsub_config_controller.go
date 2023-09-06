@@ -6,11 +6,7 @@ import (
 	"flag"
 	"fmt"
 
-	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -46,19 +42,9 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(_ *constraintclient.Client) {}
-
-func (a *Adder) InjectWatchManager(_ *watch.Manager) {}
-
 func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
-
-func (a *Adder) InjectMutationSystem(_ *mutation.System) {}
-
-func (a *Adder) InjectExpansionSystem(_ *expansion.System) {}
-
-func (a *Adder) InjectProviderCache(_ *externaldata.ProviderCache) {}
 
 func (a *Adder) InjectPubsubSystem(pubsubSystem *pubsub.System) {
 	a.PubsubSystem = pubsubSystem

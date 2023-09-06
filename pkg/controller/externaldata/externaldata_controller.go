@@ -7,10 +7,8 @@ import (
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -43,17 +41,11 @@ type Adder struct {
 	Tracker       *readiness.Tracker
 }
 
-func (a *Adder) InjectOpa(o *constraintclient.Client) {
+func (a *Adder) InjectCFClient(o *constraintclient.Client) {
 	a.Opa = o
 }
 
-func (a *Adder) InjectWatchManager(w *watch.Manager) {}
-
 func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {}
-
-func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
-
-func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t

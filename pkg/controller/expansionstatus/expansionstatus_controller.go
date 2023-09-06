@@ -22,12 +22,10 @@ import (
 
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	expansionv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -50,19 +48,9 @@ type Adder struct {
 	WatchManager *watch.Manager
 }
 
-func (a *Adder) InjectOpa(o *constraintclient.Client) {}
-
-func (a *Adder) InjectWatchManager(w *watch.Manager) {}
-
 func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {}
-
-func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
-
-func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
-
-func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 
 // Add creates a new Constraint Status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.

@@ -27,10 +27,8 @@ import (
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraintstatus"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -74,7 +72,7 @@ type Adder struct {
 	IfWatching func(schema.GroupVersionKind, func() error) (bool, error)
 }
 
-func (a *Adder) InjectOpa(o *constraintclient.Client) {
+func (a *Adder) InjectCFClient(o *constraintclient.Client) {
 	a.Opa = o
 }
 
@@ -89,10 +87,6 @@ func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
-
-func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
-
-func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
 
 // Add creates a new Constraint Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.

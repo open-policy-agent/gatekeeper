@@ -24,15 +24,12 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplatestatus"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -91,7 +88,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(o *constraintclient.Client) {
+func (a *Adder) InjectCFClient(o *constraintclient.Client) {
 	a.Opa = o
 }
 
@@ -110,12 +107,6 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) {
 	a.GetPod = getPod
 }
-
-func (a *Adder) InjectMutationSystem(_ *mutation.System) {}
-
-func (a *Adder) InjectExpansionSystem(_ *expansion.System) {}
-
-func (a *Adder) InjectProviderCache(_ *externaldata.ProviderCache) {}
 
 // newReconciler returns a new reconcile.Reconciler
 // cstrEvents is the channel from which constraint controller will receive the events
