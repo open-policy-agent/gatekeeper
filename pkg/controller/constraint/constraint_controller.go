@@ -57,7 +57,7 @@ const (
 )
 
 type Adder struct {
-	Opa              *constraintclient.Client
+	CFClient         *constraintclient.Client
 	ConstraintsCache *ConstraintsCache
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
@@ -72,8 +72,8 @@ type Adder struct {
 	IfWatching func(schema.GroupVersionKind, func() error) (bool, error)
 }
 
-func (a *Adder) InjectCFClient(o *constraintclient.Client) {
-	a.Opa = o
+func (a *Adder) InjectCFClient(c *constraintclient.Client) {
+	a.CFClient = c
 }
 
 func (a *Adder) InjectWatchManager(w *watch.Manager) {
@@ -100,7 +100,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r := newReconciler(mgr, a.Opa, a.ControllerSwitch, reporter, a.ConstraintsCache, a.Tracker)
+	r := newReconciler(mgr, a.CFClient, a.ControllerSwitch, reporter, a.ConstraintsCache, a.Tracker)
 	if a.GetPod != nil {
 		r.getPod = a.GetPod
 	}
@@ -123,7 +123,7 @@ type tags struct {
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
-	opa *constraintclient.Client,
+	cfClient *constraintclient.Client,
 	cs *watch.ControllerSwitch,
 	reporter StatsReporter,
 	constraintsCache *ConstraintsCache,
@@ -137,7 +137,7 @@ func newReconciler(
 
 		cs:               cs,
 		scheme:           mgr.GetScheme(),
-		opa:              opa,
+		cfClient:         cfClient,
 		log:              log,
 		reporter:         reporter,
 		constraintsCache: constraintsCache,
@@ -190,7 +190,7 @@ type ReconcileConstraint struct {
 
 	cs               *watch.ControllerSwitch
 	scheme           *runtime.Scheme
-	opa              *constraintclient.Client
+	cfClient         *constraintclient.Client
 	log              logr.Logger
 	reporter         StatsReporter
 	constraintsCache *ConstraintsCache
@@ -285,7 +285,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		status.Status.ConstraintUID = instance.GetUID()
 		status.Status.ObservedGeneration = instance.GetGeneration()
 		status.Status.Errors = nil
-		if c, err := r.opa.GetConstraint(instance); err != nil || !constraints.SemanticEqual(instance, c) {
+		if c, err := r.cfClient.GetConstraint(instance); err != nil || !constraints.SemanticEqual(instance, c) {
 			if err := r.cacheConstraint(ctx, instance); err != nil {
 				r.constraintsCache.addConstraintKey(constraintKey, tags{
 					enforcementAction: enforcementAction,
@@ -314,7 +314,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		reportMetrics = true
 	} else {
 		r.log.Info("handling constraint delete", "instance", instance)
-		if _, err := r.opa.RemoveConstraint(ctx, instance); err != nil {
+		if _, err := r.cfClient.RemoveConstraint(ctx, instance); err != nil {
 			if errors.Is(err, constraintclient.ErrMissingConstraint) {
 				return reconcile.Result{}, err
 			}
@@ -408,9 +408,9 @@ func (r *ReconcileConstraint) cacheConstraint(ctx context.Context, instance *uns
 	t := r.tracker.For(instance.GroupVersionKind())
 
 	obj := instance.DeepCopy()
-	// Remove the status field since we do not need it for OPA
+	// Remove the status field since we do not need it
 	unstructured.RemoveNestedField(obj.Object, "status")
-	_, err := r.opa.AddConstraint(ctx, obj)
+	_, err := r.cfClient.AddConstraint(ctx, obj)
 	if err != nil {
 		t.TryCancelExpect(obj)
 		return err

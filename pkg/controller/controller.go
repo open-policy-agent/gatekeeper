@@ -94,7 +94,7 @@ var AddToManagerFuncs []func(manager.Manager) error
 
 // Dependencies are dependencies that can be injected into controllers.
 type Dependencies struct {
-	Opa              *constraintclient.Client
+	CFClient         *constraintclient.Client
 	WatchManger      *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
@@ -198,7 +198,7 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		a.InjectTracker(deps.Tracker)
 
 		if a2, ok := a.(DataClientInjector); ok {
-			a2.InjectCFClient(deps.Opa)
+			a2.InjectCFClient(deps.CFClient)
 		}
 		if a2, ok := a.(WatchManagerInjector); ok {
 			a2.InjectWatchManager(deps.WatchManger)

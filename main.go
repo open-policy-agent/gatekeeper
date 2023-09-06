@@ -410,7 +410,6 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 		cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
 	}
 
-	// initialize OPA
 	driver, err := rego.New(args...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up Driver")
@@ -478,7 +477,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	}
 
 	opts := controller.Dependencies{
-		Opa:              client,
+		CFClient:         client,
 		WatchManger:      wm,
 		SyncEventsCh:     events,
 		CacheMgr:         cm,
