@@ -1,5 +1,7 @@
 # Gatekeeper
 
+![Static Badge](https://img.shields.io/badge/OPA%20Version-v0.54.0-blue)
+
 ## How is Gatekeeper different from OPA?
 
 Compared to using [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html) (aka Gatekeeper v1.0), Gatekeeper introduces the following functionality:
