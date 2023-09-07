@@ -44,7 +44,8 @@ module.exports = {
       collapsed: false,
       items: [
         'operations',
-        'performance-tuning'
+        'performance-tuning',
+        'opa-versions'
       ],
     },
     {
