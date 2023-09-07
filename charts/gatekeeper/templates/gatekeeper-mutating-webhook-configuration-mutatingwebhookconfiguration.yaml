@@ -24,7 +24,7 @@ webhooks:
       path: /v1/mutate
     {{- end }}
   failurePolicy: {{ .Values.mutatingWebhookFailurePolicy }}
-  matchPolicy: Exact
+  matchPolicy: {{ .Values.mutatingWebhookMatchPolicy }}
   name: mutation.gatekeeper.sh
   namespaceSelector:
     matchExpressions:

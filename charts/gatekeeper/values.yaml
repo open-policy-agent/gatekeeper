@@ -16,6 +16,7 @@ validatingWebhookObjectSelector: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 validatingWebhookURL: null
+validatingWebhookMatchPolicy: Exact
 enableDeleteOperations: false
 enableExternalData: true
 enableGeneratorResourceExpansion: true
@@ -31,6 +32,7 @@ mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
 mutatingWebhookURL: null
 mutationAnnotations: false
+mutatingWebhookMatchPolicy: Exact
 auditChunkSize: 500
 logLevel: INFO
 logDenies: false

@@ -24,7 +24,7 @@ webhooks:
       path: /v1/admit
     {{- end }}
   failurePolicy: {{ .Values.validatingWebhookFailurePolicy }}
-  matchPolicy: Exact
+  matchPolicy: {{ .Values.validatingWebhookMatchPolicy }}
   name: validation.gatekeeper.sh
   namespaceSelector:
     matchExpressions:
