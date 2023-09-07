@@ -352,7 +352,7 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 				close(relistStopChan)
 				select {
 				case <-waitToCloseChan:
-					// child goroutine exited gratecefully
+					// child goroutine exited gracefully
 					break
 				case <-time.After(time.Second * 10):
 					log.Error(fmt.Errorf("internal: background relist did not exit gracefully"), "possible goroutine leak")
