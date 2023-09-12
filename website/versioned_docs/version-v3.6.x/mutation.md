@@ -153,11 +153,6 @@ spec:
       value: "admin"
 ```
 
-### Mutation Annotations
-
-You can have two recording annotations applied at mutation time by enabling the `--mutation-annotations` flag. More details can be found on the
-[customize startup docs page](./customize-startup.md).
-
 ## Examples
 
 ### Adding an annotation
