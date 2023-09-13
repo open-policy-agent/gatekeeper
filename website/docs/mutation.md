@@ -252,6 +252,11 @@ must start with `:` or `@`. Also, if `assignPath` is set to a value which could 
 be interpreted as a domain, such as `my.repo.lib/app`, then `assignDomain` must
 also be specified.
 
+### Mutation Annotations
+
+You can have two recording annotations applied at mutation time by enabling the `--mutation-annotations` flag. More details can be found on the
+[customize startup docs page](./customize-startup.md).
+
 ## Examples
 
 ### Adding an annotation
