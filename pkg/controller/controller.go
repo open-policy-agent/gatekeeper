@@ -47,13 +47,9 @@ import (
 var debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
 
 type Injector interface {
-	InjectOpa(*constraintclient.Client)
-	InjectWatchManager(*watch.Manager)
 	InjectControllerSwitch(*watch.ControllerSwitch)
 	InjectTracker(tracker *readiness.Tracker)
-	InjectMutationSystem(mutationSystem *mutation.System)
-	InjectExpansionSystem(expansionSystem *expansion.System)
-	InjectProviderCache(providerCache *externaldata.ProviderCache)
+
 	Add(mgr manager.Manager) error
 }
 
@@ -63,6 +59,26 @@ type GetPodInjector interface {
 
 type PubsubInjector interface {
 	InjectPubsubSystem(pubsubSystem *pubsub.System)
+}
+
+type DataClientInjector interface {
+	InjectCFClient(*constraintclient.Client)
+}
+
+type WatchManagerInjector interface {
+	InjectWatchManager(*watch.Manager)
+}
+
+type MutationSystemInjector interface {
+	InjectMutationSystem(mutationSystem *mutation.System)
+}
+
+type ExpansionSystemInjector interface {
+	InjectExpansionSystem(expansionSystem *expansion.System)
+}
+
+type ProviderCacheInjector interface {
+	InjectProviderCache(providerCache *externaldata.ProviderCache)
 }
 
 type CacheManagerInjector interface {
@@ -78,7 +94,7 @@ var AddToManagerFuncs []func(manager.Manager) error
 
 // Dependencies are dependencies that can be injected into controllers.
 type Dependencies struct {
-	Opa              *constraintclient.Client
+	CFClient         *constraintclient.Client
 	WatchManger      *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
@@ -178,13 +194,24 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 	}
 
 	for _, a := range Injectors {
-		a.InjectOpa(deps.Opa)
-		a.InjectWatchManager(deps.WatchManger)
 		a.InjectControllerSwitch(deps.ControllerSwitch)
 		a.InjectTracker(deps.Tracker)
-		a.InjectMutationSystem(deps.MutationSystem)
-		a.InjectExpansionSystem(deps.ExpansionSystem)
-		a.InjectProviderCache(deps.ProviderCache)
+
+		if a2, ok := a.(DataClientInjector); ok {
+			a2.InjectCFClient(deps.CFClient)
+		}
+		if a2, ok := a.(WatchManagerInjector); ok {
+			a2.InjectWatchManager(deps.WatchManger)
+		}
+		if a2, ok := a.(MutationSystemInjector); ok {
+			a2.InjectMutationSystem(deps.MutationSystem)
+		}
+		if a2, ok := a.(ExpansionSystemInjector); ok {
+			a2.InjectExpansionSystem(deps.ExpansionSystem)
+		}
+		if a2, ok := a.(ProviderCacheInjector); ok {
+			a2.InjectProviderCache(deps.ProviderCache)
+		}
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)
 		}

@@ -106,15 +106,14 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("want createGatekeeperNamespace(mgr.GetConfig()) error = nil, got %v", err)
 	}
 
-	// initialize OPA
 	driver, err := rego.New(rego.Tracing(true))
 	if err != nil {
 		t.Fatalf("unable to set up Driver: %v", err)
 	}
 
-	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
-		t.Fatalf("unable to set up OPA client: %s", err)
+		t.Fatalf("unable to set up constraint framework client: %s", err)
 	}
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
@@ -130,7 +129,7 @@ violation[{"msg": "denied!"}] {
 	)
 
 	adder := constrainttemplate.Adder{
-		Opa:              opaClient,
+		CFClient:         cfClient,
 		WatchManager:     wm,
 		ControllerSwitch: cs,
 		Tracker:          tracker,
