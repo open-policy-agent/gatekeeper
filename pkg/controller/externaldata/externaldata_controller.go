@@ -7,10 +7,8 @@ import (
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -38,22 +36,16 @@ var (
 )
 
 type Adder struct {
-	Opa           *constraintclient.Client
+	CFClient      *constraintclient.Client
 	ProviderCache *frameworksexternaldata.ProviderCache
 	Tracker       *readiness.Tracker
 }
 
-func (a *Adder) InjectOpa(o *constraintclient.Client) {
-	a.Opa = o
+func (a *Adder) InjectCFClient(c *constraintclient.Client) {
+	a.CFClient = c
 }
 
-func (a *Adder) InjectWatchManager(w *watch.Manager) {}
-
 func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {}
-
-func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
-
-func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
@@ -66,23 +58,23 @@ func (a *Adder) InjectProviderCache(providerCache *frameworksexternaldata.Provid
 // Add creates a new ExternalData Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.Opa, a.ProviderCache, a.Tracker)
+	r := newReconciler(mgr, a.CFClient, a.ProviderCache, a.Tracker)
 	return add(mgr, r)
 }
 
 // Reconciler reconciles a ExternalData object.
 type Reconciler struct {
 	client.Client
-	opa           *constraintclient.Client
+	cfClient      *constraintclient.Client
 	providerCache *frameworksexternaldata.ProviderCache
 	tracker       *readiness.Tracker
 	scheme        *runtime.Scheme
 }
 
 // newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, opa *constraintclient.Client, providerCache *frameworksexternaldata.ProviderCache, tracker *readiness.Tracker) *Reconciler {
+func newReconciler(mgr manager.Manager, client *constraintclient.Client, providerCache *frameworksexternaldata.ProviderCache, tracker *readiness.Tracker) *Reconciler {
 	r := &Reconciler{
-		opa:           opa,
+		cfClient:      client,
 		providerCache: providerCache,
 		Client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),

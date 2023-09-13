@@ -19,15 +19,11 @@ import (
 	"context"
 	"fmt"
 
-	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -66,10 +62,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(_ *constraintclient.Client) {}
-
-func (a *Adder) InjectWatchManager(_ *watch.Manager) {}
-
 func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 	a.ControllerSwitch = cs
 }
@@ -77,12 +69,6 @@ func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
-
-func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
-
-func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
-
-func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 
 func (a *Adder) InjectCacheManager(cm *cm.CacheManager) {
 	a.CacheManager = cm
