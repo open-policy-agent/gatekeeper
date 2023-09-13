@@ -57,7 +57,7 @@ The `--mutation-annotations` flag adds the following two annotations to mutated 
 | `gatekeeper.sh/mutation-id` | The UUID of the mutation.                                                                                                                                     |
 | `gatekeeper.sh/mutations`   | A list of comma-separated mutations in the format of `<MutationType>/<MutationNamespace>/<MutationName>:<MutationGeneration>` that are applied to the object. |
 
-> ❗ Note that this will break the idempotence requirement that Kubernetes sets for mutation webhooks.
+> ❗ Note that this will break the idempotence requirement that Kubernetes sets for mutation webhooks. See the [Kubernetes docs here](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#idempotence) for more details
 
 ## Other Configuration Options
 
