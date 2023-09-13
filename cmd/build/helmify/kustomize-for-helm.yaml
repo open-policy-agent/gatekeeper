@@ -92,6 +92,7 @@ spec:
             - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
             - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
+            - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
@@ -180,6 +181,7 @@ spec:
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_DEPLOYMENT_AUDIT_LOGFILE
             - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
+            - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
