@@ -113,15 +113,14 @@ func TestReconcile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// initialize OPA
 	driver, err := rego.New(rego.Tracing(true))
 	if err != nil {
 		t.Fatalf("unable to set up Driver: %v", err)
 	}
 
-	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
-		t.Fatalf("unable to set up OPA client: %s", err)
+		t.Fatalf("unable to set up constraint framework client: %s", err)
 	}
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
@@ -139,7 +138,7 @@ func TestReconcile(t *testing.T) {
 
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, opaClient, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, cfClient, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +223,7 @@ func TestReconcile(t *testing.T) {
 			Name:      "FooNamespace",
 			Object:    runtime.RawExtension{Object: ns},
 		}
-		resp, err := opaClient.Review(ctx, req)
+		resp, err := cfClient.Review(ctx, req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -232,7 +231,7 @@ func TestReconcile(t *testing.T) {
 		gotResults := resp.Results()
 		if len(gotResults) != 1 {
 			t.Log(resp.TraceDump())
-			t.Log(opaClient.Dump(ctx))
+			t.Log(cfClient.Dump(ctx))
 			t.Fatalf("want 1 result, got %v", gotResults)
 		}
 	})
@@ -418,7 +417,7 @@ func TestReconcile(t *testing.T) {
 			Name:      "FooNamespace",
 			Object:    runtime.RawExtension{Object: ns},
 		}
-		resp, err := opaClient.Review(ctx, req)
+		resp, err := cfClient.Review(ctx, req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -426,7 +425,7 @@ func TestReconcile(t *testing.T) {
 		gotResults := resp.Results()
 		if len(resp.Results()) != 0 {
 			t.Log(resp.TraceDump())
-			t.Log(opaClient.Dump(ctx))
+			t.Log(cfClient.Dump(ctx))
 			t.Fatalf("did not get 0 results: %v", gotResults)
 		}
 
@@ -439,13 +438,13 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 			return true
 		}, func() error {
-			resp, err := opaClient.Review(ctx, req)
+			resp, err := cfClient.Review(ctx, req)
 			if err != nil {
 				return err
 			}
 			if len(resp.Results()) != 0 {
-				dump, _ := opaClient.Dump(ctx)
-				return fmt.Errorf("Results not yet zero\nOPA DUMP:\n%s", dump)
+				dump, _ := cfClient.Dump(ctx)
+				return fmt.Errorf("Results not yet zero\nDUMP:\n%s", dump)
 			}
 			return nil
 		})
@@ -536,15 +535,14 @@ violation[{"msg": "denied!"}] {
 		t.Fatal(err)
 	}
 
-	// initialize OPA
 	driver, err := rego.New(rego.Tracing(true))
 	if err != nil {
 		t.Fatalf("unable to set up Driver: %v", err)
 	}
 
-	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
-		t.Fatalf("unable to set up OPA client: %s", err)
+		t.Fatalf("unable to set up constraint framework client: %s", err)
 	}
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
@@ -557,7 +555,7 @@ violation[{"msg": "denied!"}] {
 
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, opaClient, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, cfClient, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 	if err != nil {
 		t.Fatal(err)
 	}

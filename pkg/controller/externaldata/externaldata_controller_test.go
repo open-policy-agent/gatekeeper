@@ -79,16 +79,15 @@ func TestReconcile(t *testing.T) {
 	*externaldata.ExternalDataEnabled = true
 	pc := frameworksexternaldata.NewCache()
 
-	// initialize OPA
 	args := []rego.Arg{rego.Tracing(false), rego.AddExternalDataProviderCache(pc)}
 	driver, err := rego.New(args...)
 	if err != nil {
 		t.Fatalf("unable to set up Driver: %v", err)
 	}
 
-	opa, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
-		t.Fatalf("unable to set up OPA client: %s", err)
+		t.Fatalf("unable to set up constraint framework client: %s", err)
 	}
 
 	cs := watch.NewSwitch()
@@ -97,7 +96,7 @@ func TestReconcile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := newReconciler(mgr, opa, pc, tracker)
+	rec := newReconciler(mgr, cfClient, pc, tracker)
 
 	recFn, requests := SetupTestReconcile(rec)
 	err = add(mgr, recFn)
