@@ -4,15 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
 	expansionv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -52,17 +49,11 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(_ *constraintclient.Client) {}
-
-func (a *Adder) InjectWatchManager(_ *watch.Manager) {}
-
 func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(tracker *readiness.Tracker) {
 	a.Tracker = tracker
 }
-
-func (a *Adder) InjectMutationSystem(_ *mutation.System) {}
 
 func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {
 	a.ExpansionSystem = expansionSystem
@@ -71,8 +62,6 @@ func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {
 func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, error)) {
 	a.GetPod = getPod
 }
-
-func (a *Adder) InjectProviderCache(_ *externaldata.ProviderCache) {}
 
 type Reconciler struct {
 	client.Client
