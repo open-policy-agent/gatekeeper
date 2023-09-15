@@ -323,7 +323,8 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 	// only using a singleton routine to relist gvks.
 	waitToCloseChan := make(chan struct{})
 
-	// the 0th relist goroutine is stopped, by definition, so we close the channel.
+	// edge case: the 0th relist goroutine is "stopped", by definition, so we close the wait channel
+	// but it's also "running" so we don't close the kill channel in order to do so in the for loop below.
 	close(waitToCloseChan)
 
 	for {
