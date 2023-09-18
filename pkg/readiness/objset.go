@@ -61,5 +61,5 @@ func (o *objData) decrementRetries() bool {
 type objDataFactory func() objData
 
 func objDataFromFlags() objData {
-	return objData{retries: *readinessRetries}
+	return objData{retries: *ReadinessRetries}
 }

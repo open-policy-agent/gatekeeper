@@ -271,6 +271,11 @@ func (t *Tracker) Satisfied() bool {
 	if operations.HasValidationOperations() {
 		configKinds := t.config.kinds()
 		for _, gvk := range configKinds {
+			// a t.data.Get(configGVK) will result in setting up DATA expectations
+			// for the config singleton and we don't want that to happen.
+			if gvk.GroupVersion() == configv1alpha1.GroupVersion && gvk.Kind == "Config" {
+				continue
+			}
 			if !t.data.Get(gvk).Satisfied() {
 				return false
 			}
@@ -384,13 +389,13 @@ func (t *Tracker) Populated() bool {
 
 // collectForObjectTracker identifies objects that are unsatisfied for the provided
 // `es`, which must be an objectTracker, and removes those expectations.
-func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, cleanup func(schema.GroupVersionKind)) error {
+func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, cleanup func(schema.GroupVersionKind), trackerName string) error {
 	if es == nil {
 		return fmt.Errorf("nil Expectations provided to collectForObjectTracker")
 	}
 
 	if !es.Populated() || es.Satisfied() {
-		log.V(1).Info("Expectations unpopulated or already satisfied, skipping collection")
+		log.V(1).Info("Expectations unpopulated or already satisfied, skipping collection", "tracker", trackerName)
 		return nil
 	}
 
@@ -453,7 +458,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 		t.constraints.Remove(gvk)
 		t.constraintTrackers.Cancel(gvk.String())
 	}
-	err := t.collectForObjectTracker(ctx, tt, cleanupTemplate)
+	err := t.collectForObjectTracker(ctx, tt, cleanupTemplate, "templates")
 	if err != nil {
 		log.Error(err, "while collecting for the ConstraintTemplate tracker")
 	}
@@ -462,7 +467,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 	cleanupData := func(gvk schema.GroupVersionKind) {
 		t.data.Remove(gvk)
 	}
-	err = t.collectForObjectTracker(ctx, ct, cleanupData)
+	err = t.collectForObjectTracker(ctx, ct, cleanupData, "config")
 	if err != nil {
 		log.Error(err, "while collecting for the Config tracker")
 	}
@@ -471,7 +476,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 	for _, gvk := range t.constraints.Keys() {
 		// retrieve the expectations for this key
 		es := t.constraints.Get(gvk)
-		err = t.collectForObjectTracker(ctx, es, nil)
+		err = t.collectForObjectTracker(ctx, es, nil, "constraints")
 		if err != nil {
 			log.Error(err, "while collecting for the Constraint type", "gvk", gvk)
 			continue
@@ -482,7 +487,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 	for _, gvk := range t.data.Keys() {
 		// retrieve the expectations for this key
 		es := t.data.Get(gvk)
-		err = t.collectForObjectTracker(ctx, es, nil)
+		err = t.collectForObjectTracker(ctx, es, nil, "data")
 		if err != nil {
 			log.Error(err, "while collecting for the Data type", "gvk", gvk)
 			continue
@@ -714,6 +719,10 @@ func (t *Tracker) trackConfig(ctx context.Context) error {
 	}
 
 	if operations.HasValidationOperations() {
+		// expect a config singleton regardless of whether syncOnly is present
+		// as the config can specify a process excluder.
+		t.config.Expect(cfg)
+
 		// Expect the resource kinds specified in the Config.
 		// We will fail-open (resolve expectations) for GVKs
 		// that are unregistered.
@@ -726,7 +735,6 @@ func (t *Tracker) trackConfig(ctx context.Context) error {
 			u := &unstructured.Unstructured{}
 			u.SetGroupVersionKind(gvk)
 			t.config.Expect(u)
-			t.config.Observe(u) // we only care about the gvk entry in kinds()
 
 			// Set expectations for individual cached resources
 			dt := t.ForData(gvk)

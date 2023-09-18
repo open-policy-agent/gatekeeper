@@ -27,6 +27,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -150,13 +151,25 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 	exists := true
 	instance := &configv1alpha1.Config{}
+	cfgTracker := r.getTracker()
+
 	err := r.reader.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
+		// use a tempInstance for cfg tracker
+		tempInstance := &configv1alpha1.Config{}
+		tempInstance.SetNamespace(request.NamespacedName.Namespace)
+		tempInstance.SetName(request.NamespacedName.Name)
+
 		// if config is not found, we should remove cached data
 		if errors.IsNotFound(err) {
 			exists = false
+			// expectations will be reaped by the tracker for deleted resources.
 		} else {
 			// Error reading the object - requeue the request.
+			// Canceling of underlying data will be done lower either in cachemanager.UpsertSource
+			// or on err to the call.
+			cfgTracker.TryCancelExpect(tempInstance)
+
 			return reconcile.Result{}, err
 		}
 	}
@@ -167,8 +180,15 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	if exists && hasFinalizer(instance) {
 		removeFinalizer(instance)
 		if err := r.writer.Update(ctx, instance); err != nil {
+			cfgTracker.TryCancelExpect(instance)
+
 			return reconcile.Result{}, err
 		}
+	}
+
+	if exists {
+		// observe the config instance
+		cfgTracker.Observe(instance)
 	}
 
 	newExcluder := process.New()
@@ -197,11 +217,33 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 	r.cacheManager.ExcludeProcesses(newExcluder)
 	configSourceKey := aggregator.Key{Source: "config", ID: request.NamespacedName.String()}
+	// if gvksToSync is empty, cachemanager will CancelData for stale expectations
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
+		// for readiness, try to cancel the expectations on error for the gvks
+		for _, gvk := range gvksToSync {
+			u := &unstructured.Unstructured{}
+			u.SetGroupVersionKind(gvk)
+
+			if cfgTracker.TryCancelExpect(u) {
+				r.tracker.CancelData(gvk)
+			}
+		}
+
 		return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error establishing watches for new syncOny: %w", err)
 	}
 
+	for _, gvk := range gvksToSync {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(gvk)
+
+		cfgTracker.Observe(u)
+	}
+
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileConfig) getTracker() readiness.Expectations {
+	return r.tracker.For(configv1alpha1.GroupVersion.WithKind("Config"))
 }
 
 func containsString(s string, items []string) bool {

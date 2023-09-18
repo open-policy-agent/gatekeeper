@@ -9,7 +9,15 @@ import (
 
 type SpyReader struct {
 	client.Reader
+	GetFunc  func(ctx context.Context, key client.ObjectKey, get client.Object, opts ...client.GetOption) error
 	ListFunc func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
+}
+
+func (r SpyReader) Get(ctx context.Context, key client.ObjectKey, get client.Object, opts ...client.GetOption) error {
+	if r.GetFunc != nil {
+		return r.GetFunc(ctx, key, get, opts...)
+	}
+	return r.Reader.Get(ctx, key, get, opts...)
 }
 
 func (r SpyReader) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {

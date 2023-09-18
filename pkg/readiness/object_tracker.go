@@ -22,6 +22,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -31,7 +32,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-var readinessRetries = flag.Int("readiness-retries", 0, "The number of resource ingestion attempts allowed before the resource is disregarded.  A value of -1 will retry indefinitely.")
+var (
+	ReadinessRetries = flag.Int("readiness-retries", 0, "The number of resource ingestion attempts allowed before the resource is disregarded.  A value of -1 will retry indefinitely.")
+	CleanupState     = true
+)
 
 // Expectations tracks expectations for runtime.Objects.
 // A set of Expect() calls are made, demarcated by ExpectationsDone().
@@ -124,7 +128,6 @@ func (t *objectTracker) Expect(o runtime.Object) {
 	t.expect[k] = struct{}{}
 }
 
-// nolint: gocritic // Using a pointer here is less efficient and results in more copying.
 func (t *objectTracker) cancelExpectNoLock(k objKey) {
 	delete(t.expect, k)
 	delete(t.seen, k)
@@ -332,11 +335,13 @@ func (t *objectTracker) Satisfied() bool {
 
 		// Circuit-breaker tripped - free tracking memory
 		t.kindsSnapshot = t.kindsNoLock() // Take snapshot as kinds() depends on the maps we're about to clear.
-		t.seen = nil
-		t.expect = nil
-		t.satisfied = nil
-		t.canceled = nil
-		t.tryCanceled = nil
+		if CleanupState {
+			t.seen = nil
+			t.expect = nil
+			t.satisfied = nil
+			t.canceled = nil
+			t.tryCanceled = nil
+		}
 	}
 	return t.allSatisfied
 }
@@ -396,6 +401,12 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 			Version: v1beta1.SchemeGroupVersion.Version,
 			Kind:    v.Spec.CRD.Spec.Names.Kind,
 		}
+	case *configv1alpha1.Config:
+		gvk = schema.GroupVersionKind{
+			Group:   configv1alpha1.GroupVersion.Group,
+			Version: configv1alpha1.GroupVersion.Version,
+			Kind:    "Config",
+		}
 	case *unstructured.Unstructured:
 		ugvk := obj.GetObjectKind().GroupVersionKind()
 		if ugvk.GroupVersion() == v1beta1.SchemeGroupVersion && ugvk.Kind == "ConstraintTemplate" {
@@ -438,5 +449,17 @@ func (t *objectTracker) IsExpecting(gvk schema.GroupVersionKind, nsName types.Na
 	if _, ok := t.satisfied[k]; ok {
 		return true
 	}
+	return false
+}
+
+func (t *objectTracker) IsCancelled(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	k := objKey{gvk: gvk, namespacedName: nsName}
+	if _, ok := t.canceled[k]; ok {
+		return true
+	}
+
 	return false
 }

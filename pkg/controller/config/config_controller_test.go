@@ -29,6 +29,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -58,7 +59,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const timeout = time.Second * 20
+const (
+	timeout = time.Second * 20
+	tick    = time.Second * 2
+)
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -298,21 +302,10 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	// create the Config object and expect the Reconcile to be created when controller starts
-	instance := &configv1alpha1.Config{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "config",
-			Namespace:  "gatekeeper-system",
-			Finalizers: []string{finalizerName},
-		},
-		Spec: configv1alpha1.ConfigSpec{
-			Sync: configv1alpha1.Sync{
-				SyncOnly: []configv1alpha1.SyncOnlyEntry{
-					{Group: "", Version: "v1", Kind: "Pod"},
-				},
-			},
-		},
-	}
+	instance := configFor([]schema.GroupVersionKind{
+		{Group: "", Version: "v1", Kind: "Pod"},
+	})
+	cfgGVK := instance.GroupVersionKind()
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
@@ -359,11 +352,19 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	events := make(chan event.GenericEvent, 1024)
 
 	// set up controller and add it to the manager
-	_, err = setupController(ctx, mgr, wm, tracker, events, c, false)
+	_, err = setupController(ctx, mgr, wm, tracker, events, c, false, nil)
 	require.NoError(t, err, "failed to set up controller")
 
 	// start manager that will start tracker and controller
 	testutils.StartManager(ctx, t, mgr)
+
+	// get the object tracker for the synconly pod resource
+	cfgTr, ok := tracker.For(cfgGVK).(testExpectations)
+	require.True(t, ok, fmt.Sprintf("unexpected tracker, got %T", cfgTr))
+
+	assert.Eventually(t, func() bool {
+		return cfgTr.IsExpecting(cfgGVK, keys.Config)
+	}, timeout, tick, "checking expectation satisfied for config instance")
 
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 
@@ -373,7 +374,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 		t.Fatalf("unexpected tracker, got %T", tr)
 	}
 
-	// ensure that expectations are set for the constraint gvk
+	// ensure that expectations are set for the gvk to sync
 	g.Eventually(func() bool {
 		return tr.IsExpecting(gvk, types.NamespacedName{Name: "testpod", Namespace: "default"})
 	}, timeout).Should(gomega.BeTrue())
@@ -401,7 +402,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}, timeout).Should(gomega.BeTrue())
 }
 
-func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager, tracker *readiness.Tracker, events chan event.GenericEvent, reader client.Reader, useFakeClient bool) (cachemanager.CFDataClient, error) {
+func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager, tracker *readiness.Tracker, events chan event.GenericEvent, cmReader client.Reader, useFakeClient bool, recReader *fakes.SpyReader) (cachemanager.CFDataClient, error) {
 	// initialize constraint framework data client
 	var client cachemanager.CFDataClient
 	if useFakeClient {
@@ -435,7 +436,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
 		Registrar:        reg,
-		Reader:           reader,
+		Reader:           cmReader,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error creating cache manager: %w", err)
@@ -445,6 +446,9 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 	}()
 
 	rec, err := newReconciler(mgr, cacheManager, cs, tracker)
+	if recReader != nil {
+		rec.reader = recReader
+	}
 	if err != nil {
 		return nil, fmt.Errorf("creating reconciler: %w", err)
 	}
@@ -506,7 +510,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	require.NoError(t, err)
 
 	events := make(chan event.GenericEvent, 1024)
-	dataClient, err := setupController(ctx, mgr, wm, tracker, events, c, true)
+	dataClient, err := setupController(ctx, mgr, wm, tracker, events, c, true, nil)
 	require.NoError(t, err, "failed to set up controller")
 
 	fakeClient, ok := dataClient.(*fakes.FakeCfClient)
@@ -701,6 +705,61 @@ func TestConfig_Retries(t *testing.T) {
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking final cache contents")
 }
 
+func Test_ConfigController_TryCancelExpectations(t *testing.T) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+
+	mgr, wm := setupManager(t)
+	c := testclient.NewRetryClient(mgr.GetClient())
+
+	instance := configFor([]schema.GroupVersionKind{})
+	cfgGVK := instance.GroupVersionKind()
+	require.NoError(t, c.Create(ctx, instance))
+
+	// set up tracker
+	trackerRetries := 3
+	readiness.ReadinessRetries = &trackerRetries
+	readiness.CleanupState = false
+	tracker, err := readiness.SetupTracker(mgr, false, false, false)
+	require.NoError(t, err)
+
+	// only the config controller will fail to read the config resources, not the tracker
+	ctrlReader := &fakes.SpyReader{
+		Reader: mgr.GetCache(),
+		GetFunc: func(ctx context.Context, key client.ObjectKey, get client.Object, opts ...client.GetOption) error {
+			if key == keys.Config {
+				return fmt.Errorf("permanent synthetic failure for config TryCancelExpect test")
+			}
+
+			return mgr.GetCache().Get(ctx, key, get, opts...)
+		},
+	}
+
+	_, err = setupController(ctx, mgr, wm, tracker, make(chan event.GenericEvent, 1024), c, false, ctrlReader)
+	require.NoError(t, err, "failed to set up config controller")
+
+	testutils.StartManager(ctx, t, mgr)
+
+	// expect config expectations to be populated and the tracker satisfied eventually
+	assert.Eventually(t, func() bool {
+		return tracker.For(cfgGVK).Populated()
+	}, timeout, tick, "waiting for expectations to be populated")
+
+	assert.Eventually(t, func() bool {
+		return tracker.Satisfied()
+	}, timeout, tick, "waiting on tracker to be satisfied")
+
+	// but the config expectation will be canceled bc of the synthetic failures injected above
+	// and the readiness-retries config.
+	ts, ok := tracker.For(cfgGVK).(testExpectations)
+	require.True(t, ok)
+	assert.Eventually(t, func() bool {
+		return ts.IsCancelled(cfgGVK, keys.Config)
+	}, timeout, tick, "waiting on exception to be canceled")
+
+	require.NoError(t, c.Delete(ctx, instance))
+}
+
 // configFor returns a config resource that watches the requested set of resources.
 func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 	entries := make([]configv1alpha1.SyncOnlyEntry, len(kinds))
@@ -744,6 +803,7 @@ func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Uns
 // This interface is getting used by tests to check the private objects of objectTracker.
 type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
+	IsCancelled(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }
 
 func deleteResource(ctx context.Context, c client.Client, resounce *unstructured.Unstructured) error {
