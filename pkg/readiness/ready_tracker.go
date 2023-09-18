@@ -30,6 +30,7 @@ import (
 	mutationv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/pkg/errors"
@@ -196,7 +197,7 @@ func (t *Tracker) templateCleanup(ct *templates.ConstraintTemplate) {
 
 // CancelTemplate stops expecting the provided ConstraintTemplate and associated Constraints.
 func (t *Tracker) CancelTemplate(ct *templates.ConstraintTemplate) {
-	log.V(1).Info("cancel tracking for template", "namespace", ct.GetNamespace(), "name", ct.GetName())
+	log.V(logging.DebugLevel).Info("cancel tracking for template", "namespace", ct.GetNamespace(), "name", ct.GetName())
 	t.templates.CancelExpect(ct)
 	t.templateCleanup(ct)
 }
@@ -205,7 +206,7 @@ func (t *Tracker) CancelTemplate(ct *templates.ConstraintTemplate) {
 // cancel the expectation for that CT and its associated Constraints if
 // no retries remain.
 func (t *Tracker) TryCancelTemplate(ct *templates.ConstraintTemplate) {
-	log.V(1).Info("try to cancel tracking for template", "namespace", ct.GetNamespace(), "name", ct.GetName())
+	log.V(logging.DebugLevel).Info("try to cancel tracking for template", "namespace", ct.GetNamespace(), "name", ct.GetName())
 	if t.templates.TryCancelExpect(ct) {
 		t.templateCleanup(ct)
 	}
@@ -213,7 +214,7 @@ func (t *Tracker) TryCancelTemplate(ct *templates.ConstraintTemplate) {
 
 // CancelData stops expecting data for the specified resource kind.
 func (t *Tracker) CancelData(gvk schema.GroupVersionKind) {
-	log.V(1).Info("cancel tracking for data", "gvk", gvk)
+	log.V(logging.DebugLevel).Info("cancel tracking for data", "gvk", gvk)
 	t.data.Remove(gvk)
 }
 
@@ -231,24 +232,24 @@ func (t *Tracker) Satisfied() bool {
 		if !t.assignMetadata.Satisfied() || !t.assign.Satisfied() || !t.modifySet.Satisfied() || !t.assignImage.Satisfied() {
 			return false
 		}
-		log.V(1).Info("all expectations satisfied", "tracker", "assignMetadata")
-		log.V(1).Info("all expectations satisfied", "tracker", "assign")
-		log.V(1).Info("all expectations satisfied", "tracker", "modifySet")
-		log.V(1).Info("all expectations satisfied", "tracker", "assignImage")
+		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "assignMetadata")
+		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "assign")
+		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "modifySet")
+		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "assignImage")
 	}
 
 	if t.externalDataEnabled {
 		if !t.externalDataProvider.Satisfied() {
 			return false
 		}
-		log.V(1).Info("all expectations satisfied", "tracker", "provider")
+		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "provider")
 	}
 
 	if t.expansionEnabled {
 		if !t.expansions.Satisfied() {
 			return false
 		}
-		log.V(1).Info("all expectations satisfied", "tracker", "expansiontemplates")
+		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "expansiontemplates")
 	}
 
 	if operations.HasValidationOperations() {
@@ -262,7 +263,7 @@ func (t *Tracker) Satisfied() bool {
 			}
 		}
 	}
-	log.V(1).Info("all expectations satisfied", "tracker", "constraints")
+	log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "constraints")
 
 	if !t.config.Satisfied() {
 		return false
@@ -281,7 +282,7 @@ func (t *Tracker) Satisfied() bool {
 			}
 		}
 	}
-	log.V(1).Info("all expectations satisfied", "tracker", "data")
+	log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "data")
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -395,7 +396,7 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, 
 	}
 
 	if !es.Populated() || es.Satisfied() {
-		log.V(1).Info("Expectations unpopulated or already satisfied, skipping collection", "tracker", trackerName)
+		log.V(logging.DebugLevel).Info("Expectations unpopulated or already satisfied, skipping collection", "tracker", trackerName)
 		return nil
 	}
 
@@ -498,7 +499,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
 	defer func() {
 		t.assignMetadata.ExpectationsDone()
-		log.V(1).Info("AssignMetadata expectations populated")
+		log.V(logging.DebugLevel).Info("AssignMetadata expectations populated")
 
 		_ = t.constraintTrackers.Wait()
 	}()
@@ -512,10 +513,10 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
 	if err := lister.List(ctx, assignMetadataList); err != nil {
 		return fmt.Errorf("listing AssignMetadata: %w", err)
 	}
-	log.V(1).Info("setting expectations for AssignMetadata", "AssignMetadata Count", len(assignMetadataList.Items))
+	log.V(logging.DebugLevel).Info("setting expectations for AssignMetadata", "AssignMetadata Count", len(assignMetadataList.Items))
 
 	for index := range assignMetadataList.Items {
-		log.V(1).Info("expecting AssignMetadata", "name", assignMetadataList.Items[index].GetName())
+		log.V(logging.DebugLevel).Info("expecting AssignMetadata", "name", assignMetadataList.Items[index].GetName())
 		t.assignMetadata.Expect(&assignMetadataList.Items[index])
 	}
 	return nil
@@ -524,7 +525,7 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
 func (t *Tracker) trackAssign(ctx context.Context) error {
 	defer func() {
 		t.assign.ExpectationsDone()
-		log.V(1).Info("Assign expectations populated")
+		log.V(logging.DebugLevel).Info("Assign expectations populated")
 		_ = t.constraintTrackers.Wait()
 	}()
 
@@ -537,10 +538,10 @@ func (t *Tracker) trackAssign(ctx context.Context) error {
 	if err := lister.List(ctx, assignList); err != nil {
 		return fmt.Errorf("listing Assign: %w", err)
 	}
-	log.V(1).Info("setting expectations for Assign", "Assign Count", len(assignList.Items))
+	log.V(logging.DebugLevel).Info("setting expectations for Assign", "Assign Count", len(assignList.Items))
 
 	for index := range assignList.Items {
-		log.V(1).Info("expecting Assign", "name", assignList.Items[index].GetName())
+		log.V(logging.DebugLevel).Info("expecting Assign", "name", assignList.Items[index].GetName())
 		t.assign.Expect(&assignList.Items[index])
 	}
 	return nil
@@ -549,7 +550,7 @@ func (t *Tracker) trackAssign(ctx context.Context) error {
 func (t *Tracker) trackModifySet(ctx context.Context) error {
 	defer func() {
 		t.modifySet.ExpectationsDone()
-		log.V(1).Info("ModifySet expectations populated")
+		log.V(logging.DebugLevel).Info("ModifySet expectations populated")
 		_ = t.constraintTrackers.Wait()
 	}()
 
@@ -562,10 +563,10 @@ func (t *Tracker) trackModifySet(ctx context.Context) error {
 	if err := lister.List(ctx, modifySetList); err != nil {
 		return fmt.Errorf("listing ModifySet: %w", err)
 	}
-	log.V(1).Info("setting expectations for ModifySet", "ModifySet Count", len(modifySetList.Items))
+	log.V(logging.DebugLevel).Info("setting expectations for ModifySet", "ModifySet Count", len(modifySetList.Items))
 
 	for index := range modifySetList.Items {
-		log.V(1).Info("expecting ModifySet", "name", modifySetList.Items[index].GetName())
+		log.V(logging.DebugLevel).Info("expecting ModifySet", "name", modifySetList.Items[index].GetName())
 		t.modifySet.Expect(&modifySetList.Items[index])
 	}
 	return nil
@@ -574,7 +575,7 @@ func (t *Tracker) trackModifySet(ctx context.Context) error {
 func (t *Tracker) trackAssignImage(ctx context.Context) error {
 	defer func() {
 		t.assignImage.ExpectationsDone()
-		log.V(1).Info("AssignImage expectations populated")
+		log.V(logging.DebugLevel).Info("AssignImage expectations populated")
 		_ = t.constraintTrackers.Wait()
 	}()
 
@@ -587,10 +588,10 @@ func (t *Tracker) trackAssignImage(ctx context.Context) error {
 	if err := lister.List(ctx, assignImageList); err != nil {
 		return fmt.Errorf("listing AssignImage: %w", err)
 	}
-	log.V(1).Info("setting expectations for AssignImage", "AssignImage Count", len(assignImageList.Items))
+	log.V(logging.DebugLevel).Info("setting expectations for AssignImage", "AssignImage Count", len(assignImageList.Items))
 
 	for index := range assignImageList.Items {
-		log.V(1).Info("expecting AssignImage", "name", assignImageList.Items[index].GetName())
+		log.V(logging.DebugLevel).Info("expecting AssignImage", "name", assignImageList.Items[index].GetName())
 		t.assignImage.Expect(&assignImageList.Items[index])
 	}
 	return nil
@@ -599,7 +600,7 @@ func (t *Tracker) trackAssignImage(ctx context.Context) error {
 func (t *Tracker) trackExpansionTemplates(ctx context.Context) error {
 	defer func() {
 		t.expansions.ExpectationsDone()
-		log.V(1).Info("ExpansionTemplate expectations populated")
+		log.V(logging.DebugLevel).Info("ExpansionTemplate expectations populated")
 		_ = t.constraintTrackers.Wait()
 	}()
 
@@ -612,10 +613,10 @@ func (t *Tracker) trackExpansionTemplates(ctx context.Context) error {
 	if err := lister.List(ctx, expansionList); err != nil {
 		return fmt.Errorf("listing ExpansionTemplate: %w", err)
 	}
-	log.V(1).Info("setting expectations for ExpansionTemplate", "ExpansionTemplate Count", len(expansionList.Items))
+	log.V(logging.DebugLevel).Info("setting expectations for ExpansionTemplate", "ExpansionTemplate Count", len(expansionList.Items))
 
 	for index := range expansionList.Items {
-		log.V(1).Info("expecting ExpansionTemplate", "name", expansionList.Items[index].GetName())
+		log.V(logging.DebugLevel).Info("expecting ExpansionTemplate", "name", expansionList.Items[index].GetName())
 		t.expansions.Expect(&expansionList.Items[index])
 	}
 	return nil
@@ -624,7 +625,7 @@ func (t *Tracker) trackExpansionTemplates(ctx context.Context) error {
 func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 	defer func() {
 		t.externalDataProvider.ExpectationsDone()
-		log.V(1).Info("Provider expectations populated")
+		log.V(logging.DebugLevel).Info("Provider expectations populated")
 		_ = t.constraintTrackers.Wait()
 	}()
 
@@ -637,10 +638,10 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 	if err := lister.List(ctx, providerList); err != nil {
 		return fmt.Errorf("listing Provider: %w", err)
 	}
-	log.V(1).Info("setting expectations for Provider", "Provider Count", len(providerList.Items))
+	log.V(logging.DebugLevel).Info("setting expectations for Provider", "Provider Count", len(providerList.Items))
 
 	for index := range providerList.Items {
-		log.V(1).Info("expecting Provider", "name", providerList.Items[index].GetName())
+		log.V(logging.DebugLevel).Info("expecting Provider", "name", providerList.Items[index].GetName())
 		t.externalDataProvider.Expect(&providerList.Items[index])
 	}
 	return nil
@@ -649,7 +650,7 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 	defer func() {
 		t.templates.ExpectationsDone()
-		log.V(1).Info("template expectations populated")
+		log.V(logging.DebugLevel).Info("template expectations populated")
 
 		_ = t.constraintTrackers.Wait()
 	}()
@@ -660,7 +661,7 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 		return fmt.Errorf("listing templates: %w", err)
 	}
 
-	log.V(1).Info("setting expectations for templates", "templateCount", len(templates.Items))
+	log.V(logging.DebugLevel).Info("setting expectations for templates", "templateCount", len(templates.Items))
 
 	handled := make(map[schema.GroupVersionKind]bool, len(templates.Items))
 	for i := range templates.Items {
@@ -668,7 +669,7 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 		// list is used for nothing else, so there is no danger of the object we
 		// pass to templates.Expect() changing from underneath us.
 		ct := &templates.Items[i]
-		log.V(1).Info("expecting template", "name", ct.GetName())
+		log.V(logging.DebugLevel).Info("expecting template", "name", ct.GetName())
 		t.templates.Expect(ct)
 
 		gvk := schema.GroupVersionKind{
@@ -700,7 +701,7 @@ func (t *Tracker) trackConfig(ctx context.Context) error {
 	var wg sync.WaitGroup
 	defer func() {
 		defer t.config.ExpectationsDone()
-		log.V(1).Info("config expectations populated")
+		log.V(logging.DebugLevel).Info("config expectations populated")
 
 		wg.Wait()
 	}()
@@ -780,7 +781,7 @@ func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config
 func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt Expectations) error {
 	defer func() {
 		dt.ExpectationsDone()
-		log.V(1).Info("data expectations populated", "gvk", gvk)
+		log.V(logging.DebugLevel).Info("data expectations populated", "gvk", gvk)
 	}()
 
 	// List individual resources and expect observations of each in the sync controller.
@@ -801,7 +802,7 @@ func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt
 	for i := range u.Items {
 		item := &u.Items[i]
 		dt.Expect(item)
-		log.V(1).Info("expecting data", "gvk", item.GroupVersionKind(), "namespace", item.GetNamespace(), "name", item.GetName())
+		log.V(logging.DebugLevel).Info("expecting data", "gvk", item.GroupVersionKind(), "namespace", item.GetNamespace(), "name", item.GetName())
 	}
 	return nil
 }
@@ -811,7 +812,7 @@ func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt
 func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionKind, constraints Expectations) error {
 	defer func() {
 		constraints.ExpectationsDone()
-		log.V(1).Info("constraint expectations populated", "gvk", gvk)
+		log.V(logging.DebugLevel).Info("constraint expectations populated", "gvk", gvk)
 	}()
 
 	u := unstructured.UnstructuredList{}
@@ -824,7 +825,7 @@ func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionK
 	for i := range u.Items {
 		o := u.Items[i]
 		constraints.Expect(&o)
-		log.V(1).Info("expecting Constraint", "gvk", gvk, "name", objectName(&o))
+		log.V(logging.DebugLevel).Info("expecting Constraint", "gvk", gvk, "name", objectName(&o))
 	}
 
 	return nil

@@ -128,6 +128,7 @@ func (t *objectTracker) Expect(o runtime.Object) {
 	t.expect[k] = struct{}{}
 }
 
+// nolint: gocritic // Using a pointer here is less efficient and results in more copying.
 func (t *objectTracker) cancelExpectNoLock(k objKey) {
 	delete(t.expect, k)
 	delete(t.seen, k)
@@ -303,7 +304,7 @@ func (t *objectTracker) Satisfied() bool {
 	if !needMutate {
 		// Read lock to prevent concurrent read/write while logging readiness state.
 		t.mu.RLock()
-		log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
+		log.V(logging.DebugLevel).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
 		t.mu.RUnlock()
 		return false
 	}
@@ -323,15 +324,15 @@ func (t *objectTracker) Satisfied() bool {
 		t.satisfied[k] = struct{}{}
 		resolveCount++
 	}
-	log.V(1).Info("resolved pre-observations", "gvk", t.gvk, "count", resolveCount)
-	log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
+	log.V(logging.DebugLevel).Info("resolved pre-observations", "gvk", t.gvk, "count", resolveCount)
+	log.V(logging.DebugLevel).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
 
 	// All satisfied if:
 	//  1. Expectations have been previously populated
 	//  2. No expectations remain
 	if t.populated && len(t.expect) == 0 {
 		t.allSatisfied = true
-		log.V(1).Info("all expectations satisfied", "gvk", t.gvk)
+		log.V(logging.DebugLevel).Info("all expectations satisfied", "gvk", t.gvk)
 
 		// Circuit-breaker tripped - free tracking memory
 		t.kindsSnapshot = t.kindsNoLock() // Take snapshot as kinds() depends on the maps we're about to clear.
