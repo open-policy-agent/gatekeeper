@@ -29,6 +29,7 @@ const (
 	ResourceAPIVersion    = "resource_api_version"
 	ResourceNamespace     = "resource_namespace"
 	ResourceName          = "resource_name"
+	ResourceSourceType    = "resource_source_type"
 	RequestUsername       = "request_username"
 	MutationApplied       = "mutation_applied"
 	Mutator               = "mutator"
