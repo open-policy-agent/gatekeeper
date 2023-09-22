@@ -174,7 +174,24 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 		var buf bytes.Buffer
 		if len(results) > 0 {
 			for _, result := range results {
-				buf.WriteString(fmt.Sprintf("[%q] Message: %q\n", result.Constraint.GetName(), result.Msg))
+				obj := fmt.Sprintf("%s/%s %s",
+					result.ViolatingObject.GetAPIVersion(),
+					result.ViolatingObject.GetKind(),
+					result.ViolatingObject.GetName(),
+				)
+				if result.ViolatingObject.GetNamespace() != "" {
+					obj = fmt.Sprintf("%s/%s %s/%s",
+						result.ViolatingObject.GetAPIVersion(),
+						result.ViolatingObject.GetKind(),
+						result.ViolatingObject.GetNamespace(),
+						result.ViolatingObject.GetName(),
+					)
+				}
+				buf.WriteString(fmt.Sprintf("%s: [%q] Message: %q\n",
+					obj,
+					result.Constraint.GetName(),
+					result.Msg,
+				))
 
 				if result.Trace != nil {
 					buf.WriteString(fmt.Sprintf("Trace: %v", *result.Trace))
