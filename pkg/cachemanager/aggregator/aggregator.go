@@ -85,10 +85,15 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 		}
 	}
 
-	b.store[k] = makeSet(gvks)
+	// protect against empty inputs
+	gvksSet := makeSet(gvks)
+	if len(gvksSet) == 0 {
+		return nil
+	}
 
+	b.store[k] = gvksSet
 	// add reverse links
-	for _, gvk := range gvks {
+	for gvk := range gvksSet {
 		if _, found := b.reverseStore[gvk]; !found {
 			b.reverseStore[gvk] = make(map[Key]struct{})
 		}
@@ -148,7 +153,9 @@ func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struc
 func makeSet(gvks []schema.GroupVersionKind) map[schema.GroupVersionKind]struct{} {
 	gvkSet := make(map[schema.GroupVersionKind]struct{})
 	for _, gvk := range gvks {
-		gvkSet[gvk] = struct{}{}
+		if !gvk.Empty() {
+			gvkSet[gvk] = struct{}{}
+		}
 	}
 
 	return gvkSet
