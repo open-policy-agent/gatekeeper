@@ -70,7 +70,7 @@ import (
 const httpStatusWarning = 299
 
 var (
-	validateTemplateRego = flag.Bool("validate-template-rego", true, "validate rego code for constraints template. Defaults to true. To be removed before 3.16. Not to be used with `experimental-enable-k8s-native-validation` is set to true.")
+	ValidateTemplateRego = flag.Bool("validate-template-rego", true, "validate rego code for constraints template. Defaults to true. To be removed in 3.16. Use gator to validate in shift left manner to avoid impact with this behavior change. Not to be used when `experimental-enable-k8s-native-validation` is set to true.")
 	maxServingThreads    = flag.Int("max-serving-threads", -1, "cap the number of threads handling non-trivial requests, -1 caps the number of threads to GOMAXPROCS. Defaults to -1.")
 )
 
@@ -387,7 +387,7 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 	}
 
 	// TODO: This is a temporary check for rego to give enough time to users to migrate to gator for validation. To be removed before 3.16.
-	if *validateTemplateRego {
+	if *ValidateTemplateRego {
 		// Create a temporary Driver and attempt to add the Template to it. This
 		// ensures the Rego code both parses and compiles.
 		d, err := rego.New()

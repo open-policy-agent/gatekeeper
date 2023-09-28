@@ -400,6 +400,12 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 
 	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 
+	if *webhook.ValidateTemplateRego && *enableK8sCel {
+		err := fmt.Errorf("cannot validate template rego when K8s cel is enabled. Please disable K8s cel by setting --experimental-enable-k8s-native-validation=false or disable template rego validation by setting --validate-template-rego=false")
+		setupLog.Error(err, "unable to set up OPA and K8s native drivers")
+		return err
+	}
+
 	if *enableK8sCel {
 		// initialize K8sValidation
 		k8sDriver, err := k8scel.New()
