@@ -7,10 +7,16 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var (
@@ -86,7 +93,7 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 		t.Helper()
 
 		// Construct a single-use Unstructured to send the Delete request.
-		toDelete := makeUnstructured(gvk, namespace, name)
+		toDelete := UnstructuredFor(gvk, namespace, name)
 		err := c.Delete(ctx, toDelete)
 		if apierrors.IsNotFound(err) {
 			return
@@ -99,7 +106,7 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 		}, func() error {
 			// Construct a single-use Unstructured to send the Get request. It isn't
 			// safe to reuse Unstructureds for each retry as Get modifies its input.
-			toGet := makeUnstructured(gvk, namespace, name)
+			toGet := UnstructuredFor(gvk, namespace, name)
 			key := client.ObjectKey{Namespace: namespace, Name: name}
 			err2 := c.Get(ctx, key, toGet)
 			if apierrors.IsGone(err2) || apierrors.IsNotFound(err2) {
@@ -168,12 +175,83 @@ func CreateThenCleanup(ctx context.Context, t *testing.T, c client.Client, obj c
 	t.Cleanup(DeleteObjectAndConfirm(ctx, t, c, obj))
 }
 
-func makeUnstructured(gvk schema.GroupVersionKind, namespace, name string) *unstructured.Unstructured {
-	u := &unstructured.Unstructured{
-		Object: make(map[string]interface{}),
+func SetupDataClient(t *testing.T) *constraintclient.Client {
+	driver, err := rego.New(rego.Tracing(false))
+	if err != nil {
+		t.Fatalf("setting up Driver: %v", err)
 	}
+
+	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	if err != nil {
+		t.Fatalf("setting up constraint framework client: %v", err)
+	}
+	return client
+}
+
+// SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
+// writes the request to requests after Reconcile is finished.
+func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, *sync.Map) {
+	var requests sync.Map
+	fn := reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+		result, err := inner.Reconcile(ctx, req)
+		requests.Store(req, struct{}{})
+		return result, err
+	})
+	return fn, &requests
+}
+
+// ConfigFor returns a config resource that watches the requested set of resources.
+func ConfigFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
+	entries := make([]configv1alpha1.SyncOnlyEntry, len(kinds))
+	for i := range kinds {
+		entries[i].Group = kinds[i].Group
+		entries[i].Version = kinds[i].Version
+		entries[i].Kind = kinds[i].Kind
+	}
+
+	return &configv1alpha1.Config{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: configv1alpha1.GroupVersion.String(),
+			Kind:       "Config",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "config",
+			Namespace: "gatekeeper-system",
+		},
+		Spec: configv1alpha1.ConfigSpec{
+			Sync: configv1alpha1.Sync{
+				SyncOnly: entries,
+			},
+			Match: []configv1alpha1.MatchEntry{
+				{
+					ExcludedNamespaces: []wildcard.Wildcard{"kube-system"},
+					Processes:          []string{"sync"},
+				},
+			},
+		},
+	}
+}
+
+func UnstructuredFor(gvk schema.GroupVersionKind, namespace, name string) *unstructured.Unstructured {
+	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(gvk)
-	u.SetNamespace(namespace)
 	u.SetName(name)
+	if namespace == "" {
+		u.SetNamespace("default")
+	} else {
+		u.SetNamespace(namespace)
+	}
+
+	if gvk.Kind == "Pod" {
+		u.Object["spec"] = map[string]interface{}{
+			"containers": []map[string]interface{}{
+				{
+					"name":  "foo-container",
+					"image": "foo-image",
+				},
+			},
+		}
+	}
+
 	return u
 }
