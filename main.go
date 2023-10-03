@@ -47,6 +47,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expectationsmgr"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
@@ -475,6 +476,9 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 		setupLog.Error(err, "unable to create cache manager")
 		return err
 	}
+
+	em := expectationsmgr.NewExpecationsManager(cm, tracker)
+	go em.Run(ctx)
 
 	opts := controller.Dependencies{
 		CFClient:         client,

@@ -59,6 +59,8 @@ type CacheManager struct {
 	registrar                  *watch.Registrar
 	backgroundManagementTicker time.Ticker
 	reader                     client.Reader
+
+	started bool
 }
 
 // CFDataClient is an interface for caching data.
@@ -104,8 +106,19 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 func (c *CacheManager) Start(ctx context.Context) error {
 	go c.manageCache(ctx)
 
+	c.mu.Lock()
+	c.started = true
+	c.mu.Unlock()
+
 	<-ctx.Done()
 	return nil
+}
+
+func (c *CacheManager) Started() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.started
 }
 
 // UpsertSource adjusts the watched set of gvks according to the newGVKs passed in
@@ -142,8 +155,7 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	newWatchSet.Add(c.gvksToSync.GVKs()...)
 
 	diff := c.watchedSet.Difference(newWatchSet)
-	c.removeStaleExpectations(diff)
-
+	// any resulting stale data expectations are handled async by the ExpectationsMgr.
 	c.gvksToDeleteFromCache.AddSet(diff)
 
 	var innerError error
@@ -156,13 +168,6 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	})
 
 	return innerError
-}
-
-// removeStaleExpectations stops tracking data for any resources that are no longer watched.
-func (c *CacheManager) removeStaleExpectations(stale *watch.Set) {
-	for _, gvk := range stale.Items() {
-		c.tracker.CancelData(gvk)
-	}
 }
 
 // RemoveSource removes the watches of the GVKs for a given aggregator.Key. Callers are responsible for retrying on error.
@@ -206,6 +211,13 @@ func (c *CacheManager) DoForEach(fn func(gvk schema.GroupVersionKind) error) err
 
 	err := c.watchedSet.DoForEach(fn)
 	return err
+}
+
+func (c *CacheManager) WatchedGVKs() []schema.GroupVersionKind {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.watchedSet.Items()
 }
 
 func (c *CacheManager) watchesGVK(gvk schema.GroupVersionKind) bool {
