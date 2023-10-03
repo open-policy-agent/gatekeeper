@@ -144,12 +144,12 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 				return reconcile.Result{}, err
 			}
 		}
-		syncsetTr.Observe(instance)
 	}
 
 	gvks := make([]schema.GroupVersionKind, 0)
 	if exists && instance.GetDeletionTimestamp().IsZero() {
 		log.Info("handling SyncSet update", "instance", instance)
+		syncsetTr.Observe(instance)
 
 		for _, entry := range instance.Spec.GVKs {
 			gvks = append(gvks, schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind})

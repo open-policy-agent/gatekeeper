@@ -22,7 +22,8 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	syncset1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -242,12 +243,16 @@ func (t *objectTracker) Observe(o runtime.Object) {
 	_, wasExpecting := t.expect[k]
 	switch {
 	case wasExpecting:
+		log.V(1).Info("[readiness] observing expectation", "gvk", o.GetObjectKind().GroupVersionKind())
+
 		// Satisfy existing expectation
 		delete(t.seen, k)
 		delete(t.expect, k)
 		t.satisfied[k] = struct{}{}
 		return
 	case !wasExpecting && t.populated:
+		log.V(1).Info("[readiness] not expecting anymore", "gvk", o.GetObjectKind().GroupVersionKind())
+
 		// Not expecting and no longer accepting expectations.
 		// No need to track.
 		delete(t.seen, k)
@@ -257,7 +262,7 @@ func (t *objectTracker) Observe(o runtime.Object) {
 	// Track for future expectation.
 	t.seen[k] = struct{}{}
 
-	log.V(logging.DebugLevel).Info("[readiness] observed data", "gvk", o.GetObjectKind().GroupVersionKind())
+	log.V(1).Info("[readiness] observed data", "gvk", o.GetObjectKind().GroupVersionKind())
 }
 
 func (t *objectTracker) Populated() bool {
@@ -300,7 +305,7 @@ func (t *objectTracker) Satisfied() bool {
 	if !needMutate {
 		// Read lock to prevent concurrent read/write while logging readiness state.
 		t.mu.RLock()
-		log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
+		log.V(1).Info("readiness state unsatisfied", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
 		t.mu.RUnlock()
 		return false
 	}
@@ -395,6 +400,18 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 			Group:   constraintGroup,
 			Version: v1beta1.SchemeGroupVersion.Version,
 			Kind:    v.Spec.CRD.Spec.Names.Kind,
+		}
+	case *configv1alpha1.Config:
+		gvk = schema.GroupVersionKind{
+			Group:   configv1alpha1.GroupVersion.Group,
+			Version: configv1alpha1.GroupVersion.Version,
+			Kind:    "Config",
+		}
+	case *syncset1alpha1.SyncSet:
+		gvk = schema.GroupVersionKind{
+			Group:   syncset1alpha1.GroupVersion.Group,
+			Version: syncset1alpha1.GroupVersion.Version,
+			Kind:    "SyncSet",
 		}
 	case *unstructured.Unstructured:
 		ugvk := obj.GetObjectKind().GroupVersionKind()

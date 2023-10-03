@@ -29,6 +29,7 @@ import (
 )
 
 // Applies fixture YAMLs directly under the provided path in alpha-sorted order.
+// Does not crawl the directory, instead it only looks at the files present at path.
 func applyFixtures(path string) error {
 	files, err := os.ReadDir(path)
 	if err != nil {

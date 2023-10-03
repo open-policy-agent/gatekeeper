@@ -155,7 +155,7 @@ func TestReconcile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wrap the Controller Reconcile function so it writes each request to a map when it is finished reconciling.
-	recFn, requests := SetupTestReconcile(rec)
+	recFn, requests := testutils.SetupTestReconcile(rec)
 	require.NoError(t, add(mgr, recFn))
 
 	testutils.StartManager(ctx, t, mgr)

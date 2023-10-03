@@ -29,6 +29,7 @@ import (
 	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
 	mutationv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1alpha1"
+	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
@@ -63,6 +64,7 @@ type Tracker struct {
 
 	templates            *objectTracker
 	config               *objectTracker
+	syncsets             *objectTracker
 	assignMetadata       *objectTracker
 	assign               *objectTracker
 	modifySet            *objectTracker
@@ -90,6 +92,7 @@ func newTracker(lister Lister, mutationEnabled, externalDataEnabled, expansionEn
 		lister:             lister,
 		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate"), fn),
 		config:             newObjTracker(configv1alpha1.GroupVersion.WithKind("Config"), fn),
+		syncsets:           newObjTracker(syncsetv1alpha1.GroupVersion.WithKind("SyncSet"), fn),
 		constraints:        newTrackerMap(fn),
 		data:               newTrackerMap(fn),
 		ready:              make(chan struct{}),
@@ -136,6 +139,8 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 			return t.templates
 		}
 		return noopExpectations{}
+	case gvk.Group == syncsetv1alpha1.GroupVersion.Group && gvk.Kind == "SyncSet":
+		return t.syncsets
 	case gvk.Group == configv1alpha1.GroupVersion.Group && gvk.Kind == "Config":
 		return t.config
 	case gvk.Group == externaldatav1beta1.SchemeGroupVersion.Group && gvk.Kind == "Provider":
@@ -180,11 +185,18 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 func (t *Tracker) ForData(gvk schema.GroupVersionKind) Expectations {
 	// Avoid new data trackers after data expectations have been fully populated.
 	// Race is ok here - extra trackers will only consume some unneeded memory.
-	if t.config.Populated() && !t.data.Has(gvk) {
+	if t.DataPopulated() && !t.data.Has(gvk) {
 		// Return throw-away tracker instead.
 		return noopExpectations{}
 	}
 	return t.data.Get(gvk)
+}
+
+func (t *Tracker) DataGVKs() []schema.GroupVersionKind {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	return t.data.Keys()
 }
 
 func (t *Tracker) templateCleanup(ct *templates.ConstraintTemplate) {
@@ -265,13 +277,19 @@ func (t *Tracker) Satisfied() bool {
 	log.V(1).Info("all expectations satisfied", "tracker", "constraints")
 
 	if !t.config.Satisfied() {
+		log.V(1).Info("expectations unsatisfied", "tracker", "config")
+		return false
+	}
+
+	if !t.syncsets.Satisfied() {
+		log.V(1).Info("expectations unsatisfied", "tracker", "syncset")
 		return false
 	}
 
 	if operations.HasValidationOperations() {
-		configKinds := t.config.kinds()
-		for _, gvk := range configKinds {
+		for _, gvk := range t.data.Keys() {
 			if !t.data.Get(gvk).Satisfied() {
+				log.V(1).Info("expectations unsatisfied", "tracker", "data", "gvk", gvk)
 				return false
 			}
 		}
@@ -322,10 +340,10 @@ func (t *Tracker) Run(ctx context.Context) error {
 		grp.Go(func() error {
 			return t.trackConstraintTemplates(gctx)
 		})
+		grp.Go(func() error {
+			return t.trackSyncSources(gctx)
+		})
 	}
-	grp.Go(func() error {
-		return t.trackConfig(gctx)
-	})
 	grp.Go(func() error {
 		t.statsPrinter(ctx)
 		return nil
@@ -379,18 +397,32 @@ func (t *Tracker) Populated() bool {
 	if operations.HasValidationOperations() {
 		validationPopulated = t.templates.Populated() && t.constraints.Populated() && t.data.Populated()
 	}
-	return validationPopulated && t.config.Populated() && mutationPopulated && externalDataProviderPopulated
+	return validationPopulated && t.config.Populated() && mutationPopulated && externalDataProviderPopulated && t.syncsets.Populated()
+}
+
+func (t *Tracker) DataPopulated() bool {
+	dataPopulated := true
+	if operations.HasValidationOperations() {
+		dataPopulated = t.data.Populated()
+	}
+
+	return dataPopulated && t.config.Populated() && t.syncsets.Populated()
 }
 
 // collectForObjectTracker identifies objects that are unsatisfied for the provided
 // `es`, which must be an objectTracker, and removes those expectations.
-func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, cleanup func(schema.GroupVersionKind)) error {
+func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, cleanup func(schema.GroupVersionKind), trackerName string) error {
 	if es == nil {
 		return fmt.Errorf("nil Expectations provided to collectForObjectTracker")
 	}
 
-	if !es.Populated() || es.Satisfied() {
-		log.V(1).Info("Expectations unpopulated or already satisfied, skipping collection")
+	if !es.Populated() {
+		log.V(1).Info("Expectations unpopulated, skipping collection", "tracker", trackerName)
+		return nil
+	}
+
+	if es.Satisfied() {
+		log.V(1).Info("Expectations already satisfied, skipping collection", "tracker", trackerName)
 		return nil
 	}
 
@@ -433,6 +465,8 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, 
 		u.SetName(k.namespacedName.Name)
 		u.SetNamespace(k.namespacedName.Namespace)
 		u.SetGroupVersionKind(k.gvk)
+
+		log.V(1).Info("canceling expectations", "name", u.GetName(), "namespace", u.GetNamespace(), "gvk", u.GroupVersionKind(), "tracker", trackerName)
 		ot.CancelExpect(u)
 		if cleanup != nil {
 			cleanup(gvk)
@@ -453,25 +487,28 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 		t.constraints.Remove(gvk)
 		t.constraintTrackers.Cancel(gvk.String())
 	}
-	err := t.collectForObjectTracker(ctx, tt, cleanupTemplate)
+	err := t.collectForObjectTracker(ctx, tt, cleanupTemplate, "ConstraintTemplate")
 	if err != nil {
 		log.Error(err, "while collecting for the ConstraintTemplate tracker")
 	}
 
 	ct := t.config
-	cleanupData := func(gvk schema.GroupVersionKind) {
-		t.data.Remove(gvk)
-	}
-	err = t.collectForObjectTracker(ctx, ct, cleanupData)
+	err = t.collectForObjectTracker(ctx, ct, nil, "Config")
 	if err != nil {
 		log.Error(err, "while collecting for the Config tracker")
+	}
+
+	sst := t.syncsets
+	err = t.collectForObjectTracker(ctx, sst, nil, "SyncSet")
+	if err != nil {
+		log.Error(err, "while collecting for the SyncSet tracker")
 	}
 
 	// collect deleted but expected constraints
 	for _, gvk := range t.constraints.Keys() {
 		// retrieve the expectations for this key
 		es := t.constraints.Get(gvk)
-		err = t.collectForObjectTracker(ctx, es, nil)
+		err = t.collectForObjectTracker(ctx, es, nil, fmt.Sprintf("%s/%s", "Constraints", gvk))
 		if err != nil {
 			log.Error(err, "while collecting for the Constraint type", "gvk", gvk)
 			continue
@@ -482,7 +519,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 	for _, gvk := range t.data.Keys() {
 		// retrieve the expectations for this key
 		es := t.data.Get(gvk)
-		err = t.collectForObjectTracker(ctx, es, nil)
+		err = t.collectForObjectTracker(ctx, es, nil, fmt.Sprintf("%s/%s", "Data", gvk))
 		if err != nil {
 			log.Error(err, "while collecting for the Data type", "gvk", gvk)
 			continue
@@ -689,56 +726,85 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 	return nil
 }
 
-// trackConfig sets expectations for cached data as specified by the singleton Config resource.
-// Fails-open if the Config resource cannot be fetched or does not exist.
-func (t *Tracker) trackConfig(ctx context.Context) error {
+// trackSyncSources sets expectations for cached data as specified by the singleton Config resource.
+// and any SyncSet resources present on the cluster.
+// Works best effort and fails-open if the a resource cannot be fetched or does not exist.
+func (t *Tracker) trackSyncSources(ctx context.Context) error {
 	var wg sync.WaitGroup
 	defer func() {
-		defer t.config.ExpectationsDone()
+		t.config.ExpectationsDone()
 		log.V(1).Info("config expectations populated")
+
+		t.syncsets.ExpectationsDone()
+		log.V(1).Info("syncset expectations populated")
 
 		wg.Wait()
 	}()
 
+	handled := make(map[schema.GroupVersionKind]struct{})
+
 	cfg, err := t.getConfigResource(ctx)
 	if err != nil {
-		return fmt.Errorf("fetching config resource: %w", err)
+		log.Error(err, "fetching config resource")
 	}
 	if cfg == nil {
 		log.Info("config resource not found - skipping for readiness")
-		return nil
-	}
-	if !cfg.GetDeletionTimestamp().IsZero() {
-		log.Info("config resource is being deleted - skipping for readiness")
-		return nil
-	}
+	} else {
+		if !cfg.GetDeletionTimestamp().IsZero() {
+			log.Info("config resource is being deleted - skipping for readiness")
+		} else {
+			t.config.Expect(cfg)
+			log.V(1).Info("setting expectations for config", "configCount", 1)
 
-	if operations.HasValidationOperations() {
-		// Expect the resource kinds specified in the Config.
-		// We will fail-open (resolve expectations) for GVKs
-		// that are unregistered.
-		for _, entry := range cfg.Spec.Sync.SyncOnly {
-			gvk := schema.GroupVersionKind{
-				Group:   entry.Group,
-				Version: entry.Version,
-				Kind:    entry.Kind,
+			for _, entry := range cfg.Spec.Sync.SyncOnly {
+				handled[schema.GroupVersionKind{
+					Group:   entry.Group,
+					Version: entry.Version,
+					Kind:    entry.Kind,
+				}] = struct{}{}
 			}
-			u := &unstructured.Unstructured{}
-			u.SetGroupVersionKind(gvk)
-			t.config.Expect(u)
-			t.config.Observe(u) // we only care about the gvk entry in kinds()
-
-			// Set expectations for individual cached resources
-			dt := t.ForData(gvk)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				err := t.trackData(ctx, gvk, dt)
-				if err != nil {
-					log.Error(err, "aborted trackData", "gvk", gvk)
-				}
-			}()
 		}
+	}
+
+	syncsets := &syncsetv1alpha1.SyncSetList{}
+	lister := retryLister(t.lister, retryAll)
+	if err := lister.List(ctx, syncsets); err != nil {
+		log.Error(err, "listing syncsets")
+	} else {
+		log.V(1).Info("setting expectations for syncsets", "syncsetCount", len(syncsets.Items))
+
+		for i := range syncsets.Items {
+			syncset := syncsets.Items[i]
+
+			t.syncsets.Expect(&syncset)
+			log.V(1).Info("expecting syncset", "name", syncset.GetName(), "namespace", syncset.GetNamespace())
+
+			for i := range syncset.Spec.GVKs {
+				gvk := syncset.Spec.GVKs[i].ToGroupVersionKind()
+				if _, ok := handled[gvk]; ok {
+					log.Info("duplicate GVK to sync", "gvk", gvk)
+				}
+
+				handled[gvk] = struct{}{}
+			}
+		}
+	}
+
+	// Expect the resource kinds specified in the Config resource and all SyncSet resources.
+	// We will fail-open (resolve expectations) for GVKs that are unregistered.
+	for gvk := range handled {
+		g := gvk
+
+		// Set expectations for individual cached resources
+		dt := t.ForData(g)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := t.trackData(ctx, g, dt)
+			if err != nil {
+				log.Error(err, "aborted trackData", "gvk", g)
+			}
+		}()
 	}
 
 	return nil
@@ -878,7 +944,7 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 				}
 			}
 
-			for _, gvk := range t.config.kinds() {
+			for _, gvk := range t.data.Keys() {
 				if t.data.Get(gvk).Satisfied() {
 					continue
 				}
@@ -897,6 +963,9 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 					log.Info("unsatisfied data", "name", u.namespacedName, "gvk", u.gvk)
 				}
 			}
+
+			logUnsatisfiedSyncSet(t)
+			logUnsatisfiedConfig(t)
 		}
 		if t.mutationEnabled {
 			logUnsatisfiedAssignMetadata(t)
@@ -910,6 +979,25 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 		if t.expansionEnabled {
 			logUnsatisfiedExpansions(t)
 		}
+	}
+}
+
+func logUnsatisfiedSyncSet(t *Tracker) {
+	if unsat := t.syncsets.unsatisfied(); len(unsat) > 0 {
+		log.Info("--- Begin unsatisfied syncsets ---", "populated", t.syncsets.Populated(), "count", len(unsat))
+
+		for _, k := range unsat {
+			log.Info("unsatisfied SyncSet", "name", k.namespacedName)
+		}
+		log.Info("--- End unsatisfied syncsets ---")
+	}
+}
+
+func logUnsatisfiedConfig(t *Tracker) {
+	if unsat := t.config.unsatisfied(); len(unsat) > 0 {
+		log.Info("--- Begin unsatisfied config ---", "populated", t.config.Populated(), "count", len(unsat))
+		log.Info("unsatisfied Config", "name", keys.Config)
+		log.Info("--- End unsatisfied config ---")
 	}
 }
 

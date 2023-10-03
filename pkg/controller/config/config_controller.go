@@ -177,6 +177,8 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	// sync anything
 	gvksToSync := []schema.GroupVersionKind{}
 	if exists && instance.GetDeletionTimestamp().IsZero() {
+		r.tracker.For(instance.GroupVersionKind()).Observe(instance)
+
 		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
 			gvksToSync = append(gvksToSync, gvk)
