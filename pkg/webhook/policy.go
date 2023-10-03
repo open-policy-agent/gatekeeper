@@ -70,7 +70,7 @@ import (
 const httpStatusWarning = 299
 
 var (
-	ValidateTemplateRego = flag.Bool("validate-template-rego", true, "validate rego code for constraints template. Defaults to true. To be removed in 3.16. Use gator to validate in shift left manner to avoid impact with this behavior change. Not to be used when `experimental-enable-k8s-native-validation` is set to true.")
+	ValidateTemplateRego = flag.Bool("validate-template-rego", true, "validate Rego code for constraint templates. Defaults to true. This flag will be removed in Gatekeeper v3.16 and cannot be used if `experimental-enable-k8s-native-validation` flag is set. Use Gator to validate in shift left manner to avoid impact with this behavior change.). Use Gator to validate in shift left manner to avoid impact with this behavior change.")
 	maxServingThreads    = flag.Int("max-serving-threads", -1, "cap the number of threads handling non-trivial requests, -1 caps the number of threads to GOMAXPROCS. Defaults to -1.")
 )
 

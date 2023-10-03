@@ -6,7 +6,7 @@ title: Integration with Kubernetes Validating Admission Policy
 `Feature State`: Gatekeeper version v3.13+ (pre-alpha)
 
 > ❗ This feature is pre-alpha, subject to change (feedback is welcome!). It is disabled by default. To enable the feature,
-> set the `experimental-enable-k8s-native-validation` flag to true and use the [development build of Gatekeeper](https://open-policy-agent.github.io/gatekeeper/website/docs/install/#deploying-a-release-using-development-image).  Do not use this feature with `validate-template-rego` flag enabled, as the policies with cel would get rejected with rego compilation error.
+> set the `experimental-enable-k8s-native-validation` flag to true and use the [development build of Gatekeeper](https://open-policy-agent.github.io/gatekeeper/website/docs/install/#deploying-a-release-using-development-image).  Do not use this feature with `validate-template-rego` flag enabled, as the policies with CEL would get rejected with Rego compilation error.
 
 ## Description
 
