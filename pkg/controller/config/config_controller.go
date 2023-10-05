@@ -177,8 +177,6 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	// sync anything
 	gvksToSync := []schema.GroupVersionKind{}
 	if exists && instance.GetDeletionTimestamp().IsZero() {
-		r.tracker.For(instance.GroupVersionKind()).Observe(instance)
-
 		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
 			gvksToSync = append(gvksToSync, gvk)
@@ -197,12 +195,15 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		r.tracker.DisableStats()
 	}
 
+	r.tracker.For(instance.GroupVersionKind()).Observe(instance)
+
 	r.cacheManager.ExcludeProcesses(newExcluder)
 	configSourceKey := aggregator.Key{Source: "config", ID: request.NamespacedName.String()}
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error establishing watches for new syncOny: %w", err)
 	}
 
+	// r.tracker.For(instance.GroupVersionKind()).Observe(instance)
 	return reconcile.Result{}, nil
 }
 

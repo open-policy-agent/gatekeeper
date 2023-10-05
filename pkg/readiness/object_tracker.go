@@ -243,16 +243,12 @@ func (t *objectTracker) Observe(o runtime.Object) {
 	_, wasExpecting := t.expect[k]
 	switch {
 	case wasExpecting:
-		log.V(1).Info("[readiness] observing expectation", "gvk", o.GetObjectKind().GroupVersionKind())
-
 		// Satisfy existing expectation
 		delete(t.seen, k)
 		delete(t.expect, k)
 		t.satisfied[k] = struct{}{}
 		return
 	case !wasExpecting && t.populated:
-		log.V(1).Info("[readiness] not expecting anymore", "gvk", o.GetObjectKind().GroupVersionKind())
-
 		// Not expecting and no longer accepting expectations.
 		// No need to track.
 		delete(t.seen, k)
@@ -305,7 +301,7 @@ func (t *objectTracker) Satisfied() bool {
 	if !needMutate {
 		// Read lock to prevent concurrent read/write while logging readiness state.
 		t.mu.RLock()
-		log.V(1).Info("readiness state unsatisfied", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
+		log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)), "populated", t.populated)
 		t.mu.RUnlock()
 		return false
 	}

@@ -75,8 +75,7 @@ func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.Controlle
 	}
 
 	return &ReconcileSyncSet{
-		reader:       mgr.GetCache(),
-		writer:       mgr.GetClient(),
+		reader:       mgr.GetClient(),
 		scheme:       mgr.GetScheme(),
 		cs:           cs,
 		cacheManager: cm,
@@ -103,7 +102,6 @@ var _ reconcile.Reconciler = &ReconcileSyncSet{}
 // ReconcileSyncSet reconciles a SyncSet object.
 type ReconcileSyncSet struct {
 	reader client.Reader
-	writer client.Writer
 
 	scheme       *runtime.Scheme
 	cacheManager *cm.CacheManager
@@ -123,8 +121,8 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 
 	syncsetTr := r.tracker.For(syncsetGVK)
 	exists := true
-	instance := &syncsetv1alpha1.SyncSet{}
-	err := r.reader.Get(ctx, request.NamespacedName, instance)
+	syncset := &syncsetv1alpha1.SyncSet{}
+	err := r.reader.Get(ctx, request.NamespacedName, syncset)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			exists = false
@@ -134,24 +132,11 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	if exists {
-		// Actively remove a finalizer. This should automatically remove
-		// the finalizer over time even if state teardown didn't work correctly
-		// after a deprecation period, all finalizer code can be removed.
-		if hasFinalizer(instance) {
-			removeFinalizer(instance)
-			if err := r.writer.Update(ctx, instance); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-	}
-
 	gvks := make([]schema.GroupVersionKind, 0)
-	if exists && instance.GetDeletionTimestamp().IsZero() {
-		log.Info("handling SyncSet update", "instance", instance)
-		syncsetTr.Observe(instance)
+	if exists && syncset.GetDeletionTimestamp().IsZero() {
+		log.V(logging.DebugLevel).Info("handling SyncSet update", "instance", syncset)
 
-		for _, entry := range instance.Spec.GVKs {
+		for _, entry := range syncset.Spec.GVKs {
 			gvks = append(gvks, schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind})
 		}
 	}
@@ -161,32 +146,7 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{Requeue: true}, fmt.Errorf("synceset-controller: error changing watches: %w", err)
 	}
 
+	syncsetTr.Observe(syncset)
+
 	return reconcile.Result{}, nil
-}
-
-func containsString(s string, items []string) bool {
-	for _, item := range items {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(s string, items []string) []string {
-	var rval []string
-	for _, item := range items {
-		if item != s {
-			rval = append(rval, item)
-		}
-	}
-	return rval
-}
-
-func hasFinalizer(instance *syncsetv1alpha1.SyncSet) bool {
-	return containsString(finalizerName, instance.GetFinalizers())
-}
-
-func removeFinalizer(instance *syncsetv1alpha1.SyncSet) {
-	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
 }

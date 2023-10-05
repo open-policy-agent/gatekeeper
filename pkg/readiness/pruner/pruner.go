@@ -1,4 +1,4 @@
-package expectationsmgr
+package pruner
 
 import (
 	"context"
@@ -11,22 +11,22 @@ import (
 
 const tickDuration = 3 * time.Second
 
-// ExpectationsMgr fires after data expectations have been populated in the ready Tracker and runs
-// until the Tracker is satisfeid or the process is exiting. It removes Data expectations for any
+// ExpectationsPruner fires after sync expectations have been satisfied in the ready Tracker and runs
+// until the overall Tracker is satisfied. It removes Data expectations for any
 // GVKs that are expected in the Tracker but not watched by the CacheManager.
-type ExpectationsMgr struct {
+type ExpectationsPruner struct {
 	cacheMgr *cachemanager.CacheManager
 	tracker  *readiness.Tracker
 }
 
-func NewExpecationsManager(cm *cachemanager.CacheManager, rt *readiness.Tracker) *ExpectationsMgr {
-	return &ExpectationsMgr{
+func NewExpecationsPruner(cm *cachemanager.CacheManager, rt *readiness.Tracker) *ExpectationsPruner {
+	return &ExpectationsPruner{
 		cacheMgr: cm,
 		tracker:  rt,
 	}
 }
 
-func (e *ExpectationsMgr) Run(ctx context.Context) {
+func (e *ExpectationsPruner) Run(ctx context.Context) {
 	ticker := time.NewTicker(tickDuration)
 	for {
 		select {
@@ -38,10 +38,8 @@ func (e *ExpectationsMgr) Run(ctx context.Context) {
 				// further manage the data sync expectations.
 				return
 			}
-			if !(e.tracker.DataPopulated() && e.cacheMgr.Started()) {
-				// we have to wait on data expectations to be populated
-				// and for the cachemanager to have been started by the
-				// controller manager.
+			if !e.tracker.SyncSourcesSatisfied() {
+				// not yet ready to prune data expectations.
 				break
 			}
 

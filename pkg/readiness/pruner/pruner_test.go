@@ -1,4 +1,4 @@
-package expectationsmgr
+package pruner
 
 import (
 	"context"
@@ -46,10 +46,10 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	testutils.StartControlPlane(m, &cfg, 2)
+	testutils.StartControlPlane(m, &cfg, 3)
 }
 
-func setupTest(ctx context.Context, t *testing.T, startControllers bool) (*ExpectationsMgr, client.Client) {
+func setupTest(ctx context.Context, t *testing.T, startControllers bool) (*ExpectationsPruner, client.Client) {
 	t.Helper()
 
 	mgr, wm := testutils.SetupManager(t, cfg)
@@ -105,7 +105,7 @@ func setupTest(ctx context.Context, t *testing.T, startControllers bool) (*Expec
 
 	testutils.StartManager(ctx, t, mgr)
 
-	return &ExpectationsMgr{
+	return &ExpectationsPruner{
 		cacheMgr: cm,
 		tracker:  tracker,
 	}, c

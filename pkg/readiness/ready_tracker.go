@@ -185,17 +185,15 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 func (t *Tracker) ForData(gvk schema.GroupVersionKind) Expectations {
 	// Avoid new data trackers after data expectations have been fully populated.
 	// Race is ok here - extra trackers will only consume some unneeded memory.
-	if t.DataPopulated() && !t.data.Has(gvk) {
+	if t.config.Populated() && t.syncsets.Populated() && !t.data.Has(gvk) {
 		// Return throw-away tracker instead.
 		return noopExpectations{}
 	}
 	return t.data.Get(gvk)
 }
 
+// Returns the GVKs for which the Tracker has data expectations.
 func (t *Tracker) DataGVKs() []schema.GroupVersionKind {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-
 	return t.data.Keys()
 }
 
@@ -400,13 +398,9 @@ func (t *Tracker) Populated() bool {
 	return validationPopulated && t.config.Populated() && mutationPopulated && externalDataProviderPopulated && t.syncsets.Populated()
 }
 
-func (t *Tracker) DataPopulated() bool {
-	dataPopulated := true
-	if operations.HasValidationOperations() {
-		dataPopulated = t.data.Populated()
-	}
-
-	return dataPopulated && t.config.Populated() && t.syncsets.Populated()
+// Returns whether both the Config and all SyncSet expectations have been Satisfied.
+func (t *Tracker) SyncSourcesSatisfied() bool {
+	return t.config.Satisfied() && t.syncsets.Satisfied()
 }
 
 // collectForObjectTracker identifies objects that are unsatisfied for the provided

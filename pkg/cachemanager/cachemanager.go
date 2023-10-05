@@ -61,8 +61,6 @@ type CacheManager struct {
 	registrar                  *watch.Registrar
 	backgroundManagementTicker time.Ticker
 	reader                     client.Reader
-
-	started bool
 }
 
 // CFDataClient is an interface for caching data.
@@ -108,19 +106,8 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 func (c *CacheManager) Start(ctx context.Context) error {
 	go c.manageCache(ctx)
 
-	c.mu.Lock()
-	c.started = true
-	c.mu.Unlock()
-
 	<-ctx.Done()
 	return nil
-}
-
-func (c *CacheManager) Started() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.started
 }
 
 // UpsertSource adjusts the watched set of gvks according to the newGVKs passed in
