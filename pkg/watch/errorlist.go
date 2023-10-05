@@ -15,10 +15,28 @@ limitations under the License.
 
 package watch
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
+)
 
 // errorList is an error that aggregates multiple errors.
-type errorList []error
+type errorList []GVKError
+
+type GVKError struct {
+	err error
+	gvk schema.GroupVersionKind
+}
+
+func (w GVKError) String() string {
+	return w.Error()
+}
+
+func (w GVKError) Error() string {
+	return fmt.Sprintf("error for gvk: %s: %s", w.gvk, w.err.Error())
+}
 
 func (e errorList) String() string {
 	return e.Error()
@@ -33,4 +51,13 @@ func (e errorList) Error() string {
 		builder.WriteString(err.Error())
 	}
 	return builder.String()
+}
+
+func (e errorList) FailingGVKs() []schema.GroupVersionKind {
+	gvks := make([]schema.GroupVersionKind, len(e))
+	for _, err := range e {
+		gvks = append(gvks, err.gvk)
+	}
+
+	return gvks
 }

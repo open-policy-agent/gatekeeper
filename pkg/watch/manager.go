@@ -263,7 +263,7 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 			continue
 		}
 		if err := wm.doRemoveWatch(ctx, r, gvk); err != nil {
-			errlist = append(errlist, fmt.Errorf("removing watch for %+v %w", gvk, err))
+			errlist = append(errlist, GVKError{gvk: gvk, err: fmt.Errorf("removing watch for %+v %w", gvk, err)})
 		}
 	}
 
@@ -273,7 +273,7 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 			continue
 		}
 		if err := wm.doAddWatch(ctx, r, gvk); err != nil {
-			errlist = append(errlist, fmt.Errorf("adding watch for %+v %w", gvk, err))
+			errlist = append(errlist, GVKError{gvk: gvk, err: fmt.Errorf("adding watch for %+v %w", gvk, err)})
 		}
 	}
 
