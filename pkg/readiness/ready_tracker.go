@@ -724,15 +724,12 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 // and any SyncSet resources present on the cluster.
 // Works best effort and fails-open if the a resource cannot be fetched or does not exist.
 func (t *Tracker) trackSyncSources(ctx context.Context) error {
-	var wg sync.WaitGroup
 	defer func() {
 		t.config.ExpectationsDone()
 		log.V(1).Info("config expectations populated")
 
 		t.syncsets.ExpectationsDone()
 		log.V(1).Info("syncset expectations populated")
-
-		wg.Wait()
 	}()
 
 	handled := make(map[schema.GroupVersionKind]struct{})
@@ -791,9 +788,7 @@ func (t *Tracker) trackSyncSources(ctx context.Context) error {
 
 		// Set expectations for individual cached resources
 		dt := t.ForData(g)
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
 			err := t.trackData(ctx, g, dt)
 			if err != nil {
 				log.Error(err, "aborted trackData", "gvk", g)
