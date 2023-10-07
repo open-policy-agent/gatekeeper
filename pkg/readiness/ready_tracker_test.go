@@ -584,8 +584,8 @@ func Test_Tracker_EdgeCases(t *testing.T) {
 	for _, tt := range tts {
 		t.Run(tt.name, func(t *testing.T) {
 			testutils.Setenv(t, "POD_NAME", "no-pod")
-			require.NoError(t, applyFixtures("testdata"), "base fixtures config")
-			require.NoError(t, applyFixtures("testdata/config/bad-gvk"), fmt.Sprintf("test fixtures: %s", tt.fixturesPath))
+			require.NoError(t, applyFixtures("testdata"), "base fixtures")
+			require.NoError(t, applyFixtures(tt.fixturesPath), fmt.Sprintf("test fixtures: %s", tt.fixturesPath))
 
 			mgr, wm := setupManager(t)
 			cfClient := testutils.SetupDataClient(t)
