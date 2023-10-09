@@ -23,7 +23,8 @@ jobs:
     steps:
       - name: Cleanup disk
         run: |
-          docker system prune -a -f
+            # Filter out local helm-gh-pages image so we don't delete it
+            docker system prune -a -f --filter "label!=org.opencontainers.image.source=https://github.com/stefanprodan/alpine-base"
 
       - name: Harden Runner
         uses: step-security/harden-runner@128a63446a954579617e875aaab7d2978154e969 # v2.4.0
