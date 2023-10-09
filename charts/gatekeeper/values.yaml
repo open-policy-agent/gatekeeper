@@ -271,3 +271,10 @@ rbac:
 externalCertInjection:
   enabled: false
   secretName: gatekeeper-webhook-server-cert
+# Gke Autopilot Does not Support patching kube-system,kube-node-lease namespaces.
+# Gke autopilot also does not support "*" value in validating/mutation webhook resource rules  
+enableGkeAutopilot:
+ enabled: false
+ exemptNamespaces:
+  - kube-system
+  - kube-node-lease

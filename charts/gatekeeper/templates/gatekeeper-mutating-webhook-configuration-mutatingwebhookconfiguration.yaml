@@ -34,6 +34,9 @@ webhooks:
       operator: NotIn
       values:
       - {{ .Release.Namespace }}
+      {{- if .Values.enableGkeAutopilot.enabled -}}
+      {{ toYaml .Values.enableGkeAutopilot.exemptNamespaces | nindent 6 }}
+      {{- end }}
     
     {{- range $key, $value := .Values.mutatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
