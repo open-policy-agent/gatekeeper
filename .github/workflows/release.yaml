@@ -21,6 +21,11 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
     timeout-minutes: 45
     steps:
+      - name: Cleanup disk
+        run: |
+            # Filter out local helm-gh-pages image so we don't delete it
+            docker system prune -a -f --filter "label!=org.opencontainers.image.source=https://github.com/stefanprodan/alpine-base"
+
       - name: Harden Runner
         uses: step-security/harden-runner@8ca2b8b2ece13480cda6dacd3511b49857a23c09 # v2.5.1
         with:
