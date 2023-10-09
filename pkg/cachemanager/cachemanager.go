@@ -130,8 +130,12 @@ func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Ke
 	// may become unreferenced and need to be deleted; this will be handled async
 	// in the manageCache loop.
 
-	if err := c.replaceWatchSet(ctx, newGVKs); err != nil {
-		return fmt.Errorf("error watching new gvks: %w", err)
+	err := c.replaceWatchSet(ctx)
+	if failedGVKs, interpreted := interpretErr(log, err, newGVKs); interpreted != nil {
+		for _, g := range failedGVKs {
+			c.tracker.TryCancelData(g)
+		}
+		return fmt.Errorf("error establishing watches: %w", interpreted)
 	}
 
 	return nil
@@ -139,7 +143,7 @@ func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Ke
 
 // replaceWatchSet looks at the gvksToSync and makes changes to the registrar's watch set.
 // Assumes caller has lock. On error, actual watch state may not align with intended watch state.
-func (c *CacheManager) replaceWatchSet(ctx context.Context, pertinentGVKs []schema.GroupVersionKind) error {
+func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	newWatchSet := watch.NewSet()
 	newWatchSet.Add(c.gvksToSync.GVKs()...)
 
@@ -156,21 +160,17 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context, pertinentGVKs []sche
 		innerError = c.registrar.ReplaceWatch(ctx, newWatchSet.Items())
 	})
 
-	if err := interpretErr(log, innerError, pertinentGVKs); err != nil {
-		return err
-	}
-
-	return nil
+	return innerError
 }
 
 // interpretErr looks at the error e and unwraps it looking to find an error FailingGVKs() in the error chain.
-// If found and there is an intersection with the given gvks parameter with the failing gvks, we return an error
-// that is meant to bubble up to controllers. If there is no intersection, we log the error so as not to fully
-// swallow any issues. If no error implemeting FailingGVKs() is found, we consider that to be a "global error"
-// and it is returned.
-func interpretErr(logger logr.Logger, e error, gvks []schema.GroupVersionKind) error {
+// If found and there is an intersection with the given gvks parameter with the failing gvks, we return the failing
+// gvks and an error that is meant to bubble up to controllers. If there is no intersection, we log the error
+// so as not to fully swallow any issues. If no error implemeting FailingGVKs() is found, we consider that
+// to be a "global error", so we return all gvks passed in and the error.
+func interpretErr(logger logr.Logger, e error, gvks []schema.GroupVersionKind) ([]schema.GroupVersionKind, error) {
 	if e == nil {
-		return nil
+		return nil, nil
 	}
 
 	var f interface {
@@ -189,17 +189,17 @@ func interpretErr(logger logr.Logger, e error, gvks []schema.GroupVersionKind) e
 		common := failedGvks.Intersection(gvksSet)
 		if common.Size() > 0 {
 			// then this error is pertinent to the gvks and needs to be returned
-			return e
+			return common.Items(), e
 		}
 
 		// if no intersection, this error is not about the gvks in this request
 		// but we still log it for visibility
 		logger.Info("encountered unrelated error when replacing watch set", "error", e)
-		return nil
+		return nil, nil
 	}
 
 	// otherwise, this is a "global error"
-	return e
+	return gvks, e
 }
 
 // RemoveSource removes the watches of the GVKs for a given aggregator.Key. Callers are responsible for retrying on error.
@@ -211,8 +211,11 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 		return fmt.Errorf("internal error removing source: %w", err)
 	}
 
-	if err := c.replaceWatchSet(ctx, []schema.GroupVersionKind{}); err != nil {
-		return fmt.Errorf("error removing watches for source %v: %w", sourceKey, err)
+	err := c.replaceWatchSet(ctx)
+	if _, interpreted := interpretErr(log, err, []schema.GroupVersionKind{}); interpreted != nil {
+		// unlike UpsertSource, we cannot TryCancel or Cancel any expectations as these
+		// GVKs may be required by other sync sources.
+		return fmt.Errorf("error removing watches for source %v: %w", sourceKey, interpreted)
 	}
 
 	return nil

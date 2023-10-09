@@ -143,6 +143,8 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 
 	sk := aggregator.Key{Source: "syncset", ID: request.NamespacedName.String()}
 	if err := r.cacheManager.UpsertSource(ctx, sk, gvks); err != nil {
+		syncsetTr.TryCancelExpect(syncset)
+
 		return reconcile.Result{Requeue: true}, fmt.Errorf("synceset-controller: error changing watches: %w", err)
 	}
 

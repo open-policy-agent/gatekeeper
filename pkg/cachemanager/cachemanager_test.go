@@ -612,80 +612,91 @@ func Test_interpretErr(t *testing.T) {
 	gvk2 := schema.GroupVersionKind{Group: "g2", Version: "v2", Kind: "k2"}
 
 	cases := []struct {
-		name     string
-		inputErr error
-		inputGVK []schema.GroupVersionKind
-		expected error
+		name                string
+		inputErr            error
+		inputGVK            []schema.GroupVersionKind
+		expectedErr         error
+		expectedFailingGVKs []schema.GroupVersionKind
 	}{
 		{
-			name:     "nil err",
-			inputErr: nil,
-			expected: nil,
+			name:        "nil err",
+			inputErr:    nil,
+			expectedErr: nil,
 		},
 		{
-			name:     "intersection exists, wrapped",
-			inputErr: fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}}),
-			inputGVK: []schema.GroupVersionKind{gvk1},
-			expected: fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}}),
+			name:                "intersection exists, wrapped",
+			inputErr:            fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}}),
+			inputGVK:            []schema.GroupVersionKind{gvk1},
+			expectedErr:         fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}}),
+			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
 		},
 		{
-			name:     "intersection exists, unwrapped",
-			inputErr: &gvkError{gvks: []schema.GroupVersionKind{gvk1}},
-			inputGVK: []schema.GroupVersionKind{gvk1},
-			expected: &gvkError{gvks: []schema.GroupVersionKind{gvk1}},
+			name:                "intersection exists, unwrapped",
+			inputErr:            &gvkError{gvks: []schema.GroupVersionKind{gvk1}},
+			inputGVK:            []schema.GroupVersionKind{gvk1},
+			expectedErr:         &gvkError{gvks: []schema.GroupVersionKind{gvk1}},
+			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
 		},
 		{
-			name:     "intersection does not exist",
-			inputErr: &gvkError{gvks: []schema.GroupVersionKind{gvk1}},
-			inputGVK: []schema.GroupVersionKind{gvk2},
-			expected: nil,
+			name:                "intersection does not exist",
+			inputErr:            &gvkError{gvks: []schema.GroupVersionKind{gvk1}},
+			inputGVK:            []schema.GroupVersionKind{gvk2},
+			expectedErr:         nil,
+			expectedFailingGVKs: nil,
 		},
 		{
-			name:     "intersection does not exist, GVKs is empty",
-			inputErr: fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}}),
-			inputGVK: []schema.GroupVersionKind{},
-			expected: nil,
+			name:                "intersection does not exist, GVKs is empty",
+			inputErr:            fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}}),
+			inputGVK:            []schema.GroupVersionKind{},
+			expectedErr:         nil,
+			expectedFailingGVKs: nil,
 		},
 		{
-			name:     "global error, gvks inputed",
-			inputErr: fmt.Errorf("some err: %w", errors.New("some other err")),
-			inputGVK: []schema.GroupVersionKind{gvk1},
-			expected: fmt.Errorf("some err: %w", errors.New("some other err")),
+			name:                "global error, gvks inputed",
+			inputErr:            fmt.Errorf("some err: %w", errors.New("some other err")),
+			inputGVK:            []schema.GroupVersionKind{gvk1},
+			expectedErr:         fmt.Errorf("some err: %w", errors.New("some other err")),
+			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
 		},
 		{
-			name:     "global error, no gvks inputed",
-			inputErr: fmt.Errorf("some err: %w", errors.New("some other err")),
-			inputGVK: []schema.GroupVersionKind{},
-			expected: fmt.Errorf("some err: %w", errors.New("some other err")),
+			name:                "global error, no gvks inputed",
+			inputErr:            fmt.Errorf("some err: %w", errors.New("some other err")),
+			inputGVK:            []schema.GroupVersionKind{},
+			expectedErr:         fmt.Errorf("some err: %w", errors.New("some other err")),
+			expectedFailingGVKs: []schema.GroupVersionKind{},
 		},
 		{
-			name:     "global unwrapped error, gvks inputed",
-			inputErr: errors.New("some err"),
-			inputGVK: []schema.GroupVersionKind{gvk1},
-			expected: errors.New("some err"),
+			name:                "global unwrapped error, gvks inputed",
+			inputErr:            errors.New("some err"),
+			inputGVK:            []schema.GroupVersionKind{gvk1},
+			expectedErr:         errors.New("some err"),
+			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
 		},
 		{
-			name:     "nested gvk error, intersection",
-			inputErr: fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}, err: errors.New("some other err")}),
-			inputGVK: []schema.GroupVersionKind{gvk1},
-			expected: fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}, err: errors.New("some other err")}),
+			name:                "nested gvk error, intersection",
+			inputErr:            fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}, err: errors.New("some other err")}),
+			inputGVK:            []schema.GroupVersionKind{gvk1},
+			expectedErr:         fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}, err: errors.New("some other err")}),
+			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
 		},
 		{
-			name:     "nested gvk error, no intersection",
-			inputErr: fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}, err: errors.New("some other err")}),
-			inputGVK: []schema.GroupVersionKind{gvk2},
-			expected: nil,
+			name:                "nested gvk error, no intersection",
+			inputErr:            fmt.Errorf("some err: %w", &gvkError{gvks: []schema.GroupVersionKind{gvk1}, err: errors.New("some other err")}),
+			inputGVK:            []schema.GroupVersionKind{gvk2},
+			expectedErr:         nil,
+			expectedFailingGVKs: nil,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := interpretErr(logger, tc.inputErr, tc.inputGVK)
+			gvks, gotErr := interpretErr(logger, tc.inputErr, tc.inputGVK)
+			require.ElementsMatch(t, gvks, tc.expectedFailingGVKs)
 
-			if tc.expected != nil {
-				require.Equal(t, tc.expected.Error(), got.Error())
+			if tc.expectedErr != nil {
+				require.Equal(t, tc.expectedErr.Error(), gotErr.Error())
 			} else {
-				require.Nil(t, got, fmt.Sprintf("expected nil error, got: %s", got))
+				require.Nil(t, gotErr, fmt.Sprintf("expected nil error, got: %s", gotErr))
 			}
 		})
 	}

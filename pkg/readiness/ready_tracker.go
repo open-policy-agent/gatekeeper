@@ -228,6 +228,11 @@ func (t *Tracker) CancelData(gvk schema.GroupVersionKind) {
 	t.data.Remove(gvk)
 }
 
+func (t *Tracker) TryCancelData(gvk schema.GroupVersionKind) {
+	log.V(logging.DebugLevel).Info("try to cancel tracking for data", "gvk", gvk)
+	t.data.TryCancel(gvk)
+}
+
 // Satisfied returns true if all tracked expectations have been satisfied.
 func (t *Tracker) Satisfied() bool {
 	// Check circuit-breaker first. Once satisfied, always satisfied.
