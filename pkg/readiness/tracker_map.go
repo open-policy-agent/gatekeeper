@@ -134,8 +134,8 @@ func (t *trackerMap) Populated() bool {
 
 // Populated returns true if all objectTrackers are populated.
 func (t *trackerMap) TryCancel(g schema.GroupVersionKind) bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	obj, ok := t.tryCanceled[g]
 	if !ok {
