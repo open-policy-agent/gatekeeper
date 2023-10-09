@@ -114,7 +114,7 @@ var (
 	enableTLSHealthcheck                 = flag.Bool("enable-tls-healthcheck", false, "enable probing webhook API with certificate stored in certDir")
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
-	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified.")
+	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
 )
 
 func init() {
@@ -368,13 +368,17 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 		args = append(args, rego.AddExternalDataProviderCache(providerCache))
 		mutationOpts.ProviderCache = providerCache
 
-		if *externaldataProviderResponseCacheTTL <= 0 {
+		switch {
+		case *externaldataProviderResponseCacheTTL > 0:
+			providerResponseCache := frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
+			args = append(args, rego.AddExternalDataProviderResponseCache(providerResponseCache))
+		case *externaldataProviderResponseCacheTTL == 0:
+			setupLog.Info("external data provider response cache is disabled")
+		default:
 			err := fmt.Errorf("invalid value for external-data-provider-response-cache-ttl: %d", *externaldataProviderResponseCacheTTL)
 			setupLog.Error(err, "unable to create external data provider response cache")
 			return err
 		}
-		providerResponseCache := frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
-		args = append(args, rego.AddExternalDataProviderResponseCache(providerResponseCache))
 
 		certFile := filepath.Join(*certDir, certName)
 		keyFile := filepath.Join(*certDir, keyName)
@@ -400,6 +404,12 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	}
 
 	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
+
+	if *webhook.ValidateTemplateRego && *enableK8sCel {
+		err := fmt.Errorf("cannot validate template rego when K8s cel is enabled. Please disable K8s cel by setting --experimental-enable-k8s-native-validation=false or disable template rego validation by setting --validate-template-rego=false")
+		setupLog.Error(err, "unable to set up OPA and K8s native drivers")
+		return err
+	}
 
 	if *enableK8sCel {
 		// initialize K8sValidation

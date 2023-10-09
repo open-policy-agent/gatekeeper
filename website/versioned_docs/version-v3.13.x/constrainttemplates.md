@@ -8,6 +8,8 @@ ConstraintTemplates define a way to validate some set of Kubernetes objects in G
 1. [Rego](https://www.openpolicyagent.org/docs/latest/#rego) code that defines a policy violation
 2. The schema of the accompanying `Constraint` object, which represents an instantiation of a `ConstraintTemplate`
 
+> ❗ Validation of Rego for constraint templates is enabled by default. Set `validate-template-rego` flag to `false` to disable rego validation if you want to use `experimental-enable-k8s-native-validation` Kubernetes CEL based policies as well. This flag will be removed from Gatekeeper 3.16 and later, please make use of [Gator](https://open-policy-agent.github.io/gatekeeper/website/docs/gator) to validate constraint template in shift left manner to avoid any impact with this behavior change.
+
 ## `v1` Constraint Template
 
 In release version 3.6.0, Gatekeeper included the `v1` version of `ConstraintTemplate`.  Unlike past versions of `ConstraintTemplate`, `v1` requires the Constraint schema section to be [structural](https://kubernetes.io/blog/2019/06/20/crd-structural-schema/).
