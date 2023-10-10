@@ -1,7 +1,6 @@
-ARG TARGETPLATFORM="linux/amd64"
-
 FROM --platform=$TARGETPLATFORM registry.k8s.io/kubectl:v1.28.1 as builder
 
+ARG TARGETPLATFORM
 ARG TARGETOS
 ARG TARGETARCH
 
