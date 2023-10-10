@@ -27,10 +27,10 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Set up Go 1.20
+      - name: Set up Go
         uses: actions/setup-go@v4 # v4.0.1
         with:
-          go-version: "1.20"
+          go-version: "1.21"
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v3.5.2
