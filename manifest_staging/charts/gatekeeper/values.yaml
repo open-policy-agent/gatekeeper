@@ -42,20 +42,20 @@ resourceQuota: true
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.13.1
+  release: v3.13.2
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.13.1
+      tag: v3.13.2
 postUpgrade:
   labelNamespace:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.1
+      tag: v3.13.2
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -86,7 +86,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.1
+      tag: v3.13.2
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -127,7 +127,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.13.1
+      tag: v3.13.2
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""
