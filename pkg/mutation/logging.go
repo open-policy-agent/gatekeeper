@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator) {
+func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator, source types.SourceType) {
 	iterations := make([]interface{}, 0, 2*len(allAppliedMutations))
 	for i, appliedMutations := range allAppliedMutations {
 		if len(appliedMutations) == 0 {
@@ -33,9 +33,22 @@ func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructur
 			logging.ResourceKind, obj.GroupVersionKind().Kind,
 			logging.ResourceAPIVersion, obj.GroupVersionKind().Version,
 			logging.ResourceNamespace, obj.GetNamespace(),
-			logging.ResourceName, obj.GetName(),
+			logging.ResourceName, getNameOrGenerateName(obj),
+			logging.ResourceSourceType, source,
+			logging.ResourceLabels, obj.GetLabels(),
 		}
 		logDetails = append(logDetails, iterations...)
 		log.Info(message, logDetails...)
 	}
+}
+
+func getNameOrGenerateName(obj *unstructured.Unstructured) string {
+	resourceName := obj.GetName()
+	// for generated resources on CREATE, like a pod from a deployment,
+	// the name has not been populated yet, so we use the GeneratedName instead.
+	if resourceName == "" {
+		resourceName = obj.GetGenerateName()
+	}
+
+	return resourceName
 }

@@ -29,10 +29,11 @@ const (
 	ResourceAPIVersion    = "resource_api_version"
 	ResourceNamespace     = "resource_namespace"
 	ResourceName          = "resource_name"
+	ResourceSourceType    = "resource_source_type"
 	RequestUsername       = "request_username"
 	MutationApplied       = "mutation_applied"
 	Mutator               = "mutator"
-	DebugLevel            = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
+	DebugLevel            = 1 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
 	ExecutionStats        = "execution_stats"
 )
 

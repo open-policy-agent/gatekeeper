@@ -17,20 +17,20 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@8ca2b8b2ece13480cda6dacd3511b49857a23c09 # v2.5.1
+        uses: step-security/harden-runner@1b05615854632b887b69ae1be8cbefe72d3ae423 # v2.6.0
         with:
           egress-policy: audit
 
       - name: Checkout repository
-        uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@a09933a12a80f87b87005513f0abb1494c27a716
+        uses: github/codeql-action/init@fdcae64e1484d349b3366718cdfef3d404390e85
         with:
           languages: go
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@a09933a12a80f87b87005513f0abb1494c27a716
+        uses: github/codeql-action/autobuild@fdcae64e1484d349b3366718cdfef3d404390e85
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@a09933a12a80f87b87005513f0abb1494c27a716
+        uses: github/codeql-action/analyze@fdcae64e1484d349b3366718cdfef3d404390e85

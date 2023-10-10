@@ -43,6 +43,7 @@ import (
 	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/audit"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
@@ -52,6 +53,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -69,6 +71,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 	crWebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -110,7 +113,7 @@ var (
 	enableTLSHealthcheck                 = flag.Bool("enable-tls-healthcheck", false, "enable probing webhook API with certificate stored in certDir")
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
-	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified.")
+	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
 )
 
 func init() {
@@ -364,13 +367,17 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 		args = append(args, rego.AddExternalDataProviderCache(providerCache))
 		mutationOpts.ProviderCache = providerCache
 
-		if *externaldataProviderResponseCacheTTL <= 0 {
+		switch {
+		case *externaldataProviderResponseCacheTTL > 0:
+			providerResponseCache := frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
+			args = append(args, rego.AddExternalDataProviderResponseCache(providerResponseCache))
+		case *externaldataProviderResponseCacheTTL == 0:
+			setupLog.Info("external data provider response cache is disabled")
+		default:
 			err := fmt.Errorf("invalid value for external-data-provider-response-cache-ttl: %d", *externaldataProviderResponseCacheTTL)
 			setupLog.Error(err, "unable to create external data provider response cache")
 			return err
 		}
-		providerResponseCache := frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
-		args = append(args, rego.AddExternalDataProviderResponseCache(providerResponseCache))
 
 		certFile := filepath.Join(*certDir, certName)
 		keyFile := filepath.Join(*certDir, keyName)
@@ -397,6 +404,12 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 
 	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 
+	if *webhook.ValidateTemplateRego && *enableK8sCel {
+		err := fmt.Errorf("cannot validate template rego when K8s cel is enabled. Please disable K8s cel by setting --experimental-enable-k8s-native-validation=false or disable template rego validation by setting --validate-template-rego=false")
+		setupLog.Error(err, "unable to set up OPA and K8s native drivers")
+		return err
+	}
+
 	if *enableK8sCel {
 		// initialize K8sValidation
 		k8sDriver, err := k8scel.New()
@@ -407,7 +420,6 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 		cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
 	}
 
-	// initialize OPA
 	driver, err := rego.New(args...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up Driver")
@@ -448,17 +460,43 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 
 	// Setup all Controllers
 	setupLog.Info("setting up controllers")
-	watchSet := watch.NewSet()
+
+	// Events ch will be used to receive events from dynamic watches registered
+	// via the registrar below.
+	events := make(chan event.GenericEvent, 1024)
+	reg, err := wm.NewRegistrar(
+		cachemanager.RegistrarName,
+		events)
+	if err != nil {
+		setupLog.Error(err, "unable to set up watch registrar for cache manager")
+		return err
+	}
+
+	syncMetricsCache := syncutil.NewMetricsCache()
+	cm, err := cachemanager.NewCacheManager(&cachemanager.Config{
+		CfClient:         client,
+		SyncMetricsCache: syncMetricsCache,
+		Tracker:          tracker,
+		ProcessExcluder:  processExcluder,
+		Registrar:        reg,
+		Reader:           mgr.GetCache(),
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to create cache manager")
+		return err
+	}
+
 	opts := controller.Dependencies{
-		Opa:              client,
+		CFClient:         client,
 		WatchManger:      wm,
+		SyncEventsCh:     events,
+		CacheMgr:         cm,
 		ControllerSwitch: sw,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
 		ExpansionSystem:  expansionSystem,
 		ProviderCache:    providerCache,
-		WatchSet:         watchSet,
 		PubsubSystem:     pubsubSystem,
 	}
 
@@ -483,7 +521,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 
 	if operations.IsAssigned(operations.Audit) {
 		setupLog.Info("setting up audit")
-		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), watchSet)
+		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), cm)
 		auditDeps := audit.Dependencies{
 			Client:          client,
 			ProcessExcluder: processExcluder,

@@ -146,6 +146,9 @@ If there is a system error, the provider should return the system error message 
 
 Example provider implementation: https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/provider.go
 
+#### Provider Response Caching
+Starting with v3.13+, Gatekeeper supports caching of responses from external data providers for both audit and validating webhook. It caches the response based on the `Key` and `Value` received as part of the [`ProviderResponse`](#providerresponse). By default, the cache is invalidated after 3 minutes, which is the default Time-to-Live (TTL). You can configure the TTL using the `--external-data-provider-response-cache-ttl` flag. Setting the flag to 0 disables this cache.
+
 ## External data for Gatekeeper validating webhook
 
 External data adds a [custom OPA built-in function](https://www.openpolicyagent.org/docs/latest/extensions/#custom-built-in-functions-in-go) called `external_data` to Rego. This function is used to query external data providers.

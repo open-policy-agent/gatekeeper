@@ -3,13 +3,10 @@ package instances
 import (
 	"context"
 
-	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/mutators/core"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
@@ -132,10 +129,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return assignMetadata.Add(mgr)
 }
 
-func (a *Adder) InjectOpa(o *constraintclient.Client) {}
-
-func (a *Adder) InjectWatchManager(w *watch.Manager) {}
-
 func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
@@ -149,7 +142,3 @@ func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, erro
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {
 	a.MutationSystem = mutationSystem
 }
-
-func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
-
-func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}

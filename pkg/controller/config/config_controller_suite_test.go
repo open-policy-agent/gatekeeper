@@ -20,6 +20,7 @@ import (
 	stdlog "log"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
@@ -62,12 +63,12 @@ func TestMain(m *testing.M) {
 
 // SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
 // writes the request to requests after Reconcile is finished.
-func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan reconcile.Request) {
-	requests := make(chan reconcile.Request)
+func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, *sync.Map) {
+	var requests sync.Map
 	fn := reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 		result, err := inner.Reconcile(ctx, req)
-		requests <- req
+		requests.Store(req, struct{}{})
 		return result, err
 	})
-	return fn, requests
+	return fn, &requests
 }

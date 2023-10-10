@@ -22,14 +22,10 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
-	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -54,19 +50,9 @@ type Adder struct {
 	ControllerSwitch *watch.ControllerSwitch
 }
 
-func (a *Adder) InjectOpa(o *constraintclient.Client) {}
-
-func (a *Adder) InjectWatchManager(w *watch.Manager) {}
-
 func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {}
-
-func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
-
-func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
-
-func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 
 // Add creates a new Mutator Status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.

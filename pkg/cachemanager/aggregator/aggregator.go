@@ -46,7 +46,7 @@ func (b *GVKAgreggator) IsPresent(gvk schema.GroupVersionKind) bool {
 	return found
 }
 
-// Remove deletes the any associations that Key k has in the GVKAggregator.
+// Remove deletes any associations that Key k has in the GVKAggregator.
 // For any GVK in the association k --> [GVKs], we also delete any associations
 // between the GVK and the Key k stored in the reverse map.
 func (b *GVKAgreggator) Remove(k Key) error {
@@ -85,10 +85,15 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 		}
 	}
 
-	b.store[k] = makeSet(gvks)
+	// protect against empty inputs
+	gvksSet := makeSet(gvks)
+	if len(gvksSet) == 0 {
+		return nil
+	}
 
+	b.store[k] = gvksSet
 	// add reverse links
-	for _, gvk := range gvks {
+	for gvk := range gvksSet {
 		if _, found := b.reverseStore[gvk]; !found {
 			b.reverseStore[gvk] = make(map[Key]struct{})
 		}
@@ -96,6 +101,31 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 	}
 
 	return nil
+}
+
+// List returnes the gvk set for a given Key.
+func (b *GVKAgreggator) List(k Key) map[schema.GroupVersionKind]struct{} {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	v := b.store[k]
+	cpy := make(map[schema.GroupVersionKind]struct{}, len(v))
+	for key, value := range v {
+		cpy[key] = value
+	}
+	return cpy
+}
+
+// GVKs returns a list of all of the schema.GroupVersionKind that are aggregated.
+func (b *GVKAgreggator) GVKs() []schema.GroupVersionKind {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	allGVKs := []schema.GroupVersionKind{}
+	for gvk := range b.reverseStore {
+		allGVKs = append(allGVKs, gvk)
+	}
+	return allGVKs
 }
 
 func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struct{}, k Key) error {
@@ -123,7 +153,9 @@ func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struc
 func makeSet(gvks []schema.GroupVersionKind) map[schema.GroupVersionKind]struct{} {
 	gvkSet := make(map[schema.GroupVersionKind]struct{})
 	for _, gvk := range gvks {
-		gvkSet[gvk] = struct{}{}
+		if !gvk.Empty() {
+			gvkSet[gvk] = struct{}{}
+		}
 	}
 
 	return gvkSet

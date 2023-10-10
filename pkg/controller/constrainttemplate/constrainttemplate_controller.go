@@ -24,15 +24,12 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplatestatus"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -69,7 +66,7 @@ var gvkConstraintTemplate = schema.GroupVersionKind{
 }
 
 type Adder struct {
-	Opa              *constraintclient.Client
+	CFClient         *constraintclient.Client
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
@@ -84,15 +81,15 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	}
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker, events, events, a.GetPod)
+	r, err := newReconciler(mgr, a.CFClient, a.WatchManager, a.ControllerSwitch, a.Tracker, events, events, a.GetPod)
 	if err != nil {
 		return err
 	}
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(o *constraintclient.Client) {
-	a.Opa = o
+func (a *Adder) InjectCFClient(c *constraintclient.Client) {
+	a.CFClient = c
 }
 
 func (a *Adder) InjectWatchManager(wm *watch.Manager) {
@@ -111,17 +108,11 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 	a.GetPod = getPod
 }
 
-func (a *Adder) InjectMutationSystem(_ *mutation.System) {}
-
-func (a *Adder) InjectExpansionSystem(_ *expansion.System) {}
-
-func (a *Adder) InjectProviderCache(_ *externaldata.ProviderCache) {}
-
 // newReconciler returns a new reconcile.Reconciler
 // cstrEvents is the channel from which constraint controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
-func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
+func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -136,7 +127,7 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 
 	// via the registrar below.
 	constraintAdder := constraint.Adder{
-		Opa:              opa,
+		CFClient:         cfClient,
 		ConstraintsCache: constraintsCache,
 		WatchManager:     wm,
 		ControllerSwitch: cs,
@@ -155,7 +146,7 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 		// via the registrar below.
 		statusEvents := make(chan event.GenericEvent, 1024)
 		csAdder := constraintstatus.Adder{
-			Opa:              opa,
+			CFClient:         cfClient,
 			WatchManager:     wm,
 			ControllerSwitch: cs,
 			Events:           statusEvents,
@@ -166,7 +157,7 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 		}
 
 		ctsAdder := constrainttemplatestatus.Adder{
-			Opa:              opa,
+			CfClient:         cfClient,
 			WatchManager:     wm,
 			ControllerSwitch: cs,
 		}
@@ -179,7 +170,7 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 	reconciler := &ReconcileConstraintTemplate{
 		Client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
-		opa:           opa,
+		cfClient:      cfClient,
 		watcher:       w,
 		statusWatcher: statusW,
 		cs:            cs,
@@ -242,7 +233,7 @@ type ReconcileConstraintTemplate struct {
 	scheme        *runtime.Scheme
 	watcher       *watch.Registrar
 	statusWatcher *watch.Registrar
-	opa           *constraintclient.Client
+	cfClient      *constraintclient.Client
 	cs            *watch.ControllerSwitch
 	metrics       *reporter
 	tracker       *readiness.Tracker
@@ -299,7 +290,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		ctRef := &templates.ConstraintTemplate{}
 		ctRef.SetNamespace(request.Namespace)
 		ctRef.SetName(request.Name)
-		ctUnversioned, err := r.opa.GetTemplate(ctRef)
+		ctUnversioned, err := r.cfClient.GetTemplate(ctRef)
 		result := reconcile.Result{}
 		if err != nil {
 			logger.Info("missing constraint template in OPA cache, no deletion necessary")
@@ -338,7 +329,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	unversionedProposedCRD, err := r.opa.CreateCRD(ctx, unversionedCT)
+	unversionedProposedCRD, err := r.cfClient.CreateCRD(ctx, unversionedCT)
 	if err != nil {
 		logger.Error(err, "CRD creation error")
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
@@ -424,10 +415,10 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	logger.Info("loading code into OPA")
 	beginCompile := time.Now()
 
-	// It's important that opa.AddTemplate() is called first. That way we can
+	// It's important that cfClient.AddTemplate() is called first. That way we can
 	// rely on a template's existence in OPA to know whether a watch needs
 	// to be removed
-	if _, err := r.opa.AddTemplate(ctx, unversionedCT); err != nil {
+	if _, err := r.cfClient.AddTemplate(ctx, unversionedCT); err != nil {
 		if err := r.metrics.reportIngestDuration(ctx, metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			logger.Error(err, "failed to report constraint template ingestion duration")
 		}
@@ -496,7 +487,7 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 
 	// removing the template from the OPA cache must go last as we are relying
 	// on that cache to derive the Kind to remove from the watch
-	if _, err := r.opa.RemoveTemplate(ctx, ct); err != nil {
+	if _, err := r.cfClient.RemoveTemplate(ctx, ct); err != nil {
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil

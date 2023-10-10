@@ -44,7 +44,7 @@ import (
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_status_controller")
 
 type Adder struct {
-	Opa              *constraintclient.Client
+	CFClient         *constraintclient.Client
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Events           <-chan event.GenericEvent
