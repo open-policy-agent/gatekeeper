@@ -75,6 +75,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	crWebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
@@ -488,7 +489,13 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	}
 
 	p := pruner.NewExpecationsPruner(cm, tracker)
-	go p.Run(ctx)
+	err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		return p.Run(ctx)
+	}))
+	if err != nil {
+		setupLog.Error(err, "adding expectations pruner to manager")
+		return err
+	}
 
 	opts := controller.Dependencies{
 		CFClient:         client,

@@ -26,17 +26,17 @@ func NewExpecationsPruner(cm *cachemanager.CacheManager, rt *readiness.Tracker) 
 	}
 }
 
-func (e *ExpectationsPruner) Run(ctx context.Context) {
+func (e *ExpectationsPruner) Run(ctx context.Context) error {
 	ticker := time.NewTicker(tickDuration)
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
 			if e.tracker.Satisfied() {
 				// we're done, there's no need to
 				// further manage the data sync expectations.
-				return
+				return nil
 			}
 			if !e.tracker.SyncSourcesSatisfied() {
 				// not yet ready to prune data expectations.

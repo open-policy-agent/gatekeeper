@@ -23,8 +23,7 @@ import (
 )
 
 const (
-	ctrlName      = "syncset-controller"
-	finalizerName = "finalizers.gatekeeper.sh/syncset"
+	ctrlName = "syncset-controller"
 )
 
 var (

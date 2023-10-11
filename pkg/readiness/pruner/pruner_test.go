@@ -149,7 +149,9 @@ func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
 			require.NoError(t, testutils.ApplyFixtures(tt.fixturesPath, cfg), "applying base fixtures")
 
 			em, c := setupTest(ctx, t, tt.startControllers)
-			go em.Run(ctx)
+			go func() {
+				_ = em.Run(ctx)
+			}()
 
 			// we have to wait on the Tracker to Populate in order to not
 			// have the Deletes below race with the population of expectations.
