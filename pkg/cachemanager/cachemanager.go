@@ -160,19 +160,20 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	return innerError
 }
 
-// interpret whether the err received is of type TODO and whether it has to do with the provided GVKs.
+// interpret whether the err received is of type WatchesError and whether it has to do with the provided GVKs.
 func interpretErr(logger logr.Logger, e error, gvks []schema.GroupVersionKind) ([]schema.GroupVersionKind, error) {
 	if e == nil {
 		return nil, nil
 	}
 
-	var f interface {
-		FailingGVKs() []schema.GroupVersionKind
-		Error() string
-	}
+	var f watch.WatchesError
 
-	// search for the first error that implements the FailingGVKs() interface
+	// search the wrapped err tree for an error that implements the WatchesError interface
 	if errors.As(e, &f) {
+		if f.IsUniversal() {
+			return gvks, e
+		}
+
 		failedGvks := watch.NewSet()
 		failedGvks.Add(f.FailingGVKs()...)
 		gvksSet := watch.NewSet()
@@ -189,7 +190,7 @@ func interpretErr(logger logr.Logger, e error, gvks []schema.GroupVersionKind) (
 		return nil, nil
 	}
 
-	// otherwise, this is a "global error"
+	// otherwise, this is some other universal error
 	return gvks, e
 }
 

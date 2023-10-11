@@ -22,19 +22,31 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// errorList is an error that aggregates multiple errors.
-type errorList []GVKError
+// errorList is an error that aggregates multiple gvkErrs.
+type errorList struct {
+	errs        []gvkErr
+	isUniversal bool
+}
 
-type GVKError struct {
+type WatchesError interface {
+	// returns gvks for which we had watch errors
+	FailingGVKs() []schema.GroupVersionKind
+	// returns true if this error is not specific to the failing gvks
+	IsUniversal() bool
+	Error() string
+}
+
+// a gvk annotated err.
+type gvkErr struct {
 	err error
 	gvk schema.GroupVersionKind
 }
 
-func (w GVKError) String() string {
+func (w gvkErr) String() string {
 	return w.Error()
 }
 
-func (w GVKError) Error() string {
+func (w gvkErr) Error() string {
 	return fmt.Sprintf("error for gvk: %s: %s", w.gvk, w.err.Error())
 }
 
@@ -44,7 +56,7 @@ func (e errorList) String() string {
 
 func (e errorList) Error() string {
 	var builder strings.Builder
-	for i, err := range e {
+	for i, err := range e.errs {
 		if i > 0 {
 			builder.WriteRune('\n')
 		}
@@ -54,10 +66,14 @@ func (e errorList) Error() string {
 }
 
 func (e errorList) FailingGVKs() []schema.GroupVersionKind {
-	gvks := make([]schema.GroupVersionKind, len(e))
-	for _, err := range e {
+	gvks := make([]schema.GroupVersionKind, len(e.errs))
+	for _, err := range e.errs {
 		gvks = append(gvks, err.gvk)
 	}
 
 	return gvks
+}
+
+func (e errorList) IsUniversal() bool {
+	return e.isUniversal
 }

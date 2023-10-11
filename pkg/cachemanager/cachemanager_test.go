@@ -652,25 +652,32 @@ func Test_interpretErr(t *testing.T) {
 			expectedFailingGVKs: nil,
 		},
 		{
-			name:                "global error, gvks inputed",
+			name:                "universal error, gvks inputed",
 			inputErr:            fmt.Errorf("some err: %w", errors.New("some other err")),
 			inputGVK:            []schema.GroupVersionKind{gvk1},
 			expectedErr:         fmt.Errorf("some err: %w", errors.New("some other err")),
 			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
 		},
 		{
-			name:                "global error, no gvks inputed",
+			name:                "universal error, no gvks inputed",
 			inputErr:            fmt.Errorf("some err: %w", errors.New("some other err")),
 			inputGVK:            []schema.GroupVersionKind{},
 			expectedErr:         fmt.Errorf("some err: %w", errors.New("some other err")),
 			expectedFailingGVKs: []schema.GroupVersionKind{},
 		},
 		{
-			name:                "global unwrapped error, gvks inputed",
+			name:                "universal unwrapped error, gvks inputed",
 			inputErr:            errors.New("some err"),
 			inputGVK:            []schema.GroupVersionKind{gvk1},
 			expectedErr:         errors.New("some err"),
 			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
+		},
+		{
+			name:                "universal error, nested gvks",
+			inputErr:            fmt.Errorf("some err: %w", &gvkError{isUniversal: true, gvks: []schema.GroupVersionKind{gvk1}, err: errors.New("some other err")}),
+			inputGVK:            []schema.GroupVersionKind{gvk1, gvk2},
+			expectedErr:         fmt.Errorf("some err: %w", &gvkError{isUniversal: true, gvks: []schema.GroupVersionKind{gvk1}, err: errors.New("some other err")}),
+			expectedFailingGVKs: []schema.GroupVersionKind{gvk1, gvk2},
 		},
 		{
 			name:                "nested gvk error, intersection",
@@ -703,8 +710,9 @@ func Test_interpretErr(t *testing.T) {
 }
 
 type gvkError struct {
-	gvks []schema.GroupVersionKind
-	err  error
+	gvks        []schema.GroupVersionKind
+	err         error
+	isUniversal bool
 }
 
 func (e *gvkError) Error() string {
@@ -713,6 +721,10 @@ func (e *gvkError) Error() string {
 
 func (e *gvkError) FailingGVKs() []schema.GroupVersionKind {
 	return e.gvks
+}
+
+func (e *gvkError) IsUniversal() bool {
+	return e.isUniversal
 }
 
 func (e *gvkError) Unwrap() error {
