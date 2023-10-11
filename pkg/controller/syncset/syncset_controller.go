@@ -130,17 +130,28 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 	}
+	sk := aggregator.Key{Source: "syncset", ID: request.NamespacedName.String()}
 
-	gvks := make([]schema.GroupVersionKind, 0)
-	if exists && syncset.GetDeletionTimestamp().IsZero() {
-		log.V(logging.DebugLevel).Info("handling SyncSet update", "instance", syncset)
+	if !exists || !syncset.GetDeletionTimestamp().IsZero() {
+		log.V(logging.DebugLevel).Info("handling SyncSet delete", "instance", syncset)
 
-		for _, entry := range syncset.Spec.GVKs {
-			gvks = append(gvks, schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind})
+		if err := r.cacheManager.RemoveSource(ctx, sk); err != nil {
+			syncsetTr.TryCancelExpect(syncset)
+
+			return reconcile.Result{}, fmt.Errorf("synceset-controller: error removing source: %w", err)
 		}
+
+		syncsetTr.CancelExpect(syncset)
+
+		return reconcile.Result{}, nil
 	}
 
-	sk := aggregator.Key{Source: "syncset", ID: request.NamespacedName.String()}
+	log.V(logging.DebugLevel).Info("handling SyncSet update", "instance", syncset)
+	gvks := []schema.GroupVersionKind{}
+	for _, entry := range syncset.Spec.GVKs {
+		gvks = append(gvks, schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind})
+	}
+
 	if err := r.cacheManager.UpsertSource(ctx, sk, gvks); err != nil {
 		syncsetTr.TryCancelExpect(syncset)
 
