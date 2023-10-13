@@ -2,6 +2,7 @@ package syncset
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -36,17 +38,22 @@ var (
 )
 
 const (
-	timeout = time.Second * 20
+	timeout = time.Second * 10
 	tick    = time.Second * 2
 )
 
 // Test_ReconcileSyncSet_wConfigController verifies that SyncSet and Config resources
 // can get reconciled and their respective specs are added to the data client.
 func Test_ReconcileSyncSet_wConfigController(t *testing.T) {
-	require.NoError(t, testutils.CreateGatekeeperNamespace(cfg))
-
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
+
+	require.NoError(t, testutils.CreateGatekeeperNamespace(cfg))
+
+	tr := setupTest(ctx, t, false, true)
+	mgr := *tr.mgr
+	c := tr.c
+	cfClient := tr.cfClient
 
 	instanceConfig := testutils.ConfigFor([]schema.GroupVersionKind{})
 	instanceSyncSet1 := &syncsetv1alpha1.SyncSet{
@@ -62,49 +69,15 @@ func Test_ReconcileSyncSet_wConfigController(t *testing.T) {
 	configMap := testutils.UnstructuredFor(configMapGVK, "", "cm1-name")
 	pod := testutils.UnstructuredFor(podGVK, "", "pod1-name")
 
-	mgr, wm := testutils.SetupManager(t, cfg)
-	c := testclient.NewRetryClient(mgr.GetClient())
-
-	cfClient := &fakes.FakeCfClient{}
-	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	processExcluder := process.Get()
-	events := make(chan event.GenericEvent, 1024)
-	syncMetricsCache := syncutil.NewMetricsCache()
-	w, err := wm.NewRegistrar(
-		cm.RegistrarName,
-		events)
-	require.NoError(t, err)
-
-	cm, err := cm.NewCacheManager(&cm.Config{
-		CfClient:         cfClient,
-		SyncMetricsCache: syncMetricsCache,
-		Tracker:          tracker,
-		ProcessExcluder:  processExcluder,
-		Registrar:        w,
-		Reader:           c,
-	})
-	require.NoError(t, err)
-	go func() {
-		assert.NoError(t, cm.Start(ctx))
-	}()
-
-	rec, err := newReconciler(mgr, cm, cs, tracker)
-	require.NoError(t, err, "creating sync set reconciler")
-	require.NoError(t, add(mgr, rec), "adding syncset reconciler to mgr")
-
 	// for sync controller
-	syncAdder := syncc.Adder{CacheManager: cm, Events: events}
+	syncAdder := syncc.Adder{CacheManager: tr.cacheMgr, Events: tr.events}
 	require.NoError(t, syncAdder.Add(mgr), "adding sync reconciler to mgr")
 
 	// now for config controller
 	configAdder := config.Adder{
-		CacheManager:     cm,
-		ControllerSwitch: cs,
-		Tracker:          tracker,
+		CacheManager:     tr.cacheMgr,
+		ControllerSwitch: tr.cs,
+		Tracker:          tr.tracker,
 	}
 	require.NoError(t, configAdder.Add(mgr), "adding config reconciler to mgr")
 
@@ -208,8 +181,6 @@ func Test_ReconcileSyncSet_wConfigController(t *testing.T) {
 			}
 		})
 	}
-
-	cs.Stop()
 }
 
 func expectedCheck(cfClient *fakes.FakeCfClient, expected []schema.GroupVersionKind) func() bool {
@@ -223,36 +194,47 @@ func expectedCheck(cfClient *fakes.FakeCfClient, expected []schema.GroupVersionK
 	}
 }
 
-func Test_ReconcileSyncSet_Reconcile(t *testing.T) {
+type testResources struct {
+	mgr      *manager.Manager
+	requests *sync.Map
+	cacheMgr *cm.CacheManager
+	c        *testclient.RetryClient
+	wm       *watch.Manager
+	cfClient *fakes.FakeCfClient
+	events   chan event.GenericEvent
+	cs       *watch.ControllerSwitch
+	tracker  *readiness.Tracker
+}
+
+func setupTest(ctx context.Context, t *testing.T, wrapReconciler bool, useFakeClient bool) testResources {
 	require.NoError(t, testutils.CreateGatekeeperNamespace(cfg))
-
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	defer cancelFunc()
-
-	instanceSyncSet := &syncsetv1alpha1.SyncSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "syncset",
-		},
-		Spec: syncsetv1alpha1.SyncSetSpec{
-			GVKs: []syncsetv1alpha1.GVKEntry{syncsetv1alpha1.GVKEntry(podGVK)},
-		},
-	}
 
 	mgr, wm := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	driver, err := rego.New()
-	require.NoError(t, err, "unable to set up driver")
+	tr := testResources{}
+	var dataClient cm.CFDataClient
+	if useFakeClient {
+		cfClient := &fakes.FakeCfClient{}
+		dataClient = cfClient
+		tr.cfClient = cfClient
+	} else {
+		driver, err := rego.New()
+		require.NoError(t, err, "unable to set up driver")
 
-	dataClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
-	require.NoError(t, err, "unable to set up data client")
+		dataClient, err = constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+		require.NoError(t, err, "unable to set up data client")
+	}
 
 	cs := watch.NewSwitch()
+	tr.cs = cs
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	require.NoError(t, err)
+	tr.tracker = tracker
 
 	processExcluder := process.Get()
 	events := make(chan event.GenericEvent, 1024)
+	tr.events = events
 	syncMetricsCache := syncutil.NewMetricsCache()
 	w, err := wm.NewRegistrar(
 		cm.RegistrarName,
@@ -265,19 +247,46 @@ func Test_ReconcileSyncSet_Reconcile(t *testing.T) {
 		assert.NoError(t, cm.Start(ctx))
 	}()
 
+	tr.mgr = &mgr
+	tr.cacheMgr = cm
+	tr.c = c
+	tr.wm = wm
+
 	rec, err := newReconciler(mgr, cm, cs, tracker)
 	require.NoError(t, err)
 
-	recFn, requests := testutils.SetupTestReconcile(rec)
-	require.NoError(t, add(mgr, recFn))
+	if wrapReconciler {
+		recFn, requests := testutils.SetupTestReconcile(rec)
+		require.NoError(t, add(mgr, recFn))
+		tr.requests = requests
+	} else {
+		require.NoError(t, add(mgr, rec))
+	}
+
+	return tr
+}
+
+func Test_ReconcileSyncSet_Reconcile(t *testing.T) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+
+	tr := setupTest(ctx, t, true, false)
+	mgr := *tr.mgr
+	requests := tr.requests
+	wm := tr.wm
+	c := tr.c
 
 	testutils.StartManager(ctx, t, mgr)
 
+	instanceSyncSet := &syncsetv1alpha1.SyncSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "syncset",
+		},
+		Spec: syncsetv1alpha1.SyncSetSpec{
+			GVKs: []syncsetv1alpha1.GVKEntry{syncsetv1alpha1.GVKEntry(podGVK)},
+		},
+	}
 	require.NoError(t, c.Create(ctx, instanceSyncSet))
-	defer func() {
-		ctx := context.Background()
-		require.NoError(t, c.Delete(ctx, instanceSyncSet))
-	}()
 
 	require.Eventually(t, func() bool {
 		_, ok := requests.Load(reconcile.Request{NamespacedName: types.NamespacedName{Name: "syncset"}})
@@ -295,5 +304,10 @@ func Test_ReconcileSyncSet_Reconcile(t *testing.T) {
 	}
 	require.ElementsMatch(t, wantGVKs, gvks)
 
-	cs.Stop()
+	// now delete the sync source and expect no longer watched gvks
+	require.NoError(t, c.Delete(ctx, instanceSyncSet))
+	require.Eventually(t, func() bool {
+		return len(wm.GetManagedGVK()) == 0
+	}, timeout, tick, "check watched gvks are deleted")
+	require.ElementsMatch(t, []schema.GroupVersionKind{}, wm.GetManagedGVK())
 }

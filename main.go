@@ -488,7 +488,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 		return err
 	}
 
-	p := pruner.NewExpecationsPruner(cm, tracker)
+	p := pruner.NewExpectationsPruner(cm, tracker)
 	err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		return p.Run(ctx)
 	}))

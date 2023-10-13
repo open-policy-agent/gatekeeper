@@ -132,7 +132,9 @@ func (t *trackerMap) Populated() bool {
 	return true
 }
 
-// Populated returns true if all objectTrackers are populated.
+// TryCancel will check the readinessRetries left on this GVK, and remove
+// the expectation for its objectTracker if no retries remain.
+// Returns True if it stopped tracking a resource kind.
 func (t *trackerMap) TryCancel(g schema.GroupVersionKind) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()

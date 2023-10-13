@@ -131,11 +131,11 @@ func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Ke
 	// in the manageCache loop.
 
 	err := c.replaceWatchSet(ctx)
-	if failedGVKs, interpreted := interpretErr(log, err, newGVKs); interpreted != nil {
+	if failedGVKs, ie := interpretErr(log, err, newGVKs); ie != nil {
 		for _, g := range failedGVKs {
 			c.tracker.TryCancelData(g)
 		}
-		return fmt.Errorf("error establishing watches: %w", interpreted)
+		return fmt.Errorf("error establishing watches: %w", ie)
 	}
 
 	return nil
@@ -204,8 +204,8 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 	}
 
 	err := c.replaceWatchSet(ctx)
-	if _, interpreted := interpretErr(log, err, []schema.GroupVersionKind{}); interpreted != nil {
-		return fmt.Errorf("error removing watches for source %v: %w", sourceKey, interpreted)
+	if _, ie := interpretErr(log, err, []schema.GroupVersionKind{}); ie != nil {
+		return fmt.Errorf("error removing watches for source %v: %w", sourceKey, ie)
 	}
 
 	return nil

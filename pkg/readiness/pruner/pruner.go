@@ -11,15 +11,14 @@ import (
 
 const tickDuration = 3 * time.Second
 
-// ExpectationsPruner fires after sync expectations have been satisfied in the ready Tracker and runs
-// until the overall Tracker is satisfied. It removes Data expectations for any
-// GVKs that are expected in the Tracker but not watched by the CacheManager.
+// ExpectationsPruner polls the ReadyTracker and other data sources in Gatekeeper to remove
+// un-satisfiable expectations in the RT that would incorrectly block startup.
 type ExpectationsPruner struct {
 	cacheMgr *cachemanager.CacheManager
 	tracker  *readiness.Tracker
 }
 
-func NewExpecationsPruner(cm *cachemanager.CacheManager, rt *readiness.Tracker) *ExpectationsPruner {
+func NewExpectationsPruner(cm *cachemanager.CacheManager, rt *readiness.Tracker) *ExpectationsPruner {
 	return &ExpectationsPruner{
 		cacheMgr: cm,
 		tracker:  rt,
@@ -42,15 +41,20 @@ func (e *ExpectationsPruner) Run(ctx context.Context) error {
 				// not yet ready to prune data expectations.
 				break
 			}
-
-			watchedGVKs := watch.NewSet()
-			watchedGVKs.Add(e.cacheMgr.WatchedGVKs()...)
-			expectedGVKs := watch.NewSet()
-			expectedGVKs.Add(e.tracker.DataGVKs()...)
-
-			for _, gvk := range expectedGVKs.Difference(watchedGVKs).Items() {
-				e.tracker.CancelData(gvk)
-			}
+			e.watchedGVKs()
 		}
+	}
+}
+
+// watchedGVKs prunes data expectations that are no longer correct based on the up-to-date
+// information in the CacheManager.
+func (e *ExpectationsPruner) watchedGVKs() {
+	watchedGVKs := watch.NewSet()
+	watchedGVKs.Add(e.cacheMgr.WatchedGVKs()...)
+	expectedGVKs := watch.NewSet()
+	expectedGVKs.Add(e.tracker.DataGVKs()...)
+
+	for _, gvk := range expectedGVKs.Difference(watchedGVKs).Items() {
+		e.tracker.CancelData(gvk)
 	}
 }

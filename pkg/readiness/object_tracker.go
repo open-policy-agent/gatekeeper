@@ -24,6 +24,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	syncset1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -258,7 +259,7 @@ func (t *objectTracker) Observe(o runtime.Object) {
 	// Track for future expectation.
 	t.seen[k] = struct{}{}
 
-	log.V(1).Info("[readiness] observed data", "gvk", o.GetObjectKind().GroupVersionKind())
+	log.V(logging.DebugLevel).Info("[readiness] observed data", "gvk", o.GetObjectKind().GroupVersionKind())
 }
 
 func (t *objectTracker) Populated() bool {
@@ -301,7 +302,7 @@ func (t *objectTracker) Satisfied() bool {
 	if !needMutate {
 		// Read lock to prevent concurrent read/write while logging readiness state.
 		t.mu.RLock()
-		log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)), "populated", t.populated)
+		log.V(logging.DebugLevel).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)), "populated", t.populated)
 		t.mu.RUnlock()
 		return false
 	}
@@ -321,15 +322,15 @@ func (t *objectTracker) Satisfied() bool {
 		t.satisfied[k] = struct{}{}
 		resolveCount++
 	}
-	log.V(1).Info("resolved pre-observations", "gvk", t.gvk, "count", resolveCount)
-	log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
+	log.V(logging.DebugLevel).Info("resolved pre-observations", "gvk", t.gvk, "count", resolveCount)
+	log.V(logging.DebugLevel).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
 
 	// All satisfied if:
 	//  1. Expectations have been previously populated
 	//  2. No expectations remain
 	if t.populated && len(t.expect) == 0 {
 		t.allSatisfied = true
-		log.V(1).Info("all expectations satisfied", "gvk", t.gvk)
+		log.V(logging.DebugLevel).Info("all expectations satisfied", "gvk", t.gvk)
 
 		// Circuit-breaker tripped - free tracking memory
 		t.kindsSnapshot = t.kindsNoLock() // Take snapshot as kinds() depends on the maps we're about to clear.
