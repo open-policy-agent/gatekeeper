@@ -8,6 +8,7 @@ import (
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -45,6 +46,10 @@ type Adder struct {
 // Add creates a new SyncSetController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
+	if !operations.HasValidationOperations() {
+		return nil
+	}
+
 	r, err := newReconciler(mgr, a.CacheManager, a.ControllerSwitch, a.Tracker)
 	if err != nil {
 		return err
