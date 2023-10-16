@@ -131,8 +131,17 @@ func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Ke
 	// in the manageCache loop.
 
 	err := c.replaceWatchSet(ctx)
-	if failedGVKs, ie := interpretErr(log, err, newGVKs); ie != nil {
-		for _, g := range failedGVKs {
+	if universal, failedGVKs, ie := interpretErr(log, err, newGVKs); ie != nil {
+		var gvksToTryCancel []schema.GroupVersionKind
+		if universal {
+			// if the err is universal, assume all gvks need TryCancel because of some
+			// WatchManager internal error and we don't want to block readiness.
+			gvksToTryCancel = c.gvksToSync.GVKs()
+		} else {
+			gvksToTryCancel = failedGVKs
+		}
+
+		for _, g := range gvksToTryCancel {
 			c.tracker.TryCancelData(g)
 		}
 		return fmt.Errorf("error establishing watches: %w", ie)
@@ -160,10 +169,10 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	return innerError
 }
 
-// interpret whether the err received is of type WatchesError and whether it has to do with the provided GVKs.
-func interpretErr(logger logr.Logger, e error, gvks []schema.GroupVersionKind) ([]schema.GroupVersionKind, error) {
+// interpret whether the err received is of type WatchesError and whether it is specific to the provided GVKs.
+func interpretErr(logger logr.Logger, e error, gvks []schema.GroupVersionKind) (bool, []schema.GroupVersionKind, error) {
 	if e == nil {
-		return nil, nil
+		return false, nil, nil
 	}
 
 	var f watch.WatchesError
@@ -171,7 +180,7 @@ func interpretErr(logger logr.Logger, e error, gvks []schema.GroupVersionKind) (
 	// search the wrapped err tree for an error that implements the WatchesError interface
 	if errors.As(e, &f) {
 		if f.IsUniversal() {
-			return gvks, e
+			return true, gvks, e
 		}
 
 		failedGvks := watch.NewSet()
@@ -181,17 +190,17 @@ func interpretErr(logger logr.Logger, e error, gvks []schema.GroupVersionKind) (
 
 		common := failedGvks.Intersection(gvksSet)
 		if common.Size() > 0 {
-			return common.Items(), e
+			return false, common.Items(), e
 		}
 
 		// this error is not about the gvks in this request
 		// but we still log it for visibility
 		logger.Info("encountered unrelated error when replacing watch set", "error", e)
-		return nil, nil
+		return false, nil, nil
 	}
 
 	// otherwise, this is some other universal error
-	return gvks, e
+	return true, gvks, e
 }
 
 // RemoveSource removes the watches of the GVKs for a given aggregator.Key. Callers are responsible for retrying on error.
@@ -204,7 +213,7 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 	}
 
 	err := c.replaceWatchSet(ctx)
-	if _, ie := interpretErr(log, err, []schema.GroupVersionKind{}); ie != nil {
+	if _, _, ie := interpretErr(log, err, []schema.GroupVersionKind{}); ie != nil {
 		return fmt.Errorf("error removing watches for source %v: %w", sourceKey, ie)
 	}
 

@@ -617,6 +617,7 @@ func Test_interpretErr(t *testing.T) {
 		inputGVK            []schema.GroupVersionKind
 		expectedErr         error
 		expectedFailingGVKs []schema.GroupVersionKind
+		expectUniversal     bool
 	}{
 		{
 			name:        "nil err",
@@ -657,6 +658,7 @@ func Test_interpretErr(t *testing.T) {
 			inputGVK:            []schema.GroupVersionKind{gvk1},
 			expectedErr:         fmt.Errorf("some err: %w", errors.New("some other err")),
 			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
+			expectUniversal:     true,
 		},
 		{
 			name:                "universal error, no gvks inputed",
@@ -664,6 +666,7 @@ func Test_interpretErr(t *testing.T) {
 			inputGVK:            []schema.GroupVersionKind{},
 			expectedErr:         fmt.Errorf("some err: %w", errors.New("some other err")),
 			expectedFailingGVKs: []schema.GroupVersionKind{},
+			expectUniversal:     true,
 		},
 		{
 			name:                "universal unwrapped error, gvks inputed",
@@ -671,6 +674,7 @@ func Test_interpretErr(t *testing.T) {
 			inputGVK:            []schema.GroupVersionKind{gvk1},
 			expectedErr:         errors.New("some err"),
 			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
+			expectUniversal:     true,
 		},
 		{
 			name:                "universal error, nested gvks",
@@ -678,6 +682,7 @@ func Test_interpretErr(t *testing.T) {
 			inputGVK:            []schema.GroupVersionKind{gvk1, gvk2},
 			expectedErr:         fmt.Errorf("some err: %w", &gvkError{isUniversal: true, gvks: []schema.GroupVersionKind{gvk1}, err: errors.New("some other err")}),
 			expectedFailingGVKs: []schema.GroupVersionKind{gvk1, gvk2},
+			expectUniversal:     true,
 		},
 		{
 			name:                "nested gvk error, intersection",
@@ -697,9 +702,10 @@ func Test_interpretErr(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gvks, gotErr := interpretErr(logger, tc.inputErr, tc.inputGVK)
-			require.ElementsMatch(t, gvks, tc.expectedFailingGVKs)
+			universal, gvks, gotErr := interpretErr(logger, tc.inputErr, tc.inputGVK)
 
+			require.Equal(t, tc.expectUniversal, universal)
+			require.ElementsMatch(t, gvks, tc.expectedFailingGVKs)
 			if tc.expectedErr != nil {
 				require.Equal(t, tc.expectedErr.Error(), gotErr.Error())
 			} else {
