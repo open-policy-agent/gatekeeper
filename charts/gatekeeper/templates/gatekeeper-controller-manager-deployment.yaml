@@ -70,6 +70,7 @@ spec:
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
+        - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}
