@@ -51,8 +51,8 @@ jobs:
           if [[ $exists == null ]]
           then
             make docker-buildx-crds-dev \
-              DEV_TAG=${GITHUB_SHA::7}
-              PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
+              DEV_TAG=${GITHUB_SHA::7} \
+              PLATFORM="linux/amd64,linux/arm64" \
               OUTPUT_TYPE=type=registry \
               GENERATE_ATTESTATIONS=true
           fi
