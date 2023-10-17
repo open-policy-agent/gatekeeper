@@ -43,7 +43,7 @@ webhooks:
       - {{ . }}
       {{- end }}
     {{- end }}
-  objectSelector: {{ toYaml .Values.validatingWebhookObjectSelector | nindent 4 }}
+  objectSelector: {{ toYaml .Values.validatingWebhookObjectSelector }}
   rules:
   {{- if .Values.validatingWebhookCustomRules }}
   {{- toYaml .Values.validatingWebhookCustomRules | nindent 2 }}
