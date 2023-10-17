@@ -85,6 +85,9 @@ func ValidateTemplate(template *expansionunversioned.ExpansionTemplate) error {
 	if k == "" {
 		return fmt.Errorf("ExpansionTemplate has empty name field")
 	}
+	if len(k) > 64 {
+		return fmt.Errorf("ExpansionTemplate name must be less than 64 characters")
+	}
 	if template.Spec.TemplateSource == "" {
 		return fmt.Errorf("ExpansionTemplate %s has empty source field", k)
 	}
