@@ -70,7 +70,7 @@ jobs:
           then
             make docker-buildx-crds-release \
               VERSION=${TAG} \
-              PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
+              PLATFORM="linux/amd64,linux/arm64" \
               OUTPUT_TYPE=type=registry \
               GENERATE_ATTESTATIONS=true
           fi
