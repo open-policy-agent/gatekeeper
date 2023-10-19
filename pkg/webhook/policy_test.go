@@ -811,36 +811,50 @@ func TestGetValidationMessages(t *testing.T) {
 
 func TestValidateConfigResource(t *testing.T) {
 	tc := []struct {
-		TestName string
-		Name     string
-		Err      bool
+		name      string
+		rName     string
+		deleteOp  bool
+		expectErr bool
 	}{
 		{
-			TestName: "Wrong name",
-			Name:     "FooBar",
-			Err:      true,
+			name:      "Wrong name",
+			rName:     "FooBar",
+			expectErr: true,
 		},
 		{
-			TestName: "Correct name",
-			Name:     "config",
+			name:  "Correct name",
+			rName: "config",
+		},
+		{
+			name:     "Delete operation with no name",
+			deleteOp: true,
+		},
+		{
+			name:      "Delete operation with name",
+			deleteOp:  true,
+			rName:     "abc",
+			expectErr: true,
 		},
 	}
 
 	for _, tt := range tc {
-		t.Run(tt.TestName, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			handler := validationHandler{log: log}
 			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
-					Name: tt.Name,
+					Name: tt.rName,
 				},
+			}
+			if tt.deleteOp {
+				req.AdmissionRequest.Operation = admissionv1.Delete
 			}
 
 			err := handler.validateConfigResource(req)
 
-			if tt.Err && err == nil {
+			if tt.expectErr && err == nil {
 				t.Errorf("Expected error but received nil")
 			}
-			if !tt.Err && err != nil {
+			if !tt.expectErr && err != nil {
 				t.Errorf("Did not expect error but received: %v", err)
 			}
 		})
