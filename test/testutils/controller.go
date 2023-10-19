@@ -15,6 +15,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	v1 "k8s.io/api/core/v1"
@@ -198,6 +199,23 @@ func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, *sync
 		return result, err
 	})
 	return fn, &requests
+}
+
+// SyncSetFor returns a syncset resource with the given name for the requested set of resources.
+func SyncSetFor(name string, kinds []schema.GroupVersionKind) *syncsetv1alpha1.SyncSet {
+	entries := make([]syncsetv1alpha1.GVKEntry, len(kinds))
+	for i := range kinds {
+		entries[i] = syncsetv1alpha1.GVKEntry(kinds[i])
+	}
+
+	return &syncsetv1alpha1.SyncSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: syncsetv1alpha1.SyncSetSpec{
+			GVKs: entries,
+		},
+	}
 }
 
 // ConfigFor returns a config resource that watches the requested set of resources.

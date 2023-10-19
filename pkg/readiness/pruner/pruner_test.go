@@ -121,6 +121,7 @@ func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
 		fixturesPath     string
 		syncsetsToDelete []string
 		deleteConfig     string
+		// not starting controllers approximates missing events in the informers cache
 		startControllers bool
 	}{
 		{
@@ -150,7 +151,7 @@ func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
 
 			em, c := setupTest(ctx, t, tt.startControllers)
 			go func() {
-				_ = em.Run(ctx)
+				_ = em.Start(ctx)
 			}()
 
 			// we have to wait on the Tracker to Populate in order to not

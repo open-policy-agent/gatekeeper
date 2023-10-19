@@ -45,11 +45,7 @@ const (
 
 var (
 	log       = logf.Log.WithName("controller").WithValues("kind", "Config")
-	configGVK = schema.GroupVersionKind{
-		Group:   configv1alpha1.GroupVersion.Group,
-		Version: configv1alpha1.GroupVersion.Version,
-		Kind:    "Config",
-	}
+	configGVK = configv1alpha1.GroupVersion.WithKind("Config")
 )
 
 type Adder struct {

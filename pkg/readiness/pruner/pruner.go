@@ -25,7 +25,7 @@ func NewExpectationsPruner(cm *cachemanager.CacheManager, rt *readiness.Tracker)
 	}
 }
 
-func (e *ExpectationsPruner) Run(ctx context.Context) error {
+func (e *ExpectationsPruner) Start(ctx context.Context) error {
 	ticker := time.NewTicker(tickDuration)
 	for {
 		select {

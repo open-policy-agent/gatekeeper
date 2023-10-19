@@ -25,15 +25,15 @@ import (
 
 // errorList is an error that aggregates multiple errors.
 type errorList struct {
-	errs                 []error
-	containsUniversalErr bool
+	errs          []error
+	hasGeneralErr bool
 }
 
 type WatchesError interface {
 	// returns gvks for which we had watch errors
 	FailingGVKs() []schema.GroupVersionKind
 	// returns true if this error is not specific to the failing gvks
-	IsUniversal() bool
+	HasGeneralErr() bool
 	Error() string
 }
 
@@ -51,6 +51,13 @@ func (w gvkErr) Error() string {
 	return fmt.Sprintf("error for gvk: %s: %s", w.gvk, w.err.Error())
 }
 
+// returns a new errorList type.
+func newErrList() *errorList {
+	return &errorList{
+		errs: []error{},
+	}
+}
+
 func (e *errorList) String() string {
 	return e.Error()
 }
@@ -66,15 +73,8 @@ func (e *errorList) Error() string {
 	return builder.String()
 }
 
-// returns a new errorList type.
-func newErrList() *errorList {
-	return &errorList{
-		errs: []error{},
-	}
-}
-
 func (e *errorList) FailingGVKs() []schema.GroupVersionKind {
-	gvks := make([]schema.GroupVersionKind, len(e.errs))
+	gvks := []schema.GroupVersionKind{}
 	for _, err := range e.errs {
 		var gvkErr gvkErr
 		if errors.As(err, &gvkErr) {
@@ -85,14 +85,14 @@ func (e *errorList) FailingGVKs() []schema.GroupVersionKind {
 	return gvks
 }
 
-func (e *errorList) IsUniversal() bool {
-	return e.containsUniversalErr
+func (e *errorList) HasGeneralErr() bool {
+	return e.hasGeneralErr
 }
 
 // adds a non gvk specific error to the list.
 func (e *errorList) Add(err error) {
 	e.errs = append(e.errs, err)
-	e.containsUniversalErr = true
+	e.hasGeneralErr = true
 }
 
 // adds a gvk specific error to the list.

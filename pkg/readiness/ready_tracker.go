@@ -291,7 +291,7 @@ func (t *Tracker) Satisfied() bool {
 			return false
 		}
 
-		for _, gvk := range t.data.Keys() {
+		for _, gvk := range t.DataGVKs() {
 			if !t.data.Get(gvk).Satisfied() {
 				log.V(logging.DebugLevel).Info("expectations unsatisfied", "tracker", "data", "gvk", gvk)
 				return false
@@ -522,7 +522,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 	}
 
 	// collect data expects
-	for _, gvk := range t.data.Keys() {
+	for _, gvk := range t.DataGVKs() {
 		// retrieve the expectations for this key
 		es := t.data.Get(gvk)
 		err = t.collectForObjectTracker(ctx, es, nil, fmt.Sprintf("%s/%s", "Data", gvk))
@@ -744,7 +744,7 @@ func (t *Tracker) trackSyncSources(ctx context.Context) error {
 		log.V(logging.DebugLevel).Info("syncset expectations populated")
 	}()
 
-	handled := make(map[schema.GroupVersionKind]struct{})
+	dataGVKs := make(map[schema.GroupVersionKind]struct{})
 
 	cfg, err := t.getConfigResource(ctx)
 	if err != nil {
@@ -760,54 +760,53 @@ func (t *Tracker) trackSyncSources(ctx context.Context) error {
 			log.V(logging.DebugLevel).Info("setting expectations for config", "configCount", 1)
 
 			for _, entry := range cfg.Spec.Sync.SyncOnly {
-				handled[schema.GroupVersionKind{
-					Group:   entry.Group,
-					Version: entry.Version,
-					Kind:    entry.Kind,
-				}] = struct{}{}
+				dataGVKs[entry.ToGroupVersionKind()] = struct{}{}
 			}
 		}
 	}
 
-	if operations.HasValidationOperations() {
-		syncsets := &syncsetv1alpha1.SyncSetList{}
-		lister := retryLister(t.lister, retryAll)
-		if err := lister.List(ctx, syncsets); err != nil {
-			log.Error(err, "listing syncsets")
-		} else {
-			log.V(logging.DebugLevel).Info("setting expectations for syncsets", "syncsetCount", len(syncsets.Items))
+	// Without validation operations, there is no reason to wait for referential data when deciding readiness.
+	if !operations.HasValidationOperations() {
+		return nil
+	}
 
-			for i := range syncsets.Items {
-				syncset := syncsets.Items[i]
+	syncsets := &syncsetv1alpha1.SyncSetList{}
+	lister := retryLister(t.lister, retryAll)
+	if err := lister.List(ctx, syncsets); err != nil {
+		log.Error(err, "listing syncsets")
+	} else {
+		log.V(logging.DebugLevel).Info("setting expectations for syncsets", "syncsetCount", len(syncsets.Items))
 
-				t.syncsets.Expect(&syncset)
-				log.V(logging.DebugLevel).Info("expecting syncset", "name", syncset.GetName(), "namespace", syncset.GetNamespace())
+		for i := range syncsets.Items {
+			syncset := syncsets.Items[i]
 
-				for i := range syncset.Spec.GVKs {
-					gvk := syncset.Spec.GVKs[i].ToGroupVersionKind()
-					if _, ok := handled[gvk]; ok {
-						log.Info("duplicate GVK to sync", "gvk", gvk)
-					}
+			t.syncsets.Expect(&syncset)
+			log.V(logging.DebugLevel).Info("expecting syncset", "name", syncset.GetName(), "namespace", syncset.GetNamespace())
 
-					handled[gvk] = struct{}{}
+			for i := range syncset.Spec.GVKs {
+				gvk := syncset.Spec.GVKs[i].ToGroupVersionKind()
+				if _, ok := dataGVKs[gvk]; ok {
+					log.Info("duplicate GVK to sync", "gvk", gvk)
 				}
+
+				dataGVKs[gvk] = struct{}{}
 			}
 		}
+	}
 
-		// Expect the resource kinds specified in the Config resource and all SyncSet resources.
-		// We will fail-open (resolve expectations) for GVKs that are unregistered.
-		for gvk := range handled {
-			g := gvk
+	// Expect the resource kinds specified in the Config resource and all SyncSet resources.
+	// We will fail-open (resolve expectations) for GVKs that are unregistered.
+	for gvk := range dataGVKs {
+		g := gvk
 
-			// Set expectations for individual cached resources
-			dt := t.ForData(g)
-			go func() {
-				err := t.trackData(ctx, g, dt)
-				if err != nil {
-					log.Error(err, "aborted trackData", "gvk", g)
-				}
-			}()
-		}
+		// Set expectations for individual cached resources
+		dt := t.ForData(g)
+		go func() {
+			err := t.trackData(ctx, g, dt)
+			if err != nil {
+				log.Error(err, "aborted trackData", "gvk", g)
+			}
+		}()
 	}
 
 	return nil
@@ -947,7 +946,7 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 				}
 			}
 
-			for _, gvk := range t.data.Keys() {
+			for _, gvk := range t.DataGVKs() {
 				if t.data.Get(gvk).Satisfied() {
 					continue
 				}
@@ -997,8 +996,8 @@ func logUnsatisfiedSyncSet(t *Tracker) {
 }
 
 func logUnsatisfiedConfig(t *Tracker) {
-	if unsat := t.config.unsatisfied(); len(unsat) > 0 {
-		log.Info("--- Begin unsatisfied config ---", "populated", t.config.Populated(), "count", len(unsat))
+	if !t.config.Satisfied() {
+		log.Info("--- Begin unsatisfied config ---", "populated", t.config.Populated(), "count", 1)
 		log.Info("unsatisfied Config", "name", keys.Config)
 		log.Info("--- End unsatisfied config ---")
 	}

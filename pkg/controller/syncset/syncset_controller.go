@@ -30,11 +30,7 @@ const (
 var (
 	log = logf.Log.WithName("controller").WithValues("kind", "SyncSet", logging.Process, "syncset_controller")
 
-	syncsetGVK = schema.GroupVersionKind{
-		Group:   syncsetv1alpha1.GroupVersion.Group,
-		Version: syncsetv1alpha1.GroupVersion.Version,
-		Kind:    "SyncSet",
-	}
+	syncsetGVK = syncsetv1alpha1.GroupVersion.WithKind("SyncSet")
 )
 
 type Adder struct {
@@ -116,9 +112,8 @@ type ReconcileSyncSet struct {
 func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {
-		running := r.cs.Enter()
 		defer r.cs.Exit()
-		if !running {
+		if !r.cs.Enter() {
 			return reconcile.Result{}, nil
 		}
 	}
@@ -154,13 +149,13 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 	log.V(logging.DebugLevel).Info("handling SyncSet update", "instance", syncset)
 	gvks := []schema.GroupVersionKind{}
 	for _, entry := range syncset.Spec.GVKs {
-		gvks = append(gvks, schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind})
+		gvks = append(gvks, entry.ToGroupVersionKind())
 	}
 
 	if err := r.cacheManager.UpsertSource(ctx, sk, gvks); err != nil {
 		syncsetTr.TryCancelExpect(syncset)
 
-		return reconcile.Result{Requeue: true}, fmt.Errorf("synceset-controller: error changing watches: %w", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("synceset-controller: error upserting watches: %w", err)
 	}
 
 	syncsetTr.Observe(syncset)
