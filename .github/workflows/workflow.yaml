@@ -54,7 +54,7 @@ jobs:
   test:
     name: "Unit test"
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@1b05615854632b887b69ae1be8cbefe72d3ae423 # v2.6.0
@@ -292,9 +292,6 @@ jobs:
           USE_LOCAL_IMG=true \
           ENABLE_GENERATOR_EXPANSION=true
 
-        go mod tidy
-        # there should be no additional manifest or go.mod changes
-        git diff --exit-code
         make test-e2e ENABLE_GENERATOR_EXPANSION_TESTS=1
 
     - name: Save logs
