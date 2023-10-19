@@ -5,8 +5,6 @@ go 1.20
 // We are forking from commit 116a1b831fffe7ccc3c8145306c3e1a3b1b14ffa (tag: v0.15.0) to enable dynamic informer caching
 replace sigs.k8s.io/controller-runtime => ./third_party/sigs.k8s.io/controller-runtime
 
-replace github.com/open-policy-agent/frameworks/constraint => ../frameworks/constraint
-
 require (
 	cloud.google.com/go/trace v1.10.1
 	contrib.go.opencensus.io/exporter/ocagent v0.7.0
@@ -22,7 +20,7 @@ require (
 	github.com/google/uuid v1.3.1
 	github.com/onsi/gomega v1.27.7
 	github.com/open-policy-agent/cert-controller v0.8.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20230812003220-e24af74adbae
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20231019180654-3eb381ce6cbe
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.16.0
 	github.com/spf13/cobra v1.7.0
