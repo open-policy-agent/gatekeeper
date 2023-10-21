@@ -10,9 +10,12 @@ import (
 
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
@@ -101,17 +104,10 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 	return template, nil
 }
 
-// TODO (https://github.com/open-policy-agent/gatekeeper/issues/1779): Move
-// this function into a location that makes it more obviously a shared resource
-// between `gator test` and `gator verify`
-
-// ToTemplate converts an unstructured template into a versionless ConstraintTemplate struct.
-func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*templates.ConstraintTemplate, error) {
+// ToTemplate converts an unstructured object into an object with the schema defined
+// by u's group, version, and kind.
+func ToStructured(scheme *runtime.Scheme, u *unstructured.Unstructured) (runtime.Object, error) {
 	gvk := u.GroupVersionKind()
-	if gvk.Group != templatesv1.SchemeGroupVersion.Group || gvk.Kind != "ConstraintTemplate" {
-		return nil, fmt.Errorf("%w", gator.ErrNotATemplate)
-	}
-
 	t, err := scheme.New(gvk)
 	if err != nil {
 		// The type isn't registered in the scheme.
@@ -130,6 +126,23 @@ func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*template
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", gator.ErrAddingTemplate, err)
 	}
+	return t, nil
+}
+
+// TODO (https://github.com/open-policy-agent/gatekeeper/issues/1779): Move
+// this function into a location that makes it more obviously a shared resource
+// between `gator test` and `gator verify`
+
+// ToTemplate converts an unstructured template into a versionless ConstraintTemplate struct.
+func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*templates.ConstraintTemplate, error) {
+	if u.GroupVersionKind().Group != templatesv1.SchemeGroupVersion.Group || u.GroupVersionKind().Kind != "ConstraintTemplate" {
+		return nil, fmt.Errorf("%w", gator.ErrNotATemplate)
+	}
+
+	t, err := ToStructured(scheme, u)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingTemplate, err)
+	}
 
 	v, isVersionless := t.(versionless)
 	if !isVersionless {
@@ -144,6 +157,44 @@ func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*template
 	}
 
 	return template, nil
+}
+
+// ToSyncSet converts an unstructured SyncSet into a SyncSet struct.
+func ToSyncSet(scheme *runtime.Scheme, u *unstructured.Unstructured) (*syncsetv1alpha1.SyncSet, error) {
+	if u.GroupVersionKind().Group != syncsetv1alpha1.GroupVersion.Group || u.GroupVersionKind().Kind != "SyncSet" {
+		return nil, fmt.Errorf("%w", gator.ErrNotASyncSet)
+	}
+
+	s, err := ToStructured(scheme, u)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingSyncSet, err)
+	}
+
+	syncSet, isSyncSet := s.(*syncsetv1alpha1.SyncSet)
+	if !isSyncSet {
+		return nil, fmt.Errorf("%w: %T", gator.ErrAddingSyncSet, syncSet)
+	}
+
+	return syncSet, nil
+}
+
+// ToConfig converts an unstructured Config into a Config struct.
+func ToConfig(scheme *runtime.Scheme, u *unstructured.Unstructured) (*configv1alpha1.Config, error) {
+	if u.GroupVersionKind().Group != configv1alpha1.GroupVersion.Group || u.GroupVersionKind().Kind != "Config" {
+		return nil, fmt.Errorf("%w", gator.ErrNotAConfig)
+	}
+
+	s, err := ToStructured(scheme, u)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingConfig, err)
+	}
+
+	config, isConfig := s.(*configv1alpha1.Config)
+	if !isConfig {
+		return nil, fmt.Errorf("%w: %T", gator.ErrAddingConfig, config)
+	}
+
+	return config, nil
 }
 
 // ReadObject reads a file from the filesystem abstraction at the specified
@@ -206,4 +257,30 @@ func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
 	}
 
 	return objs, nil
+}
+
+type DiscoveryResults map[schema.GroupVersionKind]struct{}
+
+func ReadDiscoveryResults(r string) (DiscoveryResults, error) {
+	if r == "" {
+		return nil, nil
+	}
+	var stringAsJson map[string]map[string][]string
+	if err := json.Unmarshal([]byte(r), &stringAsJson); err != nil {
+		return nil, err
+	}
+	results := DiscoveryResults{}
+	for group, versions := range stringAsJson {
+		for version, kinds := range versions {
+			for _, kind := range kinds {
+				results[schema.GroupVersionKind{
+					Group:   group,
+					Version: version,
+					Kind:    kind,
+				}] = struct{}{}
+			}
+		}
+	}
+
+	return results, nil
 }

@@ -326,6 +326,16 @@ metadata:
   name: k8suniqueserviceselector
   annotations:
     description: Requires Services to have unique selectors within a namespace.
+    metadata.gatekeeper.sh/requires-sync-data: |
+      "[
+        [
+          {
+            "groups": [""],
+            "versions": ["v1"],
+            "kinds": ["Service"]
+          }
+        ]
+      ]"
 spec:
   crd:
     spec:
@@ -365,6 +375,118 @@ spec:
           other_selector := flatten_selector(other)
           input_selector == other_selector
           msg := sprintf("same selector as service <%v> in namespace <%v>", [name, namespace])
+        }
+`
+
+	TemplateReferentialMultEquivSets = `
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8suniqueingresshost
+  annotations:
+    metadata.gatekeeper.sh/title: "Unique Ingress Host"
+    metadata.gatekeeper.sh/version: 1.0.3
+    metadata.gatekeeper.sh/requires-sync-data: |
+      "[
+        [
+          {
+            "groups": ["extensions"],
+            "versions": ["v1beta1"],
+            "kinds": ["Ingress"]
+          },
+          {
+            "groups": ["networking.k8s.io"],
+            "versions": ["v1beta1", "v1"],
+            "kinds": ["Ingress"]
+          }
+        ]
+      ]"
+    description: >-
+      Requires all Ingress rule hosts to be unique.
+
+      Does not handle hostname wildcards:
+      https://kubernetes.io/docs/concepts/services-networking/ingress/
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sUniqueIngressHost
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8suniqueingresshost
+
+        identical(obj, review) {
+          obj.metadata.namespace == review.object.metadata.namespace
+          obj.metadata.name == review.object.metadata.name
+        }
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Ingress"
+          re_match("^(extensions|networking.k8s.io)$", input.review.kind.group)
+          host := input.review.object.spec.rules[_].host
+          other := data.inventory.namespace[_][otherapiversion]["Ingress"][name]
+          re_match("^(extensions|networking.k8s.io)/.+$", otherapiversion)
+          other.spec.rules[_].host == host
+          not identical(other, input.review)
+          msg := sprintf("ingress host conflicts with an existing ingress <%v>", [host])
+        }
+`
+
+	TemplateReferentialMultReqs = `
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8suniqueingresshostmultireq
+  annotations:
+    metadata.gatekeeper.sh/title: "Unique Ingress Host"
+    metadata.gatekeeper.sh/version: 1.0.3
+    metadata.gatekeeper.sh/requires-sync-data: |
+      "[
+        [
+          {
+            "groups": ["extensions"],
+            "versions": ["v1beta1"],
+            "kinds": ["Ingress"]
+          }
+        ],
+        [
+          {
+            "groups": ["networking.k8s.io"],
+            "versions": ["v1beta1", "v1"],
+            "kinds": ["Ingress"]
+          }
+        ]
+      ]"
+    description: >-
+      Requires all Ingress rule hosts to be unique.
+
+      Does not handle hostname wildcards:
+      https://kubernetes.io/docs/concepts/services-networking/ingress/
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sUniqueIngressHost
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8suniqueingresshost
+
+        identical(obj, review) {
+          obj.metadata.namespace == review.object.metadata.namespace
+          obj.metadata.name == review.object.metadata.name
+        }
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Ingress"
+          re_match("^(extensions|networking.k8s.io)$", input.review.kind.group)
+          host := input.review.object.spec.rules[_].host
+          other := data.inventory.namespace[_][otherapiversion]["Ingress"][name]
+          re_match("^(extensions|networking.k8s.io)/.+$", otherapiversion)
+          other.spec.rules[_].host == host
+          not identical(other, input.review)
+          msg := sprintf("ingress host conflicts with an existing ingress <%v>", [host])
         }
 `
 
@@ -581,5 +703,36 @@ spec:
     kinds:
       - apiGroups: ["*"]
         kinds: ["*"]
+`
+	SyncSet = `
+apiVersion: syncset.gatekeeper.sh/v1alpha1
+kind: SyncSet
+metadata:
+  name: syncset
+  namespace: "gatekeeper-system"
+spec:
+  gvks:
+    - group: "extensions"
+      version: "v1beta1"
+      kind: "Ingress"
+    - group: "apps"
+      version: "v1"
+      kind: "Deployment"
+`
+	Config = `
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  sync:
+    syncOnly:
+      - group: ""
+        version: "v1"
+        kind: "Service"
+      - group: "apps"
+        version: "v1"
+        kind: "Deployment"
 `
 )

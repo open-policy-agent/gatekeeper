@@ -9,10 +9,20 @@ var (
 	// ErrNotAConstraint indicates the user-indicated file does not contain a
 	// Constraint.
 	ErrNotAConstraint = errors.New("not a Constraint")
+	// ErrNotAConfig indicates the user-indicated file does not contain a
+	// Config.
+	ErrNotAConfig = errors.New("not a Config")
+	// ErrNotASyncSet indicates the user-indicated file does not contain a
+	// SyncSet.
+	ErrNotASyncSet = errors.New("not a SyncSet")
 	// ErrAddingTemplate indicates a problem instantiating a Suite's ConstraintTemplate.
 	ErrAddingTemplate = errors.New("adding template")
 	// ErrAddingConstraint indicates a problem instantiating a Suite's Constraint.
 	ErrAddingConstraint = errors.New("adding constraint")
+	// ErrAddingSyncSet indicates a problem instantiating a Suite's SyncSet.
+	ErrAddingSyncSet = errors.New("adding syncset")
+	// ErrAddingConfig indicates a problem instantiating a Suite's Config.
+	ErrAddingConfig = errors.New("adding config")
 	// ErrInvalidSuite indicates a Suite does not define the required fields.
 	ErrInvalidSuite = errors.New("invalid Suite")
 	// ErrCreatingClient indicates an error instantiating the Client which compiles

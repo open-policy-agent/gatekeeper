@@ -427,6 +427,80 @@ However, not including the `namespace` definition in the call to `gator expand` 
 error expanding resources: error expanding resource nginx-deployment: failed to mutate resultant resource nginx-deployment-pod: matching for mutator Assign.mutations.gatekeeper.sh /always-pull-image failed for  Pod my-ns nginx-deployment-pod: failed to run Match criteria: namespace selector for namespace-scoped object but missing Namespace
 ```
 
+## The `gator sync verify` subcommand
+
+Certain templates require [replicating data](sync.md) into OPA to enable proper evaluation. These templates can use the annotation `metadata.gatekeeper.sh/requires-sync-data` to indicate which resources need to be synced. The annotation contains a json object representing a list of requirements, each of which contains a list of one or more equivalence sets. Each of these equivalence sets has `groups`, `versions`, and `kinds` fields; any group-version-kind combination within an equivalence set within a requirement should be considered sufficient to satisfy that requirement. For example (comments added for clarity):
+```
+[
+  [ // Requirement 1
+    { // Equivalence set 1
+      "groups": ["group1", group2"]
+      "versions": ["version1", "version2", "version3"]
+      "kinds": ["kind1", "kind2"]
+    },
+    { // Equivalence Set 2
+      "groups": ["group3", group4"]
+      "versions": ["version3", "version4"]
+      "kinds": ["kind3", "kind4"]
+    }
+  ],
+  [ // Requirement 2
+    { // Equivalence Set 3
+      "groups": ["group5"]
+      "versions": ["version5"]
+      "kinds": ["kind5"]
+    }
+  ]
+]
+```
+This annotation contains two requirements. Requirement 1 contains two equivalence sets. Syncing resources of group1, version3, kind1 (drawn from equivalence set 1) would be sufficient to fulfill Requirement 1. So, too, would syncing resources of group3, version3, kind4 (drawn from equivalence set 2). Syncing resources of group1, version1, and kind3 would not be, however.
+
+Requirement 2 is simpler: it denotes that group5, version5, kind5 must be synced for the policy to work properly. 
+
+This template annotation is descriptive, not prescriptive. The prescription of which resources to sync is done in `SyncSet` resources and/or the Gatekeeper `config` resource. The management of these various requirements can get challenging as the number of templates requiring replicated data increases. 
+
+`gator sync verify` aims to mitigate this challenge by enabling the user to verify their sync configuration is correct. he user to pass in any number of Constraint Templates, SyncSets, and Gatekeeper Config objects (although in practice only one Config object should exist), and it will inform you which requirements enumerated by the Constraint Templates are unfulfilled by the given SyncSet(s) and Config(s).
+
+### Usage
+
+#### Specifying Inputs
+
+`gator sync verify` expects a `--filename` or `--image` flag, or input fron stdin. The flags can be used individually, in combination, and/or repeated.
+
+```
+gator sync verify --filename="template.yaml" –filename="syncsets/" 
+```
+
+Or, using an OCI Artifact containing templates as described previously:
+
+```
+gator sync verify --filename="config.yaml" --image=localhost:5000/gator/template-library:v1
+```
+
+Optionally, the `--discovery-results` flag can be used to pass in a list of supported GVKs discovered on a cluster. If this is nonempty, only GVKs that are both included in a SyncSet/Config and are supported will be considered to fulfill a template's requirements. Discovery results should be passed as a string representing a JSON object mapping groups to lists of versions, which contain lists of kinds, like such:
+```
+{
+  "group1": {
+    "version1": ["kind1", "kind2"],
+    "version2": ["kind3", "kind4"],
+  },
+  "group2": {
+    "version3": ["kind3"]
+  }
+}
+```
+
+#### Exit Codes
+
+`gator sync verify` will return a `0` exit status when the Templates, SyncSets, and
+Configs are successfully ingested and no requirements are unfulfilled.
+
+An error during evaluation, for example a failure to read a file, will result in
+a `1` exit status with an error message printed to stderr.
+
+Unfulfilled requirements will generate a `1` exit status as well, and the unfulfilled requirements per template will be printed to stdout.
+
+
 ## Bundling Policy into OCI Artifacts
 
 It may be useful to bundle policy files into OCI Artifacts for ingestion during
