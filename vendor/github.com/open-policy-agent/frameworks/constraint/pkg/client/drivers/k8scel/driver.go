@@ -71,7 +71,7 @@ func (d *Driver) Name() string {
 	return pSchema.Name
 }
 
-func (d *Driver) AddTemplate(ctx context.Context, ct *templates.ConstraintTemplate) error {
+func (d *Driver) AddTemplate(_ context.Context, ct *templates.ConstraintTemplate) error {
 	if len(ct.Spec.Targets) != 1 {
 		return errors.New("wrong number of targets defined, only 1 target allowed")
 	}
@@ -132,26 +132,26 @@ func (d *Driver) AddTemplate(ctx context.Context, ct *templates.ConstraintTempla
 	return nil
 }
 
-func (d *Driver) RemoveTemplate(ctx context.Context, ct *templates.ConstraintTemplate) error {
+func (d *Driver) RemoveTemplate(_ context.Context, ct *templates.ConstraintTemplate) error {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	delete(d.validators, ct.GetName())
 	return nil
 }
 
-func (d *Driver) AddConstraint(ctx context.Context, constraint *unstructured.Unstructured) error {
+func (d *Driver) AddConstraint(_ context.Context, _ *unstructured.Unstructured) error {
 	return nil
 }
 
-func (d *Driver) RemoveConstraint(ctx context.Context, constraint *unstructured.Unstructured) error {
+func (d *Driver) RemoveConstraint(_ context.Context, _ *unstructured.Unstructured) error {
 	return nil
 }
 
-func (d *Driver) AddData(ctx context.Context, target string, path storage.Path, data interface{}) error {
+func (d *Driver) AddData(_ context.Context, _ string, _ storage.Path, _ interface{}) error {
 	return nil
 }
 
-func (d *Driver) RemoveData(ctx context.Context, target string, path storage.Path) error {
+func (d *Driver) RemoveData(_ context.Context, _ string, _ storage.Path) error {
 	return nil
 }
 
@@ -243,7 +243,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 	return &drivers.QueryResponse{Results: results, StatsEntries: statsEntries}, nil
 }
 
-func (d *Driver) Dump(ctx context.Context) (string, error) {
+func (d *Driver) Dump(_ context.Context) (string, error) {
 	return "", nil
 }
 
@@ -377,11 +377,11 @@ func (w *RequestWrapper) GetUserInfo() user.Info {
 	}
 }
 
-func (w *RequestWrapper) AddAnnotation(key, value string) error {
+func (w *RequestWrapper) AddAnnotation(_, _ string) error {
 	return errors.New("AddAnnotation not implemented")
 }
 
-func (w *RequestWrapper) AddAnnotationWithLevel(key, value string, level auditinternal.Level) error {
+func (w *RequestWrapper) AddAnnotationWithLevel(_, _ string, _ auditinternal.Level) error {
 	return errors.New("AddAnnotationWithLevel not implemented")
 }
 

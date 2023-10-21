@@ -1,5 +1,5 @@
 ARG BUILDPLATFORM="linux/amd64"
-ARG BUILDERIMAGE="golang:1.20-bullseye"
+ARG BUILDERIMAGE="golang:1.21-bullseye"
 ARG BASEIMAGE="gcr.io/distroless/static:nonroot"
 
 FROM --platform=$BUILDPLATFORM $BUILDERIMAGE as builder
@@ -28,7 +28,7 @@ FROM $BASEIMAGE
 
 WORKDIR /
 
-COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/test/pubsub/fake-subscriber/main  .
+COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/test/pubsub/fake-subscriber/main .
 
 USER 65532:65532
 

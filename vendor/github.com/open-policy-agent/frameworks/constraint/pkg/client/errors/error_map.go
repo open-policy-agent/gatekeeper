@@ -26,7 +26,7 @@ func (e *ErrorMap) Error() string {
 	sort.Strings(keys)
 
 	for _, k := range keys {
-		b.WriteString(fmt.Sprintf("%s: %s\n", k, (*e)[k]))
+		fmt.Fprintf(b, "%s: %s\n", k, (*e)[k])
 	}
 	return b.String()
 }
