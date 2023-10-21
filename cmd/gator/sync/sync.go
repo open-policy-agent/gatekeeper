@@ -6,14 +6,12 @@ package sync
 import (
 	"fmt"
 
-	synccreate "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/sync/create"
 	syncverify "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/sync/verify"
 	"github.com/spf13/cobra"
 )
 
 var commands = []*cobra.Command{
 	syncverify.Cmd,
-	synccreate.Cmd,
 }
 
 // syncCmd represents the sync command
