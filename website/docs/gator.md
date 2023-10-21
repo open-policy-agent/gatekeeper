@@ -498,7 +498,7 @@ Configs are successfully ingested and no requirements are unfulfilled.
 An error during evaluation, for example a failure to read a file, will result in
 a `1` exit status with an error message printed to stderr.
 
-Unfulfilled requirements will generate a `1` exit status as well, and the unfulfilled requirements per template will be printed to stdout.
+Unfulfilled requirements will generate a `1` exit status as well, and the unfulfilled requirements per template will be printed to stderr.
 
 
 ## Bundling Policy into OCI Artifacts
