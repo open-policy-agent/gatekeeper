@@ -41,7 +41,7 @@ func Test_formatOutput(t *testing.T) {
 				ViolatingObject: barObject,
 				Trace:           nil,
 			}},
-			expectedOutput: `[""] Message: ""
+			expectedOutput: `/ : [""] Message: ""
 `,
 		},
 		{
