@@ -429,7 +429,7 @@ error expanding resources: error expanding resource nginx-deployment: failed to 
 
 ## The `gator sync verify` subcommand
 
-Certain templates require [replicating data](sync.md) into OPA to enable proper evaluation. These templates can use the annotation `metadata.gatekeeper.sh/requires-sync-data` to indicate which resources need to be synced. The annotation contains a json object representing a list of requirements, each of which contains a list of one or more equivalence sets. Each of these equivalence sets has `groups`, `versions`, and `kinds` fields; any group-version-kind combination within an equivalence set within a requirement should be considered sufficient to satisfy that requirement. For example (comments added for clarity):
+Certain templates require [replicating data](sync.md) into OPA to enable correct evaluation. These templates can use the annotation `metadata.gatekeeper.sh/requires-sync-data` to indicate which resources need to be synced. The annotation contains a json object representing a list of requirements, each of which contains a list of one or more equivalence sets. Each of these equivalence sets has `groups`, `versions`, and `kinds` fields; any group-version-kind combination within an equivalence set within a requirement should be considered sufficient to satisfy that requirement. For example (comments added for clarity):
 ```
 [
   [ // Requirement 1
@@ -457,9 +457,9 @@ This annotation contains two requirements. Requirement 1 contains two equivalenc
 
 Requirement 2 is simpler: it denotes that group5, version5, kind5 must be synced for the policy to work properly. 
 
-This template annotation is descriptive, not prescriptive. The prescription of which resources to sync is done in `SyncSet` resources and/or the Gatekeeper `config` resource. The management of these various requirements can get challenging as the number of templates requiring replicated data increases. 
+This template annotation is descriptive, not prescriptive. The prescription of which resources to sync is done in `SyncSet` resources and/or the Gatekeeper `Config` resource. The management of these various requirements can get challenging as the number of templates requiring replicated data increases. 
 
-`gator sync verify` aims to mitigate this challenge by enabling the user to verify their sync configuration is correct. he user to pass in any number of Constraint Templates, SyncSets, and Gatekeeper Config objects (although in practice only one Config object should exist), and it will inform you which requirements enumerated by the Constraint Templates are unfulfilled by the given SyncSet(s) and Config(s).
+`gator sync verify` aims to mitigate this challenge by enabling the user to verify their sync configuration is correct. The user passes in any number of Constraint Templates, SyncSets, and Gatekeeper Config objects (although in practice only one Config object should exist), and the command will determine which requirements enumerated by the Constraint Templates are unfulfilled by the given SyncSet(s) and Config(s).
 
 ### Usage
 
