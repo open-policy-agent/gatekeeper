@@ -13,6 +13,7 @@ validatingWebhookFailurePolicy: Ignore
 validatingWebhookAnnotations: {}
 validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookObjectSelector: {}
+validatingWebhookMatchConditions: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 validatingWebhookURL: null
@@ -27,6 +28,7 @@ mutatingWebhookReinvocationPolicy: Never
 mutatingWebhookAnnotations: {}
 mutatingWebhookExemptNamespacesLabels: {}
 mutatingWebhookObjectSelector: {}
+mutatingWebhookMatchConditions: {}
 mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
 mutatingWebhookURL: null
