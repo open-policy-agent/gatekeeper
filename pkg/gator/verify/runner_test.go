@@ -1155,7 +1155,7 @@ func TestRunner_Run(t *testing.T) {
 							{Name: "invalid admission review object", Error: gator.ErrInvalidK8sAdmissionReview},
 							{Name: "missing admission request object", Error: gator.ErrMissingK8sAdmissionRequest},
 							{Name: "no objects to review", Error: gator.ErrNoObjectForReview},
-							{Name: "no oldObject on delete", Error: gator.ErrNilOldObject},
+							{Name: "no oldObject on delete", Error: gator.ErrInvalidK8sAdmissionReview},
 						},
 					},
 					{
