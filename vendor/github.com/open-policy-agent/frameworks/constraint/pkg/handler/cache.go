@@ -31,14 +31,14 @@ type Cache interface {
 
 type NoCache struct{}
 
-func (n NoCache) Add(relPath []string, object interface{}) error {
+func (n NoCache) Add(_ []string, _ interface{}) error {
 	return nil
 }
 
-func (n NoCache) Get(relPath []string) (interface{}, error) {
+func (n NoCache) Get(_ []string) (interface{}, error) {
 	return nil, nil
 }
 
-func (n NoCache) Remove(relPath []string) {}
+func (n NoCache) Remove(_ []string) {}
 
 var _ Cache = NoCache{}
