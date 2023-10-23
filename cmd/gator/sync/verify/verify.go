@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Cmd represents the verify command.
 var Cmd = &cobra.Command{
 	Use:   "verify",
 	Short: "Verify that the provided SyncSet(s) and/or Config contain the GVKs required by the input templates.",
@@ -45,7 +44,7 @@ func run(cmd *cobra.Command, args []string) {
 		cmdutils.ErrFatalf("no input data identified")
 	}
 
-	missingRequirements, err := verify.Verify(unstrucs, flagDiscoveryResults)
+	missingRequirements, templateErrors, err := verify.Verify(unstrucs, flagDiscoveryResults)
 	if err != nil {
 		cmdutils.ErrFatalf("verifying: %v", err)
 	}
@@ -54,10 +53,15 @@ func run(cmd *cobra.Command, args []string) {
 		cmdutils.ErrFatalf("The following requirements were not met: \n%v", resultsToString(missingRequirements))
 	}
 
+	if len(templateErrors) > 0 {
+		cmdutils.ErrFatalf("Encountered errors parsing the following templates: \n%v", resultsToString(templateErrors))
+	}
+
+	fmt.Println("All template requirements met.")
 	os.Exit(0)
 }
 
-func resultsToString(results map[string][]int) string {
+func resultsToString[T any](results map[string]T) string {
 	var buf bytes.Buffer
 	for template, reqs := range results {
 		buf.WriteString(fmt.Sprintf("%s: %v\n", template, reqs))

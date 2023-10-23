@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	cfapis "github.com/open-policy-agent/frameworks/constraint/pkg/apis"
-	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	gkapis "github.com/open-policy-agent/gatekeeper/v3/apis"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/parser"
@@ -28,20 +27,21 @@ func init() {
 	}
 }
 
-func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) (map[string][]int, error) {
+func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) (map[string][]int, map[string]error, error) {
 	discoveryResults, err := reader.ReadDiscoveryResults(flagDiscoveryResults)
 	if err != nil {
-		return nil, fmt.Errorf("reading: %w", err)
+		return nil, nil, fmt.Errorf("reading: %w", err)
 	}
 
 	templates := []*templates.ConstraintTemplate{}
 	syncedGVKs := map[schema.GroupVersionKind]struct{}{}
+	templateErrs := map[string]error{}
 
 	for _, obj := range unstrucs {
-		if isSyncSet(obj) {
+		if reader.IsSyncSet(obj) {
 			syncSet, err := reader.ToSyncSet(scheme, obj)
 			if err != nil {
-				return nil, fmt.Errorf("converting unstructured %q to syncset: %w", obj.GetName(), err)
+				return nil, nil, fmt.Errorf("converting unstructured %q to syncset: %w", obj.GetName(), err)
 			}
 			for _, gvkEntry := range syncSet.Spec.GVKs {
 				gvk := schema.GroupVersionKind{
@@ -53,11 +53,10 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 					syncedGVKs[gvk] = struct{}{}
 				}
 			}
-		}
-		if isConfig(obj) {
+		} else if reader.IsConfig(obj) {
 			config, err := reader.ToConfig(scheme, obj)
 			if err != nil {
-				return nil, fmt.Errorf("converting unstructured %q to config: %w", obj.GetName(), err)
+				return nil, nil, fmt.Errorf("converting unstructured %q to config: %w", obj.GetName(), err)
 			}
 			for _, syncOnlyEntry := range config.Spec.Sync.SyncOnly {
 				gvk := schema.GroupVersionKind{
@@ -69,13 +68,14 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 					syncedGVKs[gvk] = struct{}{}
 				}
 			}
-		}
-		if isTemplate(obj) {
+		} else if reader.IsTemplate(obj) {
 			templ, err := reader.ToTemplate(scheme, obj)
 			if err != nil {
-				return nil, fmt.Errorf("converting unstructured %q to template: %w", obj.GetName(), err)
+				templateErrs[obj.GetName()] = err
 			}
 			templates = append(templates, templ)
+		} else {
+			fmt.Printf("Skipping unstructured %q because it is not a syncset, config, or template\n", obj.GetName())
 		}
 	}
 
@@ -85,7 +85,7 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 		// Fetch syncrequirements from template
 		syncRequirements, err := parser.ReadSyncRequirements(templ)
 		if err != nil {
-			return nil, fmt.Errorf("reading sync requirements from template %q: %w", templ.GetName(), err)
+			templateErrs[templ.GetName()] = err
 		}
 		for i, requirement := range syncRequirements {
 			requirementMet := false
@@ -99,20 +99,5 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 			}
 		}
 	}
-	return missingReqs, nil
-}
-
-func isTemplate(u *unstructured.Unstructured) bool {
-	gvk := u.GroupVersionKind()
-	return gvk.Group == templatesv1.SchemeGroupVersion.Group && gvk.Kind == "ConstraintTemplate"
-}
-
-func isConfig(u *unstructured.Unstructured) bool {
-	gvk := u.GroupVersionKind()
-	return gvk.Group == "config.gatekeeper.sh" && gvk.Kind == "Config"
-}
-
-func isSyncSet(u *unstructured.Unstructured) bool {
-	gvk := u.GroupVersionKind()
-	return gvk.Group == "syncset.gatekeeper.sh" && gvk.Kind == "SyncSet"
+	return missingReqs, templateErrs, nil
 }

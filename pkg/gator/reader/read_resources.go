@@ -61,7 +61,7 @@ func ReadUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
 			continue
 		}
 
-		u, err := readUnstructured([]byte(split))
+		u, err := ReadUnstructured([]byte(split))
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", gator.ErrInvalidYAML, err)
 		}
@@ -72,7 +72,7 @@ func ReadUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
 	return result, nil
 }
 
-func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
+func ReadUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
 	u := &unstructured.Unstructured{
 		Object: make(map[string]interface{}),
 	}
@@ -92,7 +92,7 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 		return nil, fmt.Errorf("reading ConstraintTemplate from %q: %w", path, err)
 	}
 
-	u, err := readUnstructured(bytes)
+	u, err := ReadUnstructured(bytes)
 	if err != nil {
 		return nil, fmt.Errorf("%w: parsing ConstraintTemplate YAML from %q: %w", gator.ErrAddingTemplate, path, err)
 	}
@@ -111,7 +111,7 @@ func ToStructured(scheme *runtime.Scheme, u *unstructured.Unstructured) (runtime
 	t, err := scheme.New(gvk)
 	if err != nil {
 		// The type isn't registered in the scheme.
-		return nil, fmt.Errorf("%w: %w", gator.ErrAddingTemplate, err)
+		return nil, err
 	}
 
 	// YAML parsing doesn't properly handle ObjectMeta, so we must
@@ -124,14 +124,10 @@ func ToStructured(scheme *runtime.Scheme, u *unstructured.Unstructured) (runtime
 	}
 	err = json.Unmarshal(jsonBytes, t)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", gator.ErrAddingTemplate, err)
+		return nil, err
 	}
 	return t, nil
 }
-
-// TODO (https://github.com/open-policy-agent/gatekeeper/issues/1779): Move
-// this function into a location that makes it more obviously a shared resource
-// between `gator test` and `gator verify`
 
 // ToTemplate converts an unstructured template into a versionless ConstraintTemplate struct.
 func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*templates.ConstraintTemplate, error) {
@@ -206,7 +202,7 @@ func ReadObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
 		return nil, fmt.Errorf("reading Constraint from %q: %w", path, err)
 	}
 
-	u, err := readUnstructured(bytes)
+	u, err := ReadUnstructured(bytes)
 	if err != nil {
 		return nil, fmt.Errorf("%w: parsing Constraint from %q: %w", gator.ErrAddingConstraint, path, err)
 	}
@@ -283,4 +279,24 @@ func ReadDiscoveryResults(r string) (DiscoveryResults, error) {
 	}
 
 	return results, nil
+}
+
+func IsTemplate(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == templatesv1.SchemeGroupVersion.Group && gvk.Kind == "ConstraintTemplate"
+}
+
+func IsConfig(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == "config.gatekeeper.sh" && gvk.Kind == "Config"
+}
+
+func IsSyncSet(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == "syncset.gatekeeper.sh" && gvk.Kind == "SyncSet"
+}
+
+func IsConstraint(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == "constraints.gatekeeper.sh"
 }

@@ -1,6 +1,3 @@
-/*
-Copyright © 2023 NAME HERE <EMAIL ADDRESS>
-*/
 package sync
 
 import (
@@ -14,12 +11,11 @@ var commands = []*cobra.Command{
 	syncverify.Cmd,
 }
 
-// Cmd represents the sync command.
 var Cmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Manage SyncSets and Config",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Usage: gator sync create or gator sync verify")
+		fmt.Println("Usage: gator sync verify")
 	},
 }
 

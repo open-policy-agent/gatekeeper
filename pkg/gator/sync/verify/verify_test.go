@@ -1,13 +1,14 @@
 package verify
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 func TestVerify(t *testing.T) {
@@ -15,7 +16,8 @@ func TestVerify(t *testing.T) {
 		name      string
 		inputs    []string
 		discovery string
-		want      map[string][]int
+		wantReqs  map[string][]int
+		wantErrs  map[string]error
 		err       error
 	}{
 		{
@@ -23,8 +25,22 @@ func TestVerify(t *testing.T) {
 			inputs: []string{
 				fixtures.TemplateReferential,
 			},
-			want: map[string][]int{
+			wantReqs: map[string][]int{
 				"k8suniqueserviceselector": {1},
+			},
+			wantErrs: map[string]error{},
+		},
+		{
+			name: "one template has error, one has basic req unfulfilled",
+			inputs: []string{
+				fixtures.TemplateReferential,
+				fixtures.TemplateReferentialBadAnnotation,
+			},
+			wantReqs: map[string][]int{
+				"k8suniqueserviceselector": {1},
+			},
+			wantErrs: map[string]error{
+				"k8suniqueingresshostbadannotation": fmt.Errorf("json: cannot unmarshal object into Go value of type parser.CompactSyncRequirements"),
 			},
 		},
 		{
@@ -33,7 +49,8 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferential,
 				fixtures.Config,
 			},
-			want: map[string][]int{},
+			wantReqs: map[string][]int{},
+			wantErrs: map[string]error{},
 		},
 		{
 			name: "basic req fulfilled by syncset and discoveryresults",
@@ -42,7 +59,8 @@ func TestVerify(t *testing.T) {
 				fixtures.Config,
 			},
 			discovery: `{"": {"v1": ["Service"]}}`,
-			want:      map[string][]int{},
+			wantReqs:  map[string][]int{},
+			wantErrs:  map[string]error{},
 		},
 		{
 			name: "basic req fulfilled by syncset but not discoveryresults",
@@ -51,9 +69,10 @@ func TestVerify(t *testing.T) {
 				fixtures.Config,
 			},
 			discovery: `{"extensions": {"v1beta1": ["Ingress"]}}`,
-			want: map[string][]int{
+			wantReqs: map[string][]int{
 				"k8suniqueserviceselector": {1},
 			},
+			wantErrs: map[string]error{},
 		},
 		{
 			name: "multi equivalentset req fulfilled by syncset",
@@ -61,7 +80,8 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferentialMultEquivSets,
 				fixtures.SyncSet,
 			},
-			want: map[string][]int{},
+			wantReqs: map[string][]int{},
+			wantErrs: map[string]error{},
 		},
 		{
 			name: "multi requirement, one req fulfilled by syncset",
@@ -69,9 +89,10 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferentialMultReqs,
 				fixtures.SyncSet,
 			},
-			want: map[string][]int{
+			wantReqs: map[string][]int{
 				"k8suniqueingresshostmultireq": {2},
 			},
+			wantErrs: map[string]error{},
 		},
 		{
 			name: "multiple templates, syncset and config",
@@ -82,14 +103,16 @@ func TestVerify(t *testing.T) {
 				fixtures.Config,
 				fixtures.SyncSet,
 			},
-			want: map[string][]int{
+			wantReqs: map[string][]int{
 				"k8suniqueingresshostmultireq": {2},
 			},
+			wantErrs: map[string]error{},
 		},
 		{
-			name:   "no data of any kind",
-			inputs: []string{},
-			want:   map[string][]int{},
+			name:     "no data of any kind",
+			inputs:   []string{},
+			wantReqs: map[string][]int{},
+			wantErrs: map[string]error{},
 		},
 	}
 
@@ -98,34 +121,25 @@ func TestVerify(t *testing.T) {
 			// convert the test resources to unstructureds
 			var objs []*unstructured.Unstructured
 			for _, input := range tc.inputs {
-				u, err := readUnstructured([]byte(input))
+				u, err := reader.ReadUnstructured([]byte(input))
 				require.NoError(t, err)
 				objs = append(objs, u)
 			}
 
-			got, err := Verify(objs, tc.discovery)
+			gotReqs, gotErrs, err := Verify(objs, tc.discovery)
 			if tc.err != nil {
 				require.ErrorIs(t, err, tc.err)
 			} else if err != nil {
 				require.NoError(t, err)
 			}
 
-			if diff := cmp.Diff(tc.want, got); diff != "" {
+			if diff := cmp.Diff(tc.wantReqs, gotReqs); diff != "" {
 				t.Errorf("diff in missingRequirements objects (-want +got):\n%s", diff)
+			}
+
+			if diff := cmp.Diff(tc.wantErrs, gotErrs); diff != "" {
+				t.Errorf("diff in templateErrs objects (-want +got):\n%s", diff)
 			}
 		})
 	}
-}
-
-func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
-	u := &unstructured.Unstructured{
-		Object: make(map[string]interface{}),
-	}
-
-	err := yaml.Unmarshal(bytes, u)
-	if err != nil {
-		return nil, err
-	}
-
-	return u, nil
 }
