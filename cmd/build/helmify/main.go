@@ -105,14 +105,14 @@ func (ks *kindSet) Write() error {
 			fileName := fmt.Sprintf("%s-%s.yaml", strings.ToLower(name), strings.ToLower(kind))
 
 			if name == "validation.gatekeeper.sh" {
-				matchConditions := "  matchConditions: {{ toYaml .Values.validatingWebhookMatchConditions | nindent 4 }}"
+				matchConditions := "  matchConditions: " + replacements["HELMSUBST_VALIDATING_WEBHOOK_MATCH_CONDITIONS"]
 				replace := fmt.Sprintf("  {{- if ge (int .Capabilities.KubeVersion.Minor) 28 }}\n%s\n  {{- end }}", matchConditions)
 				obj = "{{- if not .Values.disableValidatingWebhook }}\n" + strings.Replace(obj, matchConditions, replace, 1) + "{{- end }}\n"
 				fileName = fmt.Sprintf("gatekeeper-validating-webhook-configuration-%s.yaml", strings.ToLower(kind))
 			}
 
 			if name == "mutation.gatekeeper.sh" {
-				matchConditions := "  matchConditions: {{ toYaml .Values.mutatingWebhookMatchConditions | nindent 4 }}"
+				matchConditions := "  matchConditions: " + replacements["HELMSUBST_MUTATING_WEBHOOK_MATCH_CONDITIONS"]
 				replace := fmt.Sprintf("  {{- if ge (int .Capabilities.KubeVersion.Minor) 28 }}\n%s\n  {{- end }}", matchConditions)
 				obj = "{{- if not .Values.disableMutation }}\n" + strings.Replace(obj, matchConditions, replace, 1) + "{{- end }}\n"
 				fileName = fmt.Sprintf("gatekeeper-mutating-webhook-configuration-%s.yaml", strings.ToLower(kind))
