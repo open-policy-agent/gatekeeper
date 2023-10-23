@@ -336,6 +336,11 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources.
 func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req *admission.Request) (bool, error) {
+	if req.Operation == admissionv1.Delete && req.Name == "" {
+		// Allow the general DELETE of resources like "/apis/config.gatekeeper.sh/v1alpha1/namespaces/<ns>/configs"
+		return true, nil
+	}
+
 	gvk := req.AdmissionRequest.Kind
 
 	switch {
@@ -449,10 +454,6 @@ func (h *validationHandler) validateExpansionTemplate(req *admission.Request) (b
 }
 
 func (h *validationHandler) validateConfigResource(req *admission.Request) error {
-	if req.Operation == admissionv1.Delete && req.Name == "" {
-		return nil // Allow the general DELETE of "/apis/config.gatekeeper.sh/v1alpha1/namespaces/<ns>/configs"
-	}
-
 	if req.Name != keys.Config.Name {
 		return fmt.Errorf("config resource must have name 'config'")
 	}
