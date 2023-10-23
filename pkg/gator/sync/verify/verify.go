@@ -72,6 +72,7 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 			templ, err := reader.ToTemplate(scheme, obj)
 			if err != nil {
 				templateErrs[obj.GetName()] = err
+				continue
 			}
 			templates = append(templates, templ)
 		} else {
@@ -86,6 +87,7 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 		syncRequirements, err := parser.ReadSyncRequirements(templ)
 		if err != nil {
 			templateErrs[templ.GetName()] = err
+			continue
 		}
 		for i, requirement := range syncRequirements {
 			requirementMet := false
