@@ -265,12 +265,12 @@ func ReadDiscoveryResults(r string) (DiscoveryResults, error) {
 	if r == "" {
 		return nil, nil
 	}
-	var stringAsJson map[string]map[string][]string
-	if err := json.Unmarshal([]byte(r), &stringAsJson); err != nil {
+	var stringAsJSON map[string]map[string][]string
+	if err := json.Unmarshal([]byte(r), &stringAsJSON); err != nil {
 		return nil, err
 	}
 	results := DiscoveryResults{}
-	for group, versions := range stringAsJson {
+	for group, versions := range stringAsJSON {
 		for version, kinds := range versions {
 			for _, kind := range kinds {
 				results[schema.GroupVersionKind{

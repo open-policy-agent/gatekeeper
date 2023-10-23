@@ -29,10 +29,9 @@ func init() {
 }
 
 func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) (map[string][]int, error) {
-
 	discoveryResults, err := reader.ReadDiscoveryResults(flagDiscoveryResults)
 	if err != nil {
-		return nil, fmt.Errorf("reading: %v", err)
+		return nil, fmt.Errorf("reading: %w", err)
 	}
 
 	templates := []*templates.ConstraintTemplate{}

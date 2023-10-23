@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Cmd represents the verify command
+// Cmd represents the verify command.
 var Cmd = &cobra.Command{
 	Use:   "verify",
 	Short: "Verify that the provided SyncSet(s) and/or Config contain the GVKs required by the input templates.",
@@ -31,11 +31,9 @@ const (
 )
 
 func init() {
-
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagDiscoveryResults, flagDiscoveryResults, "d", "", "a json string listing the GVKs supported by the cluster as a nested array of groups, containing supported versions, containing supported kinds.")
-
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -48,7 +46,6 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	missingRequirements, err := verify.Verify(unstrucs, flagDiscoveryResults)
-
 	if err != nil {
 		cmdutils.ErrFatalf("verifying: %v", err)
 	}

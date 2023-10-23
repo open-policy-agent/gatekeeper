@@ -14,7 +14,7 @@ var commands = []*cobra.Command{
 	syncverify.Cmd,
 }
 
-// syncCmd represents the sync command
+// Cmd represents the sync command.
 var Cmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Manage SyncSets and Config",

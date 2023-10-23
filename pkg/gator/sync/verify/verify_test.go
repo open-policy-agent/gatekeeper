@@ -6,9 +6,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/util/yaml"
-
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 func TestVerify(t *testing.T) {
