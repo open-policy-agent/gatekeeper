@@ -337,6 +337,24 @@ func TestValidateTemplate(t *testing.T) {
 			errFn: matchErr("empty name"),
 		},
 		{
+			name: "name too long",
+			temp: *fixtures.NewTemplate(&fixtures.TemplateData{
+				Name: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				Apply: []match.ApplyTo{{
+					Groups:   []string{"apps"},
+					Kinds:    []string{"Deployment"},
+					Versions: []string{"v1"},
+				}},
+				Source: "spec.template",
+				GenGVK: expansionunversioned.GeneratedGVK{
+					Group:   "",
+					Version: "v1",
+					Kind:    "Pod",
+				},
+			}),
+			errFn: matchErr("less than 64"),
+		},
+		{
 			name: "missing source",
 			temp: *fixtures.NewTemplate(&fixtures.TemplateData{
 				Name: "test1",
