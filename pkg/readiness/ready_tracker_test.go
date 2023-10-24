@@ -116,8 +116,6 @@ func setupController(
 		return fmt.Errorf("setting up tracker: %w", err)
 	}
 
-	// ControllerSwitch will be used to disable controllers during our teardown process,
-	// avoiding conflicts in finalizer cleanup.
 	sw := watch.NewSwitch()
 
 	pod := fakes.Pod(
