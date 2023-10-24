@@ -260,20 +260,88 @@ the `run` flag:
 gator verify path/to/suites/... --run "disallowed"
 ```
 
-#### Validating Metadata-Based Constraint Templates
+### Validating Metadata-Based Constraint Templates
 
 `gator verify` may be used with an [`AdmissionReview`](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/admission#AdmissionReview) 
 object to test your constraints. This can be helpful to simulate a certain operation (`CREATE`, `UPDATE`, `DELETE`, etc.) 
 or [`UserInfo`](https://pkg.go.dev/k8s.io/kubernetes@v1.25.3/pkg/apis/authentication#UserInfo) metadata. 
-Recall that the `input.review.user` can be accessed in the Rego code (see [Input Review](howto.md#input-review) for more guidance). 
-A few examples for how to structure your yaml can be found [here](https://github.com/open-policy-agent/gatekeeper/blob/03e6adb74f1714242cf936fd27eee19a0eda2d52/pkg/gator/fixtures/fixtures.go#L506-L528). 
-The `AdmissionReview` object can be specified where you would specify the object under test above:
+Recall that the `input.review.user` can be accessed in the Rego code (see [Input Review](howto.md#input-review) for more guidance). The `AdmissionReview` object can be specified where you would specify the object under test above:
 
 ```yaml
   - name: both-disallowed
     object: path/to/test_admission_review.yaml
     assertions:
     - violations: 1
+```
+
+Example for testing the `UserInfo` metadata:
+
+AdmissionReview, ConstraintTemplate, Constraint:
+```yaml
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1beta1
+request:
+  operation: "UPDATE"
+  userInfo:
+    username: "system:foo"
+  object:
+    kind: Pod
+    labels:
+      - app: "bar"
+---
+kind: ConstraintTemplate
+apiVersion: templates.gatekeeper.sh/v1
+metadata:
+  name: validateuserinfo
+spec:
+  crd:
+    spec:
+      names:
+        kind: ValidateUserInfo
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8svalidateuserinfo
+        violation[{"msg": msg}] {
+          username := input.review.userInfo.username
+          not startswith(username, "system:")
+          msg := sprintf("username is not allowed to perform this operation: %v", [username])
+        }
+---
+kind: ValidateUserInfo
+apiVersion: constraints.gatekeeper.sh/v1
+metadata:
+  name: always-validate
+```
+
+Gator Suite:
+```yaml
+apiVersion: test.gatekeeper.sh/v1alpha1
+kind: Suite
+tests:
+- name: userinfo
+  template: template.yaml
+  constraint: constraint.yaml
+  cases:
+  - name: system-user
+    object: admission-review.yaml
+    assertions:
+    - violations: no
+```
+
+Note for `DELETE` operation, the `oldObject` should be the object being deleted:
+
+```yaml
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1beta1
+request:
+  operation: "DELETE"
+  userInfo:
+    username: "system:foo"
+  oldObject:
+    kind: Pod
+    labels:
+      - app: "bar"
 ```
 
 Note that [`audit`](audit.md) or `gator test` are different enforcement points and they don't have the `AdmissionReview` request metadata.

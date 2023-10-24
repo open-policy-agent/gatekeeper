@@ -8,7 +8,7 @@ import (
 )
 
 // nolint: revive // Moved error out of pkg/webhook/admission; needs capitalization for backwards compat.
-var ErrOldObjectIsNil = errors.New("For admission webhooks registered for DELETE operations, please use Kubernetes v1.15.0+.")
+var ErrOldObjectIsNil = errors.New("oldObject cannot be nil for DELETE operations")
 
 // SetObjectOnDelete enforces that we use at least K8s API v1.15.0+ on DELETE operations
 // and copies over the oldObject into the Object field for the given AdmissionRequest.
