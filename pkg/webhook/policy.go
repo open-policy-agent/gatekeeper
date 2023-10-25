@@ -336,6 +336,11 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources.
 func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req *admission.Request) (bool, error) {
+	if req.Operation == admissionv1.Delete && req.Name == "" {
+		// Allow the general DELETE of resources like "/apis/config.gatekeeper.sh/v1alpha1/namespaces/<ns>/configs"
+		return true, nil
+	}
+
 	gvk := req.AdmissionRequest.Kind
 
 	switch {
@@ -349,15 +354,15 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		if err := h.validateConfigResource(req); err != nil {
 			return true, err
 		}
-	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "AssignMetadata":
+	case gvk.Group == mutationsGroup && gvk.Kind == "AssignMetadata":
 		return h.validateAssignMetadata(req)
-	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "Assign":
+	case gvk.Group == mutationsGroup && gvk.Kind == "Assign":
 		return h.validateAssign(req)
-	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "ModifySet":
+	case gvk.Group == mutationsGroup && gvk.Kind == "ModifySet":
 		return h.validateModifySet(req)
-	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "AssignImage":
+	case gvk.Group == mutationsGroup && gvk.Kind == "AssignImage":
 		return h.validateAssignImage(req)
-	case req.AdmissionRequest.Kind.Group == externalDataGroup && req.AdmissionRequest.Kind.Kind == "Provider":
+	case gvk.Group == externalDataGroup && gvk.Kind == "Provider":
 		return h.validateProvider(req)
 	}
 
