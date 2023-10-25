@@ -52,7 +52,7 @@ Dapr: https://dapr.io/
    To install Dapr with specific requirements and configuration, please refer to [Dapr docs](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-deploy/).
     > [!IMPORTANT]
     > - Make sure to set `SIDECAR_DROP_ALL_CAPABILITIES` environment variable on `dapr-sidecar` injector pod to `true` to avoid getting `PodSecurity violation` errors for the injected sidecar container as Gatekeeper by default requires workloads to run with [restricted](https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted) policy. If using helm charts to install Dapr, you can use `--set dapr_sidecar_injector.sidecarDropALLCapabilities=true`.
-    > - Additionally, [configure appropriate seccompProfile for sidecar containers](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#configure-seccompprofile-for-sidecar-containers) injected by Dapr to avoid getting `PodSecurity violation` errors.
+    > - Additionally, [configure appropriate seccompProfile for sidecar containers](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#configure-seccompprofile-for-sidecar-containers) injected by Dapr to avoid getting `PodSecurity violation` errors. We are setting required Dapr annotation for audit pod while deploying Gatekeeper later in this quick start to avoid getting `PodSecurity violation` error.
 
     > Dapr is installed with mtls enabled by default, for more details on the same please refer to [Dapr security](https://docs.dapr.io/operations/security/mtls/#setting-up-mtls-with-the-configuration-resource).
 
@@ -68,7 +68,7 @@ Dapr: https://dapr.io/
 
     ```shell
     kubectl create ns fake-subscriber
-    # creating redis secret in subscriber namespace to allow dapr sidecar to connect to redis instance
+    # creating redis secret in subscriber namespace to allow Dapr sidecar to connect to redis instance
     kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: fake-subscriber/' | kubectl apply -f -
     ```
 
@@ -168,7 +168,7 @@ Dapr: https://dapr.io/
     --values /tmp/annotations.yaml
     ```
 
-    **Note:** Verify that after the audit pod is running there is a dapr sidecar injected and running along side `manager` container.
+    **Note:** Verify that after the audit pod is running there is a Dapr sidecar injected and running along side `manager` container.
 
 3. Create connection config to establish a connection.
 
