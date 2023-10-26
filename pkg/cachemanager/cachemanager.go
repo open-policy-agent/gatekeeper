@@ -10,6 +10,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
@@ -130,7 +131,7 @@ func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Ke
 	// in the manageCache loop.
 
 	err := c.replaceWatchSet(ctx)
-	if general, failedGVKs := interpretErr(err, newGVKs); len(failedGVKs) > 0 {
+	if general, failedGVKs := interpretErr(err, newGVKs); len(failedGVKs) > 0 || general {
 		var gvksToTryCancel []schema.GroupVersionKind
 		if general {
 			// if the err is general, assume all gvks need TryCancel because of some
@@ -174,7 +175,7 @@ func interpretErr(e error, gvks []schema.GroupVersionKind) (bool, []schema.Group
 		return false, nil
 	}
 
-	var f watch.WatchesError
+	f := watch.NewErrorList()
 	if !errors.As(e, &f) || f.HasGeneralErr() {
 		return true, nil
 	}
@@ -191,7 +192,7 @@ func interpretErr(e error, gvks []schema.GroupVersionKind) (bool, []schema.Group
 
 	// this error is not about the gvks in this request
 	// but we still log it for visibility
-	log.Info("encountered unrelated error when replacing watch set", "error", e)
+	log.V(logging.DebugLevel).Info("encountered unrelated error when replacing watch set", "error", e)
 	return false, nil
 }
 

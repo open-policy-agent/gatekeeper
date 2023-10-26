@@ -37,18 +37,16 @@ func (e *ExpectationsPruner) Start(ctx context.Context) error {
 				// further manage the data sync expectations.
 				return nil
 			}
-			if !e.tracker.SyncSourcesSatisfied() {
-				// not yet ready to prune data expectations.
-				break
+			if e.tracker.SyncSourcesSatisfied() {
+				e.pruneNotWatchedGVKs()
 			}
-			e.watchedGVKs()
 		}
 	}
 }
 
-// watchedGVKs prunes data expectations that are no longer correct based on the up-to-date
+// pruneNotWatchedGVKs prunes data expectations that are no longer correct based on the up-to-date
 // information in the CacheManager.
-func (e *ExpectationsPruner) watchedGVKs() {
+func (e *ExpectationsPruner) pruneNotWatchedGVKs() {
 	watchedGVKs := watch.NewSet()
 	watchedGVKs.Add(e.cacheMgr.WatchedGVKs()...)
 	expectedGVKs := watch.NewSet()

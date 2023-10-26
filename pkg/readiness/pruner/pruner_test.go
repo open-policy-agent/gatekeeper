@@ -27,6 +27,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 const (
@@ -37,26 +38,39 @@ const (
 var cfg *rest.Config
 
 var (
-	syncsetGVK = schema.GroupVersionKind{
-		Group:   syncsetv1alpha1.GroupVersion.Group,
-		Version: syncsetv1alpha1.GroupVersion.Version,
-		Kind:    "SyncSet",
-	}
-	configGVK = configv1alpha1.GroupVersion.WithKind("Config")
+	syncsetGVK = syncsetv1alpha1.GroupVersion.WithKind("SyncSet")
+	configGVK  = configv1alpha1.GroupVersion.WithKind("Config")
+
+	configMapGVK = schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
+	podGVK       = schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
 )
 
 func TestMain(m *testing.M) {
 	testutils.StartControlPlane(m, &cfg, 3)
 }
 
-func setupTest(ctx context.Context, t *testing.T, startControllers bool) (*ExpectationsPruner, client.Client) {
+type testOptions struct {
+	startControllers bool
+	testLister       readiness.Lister
+}
+
+func setupTest(ctx context.Context, t *testing.T, o testOptions) (*ExpectationsPruner, client.Client) {
 	t.Helper()
 
 	mgr, wm := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	tracker, err := readiness.SetupTrackerNoReadyz(mgr, false, false, false)
-	require.NoError(t, err, "setting up tracker")
+	var tracker *readiness.Tracker
+	var err error
+	if o.testLister != nil {
+		tracker = readiness.NewTracker(o.testLister, false, false, false)
+		require.NoError(t, mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			return tracker.Run(ctx)
+		})), "adding tracker to manager")
+	} else {
+		tracker, err = readiness.SetupTrackerNoReadyz(mgr, false, false, false)
+		require.NoError(t, err, "setting up tracker")
+	}
 
 	events := make(chan event.GenericEvent, 1024)
 	reg, err := wm.NewRegistrar(
@@ -79,7 +93,7 @@ func setupTest(ctx context.Context, t *testing.T, startControllers bool) (*Expec
 	cm, err := cachemanager.NewCacheManager(config)
 	require.NoError(t, err, "creating cachemanager")
 
-	if !startControllers {
+	if !o.startControllers {
 		// need to start the cachemanager if controllers are not started
 		// since the cachemanager is started in the controllers code.
 		require.NoError(t, mgr.Add(cm), "adding cachemanager as a runnable")
@@ -149,13 +163,8 @@ func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
 
 			require.NoError(t, testutils.ApplyFixtures(tt.fixturesPath, cfg), "applying base fixtures")
 
-			em, c := setupTest(ctx, t, tt.startControllers)
-			go func() {
-				_ = em.Start(ctx)
-			}()
+			em, c := setupTest(ctx, t, testOptions{startControllers: tt.startControllers})
 
-			// we have to wait on the Tracker to Populate in order to not
-			// have the Deletes below race with the population of expectations.
 			require.Eventually(t, func() bool {
 				return em.tracker.Populated()
 			}, timeout, tick, "waiting on tracker to populate")
@@ -176,6 +185,8 @@ func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
 				require.NoError(t, c.Delete(ctx, u), fmt.Sprintf("deleting config %s", tt.deleteConfig))
 			}
 
+			em.pruneNotWatchedGVKs()
+
 			require.Eventually(t, func() bool {
 				return em.tracker.Satisfied()
 			}, timeout, tick, "waiting on tracker to get satisfied")
@@ -183,4 +194,31 @@ func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
 			cancelFunc()
 		})
 	}
+}
+
+// Test_ExpectationsMgr_missedInformers verifies that the pruner can handle a scenario
+// where the readiness tracker's state will never match the informer cache events.
+func Test_ExpectationsMgr_missedInformers(t *testing.T) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
+	// because we will use a separate lister for the tracker from the mgr client
+	// the contents of the readiness tracker will be superset of the contents of the mgr's client
+	tl := fakes.NewTestLister(
+		fakes.WithSyncSets([]*syncsetv1alpha1.SyncSet{
+			fakes.SyncSetFor("syncset-1", []schema.GroupVersionKind{podGVK, configMapGVK}),
+		}),
+	)
+	em, _ := setupTest(ctx, t, testOptions{testLister: tl})
+
+	require.Eventually(t, func() bool {
+		return em.tracker.SyncSourcesSatisfied()
+	}, timeout, tick, "waiting on sync sources to get satisfied")
+
+	em.pruneNotWatchedGVKs()
+
+	require.Eventually(t, func() bool {
+		return em.tracker.Satisfied()
+	}, timeout, tick, "waiting on tracker to get satisfied")
+
+	cancelFunc()
 }

@@ -254,7 +254,7 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 	wm.watchedMux.Lock()
 	defer wm.watchedMux.Unlock()
 
-	errlist := newErrList()
+	errlist := NewErrorList()
 
 	desired := wm.managedKinds.Get()
 	for gvk := range wm.watchedKinds {

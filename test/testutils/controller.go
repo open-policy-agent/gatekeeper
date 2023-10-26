@@ -14,15 +14,11 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
-	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -94,7 +90,7 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 		t.Helper()
 
 		// Construct a single-use Unstructured to send the Delete request.
-		toDelete := UnstructuredFor(gvk, namespace, name)
+		toDelete := fakes.UnstructuredFor(gvk, namespace, name)
 		err := c.Delete(ctx, toDelete)
 		if apierrors.IsNotFound(err) {
 			return
@@ -107,7 +103,7 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 		}, func() error {
 			// Construct a single-use Unstructured to send the Get request. It isn't
 			// safe to reuse Unstructureds for each retry as Get modifies its input.
-			toGet := UnstructuredFor(gvk, namespace, name)
+			toGet := fakes.UnstructuredFor(gvk, namespace, name)
 			key := client.ObjectKey{Namespace: namespace, Name: name}
 			err2 := c.Get(ctx, key, toGet)
 			if apierrors.IsGone(err2) || apierrors.IsNotFound(err2) {
@@ -199,77 +195,4 @@ func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, *sync
 		return result, err
 	})
 	return fn, &requests
-}
-
-// SyncSetFor returns a syncset resource with the given name for the requested set of resources.
-func SyncSetFor(name string, kinds []schema.GroupVersionKind) *syncsetv1alpha1.SyncSet {
-	entries := make([]syncsetv1alpha1.GVKEntry, len(kinds))
-	for i := range kinds {
-		entries[i] = syncsetv1alpha1.GVKEntry(kinds[i])
-	}
-
-	return &syncsetv1alpha1.SyncSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Spec: syncsetv1alpha1.SyncSetSpec{
-			GVKs: entries,
-		},
-	}
-}
-
-// ConfigFor returns a config resource that watches the requested set of resources.
-func ConfigFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
-	entries := make([]configv1alpha1.SyncOnlyEntry, len(kinds))
-	for i := range kinds {
-		entries[i].Group = kinds[i].Group
-		entries[i].Version = kinds[i].Version
-		entries[i].Kind = kinds[i].Kind
-	}
-
-	return &configv1alpha1.Config{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: configv1alpha1.GroupVersion.String(),
-			Kind:       "Config",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "config",
-			Namespace: "gatekeeper-system",
-		},
-		Spec: configv1alpha1.ConfigSpec{
-			Sync: configv1alpha1.Sync{
-				SyncOnly: entries,
-			},
-			Match: []configv1alpha1.MatchEntry{
-				{
-					ExcludedNamespaces: []wildcard.Wildcard{"kube-system"},
-					Processes:          []string{"sync"},
-				},
-			},
-		},
-	}
-}
-
-func UnstructuredFor(gvk schema.GroupVersionKind, namespace, name string) *unstructured.Unstructured {
-	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(gvk)
-	u.SetName(name)
-	if namespace == "" {
-		u.SetNamespace("default")
-	} else {
-		u.SetNamespace(namespace)
-	}
-
-	if gvk.Kind == "Pod" {
-		u.Object["spec"] = map[string]interface{}{
-			"containers": []map[string]interface{}{
-				{
-					"name":  "foo-container",
-					"image": "foo-image",
-				},
-			},
-		}
-	}
-
-	return u
 }

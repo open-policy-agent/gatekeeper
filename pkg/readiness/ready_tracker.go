@@ -797,14 +797,14 @@ func (t *Tracker) trackSyncSources(ctx context.Context) error {
 	// Expect the resource kinds specified in the Config resource and all SyncSet resources.
 	// We will fail-open (resolve expectations) for GVKs that are unregistered.
 	for gvk := range dataGVKs {
-		g := gvk
+		gvkCpy := gvk
 
 		// Set expectations for individual cached resources
-		dt := t.ForData(g)
+		dt := t.ForData(gvkCpy)
 		go func() {
-			err := t.trackData(ctx, g, dt)
+			err := t.trackData(ctx, gvkCpy, dt)
 			if err != nil {
-				log.Error(err, "aborted trackData", "gvk", g)
+				log.Error(err, "aborted trackData", "gvk", gvkCpy)
 			}
 		}()
 	}

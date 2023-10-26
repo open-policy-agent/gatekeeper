@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-logr/logr"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
@@ -89,7 +88,7 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 	dataClientForTest := func() CFDataClient {
 		cfdc := &fakes.FakeCfClient{}
 
-		cm := unstructuredFor(configMapGVK, "config-test-1")
+		cm := fakes.UnstructuredFor(configMapGVK, "", "config-test-1")
 		_, err := cfdc.AddData(context.Background(), cm)
 
 		require.NoError(t, err, "adding ConfigMap config-test-1 in cfClient")
@@ -365,13 +364,13 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 	}
 }
 
+type source struct {
+	key  aggregator.Key
+	gvks []schema.GroupVersionKind
+}
+
 // TestCacheManager_UpsertSource tests that we can modify the gvk aggregator and watched set when adding a new source.
 func TestCacheManager_UpsertSource(t *testing.T) {
-	type source struct {
-		key  aggregator.Key
-		gvks []schema.GroupVersionKind
-	}
-
 	tcs := []struct {
 		name         string
 		sources      []source
@@ -402,7 +401,7 @@ func TestCacheManager_UpsertSource(t *testing.T) {
 			expectedGVKs: []schema.GroupVersionKind{podGVK},
 		},
 		{
-			name: "remove source by not specifying any gvk",
+			name: "remove GVK from a source",
 			sources: []source{
 				{
 					key:  sourceA,
@@ -501,8 +500,7 @@ func TestCacheManager_UpsertSource_errorcases(t *testing.T) {
 				{
 					key:  sourceC,
 					gvks: []schema.GroupVersionKind{nsGVK},
-					// without error interpretation, this upsert would fail because we added a
-					// non existent gvk previously.
+					// this call will not error out even though we added a non existent gvk previously to different sync source.
 				},
 			},
 			expectedGVKs: []schema.GroupVersionKind{configMapGVK, podGVK, nonExistentGVK, nsGVK},
@@ -531,71 +529,68 @@ func TestCacheManager_UpsertSource_errorcases(t *testing.T) {
 func TestCacheManager_RemoveSource(t *testing.T) {
 	tcs := []struct {
 		name            string
-		seed            func(c *CacheManager)
+		existingSources []source
 		sourcesToRemove []aggregator.Key
 		expectedGVKs    []schema.GroupVersionKind
 	}{
 		{
 			name: "remove disjoint source",
-			seed: func(c *CacheManager) {
-				require.NoError(t, c.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{podGVK}))
-				require.NoError(t, c.gvksToSync.Upsert(sourceB, []schema.GroupVersionKind{configMapGVK}))
+			existingSources: []source{
+				{sourceA, []schema.GroupVersionKind{podGVK}},
+				{sourceB, []schema.GroupVersionKind{configMapGVK}},
 			},
 			sourcesToRemove: []aggregator.Key{sourceB},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK},
 		},
 		{
 			name: "remove fully overlapping source",
-			seed: func(c *CacheManager) {
-				require.NoError(t, c.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{podGVK}))
-				require.NoError(t, c.gvksToSync.Upsert(sourceB, []schema.GroupVersionKind{podGVK}))
+			existingSources: []source{
+				{sourceA, []schema.GroupVersionKind{podGVK}},
+				{sourceB, []schema.GroupVersionKind{podGVK}},
 			},
 			sourcesToRemove: []aggregator.Key{sourceB},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK},
 		},
 		{
 			name: "remove partially overlapping source",
-			seed: func(c *CacheManager) {
-				require.NoError(t, c.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{podGVK}))
-				require.NoError(t, c.gvksToSync.Upsert(sourceB, []schema.GroupVersionKind{podGVK, configMapGVK}))
+			existingSources: []source{
+				{sourceA, []schema.GroupVersionKind{podGVK}},
+				{sourceB, []schema.GroupVersionKind{podGVK, configMapGVK}},
 			},
 			sourcesToRemove: []aggregator.Key{sourceA},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK, configMapGVK},
 		},
 		{
 			name: "remove non existing source",
-			seed: func(c *CacheManager) {
-				require.NoError(t, c.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{podGVK}))
+			existingSources: []source{
+				{sourceA, []schema.GroupVersionKind{podGVK}},
 			},
 			sourcesToRemove: []aggregator.Key{sourceB},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK},
 		},
 		{
-			name: "remove source w a non existing gvk",
-			seed: func(c *CacheManager) {
-				require.NoError(t, c.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{nonExistentGVK}))
+			name: "remove source with a non existing gvk",
+			existingSources: []source{
+				{sourceA, []schema.GroupVersionKind{nonExistentGVK}},
 			},
 			sourcesToRemove: []aggregator.Key{sourceA},
 			expectedGVKs:    []schema.GroupVersionKind{},
 		},
 		{
-			name: "remove source from a watch set w a non existing gvk",
-			seed: func(c *CacheManager) {
-				require.NoError(t, c.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{nonExistentGVK}))
-				require.NoError(t, c.gvksToSync.Upsert(sourceB, []schema.GroupVersionKind{podGVK}))
+			name: "remove source from a watch set with a non existing gvk",
+			existingSources: []source{
+				{sourceA, []schema.GroupVersionKind{nonExistentGVK}},
+				{sourceB, []schema.GroupVersionKind{podGVK}},
 			},
-			// without interpreting the error, removing a source that doesn't reference a non existent gvk
-			// would still error out.
 			sourcesToRemove: []aggregator.Key{sourceB},
 			expectedGVKs:    []schema.GroupVersionKind{nonExistentGVK},
 		},
 		{
-			name: "remove source w non existent gvk from a watch set w a remaining non existing gvk",
-			seed: func(c *CacheManager) {
-				require.NoError(t, c.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{nonExistentGVK}))
-				require.NoError(t, c.gvksToSync.Upsert(sourceB, []schema.GroupVersionKind{nonExistentGVK}))
+			name: "remove source with non existent gvk from a watch set with a remaining non existing gvk",
+			existingSources: []source{
+				{sourceA, []schema.GroupVersionKind{nonExistentGVK}},
+				{sourceB, []schema.GroupVersionKind{nonExistentGVK}},
 			},
-			// without interpreting the error, removing a source here would error out.
 			sourcesToRemove: []aggregator.Key{sourceB},
 			expectedGVKs:    []schema.GroupVersionKind{nonExistentGVK},
 		},
@@ -604,7 +599,10 @@ func TestCacheManager_RemoveSource(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			cm, ctx := makeCacheManager(t)
-			tc.seed(cm)
+			// seed the cachemanager internals
+			for _, s := range tc.existingSources {
+				require.NoError(t, cm.gvksToSync.Upsert(s.key, s.gvks))
+			}
 
 			for _, source := range tc.sourcesToRemove {
 				require.NoError(t, cm.RemoveSource(ctx, source))
@@ -615,28 +613,10 @@ func TestCacheManager_RemoveSource(t *testing.T) {
 	}
 }
 
-func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Unstructured {
-	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(gvk)
-	u.SetName(name)
-	u.SetNamespace("default")
-	if gvk.Kind == "Pod" {
-		u.Object["spec"] = map[string]interface{}{
-			"containers": []map[string]interface{}{
-				{
-					"name":  "foo-container",
-					"image": "foo-image",
-				},
-			},
-		}
-	}
-	return u
-}
-
 func Test_interpretErr(t *testing.T) {
-	log = logr.Discard()
 	gvk1 := schema.GroupVersionKind{Group: "g1", Version: "v1", Kind: "k1"}
 	gvk2 := schema.GroupVersionKind{Group: "g2", Version: "v2", Kind: "k2"}
+	someErr := errors.New("some err")
 
 	cases := []struct {
 		name                string
@@ -650,52 +630,28 @@ func Test_interpretErr(t *testing.T) {
 			inputErr: nil,
 		},
 		{
-			name:                "intersection exists, wrapped",
-			inputErr:            fmt.Errorf("some err: %w", fakes.WatchesErr(fakes.WithErr(errors.New("some other err")), fakes.WithGVKs([]schema.GroupVersionKind{gvk1}))),
+			name:                "intersection exists",
+			inputErr:            fmt.Errorf("some err: %w", fakes.WatchesErr(fakes.WithGVKsErr([]schema.GroupVersionKind{gvk1}, someErr))),
 			inputGVK:            []schema.GroupVersionKind{gvk1},
 			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
 		},
 		{
 			name:                "intersection does not exist",
-			inputErr:            fakes.WatchesErr(fakes.WithGVKs([]schema.GroupVersionKind{gvk1})),
+			inputErr:            fakes.WatchesErr(fakes.WithGVKsErr([]schema.GroupVersionKind{gvk1}, someErr)),
 			inputGVK:            []schema.GroupVersionKind{gvk2},
 			expectedFailingGVKs: nil,
 		},
 		{
-			name:          "general error, gvks inputed",
-			inputErr:      fmt.Errorf("some err: %w", errors.New("some other err")),
+			name:          "non-watchmanager error reports general error with no GVKs",
+			inputErr:      fmt.Errorf("some err: %w", someErr),
 			inputGVK:      []schema.GroupVersionKind{gvk1},
 			expectGeneral: true,
 		},
 		{
-			name:          "some other error, no gvks inputed",
-			inputErr:      fmt.Errorf("some err: %w", errors.New("some other err")),
-			inputGVK:      []schema.GroupVersionKind{},
-			expectGeneral: true,
-		},
-		{
-			name:          "some other unwrapped error, gvks inputed",
-			inputErr:      errors.New("some err"),
-			inputGVK:      []schema.GroupVersionKind{gvk1},
-			expectGeneral: true,
-		},
-		{
-			name:          "general error, nested gvks",
-			inputErr:      fmt.Errorf("some err: %w", fakes.WatchesErr(fakes.GeneralErr(), fakes.WithErr(errors.New("some other err")), fakes.WithGVKs([]schema.GroupVersionKind{gvk1}))),
+			name:          "general error with failing gvks too",
+			inputErr:      fmt.Errorf("some err: %w", fakes.WatchesErr(fakes.WithErr(someErr), fakes.WithGVKsErr([]schema.GroupVersionKind{gvk1}, someErr))),
 			inputGVK:      []schema.GroupVersionKind{gvk1, gvk2},
 			expectGeneral: true,
-		},
-		{
-			name:                "nested gvk error, intersection",
-			inputErr:            fmt.Errorf("some err: %w", fakes.WatchesErr(fakes.WithErr(errors.New("some other err")), fakes.WithGVKs([]schema.GroupVersionKind{gvk1}))),
-			inputGVK:            []schema.GroupVersionKind{gvk1},
-			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
-		},
-		{
-			name:                "nested gvk error, no intersection",
-			inputErr:            fmt.Errorf("some err: %w", fakes.WatchesErr(fakes.WithErr(errors.New("some other err")), fakes.WithGVKs([]schema.GroupVersionKind{gvk1}))),
-			inputGVK:            []schema.GroupVersionKind{gvk2},
-			expectedFailingGVKs: nil,
 		},
 	}
 

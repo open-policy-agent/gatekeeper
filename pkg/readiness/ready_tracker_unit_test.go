@@ -23,33 +23,13 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-type lister struct {
-	templates bool // list templates
-	syncsets  bool // list syncsets
-}
-
-var scheme *runtime.Scheme
-
-func init() {
-	scheme = runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		panic(err)
-	}
-	if err := syncsetv1alpha1.AddToScheme(scheme); err != nil {
-		panic(err)
-	}
-}
 
 var (
 	testConstraintTemplate = templates.ConstraintTemplate{
@@ -79,51 +59,15 @@ var (
 	}
 
 	podGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
-
-	testUn = unstructured.Unstructured{}
 )
-
-func (dl lister) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-	// failures will be swallowed by readiness.retryAll
-	switch list := list.(type) {
-	case *v1beta1.ConstraintTemplateList:
-		if !dl.templates {
-			return nil
-		}
-		i := v1beta1.ConstraintTemplate{}
-		if err := scheme.Convert(&testConstraintTemplate, &i, nil); err != nil {
-			return err
-		}
-		list.Items = []v1beta1.ConstraintTemplate{i}
-	case *syncsetv1alpha1.SyncSetList:
-		if !dl.syncsets {
-			return nil
-		}
-		i := syncsetv1alpha1.SyncSet{}
-		if err := scheme.Convert(&testSyncSet, &i, nil); err != nil {
-			return err
-		}
-		list.Items = []syncsetv1alpha1.SyncSet{i}
-	case *unstructured.UnstructuredList:
-		if !dl.syncsets {
-			return nil
-		}
-		i := unstructured.Unstructured{}
-		if err := scheme.Convert(&testUn, &i, nil); err != nil {
-			return err
-		}
-		list.Items = []unstructured.Unstructured{i}
-	default:
-		return nil
-	}
-	return nil
-}
 
 // Verify that TryCancelTemplate functions the same as regular CancelTemplate if readinessRetries is set to 0.
 func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	l := lister{templates: true}
+	l := fakes.NewTestLister(
+		fakes.WithConstraintTemplates([]*templates.ConstraintTemplate{&testConstraintTemplate}),
+	)
 	rt := newTracker(l, false, false, false, func() objData {
 		return objData{retries: 0}
 	})
@@ -165,7 +109,9 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	l := lister{templates: true}
+	l := fakes.NewTestLister(
+		fakes.WithConstraintTemplates([]*templates.ConstraintTemplate{&testConstraintTemplate}),
+	)
 	rt := newTracker(l, false, false, false, func() objData {
 		return objData{retries: 2}
 	})
@@ -216,17 +162,22 @@ func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 }
 
 func Test_Tracker_TryCancelData(t *testing.T) {
-	l := lister{syncsets: true}
-	for _, tt := range []struct {
-		name      string
-		objDataFn func() objData
+	tcs := []struct {
+		name    string
+		retries int
 	}{
-		{name: "no retries"},
-		{name: "with retries", objDataFn: func() objData {
-			return objData{retries: 2}
-		}},
-	} {
-		rt := newTracker(l, false, false, false, tt.objDataFn)
+		{name: "no retries", retries: 0},
+		{name: "with retries", retries: 2},
+	}
+
+	l := fakes.NewTestLister(
+		fakes.WithSyncSets([]*syncsetv1alpha1.SyncSet{&testSyncSet}),
+	)
+	for _, tt := range tcs {
+		objDataFn := func() objData {
+			return objData{retries: tt.retries}
+		}
+		rt := newTracker(l, false, false, false, objDataFn)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		var runErr error
@@ -234,29 +185,24 @@ func Test_Tracker_TryCancelData(t *testing.T) {
 		runWg.Add(1)
 		go func() {
 			runErr = rt.Run(ctx)
+			// wait for the ready tracker to stop so we don't leak state between tests.
 			runWg.Done()
 		}()
 
 		require.Eventually(t, func() bool {
 			return rt.Populated()
 		}, 10*time.Second, 1*time.Second, "waiting for RT to populated")
-		require.False(t, rt.Satisfied(), "tracker with 2 retries should not be satisfied")
+		require.False(t, rt.Satisfied(), "tracker with retries should not be satisfied")
 
 		// observe the sync source for readiness
 		rt.syncsets.Observe(&testSyncSet)
 
-		var retries int
-		if tt.objDataFn == nil {
-			retries = 0
-		} else {
-			retries = tt.objDataFn().retries
-		}
-
-		for i := retries; i > 0; i-- {
+		for i := tt.retries; i > 0; i-- {
 			require.False(t, rt.data.Satisfied(), "data tracker should not be satisfied")
 			require.False(t, rt.Satisfied(), fmt.Sprintf("tracker with %d retries should not be satisfied", i))
 			rt.TryCancelData(podGVK)
 		}
+		require.False(t, rt.Satisfied(), "tracker should not be satisfied")
 
 		rt.TryCancelData(podGVK) // at this point there should no retries
 		require.True(t, rt.Satisfied(), "tracker with 0 retries and cancellation should be satisfied")

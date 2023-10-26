@@ -1,54 +1,28 @@
 package fakes
 
 import (
-	"fmt"
-
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-var _ watch.WatchesError = &FakeErr{}
-
-type FakeErr struct {
-	gvks       []schema.GroupVersionKind
-	err        error
-	generalErr bool
-}
-
-func (e *FakeErr) Error() string {
-	return fmt.Sprintf("failing gvks: %v", e.gvks)
-}
-
-func (e *FakeErr) FailingGVKs() []schema.GroupVersionKind {
-	return e.gvks
-}
-
-func (e *FakeErr) HasGeneralErr() bool {
-	return e.generalErr
-}
-
-type FOpt func(f *FakeErr)
+type FOpt func(f *watch.ErrorList)
 
 func WithErr(e error) FOpt {
-	return func(f *FakeErr) {
-		f.err = e
+	return func(f *watch.ErrorList) {
+		f.Add(e)
 	}
 }
 
-func WithGVKs(gvks []schema.GroupVersionKind) FOpt {
-	return func(f *FakeErr) {
-		f.gvks = gvks
-	}
-}
-
-func GeneralErr() FOpt {
-	return func(f *FakeErr) {
-		f.generalErr = true
+func WithGVKsErr(gvks []schema.GroupVersionKind, e error) FOpt {
+	return func(f *watch.ErrorList) {
+		for _, gvk := range gvks {
+			f.AddGVKErr(gvk, e)
+		}
 	}
 }
 
 func WatchesErr(opts ...FOpt) error {
-	result := &FakeErr{}
+	result := watch.NewErrorList()
 
 	for _, opt := range opts {
 		opt(result)

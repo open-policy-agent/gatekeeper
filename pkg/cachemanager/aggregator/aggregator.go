@@ -10,9 +10,9 @@ import (
 // Key defines a type, identifier tuple to store
 // in the GVKAggregator.
 type Key struct {
-	// Source specifies the type or where this Key comes from.
+	// Source specifies the type of the source object.
 	Source string
-	// ID specifies the name of the type that this Key is.
+	// ID specifies the name instance of the source object.
 	ID string
 }
 

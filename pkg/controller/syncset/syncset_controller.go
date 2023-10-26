@@ -137,12 +137,10 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 
 		if err := r.cacheManager.RemoveSource(ctx, sk); err != nil {
 			syncsetTr.TryCancelExpect(syncset)
-
 			return reconcile.Result{}, fmt.Errorf("synceset-controller: error removing source: %w", err)
 		}
 
 		syncsetTr.CancelExpect(syncset)
-
 		return reconcile.Result{}, nil
 	}
 
@@ -154,11 +152,9 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 
 	if err := r.cacheManager.UpsertSource(ctx, sk, gvks); err != nil {
 		syncsetTr.TryCancelExpect(syncset)
-
 		return reconcile.Result{Requeue: true}, fmt.Errorf("synceset-controller: error upserting watches: %w", err)
 	}
 
 	syncsetTr.Observe(syncset)
-
 	return reconcile.Result{}, nil
 }

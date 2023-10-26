@@ -18,7 +18,7 @@ func Test_WatchesError(t *testing.T) {
 		gvkErrs []gvkErr
 	}
 
-	for _, tt := range []struct {
+	tcs := []struct {
 		name         string
 		errsToAdd    errsToAdd
 		expectedGVKs []schema.GroupVersionKind
@@ -50,17 +50,15 @@ func Test_WatchesError(t *testing.T) {
 		{
 			name: "just global",
 			errsToAdd: errsToAdd{
-				gvkErrs: []gvkErr{},
-				errs:    []error{someErr},
+				errs: []error{someErr},
 			},
 			generalErr: true,
 		},
-		{
-			name: "nothing",
-		},
-	} {
+	}
+
+	for _, tt := range tcs {
 		t.Run(tt.name, func(t *testing.T) {
-			er := errorList{}
+			er := NewErrorList()
 			for _, gvkErr := range tt.errsToAdd.gvkErrs {
 				er.AddGVKErr(gvkErr.gvk, gvkErr.err)
 			}

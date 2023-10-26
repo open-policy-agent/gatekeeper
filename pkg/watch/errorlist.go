@@ -23,21 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// errorList is an error that aggregates multiple errors.
-type errorList struct {
-	errs          []error
-	hasGeneralErr bool
-}
-
-type WatchesError interface {
-	// returns gvks for which we had watch errors
-	FailingGVKs() []schema.GroupVersionKind
-	// returns true if this error is not specific to the failing gvks
-	HasGeneralErr() bool
-	Error() string
-}
-
-// a gvk annotated err.
 type gvkErr struct {
 	err error
 	gvk schema.GroupVersionKind
@@ -51,18 +36,23 @@ func (w gvkErr) Error() string {
 	return fmt.Sprintf("error for gvk: %s: %s", w.gvk, w.err.Error())
 }
 
-// returns a new errorList type.
-func newErrList() *errorList {
-	return &errorList{
+// ErrorList is an error that aggregates multiple errors.
+type ErrorList struct {
+	errs          []error
+	hasGeneralErr bool
+}
+
+func NewErrorList() *ErrorList {
+	return &ErrorList{
 		errs: []error{},
 	}
 }
 
-func (e *errorList) String() string {
+func (e *ErrorList) String() string {
 	return e.Error()
 }
 
-func (e *errorList) Error() string {
+func (e *ErrorList) Error() string {
 	var builder strings.Builder
 	for i, err := range e.errs {
 		if i > 0 {
@@ -73,7 +63,7 @@ func (e *errorList) Error() string {
 	return builder.String()
 }
 
-func (e *errorList) FailingGVKs() []schema.GroupVersionKind {
+func (e *ErrorList) FailingGVKs() []schema.GroupVersionKind {
 	gvks := []schema.GroupVersionKind{}
 	for _, err := range e.errs {
 		var gvkErr gvkErr
@@ -85,21 +75,21 @@ func (e *errorList) FailingGVKs() []schema.GroupVersionKind {
 	return gvks
 }
 
-func (e *errorList) HasGeneralErr() bool {
+func (e *ErrorList) HasGeneralErr() bool {
 	return e.hasGeneralErr
 }
 
 // adds a non gvk specific error to the list.
-func (e *errorList) Add(err error) {
+func (e *ErrorList) Add(err error) {
 	e.errs = append(e.errs, err)
 	e.hasGeneralErr = true
 }
 
 // adds a gvk specific error to the list.
-func (e *errorList) AddGVKErr(gvk schema.GroupVersionKind, err error) {
+func (e *ErrorList) AddGVKErr(gvk schema.GroupVersionKind, err error) {
 	e.errs = append(e.errs, gvkErr{gvk: gvk, err: err})
 }
 
-func (e *errorList) Size() int {
+func (e *ErrorList) Size() int {
 	return len(e.errs)
 }
