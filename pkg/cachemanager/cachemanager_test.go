@@ -500,7 +500,9 @@ func TestCacheManager_UpsertSource_errorcases(t *testing.T) {
 				{
 					key:  sourceC,
 					gvks: []schema.GroupVersionKind{nsGVK},
-					// this call will not error out even though we added a non existent gvk previously to different sync source.
+					// this call will not error out even though we previously added a non existent gvk to a different sync source.
+					// this way the errors in watch manager caused by one sync source do not impact the other if they are not related
+					// to the gvks it specifies.
 				},
 			},
 			expectedGVKs: []schema.GroupVersionKind{configMapGVK, podGVK, nonExistentGVK, nsGVK},
@@ -617,6 +619,11 @@ func Test_interpretErr(t *testing.T) {
 	gvk1 := schema.GroupVersionKind{Group: "g1", Version: "v1", Kind: "k1"}
 	gvk2 := schema.GroupVersionKind{Group: "g2", Version: "v2", Kind: "k2"}
 	someErr := errors.New("some err")
+	gvk1Err := watch.NewErrorList()
+	gvk1Err.AddGVKErr(gvk1, someErr)
+	genErr := watch.NewErrorList()
+	genErr.Add(someErr)
+	genErr.AddGVKErr(gvk1, someErr)
 
 	cases := []struct {
 		name                string
@@ -631,15 +638,14 @@ func Test_interpretErr(t *testing.T) {
 		},
 		{
 			name:                "intersection exists",
-			inputErr:            fmt.Errorf("some err: %w", fakes.WatchesErr(fakes.WithGVKsErr([]schema.GroupVersionKind{gvk1}, someErr))),
+			inputErr:            fmt.Errorf("some err: %w", gvk1Err),
 			inputGVK:            []schema.GroupVersionKind{gvk1},
 			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
 		},
 		{
-			name:                "intersection does not exist",
-			inputErr:            fakes.WatchesErr(fakes.WithGVKsErr([]schema.GroupVersionKind{gvk1}, someErr)),
-			inputGVK:            []schema.GroupVersionKind{gvk2},
-			expectedFailingGVKs: nil,
+			name:     "intersection does not exist",
+			inputErr: gvk1Err,
+			inputGVK: []schema.GroupVersionKind{gvk2},
 		},
 		{
 			name:          "non-watchmanager error reports general error with no GVKs",
@@ -649,7 +655,7 @@ func Test_interpretErr(t *testing.T) {
 		},
 		{
 			name:          "general error with failing gvks too",
-			inputErr:      fmt.Errorf("some err: %w", fakes.WatchesErr(fakes.WithErr(someErr), fakes.WithGVKsErr([]schema.GroupVersionKind{gvk1}, someErr))),
+			inputErr:      fmt.Errorf("some err: %w", genErr),
 			inputGVK:      []schema.GroupVersionKind{gvk1, gvk2},
 			expectGeneral: true,
 		},

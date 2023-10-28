@@ -56,18 +56,18 @@ func Test_WatchesError(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tcs {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
 			er := NewErrorList()
-			for _, gvkErr := range tt.errsToAdd.gvkErrs {
+			for _, gvkErr := range tc.errsToAdd.gvkErrs {
 				er.AddGVKErr(gvkErr.gvk, gvkErr.err)
 			}
-			for _, err := range tt.errsToAdd.errs {
+			for _, err := range tc.errsToAdd.errs {
 				er.Add(err)
 			}
 
-			require.ElementsMatch(t, tt.expectedGVKs, er.FailingGVKs())
-			require.Equal(t, tt.generalErr, er.HasGeneralErr())
+			require.ElementsMatch(t, tc.expectedGVKs, er.FailingGVKs())
+			require.Equal(t, tc.generalErr, er.HasGeneralErr())
 		})
 	}
 }

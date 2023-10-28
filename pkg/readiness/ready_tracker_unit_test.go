@@ -173,9 +173,9 @@ func Test_Tracker_TryCancelData(t *testing.T) {
 	l := fakes.NewTestLister(
 		fakes.WithSyncSets([]*syncsetv1alpha1.SyncSet{&testSyncSet}),
 	)
-	for _, tt := range tcs {
+	for _, tc := range tcs {
 		objDataFn := func() objData {
-			return objData{retries: tt.retries}
+			return objData{retries: tc.retries}
 		}
 		rt := newTracker(l, false, false, false, objDataFn)
 
@@ -197,7 +197,7 @@ func Test_Tracker_TryCancelData(t *testing.T) {
 		// observe the sync source for readiness
 		rt.syncsets.Observe(&testSyncSet)
 
-		for i := tt.retries; i > 0; i-- {
+		for i := tc.retries; i > 0; i-- {
 			require.False(t, rt.data.Satisfied(), "data tracker should not be satisfied")
 			require.False(t, rt.Satisfied(), fmt.Sprintf("tracker with %d retries should not be satisfied", i))
 			rt.TryCancelData(podGVK)

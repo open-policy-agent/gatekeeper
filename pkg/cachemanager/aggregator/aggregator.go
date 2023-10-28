@@ -12,7 +12,7 @@ import (
 type Key struct {
 	// Source specifies the type of the source object.
 	Source string
-	// ID specifies the name instance of the source object.
+	// ID specifies the name of the instance of the source object.
 	ID string
 }
 
