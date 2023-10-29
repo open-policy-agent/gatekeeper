@@ -6,4 +6,4 @@ spec:
   gvks:
     - group: ""
       version: "v1"
-      kind: "ConfigMap"
+      kind: "Namespace"

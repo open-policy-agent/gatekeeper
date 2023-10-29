@@ -525,7 +525,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 	for _, gvk := range t.DataGVKs() {
 		// retrieve the expectations for this key
 		es := t.data.Get(gvk)
-		err = t.collectForObjectTracker(ctx, es, nil, fmt.Sprintf("%s/%s", "Data", gvk))
+		err = t.collectForObjectTracker(ctx, es, nil, fmt.Sprintf("%s/ %s", "Data", gvk))
 		if err != nil {
 			log.Error(err, "while collecting for the Data type", "gvk", gvk)
 			continue

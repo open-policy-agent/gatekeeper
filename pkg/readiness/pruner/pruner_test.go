@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -216,13 +217,9 @@ func Test_ExpectationsMgr_missedInformers(t *testing.T) {
 	// Set up one data store for readyTracker:
 	// we will use a separate lister for the tracker from the mgr client and make
 	// the contents of the readiness tracker be a superset of the contents of the mgr's client
-	tl := fakes.NewTestLister(
-		fakes.WithSyncSets([]*syncsetv1alpha1.SyncSet{
-			fakes.SyncSetFor("syncset-a", []schema.GroupVersionKind{podGVK, configMapGVK}),
-		}),
-	)
-
-	testRes := setupTest(ctx, t, testOptions{testLister: tl, addExpectationsPruner: true})
+	// the syncset will look like:
+	// *fakes.SyncSetFor("syncset-a", []schema.GroupVersionKind{podGVK, configMapGVK}),
+	testRes := setupTest(ctx, t, testOptions{testLister: makeTestLister(t), addExpectationsPruner: true, addConstrollers: true})
 
 	// Set up another store for the controllers and watchManager
 	syncsetA := fakes.SyncSetFor("syncset-a", []schema.GroupVersionKind{podGVK})
@@ -234,7 +231,7 @@ func Test_ExpectationsMgr_missedInformers(t *testing.T) {
 		return testRes.expectationsPruner.tracker.SyncSourcesSatisfied()
 	}, timeout, tick, "waiting on sync sources to get satisfied")
 
-	// As configMapGVK is absent from this syncset-1, the CacheManager will never observe configMapGVK
+	// As configMapGVK is absent from this syncset-a, the CacheManager will never observe configMapGVK
 	// being deleted and will never cancel the data expectation for configMapGVK.
 	require.NoError(t, testRes.k8sClient.Delete(ctx, syncsetA))
 
@@ -243,4 +240,31 @@ func Test_ExpectationsMgr_missedInformers(t *testing.T) {
 	}, timeout, tick, "waiting on tracker to get satisfied")
 
 	cancelFunc()
+}
+
+func makeTestLister(t *testing.T) readiness.Lister {
+	syncsetList := &syncsetv1alpha1.SyncSetList{}
+	syncsetList.Items = []syncsetv1alpha1.SyncSet{
+		*fakes.SyncSetFor("syncset-a", []schema.GroupVersionKind{podGVK, configMapGVK}),
+	}
+
+	podList := &unstructured.UnstructuredList{}
+	podList.SetGroupVersionKind(schema.GroupVersionKind{
+		Version: "v1",
+		Kind:    "PodList",
+	})
+	podList.Items = []unstructured.Unstructured{
+		*fakes.UnstructuredFor(podGVK, "", "pod1-name"),
+	}
+
+	configMapList := &unstructured.UnstructuredList{}
+	configMapList.SetGroupVersionKind(schema.GroupVersionKind{
+		Version: "v1",
+		Kind:    "ConfigMapList",
+	})
+	configMapList.Items = []unstructured.Unstructured{
+		*fakes.UnstructuredFor(configMapGVK, "", "cm1-name"),
+	}
+
+	return fake.NewClientBuilder().WithLists(syncsetList, podList, configMapList).Build()
 }

@@ -158,8 +158,8 @@ func UnstructuredFor(gvk schema.GroupVersionKind, namespace, name string) *unstr
 
 	if gvk.Kind == "Pod" {
 		u.Object["spec"] = map[string]interface{}{
-			"containers": []map[string]interface{}{
-				{
+			"containers": []interface{}{
+				map[string]interface{}{
 					"name":  "foo-container",
 					"image": "foo-image",
 				},
