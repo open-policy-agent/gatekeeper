@@ -23,12 +23,16 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var (
@@ -61,14 +65,47 @@ var (
 	podGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 )
 
+type testClientOptions struct {
+	listSyncSets            bool
+	listConstraintTemplates bool
+}
+
+func makeTestClient(t *testing.T, o testClientOptions) client.WithWatch {
+	clb := fake.NewClientBuilder()
+
+	if o.listConstraintTemplates {
+		ctList := &v1beta1.ConstraintTemplateList{}
+		i := v1beta1.ConstraintTemplate{}
+		require.NoError(t, fakes.GetTestScheme().Convert(&testConstraintTemplate, &i, nil), "converting template")
+		ctList.Items = []v1beta1.ConstraintTemplate{i}
+
+		clb.WithLists(ctList)
+	}
+
+	if o.listSyncSets {
+		syncsetList := &syncsetv1alpha1.SyncSetList{}
+		syncsetList.Items = []syncsetv1alpha1.SyncSet{testSyncSet}
+
+		podList := &unstructured.UnstructuredList{}
+		podList.SetGroupVersionKind(schema.GroupVersionKind{
+			Version: "v1",
+			Kind:    "PodList",
+		})
+		podList.Items = []unstructured.Unstructured{
+			*fakes.UnstructuredFor(podGVK, "", "pod1-name"),
+		}
+
+		clb.WithLists(syncsetList, podList)
+	}
+
+	return clb.Build()
+}
+
 // Verify that TryCancelTemplate functions the same as regular CancelTemplate if readinessRetries is set to 0.
 func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	l := fakes.NewTestLister(
-		fakes.WithConstraintTemplates([]*templates.ConstraintTemplate{&testConstraintTemplate}),
-	)
-	rt := newTracker(l, false, false, false, func() objData {
+	rt := newTracker(makeTestClient(t, testClientOptions{listConstraintTemplates: true}), false, false, false, func() objData {
 		return objData{retries: 0}
 	})
 
@@ -109,10 +146,7 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	l := fakes.NewTestLister(
-		fakes.WithConstraintTemplates([]*templates.ConstraintTemplate{&testConstraintTemplate}),
-	)
-	rt := newTracker(l, false, false, false, func() objData {
+	rt := newTracker(makeTestClient(t, testClientOptions{listConstraintTemplates: true}), false, false, false, func() objData {
 		return objData{retries: 2}
 	})
 
@@ -170,14 +204,11 @@ func Test_Tracker_TryCancelData(t *testing.T) {
 		{name: "with retries", retries: 2},
 	}
 
-	l := fakes.NewTestLister(
-		fakes.WithSyncSets([]*syncsetv1alpha1.SyncSet{&testSyncSet}),
-	)
 	for _, tc := range tcs {
 		objDataFn := func() objData {
 			return objData{retries: tc.retries}
 		}
-		rt := newTracker(l, false, false, false, objDataFn)
+		rt := newTracker(makeTestClient(t, testClientOptions{listSyncSets: true}), false, false, false, objDataFn)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		var runErr error
