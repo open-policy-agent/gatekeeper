@@ -341,22 +341,17 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return true, nil
 	}
 
-	gvk := req.AdmissionRequest.Kind
-
-	// for resources that don't have a name validation
-	validateWithName := func(ctx context.Context, req *admission.Request, specificValidator func(ctx context.Context, req *admission.Request) (bool, error)) (bool, error) {
-		if len(req.Name) > 63 {
-			return false, fmt.Errorf("resource cannot have metadata.name larger than 63 char; length: %d", len(req.Name))
-		}
-		return specificValidator(ctx, req)
+	if len(req.Name) > 63 {
+		return false, fmt.Errorf("resource cannot have metadata.name larger than 63 char; length: %d", len(req.Name))
 	}
+
+	gvk := req.AdmissionRequest.Kind
 	switch {
 	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
-		return validateWithName(ctx, req, h.validateTemplate)
+		return h.validateTemplate(ctx, req)
 	case gvk.Group == "expansion.gatekeeper.sh" && gvk.Kind == "ExpansionTemplate":
 		return h.validateExpansionTemplate(req)
 	case gvk.Group == "constraints.gatekeeper.sh":
-		// constraint name is restricted to 63 at schema creation time
 		return h.validateConstraint(req)
 	case gvk.Group == "config.gatekeeper.sh" && gvk.Kind == "Config":
 		if err := h.validateConfigResource(req); err != nil {
@@ -536,7 +531,7 @@ func (h *validationHandler) validateModifySet(req *admission.Request) (bool, err
 	return false, nil
 }
 
-func (h *validationHandler) validateProvider(_ context.Context, req *admission.Request) (bool, error) {
+func (h *validationHandler) validateProvider(req *admission.Request) (bool, error) {
 	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
 		return false, err
