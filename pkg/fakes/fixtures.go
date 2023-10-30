@@ -46,10 +46,10 @@ violation[{"msg": msg}] {
 }
 
 func DenyAllConstraint() *unstructured.Unstructured {
-	return ConstraintUnparametrizedFor("denyall")
+	return ConstraintFor("denyall")
 }
 
-func ConstraintUnparametrizedFor(kind string) *unstructured.Unstructured {
+func ConstraintFor(kind string) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
 
 	u.SetGroupVersionKind(schema.GroupVersionKind{
