@@ -13,7 +13,7 @@ ENABLE_PUBSUB ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 
-VERSION := v3.14.0-rc.2
+VERSION := v3.14.0-rc.6
 
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
