@@ -52,10 +52,6 @@ import (
 
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_controller")
 
-const (
-	finalizerName = "finalizers.gatekeeper.sh/constraint"
-)
-
 type Adder struct {
 	CFClient         *constraintclient.Client
 	ConstraintsCache *ConstraintsCache
@@ -268,13 +264,6 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}()
 
-	if HasFinalizer(instance) {
-		RemoveFinalizer(instance)
-		if err := r.writer.Update(ctx, instance); err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-	}
-
 	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
 		status, err := r.getOrCreatePodStatus(ctx, instance)
@@ -420,33 +409,6 @@ func (r *ReconcileConstraint) cacheConstraint(ctx context.Context, instance *uns
 	t.Observe(instance)
 
 	return nil
-}
-
-func RemoveFinalizer(instance *unstructured.Unstructured) {
-	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
-}
-
-func HasFinalizer(instance *unstructured.Unstructured) bool {
-	return containsString(finalizerName, instance.GetFinalizers())
-}
-
-func containsString(s string, items []string) bool {
-	for _, item := range items {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(s string, items []string) []string {
-	var rval []string
-	for _, item := range items {
-		if item != s {
-			rval = append(rval, item)
-		}
-	}
-	return rval
 }
 
 func NewConstraintsCache() *ConstraintsCache {

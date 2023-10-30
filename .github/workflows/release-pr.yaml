@@ -59,7 +59,7 @@ jobs:
             echo "TARGET_BRANCH=master" >> ${GITHUB_ENV}
           fi
 
-      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
         with:
           fetch-depth: 0
 
@@ -83,3 +83,4 @@ jobs:
           title: "chore: Prepare ${{ env.NEWVERSION }} release"
           branch: "release-${{ env.NEWVERSION }}"
           base: "${{ env.TARGET_BRANCH }}"
+          signoff: true

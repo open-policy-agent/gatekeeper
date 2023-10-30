@@ -13,6 +13,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
@@ -831,36 +832,51 @@ func TestGetValidationMessages(t *testing.T) {
 
 func TestValidateConfigResource(t *testing.T) {
 	tc := []struct {
-		TestName string
-		Name     string
-		Err      bool
+		name      string
+		rName     string
+		deleteOp  bool
+		expectErr bool
 	}{
 		{
-			TestName: "Wrong name",
-			Name:     "FooBar",
-			Err:      true,
+			name:      "Wrong name",
+			rName:     "FooBar",
+			expectErr: true,
 		},
 		{
-			TestName: "Correct name",
-			Name:     "config",
+			name:  "Correct name",
+			rName: "config",
+		},
+		{
+			name:     "Delete operation with no name",
+			deleteOp: true,
+		},
+		{
+			name:      "Delete operation with name",
+			deleteOp:  true,
+			rName:     "abc",
+			expectErr: true,
 		},
 	}
 
 	for _, tt := range tc {
-		t.Run(tt.TestName, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			handler := validationHandler{log: log}
 			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
-					Name: tt.Name,
+					Name: tt.rName,
+					Kind: metav1.GroupVersionKind(configv1alpha1.GroupVersion.WithKind("Config")),
 				},
 			}
+			if tt.deleteOp {
+				req.AdmissionRequest.Operation = admissionv1.Delete
+			}
 
-			err := handler.validateConfigResource(req)
+			_, err := handler.validateGatekeeperResources(context.Background(), req)
 
-			if tt.Err && err == nil {
+			if tt.expectErr && err == nil {
 				t.Errorf("Expected error but received nil")
 			}
-			if !tt.Err && err != nil {
+			if !tt.expectErr && err != nil {
 				t.Errorf("Did not expect error but received: %v", err)
 			}
 		})

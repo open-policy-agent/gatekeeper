@@ -41,3 +41,6 @@ spec:
       - name: go-sub
         image: fake-subscriber:latest
         imagePullPolicy: Never
+        env:
+        - name: AUDIT_CHANNEL
+          value: "audit-channel"
