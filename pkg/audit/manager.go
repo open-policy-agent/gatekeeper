@@ -508,6 +508,17 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			ns = nil
 		}
 
+		excluded, err := am.skipExcludedNamespace(&obj)
+		if err != nil {
+			am.log.Error(err, "Unable to exclude object namespace for audit from cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
+			continue
+		}
+
+		if excluded {
+			am.log.V(logging.DebugLevel).Info("excluding object from audit from cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
+			continue
+		}
+
 		au := &target.AugmentedUnstructured{
 			Object:    obj,
 			Namespace: ns,
