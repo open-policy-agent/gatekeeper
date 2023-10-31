@@ -1,0 +1,25 @@
+name: create_tag
+on: [push]
+
+permissions:
+  contents: write
+
+jobs:
+  create_tag:
+    name: "Create tag"
+    if: contains(github.event.head_commit.message, 'Prepare')
+    runs-on: ubuntu-22.04
+    steps:
+    - name: "Set release tag"
+      run: |
+        RELEASE_TAG=$(echo "${{ github.event.head_commit.message }}" | grep -o 'v[^ ,]\+' | sed -n '1p')
+        echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+    
+    - name: Check out code
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v3.5.2
+
+    - uses: rickstaa/action-create-tag@v1.6.4
+      id: "tag_create"
+      with:
+        tag: ${{ env.RELEASE_TAG }}
+        tag_exists_error: false
