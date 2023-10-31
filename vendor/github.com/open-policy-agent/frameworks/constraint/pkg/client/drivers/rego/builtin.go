@@ -38,6 +38,12 @@ func externalDataBuiltin(d *Driver) func(bctx rego.BuiltinContext, regorequest *
 
 		prepareResponse.Idempotent = true
 		for _, k := range regoReq.Keys {
+			if d.providerResponseCache == nil {
+				// external data response cache is not enabled, add key to call provider
+				providerRequestKeys = append(providerRequestKeys, k)
+				continue
+			}
+
 			cachedResponse, err := d.providerResponseCache.Get(
 				externaldata.CacheKey{
 					ProviderName: regoReq.ProviderName,
@@ -70,19 +76,22 @@ func externalDataBuiltin(d *Driver) func(bctx rego.BuiltinContext, regorequest *
 				return externaldata.HandleError(statusCode, err)
 			}
 
-			for _, item := range externaldataResponse.Response.Items {
-				d.providerResponseCache.Upsert(
-					externaldata.CacheKey{
-						ProviderName: regoReq.ProviderName,
-						Key:          item.Key,
-					},
-					externaldata.CacheValue{
-						Received:   time.Now().Unix(),
-						Value:      item.Value,
-						Error:      item.Error,
-						Idempotent: externaldataResponse.Response.Idempotent,
-					},
-				)
+			// update provider response cache if it is enabled
+			if d.providerResponseCache != nil {
+				for _, item := range externaldataResponse.Response.Items {
+					d.providerResponseCache.Upsert(
+						externaldata.CacheKey{
+							ProviderName: regoReq.ProviderName,
+							Key:          item.Key,
+						},
+						externaldata.CacheValue{
+							Received:   time.Now().Unix(),
+							Value:      item.Value,
+							Error:      item.Error,
+							Idempotent: externaldataResponse.Response.Idempotent,
+						},
+					)
+				}
 			}
 
 			// we are taking conservative approach here, if any of the response is not idempotent
