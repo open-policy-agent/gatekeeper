@@ -123,7 +123,7 @@ func Test_AssignMetadata_errors(t *testing.T) {
 			errMsg: "invalid location for assignmetadata",
 		},
 		{
-			name: "name > 64",
+			name: "name > 63",
 			mut: &unversioned.AssignMetadata{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: testhelpers.BigName(),

@@ -6,5 +6,5 @@ import "errors"
 // is called against a keyed list.
 var (
 	ErrNonKeyedSetter = errors.New("mutator does not understand keyed lists")
-	ErrNameLength     = errors.New("maximum length for name is 63 char")
+	ErrNameLength     = errors.New("maximum name length is 63 characters")
 )

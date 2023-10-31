@@ -22,7 +22,7 @@ func Test_ModifySet_errors(t *testing.T) {
 			errMsg: "applyTo required for ModifySet mutator",
 		},
 		{
-			name: "name > 64",
+			name: "name > 63",
 			mut: &mutationsunversioned.ModifySet{
 				ObjectMeta: v1.ObjectMeta{
 					Name: testhelpers.BigName(),

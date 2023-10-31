@@ -408,7 +408,7 @@ func Test_AssignImage_errors(t *testing.T) {
 			errMsg: "empty path",
 		},
 		{
-			name: "name > 64",
+			name: "name > 63",
 			mut: &mutationsunversioned.AssignImage{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: testhelpers.BigName(),

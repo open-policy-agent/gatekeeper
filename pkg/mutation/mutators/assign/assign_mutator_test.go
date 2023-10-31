@@ -1087,7 +1087,7 @@ func Test_Assign_errors(t *testing.T) {
 			errMsg: "empty path",
 		},
 		{
-			name: "name > 64",
+			name: "name > 63",
 			mut: &mutationsunversioned.Assign{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: testhelpers.BigName(),
