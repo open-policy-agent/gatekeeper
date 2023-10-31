@@ -69,5 +69,5 @@ func NewDummyMutator(name, path string, value interface{}) *DummyMutator {
 
 // BigName returns a 64-length string.
 func BigName() string {
-	return strings.Repeat("abigname", len("abigname")) // len("abigname") => 8, 8 X 8 = 64
+	return strings.Repeat("abigname", 8) // 8 X 8 = 64
 }
