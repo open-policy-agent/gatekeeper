@@ -1,16 +1,114 @@
 package audit
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"testing"
 
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func Test_auditFromCache(t *testing.T) {
+	podToReview := fakes.Pod(fakes.WithNamespace("test-namespace-1"))
+	podGVK := podToReview.GroupVersionKind()
+	testAuditCache := fakeCacheListerFor([]schema.GroupVersionKind{podGVK}, []client.Object{podToReview})
+
+	driver, err := rego.New()
+	require.NoError(t, err)
+	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	require.NoError(t, err)
+
+	_, err = client.AddTemplate(context.Background(), fakes.DenyAllRegoTemplate())
+	require.NoError(t, err, "adding denyall constraint template")
+	_, err = client.AddConstraint(context.Background(), fakes.DenyAllConstraint())
+	require.NoError(t, err, "adding denyall constraint")
+
+	tests := []struct {
+		name            string
+		processExcluder *process.Excluder
+		wantViolation   bool
+	}{
+		{
+			name:            "obj excluded from audit",
+			processExcluder: processExcluderFor([]string{"test-namespace-1"}),
+		},
+		{
+			name:            "obj not excluded from audit",
+			processExcluder: processExcluderFor([]string{}),
+			wantViolation:   true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			am := &Manager{
+				processExcluder: tc.processExcluder,
+				auditCache:      testAuditCache,
+				opa:             client,
+			}
+
+			results, errs := am.auditFromCache(context.Background())
+			require.Len(t, errs, 0)
+
+			if tc.wantViolation {
+				require.Len(t, results, 1)
+			} else {
+				require.Len(t, results, 0)
+			}
+		})
+	}
+}
+
+func fakeCacheListerFor(gvks []schema.GroupVersionKind, objsToList []client.Object) *CacheLister {
+	k8sclient := fake.NewClientBuilder().WithObjects(objsToList...).Build()
+	fakeLister := fakeWatchIterator{gvksToList: gvks}
+
+	return NewAuditCacheLister(k8sclient, &fakeLister)
+}
+
+type fakeWatchIterator struct {
+	gvksToList []schema.GroupVersionKind
+}
+
+func (f *fakeWatchIterator) DoForEach(listFunc func(gvk schema.GroupVersionKind) error) error {
+	for _, gvk := range f.gvksToList {
+		if err := listFunc(gvk); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func processExcluderFor(ns []string) *process.Excluder {
+	processExcluder := process.New()
+	for _, n := range ns {
+		processExcluder.Add([]configv1alpha1.MatchEntry{
+			{
+				ExcludedNamespaces: []wildcard.Wildcard{wildcard.Wildcard(n)},
+				Processes:          []string{"audit"},
+			},
+		})
+	}
+
+	return processExcluder
+}
 
 func Test_newNSCache(t *testing.T) {
 	tests := []struct {
