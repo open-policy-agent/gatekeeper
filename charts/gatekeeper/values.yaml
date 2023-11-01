@@ -44,20 +44,20 @@ externaldataProviderResponseCacheTTL: 3m
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.14.0-rc.2
+  release: v3.14.0
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.14.0-rc.2
+      tag: v3.14.0
 postUpgrade:
   labelNamespace:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.14.0-rc.2
+      tag: v3.14.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -88,7 +88,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.14.0-rc.2
+      tag: v3.14.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -129,7 +129,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.14.0-rc.2
+      tag: v3.14.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""
