@@ -12,6 +12,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -77,23 +78,10 @@ func Test_auditFromCache(t *testing.T) {
 
 func fakeCacheListerFor(gvks []schema.GroupVersionKind, objsToList []client.Object) *CacheLister {
 	k8sclient := fake.NewClientBuilder().WithObjects(objsToList...).Build()
-	fakeLister := fakeWatchIterator{gvksToList: gvks}
+	ws := watch.NewSet()
+	ws.Add(gvks...)
 
-	return NewAuditCacheLister(k8sclient, &fakeLister)
-}
-
-type fakeWatchIterator struct {
-	gvksToList []schema.GroupVersionKind
-}
-
-func (f *fakeWatchIterator) DoForEach(listFunc func(gvk schema.GroupVersionKind) error) error {
-	for _, gvk := range f.gvksToList {
-		if err := listFunc(gvk); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return NewAuditCacheLister(k8sclient, ws)
 }
 
 func processExcluderFor(ns []string) *process.Excluder {
