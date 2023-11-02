@@ -1,5 +1,7 @@
 name: create_tag
-on: [push]
+on: 
+  pull_request:
+    types: [closed]
 
 permissions:
   contents: write
@@ -7,12 +9,14 @@ permissions:
 jobs:
   create_tag:
     name: "Create tag"
-    if: contains(github.event.head_commit.message, 'Prepare')
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release-pr')
     runs-on: ubuntu-22.04
     steps:
     - name: "Set release tag"
+      env:
+        GITHUB_CONTEXT: ${{ toJson(github.event.pull_request.labels.*.name) }}
       run: |
-        RELEASE_TAG=$(echo "${{ github.event.head_commit.message }}" | grep -o 'v[^ ,]\+' | sed -n '1p')
+        RELEASE_TAG=$(echo "$GITHUB_CONTEXT" | jq '.[1]' | tr -d '"')
         echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
     
     - name: Check out code

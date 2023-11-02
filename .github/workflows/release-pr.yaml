@@ -84,3 +84,6 @@ jobs:
           branch: "release-${{ env.NEWVERSION }}"
           base: "${{ env.TARGET_BRANCH }}"
           signoff: true
+          labels: |
+            release-pr
+            ${{ github.event.inputs.release_version }}
