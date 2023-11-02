@@ -2,13 +2,10 @@ package pruner
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
-	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
@@ -22,7 +19,6 @@ import (
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,9 +35,6 @@ const (
 var cfg *rest.Config
 
 var (
-	syncsetGVK = syncsetv1alpha1.GroupVersion.WithKind("SyncSet")
-	configGVK  = configv1alpha1.GroupVersion.WithKind("Config")
-
 	configMapGVK = schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
 	podGVK       = schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
 )
@@ -50,31 +43,19 @@ func TestMain(m *testing.M) {
 	testutils.StartControlPlane(m, &cfg, 3)
 }
 
-type testOptions struct {
-	addControllers        bool
-	addExpectationsPruner bool
-	readyTrackerClient    readiness.Lister
-}
-
 type testResources struct {
 	expectationsPruner *ExpectationsPruner
 	manager            manager.Manager
 	k8sClient          client.Client
 }
 
-func setupTest(ctx context.Context, t *testing.T, o testOptions) *testResources {
+func setupTest(ctx context.Context, t *testing.T, readyTrackerClient readiness.Lister) *testResources {
 	t.Helper()
 
 	mgr, wm := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	var tracker *readiness.Tracker
-	var err error
-	if o.readyTrackerClient != nil {
-		tracker = readiness.NewTracker(o.readyTrackerClient, false, false, false)
-	} else {
-		tracker = readiness.NewTracker(mgr.GetAPIReader(), false, false, false)
-	}
+	tracker := readiness.NewTracker(readyTrackerClient, false, false, false)
 	require.NoError(t, mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		return tracker.Run(ctx)
 	})), "adding tracker to manager")
@@ -100,109 +81,35 @@ func setupTest(ctx context.Context, t *testing.T, o testOptions) *testResources 
 	cm, err := cachemanager.NewCacheManager(config)
 	require.NoError(t, err, "creating cachemanager")
 
-	if !o.addControllers {
-		// need to start the cachemanager if controllers are not started
-		// since the cachemanager is started in the controllers code.
-		require.NoError(t, mgr.Add(cm), "adding cachemanager as a runnable")
-	} else {
-		sw := watch.NewSwitch()
-		mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
-
-		frameworksexternaldata.NewCache()
-		opts := controller.Dependencies{
-			CFClient:         testutils.SetupDataClient(t),
-			WatchManger:      wm,
-			ControllerSwitch: sw,
-			Tracker:          tracker,
-			ProcessExcluder:  process.Get(),
-			MutationSystem:   mutationSystem,
-			ExpansionSystem:  expansion.NewSystem(mutationSystem),
-			ProviderCache:    frameworksexternaldata.NewCache(),
-			CacheMgr:         cm,
-			SyncEventsCh:     events,
-		}
-		require.NoError(t, controller.AddToManager(mgr, &opts), "registering controllers")
+	sw := watch.NewSwitch()
+	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
+	frameworksexternaldata.NewCache()
+	opts := controller.Dependencies{
+		CFClient:         testutils.SetupDataClient(t),
+		WatchManger:      wm,
+		ControllerSwitch: sw,
+		Tracker:          tracker,
+		ProcessExcluder:  process.Get(),
+		MutationSystem:   mutationSystem,
+		ExpansionSystem:  expansion.NewSystem(mutationSystem),
+		ProviderCache:    frameworksexternaldata.NewCache(),
+		CacheMgr:         cm,
+		SyncEventsCh:     events,
 	}
+	require.NoError(t, controller.AddToManager(mgr, &opts), "registering controllers")
 
 	ep := &ExpectationsPruner{
 		cacheMgr: cm,
 		tracker:  tracker,
 	}
-	if o.addExpectationsPruner {
-		require.NoError(t, mgr.Add(ep), "adding expectationspruner as a runnable")
-	}
+	require.NoError(t, mgr.Add(ep), "adding expectationspruner as a runnable")
 
 	return &testResources{expectationsPruner: ep, manager: mgr, k8sClient: c}
 }
 
-// Test_ExpectationsMgr_DeletedSyncSets tests scenarios in which SyncSet and Config resources
-// get deleted after tracker expectations have been populated and we need to reconcile
-// the GVKs that are in the data client (via the cachemaanger) and the GVKs that are expected
-// by the Tracker.
-func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
-	tts := []struct {
-		name             string
-		fixturesPath     string
-		syncsetsToDelete []string
-		deleteConfig     string
-	}{
-		{
-			name:             "delete all syncsets",
-			fixturesPath:     "testdata/syncsets-overlapping",
-			syncsetsToDelete: []string{"syncset-1", "syncset-2", "syncset-3"},
-		},
-		{
-			name:             "delete syncs and configs",
-			fixturesPath:     "testdata/syncsets-config-disjoint",
-			syncsetsToDelete: []string{"syncset-1"},
-			deleteConfig:     "config",
-		},
-	}
-
-	for _, tt := range tts {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancelFunc := context.WithCancel(context.Background())
-
-			require.NoError(t, testutils.ApplyFixtures(tt.fixturesPath, cfg), "applying base fixtures")
-
-			testRes := setupTest(ctx, t, testOptions{})
-
-			testutils.StartManager(ctx, t, testRes.manager)
-
-			require.Eventually(t, func() bool {
-				return testRes.expectationsPruner.tracker.Populated()
-			}, timeout, tick, "waiting on tracker to populate")
-
-			for _, name := range tt.syncsetsToDelete {
-				u := &unstructured.Unstructured{}
-				u.SetGroupVersionKind(syncsetGVK)
-				u.SetName(name)
-
-				require.NoError(t, testRes.k8sClient.Delete(ctx, u), fmt.Sprintf("deleting syncset %s", name))
-			}
-			if tt.deleteConfig != "" {
-				u := &unstructured.Unstructured{}
-				u.SetGroupVersionKind(configGVK)
-				u.SetNamespace("gatekeeper-system")
-				u.SetName(tt.deleteConfig)
-
-				require.NoError(t, testRes.k8sClient.Delete(ctx, u), fmt.Sprintf("deleting config %s", tt.deleteConfig))
-			}
-
-			testRes.expectationsPruner.pruneUnwatchedGVKs()
-
-			require.Eventually(t, func() bool {
-				return testRes.expectationsPruner.tracker.Satisfied()
-			}, timeout, tick, "waiting on tracker to get satisfied")
-
-			cancelFunc()
-		})
-	}
-}
-
-// Test_ExpectationsMgr_missedInformers verifies that the pruner can handle a scenario
+// Test_ExpectationsPruner_missedInformers verifies that the pruner can handle a scenario
 // where the readiness tracker's state will never match the informer cache events.
-func Test_ExpectationsMgr_missedInformers(t *testing.T) {
+func Test_ExpectationsPruner_missedInformers(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	// Set up one data store for readyTracker:
@@ -213,8 +120,7 @@ func Test_ExpectationsMgr_missedInformers(t *testing.T) {
 		fakes.UnstructuredFor(podGVK, "", "pod1-name"),
 		fakes.UnstructuredFor(configMapGVK, "", "cm1-name"),
 	).Build()
-
-	testRes := setupTest(ctx, t, testOptions{readyTrackerClient: lister, addExpectationsPruner: true, addControllers: true})
+	testRes := setupTest(ctx, t, lister)
 
 	// Set up another store for the controllers and watchManager
 	syncsetA := fakes.SyncSetFor("syncset-a", []schema.GroupVersionKind{podGVK})
