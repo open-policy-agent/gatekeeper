@@ -210,12 +210,10 @@ func TestCacheManager_concurrent(t *testing.T) {
 	agg.IsPresent(configMapGVK)
 	gvks := agg.List(syncSourceOne)
 	require.Len(t, gvks, 1)
-	_, foundConfigMap := gvks[configMapGVK]
-	require.True(t, foundConfigMap)
+	require.Equal(t, configMapGVK, gvks[0])
 	gvks = agg.List(syncSourceTwo)
 	require.Len(t, gvks, 1)
-	_, foundPod := gvks[podGVK]
-	require.True(t, foundPod)
+	require.Equal(t, podGVK, gvks[0])
 
 	// do a final remove and expect the cache to clear
 	require.NoError(t, cacheManager.RemoveSource(ctx, syncSourceOne))

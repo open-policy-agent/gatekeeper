@@ -603,7 +603,7 @@ func TestCacheManager_RemoveSource(t *testing.T) {
 			cm, ctx := makeCacheManager(t)
 			// seed the cachemanager internals
 			for _, s := range tc.existingSources {
-				require.NoError(t, cm.gvksToSync.Upsert(s.key, s.gvks))
+				cm.gvksToSync.Upsert(s.key, s.gvks)
 			}
 
 			for _, source := range tc.sourcesToRemove {

@@ -204,7 +204,7 @@ func Test_GVKAggregator_Upsert(t *testing.T) {
 			agg := NewGVKAggregator()
 
 			for _, keyGVKs := range tt.keyGVKs {
-				require.NoError(t, agg.Upsert(keyGVKs.key, keyGVKs.gvks))
+				agg.Upsert(keyGVKs.key, keyGVKs.gvks)
 			}
 
 			// require all gvks added to be present in the aggregator
@@ -218,8 +218,7 @@ func Test_GVKAgreggator_Remove(t *testing.T) {
 	t.Run("Remove on empty aggregator", func(t *testing.T) {
 		b := NewGVKAggregator()
 		key := Key{Source: "testSource", ID: "testID"}
-
-		require.NoError(t, b.Remove(key))
+		b.Remove(key)
 	})
 
 	t.Run("Remove non-existing key", func(t *testing.T) {
@@ -227,49 +226,34 @@ func Test_GVKAgreggator_Remove(t *testing.T) {
 		key1 := Key{Source: syncset, ID: "testID1"}
 		key2 := Key{Source: configsync, ID: "testID2"}
 		gvks := []schema.GroupVersionKind{g1v1k1, g1v1k2}
-		require.NoError(t, b.Upsert(key1, gvks))
-
-		require.NoError(t, b.Remove(key2))
+		b.Upsert(key1, gvks)
+		b.Remove(key2)
 	})
 
 	t.Run("Remove existing key and verify reverseStore", func(t *testing.T) {
 		b := NewGVKAggregator()
 		key1 := Key{Source: syncset, ID: "testID"}
 		gvks := []schema.GroupVersionKind{g1v1k1, g1v1k2}
-		require.NoError(t, b.Upsert(key1, gvks))
-
-		require.NoError(t, b.Remove(key1))
+		b.Upsert(key1, gvks)
+		b.Remove(key1)
 
 		for _, gvk := range gvks {
 			require.False(t, b.IsPresent(gvk))
 		}
 	})
 
-	t.Run("Remove existing 1 of existing keys referencing GVKs", func(t *testing.T) {
+	t.Run("Remove 1 of existing keys referencing GVKs", func(t *testing.T) {
 		b := NewGVKAggregator()
 		key1 := Key{Source: syncset, ID: "testID"}
 		key2 := Key{Source: configsync, ID: "testID"}
 		gvks := []schema.GroupVersionKind{g1v1k1, g1v1k2}
-		require.NoError(t, b.Upsert(key1, gvks))
-		require.NoError(t, b.Upsert(key2, gvks))
-
-		require.NoError(t, b.Remove(key1))
+		b.Upsert(key1, gvks)
+		b.Upsert(key2, gvks)
+		b.Remove(key1)
 
 		for _, gvk := range gvks {
 			require.True(t, b.IsPresent(gvk))
 		}
-	})
-
-	t.Run("corrupted GVKAggregator error", func(t *testing.T) {
-		b := NewGVKAggregator()
-		key := Key{Source: syncset, ID: "testID"}
-
-		// simulate a corrupted aggreagator
-		require.NoError(t, b.Upsert(key, []schema.GroupVersionKind{g1v1k1}))
-		b.reverseStore[g1v1k1] = map[Key]struct{}{}
-
-		err2 := b.Remove(key)
-		require.EqualError(t, err2, fmt.Sprintf("internal aggregator error: gvks stores are corrupted for key: {%s %s}", key.Source, key.ID))
 	})
 }
 
@@ -333,7 +317,7 @@ func Test_GVKAggregator_ListNotShared(t *testing.T) {
 			agg := NewGVKAggregator()
 
 			for _, keyGVKs := range tt.keyGVKs {
-				require.NoError(t, agg.Upsert(keyGVKs.key, keyGVKs.gvks))
+				agg.Upsert(keyGVKs.key, keyGVKs.gvks)
 			}
 
 			require.ElementsMatch(t, tt.expectedNotShared, agg.ListNotShared(syncSetKey))
@@ -355,8 +339,8 @@ func Test_GVKAggreggator_E2E(t *testing.T) {
 	gvksKind1 := []schema.GroupVersionKind{g1v1k1, g2v1k1, g2v2k1}
 	gvksKind2 := []schema.GroupVersionKind{g1v1k2, g2v1k2, g2v2k2}
 
-	require.NoError(t, b.Upsert(key1, gvksKind1)) // key1 now has: g1v1k1, g2v1k1, g2v2k1
-	require.NoError(t, b.Upsert(key2, gvksKind2)) // key2 now has: g1v1k2, g2v1k2, g2v2k2
+	b.Upsert(key1, gvksKind1) // key1 now has: g1v1k1, g2v1k1, g2v2k1
+	b.Upsert(key2, gvksKind2) // key2 now has: g1v1k2, g2v1k2, g2v2k2
 
 	// require that every gvk that was just added to be present
 	gvksThatShouldBeTracked := map[schema.GroupVersionKind]interface{}{
@@ -372,8 +356,8 @@ func Test_GVKAggreggator_E2E(t *testing.T) {
 	gvksVersion2 := []schema.GroupVersionKind{g1v2k1, g1v2k2, g2v2k1, g2v2k2} // overlaps key1 with g2v2k1; overlaps key2 with g2v2k2
 
 	// new upserts
-	require.NoError(t, b.Upsert(key1, gvksVersion1)) // key1 no longer associates g2v2k1, but key2 does
-	require.NoError(t, b.Upsert(key2, gvksVersion2)) // key2 no longer associaates g1v1k2, but key1 does
+	b.Upsert(key1, gvksVersion1) // key1 no longer associates g2v2k1, but key2 does
+	b.Upsert(key2, gvksVersion2) // key2 no longer associaates g1v1k2, but key1 does
 
 	// require that every gvk that was just added now and before to be present
 	for _, gvk := range append(append([]schema.GroupVersionKind{}, gvksVersion1...), gvksVersion2...) {
@@ -386,7 +370,7 @@ func Test_GVKAggreggator_E2E(t *testing.T) {
 	// key1 has: g1v1k1, g2v1k1, g1v1k2, g2v1k2
 	// key2 has: g2v2k2, g1v2k1, g1v2k2, g2v2k1
 	// now remove key1
-	require.NoError(t, b.Remove(key1))
+	b.Remove(key1)
 
 	// untrack gvks that shouldn't exist in the
 	for _, gvk := range []schema.GroupVersionKind{g1v1k1, g2v1k1, g1v1k2, g2v1k2} {
@@ -403,7 +387,7 @@ func Test_GVKAggreggator_E2E(t *testing.T) {
 
 	// overwrite key2
 	gvksGroup3 := []schema.GroupVersionKind{g3v1k1, g3v1k2}
-	require.NoError(t, b.Upsert(key2, gvksGroup3))
+	b.Upsert(key2, gvksGroup3)
 
 	// require all previously added gvks to not be present:
 	testPresenceForGVK(t, false, b, gvksKind1...)

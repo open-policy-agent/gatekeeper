@@ -116,14 +116,11 @@ func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Ke
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	currentGVKsForKey := c.gvksToSync.List(sourceKey)
 	if len(newGVKs) > 0 {
-		if err := c.gvksToSync.Upsert(sourceKey, newGVKs); err != nil {
-			return fmt.Errorf("internal error adding source: %w", err)
-		}
+		c.gvksToSync.Upsert(sourceKey, newGVKs)
 	} else {
-		if err := c.gvksToSync.Remove(sourceKey); err != nil {
-			return fmt.Errorf("internal error removing source: %w", err)
-		}
+		c.gvksToSync.Remove(sourceKey)
 	}
 
 	// as a result of upserting the new gvks for the source key, some gvks
@@ -144,6 +141,12 @@ func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Ke
 		for _, g := range gvksToTryCancel {
 			c.tracker.TryCancelData(g)
 		}
+
+		// restore the gvk aggregator's key before sending out the error so clients can retry
+		if len(currentGVKsForKey) > 0 {
+			c.gvksToSync.Upsert(sourceKey, currentGVKsForKey)
+		}
+
 		return fmt.Errorf("error establishing watches: %w", err)
 	}
 
@@ -201,13 +204,17 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	currentGVKsForKey := c.gvksToSync.List(sourceKey)
 	gvksNotShared := c.gvksToSync.ListNotShared(sourceKey)
-	if err := c.gvksToSync.Remove(sourceKey); err != nil {
-		return fmt.Errorf("internal error removing source: %w", err)
-	}
 
+	c.gvksToSync.Remove(sourceKey)
 	err := c.replaceWatchSet(ctx)
 	if general, failedGVKs := interpretErr(err, gvksNotShared); general || len(failedGVKs) > 0 {
+		// restore the gvk aggregator before sending out the error so clients can retry
+		if len(currentGVKsForKey) > 0 {
+			c.gvksToSync.Upsert(sourceKey, currentGVKsForKey)
+		}
+
 		return fmt.Errorf("error removing watches for source %v: %w", sourceKey, err)
 	}
 

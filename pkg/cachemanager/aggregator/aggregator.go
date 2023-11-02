@@ -1,7 +1,6 @@
 package aggregator
 
 import (
-	"fmt"
 	gosync "sync"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -49,30 +48,25 @@ func (b *GVKAgreggator) IsPresent(gvk schema.GroupVersionKind) bool {
 // Remove deletes any associations that Key k has in the GVKAggregator.
 // For any GVK in the association k --> [GVKs], we also delete any associations
 // between the GVK and the Key k stored in the reverse map.
-func (b *GVKAgreggator) Remove(k Key) error {
+func (b *GVKAgreggator) Remove(k Key) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	gvks, found := b.store[k]
 	if !found {
-		return nil
+		return
 	}
 
-	if err := b.pruneReverseStore(gvks, k); err != nil {
-		return err
-	}
+	b.pruneReverseStore(gvks, k)
 
 	delete(b.store, k)
-	return nil
 }
 
 // Upsert stores an association between Key k and the list of GVKs
 // and also the reverse associatoin between each GVK passed in and Key k.
 // Any old associations are dropped, unless they are included in the new list of
 // GVKs.
-// It errors out if there is an internal issue with remove the reverse Key links
-// for any GVKs that are being dropped as part of this Upsert call.
-func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
+func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -80,15 +74,13 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 	if found {
 		// gvksToRemove contains old GKVs that are not included in the new gvks list
 		gvksToRemove := unreferencedOldGVKsToPrune(gvks, oldGVKs)
-		if err := b.pruneReverseStore(gvksToRemove, k); err != nil {
-			return fmt.Errorf("failed to prune entries on upsert: %w", err)
-		}
+		b.pruneReverseStore(gvksToRemove, k)
 	}
 
 	// protect against empty inputs
 	gvksSet := makeSet(gvks)
 	if len(gvksSet) == 0 {
-		return nil
+		return
 	}
 
 	b.store[k] = gvksSet
@@ -99,19 +91,17 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) error {
 		}
 		b.reverseStore[gvk][k] = struct{}{}
 	}
-
-	return nil
 }
 
 // List returnes the gvk set for a given Key.
-func (b *GVKAgreggator) List(k Key) map[schema.GroupVersionKind]struct{} {
+func (b *GVKAgreggator) List(k Key) []schema.GroupVersionKind {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	v := b.store[k]
-	cpy := make(map[schema.GroupVersionKind]struct{}, len(v))
-	for key, value := range v {
-		cpy[key] = value
+	cpy := []schema.GroupVersionKind{}
+	for key := range v {
+		cpy = append(cpy, key)
 	}
 	return cpy
 }
@@ -149,13 +139,13 @@ func (b *GVKAgreggator) GVKs() []schema.GroupVersionKind {
 	return allGVKs
 }
 
-func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struct{}, k Key) error {
+func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struct{}, k Key) {
 	for gvk := range gvks {
 		keySet, found := b.reverseStore[gvk]
-		if !found || len(keySet) == 0 {
+		if !found {
 			// this should not happen if we keep the two maps well defined
 			// but let's be defensive nonetheless.
-			return fmt.Errorf("internal aggregator error: gvks stores are corrupted for key: %s", k)
+			return
 		}
 
 		delete(keySet, k)
@@ -167,8 +157,6 @@ func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struc
 			b.reverseStore[gvk] = keySet
 		}
 	}
-
-	return nil
 }
 
 func makeSet(gvks []schema.GroupVersionKind) map[schema.GroupVersionKind]struct{} {
