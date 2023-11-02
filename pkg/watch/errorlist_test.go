@@ -25,7 +25,7 @@ func Test_WatchesError(t *testing.T) {
 		generalErr   bool
 	}{
 		{
-			name: "gvk errors, no global",
+			name: "gvk errors, not general",
 			errsToAdd: errsToAdd{
 				gvkErrs: []gvkErr{
 					{err: someErr, gvk: someGVKA},
@@ -36,7 +36,7 @@ func Test_WatchesError(t *testing.T) {
 			generalErr:   false,
 		},
 		{
-			name: "gvk errors and global",
+			name: "gvk errors and general error",
 			errsToAdd: errsToAdd{
 				gvkErrs: []gvkErr{
 					{err: someErr, gvk: someGVKA},
@@ -48,7 +48,7 @@ func Test_WatchesError(t *testing.T) {
 			generalErr:   true,
 		},
 		{
-			name: "just global",
+			name: "just general error",
 			errsToAdd: errsToAdd{
 				errs: []error{someErr},
 			},

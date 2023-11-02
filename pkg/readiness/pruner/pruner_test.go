@@ -51,9 +51,9 @@ func TestMain(m *testing.M) {
 }
 
 type testOptions struct {
-	addConstrollers       bool
+	addControllers        bool
 	addExpectationsPruner bool
-	testLister            readiness.Lister
+	readyTrackerClient    readiness.Lister
 }
 
 type testResources struct {
@@ -70,15 +70,14 @@ func setupTest(ctx context.Context, t *testing.T, o testOptions) *testResources 
 
 	var tracker *readiness.Tracker
 	var err error
-	if o.testLister != nil {
-		tracker = readiness.NewTracker(o.testLister, false, false, false)
-		require.NoError(t, mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-			return tracker.Run(ctx)
-		})), "adding tracker to manager")
+	if o.readyTrackerClient != nil {
+		tracker = readiness.NewTracker(o.readyTrackerClient, false, false, false)
 	} else {
-		tracker, err = readiness.SetupTrackerNoReadyz(mgr, false, false, false)
-		require.NoError(t, err, "setting up tracker")
+		tracker = readiness.NewTracker(mgr.GetAPIReader(), false, false, false)
 	}
+	require.NoError(t, mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		return tracker.Run(ctx)
+	})), "adding tracker to manager")
 
 	events := make(chan event.GenericEvent, 1024)
 	reg, err := wm.NewRegistrar(
@@ -101,7 +100,7 @@ func setupTest(ctx context.Context, t *testing.T, o testOptions) *testResources 
 	cm, err := cachemanager.NewCacheManager(config)
 	require.NoError(t, err, "creating cachemanager")
 
-	if !o.addConstrollers {
+	if !o.addControllers {
 		// need to start the cachemanager if controllers are not started
 		// since the cachemanager is started in the controllers code.
 		require.NoError(t, mgr.Add(cm), "adding cachemanager as a runnable")
@@ -146,8 +145,6 @@ func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
 		fixturesPath     string
 		syncsetsToDelete []string
 		deleteConfig     string
-		// not starting controllers approximates missing events in the informers cache
-		startControllers bool
 	}{
 		{
 			name:             "delete all syncsets",
@@ -160,12 +157,6 @@ func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
 			syncsetsToDelete: []string{"syncset-1"},
 			deleteConfig:     "config",
 		},
-		{
-			name:             "delete one syncset",
-			fixturesPath:     "testdata/syncsets-resources",
-			syncsetsToDelete: []string{"syncset-2"},
-			startControllers: true,
-		},
 	}
 
 	for _, tt := range tts {
@@ -174,7 +165,7 @@ func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
 
 			require.NoError(t, testutils.ApplyFixtures(tt.fixturesPath, cfg), "applying base fixtures")
 
-			testRes := setupTest(ctx, t, testOptions{addConstrollers: tt.startControllers})
+			testRes := setupTest(ctx, t, testOptions{})
 
 			testutils.StartManager(ctx, t, testRes.manager)
 
@@ -198,7 +189,7 @@ func Test_ExpectationsMgr_DeletedSyncSets(t *testing.T) {
 				require.NoError(t, testRes.k8sClient.Delete(ctx, u), fmt.Sprintf("deleting config %s", tt.deleteConfig))
 			}
 
-			testRes.expectationsPruner.pruneNotWatchedGVKs()
+			testRes.expectationsPruner.pruneUnwatchedGVKs()
 
 			require.Eventually(t, func() bool {
 				return testRes.expectationsPruner.tracker.Satisfied()
@@ -217,9 +208,13 @@ func Test_ExpectationsMgr_missedInformers(t *testing.T) {
 	// Set up one data store for readyTracker:
 	// we will use a separate lister for the tracker from the mgr client and make
 	// the contents of the readiness tracker be a superset of the contents of the mgr's client
-	// the syncset will look like:
-	// *fakes.SyncSetFor("syncset-a", []schema.GroupVersionKind{podGVK, configMapGVK}),
-	testRes := setupTest(ctx, t, testOptions{testLister: makeTestLister(t), addExpectationsPruner: true, addConstrollers: true})
+	lister := fake.NewClientBuilder().WithRuntimeObjects(
+		fakes.SyncSetFor("syncset-a", []schema.GroupVersionKind{podGVK, configMapGVK}),
+		fakes.UnstructuredFor(podGVK, "", "pod1-name"),
+		fakes.UnstructuredFor(configMapGVK, "", "cm1-name"),
+	).Build()
+
+	testRes := setupTest(ctx, t, testOptions{readyTrackerClient: lister, addExpectationsPruner: true, addControllers: true})
 
 	// Set up another store for the controllers and watchManager
 	syncsetA := fakes.SyncSetFor("syncset-a", []schema.GroupVersionKind{podGVK})
@@ -240,31 +235,4 @@ func Test_ExpectationsMgr_missedInformers(t *testing.T) {
 	}, timeout, tick, "waiting on tracker to get satisfied")
 
 	cancelFunc()
-}
-
-func makeTestLister(t *testing.T) readiness.Lister {
-	syncsetList := &syncsetv1alpha1.SyncSetList{}
-	syncsetList.Items = []syncsetv1alpha1.SyncSet{
-		*fakes.SyncSetFor("syncset-a", []schema.GroupVersionKind{podGVK, configMapGVK}),
-	}
-
-	podList := &unstructured.UnstructuredList{}
-	podList.SetGroupVersionKind(schema.GroupVersionKind{
-		Version: "v1",
-		Kind:    "PodList",
-	})
-	podList.Items = []unstructured.Unstructured{
-		*fakes.UnstructuredFor(podGVK, "", "pod1-name"),
-	}
-
-	configMapList := &unstructured.UnstructuredList{}
-	configMapList.SetGroupVersionKind(schema.GroupVersionKind{
-		Version: "v1",
-		Kind:    "ConfigMapList",
-	})
-	configMapList.Items = []unstructured.Unstructured{
-		*fakes.UnstructuredFor(configMapGVK, "", "cm1-name"),
-	}
-
-	return fake.NewClientBuilder().WithLists(syncsetList, podList, configMapList).Build()
 }

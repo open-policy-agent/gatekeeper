@@ -20,7 +20,6 @@ import (
 
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -132,6 +131,26 @@ func (f *FakeCfClient) HasGVK(gvk schema.GroupVersionKind) bool {
 	return false
 }
 
+// ContainsGVKs returns true if the cache has data for the gvks given and those gvks only.
+func (f *FakeCfClient) ContainsGVKs(gvks []schema.GroupVersionKind) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	gvkMap := map[schema.GroupVersionKind]struct{}{}
+	for _, gvk := range gvks {
+		gvkMap[gvk] = struct{}{}
+	}
+
+	foundMap := map[schema.GroupVersionKind]struct{}{}
+	for k := range f.data {
+		if _, found := gvkMap[k.Gvk]; !found {
+			return false
+		}
+		foundMap[k.Gvk] = struct{}{}
+	}
+	return len(foundMap) == len(gvkMap)
+}
+
 // Len returns the number of items in the cache.
 func (f *FakeCfClient) Len() int {
 	f.mu.Lock()
@@ -144,28 +163,4 @@ func (f *FakeCfClient) SetErroring(enabled bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.needsToError = enabled
-}
-
-func UnstructuredFor(gvk schema.GroupVersionKind, namespace, name string) *unstructured.Unstructured {
-	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(gvk)
-	u.SetName(name)
-	if namespace == "" {
-		u.SetNamespace("default")
-	} else {
-		u.SetNamespace(namespace)
-	}
-
-	if gvk.Kind == "Pod" {
-		u.Object["spec"] = map[string]interface{}{
-			"containers": []interface{}{
-				map[string]interface{}{
-					"name":  "foo-container",
-					"image": "foo-image",
-				},
-			},
-		}
-	}
-
-	return u
 }

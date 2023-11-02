@@ -201,12 +201,13 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	gvksNotShared := c.gvksToSync.ListNotShared(sourceKey)
 	if err := c.gvksToSync.Remove(sourceKey); err != nil {
 		return fmt.Errorf("internal error removing source: %w", err)
 	}
 
 	err := c.replaceWatchSet(ctx)
-	if general, _ := interpretErr(err, []schema.GroupVersionKind{}); general {
+	if general, failedGVKs := interpretErr(err, gvksNotShared); general || len(failedGVKs) > 0 {
 		return fmt.Errorf("error removing watches for source %v: %w", sourceKey, err)
 	}
 

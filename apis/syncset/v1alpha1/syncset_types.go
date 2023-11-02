@@ -26,7 +26,7 @@ func (e *GVKEntry) ToGroupVersionKind() schema.GroupVersionKind {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:object:root=true
 
-// SyncSet is the Schema for the SyncSet API.
+// SyncSet defines which resources Gatekeeper will cache. The union of all SyncSets plus the syncOnly field of Gatekeeper's Config resource defines the sets of resources that will be synced.
 type SyncSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

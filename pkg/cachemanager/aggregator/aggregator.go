@@ -116,6 +116,27 @@ func (b *GVKAgreggator) List(k Key) map[schema.GroupVersionKind]struct{} {
 	return cpy
 }
 
+// List returnes the gvks for a given Key that are not referenced by any other Key.
+func (b *GVKAgreggator) ListNotShared(k Key) []schema.GroupVersionKind {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	gvks := b.store[k]
+	gvksToReturn := []schema.GroupVersionKind{}
+	for gvk := range gvks {
+		keys, ok := b.reverseStore[gvk]
+		if !ok {
+			continue
+		}
+
+		if len(keys) == 1 { // by definition this Key k is the only one referencing this gvk
+			gvksToReturn = append(gvksToReturn, gvk)
+		}
+	}
+
+	return gvksToReturn
+}
+
 // GVKs returns a list of all of the schema.GroupVersionKind that are aggregated.
 func (b *GVKAgreggator) GVKs() []schema.GroupVersionKind {
 	b.mu.RLock()

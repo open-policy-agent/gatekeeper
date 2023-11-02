@@ -748,7 +748,7 @@ func (t *Tracker) trackSyncSources(ctx context.Context) error {
 
 	cfg, err := t.getConfigResource(ctx)
 	if err != nil {
-		log.Error(err, "fetching config resource")
+		return fmt.Errorf("fetching config resource: %w", err)
 	}
 	if cfg == nil {
 		log.Info("config resource not found - skipping for readiness")
@@ -773,24 +773,23 @@ func (t *Tracker) trackSyncSources(ctx context.Context) error {
 	syncsets := &syncsetv1alpha1.SyncSetList{}
 	lister := retryLister(t.lister, retryAll)
 	if err := lister.List(ctx, syncsets); err != nil {
-		log.Error(err, "listing syncsets")
-	} else {
-		log.V(logging.DebugLevel).Info("setting expectations for syncsets", "syncsetCount", len(syncsets.Items))
+		return fmt.Errorf("fetching syncset resources: %w", err)
+	}
 
-		for i := range syncsets.Items {
-			syncset := syncsets.Items[i]
+	log.V(logging.DebugLevel).Info("setting expectations for syncsets", "syncsetCount", len(syncsets.Items))
+	for i := range syncsets.Items {
+		syncset := syncsets.Items[i]
 
-			t.syncsets.Expect(&syncset)
-			log.V(logging.DebugLevel).Info("expecting syncset", "name", syncset.GetName(), "namespace", syncset.GetNamespace())
+		t.syncsets.Expect(&syncset)
+		log.V(logging.DebugLevel).Info("expecting syncset", "name", syncset.GetName(), "namespace", syncset.GetNamespace())
 
-			for i := range syncset.Spec.GVKs {
-				gvk := syncset.Spec.GVKs[i].ToGroupVersionKind()
-				if _, ok := dataGVKs[gvk]; ok {
-					log.Info("duplicate GVK to sync", "gvk", gvk)
-				}
-
-				dataGVKs[gvk] = struct{}{}
+		for i := range syncset.Spec.GVKs {
+			gvk := syncset.Spec.GVKs[i].ToGroupVersionKind()
+			if _, ok := dataGVKs[gvk]; ok {
+				log.Info("duplicate GVK to sync", "gvk", gvk)
 			}
+
+			dataGVKs[gvk] = struct{}{}
 		}
 	}
 

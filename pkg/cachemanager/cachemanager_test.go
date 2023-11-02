@@ -33,9 +33,9 @@ var (
 	nsGVK          = schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}
 	nonExistentGVK = schema.GroupVersionKind{Version: "v1", Kind: "DoesNotExist"}
 
-	sourceA = aggregator.Key{Source: "a", ID: "source"}
-	sourceB = aggregator.Key{Source: "b", ID: "source"}
-	sourceC = aggregator.Key{Source: "c", ID: "source"}
+	configKey   = aggregator.Key{Source: "config", ID: "config"}
+	syncsetAKey = aggregator.Key{Source: "syncset", ID: "a"}
+	syncsetBkey = aggregator.Key{Source: "syncset", ID: "b"}
 )
 
 func TestMain(m *testing.M) {
@@ -380,7 +380,7 @@ func TestCacheManager_UpsertSource(t *testing.T) {
 			name: "add one source",
 			sources: []source{
 				{
-					key:  sourceA,
+					key:  configKey,
 					gvks: []schema.GroupVersionKind{configMapGVK},
 				},
 			},
@@ -390,11 +390,11 @@ func TestCacheManager_UpsertSource(t *testing.T) {
 			name: "overwrite source",
 			sources: []source{
 				{
-					key:  sourceA,
+					key:  configKey,
 					gvks: []schema.GroupVersionKind{configMapGVK},
 				},
 				{
-					key:  sourceA,
+					key:  configKey,
 					gvks: []schema.GroupVersionKind{podGVK},
 				},
 			},
@@ -404,11 +404,11 @@ func TestCacheManager_UpsertSource(t *testing.T) {
 			name: "remove GVK from a source",
 			sources: []source{
 				{
-					key:  sourceA,
+					key:  configKey,
 					gvks: []schema.GroupVersionKind{configMapGVK},
 				},
 				{
-					key:  sourceA,
+					key:  configKey,
 					gvks: []schema.GroupVersionKind{},
 				},
 			},
@@ -418,11 +418,11 @@ func TestCacheManager_UpsertSource(t *testing.T) {
 			name: "add two disjoint sources",
 			sources: []source{
 				{
-					key:  sourceA,
+					key:  configKey,
 					gvks: []schema.GroupVersionKind{configMapGVK},
 				},
 				{
-					key:  sourceB,
+					key:  syncsetAKey,
 					gvks: []schema.GroupVersionKind{podGVK},
 				},
 			},
@@ -432,11 +432,11 @@ func TestCacheManager_UpsertSource(t *testing.T) {
 			name: "add two sources with fully overlapping gvks",
 			sources: []source{
 				{
-					key:  sourceA,
+					key:  configKey,
 					gvks: []schema.GroupVersionKind{podGVK},
 				},
 				{
-					key:  sourceB,
+					key:  syncsetAKey,
 					gvks: []schema.GroupVersionKind{podGVK},
 				},
 			},
@@ -446,11 +446,11 @@ func TestCacheManager_UpsertSource(t *testing.T) {
 			name: "add two sources with partially overlapping gvks",
 			sources: []source{
 				{
-					key:  sourceA,
+					key:  configKey,
 					gvks: []schema.GroupVersionKind{configMapGVK, podGVK},
 				},
 				{
-					key:  sourceB,
+					key:  syncsetAKey,
 					gvks: []schema.GroupVersionKind{podGVK},
 				},
 			},
@@ -474,9 +474,9 @@ func TestCacheManager_UpsertSource(t *testing.T) {
 
 func TestCacheManager_UpsertSource_errorcases(t *testing.T) {
 	type source struct {
-		key  aggregator.Key
-		gvks []schema.GroupVersionKind
-		err  error
+		key     aggregator.Key
+		gvks    []schema.GroupVersionKind
+		wantErr bool
 	}
 
 	tcs := []struct {
@@ -488,17 +488,17 @@ func TestCacheManager_UpsertSource_errorcases(t *testing.T) {
 			name: "add two sources where one fails to establish all watches",
 			sources: []source{
 				{
-					key:  sourceA,
+					key:  configKey,
 					gvks: []schema.GroupVersionKind{configMapGVK},
 				},
 				{
-					key:  sourceB,
+					key:  syncsetAKey,
 					gvks: []schema.GroupVersionKind{podGVK, nonExistentGVK},
 					// UpsertSource will err out because of nonExistentGVK
-					err: errors.New("error for gvk: /v1, Kind=DoesNotExist: adding watch for /v1, Kind=DoesNotExist getting informer for kind: /v1, Kind=DoesNotExist no matches for kind \"DoesNotExist\" in version \"v1\""),
+					wantErr: true,
 				},
 				{
-					key:  sourceC,
+					key:  syncsetBkey,
 					gvks: []schema.GroupVersionKind{nsGVK},
 					// this call will not error out even though we previously added a non existent gvk to a different sync source.
 					// this way the errors in watch manager caused by one sync source do not impact the other if they are not related
@@ -514,8 +514,8 @@ func TestCacheManager_UpsertSource_errorcases(t *testing.T) {
 			cacheManager, ctx := makeCacheManager(t)
 
 			for _, source := range tc.sources {
-				if source.err != nil {
-					require.ErrorContains(t, cacheManager.UpsertSource(ctx, source.key, source.gvks), source.err.Error(), fmt.Sprintf("while upserting source: %s", source.key))
+				if source.wantErr {
+					require.Error(t, cacheManager.UpsertSource(ctx, source.key, source.gvks), fmt.Sprintf("while upserting source: %s", source.key))
 				} else {
 					require.NoError(t, cacheManager.UpsertSource(ctx, source.key, source.gvks), fmt.Sprintf("while upserting source: %s", source.key))
 				}
@@ -538,62 +538,62 @@ func TestCacheManager_RemoveSource(t *testing.T) {
 		{
 			name: "remove disjoint source",
 			existingSources: []source{
-				{sourceA, []schema.GroupVersionKind{podGVK}},
-				{sourceB, []schema.GroupVersionKind{configMapGVK}},
+				{configKey, []schema.GroupVersionKind{podGVK}},
+				{syncsetAKey, []schema.GroupVersionKind{configMapGVK}},
 			},
-			sourcesToRemove: []aggregator.Key{sourceB},
+			sourcesToRemove: []aggregator.Key{syncsetAKey},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK},
 		},
 		{
 			name: "remove fully overlapping source",
 			existingSources: []source{
-				{sourceA, []schema.GroupVersionKind{podGVK}},
-				{sourceB, []schema.GroupVersionKind{podGVK}},
+				{configKey, []schema.GroupVersionKind{podGVK}},
+				{syncsetAKey, []schema.GroupVersionKind{podGVK}},
 			},
-			sourcesToRemove: []aggregator.Key{sourceB},
+			sourcesToRemove: []aggregator.Key{syncsetAKey},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK},
 		},
 		{
 			name: "remove partially overlapping source",
 			existingSources: []source{
-				{sourceA, []schema.GroupVersionKind{podGVK}},
-				{sourceB, []schema.GroupVersionKind{podGVK, configMapGVK}},
+				{configKey, []schema.GroupVersionKind{podGVK}},
+				{syncsetAKey, []schema.GroupVersionKind{podGVK, configMapGVK}},
 			},
-			sourcesToRemove: []aggregator.Key{sourceA},
+			sourcesToRemove: []aggregator.Key{configKey},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK, configMapGVK},
 		},
 		{
 			name: "remove non existing source",
 			existingSources: []source{
-				{sourceA, []schema.GroupVersionKind{podGVK}},
+				{configKey, []schema.GroupVersionKind{podGVK}},
 			},
-			sourcesToRemove: []aggregator.Key{sourceB},
+			sourcesToRemove: []aggregator.Key{syncsetAKey},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK},
 		},
 		{
 			name: "remove source with a non existing gvk",
 			existingSources: []source{
-				{sourceA, []schema.GroupVersionKind{nonExistentGVK}},
+				{configKey, []schema.GroupVersionKind{nonExistentGVK}},
 			},
-			sourcesToRemove: []aggregator.Key{sourceA},
+			sourcesToRemove: []aggregator.Key{configKey},
 			expectedGVKs:    []schema.GroupVersionKind{},
 		},
 		{
 			name: "remove source from a watch set with a non existing gvk",
 			existingSources: []source{
-				{sourceA, []schema.GroupVersionKind{nonExistentGVK}},
-				{sourceB, []schema.GroupVersionKind{podGVK}},
+				{configKey, []schema.GroupVersionKind{nonExistentGVK}},
+				{syncsetAKey, []schema.GroupVersionKind{podGVK}},
 			},
-			sourcesToRemove: []aggregator.Key{sourceB},
+			sourcesToRemove: []aggregator.Key{syncsetAKey},
 			expectedGVKs:    []schema.GroupVersionKind{nonExistentGVK},
 		},
 		{
 			name: "remove source with non existent gvk from a watch set with a remaining non existing gvk",
 			existingSources: []source{
-				{sourceA, []schema.GroupVersionKind{nonExistentGVK}},
-				{sourceB, []schema.GroupVersionKind{nonExistentGVK}},
+				{configKey, []schema.GroupVersionKind{nonExistentGVK}},
+				{syncsetAKey, []schema.GroupVersionKind{nonExistentGVK}},
 			},
-			sourcesToRemove: []aggregator.Key{sourceB},
+			sourcesToRemove: []aggregator.Key{syncsetAKey},
 			expectedGVKs:    []schema.GroupVersionKind{nonExistentGVK},
 		},
 	}

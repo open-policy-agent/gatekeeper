@@ -34,7 +34,7 @@ var (
 	g3v1k2 = schema.GroupVersionKind{Group: "group3", Version: "v1", Kind: "Kind2"}
 )
 
-type upsertKeyGVKs struct {
+type keyedGVKs struct {
 	key  Key
 	gvks []schema.GroupVersionKind
 }
@@ -43,14 +43,14 @@ func Test_GVKAggregator_Upsert(t *testing.T) {
 	tests := []struct {
 		name string
 		// each entry in the list is a new Upsert call
-		keyGVKs []upsertKeyGVKs
+		keyGVKs []keyedGVKs
 
 		expectData map[Key]map[schema.GroupVersionKind]struct{}
 		expectRev  map[schema.GroupVersionKind]map[Key]struct{}
 	}{
 		{
 			name: "empty GVKs",
-			keyGVKs: []upsertKeyGVKs{
+			keyGVKs: []keyedGVKs{
 				{
 					key: Key{
 						Source: syncset,
@@ -64,7 +64,7 @@ func Test_GVKAggregator_Upsert(t *testing.T) {
 		},
 		{
 			name: "add one key and GVKs",
-			keyGVKs: []upsertKeyGVKs{
+			keyGVKs: []keyedGVKs{
 				{
 					key: Key{
 						Source: syncset,
@@ -99,7 +99,7 @@ func Test_GVKAggregator_Upsert(t *testing.T) {
 		},
 		{
 			name: "add two keys and GVKs",
-			keyGVKs: []upsertKeyGVKs{
+			keyGVKs: []keyedGVKs{
 				{
 					key: Key{
 						Source: syncset,
@@ -156,7 +156,7 @@ func Test_GVKAggregator_Upsert(t *testing.T) {
 		},
 		{
 			name: "add one key and overwrite it",
-			keyGVKs: []upsertKeyGVKs{
+			keyGVKs: []keyedGVKs{
 				{
 					key: Key{
 						Source: syncset,
@@ -271,6 +271,74 @@ func Test_GVKAgreggator_Remove(t *testing.T) {
 		err2 := b.Remove(key)
 		require.EqualError(t, err2, fmt.Sprintf("internal aggregator error: gvks stores are corrupted for key: {%s %s}", key.Source, key.ID))
 	})
+}
+
+func Test_GVKAggregator_ListNotShared(t *testing.T) {
+	syncSetKey := Key{Source: syncset, ID: "foo"} // we will list this key
+	configKey := Key{Source: configsync, ID: "foo"}
+
+	tests := []struct {
+		name    string
+		keyGVKs []keyedGVKs
+
+		expectedNotShared []schema.GroupVersionKind
+	}{
+		{
+			name: "all gvks shared",
+			keyGVKs: []keyedGVKs{
+				{
+					key:  syncSetKey,
+					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
+				},
+				{
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
+				},
+			},
+			expectedNotShared: []schema.GroupVersionKind{},
+		},
+		{
+			name: "no gvks shared",
+			keyGVKs: []keyedGVKs{
+				{
+					key:  syncSetKey,
+					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
+				},
+				{
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{g2v1k1, g2v1k2},
+				},
+			},
+			expectedNotShared: []schema.GroupVersionKind{g1v1k1, g1v1k2},
+		},
+		{
+			name: "some gvks shared",
+			keyGVKs: []keyedGVKs{
+				{
+					key:  syncSetKey,
+					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
+				},
+				{
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{g1v1k1, g2v1k2},
+				},
+			},
+			expectedNotShared: []schema.GroupVersionKind{g1v1k2},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt := tt
+			agg := NewGVKAggregator()
+
+			for _, keyGVKs := range tt.keyGVKs {
+				require.NoError(t, agg.Upsert(keyGVKs.key, keyGVKs.gvks))
+			}
+
+			require.ElementsMatch(t, tt.expectedNotShared, agg.ListNotShared(syncSetKey))
+		})
+	}
 }
 
 // Test_GVKAggreggator_E2E is a test that:

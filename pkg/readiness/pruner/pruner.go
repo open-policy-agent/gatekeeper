@@ -38,15 +38,15 @@ func (e *ExpectationsPruner) Start(ctx context.Context) error {
 				return nil
 			}
 			if e.tracker.SyncSourcesSatisfied() {
-				e.pruneNotWatchedGVKs()
+				e.pruneUnwatchedGVKs()
 			}
 		}
 	}
 }
 
-// pruneNotWatchedGVKs prunes data expectations that are no longer correct based on the up-to-date
+// pruneUnwatchedGVKs prunes data expectations that are no longer correct based on the up-to-date
 // information in the CacheManager.
-func (e *ExpectationsPruner) pruneNotWatchedGVKs() {
+func (e *ExpectationsPruner) pruneUnwatchedGVKs() {
 	watchedGVKs := watch.NewSet()
 	watchedGVKs.Add(e.cacheMgr.WatchedGVKs()...)
 	expectedGVKs := watch.NewSet()

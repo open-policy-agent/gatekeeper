@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -35,9 +35,9 @@ const (
 	tick    = time.Second * 2
 )
 
-// Test_ReconcileSyncSet_wConfigController verifies that SyncSet and Config resources
+// Test_ReconcileSyncSet verifies that SyncSet resources
 // can get reconciled and their respective specs are added to the data client.
-func Test_ReconcileSyncSet_wConfigController(t *testing.T) {
+func Test_ReconcileSyncSet(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
 
@@ -52,13 +52,6 @@ func Test_ReconcileSyncSet_wConfigController(t *testing.T) {
 	syncAdder := syncc.Adder{CacheManager: testRes.cacheMgr, Events: testRes.events}
 	require.NoError(t, syncAdder.Add(*testRes.mgr), "adding sync reconciler to mgr")
 
-	configAdder := config.Adder{
-		CacheManager:     testRes.cacheMgr,
-		ControllerSwitch: testRes.cs,
-		Tracker:          testRes.tracker,
-	}
-	require.NoError(t, configAdder.Add(*testRes.mgr), "adding config reconciler to mgr")
-
 	testutils.StartManager(ctx, t, *testRes.mgr)
 
 	require.NoError(t, testRes.k8sclient.Create(ctx, configMap), fmt.Sprintf("creating ConfigMap %s", "cm1-mame"))
@@ -66,52 +59,60 @@ func Test_ReconcileSyncSet_wConfigController(t *testing.T) {
 
 	tts := []struct {
 		name         string
-		syncSources  []client.Object
+		syncSources  []*syncsetv1alpha1.SyncSet
 		expectedGVKs []schema.GroupVersionKind
 	}{
 		{
-			name: "config and 1 sync",
-			syncSources: []client.Object{
-				fakes.ConfigFor([]schema.GroupVersionKind{configMapGVK, nsGVK}),
-				fakes.SyncSetFor("syncset1", []schema.GroupVersionKind{podGVK}),
-			},
-			expectedGVKs: []schema.GroupVersionKind{configMapGVK, podGVK, nsGVK},
-		},
-		{
-			name: "config only",
-			syncSources: []client.Object{
-				fakes.ConfigFor([]schema.GroupVersionKind{configMapGVK, nsGVK}),
-			},
-			expectedGVKs: []schema.GroupVersionKind{configMapGVK, nsGVK},
-		},
-		{
-			name: "syncset only",
-			syncSources: []client.Object{
+			name: "basic reconcile",
+			syncSources: []*syncsetv1alpha1.SyncSet{
 				fakes.SyncSetFor("syncset1", []schema.GroupVersionKind{configMapGVK, nsGVK}),
 			},
 			expectedGVKs: []schema.GroupVersionKind{configMapGVK, nsGVK},
+		},
+		{
+			name: "syncset adjusts spec",
+			syncSources: []*syncsetv1alpha1.SyncSet{
+				fakes.SyncSetFor("syncset1", []schema.GroupVersionKind{configMapGVK, nsGVK}),
+				fakes.SyncSetFor("syncset1", []schema.GroupVersionKind{nsGVK}),
+			},
+			expectedGVKs: []schema.GroupVersionKind{nsGVK},
 		},
 	}
 
 	for _, tt := range tts {
 		t.Run(tt.name, func(t *testing.T) {
+			created := map[string]struct{}{}
 			for _, o := range tt.syncSources {
-				require.NoError(t, testRes.k8sclient.Create(ctx, o))
+				if _, ok := created[o.GetName()]; ok {
+					curObj, ok := o.DeepCopyObject().(client.Object)
+					require.True(t, ok)
+					// eventually we should find the object
+					require.Eventually(t, func() bool {
+						return testRes.k8sclient.Get(ctx, client.ObjectKeyFromObject(curObj), curObj) == nil
+					}, timeout, tick, fmt.Sprintf("getting %s", o.GetName()))
+
+					o.SetResourceVersion(curObj.GetResourceVersion())
+					require.NoError(t, testRes.k8sclient.Update(ctx, o), fmt.Sprintf("updating %s", o.GetName()))
+				} else {
+					require.NoError(t, testRes.k8sclient.Create(ctx, o), fmt.Sprintf("creating %s", o.GetName()))
+					created[o.GetName()] = struct{}{}
+				}
 			}
 
 			assert.Eventually(t, func() bool {
-				for _, gvk := range tt.expectedGVKs {
-					if !testRes.cfClient.HasGVK(gvk) {
-						return false
-					}
-				}
-				return true
+				return testRes.cfClient.ContainsGVKs(tt.expectedGVKs)
 			}, timeout, tick)
 
 			// empty the cache to not leak state between tests
+			deleted := map[string]struct{}{}
 			for _, o := range tt.syncSources {
+				if _, ok := deleted[o.GetName()]; ok {
+					continue
+				}
 				require.NoError(t, testRes.k8sclient.Delete(ctx, o))
+				deleted[o.GetName()] = struct{}{}
 			}
+
 			require.Eventually(t, func() bool {
 				return testRes.cfClient.Len() == 0
 			}, timeout, tick, "could not cleanup")
@@ -126,7 +127,6 @@ type testResources struct {
 	wm        *watch.Manager
 	cfClient  *fakes.FakeCfClient
 	events    chan event.GenericEvent
-	cs        *watch.ControllerSwitch
 	tracker   *readiness.Tracker
 }
 
@@ -138,8 +138,6 @@ func setupTest(ctx context.Context, t *testing.T) testResources {
 
 	testRes := testResources{}
 
-	cs := watch.NewSwitch()
-	testRes.cs = cs
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	require.NoError(t, err)
 	testRes.tracker = tracker
@@ -166,7 +164,7 @@ func setupTest(ctx context.Context, t *testing.T) testResources {
 	testRes.k8sclient = c
 	testRes.wm = wm
 
-	rec, err := newReconciler(mgr, cm, cs, tracker)
+	rec, err := newReconciler(mgr, cm, tracker)
 	require.NoError(t, err)
 
 	require.NoError(t, add(mgr, rec))

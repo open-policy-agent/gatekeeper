@@ -22,17 +22,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+)
+
+const (
+	timeout = 10 * time.Second
+	tick    = 1 * time.Second
 )
 
 var (
@@ -62,50 +63,21 @@ var (
 		},
 	}
 
-	podGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+	podGVK = testSyncSet.Spec.GVKs[0].ToGroupVersionKind()
 )
 
-type testClientOptions struct {
-	listSyncSets            bool
-	listConstraintTemplates bool
-}
+var convertedTemplate v1beta1.ConstraintTemplate
 
-func makeTestClient(t *testing.T, o testClientOptions) client.WithWatch {
-	clb := fake.NewClientBuilder()
-
-	if o.listConstraintTemplates {
-		ctList := &v1beta1.ConstraintTemplateList{}
-		i := v1beta1.ConstraintTemplate{}
-		require.NoError(t, fakes.GetTestScheme().Convert(&testConstraintTemplate, &i, nil), "converting template")
-		ctList.Items = []v1beta1.ConstraintTemplate{i}
-
-		clb.WithLists(ctList)
+func init() {
+	if err := fakes.GetTestScheme().Convert(&testConstraintTemplate, &convertedTemplate, nil); err != nil {
+		panic(err)
 	}
-
-	if o.listSyncSets {
-		syncsetList := &syncsetv1alpha1.SyncSetList{}
-		syncsetList.Items = []syncsetv1alpha1.SyncSet{testSyncSet}
-
-		podList := &unstructured.UnstructuredList{}
-		podList.SetGroupVersionKind(schema.GroupVersionKind{
-			Version: "v1",
-			Kind:    "PodList",
-		})
-		podList.Items = []unstructured.Unstructured{
-			*fakes.UnstructuredFor(podGVK, "", "pod1-name"),
-		}
-
-		clb.WithLists(syncsetList, podList)
-	}
-
-	return clb.Build()
 }
 
 // Verify that TryCancelTemplate functions the same as regular CancelTemplate if readinessRetries is set to 0.
 func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
-	g := gomega.NewWithT(t)
-
-	rt := newTracker(makeTestClient(t, testClientOptions{listConstraintTemplates: true}), false, false, false, func() objData {
+	lister := fake.NewClientBuilder().WithRuntimeObjects(&convertedTemplate).Build()
+	rt := newTracker(lister, false, false, false, func() objData {
 		return objData{retries: 0}
 	})
 
@@ -127,9 +99,9 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 		}
 	})
 
-	g.Eventually(func() bool {
+	require.Eventually(t, func() bool {
 		return rt.Populated()
-	}, "10s").Should(gomega.BeTrue())
+	}, timeout, tick, "waiting for RT to populated")
 
 	if rt.Satisfied() {
 		t.Fatal("tracker with 0 retries should not be satisfied")
@@ -144,9 +116,8 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 
 // Verify that TryCancelTemplate must be called enough times to remove all retries before canceling a template.
 func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
-	g := gomega.NewWithT(t)
-
-	rt := newTracker(makeTestClient(t, testClientOptions{listConstraintTemplates: true}), false, false, false, func() objData {
+	lister := fake.NewClientBuilder().WithRuntimeObjects(&convertedTemplate).Build()
+	rt := newTracker(lister, false, false, false, func() objData {
 		return objData{retries: 2}
 	})
 
@@ -168,9 +139,9 @@ func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 		}
 	})
 
-	g.Eventually(func() bool {
+	require.Eventually(t, func() bool {
 		return rt.Populated()
-	}, "10s").Should(gomega.BeTrue())
+	}, timeout, tick, "waiting for RT to populated")
 
 	if rt.Satisfied() {
 		t.Fatal("tracker with 2 retries should not be satisfied")
@@ -196,6 +167,9 @@ func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 }
 
 func Test_Tracker_TryCancelData(t *testing.T) {
+	lister := fake.NewClientBuilder().WithRuntimeObjects(
+		&testSyncSet, fakes.UnstructuredFor(podGVK, "", "pod1-name"),
+	).Build()
 	tcs := []struct {
 		name    string
 		retries int
@@ -205,46 +179,48 @@ func Test_Tracker_TryCancelData(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		objDataFn := func() objData {
-			return objData{retries: tc.retries}
-		}
-		rt := newTracker(makeTestClient(t, testClientOptions{listSyncSets: true}), false, false, false, objDataFn)
+		t.Run(tc.name, func(t *testing.T) {
+			objDataFn := func() objData {
+				return objData{retries: tc.retries}
+			}
+			rt := newTracker(lister, false, false, false, objDataFn)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		var runErr error
-		runWg := sync.WaitGroup{}
-		runWg.Add(1)
-		go func() {
-			runErr = rt.Run(ctx)
-			// wait for the ready tracker to stop so we don't leak state between tests.
-			runWg.Done()
-		}()
+			ctx, cancel := context.WithCancel(context.Background())
+			var runErr error
+			runWg := sync.WaitGroup{}
+			runWg.Add(1)
+			go func() {
+				runErr = rt.Run(ctx)
+				// wait for the ready tracker to stop so we don't leak state between tests.
+				runWg.Done()
+			}()
 
-		require.Eventually(t, func() bool {
-			return rt.Populated()
-		}, 10*time.Second, 1*time.Second, "waiting for RT to populated")
-		require.False(t, rt.Satisfied(), "tracker with retries should not be satisfied")
+			require.Eventually(t, func() bool {
+				return rt.Populated()
+			}, timeout, tick, "waiting for RT to populated")
+			require.False(t, rt.Satisfied(), "tracker with retries should not be satisfied")
 
-		// observe the sync source for readiness
-		rt.syncsets.Observe(&testSyncSet)
+			// observe the sync source for readiness
+			rt.syncsets.Observe(&testSyncSet)
 
-		for i := tc.retries; i > 0; i-- {
-			require.False(t, rt.data.Satisfied(), "data tracker should not be satisfied")
-			require.False(t, rt.Satisfied(), fmt.Sprintf("tracker with %d retries should not be satisfied", i))
-			rt.TryCancelData(podGVK)
-		}
-		require.False(t, rt.Satisfied(), "tracker should not be satisfied")
+			for i := tc.retries; i > 0; i-- {
+				require.False(t, rt.data.Satisfied(), "data tracker should not be satisfied")
+				require.False(t, rt.Satisfied(), fmt.Sprintf("tracker with %d retries should not be satisfied", i))
+				rt.TryCancelData(podGVK)
+			}
+			require.False(t, rt.Satisfied(), "tracker should not be satisfied")
 
-		rt.TryCancelData(podGVK) // at this point there should no retries
-		require.True(t, rt.Satisfied(), "tracker with 0 retries and cancellation should be satisfied")
-		require.True(t, rt.data.Satisfied(), "data tracker should be satisfied")
+			rt.TryCancelData(podGVK) // at this point there should no retries
+			require.True(t, rt.Satisfied(), "tracker with 0 retries and cancellation should be satisfied")
+			require.True(t, rt.data.Satisfied(), "data tracker should be satisfied")
 
-		_, removed := rt.data.removed[podGVK]
-		require.True(t, removed, "expected the podGVK to have been removed")
+			_, removed := rt.data.removed[podGVK]
+			require.True(t, removed, "expected the podGVK to have been removed")
 
-		// cleanup test
-		cancel()
-		runWg.Wait()
-		require.NoError(t, runErr, "Tracker Run() failed")
+			// cleanup test
+			cancel()
+			runWg.Wait()
+			require.NoError(t, runErr, "Tracker Run() failed")
+		})
 	}
 }

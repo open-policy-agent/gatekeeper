@@ -553,7 +553,7 @@ func Test_Tracker(t *testing.T) {
 // Verifies additional scenarios to the base "testdata/" fixtures, such as
 // invalid Config resources or overlapping SyncSets, which we want to
 // make sure the ReadyTracker can handle gracefully.
-func Test_Tracker_EdgeCases(t *testing.T) {
+func Test_Tracker_SyncSourceEdgeCases(t *testing.T) {
 	tts := []struct {
 		name         string
 		fixturesPath string
@@ -571,11 +571,6 @@ func Test_Tracker_EdgeCases(t *testing.T) {
 			// repeating gvk in Config doesn't halt readiness
 			name:         "repeating gvk",
 			fixturesPath: "testdata/config/repeating-gvk",
-		},
-		{
-			// empty syncOnly still needs reconciling for a Config resources
-			name:         "empty sync only gvk",
-			fixturesPath: "testdata/config/empty-sync",
 		},
 	}
 

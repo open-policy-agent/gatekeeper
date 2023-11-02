@@ -34,19 +34,17 @@ var (
 )
 
 type Adder struct {
-	CacheManager     *cm.CacheManager
-	ControllerSwitch *watch.ControllerSwitch
-	Tracker          *readiness.Tracker
+	CacheManager *cm.CacheManager
+	Tracker      *readiness.Tracker
 }
 
-// Add creates a new SyncSetController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
+// Add creates a new controller for SyncSets and adds it to the Manager.
 func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.HasValidationOperations() {
 		return nil
 	}
 
-	r, err := newReconciler(mgr, a.CacheManager, a.ControllerSwitch, a.Tracker)
+	r, err := newReconciler(mgr, a.CacheManager, a.Tracker)
 	if err != nil {
 		return err
 	}
@@ -59,14 +57,13 @@ func (a *Adder) InjectCacheManager(o *cm.CacheManager) {
 }
 
 func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
-	a.ControllerSwitch = cs
 }
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
 
-func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.ControllerSwitch, tracker *readiness.Tracker) (*ReconcileSyncSet, error) {
+func newReconciler(mgr manager.Manager, cm *cm.CacheManager, tracker *readiness.Tracker) (*ReconcileSyncSet, error) {
 	if cm == nil {
 		return nil, fmt.Errorf("CacheManager must be non-nil")
 	}
@@ -77,7 +74,6 @@ func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.Controlle
 	return &ReconcileSyncSet{
 		reader:       mgr.GetClient(),
 		scheme:       mgr.GetScheme(),
-		cs:           cs,
 		cacheManager: cm,
 		tracker:      tracker,
 	}, nil
@@ -105,19 +101,10 @@ type ReconcileSyncSet struct {
 
 	scheme       *runtime.Scheme
 	cacheManager *cm.CacheManager
-	cs           *watch.ControllerSwitch
 	tracker      *readiness.Tracker
 }
 
 func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	// Short-circuit if shutting down.
-	if r.cs != nil {
-		defer r.cs.Exit()
-		if !r.cs.Enter() {
-			return reconcile.Result{}, nil
-		}
-	}
-
 	syncsetTr := r.tracker.For(syncsetGVK)
 	exists := true
 	syncset := &syncsetv1alpha1.SyncSet{}
@@ -137,7 +124,7 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 
 		if err := r.cacheManager.RemoveSource(ctx, sk); err != nil {
 			syncsetTr.TryCancelExpect(syncset)
-			return reconcile.Result{}, fmt.Errorf("synceset-controller: error removing source: %w", err)
+			return reconcile.Result{}, fmt.Errorf("syncset-controller: error removing source: %w", err)
 		}
 
 		syncsetTr.CancelExpect(syncset)
@@ -152,7 +139,7 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 
 	if err := r.cacheManager.UpsertSource(ctx, sk, gvks); err != nil {
 		syncsetTr.TryCancelExpect(syncset)
-		return reconcile.Result{Requeue: true}, fmt.Errorf("synceset-controller: error upserting watches: %w", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("syncset-controller: error upserting watches: %w", err)
 	}
 
 	syncsetTr.Observe(syncset)
