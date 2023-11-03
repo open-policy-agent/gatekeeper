@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -63,7 +64,7 @@ var (
 		},
 	}
 
-	podGVK = testSyncSet.Spec.GVKs[0].ToGroupVersionKind()
+	podGVK = schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
 )
 
 var convertedTemplate v1beta1.ConstraintTemplate
