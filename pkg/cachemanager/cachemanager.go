@@ -178,7 +178,7 @@ func interpretErr(e error, gvks []schema.GroupVersionKind) (bool, []schema.Group
 	}
 
 	failedGvks := watch.NewSet()
-	failedGvks.Add(f.FailingGVKs()...)
+	failedGvks.Add(f.FailingGVKsToAdd()...)
 	sourceGVKSet := watch.NewSet()
 	sourceGVKSet.Add(gvks...)
 

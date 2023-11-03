@@ -24,8 +24,9 @@ import (
 )
 
 type gvkErr struct {
-	err error
-	gvk schema.GroupVersionKind
+	err      error
+	gvk      schema.GroupVersionKind
+	isRemove bool
 }
 
 func (w gvkErr) String() string {
@@ -63,11 +64,12 @@ func (e *ErrorList) Error() string {
 	return builder.String()
 }
 
-func (e *ErrorList) FailingGVKs() []schema.GroupVersionKind {
+// Return gvks for which there were errors adding watches.
+func (e *ErrorList) FailingGVKsToAdd() []schema.GroupVersionKind {
 	gvks := []schema.GroupVersionKind{}
 	for _, err := range e.errs {
 		var gvkErr gvkErr
-		if errors.As(err, &gvkErr) {
+		if errors.As(err, &gvkErr) && !gvkErr.isRemove {
 			gvks = append(gvks, gvkErr.gvk)
 		}
 	}
@@ -80,14 +82,19 @@ func (e *ErrorList) HasGeneralErr() bool {
 }
 
 // adds a non gvk specific error to the list.
-func (e *ErrorList) Add(err error) {
+func (e *ErrorList) Err(err error) {
 	e.errs = append(e.errs, err)
 	e.hasGeneralErr = true
 }
 
-// adds a gvk specific error to the list.
+// adds a gvk specific error for failing to add a gvk watch to the list.
 func (e *ErrorList) AddGVKErr(gvk schema.GroupVersionKind, err error) {
 	e.errs = append(e.errs, gvkErr{gvk: gvk, err: err})
+}
+
+// adds a gvk specific error for failing to remove a gvk watch to the list.
+func (e *ErrorList) RemoveGVKErr(gvk schema.GroupVersionKind, err error) {
+	e.errs = append(e.errs, gvkErr{gvk: gvk, err: err, isRemove: true})
 }
 
 func (e *ErrorList) Size() int {

@@ -263,7 +263,7 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 			continue
 		}
 		if err := wm.doRemoveWatch(ctx, r, gvk); err != nil {
-			errlist.AddGVKErr(gvk, fmt.Errorf("removing watch for %+v %w", gvk, err))
+			errlist.RemoveGVKErr(gvk, fmt.Errorf("removing watch for %+v %w", gvk, err))
 		}
 	}
 

@@ -622,8 +622,10 @@ func Test_interpretErr(t *testing.T) {
 	gvk1Err := watch.NewErrorList()
 	gvk1Err.AddGVKErr(gvk1, someErr)
 	genErr := watch.NewErrorList()
-	genErr.Add(someErr)
+	genErr.Err(someErr)
 	genErr.AddGVKErr(gvk1, someErr)
+	gvk2Err := watch.NewErrorList()
+	gvk2Err.RemoveGVKErr(gvk2, someErr)
 
 	cases := []struct {
 		name                string
@@ -646,6 +648,12 @@ func Test_interpretErr(t *testing.T) {
 			name:     "intersection does not exist",
 			inputErr: gvk1Err,
 			inputGVK: []schema.GroupVersionKind{gvk2},
+		},
+		{
+			name:                "intersection exists but we are removing the gvk",
+			inputErr:            gvk2Err,
+			inputGVK:            []schema.GroupVersionKind{gvk2},
+			expectedFailingGVKs: []schema.GroupVersionKind{},
 		},
 		{
 			name:          "non-watchmanager error reports general error with no GVKs",
