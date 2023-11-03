@@ -27,8 +27,10 @@ func init() {
 	}
 }
 
-func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) (map[string][]int, map[string]error, error) {
-	discoveryResults, err := reader.ReadDiscoveryResults(flagDiscoveryResults)
+// Reads a list of unstructured objects and a string containing supported GVKs and
+// outputs a set of missing sync requirements per template and ingestion problems per template
+func Verify(unstrucs []*unstructured.Unstructured, flagSupportedGVKs string) (map[string]parser.SyncRequirements, map[string]error, error) {
+	discoveryResults, err := reader.ReadDiscoveryResults(flagSupportedGVKs)
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading: %w", err)
 	}
@@ -36,6 +38,7 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 	templates := []*templates.ConstraintTemplate{}
 	syncedGVKs := map[schema.GroupVersionKind]struct{}{}
 	templateErrs := map[string]error{}
+	hasConfig := false
 
 	for _, obj := range unstrucs {
 		if reader.IsSyncSet(obj) {
@@ -54,10 +57,14 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 				}
 			}
 		} else if reader.IsConfig(obj) {
+			if hasConfig {
+				return nil, nil, fmt.Errorf("Multiple configs found. Config is a singleton resource.")
+			}
 			config, err := reader.ToConfig(scheme, obj)
 			if err != nil {
 				return nil, nil, fmt.Errorf("converting unstructured %q to config: %w", obj.GetName(), err)
 			}
+			hasConfig = true
 			for _, syncOnlyEntry := range config.Spec.Sync.SyncOnly {
 				gvk := schema.GroupVersionKind{
 					Group:   syncOnlyEntry.Group,
@@ -80,7 +87,7 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 		}
 	}
 
-	missingReqs := map[string][]int{}
+	missingReqs := map[string]parser.SyncRequirements{}
 
 	for _, templ := range templates {
 		// Fetch syncrequirements from template
@@ -89,7 +96,7 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 			templateErrs[templ.GetName()] = err
 			continue
 		}
-		for i, requirement := range syncRequirements {
+		for _, requirement := range syncRequirements {
 			requirementMet := false
 			for gvk := range requirement {
 				if _, exists := syncedGVKs[gvk]; exists {
@@ -97,7 +104,7 @@ func Verify(unstrucs []*unstructured.Unstructured, flagDiscoveryResults string) 
 				}
 			}
 			if !requirementMet {
-				missingReqs[templ.Name] = append(missingReqs[templ.Name], i+1)
+				missingReqs[templ.Name] = append(missingReqs[templ.Name], requirement)
 			}
 		}
 	}

@@ -9,11 +9,11 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 var (
@@ -27,32 +27,32 @@ var (
 
 func init() {
 	var err error
-	templateNeverValidate, err = readUnstructured([]byte(fixtures.TemplateNeverValidate))
+	templateNeverValidate, err = reader.ReadUnstructured([]byte(fixtures.TemplateNeverValidate))
 	if err != nil {
 		panic(err)
 	}
 
-	constraintNeverValidate, err = readUnstructured([]byte(fixtures.ConstraintNeverValidate))
+	constraintNeverValidate, err = reader.ReadUnstructured([]byte(fixtures.ConstraintNeverValidate))
 	if err != nil {
 		panic(err)
 	}
 
-	constraintReferential, err = readUnstructured([]byte(fixtures.ConstraintReferential))
+	constraintReferential, err = reader.ReadUnstructured([]byte(fixtures.ConstraintReferential))
 	if err != nil {
 		panic(err)
 	}
 
-	object, err = readUnstructured([]byte(fixtures.Object))
+	object, err = reader.ReadUnstructured([]byte(fixtures.Object))
 	if err != nil {
 		panic(err)
 	}
 
-	objectReferentialInventory, err = readUnstructured([]byte(fixtures.ObjectReferentialInventory))
+	objectReferentialInventory, err = reader.ReadUnstructured([]byte(fixtures.ObjectReferentialInventory))
 	if err != nil {
 		panic(err)
 	}
 
-	objectReferentialDeny, err = readUnstructured([]byte(fixtures.ObjectReferentialDeny))
+	objectReferentialDeny, err = reader.ReadUnstructured([]byte(fixtures.ObjectReferentialDeny))
 	if err != nil {
 		panic(err)
 	}
@@ -187,7 +187,7 @@ func TestTest(t *testing.T) {
 			// convert the test resources to unstructureds
 			var objs []*unstructured.Unstructured
 			for _, input := range tc.inputs {
-				u, err := readUnstructured([]byte(input))
+				u, err := reader.ReadUnstructured([]byte(input))
 				require.NoError(t, err)
 				objs = append(objs, u)
 			}
@@ -225,7 +225,7 @@ func Test_Test_withTrace(t *testing.T) {
 
 	var objs []*unstructured.Unstructured
 	for _, input := range inputs {
-		u, err := readUnstructured([]byte(input))
+		u, err := reader.ReadUnstructured([]byte(input))
 		if err != nil {
 			t.Fatalf("readUnstructured for input %q: %v", input, err)
 		}
@@ -288,7 +288,7 @@ func Test_Test_withStats(t *testing.T) {
 
 	var objs []*unstructured.Unstructured
 	for _, input := range inputs {
-		u, err := readUnstructured([]byte(input))
+		u, err := reader.ReadUnstructured([]byte(input))
 		assert.NoErrorf(t, err, "readUnstructured for input %q: %v", input, err)
 		objs = append(objs, u)
 	}
@@ -357,17 +357,4 @@ func Test_Test_withStats(t *testing.T) {
 			require.Equal(t, stat.Value, 1)
 		}
 	}
-}
-
-func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
-	u := &unstructured.Unstructured{
-		Object: make(map[string]interface{}),
-	}
-
-	err := yaml.Unmarshal(bytes, u)
-	if err != nil {
-		return nil, err
-	}
-
-	return u, nil
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/parser"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ func TestVerify(t *testing.T) {
 		name      string
 		inputs    []string
 		discovery string
-		wantReqs  map[string][]int
+		wantReqs  map[string][]parser.GVKEquivalenceSet
 		wantErrs  map[string]error
 		err       error
 	}{
@@ -25,8 +26,16 @@ func TestVerify(t *testing.T) {
 			inputs: []string{
 				fixtures.TemplateReferential,
 			},
-			wantReqs: map[string][]int{
-				"k8suniqueserviceselector": {1},
+			wantReqs: map[string][]parser.GVKEquivalenceSet{
+				"k8suniqueserviceselector": {
+					parser.GVKEquivalenceSet{
+						{
+							Group:   "",
+							Version: "v1",
+							Kind:    "Service",
+						}: struct{}{},
+					},
+				},
 			},
 			wantErrs: map[string]error{},
 		},
@@ -36,8 +45,16 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferential,
 				fixtures.TemplateReferentialBadAnnotation,
 			},
-			wantReqs: map[string][]int{
-				"k8suniqueserviceselector": {1},
+			wantReqs: map[string][]parser.GVKEquivalenceSet{
+				"k8suniqueserviceselector": {
+					parser.GVKEquivalenceSet{
+						{
+							Group:   "",
+							Version: "v1",
+							Kind:    "Service",
+						}: struct{}{},
+					},
+				},
 			},
 			wantErrs: map[string]error{
 				"k8suniqueingresshostbadannotation": fmt.Errorf("json: cannot unmarshal object into Go value of type parser.CompactSyncRequirements"),
@@ -49,7 +66,7 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferential,
 				fixtures.Config,
 			},
-			wantReqs: map[string][]int{},
+			wantReqs: map[string][]parser.GVKEquivalenceSet{},
 			wantErrs: map[string]error{},
 		},
 		{
@@ -59,7 +76,7 @@ func TestVerify(t *testing.T) {
 				fixtures.Config,
 			},
 			discovery: `{"": {"v1": ["Service"]}}`,
-			wantReqs:  map[string][]int{},
+			wantReqs:  map[string][]parser.GVKEquivalenceSet{},
 			wantErrs:  map[string]error{},
 		},
 		{
@@ -69,8 +86,16 @@ func TestVerify(t *testing.T) {
 				fixtures.Config,
 			},
 			discovery: `{"extensions": {"v1beta1": ["Ingress"]}}`,
-			wantReqs: map[string][]int{
-				"k8suniqueserviceselector": {1},
+			wantReqs: map[string][]parser.GVKEquivalenceSet{
+				"k8suniqueserviceselector": {
+					parser.GVKEquivalenceSet{
+						{
+							Group:   "",
+							Version: "v1",
+							Kind:    "Service",
+						}: struct{}{},
+					},
+				},
 			},
 			wantErrs: map[string]error{},
 		},
@@ -80,7 +105,7 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferentialMultEquivSets,
 				fixtures.SyncSet,
 			},
-			wantReqs: map[string][]int{},
+			wantReqs: map[string][]parser.GVKEquivalenceSet{},
 			wantErrs: map[string]error{},
 		},
 		{
@@ -89,8 +114,16 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferentialMultReqs,
 				fixtures.SyncSet,
 			},
-			wantReqs: map[string][]int{
-				"k8suniqueingresshostmultireq": {2},
+			wantReqs: map[string][]parser.GVKEquivalenceSet{
+				"k8suniqueingresshostmultireq": {
+					parser.GVKEquivalenceSet{
+						{
+							Group:   "",
+							Version: "v1",
+							Kind:    "Pod",
+						}: struct{}{},
+					},
+				},
 			},
 			wantErrs: map[string]error{},
 		},
@@ -103,15 +136,23 @@ func TestVerify(t *testing.T) {
 				fixtures.Config,
 				fixtures.SyncSet,
 			},
-			wantReqs: map[string][]int{
-				"k8suniqueingresshostmultireq": {2},
+			wantReqs: map[string][]parser.GVKEquivalenceSet{
+				"k8suniqueingresshostmultireq": {
+					parser.GVKEquivalenceSet{
+						{
+							Group:   "",
+							Version: "v1",
+							Kind:    "Pod",
+						}: struct{}{},
+					},
+				},
 			},
 			wantErrs: map[string]error{},
 		},
 		{
 			name:     "no data of any kind",
 			inputs:   []string{},
-			wantReqs: map[string][]int{},
+			wantReqs: map[string][]parser.GVKEquivalenceSet{},
 			wantErrs: map[string]error{},
 		},
 	}
@@ -137,8 +178,19 @@ func TestVerify(t *testing.T) {
 				t.Errorf("diff in missingRequirements objects (-want +got):\n%s", diff)
 			}
 
-			if diff := cmp.Diff(tc.wantErrs, gotErrs); diff != "" {
-				t.Errorf("diff in templateErrs objects (-want +got):\n%s", diff)
+			for key, wantErr := range tc.wantErrs {
+				if gotErr, ok := gotErrs[key]; ok {
+					if wantErr.Error() != gotErr.Error() {
+						t.Errorf("error mismatch for %s: want %v, got %v", key, wantErr, gotErr)
+					}
+				} else {
+					t.Errorf("missing error for %s", key)
+				}
+			}
+			for key, gotErr := range gotErrs {
+				if _, ok := tc.wantErrs[key]; !ok {
+					t.Errorf("unexpected error for %s: %v", key, gotErr)
+				}
 			}
 		})
 	}

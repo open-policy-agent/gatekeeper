@@ -104,7 +104,7 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 	return template, nil
 }
 
-// ToTemplate converts an unstructured object into an object with the schema defined
+// ToStructured converts an unstructured object into an object with the schema defined
 // by u's group, version, and kind.
 func ToStructured(scheme *runtime.Scheme, u *unstructured.Unstructured) (runtime.Object, error) {
 	gvk := u.GroupVersionKind()

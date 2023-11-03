@@ -1,9 +1,9 @@
 package verify
 
 import (
-	"bytes"
 	"fmt"
 	"os"
+	"strings"
 
 	cmdutils "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
@@ -18,21 +18,21 @@ var Cmd = &cobra.Command{
 }
 
 var (
-	flagFilenames        []string
-	flagImages           []string
-	flagDiscoveryResults string
+	flagFilenames     []string
+	flagImages        []string
+	flagSupportedGVKs string
 )
 
 const (
-	flagNameFilename         = "filename"
-	flagNameImage            = "image"
-	flagNameDiscoveryResults = "discovery-results"
+	flagNameFilename      = "filename"
+	flagNameImage         = "image"
+	flagNameSupportedGVKs = "supported-gvks"
 )
 
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().StringVarP(&flagDiscoveryResults, flagDiscoveryResults, "d", "", "a json string listing the GVKs supported by the cluster as a nested array of groups, containing supported versions, containing supported kinds.")
+	Cmd.Flags().StringVarP(&flagSupportedGVKs, flagSupportedGVKs, "d", "", "a json string listing the GVKs supported by the cluster as a nested array of groups, containing supported versions, each of which contains supported kinds. See https://open-policy-agent.github.io/gatekeeper/website/docs/gator#the-gator-sync-verify-subcommand for an example.")
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -44,7 +44,7 @@ func run(cmd *cobra.Command, args []string) {
 		cmdutils.ErrFatalf("no input data identified")
 	}
 
-	missingRequirements, templateErrors, err := verify.Verify(unstrucs, flagDiscoveryResults)
+	missingRequirements, templateErrors, err := verify.Verify(unstrucs, flagSupportedGVKs)
 	if err != nil {
 		cmdutils.ErrFatalf("verifying: %v", err)
 	}
@@ -62,9 +62,9 @@ func run(cmd *cobra.Command, args []string) {
 }
 
 func resultsToString[T any](results map[string]T) string {
-	var buf bytes.Buffer
-	for template, reqs := range results {
-		buf.WriteString(fmt.Sprintf("%s: %v\n", template, reqs))
+	var sb strings.Builder
+	for template, vals := range results {
+		sb.WriteString(fmt.Sprintf("%s:\n%v\n", template, vals))
 	}
-	return buf.String()
+	return sb.String()
 }

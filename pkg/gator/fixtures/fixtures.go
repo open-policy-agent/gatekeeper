@@ -401,36 +401,6 @@ metadata:
           }
         ]
       ]"
-    description: >-
-      Requires all Ingress rule hosts to be unique.
-
-      Does not handle hostname wildcards:
-      https://kubernetes.io/docs/concepts/services-networking/ingress/
-spec:
-  crd:
-    spec:
-      names:
-        kind: K8sUniqueIngressHost
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package k8suniqueingresshost
-
-        identical(obj, review) {
-          obj.metadata.namespace == review.object.metadata.namespace
-          obj.metadata.name == review.object.metadata.name
-        }
-
-        violation[{"msg": msg}] {
-          input.review.kind.kind == "Ingress"
-          re_match("^(extensions|networking.k8s.io)$", input.review.kind.group)
-          host := input.review.object.spec.rules[_].host
-          other := data.inventory.namespace[_][otherapiversion]["Ingress"][name]
-          re_match("^(extensions|networking.k8s.io)/.+$", otherapiversion)
-          other.spec.rules[_].host == host
-          not identical(other, input.review)
-          msg := sprintf("ingress host conflicts with an existing ingress <%v>", [host])
-        }
 `
 
 	TemplateReferentialMultReqs = `
@@ -445,9 +415,9 @@ metadata:
       "[
         [
           {
-            "groups": ["extensions"],
-            "versions": ["v1beta1"],
-            "kinds": ["Ingress"]
+            "groups": [""],
+            "versions": ["v1"],
+            "kinds": ["Pod"]
           }
         ],
         [
@@ -458,36 +428,6 @@ metadata:
           }
         ]
       ]"
-    description: >-
-      Requires all Ingress rule hosts to be unique.
-
-      Does not handle hostname wildcards:
-      https://kubernetes.io/docs/concepts/services-networking/ingress/
-spec:
-  crd:
-    spec:
-      names:
-        kind: K8sUniqueIngressHost
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package k8suniqueingresshost
-
-        identical(obj, review) {
-          obj.metadata.namespace == review.object.metadata.namespace
-          obj.metadata.name == review.object.metadata.name
-        }
-
-        violation[{"msg": msg}] {
-          input.review.kind.kind == "Ingress"
-          re_match("^(extensions|networking.k8s.io)$", input.review.kind.group)
-          host := input.review.object.spec.rules[_].host
-          other := data.inventory.namespace[_][otherapiversion]["Ingress"][name]
-          re_match("^(extensions|networking.k8s.io)/.+$", otherapiversion)
-          other.spec.rules[_].host == host
-          not identical(other, input.review)
-          msg := sprintf("ingress host conflicts with an existing ingress <%v>", [host])
-        }
 `
 
 	TemplateReferentialBadAnnotation = `
@@ -500,36 +440,6 @@ metadata:
     metadata.gatekeeper.sh/version: 1.0.3
     metadata.gatekeeper.sh/requires-sync-data: |
       "{}"
-    description: >-
-      Requires all Ingress rule hosts to be unique.
-
-      Does not handle hostname wildcards:
-      https://kubernetes.io/docs/concepts/services-networking/ingress/
-spec:
-  crd:
-    spec:
-      names:
-        kind: K8sUniqueIngressHost
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package k8suniqueingresshost
-
-        identical(obj, review) {
-          obj.metadata.namespace == review.object.metadata.namespace
-          obj.metadata.name == review.object.metadata.name
-        }
-
-        violation[{"msg": msg}] {
-          input.review.kind.kind == "Ingress"
-          re_match("^(extensions|networking.k8s.io)$", input.review.kind.group)
-          host := input.review.object.spec.rules[_].host
-          other := data.inventory.namespace[_][otherapiversion]["Ingress"][name]
-          re_match("^(extensions|networking.k8s.io)/.+$", otherapiversion)
-          other.spec.rules[_].host == host
-          not identical(other, input.review)
-          msg := sprintf("ingress host conflicts with an existing ingress <%v>", [host])
-        }
 `
 
 	ConstraintReferential = `
@@ -754,8 +664,8 @@ metadata:
   namespace: "gatekeeper-system"
 spec:
   gvks:
-    - group: "extensions"
-      version: "v1beta1"
+    - group: "networking.k8s.io"
+      version: "v1"
       kind: "Ingress"
     - group: "apps"
       version: "v1"
