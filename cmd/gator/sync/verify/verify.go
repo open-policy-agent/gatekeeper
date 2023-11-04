@@ -50,14 +50,14 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	if len(missingRequirements) > 0 {
-		cmdutils.ErrFatalf("The following requirements were not met: \n%v", resultsToString(missingRequirements))
+		cmdutils.ErrFatalf("the following requirements were not met: \n%v", resultsToString(missingRequirements))
 	}
 
 	if len(templateErrors) > 0 {
-		cmdutils.ErrFatalf("Encountered errors parsing the following templates: \n%v", resultsToString(templateErrors))
+		cmdutils.ErrFatalf("encountered errors parsing the following templates: \n%v", resultsToString(templateErrors))
 	}
 
-	fmt.Println("All template requirements met.")
+	fmt.Println("all template requirements met")
 	os.Exit(0)
 }
 

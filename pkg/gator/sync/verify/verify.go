@@ -62,7 +62,7 @@ func init() {
 }
 
 // Reads a list of unstructured objects and a string containing supported GVKs and
-// outputs a set of missing sync requirements per template and ingestion problems per template
+// outputs a set of missing sync requirements per template and ingestion problems per template.
 func Verify(unstrucs []*unstructured.Unstructured, supportedGVKs SupportedGVKs) (map[string]parser.SyncRequirements, map[string]error, error) {
 	templates := []*templates.ConstraintTemplate{}
 	syncedGVKs := map[schema.GroupVersionKind]struct{}{}
@@ -87,7 +87,7 @@ func Verify(unstrucs []*unstructured.Unstructured, supportedGVKs SupportedGVKs) 
 			}
 		} else if reader.IsConfig(obj) {
 			if hasConfig {
-				return nil, nil, fmt.Errorf("Multiple configs found. Config is a singleton resource.")
+				return nil, nil, fmt.Errorf("multiple configs found. Config is a singleton resource")
 			}
 			config, err := reader.ToConfig(scheme, obj)
 			if err != nil {
@@ -112,7 +112,7 @@ func Verify(unstrucs []*unstructured.Unstructured, supportedGVKs SupportedGVKs) 
 			}
 			templates = append(templates, templ)
 		} else {
-			fmt.Printf("Skipping unstructured %q because it is not a syncset, config, or template\n", obj.GetName())
+			fmt.Printf("skipping unstructured %q because it is not a syncset, config, or template\n", obj.GetName())
 		}
 	}
 
