@@ -53,8 +53,7 @@ import (
 )
 
 const (
-	finalizerName = "constrainttemplate.finalizers.gatekeeper.sh"
-	ctrlName      = "constrainttemplate-controller"
+	ctrlName = "constrainttemplate-controller"
 )
 
 var logger = log.Log.WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
@@ -242,9 +241,9 @@ type ReconcileConstraintTemplate struct {
 
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
+// TODO(acpana): remove in 3.16 as per https://github.com/open-policy-agent/gatekeeper/issues/3084
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/finalizers,verbs=get;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
-
 // +kubebuilder:rbac:groups=externaldata.gatekeeper.sh,resources=providers,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
@@ -271,20 +270,8 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 			return reconcile.Result{}, err
 		}
 		deleted = true
-		// be sure we are using a blank constraint template so that
-		// we know finalizer removal code won't break (can be removed once that
-		// code is removed)
-		ct = &v1beta1.ConstraintTemplate{}
 	}
 	deleted = deleted || !ct.GetDeletionTimestamp().IsZero()
-
-	if containsString(finalizerName, ct.GetFinalizers()) {
-		RemoveFinalizer(ct)
-		if err := r.Update(ctx, ct); err != nil && !errors.IsNotFound(err) {
-			logger.Error(err, "update error")
-			return reconcile.Result{Requeue: true}, nil
-		}
-	}
 
 	if deleted {
 		ctRef := &templates.ConstraintTemplate{}
@@ -601,33 +588,10 @@ func logError(name string) {
 	)
 }
 
-func RemoveFinalizer(instance *v1beta1.ConstraintTemplate) {
-	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
-}
-
 func makeGvk(kind string) schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
 		Version: "v1beta1",
 		Kind:    kind,
 	}
-}
-
-func containsString(s string, items []string) bool {
-	for _, item := range items {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(s string, items []string) []string {
-	var rval []string
-	for _, item := range items {
-		if item != s {
-			rval = append(rval, item)
-		}
-	}
-	return rval
 }
