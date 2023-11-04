@@ -628,11 +628,12 @@ func Test_interpretErr(t *testing.T) {
 	gvk2Err.RemoveGVKErr(gvk2, someErr)
 
 	cases := []struct {
-		name                string
-		inputErr            error
-		inputGVK            []schema.GroupVersionKind
-		expectedFailingGVKs []schema.GroupVersionKind
-		expectGeneral       bool
+		name                  string
+		inputErr              error
+		inputGVK              []schema.GroupVersionKind
+		expectedFailingGVKs   []schema.GroupVersionKind
+		expectGeneral         bool
+		expectDanglingWatches bool
 	}{
 		{
 			name:     "nil err",
@@ -650,10 +651,11 @@ func Test_interpretErr(t *testing.T) {
 			inputGVK: []schema.GroupVersionKind{gvk2},
 		},
 		{
-			name:                "intersection exists but we are removing the gvk",
-			inputErr:            gvk2Err,
-			inputGVK:            []schema.GroupVersionKind{gvk2},
-			expectedFailingGVKs: []schema.GroupVersionKind{},
+			name:                  "intersection exists but we are removing the gvk",
+			inputErr:              gvk2Err,
+			inputGVK:              []schema.GroupVersionKind{gvk2},
+			expectedFailingGVKs:   []schema.GroupVersionKind{},
+			expectDanglingWatches: true,
 		},
 		{
 			name:          "non-watchmanager error reports general error with no GVKs",
@@ -671,10 +673,11 @@ func Test_interpretErr(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			general, gvks := interpretErr(tc.inputErr, tc.inputGVK)
+			general, gvks, danglingWatches := interpretErr(tc.inputErr, tc.inputGVK)
 
 			require.Equal(t, tc.expectGeneral, general)
 			require.ElementsMatch(t, gvks, tc.expectedFailingGVKs)
+			require.Equal(t, tc.expectDanglingWatches, danglingWatches)
 		})
 	}
 }

@@ -52,6 +52,9 @@ type CacheManager struct {
 	needToList            bool
 	gvksToDeleteFromCache *watch.Set
 	excluderChanged       bool
+	danglingWatches       bool
+	forceWipe             bool
+
 	// mu guards access to any of the fields above
 	mu sync.RWMutex
 
@@ -127,7 +130,7 @@ func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Ke
 	// in the manageCache loop.
 
 	err := c.replaceWatchSet(ctx)
-	if general, failedGVKs := interpretErr(err, newGVKs); len(failedGVKs) > 0 || general {
+	if general, failedGVKs, _ := interpretErr(err, newGVKs); len(failedGVKs) > 0 || general {
 		var gvksToTryCancel []schema.GroupVersionKind
 		if general {
 			// if the err is general, assume all gvks need TryCancel because of some
@@ -154,43 +157,48 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	newWatchSet.Add(c.gvksToSync.GVKs()...)
 	c.gvksToDeleteFromCache.AddSet(c.watchedSet.Difference(newWatchSet))
 
-	var innerError error
-	c.watchedSet.Replace(newWatchSet, func() {
-		// *Note the following steps are not transactional with respect to admission control
+	if c.danglingWatches || !c.watchedSet.Equals(newWatchSet) {
+		var err error
+		c.watchedSet.Replace(newWatchSet, func() {
+			// *Note the following steps are not transactional with respect to admission control
 
-		// Important: dynamic watches update must happen *after* updating our watchSet.
-		// Otherwise, the sync controller will drop events for the newly watched kinds.
-		innerError = c.registrar.ReplaceWatch(ctx, newWatchSet.Items())
-	})
+			// Important: dynamic watches update must happen *after* updating our watchSet.
+			// Otherwise, the sync controller will drop events for the newly watched kinds.
+			err = c.registrar.ReplaceWatch(ctx, newWatchSet.Items())
+		})
 
-	return innerError
+		return err
+	}
+
+	return nil
 }
 
 // interpret if the err received is general or whether it is specific to the provided GVKs.
-func interpretErr(e error, gvks []schema.GroupVersionKind) (bool, []schema.GroupVersionKind) {
+// also returns whether there were any errors removing watches.
+func interpretErr(e error, gvks []schema.GroupVersionKind) (bool, []schema.GroupVersionKind, bool) {
 	if e == nil {
-		return false, nil
+		return false, nil, false
 	}
 
 	f := watch.NewErrorList()
 	if !errors.As(e, &f) || f.HasGeneralErr() {
-		return true, nil
+		return true, nil, false
 	}
 
-	failedGvks := watch.NewSet()
-	failedGvks.Add(f.FailingGVKsToAdd()...)
+	failedGvksToAdd := watch.NewSet()
+	failedGvksToAdd.Add(f.FailingGVKsToAdd()...)
 	sourceGVKSet := watch.NewSet()
 	sourceGVKSet.Add(gvks...)
 
-	common := failedGvks.Intersection(sourceGVKSet)
+	common := failedGvksToAdd.Intersection(sourceGVKSet)
 	if common.Size() > 0 {
-		return false, common.Items()
+		return false, common.Items(), f.HasFailingGVKsToRemove()
 	}
 
 	// this error is not about the gvks in this request
 	// but we still log it for visibility
 	log.V(logging.DebugLevel).Info("encountered unrelated error when replacing watch set", "error", e)
-	return false, nil
+	return false, nil, f.HasFailingGVKsToRemove()
 }
 
 // RemoveSource removes the watches of the GVKs for a given aggregator.Key. Callers are responsible for retrying on error.
@@ -199,10 +207,7 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 	defer c.mu.Unlock()
 
 	c.gvksToSync.Remove(sourceKey)
-	err := c.replaceWatchSet(ctx)
-	if general, _ := interpretErr(err, []schema.GroupVersionKind{}); general {
-		return fmt.Errorf("error removing watches for source %v: %w", sourceKey, err)
-	}
+	// watch removal will happen async in manageCache()
 
 	return nil
 }
@@ -369,6 +374,18 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 				c.mu.Lock()
 				defer c.mu.Unlock()
 
+				// first make sure there is no drift between c.gvksToSync and watch manager
+				err := c.replaceWatchSet(ctx)
+				_, _, danglingWatches := interpretErr(err, []schema.GroupVersionKind{})
+
+				// if there were dangling watches previously but not anymore,
+				// force a cache wipe so we don't track unwanted resources.
+				if c.danglingWatches && !danglingWatches {
+					c.forceWipe = true
+				}
+				c.danglingWatches = danglingWatches
+
+				// perform a wipe if we removed gvks or the excluder changed
 				c.wipeCacheIfNeeded(ctx)
 
 				if !c.needToList {
@@ -462,13 +479,14 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 func (c *CacheManager) wipeCacheIfNeeded(ctx context.Context) {
 	// remove any gvks not needing to be synced anymore
 	// or re evaluate all if the excluder changed.
-	if c.gvksToDeleteFromCache.Size() > 0 || c.excluderChanged {
+	if c.gvksToDeleteFromCache.Size() > 0 || c.excluderChanged || c.forceWipe {
 		if err := c.wipeData(ctx); err != nil {
 			log.Error(err, "internal: error wiping cache")
 			return
 		}
 
 		c.gvksToDeleteFromCache = watch.NewSet()
+		c.forceWipe = false
 		c.excluderChanged = false
 		c.needToList = true
 	}

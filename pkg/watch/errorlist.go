@@ -77,6 +77,18 @@ func (e *ErrorList) FailingGVKsToAdd() []schema.GroupVersionKind {
 	return gvks
 }
 
+// Return gvks for which there were errors removing watches.
+func (e *ErrorList) HasFailingGVKsToRemove() bool {
+	for _, err := range e.errs {
+		var gvkErr gvkErr
+		if errors.As(err, &gvkErr) && gvkErr.isRemove {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (e *ErrorList) HasGeneralErr() bool {
 	return e.hasGeneralErr
 }
