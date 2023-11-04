@@ -545,7 +545,7 @@ Or, using an OCI Artifact containing templates as described previously:
 gator sync verify --filename="config.yaml" --image=localhost:5000/gator/template-library:v1
 ```
 
-Optionally, the `--discovery-results` flag can be used to pass in a list of supported GVKs discovered on a cluster. If this is nonempty, only GVKs that are both included in a SyncSet/Config and are supported will be considered to fulfill a template's requirements. Discovery results should be passed as a string representing a JSON object mapping groups to lists of versions, which contain lists of kinds, like such:
+Optionally, the `--supported-gvks` flag can be used to pass in a list of supported GVKs for the applicable cluster. If this is nonempty, only GVKs that are both included in a SyncSet/Config and are supported will be considered to fulfill a template's requirements. Supported GVKs should be passed as a string representing a JSON object mapping groups to lists of versions, which contain lists of kinds, like such:
 ```
 {
   "group1": {

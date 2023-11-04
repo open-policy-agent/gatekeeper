@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"encoding/json"
 	"fmt"
 
 	cfapis "github.com/open-policy-agent/frameworks/constraint/pkg/apis"
@@ -12,6 +13,39 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+type SupportedGVKs map[schema.GroupVersionKind]struct{}
+
+func (s *SupportedGVKs) String() string {
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *SupportedGVKs) Set(value string) error {
+	if value == "" {
+		return nil
+	}
+	var stringAsJSON map[string]map[string][]string
+	if err := json.Unmarshal([]byte(value), &stringAsJSON); err != nil {
+		return err
+	}
+	*s = SupportedGVKs{}
+	for group, versions := range stringAsJSON {
+		for version, kinds := range versions {
+			for _, kind := range kinds {
+				(*s)[schema.GroupVersionKind{
+					Group:   group,
+					Version: version,
+					Kind:    kind,
+				}] = struct{}{}
+			}
+		}
+	}
+	return nil
+}
+
+func (s *SupportedGVKs) Type() string {
+	return "SupportedGVKs"
+}
 
 var scheme *runtime.Scheme
 
@@ -29,12 +63,7 @@ func init() {
 
 // Reads a list of unstructured objects and a string containing supported GVKs and
 // outputs a set of missing sync requirements per template and ingestion problems per template
-func Verify(unstrucs []*unstructured.Unstructured, flagSupportedGVKs string) (map[string]parser.SyncRequirements, map[string]error, error) {
-	discoveryResults, err := reader.ReadDiscoveryResults(flagSupportedGVKs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("reading: %w", err)
-	}
-
+func Verify(unstrucs []*unstructured.Unstructured, supportedGVKs SupportedGVKs) (map[string]parser.SyncRequirements, map[string]error, error) {
 	templates := []*templates.ConstraintTemplate{}
 	syncedGVKs := map[schema.GroupVersionKind]struct{}{}
 	templateErrs := map[string]error{}
@@ -52,7 +81,7 @@ func Verify(unstrucs []*unstructured.Unstructured, flagSupportedGVKs string) (ma
 					Version: gvkEntry.Version,
 					Kind:    gvkEntry.Kind,
 				}
-				if _, exists := discoveryResults[gvk]; exists || discoveryResults == nil {
+				if _, exists := supportedGVKs[gvk]; exists || supportedGVKs == nil {
 					syncedGVKs[gvk] = struct{}{}
 				}
 			}
@@ -71,7 +100,7 @@ func Verify(unstrucs []*unstructured.Unstructured, flagSupportedGVKs string) (ma
 					Version: syncOnlyEntry.Version,
 					Kind:    syncOnlyEntry.Kind,
 				}
-				if _, exists := discoveryResults[gvk]; exists || discoveryResults == nil {
+				if _, exists := supportedGVKs[gvk]; exists || supportedGVKs == nil {
 					syncedGVKs[gvk] = struct{}{}
 				}
 			}

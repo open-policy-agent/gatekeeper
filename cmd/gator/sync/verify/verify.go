@@ -20,7 +20,7 @@ var Cmd = &cobra.Command{
 var (
 	flagFilenames     []string
 	flagImages        []string
-	flagSupportedGVKs string
+	flagSupportedGVKs verify.SupportedGVKs
 )
 
 const (
@@ -32,7 +32,7 @@ const (
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().StringVarP(&flagSupportedGVKs, flagSupportedGVKs, "d", "", "a json string listing the GVKs supported by the cluster as a nested array of groups, containing supported versions, each of which contains supported kinds. See https://open-policy-agent.github.io/gatekeeper/website/docs/gator#the-gator-sync-verify-subcommand for an example.")
+	Cmd.Flags().VarP(&flagSupportedGVKs, flagNameSupportedGVKs, "s", "a json string listing the GVKs supported by the cluster as a nested array of groups, containing supported versions, each of which contains supported kinds. See https://open-policy-agent.github.io/gatekeeper/website/docs/gator#the-gator-sync-verify-subcommand for an example.")
 }
 
 func run(cmd *cobra.Command, args []string) {

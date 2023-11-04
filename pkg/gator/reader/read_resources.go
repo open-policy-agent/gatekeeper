@@ -15,7 +15,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
@@ -104,7 +103,7 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 	return template, nil
 }
 
-// ToStructured converts an unstructured object into an object with the schema defined
+// ToTemplate converts an unstructured object into an object with the schema defined
 // by u's group, version, and kind.
 func ToStructured(scheme *runtime.Scheme, u *unstructured.Unstructured) (runtime.Object, error) {
 	gvk := u.GroupVersionKind()
@@ -253,32 +252,6 @@ func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
 	}
 
 	return objs, nil
-}
-
-type DiscoveryResults map[schema.GroupVersionKind]struct{}
-
-func ReadDiscoveryResults(r string) (DiscoveryResults, error) {
-	if r == "" {
-		return nil, nil
-	}
-	var stringAsJSON map[string]map[string][]string
-	if err := json.Unmarshal([]byte(r), &stringAsJSON); err != nil {
-		return nil, err
-	}
-	results := DiscoveryResults{}
-	for group, versions := range stringAsJSON {
-		for version, kinds := range versions {
-			for _, kind := range kinds {
-				results[schema.GroupVersionKind{
-					Group:   group,
-					Version: version,
-					Kind:    kind,
-				}] = struct{}{}
-			}
-		}
-	}
-
-	return results, nil
 }
 
 func IsTemplate(u *unstructured.Unstructured) bool {

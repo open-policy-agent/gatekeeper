@@ -14,19 +14,19 @@ import (
 
 func TestVerify(t *testing.T) {
 	tcs := []struct {
-		name      string
-		inputs    []string
-		discovery string
-		wantReqs  map[string][]parser.GVKEquivalenceSet
-		wantErrs  map[string]error
-		err       error
+		name          string
+		inputs        []string
+		supportedGVKs SupportedGVKs
+		wantReqs      map[string]parser.SyncRequirements
+		wantErrs      map[string]error
+		err           error
 	}{
 		{
 			name: "basic req unfulfilled",
 			inputs: []string{
 				fixtures.TemplateReferential,
 			},
-			wantReqs: map[string][]parser.GVKEquivalenceSet{
+			wantReqs: map[string]parser.SyncRequirements{
 				"k8suniqueserviceselector": {
 					parser.GVKEquivalenceSet{
 						{
@@ -45,7 +45,7 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferential,
 				fixtures.TemplateReferentialBadAnnotation,
 			},
-			wantReqs: map[string][]parser.GVKEquivalenceSet{
+			wantReqs: map[string]parser.SyncRequirements{
 				"k8suniqueserviceselector": {
 					parser.GVKEquivalenceSet{
 						{
@@ -66,7 +66,7 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferential,
 				fixtures.Config,
 			},
-			wantReqs: map[string][]parser.GVKEquivalenceSet{},
+			wantReqs: map[string]parser.SyncRequirements{},
 			wantErrs: map[string]error{},
 		},
 		{
@@ -75,9 +75,15 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferential,
 				fixtures.Config,
 			},
-			discovery: `{"": {"v1": ["Service"]}}`,
-			wantReqs:  map[string][]parser.GVKEquivalenceSet{},
-			wantErrs:  map[string]error{},
+			supportedGVKs: SupportedGVKs{
+				{
+					Group:   "",
+					Version: "v1",
+					Kind:    "Service",
+				}: struct{}{},
+			},
+			wantReqs: map[string]parser.SyncRequirements{},
+			wantErrs: map[string]error{},
 		},
 		{
 			name: "basic req fulfilled by syncset but not discoveryresults",
@@ -85,8 +91,13 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferential,
 				fixtures.Config,
 			},
-			discovery: `{"extensions": {"v1beta1": ["Ingress"]}}`,
-			wantReqs: map[string][]parser.GVKEquivalenceSet{
+			supportedGVKs: SupportedGVKs{
+				{
+					Group:   "extensions",
+					Version: "v1beta1",
+					Kind:    "Ingress",
+				}: struct{}{},
+			}, wantReqs: map[string]parser.SyncRequirements{
 				"k8suniqueserviceselector": {
 					parser.GVKEquivalenceSet{
 						{
@@ -105,7 +116,7 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferentialMultEquivSets,
 				fixtures.SyncSet,
 			},
-			wantReqs: map[string][]parser.GVKEquivalenceSet{},
+			wantReqs: map[string]parser.SyncRequirements{},
 			wantErrs: map[string]error{},
 		},
 		{
@@ -114,7 +125,7 @@ func TestVerify(t *testing.T) {
 				fixtures.TemplateReferentialMultReqs,
 				fixtures.SyncSet,
 			},
-			wantReqs: map[string][]parser.GVKEquivalenceSet{
+			wantReqs: map[string]parser.SyncRequirements{
 				"k8suniqueingresshostmultireq": {
 					parser.GVKEquivalenceSet{
 						{
@@ -136,7 +147,7 @@ func TestVerify(t *testing.T) {
 				fixtures.Config,
 				fixtures.SyncSet,
 			},
-			wantReqs: map[string][]parser.GVKEquivalenceSet{
+			wantReqs: map[string]parser.SyncRequirements{
 				"k8suniqueingresshostmultireq": {
 					parser.GVKEquivalenceSet{
 						{
@@ -152,7 +163,7 @@ func TestVerify(t *testing.T) {
 		{
 			name:     "no data of any kind",
 			inputs:   []string{},
-			wantReqs: map[string][]parser.GVKEquivalenceSet{},
+			wantReqs: map[string]parser.SyncRequirements{},
 			wantErrs: map[string]error{},
 		},
 	}
@@ -167,7 +178,7 @@ func TestVerify(t *testing.T) {
 				objs = append(objs, u)
 			}
 
-			gotReqs, gotErrs, err := Verify(objs, tc.discovery)
+			gotReqs, gotErrs, err := Verify(objs, tc.supportedGVKs)
 			if tc.err != nil {
 				require.ErrorIs(t, err, tc.err)
 			} else if err != nil {
