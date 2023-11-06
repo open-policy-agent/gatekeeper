@@ -34,7 +34,7 @@ webhooks:
       operator: NotIn
       values:
       - {{ .Release.Namespace }}
-    
+
     {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
       operator: NotIn
@@ -98,6 +98,15 @@ webhooks:
       operator: NotIn
       values:
       - {{ .Release.Namespace }}
+
+    {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
+    - key: {{ $key }}
+      operator: NotIn
+      values:
+      {{- range $value }}
+      - {{ . }}
+      {{- end }}
+    {{- end }}
   rules:
   - apiGroups:
     - ""
