@@ -8,7 +8,10 @@ import (
 
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/core"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/testhelpers"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -389,6 +392,36 @@ func TestMutatorForAssignImage(t *testing.T) {
 					t.Errorf("got error of unexpected type: %s", err)
 				}
 			}
+		})
+	}
+}
+
+func Test_AssignImage_errors(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		mut    *mutationsunversioned.AssignImage
+		errMsg string
+	}{
+		{
+			name:   "empty path",
+			mut:    &mutationsunversioned.AssignImage{},
+			errMsg: "empty path",
+		},
+		{
+			name: "name > 63",
+			mut: &mutationsunversioned.AssignImage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: testhelpers.BigName(),
+				},
+			},
+			errMsg: core.ErrNameLength.Error(),
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mutator, err := MutatorForAssignImage(tt.mut)
+
+			require.ErrorContains(t, err, tt.errMsg)
+			require.Nil(t, mutator)
 		})
 	}
 }
