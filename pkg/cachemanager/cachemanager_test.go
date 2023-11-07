@@ -628,22 +628,21 @@ func Test_interpretErr(t *testing.T) {
 	gvk2Err.RemoveGVKErr(gvk2, someErr)
 
 	cases := []struct {
-		name                  string
-		inputErr              error
-		inputGVK              []schema.GroupVersionKind
-		expectedFailingGVKs   []schema.GroupVersionKind
-		expectGeneral         bool
-		expectDanglingWatches bool
+		name                      string
+		inputErr                  error
+		inputGVK                  []schema.GroupVersionKind
+		expectedAddGVKFailures    []schema.GroupVersionKind
+		expectedRemoveGVKFailures []schema.GroupVersionKind
+		expectGeneral             bool
 	}{
 		{
-			name:     "nil err",
-			inputErr: nil,
+			name: "nil err",
 		},
 		{
-			name:                "intersection exists",
-			inputErr:            fmt.Errorf("some err: %w", gvk1Err),
-			inputGVK:            []schema.GroupVersionKind{gvk1},
-			expectedFailingGVKs: []schema.GroupVersionKind{gvk1},
+			name:                   "intersection exists",
+			inputErr:               fmt.Errorf("some err: %w", gvk1Err),
+			inputGVK:               []schema.GroupVersionKind{gvk1},
+			expectedAddGVKFailures: []schema.GroupVersionKind{gvk1},
 		},
 		{
 			name:     "intersection does not exist",
@@ -651,11 +650,9 @@ func Test_interpretErr(t *testing.T) {
 			inputGVK: []schema.GroupVersionKind{gvk2},
 		},
 		{
-			name:                  "intersection exists but we are removing the gvk",
-			inputErr:              gvk2Err,
-			inputGVK:              []schema.GroupVersionKind{gvk2},
-			expectedFailingGVKs:   []schema.GroupVersionKind{},
-			expectDanglingWatches: true,
+			name:                      "gvk watch failing to remove",
+			inputErr:                  gvk2Err,
+			expectedRemoveGVKFailures: []schema.GroupVersionKind{gvk2},
 		},
 		{
 			name:          "non-watchmanager error reports general error with no GVKs",
@@ -673,11 +670,11 @@ func Test_interpretErr(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			general, gvks, danglingWatches := interpretErr(tc.inputErr, tc.inputGVK)
+			general, addGVKs, removeGVKs := interpretErr(tc.inputErr, tc.inputGVK)
 
 			require.Equal(t, tc.expectGeneral, general)
-			require.ElementsMatch(t, gvks, tc.expectedFailingGVKs)
-			require.Equal(t, tc.expectDanglingWatches, danglingWatches)
+			require.ElementsMatch(t, addGVKs, tc.expectedAddGVKFailures)
+			require.ElementsMatch(t, removeGVKs, tc.expectedRemoveGVKFailures)
 		})
 	}
 }
