@@ -168,7 +168,11 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 		err = c.registrar.ReplaceWatch(ctx, newWatchSet.Items())
 	})
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // interpret if the err received is general or whether it is specific to the provided GVKs.
@@ -184,19 +188,19 @@ func interpretErr(e error, gvks []schema.GroupVersionKind) (bool, []schema.Group
 	}
 
 	failedGvksToAdd := watch.NewSet()
-	failedGvksToAdd.Add(f.FailingGVKsToAdd()...)
+	failedGvksToAdd.Add(f.AddGVKFailures()...)
 	sourceGVKSet := watch.NewSet()
 	sourceGVKSet.Add(gvks...)
 
 	common := failedGvksToAdd.Intersection(sourceGVKSet)
 	if common.Size() > 0 {
-		return false, common.Items(), f.HasFailingGVKsToRemove()
+		return false, common.Items(), f.HasRemoveGVKErrors()
 	}
 
 	// this error is not about the gvks in this request
 	// but we still log it for visibility
 	log.V(logging.DebugLevel).Info("encountered unrelated error when replacing watch set", "error", e)
-	return false, nil, f.HasFailingGVKsToRemove()
+	return false, nil, f.HasRemoveGVKErrors()
 }
 
 // RemoveSource removes the watches of the GVKs for a given aggregator.Key. Callers are responsible for retrying on error.

@@ -72,7 +72,7 @@ func Test_WatchesError(t *testing.T) {
 				er.Err(err)
 			}
 
-			require.ElementsMatch(t, tc.expectedGVKs, er.FailingGVKsToAdd())
+			require.ElementsMatch(t, tc.expectedGVKs, er.AddGVKFailures())
 			require.Equal(t, tc.generalErr, er.HasGeneralErr())
 		})
 	}
