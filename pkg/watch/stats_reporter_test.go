@@ -1,63 +1,149 @@
 package watch
 
 import (
+	"context"
 	"testing"
 
-	"go.opencensus.io/stats/view"
+	"github.com/stretchr/testify/assert"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 )
 
-func TestGauges(t *testing.T) {
+type fnExporter struct {
+	temporalityFunc sdkmetric.TemporalitySelector
+	aggregationFunc sdkmetric.AggregationSelector
+	exportFunc      func(context.Context, *metricdata.ResourceMetrics) error
+	flushFunc       func(context.Context) error
+	shutdownFunc    func(context.Context) error
+}
+
+func (e *fnExporter) Temporality(k sdkmetric.InstrumentKind) metricdata.Temporality {
+	if e.temporalityFunc != nil {
+		return e.temporalityFunc(k)
+	}
+	return sdkmetric.DefaultTemporalitySelector(k)
+}
+
+func (e *fnExporter) Aggregation(k sdkmetric.InstrumentKind) sdkmetric.Aggregation {
+	if e.aggregationFunc != nil {
+		return e.aggregationFunc(k)
+	}
+	return sdkmetric.DefaultAggregationSelector(k)
+}
+
+func (e *fnExporter) Export(ctx context.Context, m *metricdata.ResourceMetrics) error {
+	if e.exportFunc != nil {
+		return e.exportFunc(ctx, m)
+	}
+	return nil
+}
+
+func (e *fnExporter) ForceFlush(ctx context.Context) error {
+	if e.flushFunc != nil {
+		return e.flushFunc(ctx)
+	}
+	return nil
+}
+
+func (e *fnExporter) Shutdown(ctx context.Context) error {
+	if e.shutdownFunc != nil {
+		return e.shutdownFunc(ctx)
+	}
+	return nil
+}
+
+func TestReporter_registerGvkCountMCallBack(t *testing.T) {
 	r, err := newStatsReporter()
 	if err != nil {
 		t.Fatalf("newStatsReporter() error %v", err)
 	}
-	tc := []struct {
-		name string
-		fn   func(int64) error
+	tests := []struct {
+		name        string
+		ctx         context.Context
+		expectedErr error
+		want        metricdata.Metrics
+		r           *reporter
+		wm          *Manager
 	}{
 		{
-			name: gvkCountMetricName,
-			fn:   r.reportGvkCount,
-		},
-		{
-			name: gvkIntentCountMetricName,
-			fn:   r.reportGvkIntentCount,
+			name:        "reporting total violations with attributes",
+			ctx:         context.Background(),
+			expectedErr: nil,
+			r:           r,
+			wm:          &Manager{watchedKinds: make(vitalsByGVK)},
+			want: metricdata.Metrics{
+				Name: "test",
+				Data: metricdata.Gauge[int64]{
+					DataPoints: []metricdata.DataPoint[int64]{
+						{Value: 0},
+					},
+				},
+			},
 		},
 	}
-	for _, tt := range tc {
-		t.Run(tt.name, func(t *testing.T) {
-			const expectedValue int64 = 10
-			const expectedRowLength = 1
 
-			err = tt.fn(expectedValue)
-			if err != nil {
-				t.Errorf("function error %v", err)
-			}
-			row := checkData(t, tt.name, expectedRowLength)
-			value, ok := row.Data.(*view.LastValueData)
-			if !ok {
-				t.Errorf("metric %s should have aggregation LastValue()", tt.name)
-			}
-			if len(row.Tags) != 0 {
-				t.Errorf("%s tags is non-empty, got: %v", tt.name, row.Tags)
-			}
-			if int64(value.Value) != expectedValue {
-				t.Errorf("Metric: %v - Expected %v, got %v", tt.name, expectedValue, value.Value)
-			}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
+			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+			meter = mp.Meter("test")
+
+			// Ensure the pipeline has a callback setup
+			gvkCountM, err = meter.Int64ObservableGauge("test")
+			assert.NoError(t, err)
+			err = r.registerGvkCountMCallBack(tt.wm)
+			assert.NoError(t, err)
+
+			rm := &metricdata.ResourceMetrics{}
+			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
+
+			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
 		})
 	}
 }
 
-func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
-	row, err := view.RetrieveData(name)
+func TestRecordKeeper_registerGvkIntentCountMCallback(t *testing.T) {
+	var err error
+	want := metricdata.Metrics{
+		Name: "test",
+		Data: metricdata.Gauge[int64]{
+			DataPoints: []metricdata.DataPoint[int64]{
+				{Value: 0},
+			},
+		},
+	}
+
+	rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter = mp.Meter("test")
+
+	// Ensure the pipeline has a callback setup
+	gvkIntentCountM, err = meter.Int64ObservableGauge("test")
+	assert.NoError(t, err)
+	r, err := newRecordKeeper()
 	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, name)
+		t.Fatalf("newRecordKeeper() error %v", err)
 	}
-	if len(row) != expectedRowLength {
-		t.Errorf("Expected length %v, got %v", expectedRowLength, len(row))
-	}
-	if row[0].Data == nil {
-		t.Errorf("Expected row data not to be nil")
-	}
-	return row[0]
+
+	// Register the callback
+	err = r.registerGvkIntentCountMCallback()
+	assert.NoError(t, err)
+
+	rm := &metricdata.ResourceMetrics{}
+	assert.Equal(t, nil, rdr.Collect(context.Background(), rm))
+	metricdatatest.AssertEqual(t, want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+}
+
+func InitializeTestInstruments(t *testing.T) {
+	var err error
+	rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter = mp.Meter("test")
+
+	// Ensure the pipeline has a callback setup
+	gvkIntentCountM, err = meter.Int64ObservableGauge("test")
+	assert.NoError(t, err)
+	gvkCountM, err = meter.Int64ObservableGauge("test")
+	assert.NoError(t, err)
 }

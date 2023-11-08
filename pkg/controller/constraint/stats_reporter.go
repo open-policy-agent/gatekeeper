@@ -4,60 +4,65 @@ import (
 	"context"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
 	constraintsMetricName = "constraints"
+	enforcementActionKey  = "enforcement_action"
+	statusKey             = "status"
 )
 
 var (
-	constraintsM = stats.Int64(constraintsMetricName, "Current number of known constraints", stats.UnitDimensionless)
-
-	enforcementActionKey = tag.MustNewKey("enforcement_action")
-	statusKey            = tag.MustNewKey("status")
+	constraintsM metric.Int64ObservableGauge
+	meter        metric.Meter
 )
 
 func init() {
-	if err := register(); err != nil {
+	var err error
+	meter = otel.GetMeterProvider().Meter("gatekeeper")
+	constraintsM, err = meter.Int64ObservableGauge(
+		constraintsMetricName,
+		metric.WithDescription("Current number of known constraints"))
+	if err != nil {
 		panic(err)
 	}
 }
 
-func register() error {
-	views := []*view.View{
-		{
-			Name:        constraintsMetricName,
-			Measure:     constraintsM,
-			Aggregation: view.LastValue(),
-			TagKeys:     []tag.Key{enforcementActionKey, statusKey},
-		},
+func (c *ConstraintsCache) observeConstraints(ctx context.Context, observer metric.Observer) error {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
+	if c.reportMetrics {
+		totals := make(map[tags]int)
+		// report total number of constraints
+		for _, v := range c.cache {
+			totals[v]++
+		}
+
+		for _, enforcementAction := range util.KnownEnforcementActions {
+			for _, status := range metrics.AllStatuses {
+				t := tags{
+					enforcementAction: enforcementAction,
+					status:            status,
+				}
+				observer.ObserveInt64(constraintsM, int64(totals[t]), metric.WithAttributes(attribute.String(enforcementActionKey, string(enforcementAction)), attribute.String(statusKey, string(status))))
+			}
+		}
 	}
-	return view.Register(views...)
-}
-
-func (r *reporter) reportConstraints(ctx context.Context, t tags, v int64) error {
-	ctx, err := tag.New(
-		ctx,
-		tag.Insert(enforcementActionKey, string(t.enforcementAction)),
-		tag.Insert(statusKey, string(t.status)))
-	if err != nil {
-		return err
-	}
-
-	return metrics.Record(ctx, constraintsM.M(v))
-}
-
-// StatsReporter reports audit metrics.
-type StatsReporter interface {
-	reportConstraints(ctx context.Context, t tags, v int64) error
+	return nil
 }
 
 // newStatsReporter creates a reporter for audit metrics.
-func newStatsReporter() (StatsReporter, error) {
+func newStatsReporter() (*reporter, error) {
 	return &reporter{}, nil
+}
+
+func (rep *reporter) registerCallback(r *ReconcileConstraint) error {
+	_, err := meter.RegisterCallback(r.constraintsCache.observeConstraints, constraintsM)
+	return err
 }
 
 type reporter struct{}

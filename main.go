@@ -445,6 +445,12 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 		return err
 	}
 
+	setupLog.Info("setting up metrics")
+	if err := metrics.AddToManager(mgr); err != nil {
+		setupLog.Error(err, "unable to register metrics with the manager")
+		return err
+	}
+
 	wm, err := watch.New(dc)
 	if err != nil {
 		setupLog.Error(err, "unable to create watch manager")
@@ -538,12 +544,6 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	setupLog.Info("setting up upgrade")
 	if err := upgrade.AddToManager(mgr); err != nil {
 		setupLog.Error(err, "unable to register upgrade with the manager")
-		return err
-	}
-
-	setupLog.Info("setting up metrics")
-	if err := metrics.AddToManager(mgr); err != nil {
-		setupLog.Error(err, "unable to register metrics with the manager")
 		return err
 	}
 

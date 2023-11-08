@@ -72,6 +72,10 @@ func newReconciler(
 	if getPod == nil {
 		r.getPod = r.defaultGetPod
 	}
+	err := ctrlmutators.RegisterCallback(r.cache)
+	if err != nil {
+		r.log.Error(err, "failed to register callback for mutators metrics")
+	}
 	return r
 }
 
@@ -232,16 +236,6 @@ func (r *Reconciler) reportMutator(id types.ID, ingestionStatus ctrlmutators.Mut
 		if err := r.reporter.ReportMutatorIngestionRequest(ingestionStatus, time.Since(startTime)); err != nil {
 			r.log.Error(err, "failed to report mutator ingestion request")
 		}
-	}
-
-	for status, count := range r.cache.TallyStatus() {
-		if err := r.reporter.ReportMutatorsStatus(status, count); err != nil {
-			r.log.Error(err, "failed to report mutator status request")
-		}
-	}
-
-	if err := r.reporter.ReportMutatorsInConflict(r.cache.TallyConflict()); err != nil {
-		r.log.Error(err, "failed to report mutators in conflict request")
 	}
 }
 

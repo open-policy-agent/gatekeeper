@@ -4,40 +4,34 @@ import (
 	"context"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
 	etMetricName = "expansion_templates"
 	etDesc       = "Number of observed expansion templates"
+	statusKey    = "status"
 )
 
 var (
-	etM       = stats.Int64(etMetricName, etDesc, stats.UnitDimensionless)
-	statusKey = tag.MustNewKey("status")
-
-	views = []*view.View{
-		{
-			Name:        etMetricName,
-			Measure:     etM,
-			Description: etDesc,
-			Aggregation: view.LastValue(),
-			TagKeys:     []tag.Key{statusKey},
-		},
-	}
+	etM   metric.Int64ObservableGauge
+	meter metric.Meter
 )
 
 func init() {
-	if err := register(); err != nil {
-		panic(err)
-	}
-}
+	var err error
+	meter = otel.GetMeterProvider().Meter("gatekeeper")
+	etM, err = meter.Int64ObservableGauge(
+		etMetricName,
+		metric.WithDescription(etDesc))
 
-func register() error {
-	return view.Register(views...)
+	if err != nil {
+		log.Error(err, "failed to record total expansion templates")
+		// panic(err)
+	}
 }
 
 func newRegistry() *etRegistry {
@@ -66,9 +60,14 @@ func (r *etRegistry) remove(key types.NamespacedName) {
 	r.dirty = true
 }
 
-func (r *etRegistry) report(ctx context.Context) {
+func (r *etRegistry) registerCallback() error {
+	_, err := meter.RegisterCallback(r.observeETM, etM)
+	return err
+}
+
+func (r *etRegistry) observeETM(_ context.Context, o metric.Observer) error {
 	if !r.dirty {
-		return
+		return nil
 	}
 
 	totals := make(map[metrics.Status]int64)
@@ -77,14 +76,7 @@ func (r *etRegistry) report(ctx context.Context) {
 	}
 
 	for _, s := range metrics.AllStatuses {
-		ctx, err := tag.New(ctx, tag.Insert(statusKey, string(s)))
-		if err != nil {
-			log.Error(err, "failed to create status tag for expansion templates")
-			continue
-		}
-		err = metrics.Record(ctx, etM.M(totals[s]))
-		if err != nil {
-			log.Error(err, "failed to record total expansion templates")
-		}
+		o.ObserveInt64(etM, totals[s], metric.WithAttributes(attribute.String(statusKey, string(s))))
 	}
+	return nil
 }

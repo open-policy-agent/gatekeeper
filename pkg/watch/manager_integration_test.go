@@ -56,6 +56,7 @@ import (
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
+	watch.InitializeTestInstruments(t)
 
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{

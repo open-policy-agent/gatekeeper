@@ -3,21 +3,26 @@ package stackdriver
 import (
 	"context"
 	"flag"
+	"time"
 
 	traceapi "cloud.google.com/go/trace/apiv2"
-	"contrib.go.opencensus.io/exporter/stackdriver"
-	"contrib.go.opencensus.io/exporter/stackdriver/monitoredresource"
+	stackdriver "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/sdk/metric"
 	"golang.org/x/oauth2/google"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
-	Name         = "stackdriver"
-	metricPrefix = "custom.googleapis.com/opencensus/gatekeeper/"
+	Name                          = "stackdriver"
+	metricPrefix                  = "custom.googleapis.com/opentelemetry/gatekeeper/"
+	defaultMetricsCollectInterval = 10
 )
 
 var (
 	ignoreMissingCreds = flag.Bool("stackdriver-only-when-available", false, "Only attempt to start the stackdriver exporter if credentials are available")
+	metricInterval     = flag.Uint("stackdriver-metric-interval", defaultMetricsCollectInterval, "interval to read metrics for stackdriver exporter. defaulted to 10 secs if unspecified")
 	log                = logf.Log.WithName("stackdriver-exporter")
 )
 
@@ -31,10 +36,7 @@ func Start(ctx context.Context) error {
 		return err
 	}
 
-	exporter, err := stackdriver.NewExporter(stackdriver.Options{
-		MetricPrefix:      metricPrefix,
-		MonitoredResource: monitoredresource.Autodetect(),
-	})
+	e, err := stackdriver.New(stackdriver.WithProjectID(metricPrefix))
 	if err != nil {
 		if *ignoreMissingCreds {
 			log.Error(err, "Error initializing stackdriver exporter, not exporting stackdriver metrics")
@@ -42,15 +44,14 @@ func Start(ctx context.Context) error {
 		}
 		return err
 	}
+	reader := metric.NewPeriodicReader(e, metric.WithInterval(time.Duration(*metricInterval)*time.Second))
+	meterProvider := metric.NewMeterProvider(
+		metric.WithReader(reader),
+		metric.WithView(view.Views()...),
+	)
 
-	if err := exporter.StartMetricsExporter(); err != nil {
-		if *ignoreMissingCreds {
-			log.Error(err, "Error starting stackdriver exporter, not exporting stackdriver metrics")
-			return nil
-		}
-		return err
-	}
-	defer exporter.StopMetricsExporter()
+	otel.SetMeterProvider(meterProvider)
+	otel.SetLogger(logf.Log.WithName("metrics"))
 
 	<-ctx.Done()
 	return nil

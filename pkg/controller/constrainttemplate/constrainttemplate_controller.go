@@ -181,7 +181,7 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 	if getPod == nil {
 		reconciler.getPod = reconciler.defaultGetPod
 	}
-	return reconciler, nil
+	return reconciler, reconciler.metrics.registry.registerCallback()
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
@@ -259,7 +259,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		}
 	}
 
-	defer r.metrics.registry.report(ctx, r.metrics)
+	// defer r.metrics.registry.report(ctx, r.metrics)
 
 	// Fetch the ConstraintTemplate instance
 	deleted := false
