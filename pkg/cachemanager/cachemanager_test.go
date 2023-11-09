@@ -683,33 +683,35 @@ func Test_handleDanglingWatches(t *testing.T) {
 	cases := []struct {
 		name              string
 		alreadyDangling   *watch.Set
-		removeGVKFailures []schema.GroupVersionKind
+		removeGVKFailures *watch.Set
 		expectedDangling  *watch.Set
 	}{
 		{
-			name:             "no watches dangling, nothing to remove",
-			expectedDangling: watch.NewSet(),
+			name:              "no watches dangling, nothing to remove",
+			removeGVKFailures: watch.NewSet(),
+			expectedDangling:  watch.NewSet(),
 		},
 		{
-			name:             "no watches dangling, something to remove",
-			expectedDangling: watch.NewSet(),
+			name:              "no watches dangling, something to remove",
+			removeGVKFailures: watch.NewSet(),
+			expectedDangling:  watch.NewSet(),
 		},
 		{
 			name:              "watches dangling, finally removed",
 			alreadyDangling:   watch.SetFrom([]schema.GroupVersionKind{gvk1}),
-			removeGVKFailures: []schema.GroupVersionKind{},
-			expectedDangling:  watch.SetFrom([]schema.GroupVersionKind{}),
+			removeGVKFailures: watch.NewSet(),
+			expectedDangling:  watch.NewSet(),
 		},
 		{
 			name:              "watches dangling, keep dangling",
 			alreadyDangling:   watch.SetFrom([]schema.GroupVersionKind{gvk1}),
-			removeGVKFailures: []schema.GroupVersionKind{gvk1},
+			removeGVKFailures: watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 			expectedDangling:  watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 		},
 		{
 			name:              "watches dangling, some keep dangling",
 			alreadyDangling:   watch.SetFrom([]schema.GroupVersionKind{gvk2, gvk1}),
-			removeGVKFailures: []schema.GroupVersionKind{gvk1},
+			removeGVKFailures: watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 			expectedDangling:  watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 		},
 	}
@@ -723,11 +725,7 @@ func Test_handleDanglingWatches(t *testing.T) {
 
 			cm.handleDanglingWatches(tc.removeGVKFailures)
 
-			if tc.expectedDangling != nil {
-				require.ElementsMatch(t, tc.expectedDangling.Items(), cm.danglingWatches.Items())
-			} else {
-				require.Empty(t, cm.danglingWatches)
-			}
+			require.ElementsMatch(t, tc.expectedDangling.Items(), cm.danglingWatches.Items())
 		})
 	}
 }

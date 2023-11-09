@@ -154,9 +154,10 @@ func (c *CacheManager) UpsertSource(ctx context.Context, sourceKey aggregator.Ke
 // replaceWatchSet looks at the gvksToSync and makes changes to the registrar's watch set.
 // Assumes caller has lock. On error, actual watch state may not align with intended watch state.
 func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
-	newWatchSet := watch.NewSet()
-	newWatchSet.Add(c.gvksToSync.GVKs()...)
-	c.gvksToDeleteFromCache.AddSet(c.watchedSet.Difference(newWatchSet))
+	newWatchSet := watch.SetFrom(c.gvksToSync.GVKs())
+
+	gvksToRemove := c.watchedSet.Difference(newWatchSet)
+	c.gvksToDeleteFromCache.AddSet(gvksToRemove)
 
 	var err error
 	c.watchedSet.Replace(newWatchSet, func() {
@@ -169,9 +170,13 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 
 	if err != nil {
 		// account for any watches failing to remove
-		if f := watch.NewErrorList(); errors.As(err, &f) {
-			c.handleDanglingWatches(f.RemoveGVKFailures())
+		if f := watch.NewErrorList(); errors.As(err, &f) && !f.HasGeneralErr() {
+			c.handleDanglingWatches(watch.SetFrom(f.RemoveGVKFailures()))
+		} else {
+			// defensively assume all watches that needed removal failed to be removed in the general error case
+			c.handleDanglingWatches(gvksToRemove)
 		}
+
 		return err
 	}
 
@@ -222,14 +227,14 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 // Mark if there are any dangling watches that need to be retried to be removed and which
 // of the watches have finally been removed so they can be wiped from the cache.
 // assumes caller has lock.
-func (c *CacheManager) handleDanglingWatches(removeGVKFailures []schema.GroupVersionKind) {
-	removeGVKFailuresSet := watch.SetFrom(removeGVKFailures)
-
+func (c *CacheManager) handleDanglingWatches(removeGVKFailures *watch.Set) {
 	// any watches that failed previously but not anymore need to be marked for deletion
-	finallyRemoved := c.danglingWatches.Difference(removeGVKFailuresSet)
+	finallyRemoved := c.danglingWatches.Difference(removeGVKFailures)
 	c.gvksToDeleteFromCache.AddSet(finallyRemoved)
-
 	c.danglingWatches.RemoveSet(finallyRemoved)
+
+	// keep track of new dangling watches
+	c.danglingWatches.AddSet(removeGVKFailures.Difference(c.danglingWatches))
 }
 
 // ExcludeProcesses swaps the current process excluder with the new *process.Excluder.
