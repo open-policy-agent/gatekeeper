@@ -495,7 +495,7 @@ However, not including the `namespace` definition in the call to `gator expand` 
 error expanding resources: error expanding resource nginx-deployment: failed to mutate resultant resource nginx-deployment-pod: matching for mutator Assign.mutations.gatekeeper.sh /always-pull-image failed for  Pod my-ns nginx-deployment-pod: failed to run Match criteria: namespace selector for namespace-scoped object but missing Namespace
 ```
 
-## The `gator sync verify` subcommand
+## The `gator sync test` subcommand
 
 Certain templates require [replicating data](sync.md) into OPA to enable correct evaluation. These templates can use the annotation `metadata.gatekeeper.sh/requires-sync-data` to indicate which resources need to be synced. The annotation contains a json object representing a list of requirements, each of which contains a list of one or more GVK clauses forming an equivalence set of interchangeable GVKs. Each of these clauses has `groups`, `versions`, and `kinds` fields; any group-version-kind combination within a clause within a requirement should be considered sufficient to satisfy that requirement. For example (comments added for clarity):
 ```
@@ -527,40 +527,49 @@ Requirement 2 is simpler: it denotes that group5, version5, kind5 must be synced
 
 This template annotation is descriptive, not prescriptive. The prescription of which resources to sync is done in `SyncSet` resources and/or the Gatekeeper `Config` resource. The management of these various requirements can get challenging as the number of templates requiring replicated data increases. 
 
-`gator sync verify` aims to mitigate this challenge by enabling the user to verify their sync configuration is correct. The user passes in a set of Constraint Templates, SyncSets, and/or a Gatekeeper Config, and the command will determine which requirements enumerated by the Constraint Templates are unfulfilled by the given SyncSet(s) and Config(s).
+`gator sync test` aims to mitigate this challenge by enabling the user to check that their sync configuration is correct. The user passes in a set of Constraint Templates, GVK Manifest listing GVKs supported by the cluster, SyncSets, and/or a Gatekeeper Config, and the command will determine which requirements enumerated by the Constraint Templates are unfulfilled by the cluster and SyncSet(s)/Config.
 
 ### Usage
 
 #### Specifying Inputs
 
-`gator sync verify` expects a `--filename` or `--image` flag, or input fron stdin. The flags can be used individually, in combination, and/or repeated.
+`gator sync test` expects a `--filename` or `--image` flag, or input fron stdin. The flags can be used individually, in combination, and/or repeated.
 
 ```
-gator sync verify --filename="template.yaml" –filename="syncsets/" 
+gator sync test --filename="template.yaml" –-filename="syncsets/" --filename="manifest.yaml"
 ```
 
 Or, using an OCI Artifact containing templates as described previously:
 
 ```
-gator sync verify --filename="config.yaml" --image=localhost:5000/gator/template-library:v1
+gator sync test --filename="config.yaml" --image=localhost:5000/gator/template-library:v1
 ```
 
-Optionally, the `--supported-gvks` flag can be used to pass in a list of supported GVKs for the applicable cluster. If this is nonempty, only GVKs that are both included in a SyncSet/Config and are supported will be considered to fulfill a template's requirements. Supported GVKs should be passed as a string representing a JSON object mapping groups to lists of versions, which contain lists of kinds, like such:
+The manifest of GVKs supported by the cluster should be passed as a GVKManifest resource (CRD visible under the apis directory in the repo):
 ```
-{
-  "group1": {
-    "version1": ["kind1", "kind2"],
-    "version2": ["kind3", "kind4"],
-  },
-  "group2": {
-    "version3": ["kind3"]
-  }
-}
+apiVersion: gvkmanifest.gatekeeper.sh/v1alpha1
+kind: GVKManifest
+metadata:
+  name: gvkmanifest
+spec:
+  groups:
+  - name: "group1"
+    versions:
+    - name: "v1"
+      kinds: ["Kind1", "Kind2"]
+    - name: "v2"
+      kinds: ["Kind1", "Kind3"]
+  - name: "group2"
+    versions:
+      - name: "v1beta1"
+        kinds: ["Kind4", "Kind5"]
 ```
+
+Optionally, the `--omit-gvk-manifest` flag can be used to skip the requirement of providing a manifest of supported GVKs for the cluster. If this is provided, all GVKs will be assumed to be supported by the cluster. If this assumption is not true, then the given config and templates may cause caching errors or incorrect evaluation on the cluster despite passing this command. 
 
 #### Exit Codes
 
-`gator sync verify` will return a `0` exit status when the Templates, SyncSets, and
+`gator sync test` will return a `0` exit status when the Templates, SyncSets, and
 Config are successfully ingested and no requirements are unfulfilled.
 
 An error during evaluation, for example a failure to read a file, will result in

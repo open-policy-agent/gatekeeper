@@ -1,4 +1,4 @@
-package verify
+package test
 
 import (
 	"fmt"
@@ -7,32 +7,33 @@ import (
 
 	cmdutils "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/sync/verify"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/sync/test"
 	"github.com/spf13/cobra"
 )
 
 var Cmd = &cobra.Command{
-	Use:   "verify",
-	Short: "Verify that the provided SyncSet(s) and/or Config contain the GVKs required by the input templates.",
+	Use:   "test",
+	Short: "Test that the provided SyncSet(s) and/or Config contain the GVKs required by the input templates.",
 	Run:   run,
 }
 
 var (
-	flagFilenames     []string
-	flagImages        []string
-	flagSupportedGVKs verify.SupportedGVKs
+	flagFilenames       []string
+	flagImages          []string
+	flagOmitGVKManifest bool
 )
 
 const (
-	flagNameFilename      = "filename"
-	flagNameImage         = "image"
-	flagNameSupportedGVKs = "supported-gvks"
+	flagNameFilename = "filename"
+	flagNameImage    = "image"
+	flagNameForce    = "omit-gvk-manifest"
 )
 
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().VarP(&flagSupportedGVKs, flagNameSupportedGVKs, "s", "a json string listing the GVKs supported by the cluster as a nested array of groups, containing supported versions, each of which contains supported kinds. See https://open-policy-agent.github.io/gatekeeper/website/docs/gator#the-gator-sync-verify-subcommand for an example.")
+	Cmd.Flags().BoolVarP(&flagOmitGVKManifest, flagNameForce, "o", false, "Do not require a GVK manifest; if one is not provided, assume all GVKs listed in the requirements "+
+		"and configs are supported by the cluster under test. If this assumption isn't true, the given config may cause errors or templates may not be enforced correctly even after passing this test.")
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -44,9 +45,9 @@ func run(cmd *cobra.Command, args []string) {
 		cmdutils.ErrFatalf("no input data identified")
 	}
 
-	missingRequirements, templateErrors, err := verify.Verify(unstrucs, flagSupportedGVKs)
+	missingRequirements, templateErrors, err := test.Test(unstrucs, flagOmitGVKManifest)
 	if err != nil {
-		cmdutils.ErrFatalf("verifying: %v", err)
+		cmdutils.ErrFatalf("checking: %v", err)
 	}
 
 	if len(missingRequirements) > 0 {
@@ -57,7 +58,6 @@ func run(cmd *cobra.Command, args []string) {
 		cmdutils.ErrFatalf("encountered errors parsing the following templates: \n%v", resultsToString(templateErrors))
 	}
 
-	fmt.Println("all template requirements met")
 	os.Exit(0)
 }
 

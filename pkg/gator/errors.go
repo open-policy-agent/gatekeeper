@@ -15,12 +15,17 @@ var (
 	// ErrNotASyncSet indicates the user-indicated file does not contain a
 	// SyncSet.
 	ErrNotASyncSet = errors.New("not a SyncSet")
+	// ErrNotASyncSet indicates the user-indicated file does not contain a
+	// SyncSet.
+	ErrNotAGVKManifest = errors.New("not a GVKManifest")
 	// ErrAddingTemplate indicates a problem instantiating a Suite's ConstraintTemplate.
 	ErrAddingTemplate = errors.New("adding template")
 	// ErrAddingConstraint indicates a problem instantiating a Suite's Constraint.
 	ErrAddingConstraint = errors.New("adding constraint")
 	// ErrAddingSyncSet indicates a problem instantiating a Suite's SyncSet.
 	ErrAddingSyncSet = errors.New("adding syncset")
+	// ErrAddingGVKManifest indicates a problem instantiating a Suite's GVKManifest.
+	ErrAddingGVKManifest = errors.New("adding gvkmanifest")
 	// ErrAddingConfig indicates a problem instantiating a Suite's Config.
 	ErrAddingConfig = errors.New("adding config")
 	// ErrInvalidSuite indicates a Suite does not define the required fields.

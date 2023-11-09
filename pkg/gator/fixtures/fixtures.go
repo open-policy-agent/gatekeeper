@@ -661,7 +661,6 @@ apiVersion: syncset.gatekeeper.sh/v1alpha1
 kind: SyncSet
 metadata:
   name: syncset
-  namespace: "gatekeeper-system"
 spec:
   gvks:
     - group: "networking.k8s.io"
@@ -676,7 +675,6 @@ apiVersion: config.gatekeeper.sh/v1alpha1
 kind: Config
 metadata:
   name: config
-  namespace: "gatekeeper-system"
 spec:
   sync:
     syncOnly:
@@ -686,5 +684,17 @@ spec:
       - group: "apps"
         version: "v1"
         kind: "Deployment"
+`
+	GVKManifest = `
+apiVersion: gvkmanifest.gatekeeper.sh/v1alpha1
+kind: GVKManifest
+metadata:
+  name: gvkmanifest
+spec:
+  groups:
+  - name: ""
+    versions:
+    - name: "v1"
+      kinds: ["Service"]
 `
 )

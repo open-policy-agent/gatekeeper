@@ -1,51 +1,19 @@
-package verify
+package test
 
 import (
-	"encoding/json"
 	"fmt"
 
 	cfapis "github.com/open-policy-agent/frameworks/constraint/pkg/apis"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	gkapis "github.com/open-policy-agent/gatekeeper/v3/apis"
+
+	gvkmanifestv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/gvkmanifest/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/parser"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
-
-type SupportedGVKs map[schema.GroupVersionKind]struct{}
-
-func (s *SupportedGVKs) String() string {
-	return fmt.Sprintf("%v", *s)
-}
-
-func (s *SupportedGVKs) Set(value string) error {
-	if value == "" {
-		return nil
-	}
-	var stringAsJSON map[string]map[string][]string
-	if err := json.Unmarshal([]byte(value), &stringAsJSON); err != nil {
-		return err
-	}
-	*s = SupportedGVKs{}
-	for group, versions := range stringAsJSON {
-		for version, kinds := range versions {
-			for _, kind := range kinds {
-				(*s)[schema.GroupVersionKind{
-					Group:   group,
-					Version: version,
-					Kind:    kind,
-				}] = struct{}{}
-			}
-		}
-	}
-	return nil
-}
-
-func (s *SupportedGVKs) Type() string {
-	return "SupportedGVKs"
-}
 
 var scheme *runtime.Scheme
 
@@ -63,11 +31,13 @@ func init() {
 
 // Reads a list of unstructured objects and a string containing supported GVKs and
 // outputs a set of missing sync requirements per template and ingestion problems per template.
-func Verify(unstrucs []*unstructured.Unstructured, supportedGVKs SupportedGVKs) (map[string]parser.SyncRequirements, map[string]error, error) {
-	templates := []*templates.ConstraintTemplate{}
+func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[string]parser.SyncRequirements, map[string]error, error) {
+	templates := map[*templates.ConstraintTemplate]parser.SyncRequirements{}
 	syncedGVKs := map[schema.GroupVersionKind]struct{}{}
 	templateErrs := map[string]error{}
 	hasConfig := false
+	var gvkManifest *gvkmanifestv1alpha1.GVKManifest
+	var err error
 
 	for _, obj := range unstrucs {
 		if reader.IsSyncSet(obj) {
@@ -81,13 +51,11 @@ func Verify(unstrucs []*unstructured.Unstructured, supportedGVKs SupportedGVKs) 
 					Version: gvkEntry.Version,
 					Kind:    gvkEntry.Kind,
 				}
-				if _, exists := supportedGVKs[gvk]; exists || supportedGVKs == nil {
-					syncedGVKs[gvk] = struct{}{}
-				}
+				syncedGVKs[gvk] = struct{}{}
 			}
 		} else if reader.IsConfig(obj) {
 			if hasConfig {
-				return nil, nil, fmt.Errorf("multiple configs found. Config is a singleton resource")
+				return nil, nil, fmt.Errorf("multiple configs found; Config is a singleton resource")
 			}
 			config, err := reader.ToConfig(scheme, obj)
 			if err != nil {
@@ -100,9 +68,7 @@ func Verify(unstrucs []*unstructured.Unstructured, supportedGVKs SupportedGVKs) 
 					Version: syncOnlyEntry.Version,
 					Kind:    syncOnlyEntry.Kind,
 				}
-				if _, exists := supportedGVKs[gvk]; exists || supportedGVKs == nil {
-					syncedGVKs[gvk] = struct{}{}
-				}
+				syncedGVKs[gvk] = struct{}{}
 			}
 		} else if reader.IsTemplate(obj) {
 			templ, err := reader.ToTemplate(scheme, obj)
@@ -110,22 +76,63 @@ func Verify(unstrucs []*unstructured.Unstructured, supportedGVKs SupportedGVKs) 
 				templateErrs[obj.GetName()] = err
 				continue
 			}
-			templates = append(templates, templ)
+			syncRequirements, err := parser.ReadSyncRequirements(templ)
+			if err != nil {
+				templateErrs[templ.GetName()] = err
+				continue
+			}
+			templates[templ] = syncRequirements
+		} else if reader.IsGVKManifest(obj) {
+			if gvkManifest == nil {
+				gvkManifest, err = reader.ToGVKManifest(scheme, obj)
+				if err != nil {
+					return nil, nil, fmt.Errorf("converting unstructured %q to gvkmanifest: %w", obj.GetName(), err)
+				}
+			} else {
+				return nil, nil, fmt.Errorf("multiple GVK manifests found; please provide one manifest enumerating the GVKs supported by the cluster")
+			}
 		} else {
-			fmt.Printf("skipping unstructured %q because it is not a syncset, config, or template\n", obj.GetName())
+			fmt.Printf("skipping unstructured %q because it is not a syncset, config, gvk manifest, or template\n", obj.GetName())
+		}
+	}
+
+	// Don't assess requirement fulfillment if there was an error parsing any of the templates.
+	if len(templateErrs) != 0 {
+		return nil, templateErrs, nil
+	}
+
+	// Crosscheck synced gvks with supported gvks.
+	if gvkManifest == nil {
+		if !omitGVKManifest {
+			return nil, nil, fmt.Errorf("no GVK manifest found; please provide a manifest enumerating the GVKs supported by the cluster")
+		}
+		fmt.Print("ignoring absence of supported GVK manifest due to --omit-gvk-manifest flag; will assume all synced GVKs are supported by cluster")
+	} else {
+		supportedGVKs := map[schema.GroupVersionKind]struct{}{}
+		for _, group := range gvkManifest.Spec.Groups {
+			for _, version := range group.Versions {
+				for _, kind := range version.Kinds {
+					gvk := schema.GroupVersionKind{
+						Group:   group.Name,
+						Version: version.Name,
+						Kind:    kind,
+					}
+					supportedGVKs[gvk] = struct{}{}
+				}
+			}
+		}
+		for gvk := range syncedGVKs {
+			if _, exists := supportedGVKs[gvk]; !exists {
+				delete(syncedGVKs, gvk)
+			}
 		}
 	}
 
 	missingReqs := map[string]parser.SyncRequirements{}
 
-	for _, templ := range templates {
+	for templ, reqs := range templates {
 		// Fetch syncrequirements from template
-		syncRequirements, err := parser.ReadSyncRequirements(templ)
-		if err != nil {
-			templateErrs[templ.GetName()] = err
-			continue
-		}
-		for _, requirement := range syncRequirements {
+		for _, requirement := range reqs {
 			requirementMet := false
 			for gvk := range requirement {
 				if _, exists := syncedGVKs[gvk]; exists {

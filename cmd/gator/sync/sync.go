@@ -3,19 +3,19 @@ package sync
 import (
 	"fmt"
 
-	syncverify "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/sync/verify"
+	synctest "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/sync/test"
 	"github.com/spf13/cobra"
 )
 
 var commands = []*cobra.Command{
-	syncverify.Cmd,
+	synctest.Cmd,
 }
 
 var Cmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Manage SyncSets and Config",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Usage: gator sync verify")
+		fmt.Println("Usage: gator sync test")
 	},
 }
 

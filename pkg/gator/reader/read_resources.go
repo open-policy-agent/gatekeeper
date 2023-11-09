@@ -11,6 +11,7 @@ import (
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	gvkmanifestv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/gvkmanifest/v1alpha1"
 	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -192,6 +193,25 @@ func ToConfig(scheme *runtime.Scheme, u *unstructured.Unstructured) (*configv1al
 	return config, nil
 }
 
+// ToGVKManifest converts an unstructured GVKManifest into a GVKManifest struct.
+func ToGVKManifest(scheme *runtime.Scheme, u *unstructured.Unstructured) (*gvkmanifestv1alpha1.GVKManifest, error) {
+	if u.GroupVersionKind().Group != gvkmanifestv1alpha1.GroupVersion.Group || u.GroupVersionKind().Kind != "GVKManifest" {
+		return nil, fmt.Errorf("%w", gator.ErrNotAGVKManifest)
+	}
+
+	s, err := ToStructured(scheme, u)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingGVKManifest, err)
+	}
+
+	gvkManifest, isGVKManifest := s.(*gvkmanifestv1alpha1.GVKManifest)
+	if !isGVKManifest {
+		return nil, fmt.Errorf("%w: %T", gator.ErrAddingGVKManifest, gvkManifest)
+	}
+
+	return gvkManifest, nil
+}
+
 // ReadObject reads a file from the filesystem abstraction at the specified
 // path, and returns an unstructured.Unstructured object if the file can be
 // successfully unmarshalled.
@@ -261,12 +281,17 @@ func IsTemplate(u *unstructured.Unstructured) bool {
 
 func IsConfig(u *unstructured.Unstructured) bool {
 	gvk := u.GroupVersionKind()
-	return gvk.Group == "config.gatekeeper.sh" && gvk.Kind == "Config"
+	return gvk.Group == configv1alpha1.GroupVersion.Group && gvk.Kind == "Config"
 }
 
 func IsSyncSet(u *unstructured.Unstructured) bool {
 	gvk := u.GroupVersionKind()
-	return gvk.Group == "syncset.gatekeeper.sh" && gvk.Kind == "SyncSet"
+	return gvk.Group == syncsetv1alpha1.GroupVersion.Group && gvk.Kind == "SyncSet"
+}
+
+func IsGVKManifest(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == gvkmanifestv1alpha1.GroupVersion.Group && gvk.Kind == "GVKManifest"
 }
 
 func IsConstraint(u *unstructured.Unstructured) bool {
