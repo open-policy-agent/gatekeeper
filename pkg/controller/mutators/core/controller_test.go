@@ -22,7 +22,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/onsi/gomega"
 	mutationsinternal "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1"
 	podstatus "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
@@ -35,8 +34,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,7 +50,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const timeout = time.Second * 15
+const (
+	timeout = time.Second * 15
+	tick    = time.Second * 2
+)
 
 func makeValue(v interface{}) mutationsv1.AssignField {
 	return mutationsv1.AssignField{Value: &types.Anything{Value: v}}
@@ -91,7 +93,6 @@ func newAssign(name, location, value string) *mutationsv1.Assign {
 }
 
 func TestReconcile(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
 	mutator := &mutationsv1.Assign{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "assign-test-obj",
@@ -167,20 +168,20 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("Mutator is reported as enforced", func(t *testing.T) {
-		g.Eventually(func() error {
+		require.Eventually(t, func() bool {
 			v := &mutationsv1.Assign{}
 			v.SetName("assign-test-obj")
 			if err := c.Get(ctx, objName, v); err != nil {
-				return errors.Wrap(err, "cannot get mutator")
+				return false
 			}
 			if len(v.Status.ByPod) < 1 {
-				return errors.Errorf("no pod status reported: %+v", v)
+				return false
 			}
 			if !v.Status.ByPod[0].Enforced {
-				return errors.New("pod not reported as enforced")
+				return false
 			}
-			return nil
-		}, timeout).Should(gomega.Succeed())
+			return true
+		}, timeout, tick)
 	})
 
 	t.Run("System mutates a resource", func(t *testing.T) {
@@ -208,7 +209,7 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(func() error {
+		require.Eventually(t, func() bool {
 			u := &unstructured.Unstructured{}
 			u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 
@@ -218,14 +219,11 @@ func TestReconcile(t *testing.T) {
 			}
 
 			_, exists, err := unstructured.NestedString(u.Object, "spec", "test")
-			if err != nil {
-				return err
+			if err != nil || exists {
+				return false
 			}
-			if exists {
-				return errors.New("mutated value still exists")
-			}
-			return nil
-		}, timeout).Should(gomega.Succeed())
+			return true
+		}, timeout, tick)
 	})
 
 	t.Run("Conflicting mutators are marked not enforced and conflicts can be resolved", func(t *testing.T) {
@@ -246,24 +244,20 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		g.Eventually(func() error {
-			err := podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil))
-			if err != nil {
-				return err
-			}
-
-			return podStatusMatches(ctx, c, pod, mBar1ID, hasStatusErrors(nil))
-		})
+		require.Eventually(t, func() bool {
+			return podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil)) == nil &&
+				podStatusMatches(ctx, c, pod, mBar1ID, hasStatusErrors(nil)) == nil
+		}, timeout, tick)
 
 		err = c.Create(ctx, mBar2.DeepCopy())
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		g.Eventually(func() error {
+		require.Eventually(t, func() bool {
 			err := podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil))
 			if err != nil {
-				return err
+				return false
 			}
 
 			err = podStatusMatches(ctx, c, pod, mBar1ID, hasStatusErrors([]podstatus.MutatorError{{
@@ -273,7 +267,7 @@ func TestReconcile(t *testing.T) {
 				}).Error(),
 			}}))
 			if err != nil {
-				return err
+				return false
 			}
 
 			return podStatusMatches(ctx, c, pod, mBar2ID, hasStatusErrors([]podstatus.MutatorError{{
@@ -281,22 +275,22 @@ func TestReconcile(t *testing.T) {
 				Message: mutationschema.NewErrConflictingSchema(mutationschema.IDSet{
 					mBar1ID: true, mBar2ID: true,
 				}).Error(),
-			}}))
-		}, timeout).Should(gomega.Succeed())
+			}})) == nil
+		}, timeout, tick)
 
 		err = c.Delete(ctx, mBar1.DeepCopy())
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		g.Eventually(func() error {
+		require.Eventually(t, func() bool {
 			err := podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil))
 			if err != nil {
-				return err
+				return false
 			}
 
-			return podStatusMatches(ctx, c, pod, mBar2ID, hasStatusErrors(nil))
-		})
+			return podStatusMatches(ctx, c, pod, mBar2ID, hasStatusErrors(nil)) == nil
+		}, timeout, tick)
 	})
 }
 

@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -583,7 +583,6 @@ func TestRegistrar_Duplicates_Rejected(t *testing.T) {
 // unneeded watches will be removed, and watches that haven't changed will remain unchanged.
 func TestRegistrar_ReplaceWatch(t *testing.T) {
 	ctx := context.Background()
-	g := gomega.NewWithT(t)
 	var mu sync.Mutex
 	listCalls := make(map[schema.GroupVersionKind]int)
 	getInformerCalls := make(map[schema.GroupVersionKind]int)
@@ -713,18 +712,34 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 			t.Fatalf("got getInformerCalls[secret] = %v, want %v", getInformerCalls[secret], 1)
 		}
 	}()
-	g.Eventually(func() int {
+	require.Eventually(t, func() bool {
 		mu.Lock()
 		defer mu.Unlock()
-		return listCalls[pod]
-	}, 5*time.Second).Should(gomega.Equal(1), "final pod replay count")
+
+		return listCalls[pod] == 1
+	}, 5*time.Second, 1*time.Second, "final pod replay count")
 
 	// Replay should not be called against deployment - it should not leak from r1 to r2.
-	g.Consistently(func() int {
-		mu.Lock()
-		defer mu.Unlock()
-		return listCalls[deploy]
-	}, 50*time.Millisecond).Should(gomega.Equal(0), "final deployment replay count")
+	func() {
+		// require consistently
+		timeoutAfter := time.After(5 * time.Second)
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				func() {
+					mu.Lock()
+					defer mu.Unlock()
+
+					require.Equal(t, 0, listCalls[deploy], "final deployment replay count")
+				}()
+			case <-timeoutAfter:
+				return
+			}
+		}
+	}()
 
 	// Verify internals
 	registrarCounts := map[schema.GroupVersionKind]int{

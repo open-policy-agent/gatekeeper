@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/onsi/gomega"
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -21,6 +20,7 @@ import (
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -31,7 +31,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const timeout = time.Second * 20
+const (
+	timeout = time.Second * 10
+	tick    = time.Second * 1
+)
 
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
 	Name: "my-provider",
@@ -54,7 +57,6 @@ func setupManager(t *testing.T) manager.Manager {
 }
 
 func TestReconcile(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
 	instance := &externaldatav1beta1.Provider{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "externaldata.gatekeeper.sh/v1beta1",
@@ -98,7 +100,7 @@ func TestReconcile(t *testing.T) {
 
 	rec := newReconciler(mgr, cfClient, pc, tracker)
 
-	recFn, requests := SetupTestReconcile(rec)
+	recFn, requests := testutils.SetupTestReconcile(rec)
 	err = add(mgr, recFn)
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +122,10 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+		require.Eventually(t, func() bool {
+			_, ok := requests.Load(expectedRequest)
+			return ok
+		}, timeout, tick, "waiting to receive request")
 
 		entry, err := pc.Get("my-provider")
 		if err != nil {
@@ -145,7 +150,10 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+		require.Eventually(t, func() bool {
+			_, ok := requests.Load(expectedRequest)
+			return ok
+		}, timeout, tick, "waiting to receive request")
 
 		entry, err := pc.Get("my-provider")
 		if err != nil {
@@ -167,7 +175,10 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+		require.Eventually(t, func() bool {
+			_, ok := requests.Load(expectedRequest)
+			return ok
+		}, timeout, tick, "waiting to receive request")
 
 		_, err = pc.Get("my-provider")
 		// TODO(willbeason): Make an error in frameworks for this test to check against

@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/onsi/gomega"
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -198,12 +197,7 @@ func Test_AssignMetadata(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	g := gomega.NewWithT(t)
-	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		return probeIsReady(ctx)
-	}, 30*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	requireProbeIsReady(t)
 
 	// Verify that the AssignMetadata is present in the cache
 	for _, am := range testAssignMetadata {
@@ -217,8 +211,6 @@ func Test_AssignMetadata(t *testing.T) {
 }
 
 func Test_ModifySet(t *testing.T) {
-	g := gomega.NewWithT(t)
-
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are set up.
@@ -242,11 +234,7 @@ func Test_ModifySet(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		return probeIsReady(ctx)
-	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	requireProbeIsReady(t)
 
 	// Verify that the ModifySet is present in the cache
 	for _, am := range testModifySet {
@@ -259,8 +247,6 @@ func Test_ModifySet(t *testing.T) {
 }
 
 func Test_AssignImage(t *testing.T) {
-	g := gomega.NewWithT(t)
-
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are set up.
@@ -284,11 +270,7 @@ func Test_AssignImage(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		return probeIsReady(ctx)
-	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	requireProbeIsReady(t)
 
 	// Verify that the AssignImage is present in the cache
 	for _, am := range testAssignImage {
@@ -301,8 +283,6 @@ func Test_AssignImage(t *testing.T) {
 }
 
 func Test_Assign(t *testing.T) {
-	g := gomega.NewWithT(t)
-
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are setup.
@@ -326,11 +306,7 @@ func Test_Assign(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		return probeIsReady(ctx)
-	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	requireProbeIsReady(t)
 
 	// Verify that the Assign is present in the cache
 	for _, am := range testAssign {
@@ -343,8 +319,6 @@ func Test_Assign(t *testing.T) {
 }
 
 func Test_ExpansionTemplate(t *testing.T) {
-	g := gomega.NewWithT(t)
-
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are setup.
@@ -368,11 +342,7 @@ func Test_ExpansionTemplate(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		return probeIsReady(ctx)
-	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	requireProbeIsReady(t)
 
 	// Verify that the ExpansionTemplate is registered by expanding a demo deployment
 	// and checking that the resulting Pod is non-nil
@@ -398,8 +368,6 @@ func Test_ExpansionTemplate(t *testing.T) {
 }
 
 func Test_Provider(t *testing.T) {
-	g := gomega.NewWithT(t)
-
 	providerCache := frameworksexternaldata.NewCache()
 
 	err := os.Setenv("POD_NAME", "no-pod")
@@ -428,11 +396,7 @@ func Test_Provider(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		return probeIsReady(ctx)
-	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	requireProbeIsReady(t)
 
 	// Verify that the Provider is present in the cache
 	for _, tp := range testProvider {
@@ -460,8 +424,6 @@ func Test_Provider(t *testing.T) {
 // CRDs are loaded from testdata/crds (see TestMain).
 // Corresponding expectations are in testdata_test.go.
 func Test_Tracker(t *testing.T) {
-	g := gomega.NewWithT(t)
-
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are setup.
@@ -488,11 +450,7 @@ func Test_Tracker(t *testing.T) {
 		t.Fatalf("want createGatekeeperNamespace(mgr.GetConfig()) error = nil, got %v", err)
 	}
 
-	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		return probeIsReady(ctx)
-	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	requireProbeIsReady(t)
 
 	// Verify cache (tracks testdata fixtures)
 	for _, ct := range testTemplates {
@@ -520,23 +478,23 @@ func Test_Tracker(t *testing.T) {
 		t.Fatalf("applying post fixtures: %v", err)
 	}
 
-	g.Eventually(func() (bool, error) {
+	require.Eventually(t, func() bool {
 		// Verify cache (tracks testdata/post fixtures)
 		for _, ct := range postTemplates {
 			_, err := cfClient.GetTemplate(ct)
 			if err != nil {
-				return false, err
+				return false
 			}
 		}
 		for _, c := range postConstraints {
 			_, err := cfClient.GetConstraint(c)
 			if err != nil {
-				return false, err
+				return false
 			}
 		}
 
-		return true, nil
-	}, 20*time.Second, 100*time.Millisecond).Should(gomega.BeTrue(), "verifying cache for post-fixtures")
+		return true
+	}, ttimeout, ttick, "verifying cache for post-fixtures")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	t.Cleanup(cancel)
@@ -604,6 +562,18 @@ func Test_Tracker_SyncSourceEdgeCases(t *testing.T) {
 	}
 }
 
+func requireProbeIsReady(t *testing.T) {
+	require.Eventually(t, func() bool {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
+		ready, err := probeIsReady(ctx)
+		assert.NoError(t, err, "error while waiting for probe to be ready")
+
+		return ready
+	}, ttimeout, ttick, "tracker not healthy")
+}
+
 // Test_CollectDeleted adds resources and starts the readiness tracker, then
 // deletes the expected resources and ensures that the trackers watching these
 // resources correctly identify the deletions and remove the corresponding expectations.
@@ -615,8 +585,6 @@ func Test_CollectDeleted(t *testing.T) {
 		gvk         schema.GroupVersionKind
 		tracker     *readiness.Expectations
 	}
-
-	g := gomega.NewWithT(t)
 
 	err := applyFixtures("testdata")
 	if err != nil {
@@ -694,10 +662,9 @@ func Test_CollectDeleted(t *testing.T) {
 				tt = tracker.For(tc.gvk)
 			}
 
-			g.Eventually(func() (bool, error) {
-				return tt.Populated() && !tt.Satisfied(), nil
-			}, 20*time.Second, 1*time.Second).
-				Should(gomega.BeTrue(), "checking the tracker is tracking %s correctly")
+			require.Eventually(t, func() bool {
+				return tt.Populated() && !tt.Satisfied()
+			}, ttimeout, ttick, "checking the tracker is tracking %s correctly")
 
 			ul := &unstructured.UnstructuredList{}
 			ul.SetGroupVersionKind(tc.gvk)
@@ -716,10 +683,9 @@ func Test_CollectDeleted(t *testing.T) {
 				}
 			}
 
-			g.Eventually(func() (bool, error) {
-				return tt.Satisfied(), nil
-			}, 20*time.Second, 1*time.Second).
-				Should(gomega.BeTrue(), "checking the tracker collects deletes of %s")
+			require.Eventually(t, func() bool {
+				return tt.Satisfied()
+			}, ttimeout, ttick, "checking the tracker collects deletes of %s")
 		})
 	}
 }

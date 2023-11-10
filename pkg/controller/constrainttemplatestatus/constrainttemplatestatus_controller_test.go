@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
@@ -18,6 +17,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -30,6 +30,7 @@ import (
 
 const (
 	timeout = 15 * time.Second
+	tick    = 10 * time.Millisecond
 
 	contraintTemplateName = "denyall"
 	constraintCRDName     = "DenyAll"
@@ -63,7 +64,6 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 }
 
 func TestReconcile(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
 	template := &v1beta1.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: contraintTemplateName},
 		Spec: v1beta1.ConstraintTemplateSpec{
@@ -149,25 +149,25 @@ violation[{"msg": "denied!"}] {
 
 	templateCpy := template.DeepCopy()
 	t.Run("Constraint template status gets created and reported", func(t *testing.T) {
-		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
+		verifyTStatusCount(ctx, t, c, 0)
 		err := c.Create(ctx, templateCpy)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyTStatusCreated(ctx, c, true), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		verifyTStatusCount(ctx, t, c, 1)
+		verifyTStatusCreated(ctx, t, c, true)
+		verifyTByPodStatusCount(ctx, t, c, 1)
 	})
 
 	constraint := newDenyAllConstraint()
 	t.Run("Constraint status gets created and reported", func(t *testing.T) {
-		g.Eventually(verifyCStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
+		verifyCStatusCount(ctx, t, c, 0)
 		err := c.Create(ctx, constraint)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		verifyCStatusCount(ctx, t, c, 1)
+		verifyCByPodStatusCount(ctx, t, c, 1)
 	})
 
 	fakePod := pod.DeepCopy()
@@ -187,13 +187,13 @@ violation[{"msg": "denied!"}] {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyTStatusCreated(ctx, c, true), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
+		verifyTStatusCreated(ctx, t, c, true)
+		verifyTByPodStatusCount(ctx, t, c, 2)
 		err = c.Delete(ctx, fakeTStatus)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		verifyTByPodStatusCount(ctx, t, c, 1)
 	})
 
 	t.Run("Constraint template status.created is true even if some pod has errors", func(t *testing.T) {
@@ -215,13 +215,13 @@ violation[{"msg": "denied!"}] {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyTStatusCreated(ctx, c, true), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
+		verifyTStatusCreated(ctx, t, c, true)
+		verifyTByPodStatusCount(ctx, t, c, 2)
 		err = c.Delete(ctx, fakeTStatus)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		verifyTByPodStatusCount(ctx, t, c, 1)
 	})
 
 	t.Run("Multiple constraint statuses are reported", func(t *testing.T) {
@@ -242,12 +242,12 @@ violation[{"msg": "denied!"}] {
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, fakeCStatus))
 
-		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
+		verifyCByPodStatusCount(ctx, t, c, 2)
 		err = c.Delete(ctx, fakeCStatus)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		verifyCByPodStatusCount(ctx, t, c, 1)
 	})
 
 	t.Run("Deleting a constraint deletes its status", func(t *testing.T) {
@@ -255,14 +255,14 @@ violation[{"msg": "denied!"}] {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyCStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
+		verifyCStatusCount(ctx, t, c, 0)
 		constraint = newDenyAllConstraint()
 		err = c.Create(ctx, constraint)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		verifyCStatusCount(ctx, t, c, 1)
+		verifyCByPodStatusCount(ctx, t, c, 1)
 	})
 
 	t.Run("Deleting a constraint template deletes all statuses", func(t *testing.T) {
@@ -270,8 +270,8 @@ violation[{"msg": "denied!"}] {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyCStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
+		verifyTStatusCount(ctx, t, c, 0)
+		verifyCStatusCount(ctx, t, c, 0)
 		// need to manually delete constraint currently as garbage collection does not run on the test API server
 		err = c.Delete(ctx, newDenyAllConstraint())
 		if err != nil {
@@ -282,21 +282,21 @@ violation[{"msg": "denied!"}] {
 	templateCpy = template.DeepCopy()
 	constraint = newDenyAllConstraint()
 	t.Run("Deleting a constraint template deletes all statuses for the current pod", func(t *testing.T) {
-		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
+		verifyTStatusCount(ctx, t, c, 0)
 		err := c.Create(ctx, templateCpy)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyTStatusCreated(ctx, c, true), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyCStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
+		verifyTStatusCount(ctx, t, c, 1)
+		verifyTStatusCreated(ctx, t, c, true)
+		verifyTByPodStatusCount(ctx, t, c, 1)
+		verifyCStatusCount(ctx, t, c, 0)
 		err = c.Create(ctx, constraint)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		verifyCStatusCount(ctx, t, c, 1)
+		verifyCByPodStatusCount(ctx, t, c, 1)
 
 		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, contraintTemplateName, mgr.GetScheme())
 		if err != nil {
@@ -326,14 +326,15 @@ violation[{"msg": "denied!"}] {
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, fakeCStatus))
 
-		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), 30*timeout).Should(gomega.BeNil())
-		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
+		verifyTByPodStatusCount(ctx, t, c, 2)
+		verifyCByPodStatusCount(ctx, t, c, 2)
 		err = c.Delete(ctx, template.DeepCopy())
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+
+		verifyTStatusCount(ctx, t, c, 1)
+		verifyCStatusCount(ctx, t, c, 1)
 	})
 
 	templateCpy = template.DeepCopy()
@@ -343,25 +344,26 @@ violation[{"msg": "denied!"}] {
 	violation[invalid syntax error`
 
 	t.Run("Invalid ContraintTemplate has .status.created set to false", func(t *testing.T) {
-		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
+		verifyTStatusCount(ctx, t, c, 0)
 		err := c.Create(ctx, templateCpy)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
-		g.Eventually(verifyTStatusCreated(ctx, c, false), timeout).Should(gomega.BeNil())
 
+		verifyTStatusCount(ctx, t, c, 1)
+		verifyTByPodStatusCount(ctx, t, c, 1)
+		verifyTStatusCreated(ctx, t, c, false)
 		err = c.Delete(ctx, templateCpy)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
+
+		verifyTStatusCount(ctx, t, c, 0)
 	})
 }
 
-func verifyTStatusCount(ctx context.Context, c client.Client, expected int) func() error {
-	return func() error {
+func verifyTStatusCount(ctx context.Context, t *testing.T, c client.Client, expected int) {
+	fn := func() error {
 		statuses := &podstatus.ConstraintTemplatePodStatusList{}
 		if err := c.List(ctx, statuses, client.InNamespace("gatekeeper-system")); err != nil {
 			return err
@@ -371,10 +373,14 @@ func verifyTStatusCount(ctx context.Context, c client.Client, expected int) func
 		}
 		return nil
 	}
+
+	require.Eventually(t, func() bool {
+		return fn() == nil
+	}, timeout, tick)
 }
 
-func verifyTStatusCreated(ctx context.Context, c client.Client, expected bool) func() error {
-	return func() error {
+func verifyTStatusCreated(ctx context.Context, t *testing.T, c client.Client, expected bool) {
+	fn := func() error {
 		ct := &v1beta1.ConstraintTemplate{}
 		if err := c.Get(ctx, types.NamespacedName{Name: contraintTemplateName}, ct); err != nil {
 			return err
@@ -384,10 +390,14 @@ func verifyTStatusCreated(ctx context.Context, c client.Client, expected bool) f
 		}
 		return nil
 	}
+
+	require.Eventually(t, func() bool {
+		return fn() == nil
+	}, timeout, tick)
 }
 
-func verifyTByPodStatusCount(ctx context.Context, c client.Client, expected int) func() error {
-	return func() error {
+func verifyTByPodStatusCount(ctx context.Context, t *testing.T, c client.Client, expected int) {
+	fn := func() error {
 		ct := &v1beta1.ConstraintTemplate{}
 		if err := c.Get(ctx, types.NamespacedName{Name: contraintTemplateName}, ct); err != nil {
 			return err
@@ -397,10 +407,14 @@ func verifyTByPodStatusCount(ctx context.Context, c client.Client, expected int)
 		}
 		return nil
 	}
+
+	require.Eventually(t, func() bool {
+		return fn() == nil
+	}, timeout, tick)
 }
 
-func verifyCStatusCount(ctx context.Context, c client.Client, expected int) func() error {
-	return func() error {
+func verifyCStatusCount(ctx context.Context, t *testing.T, c client.Client, expected int) {
+	fn := func() error {
 		statuses := &podstatus.ConstraintPodStatusList{}
 		if err := c.List(ctx, statuses, client.InNamespace("gatekeeper-system")); err != nil {
 			return err
@@ -410,10 +424,14 @@ func verifyCStatusCount(ctx context.Context, c client.Client, expected int) func
 		}
 		return nil
 	}
+
+	require.Eventually(t, func() bool {
+		return fn() == nil
+	}, timeout, tick)
 }
 
-func verifyCByPodStatusCount(ctx context.Context, c client.Client, expected int) func() error {
-	return func() error {
+func verifyCByPodStatusCount(ctx context.Context, t *testing.T, c client.Client, expected int) {
+	fn := func() error {
 		constraint := newDenyAllConstraint()
 		if err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, constraint); err != nil {
 			return err
@@ -427,6 +445,10 @@ func verifyCByPodStatusCount(ctx context.Context, c client.Client, expected int)
 		}
 		return nil
 	}
+
+	require.Eventually(t, func() bool {
+		return fn() == nil
+	}, timeout, tick)
 }
 
 func newDenyAllConstraint() *unstructured.Unstructured {

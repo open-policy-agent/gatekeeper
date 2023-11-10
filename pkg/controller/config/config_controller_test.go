@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/onsi/gomega"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
@@ -58,7 +57,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const timeout = time.Second * 20
+const (
+	timeout = time.Second * 10
+	tick    = time.Second * 1
+)
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -91,8 +93,6 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 func TestReconcile(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	g := gomega.NewGomegaWithT(t)
 
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
@@ -173,21 +173,20 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}()
-	g.Eventually(func() bool {
-		expectedReq := reconcile.Request{NamespacedName: types.NamespacedName{
-			Name:      "config",
-			Namespace: "gatekeeper-system",
-		}}
+
+	expectedReq := reconcile.Request{NamespacedName: types.NamespacedName{
+		Name:      "config",
+		Namespace: "gatekeeper-system",
+	}}
+	require.Eventually(t, func() bool {
 		_, ok := requests.Load(expectedReq)
-
 		return ok
-	}).WithTimeout(timeout).Should(gomega.BeTrue())
+	}, timeout, tick, "waiting to receive request")
+	require.Eventually(t, func() bool {
+		return len(wm.GetManagedGVK()) != 0
+	}, timeout, tick)
 
-	g.Eventually(func() int {
-		return len(wm.GetManagedGVK())
-	}).WithTimeout(timeout).ShouldNot(gomega.Equal(0))
 	gvks := wm.GetManagedGVK()
-
 	wantGVKs := []schema.GroupVersionKind{
 		{Group: "", Version: "v1", Kind: "Namespace"},
 		{Group: "", Version: "v1", Kind: "Pod"},
@@ -291,8 +290,6 @@ func TestReconcile(t *testing.T) {
 func TestConfig_DeleteSyncResources(t *testing.T) {
 	log.Info("Running test: Cancel the expectations when sync only resource gets deleted")
 
-	g := gomega.NewGomegaWithT(t)
-
 	// setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
@@ -373,9 +370,9 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}
 
 	// ensure that expectations are set for the constraint gvk
-	g.Eventually(func() bool {
+	require.Eventually(t, func() bool {
 		return tr.IsExpecting(gvk, types.NamespacedName{Name: "testpod", Namespace: "default"})
-	}, timeout).Should(gomega.BeTrue())
+	}, timeout, tick)
 
 	// delete the pod , the delete event will be reconciled by sync controller
 	// to cancel the expectation set for it by tracker
@@ -395,9 +392,9 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}
 
 	// check readiness tracker is satisfied post-reconcile
-	g.Eventually(func() bool {
+	require.Eventually(t, func() bool {
 		return tracker.ForData(gvk).Satisfied()
-	}, timeout).Should(gomega.BeTrue())
+	}, timeout, tick)
 }
 
 func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager, tracker *readiness.Tracker, events chan event.GenericEvent, reader client.Reader, useFakeClient bool) (cachemanager.CFDataClient, error) {
@@ -469,7 +466,6 @@ func TestConfig_CacheContents(t *testing.T) {
 	// Setup the Manager and Controller.
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
-	g := gomega.NewGomegaWithT(t)
 	nsGVK := schema.GroupVersionKind{
 		Group:   "",
 		Version: "v1",
@@ -520,9 +516,9 @@ func TestConfig_CacheContents(t *testing.T) {
 		cmKey:                        nil,
 		// kube-system namespace is being excluded, it should not be in the cache
 	}
-	g.Eventually(func() bool {
+	require.Eventually(t, func() bool {
 		return fakeClient.Contains(expected)
-	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial cache contents")
+	}, timeout, tick, "checking initial cache contents")
 	require.True(t, fakeClient.HasGVK(nsGVK), "want fakeClient.HasGVK(nsGVK) to be true but got false")
 
 	// Reconfigure to drop the namespace watches
@@ -534,25 +530,24 @@ func TestConfig_CacheContents(t *testing.T) {
 	require.NoError(t, c.Update(ctx, configUpdate), "updating Config config")
 
 	// Expect namespaces to go away from cache
-	g.Eventually(func() bool {
+	require.Eventually(t, func() bool {
 		return fakeClient.HasGVK(nsGVK)
-	}, 10*time.Second).Should(gomega.BeFalse())
+	}, timeout, tick)
 
 	// Expect our configMap to return at some point
 	// TODO: In the future it will remain instead of having to repopulate.
 	expected = map[fakes.CfDataKey]interface{}{
 		cmKey: nil,
 	}
-	g.Eventually(func() bool {
+	require.Eventually(t, func() bool {
 		return fakeClient.Contains(expected)
-	}, 10*time.Second).Should(gomega.BeTrue(), "waiting for ConfigMap to repopulate in cache")
-
+	}, timeout, tick, "waiting for ConfigMap to repopulate in cache")
 	expected = map[fakes.CfDataKey]interface{}{
 		cm2Key: nil,
 	}
-	g.Eventually(func() bool {
+	require.Eventually(t, func() bool {
 		return !fakeClient.Contains(expected)
-	}, 10*time.Second).Should(gomega.BeTrue(), "kube-system namespace is excluded. kube-system/config-test-2 should not be in the cache")
+	}, timeout, tick, "kube-system namespace is excluded. kube-system/config-test-2 should not be in the cache")
 
 	// Delete the config resource - expect cache to empty out.
 	if fakeClient.Len() == 0 {
@@ -561,16 +556,15 @@ func TestConfig_CacheContents(t *testing.T) {
 	require.NoError(t, c.Delete(ctx, config), "deleting Config resource")
 
 	// The cache will be cleared out.
-	g.Eventually(func() int {
-		return fakeClient.Len()
-	}, 10*time.Second).Should(gomega.BeZero(), "waiting for cache to empty")
+	require.Eventually(t, func() bool {
+		return fakeClient.Len() == 0
+	}, timeout, tick, "waiting for cache to empty")
 }
 
 func TestConfig_Retries(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
 
-	g := gomega.NewGomegaWithT(t)
 	nsGVK := schema.GroupVersionKind{
 		Group:   "",
 		Version: "v1",
@@ -643,9 +637,9 @@ func TestConfig_Retries(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	// Create the Config object and expect the Reconcile to be created
-	g.Eventually(func() error {
-		return c.Create(ctx, instance.DeepCopy())
-	}, timeout).Should(gomega.BeNil())
+	require.Eventually(t, func() bool {
+		return c.Create(ctx, instance.DeepCopy()) == nil
+	}, timeout, tick)
 
 	defer func() {
 		ctx := context.Background()
@@ -675,9 +669,9 @@ func TestConfig_Retries(t *testing.T) {
 	expected := map[fakes.CfDataKey]interface{}{
 		cmKey: nil,
 	}
-	g.Eventually(func() bool {
+	require.Eventually(t, func() bool {
 		return dataClient.Contains(expected)
-	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial cache contents")
+	}, timeout, tick, "checking initial cache contents")
 
 	fi.SetFailures("ConfigMapList", 2)
 
@@ -693,9 +687,9 @@ func TestConfig_Retries(t *testing.T) {
 	}
 
 	// Despite the transient error, we expect the cache to eventually be repopulated.
-	g.Eventually(func() bool {
+	require.Eventually(t, func() bool {
 		return dataClient.Contains(expected)
-	}, 10*time.Second).Should(gomega.BeTrue(), "checking final cache contents")
+	}, timeout, tick, "checking final cache contents")
 }
 
 // configFor returns a config resource that watches the requested set of resources.

@@ -24,13 +24,13 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -225,7 +225,6 @@ loop:
 
 // Verifies that a dynamic watch will deliver events even across de-registration and re-registration of a watched CRD.
 func TestRegistrar_Reconnect(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
@@ -263,7 +262,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 	}
 	const plural = "testresources"
 	crd := makeCRD(gvk, plural)
-	err = applyCRD(ctx, g, c, gvk, crd)
+	err = applyCRD(ctx, t, c, gvk, crd)
 	if err != nil {
 		t.Fatalf("applying CRD: %v", err)
 	}
@@ -300,7 +299,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 
 	// Create the CRD and resource again, expect our previous watch to pick them up automatically.
 	crd = makeCRD(gvk, plural)
-	err = applyCRD(ctx, g, c, gvk, crd)
+	err = applyCRD(ctx, t, c, gvk, crd)
 	if err != nil {
 		t.Fatalf("reapplying CRD: %v", err)
 	}
@@ -450,7 +449,7 @@ func makeCRD(gvk schema.GroupVersionKind, plural string) *apiextensionsv1.Custom
 }
 
 // applyCRD applies a CRD and waits for it to register successfully.
-func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, gvk schema.GroupVersionKind, crd client.Object) error {
+func applyCRD(ctx context.Context, t *testing.T, client client.Client, gvk schema.GroupVersionKind, crd client.Object) error {
 	err := client.Create(ctx, crd)
 	if err != nil {
 		return fmt.Errorf("creating %+v: %w", gvk, err)
@@ -458,12 +457,13 @@ func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, 
 
 	u := &unstructured.UnstructuredList{}
 	u.SetGroupVersionKind(gvk)
-	g.Eventually(func() error {
+	require.Eventually(t, func() bool {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return false
 		}
-		return client.List(ctx, u)
-	}, 5*time.Second, 100*time.Millisecond).ShouldNot(gomega.HaveOccurred())
+
+		return client.List(ctx, u) == nil
+	}, 5*time.Second, 100*time.Millisecond, "waiting for CRD to be registered")
 	return nil
 }
 

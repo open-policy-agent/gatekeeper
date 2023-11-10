@@ -16,28 +16,14 @@ limitations under the License.
 package externaldata
 
 import (
-	"context"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var cfg *rest.Config
 
 func TestMain(m *testing.M) {
 	testutils.StartControlPlane(m, &cfg, 3)
-}
-
-// SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
-// writes the request to requests after Reconcile is finished.
-func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan reconcile.Request) {
-	requests := make(chan reconcile.Request)
-	fn := reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
-		result, err := inner.Reconcile(ctx, req)
-		requests <- req
-		return result, err
-	})
-	return fn, requests
 }
