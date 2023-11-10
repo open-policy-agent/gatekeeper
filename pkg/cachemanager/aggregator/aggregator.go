@@ -122,8 +122,7 @@ func (b *GVKAgreggator) pruneReverseStore(gvks map[schema.GroupVersionKind]struc
 	for gvk := range gvks {
 		keySet, found := b.reverseStore[gvk]
 		if !found {
-			// this should not happen if we keep the two maps well defined
-			// but let's be defensive nonetheless.
+			// by definition, nothing to prune
 			return
 		}
 

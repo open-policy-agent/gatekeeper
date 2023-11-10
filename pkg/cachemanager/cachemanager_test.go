@@ -681,38 +681,44 @@ func Test_handleDanglingWatches(t *testing.T) {
 	gvk2 := schema.GroupVersionKind{Group: "g2", Version: "v2", Kind: "k2"}
 
 	cases := []struct {
-		name              string
-		alreadyDangling   *watch.Set
-		removeGVKFailures *watch.Set
-		expectedDangling  *watch.Set
+		name                 string
+		alreadyDangling      *watch.Set
+		removeGVKFailures    *watch.Set
+		expectedDangling     *watch.Set
+		expectedGVKsToDelete *watch.Set
 	}{
 		{
-			name:              "no watches dangling, nothing to remove",
-			removeGVKFailures: watch.NewSet(),
-			expectedDangling:  watch.NewSet(),
+			name:                 "mothing dangling, no failures yields nothing dangling",
+			removeGVKFailures:    watch.NewSet(),
+			expectedDangling:     watch.NewSet(),
+			expectedGVKsToDelete: watch.NewSet(),
 		},
 		{
-			name:              "no watches dangling, something to remove",
-			removeGVKFailures: watch.NewSet(),
-			expectedDangling:  watch.NewSet(),
+			name:                 "mothing dangling, per gvk failures yields something dangling",
+			removeGVKFailures:    watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedGVKsToDelete: watch.NewSet(),
 		},
 		{
-			name:              "watches dangling, finally removed",
-			alreadyDangling:   watch.SetFrom([]schema.GroupVersionKind{gvk1}),
-			removeGVKFailures: watch.NewSet(),
-			expectedDangling:  watch.NewSet(),
+			name:                 "watches dangling, finally removed",
+			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			removeGVKFailures:    watch.NewSet(),
+			expectedDangling:     watch.NewSet(),
+			expectedGVKsToDelete: watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 		},
 		{
-			name:              "watches dangling, keep dangling",
-			alreadyDangling:   watch.SetFrom([]schema.GroupVersionKind{gvk1}),
-			removeGVKFailures: watch.SetFrom([]schema.GroupVersionKind{gvk1}),
-			expectedDangling:  watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			name:                 "watches dangling, keep dangling",
+			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			removeGVKFailures:    watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedGVKsToDelete: watch.NewSet(),
 		},
 		{
-			name:              "watches dangling, some keep dangling",
-			alreadyDangling:   watch.SetFrom([]schema.GroupVersionKind{gvk2, gvk1}),
-			removeGVKFailures: watch.SetFrom([]schema.GroupVersionKind{gvk1}),
-			expectedDangling:  watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			name:                 "watches dangling, some keep dangling",
+			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk2, gvk1}),
+			removeGVKFailures:    watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedGVKsToDelete: watch.SetFrom([]schema.GroupVersionKind{gvk2}),
 		},
 	}
 
@@ -726,6 +732,7 @@ func Test_handleDanglingWatches(t *testing.T) {
 			cm.handleDanglingWatches(tc.removeGVKFailures)
 
 			require.ElementsMatch(t, tc.expectedDangling.Items(), cm.danglingWatches.Items())
+			require.ElementsMatch(t, tc.expectedGVKsToDelete.Items(), cm.gvksToDeleteFromCache.Items())
 		})
 	}
 }

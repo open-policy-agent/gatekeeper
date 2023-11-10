@@ -13,6 +13,7 @@ func Test_WatchesError(t *testing.T) {
 	someGVKA := schema.GroupVersionKind{Group: "a", Version: "b", Kind: "c"}
 	someGVKB := schema.GroupVersionKind{Group: "x", Version: "y", Kind: "z"}
 	someGVKC := schema.GroupVersionKind{Group: "m", Version: "n", Kind: "o"}
+	someGVKD := schema.GroupVersionKind{Group: "p", Version: "q", Kind: "r"}
 
 	type errsToAdd struct {
 		errs    []error
@@ -20,10 +21,11 @@ func Test_WatchesError(t *testing.T) {
 	}
 
 	tcs := []struct {
-		name         string
-		errsToAdd    errsToAdd
-		expectedGVKs []schema.GroupVersionKind
-		generalErr   bool
+		name               string
+		errsToAdd          errsToAdd
+		expectedAddGVKs    []schema.GroupVersionKind
+		expectedRemoveGVKs []schema.GroupVersionKind
+		expectGeneralErr   bool
 	}{
 		{
 			name: "gvk errors, not general",
@@ -31,10 +33,11 @@ func Test_WatchesError(t *testing.T) {
 				gvkErrs: []gvkErr{
 					{err: someErr, gvk: someGVKA},
 					{err: someErr, gvk: someGVKB},
+					{err: someErr, gvk: someGVKD, isRemove: true},
 				},
 			},
-			expectedGVKs: []schema.GroupVersionKind{someGVKA, someGVKB},
-			generalErr:   false,
+			expectedAddGVKs:    []schema.GroupVersionKind{someGVKA, someGVKB},
+			expectedRemoveGVKs: []schema.GroupVersionKind{someGVKD},
 		},
 		{
 			name: "gvk errors and general error",
@@ -42,19 +45,40 @@ func Test_WatchesError(t *testing.T) {
 				gvkErrs: []gvkErr{
 					{err: someErr, gvk: someGVKA},
 					{err: someErr, gvk: someGVKB},
-					{err: someErr, gvk: someGVKC, isRemove: true}, // this one should not show up in FailingGVKsToAdd
+					{err: someErr, gvk: someGVKC, isRemove: true},
 				},
 				errs: []error{someErr, someErr},
 			},
-			expectedGVKs: []schema.GroupVersionKind{someGVKA, someGVKB},
-			generalErr:   true,
+			expectedAddGVKs:    []schema.GroupVersionKind{someGVKA, someGVKB},
+			expectedRemoveGVKs: []schema.GroupVersionKind{someGVKC},
+			expectGeneralErr:   true,
 		},
 		{
 			name: "just general error",
 			errsToAdd: errsToAdd{
 				errs: []error{someErr},
 			},
-			generalErr: true,
+			expectGeneralErr: true,
+		},
+		{
+			name: "just add gvk error",
+			errsToAdd: errsToAdd{
+				gvkErrs: []gvkErr{
+					{err: someErr, gvk: someGVKA},
+					{err: someErr, gvk: someGVKB},
+				},
+			},
+			expectedAddGVKs: []schema.GroupVersionKind{someGVKA, someGVKB},
+		},
+		{
+			name: "just remove gvk error",
+			errsToAdd: errsToAdd{
+				gvkErrs: []gvkErr{
+					{err: someErr, gvk: someGVKC, isRemove: true},
+					{err: someErr, gvk: someGVKD, isRemove: true},
+				},
+			},
+			expectedRemoveGVKs: []schema.GroupVersionKind{someGVKC, someGVKD},
 		},
 	}
 
@@ -72,8 +96,9 @@ func Test_WatchesError(t *testing.T) {
 				er.Err(err)
 			}
 
-			require.ElementsMatch(t, tc.expectedGVKs, er.AddGVKFailures())
-			require.Equal(t, tc.generalErr, er.HasGeneralErr())
+			require.ElementsMatch(t, tc.expectedAddGVKs, er.AddGVKFailures())
+			require.ElementsMatch(t, tc.expectedRemoveGVKs, er.RemoveGVKFailures())
+			require.Equal(t, tc.expectGeneralErr, er.HasGeneralErr())
 		})
 	}
 }

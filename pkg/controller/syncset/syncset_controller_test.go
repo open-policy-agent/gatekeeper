@@ -63,14 +63,14 @@ func Test_ReconcileSyncSet(t *testing.T) {
 		expectedGVKs []schema.GroupVersionKind
 	}{
 		{
-			name: "basic reconcile",
+			name: "SyncSet includes new GVKs",
 			syncSources: []*syncsetv1alpha1.SyncSet{
 				fakes.SyncSetFor("syncset1", []schema.GroupVersionKind{configMapGVK, nsGVK}),
 			},
 			expectedGVKs: []schema.GroupVersionKind{configMapGVK, nsGVK},
 		},
 		{
-			name: "syncset adjusts spec",
+			name: "New SyncSet generation has one less GVK than previous generation",
 			syncSources: []*syncsetv1alpha1.SyncSet{
 				fakes.SyncSetFor("syncset1", []schema.GroupVersionKind{configMapGVK, nsGVK}),
 				fakes.SyncSetFor("syncset1", []schema.GroupVersionKind{nsGVK}),
@@ -82,20 +82,20 @@ func Test_ReconcileSyncSet(t *testing.T) {
 	for _, tt := range tts {
 		t.Run(tt.name, func(t *testing.T) {
 			created := map[string]struct{}{}
-			for _, o := range tt.syncSources {
-				if _, ok := created[o.GetName()]; ok {
-					curObj, ok := o.DeepCopyObject().(client.Object)
+			for _, syncSource := range tt.syncSources {
+				if _, ok := created[syncSource.GetName()]; ok {
+					curObj, ok := syncSource.DeepCopyObject().(client.Object)
 					require.True(t, ok)
 					// eventually we should find the object
 					require.Eventually(t, func() bool {
 						return testRes.k8sclient.Get(ctx, client.ObjectKeyFromObject(curObj), curObj) == nil
-					}, timeout, tick, fmt.Sprintf("getting %s", o.GetName()))
+					}, timeout, tick, fmt.Sprintf("getting %s", syncSource.GetName()))
 
-					o.SetResourceVersion(curObj.GetResourceVersion())
-					require.NoError(t, testRes.k8sclient.Update(ctx, o), fmt.Sprintf("updating %s", o.GetName()))
+					syncSource.SetResourceVersion(curObj.GetResourceVersion())
+					require.NoError(t, testRes.k8sclient.Update(ctx, syncSource), fmt.Sprintf("updating %s", syncSource.GetName()))
 				} else {
-					require.NoError(t, testRes.k8sclient.Create(ctx, o), fmt.Sprintf("creating %s", o.GetName()))
-					created[o.GetName()] = struct{}{}
+					require.NoError(t, testRes.k8sclient.Create(ctx, syncSource), fmt.Sprintf("creating %s", syncSource.GetName()))
+					created[syncSource.GetName()] = struct{}{}
 				}
 			}
 

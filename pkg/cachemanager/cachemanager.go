@@ -183,7 +183,8 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	return nil
 }
 
-// interpret if the err received is general or whether it is specific to the provided GVKs.
+// interpretErr determines if the passed-in error is general (not GVK-specific) and,
+// if GVK-specific, returns the subset of the passed in GVKs that are included in the err.
 func interpretErr(e error, gvks []schema.GroupVersionKind) (bool, []schema.GroupVersionKind) {
 	if e == nil {
 		return false, nil
@@ -217,6 +218,8 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 
 	c.gvksToSync.Remove(sourceKey)
 	err := c.replaceWatchSet(ctx)
+	// Retrying watch deletion due to per-GVK errors is done in the background management loop,
+	// and thus only a general error should be returned to the caller for a controller-based retry.
 	if general, _ := interpretErr(err, []schema.GroupVersionKind{}); general {
 		return fmt.Errorf("error establishing watches: %w", err)
 	}
