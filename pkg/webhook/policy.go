@@ -341,8 +341,11 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return true, nil
 	}
 
-	gvk := req.AdmissionRequest.Kind
+	if len(req.Name) > 63 {
+		return false, fmt.Errorf("resource cannot have metadata.name larger than 63 char; length: %d", len(req.Name))
+	}
 
+	gvk := req.AdmissionRequest.Kind
 	switch {
 	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
 		return h.validateTemplate(ctx, req)
