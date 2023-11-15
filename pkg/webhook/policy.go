@@ -336,6 +336,10 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources.
 func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req *admission.Request) (bool, error) {
+	if !h.isGatekeeperResource(req) {
+		return false, nil
+	}
+
 	if req.Operation == admissionv1.Delete && req.Name == "" {
 		// Allow the general DELETE of resources like "/apis/config.gatekeeper.sh/v1alpha1/namespaces/<ns>/configs"
 		return true, nil
