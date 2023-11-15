@@ -16,6 +16,7 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
@@ -126,6 +127,7 @@ spec:
       - apiGroups: [""]
         kinds: ["Pod"]
 `
+	nameLargerThan63 = "abignameabignameabignameabignameabignameabignameabignameabigname"
 )
 
 func validProvider() *externadatav1alpha1.Provider {
@@ -520,6 +522,27 @@ func Test_ConstrainTemplate_Name(t *testing.T) {
 	got, err := h.validateGatekeeperResources(context.Background(), review)
 	require.False(t, got)
 	require.ErrorContains(t, err, "resource cannot have metadata.name larger than 63 char")
+}
+
+func Test_NonGkResource_Name(t *testing.T) {
+	h := &validationHandler{log: log}
+	fp := fakes.Pod(fakes.WithName(nameLargerThan63))
+
+	b, err := convertToRawExtension(fp)
+	require.NoError(t, err)
+
+	review := &admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Kind:   metav1.GroupVersionKind(fp.GroupVersionKind()),
+			Object: *b,
+			Name:   fp.Name,
+		},
+	}
+
+	// since this is not a gatekeeper resource, we should not enforce the metadata.name len check
+	got, err := h.validateGatekeeperResources(context.Background(), review)
+	require.False(t, got)
+	require.NoError(t, err)
 }
 
 func TestTracing(t *testing.T) {
