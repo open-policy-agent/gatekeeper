@@ -40,7 +40,7 @@ jobs:
         uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
         with:
           go-version: "1.21"
-
+          check-latest: true
       - name: Check out code into the Go module directory
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
@@ -65,7 +65,7 @@ jobs:
         uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
         with:
           go-version: "1.21"
-
+          check-latest: true
       - name: Check out code into the Go module directory
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
@@ -95,6 +95,7 @@ jobs:
         uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
         with:
           go-version: "1.21"
+          check-latest: true
       - name: Check go.mod and manifests
         run: |
           # there should be no additional manifest or go.mod changes
@@ -117,7 +118,7 @@ jobs:
         uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
         with:
           go-version: "1.21"
-
+          check-latest: true
       - name: Check out code into the Go module directory
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
@@ -150,7 +151,7 @@ jobs:
         uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
         with:
           go-version: "1.21"
-
+          check-latest: true
       - name: Bootstrap e2e
         run: |
           mkdir -p $GITHUB_WORKSPACE/bin
@@ -270,7 +271,7 @@ jobs:
       uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
       with:
         go-version: "1.21"
-
+        check-latest: true
     - name: Bootstrap e2e
       run: |
         mkdir -p $GITHUB_WORKSPACE/bin
