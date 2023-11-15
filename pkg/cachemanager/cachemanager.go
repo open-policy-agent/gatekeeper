@@ -60,7 +60,7 @@ type CacheManager struct {
 	cfClient                   CFDataClient
 	syncMetricsCache           *syncutil.MetricsCache
 	tracker                    *readiness.Tracker
-	registrar                  *watch.Registrar
+	registrar                  registrarReplacer
 	backgroundManagementTicker time.Ticker
 	reader                     client.Reader
 }
@@ -69,6 +69,10 @@ type CacheManager struct {
 type CFDataClient interface {
 	AddData(ctx context.Context, data interface{}) (*types.Responses, error)
 	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
+}
+
+type registrarReplacer interface {
+	ReplaceWatch(ctx context.Context, gvks []schema.GroupVersionKind) error
 }
 
 func NewCacheManager(config *Config) (*CacheManager, error) {
@@ -171,14 +175,24 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 	if err != nil {
 		// account for any watches failing to remove
 		if f := watch.NewErrorList(); errors.As(err, &f) && !f.HasGeneralErr() {
-			c.handleDanglingWatches(watch.SetFrom(f.RemoveGVKFailures()))
+			removeGVKFailures := watch.SetFrom(f.RemoveGVKFailures())
+			finallyRemoved := c.danglingWatches.Difference(removeGVKFailures)
+
+			c.gvksToDeleteFromCache.AddSet(finallyRemoved)
+			c.danglingWatches.RemoveSet(finallyRemoved)
+			c.danglingWatches.AddSet(removeGVKFailures.Difference(c.danglingWatches))
 		} else {
 			// defensively assume all watches that needed removal failed to be removed in the general error case
-			c.handleDanglingWatches(gvksToRemove)
+			// also assume whatever watches were dangling are still dangling.
+			c.danglingWatches.AddSet(gvksToRemove)
 		}
 
 		return err
 	}
+
+	// if no error, it means no previously dangling watches are still dangling
+	c.gvksToDeleteFromCache.AddSet(c.danglingWatches)
+	c.danglingWatches = watch.NewSet()
 
 	return nil
 }
@@ -225,19 +239,6 @@ func (c *CacheManager) RemoveSource(ctx context.Context, sourceKey aggregator.Ke
 	}
 
 	return nil
-}
-
-// Mark if there are any dangling watches that need to be retried to be removed and which
-// of the watches have finally been removed so they can be wiped from the cache.
-// assumes caller has lock.
-func (c *CacheManager) handleDanglingWatches(removeGVKFailures *watch.Set) {
-	// any watches that failed previously but not anymore need to be marked for deletion
-	finallyRemoved := c.danglingWatches.Difference(removeGVKFailures)
-	c.gvksToDeleteFromCache.AddSet(finallyRemoved)
-	c.danglingWatches.RemoveSet(finallyRemoved)
-
-	// keep track of new dangling watches
-	c.danglingWatches.AddSet(removeGVKFailures.Difference(c.danglingWatches))
 }
 
 // ExcludeProcesses swaps the current process excluder with the new *process.Excluder.

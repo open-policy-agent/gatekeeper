@@ -676,28 +676,30 @@ func Test_interpretErr(t *testing.T) {
 	}
 }
 
-func Test_handleDanglingWatches(t *testing.T) {
+func Test_replaceWatchSet_danglingWatches(t *testing.T) {
 	gvk1 := schema.GroupVersionKind{Group: "g1", Version: "v1", Kind: "k1"}
 	gvk2 := schema.GroupVersionKind{Group: "g2", Version: "v2", Kind: "k2"}
 
 	cases := []struct {
-		name                 string
-		alreadyDangling      *watch.Set
-		removeGVKFailures    *watch.Set
+		name              string
+		alreadyDangling   *watch.Set
+		removeGVKFailures *watch.Set
+		hasGeneralErr     bool
+
 		expectedDangling     *watch.Set
 		expectedGVKsToDelete *watch.Set
 	}{
 		{
-			name:                 "mothing dangling, no failures yields nothing dangling",
+			name:                 "nothing dangling, no failures yields nothing dangling",
 			removeGVKFailures:    watch.NewSet(),
 			expectedDangling:     watch.NewSet(),
 			expectedGVKsToDelete: watch.NewSet(),
 		},
 		{
-			name:                 "mothing dangling, per gvk failures yields something dangling",
+			name:                 "nothing dangling, per gvk failures yields something dangling",
 			removeGVKFailures:    watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1}),
-			expectedGVKsToDelete: watch.NewSet(),
+			expectedGVKsToDelete: watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 		},
 		{
 			name:                 "watches dangling, finally removed",
@@ -711,28 +713,69 @@ func Test_handleDanglingWatches(t *testing.T) {
 			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 			removeGVKFailures:    watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1}),
-			expectedGVKsToDelete: watch.NewSet(),
+			expectedGVKsToDelete: watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 		},
 		{
 			name:                 "watches dangling, some keep dangling",
-			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk2, gvk1}),
+			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk1, gvk2}),
 			removeGVKFailures:    watch.SetFrom([]schema.GroupVersionKind{gvk1}),
 			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1}),
-			expectedGVKsToDelete: watch.SetFrom([]schema.GroupVersionKind{gvk2}),
+			expectedGVKsToDelete: watch.SetFrom([]schema.GroupVersionKind{gvk1, gvk2}),
+		},
+		{
+			name:                 "watches dangling, keep dangling on general error",
+			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk1, gvk2}),
+			removeGVKFailures:    watch.NewSet(),
+			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1, gvk2}),
+			expectedGVKsToDelete: watch.NewSet(),
+			hasGeneralErr:        true,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cm, _ := makeCacheManager(t)
+			cm, ctx := makeCacheManager(t)
+			fakeRegistrar := &fakeRegistrar{removeGVKFailures: tc.removeGVKFailures.Items()}
+			if tc.hasGeneralErr {
+				fakeRegistrar.generalErr = errors.New("test general error")
+			}
+			cm.registrar = fakeRegistrar
+
 			if tc.alreadyDangling != nil {
 				cm.danglingWatches.AddSet(tc.alreadyDangling)
 			}
+			cm.watchedSet.AddSet(tc.removeGVKFailures)
 
-			cm.handleDanglingWatches(tc.removeGVKFailures)
+			err := cm.replaceWatchSet(ctx)
+			if tc.removeGVKFailures.Size() == 0 && !tc.hasGeneralErr {
+				require.NoError(t, err)
+			}
 
 			require.ElementsMatch(t, tc.expectedDangling.Items(), cm.danglingWatches.Items())
 			require.ElementsMatch(t, tc.expectedGVKsToDelete.Items(), cm.gvksToDeleteFromCache.Items())
 		})
 	}
+}
+
+type fakeRegistrar struct {
+	removeGVKFailures []schema.GroupVersionKind
+	generalErr        error
+}
+
+func (f *fakeRegistrar) ReplaceWatch(ctx context.Context, gvks []schema.GroupVersionKind) error {
+	err := watch.NewErrorList()
+	if f.generalErr != nil {
+		err.Err(f.generalErr)
+	}
+	if len(f.removeGVKFailures) > 0 {
+		for _, gvk := range f.removeGVKFailures {
+			err.RemoveGVKErr(gvk, errors.New("some error"))
+		}
+	}
+
+	if err.Size() != 0 {
+		return err
+	}
+
+	return nil
 }
