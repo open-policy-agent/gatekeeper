@@ -215,46 +215,54 @@ func Test_GVKAggregator_Upsert(t *testing.T) {
 }
 
 func Test_GVKAgreggator_Remove(t *testing.T) {
-	t.Run("Remove on empty aggregator", func(t *testing.T) {
-		b := NewGVKAggregator()
-		key := Key{Source: "testSource", ID: "testID"}
-		b.Remove(key)
-	})
+	tests := []struct {
+		name         string
+		toUpsert     []keyedGVKs
+		keyToRemove  Key
+		expectedGVKs []schema.GroupVersionKind
+	}{
+		{
+			name:        "empty aggregator",
+			keyToRemove: Key{Source: "testSource", ID: "testID"},
+		},
+		{
+			name: "remove non existing key",
+			toUpsert: []keyedGVKs{
+				{key: Key{Source: syncset, ID: "testID1"}, gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2}},
+			},
+			keyToRemove:  Key{Source: configsync, ID: "testID"},
+			expectedGVKs: []schema.GroupVersionKind{g1v1k1, g1v1k2},
+		},
+		{
+			name: "remove existing key",
+			toUpsert: []keyedGVKs{
+				{key: Key{Source: syncset, ID: "testID1"}, gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2}},
+			},
+			keyToRemove: Key{Source: syncset, ID: "testID1"},
+		},
+		{
+			name: "remove overlapping key",
+			toUpsert: []keyedGVKs{
+				{key: Key{Source: syncset, ID: "testID1"}, gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2}},
+				{key: Key{Source: configsync, ID: "testID2"}, gvks: []schema.GroupVersionKind{g1v1k2, g1v2k2}},
+			},
+			keyToRemove:  Key{Source: syncset, ID: "testID1"},
+			expectedGVKs: []schema.GroupVersionKind{g1v1k2, g1v2k2},
+		},
+	}
 
-	t.Run("Remove non-existing key", func(t *testing.T) {
-		b := NewGVKAggregator()
-		key1 := Key{Source: syncset, ID: "testID1"}
-		key2 := Key{Source: configsync, ID: "testID2"}
-		gvks := []schema.GroupVersionKind{g1v1k1, g1v1k2}
-		b.Upsert(key1, gvks)
-		b.Remove(key2)
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			agg := NewGVKAggregator()
+			for _, seed := range tc.toUpsert {
+				agg.Upsert(seed.key, seed.gvks)
+			}
 
-	t.Run("Remove existing key and verify reverseStore", func(t *testing.T) {
-		b := NewGVKAggregator()
-		key1 := Key{Source: syncset, ID: "testID"}
-		gvks := []schema.GroupVersionKind{g1v1k1, g1v1k2}
-		b.Upsert(key1, gvks)
-		b.Remove(key1)
+			agg.Remove(tc.keyToRemove)
 
-		for _, gvk := range gvks {
-			require.False(t, b.IsPresent(gvk))
-		}
-	})
-
-	t.Run("Remove 1 of existing keys referencing GVKs", func(t *testing.T) {
-		b := NewGVKAggregator()
-		key1 := Key{Source: syncset, ID: "testID"}
-		key2 := Key{Source: configsync, ID: "testID"}
-		gvks := []schema.GroupVersionKind{g1v1k1, g1v1k2}
-		b.Upsert(key1, gvks)
-		b.Upsert(key2, gvks)
-		b.Remove(key1)
-
-		for _, gvk := range gvks {
-			require.True(t, b.IsPresent(gvk))
-		}
-	})
+			require.ElementsMatch(t, tc.expectedGVKs, agg.GVKs())
+		})
+	}
 }
 
 // Test_GVKAggreggator_E2E is a test that:
