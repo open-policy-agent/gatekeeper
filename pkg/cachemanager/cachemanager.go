@@ -180,7 +180,7 @@ func (c *CacheManager) replaceWatchSet(ctx context.Context) error {
 
 			c.gvksToDeleteFromCache.AddSet(finallyRemoved)
 			c.danglingWatches.RemoveSet(finallyRemoved)
-			c.danglingWatches.AddSet(removeGVKFailures.Difference(c.danglingWatches))
+			c.danglingWatches.AddSet(removeGVKFailures)
 		} else {
 			// defensively assume all watches that needed removal failed to be removed in the general error case
 			// also assume whatever watches were dangling are still dangling.
