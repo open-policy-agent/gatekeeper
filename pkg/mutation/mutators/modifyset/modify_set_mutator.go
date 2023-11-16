@@ -126,6 +126,10 @@ func (m *Mutator) String() string {
 // MutatorForModifySet returns an Mutator built from
 // the given modifyset instance.
 func MutatorForModifySet(modifySet *mutationsunversioned.ModifySet) (*Mutator, error) {
+	if err := core.ValidateName(modifySet.Name); err != nil {
+		return nil, err
+	}
+
 	// This is not always set by the kubernetes API server
 	modifySet.SetGroupVersionKind(runtimeschema.GroupVersionKind{Group: mutationsv1beta1.GroupVersion.Group, Kind: "ModifySet"})
 

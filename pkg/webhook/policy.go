@@ -336,13 +336,20 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources.
 func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req *admission.Request) (bool, error) {
+	if !h.isGatekeeperResource(req) {
+		return false, nil
+	}
+
 	if req.Operation == admissionv1.Delete && req.Name == "" {
 		// Allow the general DELETE of resources like "/apis/config.gatekeeper.sh/v1alpha1/namespaces/<ns>/configs"
 		return true, nil
 	}
 
-	gvk := req.AdmissionRequest.Kind
+	if len(req.Name) > 63 {
+		return false, fmt.Errorf("resource cannot have metadata.name larger than 63 char; length: %d", len(req.Name))
+	}
 
+	gvk := req.AdmissionRequest.Kind
 	switch {
 	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
 		return h.validateTemplate(ctx, req)
