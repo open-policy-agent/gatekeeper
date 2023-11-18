@@ -3694,7 +3694,7 @@ spec:
               fieldPath: metadata.namespace
         - name: CONTAINER_NAME
           value: manager
-        image: openpolicyagent/gatekeeper:v3.14.0-beta.0
+        image: openpolicyagent/gatekeeper:v3.15.0-beta.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -3811,7 +3811,7 @@ spec:
               fieldPath: metadata.namespace
         - name: CONTAINER_NAME
           value: manager
-        image: openpolicyagent/gatekeeper:v3.14.0-beta.0
+        image: openpolicyagent/gatekeeper:v3.15.0-beta.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
