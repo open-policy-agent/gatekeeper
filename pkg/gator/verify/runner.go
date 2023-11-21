@@ -358,10 +358,9 @@ func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c 
 		}
 	}
 
-	// parse into webhook/admission type
 	req := &admission.Request{AdmissionRequest: *ar.Request}
 	if err := util.SetObjectOnDelete(req); err != nil {
-		return nil, fmt.Errorf("%w: %w", gator.ErrNilOldObject, err)
+		return nil, fmt.Errorf("%w: %w", gator.ErrInvalidK8sAdmissionReview, err)
 	}
 
 	arr := target.AugmentedReview{

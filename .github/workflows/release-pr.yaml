@@ -83,3 +83,4 @@ jobs:
           title: "chore: Prepare ${{ env.NEWVERSION }} release"
           branch: "release-${{ env.NEWVERSION }}"
           base: "${{ env.TARGET_BRANCH }}"
+          signoff: true

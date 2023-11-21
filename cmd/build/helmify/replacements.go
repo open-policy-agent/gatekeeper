@@ -120,7 +120,7 @@ var replacements = map[string]string{
       {{- end }}
     {{- end }}`,
 
-	"HELMSUBST_MUTATING_WEBHOOK_OBJECT_SELECTOR": `{{ toYaml .Values.mutatingWebhookObjectSelector }}`,
+	"HELMSUBST_MUTATING_WEBHOOK_OBJECT_SELECTOR": `{{ toYaml .Values.mutatingWebhookObjectSelector | nindent 4 }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_TIMEOUT": `{{ .Values.mutatingWebhookTimeoutSeconds }}`,
 	"- HELMSUBST_MUTATING_WEBHOOK_OPERATION_RULES": `{{- if .Values.mutatingWebhookCustomRules }}
@@ -167,7 +167,7 @@ var replacements = map[string]string{
       {{- end }}
     {{- end }}`,
 
-	"HELMSUBST_VALIDATING_WEBHOOK_OBJECT_SELECTOR": `{{ toYaml .Values.validatingWebhookObjectSelector }}`,
+	"HELMSUBST_VALIDATING_WEBHOOK_OBJECT_SELECTOR": `{{ toYaml .Values.validatingWebhookObjectSelector | nindent 4 }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY": `{{ .Values.validatingWebhookCheckIgnoreFailurePolicy }}`,
 
