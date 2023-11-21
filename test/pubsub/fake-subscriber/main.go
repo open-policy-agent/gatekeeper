@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"os"
 	"strconv"
 
 	"github.com/dapr/go-sdk/service/common"
@@ -30,15 +31,18 @@ type PubsubMsg struct {
 	ResourceLabels        map[string]string `json:"resourceLabels,omitempty"`
 }
 
-var sub = &common.Subscription{
-	PubsubName: "pubsub",
-	Topic:      "audit",
-	Route:      "/checkout",
-}
-
 func main() {
+	auditChannel := os.Getenv("AUDIT_CHANNEL")
+	if auditChannel == "" {
+		auditChannel = "audit-channel"
+	}
+	sub := &common.Subscription{
+		PubsubName: "pubsub",
+		Topic:      auditChannel,
+		Route:      "/checkout",
+	}
 	s := daprd.NewService(":6002")
-	log.Printf("Listening...")
+	log.Printf("Listening on %s...", auditChannel)
 	if err := s.AddTopicEventHandler(sub, eventHandler); err != nil {
 		log.Fatalf("error adding topic subscription: %v", err)
 	}

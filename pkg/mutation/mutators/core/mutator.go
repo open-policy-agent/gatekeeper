@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// NewTester returns a patht.Tester for the given object name, kind path and
+// NewTester returns a path.Tester for the given object name, kind path and
 // pathtests.
 func NewTester(name string, kind string, path parser.Path, ptests []unversioned.PathTest) (*patht.Tester, error) {
 	pathTests, err := gatherPathTests(name, kind, ptests)
@@ -140,4 +140,12 @@ func MatchWithApplyTo(mut *types.Mutable, applies []match.ApplyTo, mat *match.Ma
 	}
 
 	return matches, nil
+}
+
+func ValidateName(name string) error {
+	if len(name) > 63 {
+		return ErrNameLength
+	}
+
+	return nil
 }
