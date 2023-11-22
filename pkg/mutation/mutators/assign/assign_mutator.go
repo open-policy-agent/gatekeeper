@@ -118,6 +118,9 @@ func (m *Mutator) String() string {
 
 // MutatorForAssign returns a mutator built from the given assign instance.
 func MutatorForAssign(assign *mutationsunversioned.Assign) (*Mutator, error) {
+	if err := core.ValidateName(assign.Name); err != nil {
+		return nil, err
+	}
 	// This is not always set by the kubernetes API server
 	assign.SetGroupVersionKind(runtimeschema.GroupVersionKind{Group: mutationsv1beta1.GroupVersion.Group, Kind: "Assign"})
 
