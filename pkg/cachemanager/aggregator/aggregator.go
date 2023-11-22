@@ -63,7 +63,7 @@ func (b *GVKAgreggator) Remove(k Key) {
 }
 
 // Upsert stores an association between Key k and the list of GVKs
-// and also the reverse associatoin between each GVK passed in and Key k.
+// and also the reverse association between each GVK passed in and Key k.
 // Any old associations are dropped, unless they are included in the new list of
 // GVKs.
 func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) {

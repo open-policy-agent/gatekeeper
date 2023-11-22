@@ -734,7 +734,7 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 
 // trackSyncSources sets expectations for cached data as specified by the singleton Config resource.
 // and any SyncSet resources present on the cluster.
-// Works best effort and fails-open if the a resource cannot be fetched or does not exist.
+// Works best effort and fails-open if a resource cannot be fetched or does not exist.
 func (t *Tracker) trackSyncSources(ctx context.Context) error {
 	defer func() {
 		t.config.ExpectationsDone()
