@@ -2,21 +2,26 @@ package webhook
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
+	externadatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclients "github.com/open-policy-agent/gatekeeper/v3/test/clients"
+	"github.com/stretchr/testify/require"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -122,28 +127,25 @@ spec:
       - apiGroups: [""]
         kinds: ["Pod"]
 `
-
-	validProvider = `
-apiVersion: externaldata.gatekeeper.sh/v1alpha1
-kind: Provider
-metadata:
-  name: dummy-provider
-spec:
-  url: https://localhost:8080/validate
-  timeout: 1
-  caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIwekNDQVgyZ0F3SUJBZ0lKQUkvTTdCWWp3Qit1TUEwR0NTcUdTSWIzRFFFQkJRVUFNRVV4Q3pBSkJnTlYKQkFZVEFrRlZNUk13RVFZRFZRUUlEQXBUYjIxbExWTjBZWFJsTVNFd0h3WURWUVFLREJoSmJuUmxjbTVsZENCWAphV1JuYVhSeklGQjBlU0JNZEdRd0hoY05NVEl3T1RFeU1qRTFNakF5V2hjTk1UVXdPVEV5TWpFMU1qQXlXakJGCk1Rc3dDUVlEVlFRR0V3SkJWVEVUTUJFR0ExVUVDQXdLVTI5dFpTMVRkR0YwWlRFaE1COEdBMVVFQ2d3WVNXNTAKWlhKdVpYUWdWMmxrWjJsMGN5QlFkSGtnVEhSa01Gd3dEUVlKS29aSWh2Y05BUUVCQlFBRFN3QXdTQUpCQU5MSgpoUEhoSVRxUWJQa2xHM2liQ1Z4d0dNUmZwL3Y0WHFoZmRRSGRjVmZIYXA2TlE1V29rLzR4SUErdWkzNS9NbU5hCnJ0TnVDK0JkWjF0TXVWQ1BGWmNDQXdFQUFhTlFNRTR3SFFZRFZSME9CQllFRkp2S3M4UmZKYVhUSDA4VytTR3YKelF5S24wSDhNQjhHQTFVZEl3UVlNQmFBRkp2S3M4UmZKYVhUSDA4VytTR3Z6UXlLbjBIOE1Bd0dBMVVkRXdRRgpNQU1CQWY4d0RRWUpLb1pJaHZjTkFRRUZCUUFEUVFCSmxmZkpIeWJqREd4Uk1xYVJtRGhYMCs2djAyVFVLWnNXCnI1UXVWYnBRaEg2dSswVWdjVzBqcDlRd3B4b1BUTFRXR1hFV0JCQnVyeEZ3aUNCaGtRK1YKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
-`
-
-	providerWithNoCA = `
-apiVersion: externaldata.gatekeeper.sh/v1alpha1
-kind: Provider
-metadata:
-  name: dummy-provider
-spec:
-  url: https://localhost:8080/validate
-  timeout: 1
-`
+	nameLargerThan63 = "abignameabignameabignameabignameabignameabignameabignameabigname"
 )
+
+func validProvider() *externadatav1alpha1.Provider {
+	return &externadatav1alpha1.Provider{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: externadatav1alpha1.SchemeGroupVersion.String(),
+			Kind:       "Provider",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-provider",
+		},
+		Spec: externadatav1alpha1.ProviderSpec{
+			URL:      "https://localhost:8080/validate",
+			Timeout:  1,
+			CABundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIwekNDQVgyZ0F3SUJBZ0lKQUkvTTdCWWp3Qit1TUEwR0NTcUdTSWIzRFFFQkJRVUFNRVV4Q3pBSkJnTlYKQkFZVEFrRlZNUk13RVFZRFZRUUlEQXBUYjIxbExWTjBZWFJsTVNFd0h3WURWUVFLREJoSmJuUmxjbTVsZENCWAphV1JuYVhSeklGQjBlU0JNZEdRd0hoY05NVEl3T1RFeU1qRTFNakF5V2hjTk1UVXdPVEV5TWpFMU1qQXlXakJGCk1Rc3dDUVlEVlFRR0V3SkJWVEVUTUJFR0ExVUVDQXdLVTI5dFpTMVRkR0YwWlRFaE1COEdBMVVFQ2d3WVNXNTAKWlhKdVpYUWdWMmxrWjJsMGN5QlFkSGtnVEhSa01Gd3dEUVlKS29aSWh2Y05BUUVCQlFBRFN3QXdTQUpCQU5MSgpoUEhoSVRxUWJQa2xHM2liQ1Z4d0dNUmZwL3Y0WHFoZmRRSGRjVmZIYXA2TlE1V29rLzR4SUErdWkzNS9NbU5hCnJ0TnVDK0JkWjF0TXVWQ1BGWmNDQXdFQUFhTlFNRTR3SFFZRFZSME9CQllFRkp2S3M4UmZKYVhUSDA4VytTR3YKelF5S24wSDhNQjhHQTFVZEl3UVlNQmFBRkp2S3M4UmZKYVhUSDA4VytTR3Z6UXlLbjBIOE1Bd0dBMVVkRXdRRgpNQU1CQWY4d0RRWUpLb1pJaHZjTkFRRUZCUUFEUVFCSmxmZkpIeWJqREd4Uk1xYVJtRGhYMCs2djAyVFVLWnNXCnI1UXVWYnBRaEg2dSswVWdjVzBqcDlRd3B4b1BUTFRXR1hFV0JCQnVyeEZ3aUNCaGtRK1YKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=",
+		},
+	}
+}
 
 func validRegoTemplate() *templates.ConstraintTemplate {
 	return &templates.ConstraintTemplate{
@@ -501,6 +503,48 @@ func TestConstraintValidation(t *testing.T) {
 	}
 }
 
+func Test_ConstrainTemplate_Name(t *testing.T) {
+	h := &validationHandler{log: log}
+	te := validRegoTemplate()
+	te.Name = "abignameabignameabignameabignameabignameabignameabignameabigname"
+
+	b, err := convertToRawExtension(te)
+	require.NoError(t, err)
+
+	review := &admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Kind:   metav1.GroupVersionKind(templatesv1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate")),
+			Object: *b,
+			Name:   te.Name,
+		},
+	}
+
+	got, err := h.validateGatekeeperResources(context.Background(), review)
+	require.False(t, got)
+	require.ErrorContains(t, err, "resource cannot have metadata.name larger than 63 char")
+}
+
+func Test_NonGkResource_Name(t *testing.T) {
+	h := &validationHandler{log: log}
+	fp := fakes.Pod(fakes.WithName(nameLargerThan63))
+
+	b, err := convertToRawExtension(fp)
+	require.NoError(t, err)
+
+	review := &admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Kind:   metav1.GroupVersionKind(fp.GroupVersionKind()),
+			Object: *b,
+			Name:   fp.Name,
+		},
+	}
+
+	// since this is not a gatekeeper resource, we should not enforce the metadata.name len check
+	got, err := h.validateGatekeeperResources(context.Background(), review)
+	require.False(t, got)
+	require.NoError(t, err)
+}
+
 func TestTracing(t *testing.T) {
 	tc := []struct {
 		Name          string
@@ -811,36 +855,51 @@ func TestGetValidationMessages(t *testing.T) {
 
 func TestValidateConfigResource(t *testing.T) {
 	tc := []struct {
-		TestName string
-		Name     string
-		Err      bool
+		name      string
+		rName     string
+		deleteOp  bool
+		expectErr bool
 	}{
 		{
-			TestName: "Wrong name",
-			Name:     "FooBar",
-			Err:      true,
+			name:      "Wrong name",
+			rName:     "FooBar",
+			expectErr: true,
 		},
 		{
-			TestName: "Correct name",
-			Name:     "config",
+			name:  "Correct name",
+			rName: "config",
+		},
+		{
+			name:     "Delete operation with no name",
+			deleteOp: true,
+		},
+		{
+			name:      "Delete operation with name",
+			deleteOp:  true,
+			rName:     "abc",
+			expectErr: true,
 		},
 	}
 
 	for _, tt := range tc {
-		t.Run(tt.TestName, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			handler := validationHandler{log: log}
 			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
-					Name: tt.Name,
+					Name: tt.rName,
+					Kind: metav1.GroupVersionKind(configv1alpha1.GroupVersion.WithKind("Config")),
 				},
 			}
+			if tt.deleteOp {
+				req.AdmissionRequest.Operation = admissionv1.Delete
+			}
 
-			err := handler.validateConfigResource(req)
+			_, err := handler.validateGatekeeperResources(context.Background(), req)
 
-			if tt.Err && err == nil {
+			if tt.expectErr && err == nil {
 				t.Errorf("Expected error but received nil")
 			}
-			if !tt.Err && err != nil {
+			if !tt.expectErr && err != nil {
 				t.Errorf("Did not expect error but received: %v", err)
 			}
 		})
@@ -850,52 +909,76 @@ func TestValidateConfigResource(t *testing.T) {
 func TestValidateProvider(t *testing.T) {
 	tests := []struct {
 		name     string
-		provider string
+		provider *externadatav1alpha1.Provider
 		want     bool
 		wantErr  bool
 	}{
 		{
 			name:     "valid provider",
-			provider: validProvider,
+			provider: validProvider(),
 			want:     false,
 			wantErr:  false,
 		},
 		{
-			name:     "invalid provider",
-			provider: "invalid",
-			want:     false,
-			wantErr:  true,
+			name: "invalid provider",
+			provider: func() *externadatav1alpha1.Provider {
+				return &externadatav1alpha1.Provider{}
+			}(),
+			want:    false,
+			wantErr: true,
 		},
 		{
-			name:     "provider with no CA",
-			provider: providerWithNoCA,
-			want:     true,
-			wantErr:  true,
+			name: "provider with no CA",
+			provider: func() *externadatav1alpha1.Provider {
+				p := validProvider()
+				p.Spec.CABundle = ""
+				return p
+			}(),
+			want:    true,
+			wantErr: true,
+		},
+		{
+			name: "provider with big name",
+			provider: func() *externadatav1alpha1.Provider {
+				p := validProvider()
+				p.Name = "abignameabignameabignameabignameabignameabignameabignameabigname"
+				return p
+			}(),
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := &validationHandler{log: log}
-			b, err := yaml.YAMLToJSON([]byte(tt.provider))
-			if err != nil {
-				t.Fatalf("Error parsing yaml: %s", err)
-			}
+			b, err := convertToRawExtension(tt.provider)
+			require.NoError(t, err)
 
 			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
-					Object: runtime.RawExtension{
-						Raw: b,
-					},
+					Kind:   metav1.GroupVersionKind(externadatav1alpha1.SchemeGroupVersion.WithKind("Provider")),
+					Object: *b,
+					Name:   tt.provider.Name,
 				},
 			}
-			got, err := h.validateProvider(req)
+			got, err := h.validateGatekeeperResources(context.Background(), req)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("validationHandler.validateProvider() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("validationHandler.validateGatekeeperResources() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("validationHandler.validateProvider() = %v, want %v", got, tt.want)
+				t.Errorf("validationHandler.validateGatekeeperResources() = %v, want %v", got, tt.want)
 			}
 		})
 	}
+}
+
+// converts runtime.Object to runtime.RawExtension.
+func convertToRawExtension(obj runtime.Object) (*runtime.RawExtension, error) {
+	re := &runtime.RawExtension{}
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	re.Raw = b
+	return re, nil
 }

@@ -16,6 +16,8 @@ const (
 
 var (
 	// test gvks.
+	emptyGVK = schema.GroupVersionKind{Group: "", Version: "", Kind: ""}
+
 	g1v1k1 = schema.GroupVersionKind{Group: "group1", Version: "v1", Kind: "Kind1"}
 	g1v1k2 = schema.GroupVersionKind{Group: "group1", Version: "v1", Kind: "Kind2"}
 
@@ -47,6 +49,20 @@ func Test_GVKAggregator_Upsert(t *testing.T) {
 		expectRev  map[schema.GroupVersionKind]map[Key]struct{}
 	}{
 		{
+			name: "empty GVKs",
+			keyGVKs: []upsertKeyGVKs{
+				{
+					key: Key{
+						Source: syncset,
+						ID:     "foo",
+					},
+					gvks: []schema.GroupVersionKind{emptyGVK, emptyGVK},
+				},
+			},
+			expectData: map[Key]map[schema.GroupVersionKind]struct{}{},
+			expectRev:  map[schema.GroupVersionKind]map[Key]struct{}{},
+		},
+		{
 			name: "add one key and GVKs",
 			keyGVKs: []upsertKeyGVKs{
 				{
@@ -54,7 +70,7 @@ func Test_GVKAggregator_Upsert(t *testing.T) {
 						Source: syncset,
 						ID:     "foo",
 					},
-					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2},
+					gvks: []schema.GroupVersionKind{g1v1k1, g1v1k2, emptyGVK},
 				},
 			},
 			expectData: map[Key]map[schema.GroupVersionKind]struct{}{

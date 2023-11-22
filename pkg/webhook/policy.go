@@ -30,6 +30,7 @@ import (
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -68,7 +69,10 @@ import (
 // https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#response
 const httpStatusWarning = 299
 
-var maxServingThreads = flag.Int("max-serving-threads", -1, "cap the number of threads handling non-trivial requests, -1 caps the number of threads to GOMAXPROCS. Defaults to -1.")
+var (
+	ValidateTemplateRego = flag.Bool("validate-template-rego", true, "validate Rego code for constraint templates. Defaults to true. This flag will be removed in Gatekeeper v3.16 and cannot be used if `experimental-enable-k8s-native-validation` flag is set. Use Gator to validate in shift left manner to avoid impact with this behavior change.). Use Gator to validate in shift left manner to avoid impact with this behavior change.")
+	maxServingThreads    = flag.Int("max-serving-threads", -1, "cap the number of threads handling non-trivial requests, -1 caps the number of threads to GOMAXPROCS. Defaults to -1.")
+)
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
@@ -332,8 +336,20 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources.
 func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req *admission.Request) (bool, error) {
-	gvk := req.AdmissionRequest.Kind
+	if !h.isGatekeeperResource(req) {
+		return false, nil
+	}
 
+	if req.Operation == admissionv1.Delete && req.Name == "" {
+		// Allow the general DELETE of resources like "/apis/config.gatekeeper.sh/v1alpha1/namespaces/<ns>/configs"
+		return true, nil
+	}
+
+	if len(req.Name) > 63 {
+		return false, fmt.Errorf("resource cannot have metadata.name larger than 63 char; length: %d", len(req.Name))
+	}
+
+	gvk := req.AdmissionRequest.Kind
 	switch {
 	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
 		return h.validateTemplate(ctx, req)
@@ -345,15 +361,15 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		if err := h.validateConfigResource(req); err != nil {
 			return true, err
 		}
-	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "AssignMetadata":
+	case gvk.Group == mutationsGroup && gvk.Kind == "AssignMetadata":
 		return h.validateAssignMetadata(req)
-	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "Assign":
+	case gvk.Group == mutationsGroup && gvk.Kind == "Assign":
 		return h.validateAssign(req)
-	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "ModifySet":
+	case gvk.Group == mutationsGroup && gvk.Kind == "ModifySet":
 		return h.validateModifySet(req)
-	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "AssignImage":
+	case gvk.Group == mutationsGroup && gvk.Kind == "AssignImage":
 		return h.validateAssignImage(req)
-	case req.AdmissionRequest.Kind.Group == externalDataGroup && req.AdmissionRequest.Kind.Kind == "Provider":
+	case gvk.Group == externalDataGroup && gvk.Kind == "Provider":
 		return h.validateProvider(req)
 	}
 
@@ -380,6 +396,21 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 	_, err = h.opa.CreateCRD(ctx, unversioned)
 	if err != nil {
 		return true, err
+	}
+
+	// TODO: This is a temporary check for rego to give enough time to users to migrate to gator for validation. To be removed before 3.16.
+	if *ValidateTemplateRego {
+		// Create a temporary Driver and attempt to add the Template to it. This
+		// ensures the Rego code both parses and compiles.
+		d, err := rego.New()
+		if err != nil {
+			return false, fmt.Errorf("unable to create Driver: %w", err)
+		}
+
+		err = d.AddTemplate(ctx, unversioned)
+		if err != nil {
+			return true, err
+		}
 	}
 
 	return false, nil
