@@ -37,7 +37,7 @@ func (e *ExpectationsPruner) Start(ctx context.Context) error {
 				// further manage the data sync expectations.
 				return nil
 			}
-			if e.tracker.SyncSourcesSatisfied() {
+			if e.tracker.SyncSetAndConfigSatisfied() {
 				e.pruneUnwatchedGVKs()
 			}
 		}

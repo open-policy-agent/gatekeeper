@@ -129,7 +129,7 @@ func Test_ExpectationsPruner_missedInformers(t *testing.T) {
 	testutils.StartManager(ctx, t, testRes.manager)
 
 	require.Eventually(t, func() bool {
-		return testRes.expectationsPruner.tracker.SyncSourcesSatisfied()
+		return testRes.expectationsPruner.tracker.SyncSetAndConfigSatisfied()
 	}, timeout, tick, "waiting on sync sources to get satisfied")
 
 	// As configMapGVK is absent from this syncset-a, the CacheManager will never observe configMapGVK

@@ -405,8 +405,9 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 
 				// first make sure there is no drift between c.gvksToSync and watch manager
 				if c.danglingWatches.Size() > 0 {
-					err := c.replaceWatchSet(ctx)
-					log.V(logging.DebugLevel).Info("error replacing watch set", "error", err)
+					if err := c.replaceWatchSet(ctx); err != nil {
+						log.V(logging.DebugLevel).Info("error replacing watch set", "error", err)
+					}
 				}
 
 				c.wipeCacheIfNeeded(ctx)

@@ -346,7 +346,7 @@ func (t *Tracker) Run(ctx context.Context) error {
 		})
 	}
 	grp.Go(func() error {
-		return t.trackSyncSources(gctx)
+		return t.trackConfigAndSyncSets(gctx)
 	})
 
 	grp.Go(func() error {
@@ -406,7 +406,7 @@ func (t *Tracker) Populated() bool {
 }
 
 // Returns whether both the Config and all SyncSet expectations have been Satisfied.
-func (t *Tracker) SyncSourcesSatisfied() bool {
+func (t *Tracker) SyncSetAndConfigSatisfied() bool {
 	satisfied := t.config.Satisfied()
 	if operations.HasValidationOperations() {
 		satisfied = satisfied && t.syncsets.Satisfied()
@@ -732,10 +732,10 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 	return nil
 }
 
-// trackSyncSources sets expectations for cached data as specified by the singleton Config resource.
+// trackConfigAndSyncSets sets expectations for cached data as specified by the singleton Config resource.
 // and any SyncSet resources present on the cluster.
 // Works best effort and fails-open if a resource cannot be fetched or does not exist.
-func (t *Tracker) trackSyncSources(ctx context.Context) error {
+func (t *Tracker) trackConfigAndSyncSets(ctx context.Context) error {
 	defer func() {
 		t.config.ExpectationsDone()
 		log.V(logging.DebugLevel).Info("config expectations populated")
