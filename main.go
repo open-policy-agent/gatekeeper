@@ -26,7 +26,9 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/go-logr/zapr"
@@ -115,6 +117,7 @@ var (
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
+	shutdownGracePeriod                  = flag.Duration("shutdown-grace-period", 10*time.Second, "time to wait before shutting down")
 )
 
 func init() {
@@ -309,7 +312,7 @@ func innerMain() int {
 
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
 	setupErr := make(chan error)
-	ctx := ctrl.SetupSignalHandler()
+	ctx := setupSignalHandler(*shutdownGracePeriod)
 	go func() {
 		setupErr <- setupControllers(ctx, mgr, sw, tracker, setupFinished)
 	}()
@@ -578,4 +581,29 @@ func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
 	newlogger := zapr.NewLogger(zlog)
 	ctrl.SetLogger(newlogger)
 	klog.SetLogger(newlogger)
+}
+
+// setupSignalHandler registers a signal handler for SIGTERM and SIGINT and
+// returns a context which is canceled when one of these signals is caught after
+// waiting for a grace period. If a second signal is caught then the program
+// terminates with exit code 1. Implementation stolen from controller-runtime
+// and then extended with grace period support:
+// https://github.com/kubernetes-sigs/controller-runtime/blob/2154ffbc22e26ffd8c3b713927f0df2fa40841f2/pkg/manager/signals/signal.go#L27-L45
+func setupSignalHandler(gracePeriod time.Duration) context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		// Cancel the context once the grace period expires
+		go func() {
+			<-time.After(gracePeriod)
+			cancel()
+		}()
+		<-c
+		os.Exit(1) // Second signal received, exit directly...
+	}()
+
+	return ctx
 }
