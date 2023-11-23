@@ -117,7 +117,7 @@ var (
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
-	shutdownWaitPeriod                   = flag.Duration("shutdown-wait-period", 10*time.Second, "time to wait before shutting down")
+	shutdownWaitPeriod                   = flag.Duration("shutdown-wait-period", 10*time.Second, "The amount of time to wait before shutting down")
 )
 
 func init() {
