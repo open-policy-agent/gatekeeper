@@ -117,7 +117,7 @@ var (
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
-	shutdownGracePeriod                  = flag.Duration("shutdown-grace-period", 10*time.Second, "time to wait before shutting down")
+	shutdownWaitPeriod                   = flag.Duration("shutdown-wait-period", 10*time.Second, "time to wait before shutting down")
 )
 
 func init() {
@@ -312,7 +312,7 @@ func innerMain() int {
 
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
 	setupErr := make(chan error)
-	ctx := setupSignalHandler(*shutdownGracePeriod)
+	ctx := setupSignalHandler(*shutdownWaitPeriod)
 	go func() {
 		setupErr <- setupControllers(ctx, mgr, sw, tracker, setupFinished)
 	}()
@@ -585,20 +585,20 @@ func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
 
 // setupSignalHandler registers a signal handler for SIGTERM and SIGINT and
 // returns a context which is canceled when one of these signals is caught after
-// waiting for a grace period. If a second signal is caught then the program
-// terminates with exit code 1. Implementation stolen from controller-runtime
-// and then extended with grace period support:
+// waiting for the specified period. If a second signal is caught then we
+// terminate immediately with exit code 1. The implementation has been stolen
+// from controller-runtime and then extended with wait period support:
 // https://github.com/kubernetes-sigs/controller-runtime/blob/2154ffbc22e26ffd8c3b713927f0df2fa40841f2/pkg/manager/signals/signal.go#L27-L45
-func setupSignalHandler(gracePeriod time.Duration) context.Context {
+func setupSignalHandler(waitPeriod time.Duration) context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		// Cancel the context once the grace period expires
+		// Cancel the context once the wait period expires
 		go func() {
-			<-time.After(gracePeriod)
+			<-time.After(waitPeriod)
 			cancel()
 		}()
 		<-c
