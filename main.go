@@ -596,7 +596,8 @@ func setupSignalHandler(waitPeriod time.Duration) context.Context {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		// Cancel the context once the wait period expires
+		// Cancel the context once the wait period expires but avoid blocking if
+		// a second signal is received
 		go func() {
 			<-time.After(waitPeriod)
 			cancel()
