@@ -18,6 +18,7 @@ package v1alpha1
 import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // ConfigSpec defines the desired state of Config.
@@ -60,6 +61,14 @@ type SyncOnlyEntry struct {
 	Group   string `json:"group,omitempty"`
 	Version string `json:"version,omitempty"`
 	Kind    string `json:"kind,omitempty"`
+}
+
+func (e *SyncOnlyEntry) ToGroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   e.Group,
+		Version: e.Version,
+		Kind:    e.Kind,
+	}
 }
 
 type MatchEntry struct {
