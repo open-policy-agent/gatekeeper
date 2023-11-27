@@ -2,6 +2,8 @@ package cachemanager
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
@@ -24,6 +26,17 @@ import (
 )
 
 var cfg *rest.Config
+
+var (
+	configMapGVK   = schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
+	podGVK         = schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
+	nsGVK          = schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}
+	nonExistentGVK = schema.GroupVersionKind{Version: "v1", Kind: "DoesNotExist"}
+
+	configKey   = aggregator.Key{Source: "config", ID: "config"}
+	syncsetAKey = aggregator.Key{Source: "syncset", ID: "a"}
+	syncsetBkey = aggregator.Key{Source: "syncset", ID: "b"}
+)
 
 func TestMain(m *testing.M) {
 	testutils.StartControlPlane(m, &cfg, 2)
@@ -72,11 +85,10 @@ func makeCacheManager(t *testing.T) (*CacheManager, context.Context) {
 }
 
 func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
-	configMapGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 	dataClientForTest := func() CFDataClient {
 		cfdc := &fakes.FakeCfClient{}
 
-		cm := unstructuredFor(configMapGVK, "config-test-1")
+		cm := fakes.UnstructuredFor(configMapGVK, "", "config-test-1")
 		_, err := cfdc.AddData(context.Background(), cm)
 
 		require.NoError(t, err, "adding ConfigMap config-test-1 in cfClient")
@@ -352,85 +364,94 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 	}
 }
 
+type source struct {
+	key  aggregator.Key
+	gvks []schema.GroupVersionKind
+}
+
 // TestCacheManager_UpsertSource tests that we can modify the gvk aggregator and watched set when adding a new source.
 func TestCacheManager_UpsertSource(t *testing.T) {
-	configMapGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
-	podGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
-	sourceA := aggregator.Key{Source: "a", ID: "source"}
-	sourceB := aggregator.Key{Source: "b", ID: "source"}
-
-	type sourcesAndGvk struct {
-		source aggregator.Key
-		gvks   []schema.GroupVersionKind
-	}
-
 	tcs := []struct {
-		name           string
-		sourcesAndGvks []sourcesAndGvk
-		expectedGVKs   []schema.GroupVersionKind
+		name         string
+		sources      []source
+		expectedGVKs []schema.GroupVersionKind
 	}{
 		{
 			name: "add one source",
-			sourcesAndGvks: []sourcesAndGvk{
+			sources: []source{
 				{
-					source: sourceA,
-					gvks:   []schema.GroupVersionKind{configMapGVK},
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{configMapGVK},
 				},
 			},
 			expectedGVKs: []schema.GroupVersionKind{configMapGVK},
 		},
 		{
 			name: "overwrite source",
-			sourcesAndGvks: []sourcesAndGvk{
+			sources: []source{
 				{
-					source: sourceA,
-					gvks:   []schema.GroupVersionKind{configMapGVK},
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{configMapGVK},
 				},
 				{
-					source: sourceA,
-					gvks:   []schema.GroupVersionKind{podGVK},
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{podGVK},
 				},
 			},
 			expectedGVKs: []schema.GroupVersionKind{podGVK},
 		},
 		{
-			name: "remove source by not specifying any gvk",
-			sourcesAndGvks: []sourcesAndGvk{
+			name: "remove GVK from a source",
+			sources: []source{
 				{
-					source: sourceA,
-					gvks:   []schema.GroupVersionKind{configMapGVK},
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{configMapGVK},
 				},
 				{
-					source: sourceA,
-					gvks:   []schema.GroupVersionKind{},
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{},
 				},
 			},
 			expectedGVKs: []schema.GroupVersionKind{},
 		},
 		{
-			name: "add two disjoing sources",
-			sourcesAndGvks: []sourcesAndGvk{
+			name: "add two disjoint sources",
+			sources: []source{
 				{
-					source: sourceA,
-					gvks:   []schema.GroupVersionKind{configMapGVK},
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{configMapGVK},
 				},
 				{
-					source: sourceB,
-					gvks:   []schema.GroupVersionKind{podGVK},
+					key:  syncsetAKey,
+					gvks: []schema.GroupVersionKind{podGVK},
 				},
 			},
 			expectedGVKs: []schema.GroupVersionKind{configMapGVK, podGVK},
 		},
 		{
-			name: "add two sources with overlapping gvks",
-			sourcesAndGvks: []sourcesAndGvk{
+			name: "add two sources with fully overlapping gvks",
+			sources: []source{
 				{
-					source: sourceA,
-					gvks:   []schema.GroupVersionKind{configMapGVK, podGVK},
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{podGVK},
 				},
 				{
-					source: sourceB,
-					gvks:   []schema.GroupVersionKind{podGVK},
+					key:  syncsetAKey,
+					gvks: []schema.GroupVersionKind{podGVK},
+				},
+			},
+			expectedGVKs: []schema.GroupVersionKind{podGVK},
+		},
+		{
+			name: "add two sources with partially overlapping gvks",
+			sources: []source{
+				{
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{configMapGVK, podGVK},
+				},
+				{
+					key:  syncsetAKey,
+					gvks: []schema.GroupVersionKind{podGVK},
 				},
 			},
 			expectedGVKs: []schema.GroupVersionKind{configMapGVK, podGVK},
@@ -441,8 +462,63 @@ func TestCacheManager_UpsertSource(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cacheManager, ctx := makeCacheManager(t)
 
-			for _, sourceAndGVK := range tc.sourcesAndGvks {
-				require.NoError(t, cacheManager.UpsertSource(ctx, sourceAndGVK.source, sourceAndGVK.gvks))
+			for _, source := range tc.sources {
+				require.NoError(t, cacheManager.UpsertSource(ctx, source.key, source.gvks), fmt.Sprintf("while upserting source: %s", source.key))
+			}
+
+			require.ElementsMatch(t, cacheManager.watchedSet.Items(), tc.expectedGVKs)
+			require.ElementsMatch(t, cacheManager.gvksToSync.GVKs(), tc.expectedGVKs)
+		})
+	}
+}
+
+func TestCacheManager_UpsertSource_errorcases(t *testing.T) {
+	type source struct {
+		key     aggregator.Key
+		gvks    []schema.GroupVersionKind
+		wantErr bool
+	}
+
+	tcs := []struct {
+		name         string
+		sources      []source
+		expectedGVKs []schema.GroupVersionKind
+	}{
+		{
+			name: "add two sources where one fails to establish all watches",
+			sources: []source{
+				{
+					key:  configKey,
+					gvks: []schema.GroupVersionKind{configMapGVK},
+				},
+				{
+					key:  syncsetAKey,
+					gvks: []schema.GroupVersionKind{podGVK, nonExistentGVK},
+					// UpsertSource will err out because of nonExistentGVK
+					wantErr: true,
+				},
+				{
+					key:  syncsetBkey,
+					gvks: []schema.GroupVersionKind{nsGVK},
+					// this call will not error out even though we previously added a non existent gvk to a different sync source.
+					// this way the errors in watch manager caused by one sync source do not impact the other if they are not related
+					// to the gvks it specifies.
+				},
+			},
+			expectedGVKs: []schema.GroupVersionKind{configMapGVK, podGVK, nonExistentGVK, nsGVK},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			cacheManager, ctx := makeCacheManager(t)
+
+			for _, source := range tc.sources {
+				if source.wantErr {
+					require.Error(t, cacheManager.UpsertSource(ctx, source.key, source.gvks), fmt.Sprintf("while upserting source: %s", source.key))
+				} else {
+					require.NoError(t, cacheManager.UpsertSource(ctx, source.key, source.gvks), fmt.Sprintf("while upserting source: %s", source.key))
+				}
 			}
 
 			require.ElementsMatch(t, cacheManager.watchedSet.Items(), tc.expectedGVKs)
@@ -453,49 +529,82 @@ func TestCacheManager_UpsertSource(t *testing.T) {
 
 // TestCacheManager_RemoveSource tests that we can modify the gvk aggregator when removing a source.
 func TestCacheManager_RemoveSource(t *testing.T) {
-	configMapGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
-	podGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
-	sourceA := aggregator.Key{Source: "a", ID: "source"}
-	sourceB := aggregator.Key{Source: "b", ID: "source"}
-
 	tcs := []struct {
 		name            string
-		seed            func(c *CacheManager)
+		existingSources []source
 		sourcesToRemove []aggregator.Key
 		expectedGVKs    []schema.GroupVersionKind
 	}{
 		{
 			name: "remove disjoint source",
-			seed: func(c *CacheManager) {
-				require.NoError(t, c.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{podGVK}))
-				require.NoError(t, c.gvksToSync.Upsert(sourceB, []schema.GroupVersionKind{configMapGVK}))
+			existingSources: []source{
+				{configKey, []schema.GroupVersionKind{podGVK}},
+				{syncsetAKey, []schema.GroupVersionKind{configMapGVK}},
 			},
-			sourcesToRemove: []aggregator.Key{sourceB},
+			sourcesToRemove: []aggregator.Key{syncsetAKey},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK},
 		},
 		{
-			name: "remove overlapping source",
-			seed: func(c *CacheManager) {
-				require.NoError(t, c.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{podGVK}))
-				require.NoError(t, c.gvksToSync.Upsert(sourceB, []schema.GroupVersionKind{podGVK}))
+			name: "remove fully overlapping source",
+			existingSources: []source{
+				{configKey, []schema.GroupVersionKind{podGVK}},
+				{syncsetAKey, []schema.GroupVersionKind{podGVK}},
 			},
-			sourcesToRemove: []aggregator.Key{sourceB},
+			sourcesToRemove: []aggregator.Key{syncsetAKey},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK},
+		},
+		{
+			name: "remove partially overlapping source",
+			existingSources: []source{
+				{configKey, []schema.GroupVersionKind{podGVK}},
+				{syncsetAKey, []schema.GroupVersionKind{podGVK, configMapGVK}},
+			},
+			sourcesToRemove: []aggregator.Key{configKey},
+			expectedGVKs:    []schema.GroupVersionKind{podGVK, configMapGVK},
 		},
 		{
 			name: "remove non existing source",
-			seed: func(c *CacheManager) {
-				require.NoError(t, c.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{podGVK}))
+			existingSources: []source{
+				{configKey, []schema.GroupVersionKind{podGVK}},
 			},
-			sourcesToRemove: []aggregator.Key{sourceB},
+			sourcesToRemove: []aggregator.Key{syncsetAKey},
 			expectedGVKs:    []schema.GroupVersionKind{podGVK},
+		},
+		{
+			name: "remove source with a non existing gvk",
+			existingSources: []source{
+				{configKey, []schema.GroupVersionKind{nonExistentGVK}},
+			},
+			sourcesToRemove: []aggregator.Key{configKey},
+			expectedGVKs:    []schema.GroupVersionKind{},
+		},
+		{
+			name: "remove source from a watch set with a non existing gvk",
+			existingSources: []source{
+				{configKey, []schema.GroupVersionKind{nonExistentGVK}},
+				{syncsetAKey, []schema.GroupVersionKind{podGVK}},
+			},
+			sourcesToRemove: []aggregator.Key{syncsetAKey},
+			expectedGVKs:    []schema.GroupVersionKind{nonExistentGVK},
+		},
+		{
+			name: "remove source with non existent gvk from a watch set with a remaining non existing gvk",
+			existingSources: []source{
+				{configKey, []schema.GroupVersionKind{nonExistentGVK}},
+				{syncsetAKey, []schema.GroupVersionKind{nonExistentGVK}},
+			},
+			sourcesToRemove: []aggregator.Key{syncsetAKey},
+			expectedGVKs:    []schema.GroupVersionKind{nonExistentGVK},
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			cm, ctx := makeCacheManager(t)
-			tc.seed(cm)
+			// seed the cachemanager internals
+			for _, s := range tc.existingSources {
+				cm.gvksToSync.Upsert(s.key, s.gvks)
+			}
 
 			for _, source := range tc.sourcesToRemove {
 				require.NoError(t, cm.RemoveSource(ctx, source))
@@ -504,36 +613,169 @@ func TestCacheManager_RemoveSource(t *testing.T) {
 			require.ElementsMatch(t, cm.gvksToSync.GVKs(), tc.expectedGVKs)
 		})
 	}
-	cacheManager, ctx := makeCacheManager(t)
-
-	// seed the gvk aggregator
-	require.NoError(t, cacheManager.gvksToSync.Upsert(sourceA, []schema.GroupVersionKind{podGVK}))
-	require.NoError(t, cacheManager.gvksToSync.Upsert(sourceB, []schema.GroupVersionKind{podGVK, configMapGVK}))
-
-	// removing a source that is not the only one referencing a gvk ...
-	require.NoError(t, cacheManager.RemoveSource(ctx, sourceB))
-	// ... should not remove any gvks that are still referenced by other sources
-	require.True(t, cacheManager.gvksToSync.IsPresent(podGVK))
-	require.False(t, cacheManager.gvksToSync.IsPresent(configMapGVK))
-
-	require.NoError(t, cacheManager.RemoveSource(ctx, sourceA))
-	require.False(t, cacheManager.gvksToSync.IsPresent(podGVK))
 }
 
-func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Unstructured {
-	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(gvk)
-	u.SetName(name)
-	u.SetNamespace("default")
-	if gvk.Kind == "Pod" {
-		u.Object["spec"] = map[string]interface{}{
-			"containers": []map[string]interface{}{
-				{
-					"name":  "foo-container",
-					"image": "foo-image",
-				},
-			},
+func Test_interpretErr(t *testing.T) {
+	gvk1 := schema.GroupVersionKind{Group: "g1", Version: "v1", Kind: "k1"}
+	gvk2 := schema.GroupVersionKind{Group: "g2", Version: "v2", Kind: "k2"}
+	someErr := errors.New("some err")
+	gvk1Err := watch.NewErrorList()
+	gvk1Err.AddGVKErr(gvk1, someErr)
+	genErr := watch.NewErrorList()
+	genErr.Err(someErr)
+	genErr.AddGVKErr(gvk1, someErr)
+	gvk2Err := watch.NewErrorList()
+	gvk2Err.RemoveGVKErr(gvk2, someErr)
+
+	cases := []struct {
+		name                   string
+		inputErr               error
+		inputGVK               []schema.GroupVersionKind
+		expectedAddGVKFailures []schema.GroupVersionKind
+		expectGeneral          bool
+	}{
+		{
+			name: "nil err",
+		},
+		{
+			name:                   "intersection exists",
+			inputErr:               fmt.Errorf("some err: %w", gvk1Err),
+			inputGVK:               []schema.GroupVersionKind{gvk1},
+			expectedAddGVKFailures: []schema.GroupVersionKind{gvk1},
+		},
+		{
+			name:     "intersection does not exist",
+			inputErr: gvk1Err,
+			inputGVK: []schema.GroupVersionKind{gvk2},
+		},
+		{
+			name:     "gvk watch failing to remove",
+			inputErr: gvk2Err,
+		},
+		{
+			name:          "non-watchmanager error reports general error with no GVKs",
+			inputErr:      fmt.Errorf("some err: %w", someErr),
+			inputGVK:      []schema.GroupVersionKind{gvk1},
+			expectGeneral: true,
+		},
+		{
+			name:          "general error with failing gvks too",
+			inputErr:      fmt.Errorf("some err: %w", genErr),
+			inputGVK:      []schema.GroupVersionKind{gvk1, gvk2},
+			expectGeneral: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			general, addGVKs := interpretErr(tc.inputErr, tc.inputGVK)
+
+			require.Equal(t, tc.expectGeneral, general)
+			require.ElementsMatch(t, addGVKs, tc.expectedAddGVKFailures)
+		})
+	}
+}
+
+func Test_replaceWatchSet_danglingWatches(t *testing.T) {
+	gvk1 := schema.GroupVersionKind{Group: "g1", Version: "v1", Kind: "k1"}
+	gvk2 := schema.GroupVersionKind{Group: "g2", Version: "v2", Kind: "k2"}
+
+	cases := []struct {
+		name              string
+		alreadyDangling   *watch.Set
+		removeGVKFailures *watch.Set
+		hasGeneralErr     bool
+
+		expectedDangling     *watch.Set
+		expectedGVKsToDelete *watch.Set
+	}{
+		{
+			name:                 "nothing dangling, no failures yields nothing dangling",
+			removeGVKFailures:    watch.NewSet(),
+			expectedDangling:     watch.NewSet(),
+			expectedGVKsToDelete: watch.NewSet(),
+		},
+		{
+			name:                 "nothing dangling, per gvk failures yields something dangling",
+			removeGVKFailures:    watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedGVKsToDelete: watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+		},
+		{
+			name:                 "watches dangling, finally removed",
+			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			removeGVKFailures:    watch.NewSet(),
+			expectedDangling:     watch.NewSet(),
+			expectedGVKsToDelete: watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+		},
+		{
+			name:                 "watches dangling, keep dangling",
+			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			removeGVKFailures:    watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedGVKsToDelete: watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+		},
+		{
+			name:                 "watches dangling, some keep dangling",
+			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk1, gvk2}),
+			removeGVKFailures:    watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1}),
+			expectedGVKsToDelete: watch.SetFrom([]schema.GroupVersionKind{gvk1, gvk2}),
+		},
+		{
+			name:                 "watches dangling, keep dangling on general error",
+			alreadyDangling:      watch.SetFrom([]schema.GroupVersionKind{gvk1, gvk2}),
+			removeGVKFailures:    watch.NewSet(),
+			expectedDangling:     watch.SetFrom([]schema.GroupVersionKind{gvk1, gvk2}),
+			expectedGVKsToDelete: watch.NewSet(),
+			hasGeneralErr:        true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cm, ctx := makeCacheManager(t)
+			fakeRegistrar := &fakeRegistrar{removeGVKFailures: tc.removeGVKFailures.Items()}
+			if tc.hasGeneralErr {
+				fakeRegistrar.generalErr = errors.New("test general error")
+			}
+			cm.registrar = fakeRegistrar
+
+			if tc.alreadyDangling != nil {
+				cm.danglingWatches.AddSet(tc.alreadyDangling)
+			}
+			cm.watchedSet.AddSet(tc.removeGVKFailures)
+
+			err := cm.replaceWatchSet(ctx)
+			if tc.removeGVKFailures.Size() == 0 && !tc.hasGeneralErr {
+				require.NoError(t, err)
+			}
+
+			require.ElementsMatch(t, tc.expectedDangling.Items(), cm.danglingWatches.Items())
+			require.ElementsMatch(t, tc.expectedGVKsToDelete.Items(), cm.gvksToDeleteFromCache.Items())
+		})
+	}
+}
+
+type fakeRegistrar struct {
+	removeGVKFailures []schema.GroupVersionKind
+	generalErr        error
+}
+
+func (f *fakeRegistrar) ReplaceWatch(ctx context.Context, gvks []schema.GroupVersionKind) error {
+	err := watch.NewErrorList()
+	if f.generalErr != nil {
+		err.Err(f.generalErr)
+	}
+	if len(f.removeGVKFailures) > 0 {
+		for _, gvk := range f.removeGVKFailures {
+			err.RemoveGVKErr(gvk, errors.New("some error"))
 		}
 	}
-	return u
+
+	if err.Size() != 0 {
+		return err
+	}
+
+	return nil
 }

@@ -42,7 +42,10 @@ const (
 	ctrlName = "config-controller"
 )
 
-var log = logf.Log.WithName("controller").WithValues("kind", "Config")
+var (
+	log       = logf.Log.WithName("controller").WithValues("kind", "Config")
+	configGVK = configv1alpha1.GroupVersion.WithKind("Config")
+)
 
 type Adder struct {
 	ControllerSwitch *watch.ControllerSwitch
@@ -186,8 +189,11 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	r.cacheManager.ExcludeProcesses(newExcluder)
 	configSourceKey := aggregator.Key{Source: "config", ID: request.NamespacedName.String()}
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
+		r.tracker.For(configGVK).TryCancelExpect(instance)
+
 		return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error establishing watches for new syncOny: %w", err)
 	}
 
+	r.tracker.For(configGVK).Observe(instance)
 	return reconcile.Result{}, nil
 }
