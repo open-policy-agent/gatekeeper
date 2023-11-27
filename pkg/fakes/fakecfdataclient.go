@@ -131,6 +131,26 @@ func (f *FakeCfClient) HasGVK(gvk schema.GroupVersionKind) bool {
 	return false
 }
 
+// ContainsGVKs returns true if the cache has data for the gvks given and those gvks only.
+func (f *FakeCfClient) ContainsGVKs(gvks []schema.GroupVersionKind) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	gvkMap := map[schema.GroupVersionKind]struct{}{}
+	for _, gvk := range gvks {
+		gvkMap[gvk] = struct{}{}
+	}
+
+	foundMap := map[schema.GroupVersionKind]struct{}{}
+	for k := range f.data {
+		if _, found := gvkMap[k.Gvk]; !found {
+			return false
+		}
+		foundMap[k.Gvk] = struct{}{}
+	}
+	return len(foundMap) == len(gvkMap)
+}
+
 // Len returns the number of items in the cache.
 func (f *FakeCfClient) Len() int {
 	f.mu.Lock()

@@ -3,7 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/config.gatekeeper.sh_configs.yaml
-#- bases/syncset.gatekeeper.sh_syncsets.yaml
+- bases/syncset.gatekeeper.sh_syncsets.yaml
 - bases/status.gatekeeper.sh_constraintpodstatuses.yaml
 - bases/status.gatekeeper.sh_constrainttemplatepodstatuses.yaml
 - bases/status.gatekeeper.sh_mutatorpodstatuses.yaml
@@ -55,6 +55,12 @@ patchesJson6902:
     version: v1
     kind: CustomResourceDefinition
     name: expansiontemplate.expansion.gatekeeper.sh
+  path: patches/max_name_size.yaml
+- target:
+    group: apiextensions.k8s.io
+    version: v1
+    kind: CustomResourceDefinition
+    name: syncsets.syncset.gatekeeper.sh
   path: patches/max_name_size.yaml
 
 patchesStrategicMerge:
