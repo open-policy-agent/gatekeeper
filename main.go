@@ -53,6 +53,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness/pruner"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/upgrade"
@@ -483,6 +484,12 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create cache manager")
+		return err
+	}
+
+	err = mgr.Add(pruner.NewExpectationsPruner(cm, tracker))
+	if err != nil {
+		setupLog.Error(err, "adding expectations pruner to manager")
 		return err
 	}
 

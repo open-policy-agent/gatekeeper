@@ -6,6 +6,8 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/core"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/testhelpers"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -109,11 +111,32 @@ func TestAssignMetadata(t *testing.T) {
 	}
 }
 
-// Tests the AssignMeta mutator MutatorForAssignMetadata call with an empty spec for graceful handling.
-func Test_AssignMeta_emptySpec(t *testing.T) {
-	assignMeta := &unversioned.AssignMetadata{}
-	mutator, err := MutatorForAssignMetadata(assignMeta)
+func Test_AssignMetadata_errors(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		mut    *unversioned.AssignMetadata
+		errMsg string
+	}{
+		{
+			name:   "empty spec",
+			mut:    &unversioned.AssignMetadata{},
+			errMsg: "invalid location for assignmetadata",
+		},
+		{
+			name: "name > 63",
+			mut: &unversioned.AssignMetadata{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: testhelpers.BigName(),
+				},
+			},
+			errMsg: core.ErrNameLength.Error(),
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mutator, err := MutatorForAssignMetadata(tt.mut)
 
-	require.ErrorContains(t, err, "invalid location for assignmetadat")
-	require.Nil(t, mutator)
+			require.ErrorContains(t, err, tt.errMsg)
+			require.Nil(t, mutator)
+		})
+	}
 }
