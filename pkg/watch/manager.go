@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"sync"
 
-	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -89,12 +88,7 @@ func New(c RemovableCache) (*Manager, error) {
 	}
 	wm.managedKinds.mgr = wm
 
-	err = wm.metrics.registerGvkCountMCallBack(wm)
-	if err != nil {
-		log.Error(err, "Failed to register callback")
-		return nil, err
-	}
-	return wm, err
+	return wm, nil
 }
 
 func (wm *Manager) NewRegistrar(parent string, events chan<- event.GenericEvent) (*Registrar, error) {
@@ -202,6 +196,9 @@ func (wm *Manager) doAddWatch(ctx context.Context, r *Registrar, gvk schema.Grou
 		registrars: map[*Registrar]bool{r: true},
 	}
 	wm.watchedKinds[gvk] = watchers.merge(wv)
+	if err := wm.metrics.reportGvkCount(int64(len(wm.watchedKinds))); err != nil {
+		log.Error(err, "while trying to report gvk count metric")
+	}
 	return nil
 }
 
@@ -246,6 +243,9 @@ func (wm *Manager) doRemoveWatch(ctx context.Context, r *Registrar, gvk schema.G
 		return fmt.Errorf("removing %+v: %w", gvk, err)
 	}
 	delete(wm.watchedKinds, gvk)
+	if err := wm.metrics.reportGvkCount(int64(len(wm.watchedKinds))); err != nil {
+		log.Error(err, "while trying to report gvk count metric")
+	}
 	log.Info("watch removed", "gvk", gvk)
 	return nil
 }
@@ -286,12 +286,6 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 	if errlist.Size() > 0 {
 		return errlist
 	}
-	return nil
-}
-
-func (wm *Manager) reportGvkCount(ctx context.Context, observer metric.Observer) error {
-	log.Info("reporting gvk count")
-	observer.ObserveInt64(gvkCountM, int64(len(wm.watchedKinds)))
 	return nil
 }
 

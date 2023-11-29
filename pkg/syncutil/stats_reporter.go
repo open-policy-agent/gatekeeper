@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
 	"go.opentelemetry.io/otel"
@@ -14,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
+
+var log = logf.Log.WithName("reporter").WithValues("metaKind", "Sync")
 
 const (
 	syncMetricName         = "sync"
@@ -136,18 +139,54 @@ func (c *MetricsCache) HasObject(key string) bool {
 	return ok
 }
 
+func (c *MetricsCache) ReportSync() {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
+
+	reporter, err := NewStatsReporter()
+	if err != nil {
+		log.Error(err, "failed to initialize reporter")
+		return
+	}
+
+	totals := make(map[Tags]int)
+	for _, v := range c.Cache {
+		totals[v]++
+	}
+
+	for kind := range c.KnownKinds {
+		for _, status := range metrics.AllStatuses {
+			if err := reporter.ReportSync(
+				Tags{
+					Kind:   kind,
+					Status: status,
+				},
+				int64(totals[Tags{
+					Kind:   kind,
+					Status: status,
+				}])); err != nil {
+				log.Error(err, "failed to report sync")
+			}
+		}
+	}
+}
+
 type Reporter struct {
+	mu sync.RWMutex
+	lastRun float64
+	syncReport map[Tags]int64
 	now func() float64
 }
 
 // NewStatsReporter creates a reporter for sync metrics.
 func NewStatsReporter() (*Reporter, error) {
-	return &Reporter{now: now}, nil
+	r := &Reporter{now: now}
+	return r, r.registerCallback()
 }
 
-func (r *Reporter) RegisterCallback(c *MetricsCache) error {
-	_, err1 := meter.RegisterCallback(c.ReportSync, syncM)
-	_, err2 := meter.RegisterCallback(r.ReportLastSync, lastRunSyncM)
+func (r *Reporter) registerCallback() error {
+	_, err1 := meter.RegisterCallback(r.observeSync, syncM)
+	_, err2 := meter.RegisterCallback(r.observeLastSync, lastRunSyncM)
 	return errors.Join(err1, err2)
 }
 
@@ -157,32 +196,30 @@ func (r *Reporter) ReportSyncDuration(d time.Duration) error {
 	return nil
 }
 
-func (r *Reporter) ReportLastSync(_ context.Context, observer metric.Observer) error {
-	observer.ObserveFloat64(lastRunSyncM, r.now())
+
+func (r *Reporter) ReportLastSync() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lastRun = r.now()
 	return nil
 }
 
-func (c *MetricsCache) ReportSync(_ context.Context, observer metric.Observer) error {
-	c.mux.RLock()
-	defer c.mux.RUnlock()
-
-	totals := make(map[Tags]int)
-	for _, v := range c.Cache {
-		totals[v]++
+func (r *Reporter) ReportSync(t Tags, v int64) error {
+	if r.syncReport == nil {
+		r.syncReport = make(map[Tags]int64)
 	}
+	r.syncReport[t] = v
+	return nil
+}
 
-	for kind := range c.KnownKinds {
-		for _, status := range metrics.AllStatuses {
-			t := Tags{
-				Kind:   kind,
-				Status: status,
-			}
-			v := int64(totals[Tags{
-				Kind:   kind,
-				Status: status,
-			}])
+func (r *Reporter) observeLastSync(_ context.Context, observer metric.Observer) error {
+	observer.ObserveFloat64(lastRunSyncM, r.lastRun)
+	return nil
+}
+
+func (c *Reporter) observeSync(_ context.Context, observer metric.Observer) error {
+	for t, v := range c.syncReport {
 			observer.ObserveInt64(syncM, v, metric.WithAttributes(attribute.String(kindKey, t.Kind), attribute.String(statusKey, string(t.Status))))
-		}
 	}
 	return nil
 }

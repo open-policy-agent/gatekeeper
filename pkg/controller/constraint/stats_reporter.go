@@ -2,9 +2,8 @@ package constraint
 
 import (
 	"context"
+	"sync"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -32,37 +31,40 @@ func init() {
 	}
 }
 
-func (c *ConstraintsCache) observeConstraints(ctx context.Context, observer metric.Observer) error {
-	c.mux.RLock()
-	defer c.mux.RUnlock()
-	if c.reportMetrics {
-		totals := make(map[tags]int)
-		// report total number of constraints
-		for _, v := range c.cache {
-			totals[v]++
-		}
-
-		for _, enforcementAction := range util.KnownEnforcementActions {
-			for _, status := range metrics.AllStatuses {
-				t := tags{
-					enforcementAction: enforcementAction,
-					status:            status,
-				}
-				observer.ObserveInt64(constraintsM, int64(totals[t]), metric.WithAttributes(attribute.String(enforcementActionKey, string(enforcementAction)), attribute.String(statusKey, string(status))))
-			}
-		}
+func (r *reporter) observeConstraints(ctx context.Context, observer metric.Observer) error {
+	for t, v := range r.constraintsReport {
+		observer.ObserveInt64(constraintsM, int64(v), metric.WithAttributes(attribute.String(enforcementActionKey, string(t.enforcementAction)), attribute.String(statusKey, string(t.status))))
 	}
 	return nil
 }
 
-// newStatsReporter creates a reporter for audit metrics.
-func newStatsReporter() (*reporter, error) {
-	return &reporter{}, nil
+func (r *reporter) reportConstraints(ctx context.Context, t tags, v int64) error {
+	r.mux.RLock()
+	defer r.mux.RUnlock()
+	if r.constraintsReport == nil {
+		r.constraintsReport = make(map[tags]int64)
+	}
+	r.constraintsReport[t] = v
+	return nil
 }
 
-func (rep *reporter) registerCallback(r *ReconcileConstraint) error {
-	_, err := meter.RegisterCallback(r.constraintsCache.observeConstraints, constraintsM)
+// StatsReporter reports audit metrics.
+type StatsReporter interface {
+	reportConstraints(ctx context.Context, t tags, v int64) error
+}
+
+// newStatsReporter creates a reporter for audit metrics.
+func newStatsReporter() (*reporter, error) {
+	r := &reporter{}
+	return r, r.registerCallback()
+}
+
+func (r *reporter) registerCallback() error {
+	_, err := meter.RegisterCallback(r.observeConstraints, constraintsM)
 	return err
 }
 
-type reporter struct{}
+type reporter struct {
+	mux               sync.RWMutex
+	constraintsReport map[tags]int64
+}

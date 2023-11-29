@@ -46,10 +46,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return nil
 	}
 	r := newReconciler(mgr, a.ExpansionSystem, a.GetPod, a.Tracker)
-	err := r.registry.registerCallback()
-	if err != nil {
-		return err
-	}
 	return add(mgr, r)
 }
 
@@ -122,6 +118,7 @@ func add(mgr manager.Manager, r *Reconciler) error {
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	defer r.registry.report(ctx)
 	log.V(logging.DebugLevel).Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
 
 	deleted := false

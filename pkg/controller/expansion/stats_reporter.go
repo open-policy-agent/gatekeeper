@@ -29,18 +29,20 @@ func init() {
 		metric.WithDescription(etDesc))
 
 	if err != nil {
-		log.Error(err, "failed to record total expansion templates")
-		// panic(err)
+		panic(err)
 	}
 }
 
 func newRegistry() *etRegistry {
-	return &etRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
+	r := &etRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
+	_ = r.registerCallback()
+	return r
 }
 
 type etRegistry struct {
 	cache map[types.NamespacedName]metrics.Status
 	dirty bool
+	statusReport map[metrics.Status]int64
 }
 
 func (r *etRegistry) add(key types.NamespacedName, status metrics.Status) {
@@ -60,14 +62,13 @@ func (r *etRegistry) remove(key types.NamespacedName) {
 	r.dirty = true
 }
 
-func (r *etRegistry) registerCallback() error {
-	_, err := meter.RegisterCallback(r.observeETM, etM)
-	return err
-}
-
-func (r *etRegistry) observeETM(_ context.Context, o metric.Observer) error {
+func (r *etRegistry) report(ctx context.Context) {
 	if !r.dirty {
-		return nil
+		return
+	}
+
+	if r.statusReport == nil {
+		r.statusReport = make(map[metrics.Status]int64)
 	}
 
 	totals := make(map[metrics.Status]int64)
@@ -76,7 +77,18 @@ func (r *etRegistry) observeETM(_ context.Context, o metric.Observer) error {
 	}
 
 	for _, s := range metrics.AllStatuses {
-		o.ObserveInt64(etM, totals[s], metric.WithAttributes(attribute.String(statusKey, string(s))))
+		r.statusReport[s] = totals[s]
+	}
+}
+
+func (r *etRegistry) registerCallback() error {
+	_, err := meter.RegisterCallback(r.observeETM, etM)
+	return err
+}
+
+func (r *etRegistry) observeETM(_ context.Context, o metric.Observer) error {
+	for s, v := range r.statusReport {
+		o.ObserveInt64(etM, v, metric.WithAttributes(attribute.String(statusKey, string(s))))
 	}
 	return nil
 }

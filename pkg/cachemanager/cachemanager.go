@@ -341,8 +341,13 @@ func (c *CacheManager) wipeData(ctx context.Context) error {
 
 	// reset sync cache before sending the metric
 	c.syncMetricsCache.ResetCache()
+	c.syncMetricsCache.ReportSync()
 
 	return nil
+}
+
+func (c *CacheManager) ReportSyncMetrics() {
+	c.syncMetricsCache.ReportSync()
 }
 
 func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind) error {
@@ -486,6 +491,8 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 				}
 			}
 		}
+
+		c.ReportSyncMetrics()
 	}
 }
 
@@ -505,8 +512,4 @@ func (c *CacheManager) wipeCacheIfNeeded(ctx context.Context) {
 		c.excluderChanged = false
 		c.needToList = true
 	}
-}
-
-func (c *CacheManager) GetSyncMetricsCache() *syncutil.MetricsCache {
-	return c.syncMetricsCache
 }

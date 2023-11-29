@@ -56,11 +56,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		log.Error(err, "Sync metrics reporter could not start")
 		return err
 	}
-	err = reporter.RegisterCallback(a.CacheManager.GetSyncMetricsCache())
-	if err != nil {
-		log.Error(err, "Sync metrics reporter could not start")
-		return err
-	}
 
 	r := newReconciler(mgr, *reporter, a.CacheManager)
 	return add(mgr, r, a.Events)
@@ -131,6 +126,12 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		if reportMetrics {
 			if err := r.reporter.ReportSyncDuration(time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report sync duration")
+			}
+
+			r.cm.ReportSyncMetrics()
+
+			if err := r.reporter.ReportLastSync(); err != nil {
+				log.Error(err, "failed to report last sync timestamp")
 			}
 		}
 	}()

@@ -43,10 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-var (
-	log               = logf.Log.WithName("controller").WithValues(logging.Process, "audit")
-	emptyAuditResults []updateListEntry
-)
+var log = logf.Log.WithName("controller").WithValues(logging.Process, "audit")
 
 const (
 	crdName                          = "constrainttemplates.templates.gatekeeper.sh"
@@ -71,6 +68,7 @@ var (
 	apiCacheDir                  = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
 	auditConnection              = flag.String("audit-connection", defaultConnection, "Connection name for publishing audit violation messages. Defaults to audit-connection")
 	auditChannel                 = flag.String("audit-channel", defaultChannel, "Channel name for publishing audit violation messages. Defaults to audit-channel")
+	emptyAuditResults            []updateListEntry
 	logStatsAudit                = flag.Bool("log-stats-audit", false, "(alpha) log stats metrics for the audit run")
 )
 
@@ -164,7 +162,11 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 
 // New creates a new manager for audit.
 func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
-	reporter := newStatsReporter()
+	reporter, err := newStatsReporter()
+	if err != nil {
+		log.Error(err, "StatsReporter could not start")
+		return nil, err
+	}
 	eventBroadcaster := record.NewBroadcaster()
 	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 	eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
@@ -185,24 +187,31 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 		expansionSystem: deps.ExpansionSystem,
 		pubsubSystem:    deps.PubSubSystem,
 	}
-	return am, am.reporter.registerCallback()
+	return am, nil
 }
 
 // audit performs an audit then updates the status of all constraint resources with the results.
 func (am *Manager) audit(ctx context.Context) error {
-	am.reporter.startTime = time.Now()
-	timestamp := am.reporter.startTime.UTC().Format(time.RFC3339)
+	startTime := time.Now()
+	timestamp := startTime.UTC().Format(time.RFC3339)
 	am.log = log.WithValues(logging.AuditID, timestamp)
 	logStart(am.log)
 	// record audit latency
 	defer func() {
 		logFinish(am.log)
-		am.reporter.endTime = time.Now()
-		latency := am.reporter.endTime.Sub(am.reporter.startTime)
+		endTime := time.Now()
+		latency := endTime.Sub(startTime)
 		if err := am.reporter.reportLatency(latency); err != nil {
 			am.log.Error(err, "failed to report latency")
 		}
+		if err := am.reporter.reportRunEnd(endTime); err != nil {
+			am.log.Error(err, "failed to report run end time")
+		}
 	}()
+
+	if err := am.reporter.reportRunStart(startTime); err != nil {
+		am.log.Error(err, "failed to report run start time")
+	}
 
 	// Create a new client to get an updated RESTMapper.
 	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme(), Mapper: nil})
@@ -226,10 +235,10 @@ func (am *Manager) audit(ctx context.Context) error {
 
 	updateLists := make(map[util.KindVersionName][]updateListEntry)
 	totalViolationsPerConstraint := make(map[util.KindVersionName]int64)
-	am.reporter.totalViolationsPerEnforcementAction = make(map[util.EnforcementAction]int64)
+	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
 	// resetting total violations per enforcement action
 	for _, action := range util.KnownEnforcementActions {
-		am.reporter.totalViolationsPerEnforcementAction[action] = 0
+		totalViolationsPerEnforcementAction[action] = 0
 	}
 
 	if *auditFromCache {
@@ -241,10 +250,10 @@ func (am *Manager) audit(ctx context.Context) error {
 			am.log.Error(err, "Auditing")
 		}
 
-		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, am.reporter.totalViolationsPerEnforcementAction, timestamp)
+		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 	} else {
 		am.log.Info("Auditing via discovery client")
-		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, am.reporter.totalViolationsPerEnforcementAction, timestamp)
+		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 		if err != nil {
 			return err
 		}
@@ -254,6 +263,12 @@ func (am *Manager) audit(ctx context.Context) error {
 	for gvknn := range updateLists {
 		ar := updateLists[gvknn][0]
 		logConstraint(am.log, &gvknn, ar.enforcementAction, totalViolationsPerConstraint[gvknn])
+	}
+
+	for k, v := range totalViolationsPerEnforcementAction {
+		if err := am.reporter.reportTotalViolations(k, v); err != nil {
+			am.log.Error(err, "failed to report total violations")
+		}
 	}
 
 	// update constraints for each kind

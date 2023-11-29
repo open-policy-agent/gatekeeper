@@ -103,17 +103,12 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if a.IfWatching != nil {
 		r.ifWatching = a.IfWatching
 	}
-	err = r.reporter.registerCallback(r)
-	if err != nil {
-		return err
-	}
 	return add(mgr, r, a.Events)
 }
 
 type ConstraintsCache struct {
-	mux           sync.RWMutex
-	cache         map[string]tags
-	reportMetrics bool
+	mux   sync.RWMutex
+	cache map[string]tags
 }
 
 type tags struct {
@@ -126,7 +121,7 @@ func newReconciler(
 	mgr manager.Manager,
 	cfClient *constraintclient.Client,
 	cs *watch.ControllerSwitch,
-	reporter *reporter,
+	reporter StatsReporter,
 	constraintsCache *ConstraintsCache,
 	tracker *readiness.Tracker,
 ) *ReconcileConstraint {
@@ -193,7 +188,7 @@ type ReconcileConstraint struct {
 	scheme           *runtime.Scheme
 	cfClient         *constraintclient.Client
 	log              logr.Logger
-	reporter         *reporter
+	reporter         StatsReporter
 	constraintsCache *ConstraintsCache
 	tracker          *readiness.Tracker
 	getPod           func(context.Context) (*corev1.Pod, error)
@@ -262,6 +257,13 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	reportMetrics := false
+	defer func() {
+		if reportMetrics {
+			r.constraintsCache.reportTotalConstraints(ctx, r.reporter)
+		}
+	}()
+
 	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
 		status, err := r.getOrCreatePodStatus(ctx, instance)
@@ -282,7 +284,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				if err2 := r.writer.Update(ctx, status); err2 != nil {
 					log.Error(err2, "could not report constraint error status")
 				}
-				r.constraintsCache.reportMetrics = true
+				reportMetrics = true
 				return reconcile.Result{}, err
 			}
 			logAddition(r.log, instance, enforcementAction)
@@ -298,7 +300,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			enforcementAction: enforcementAction,
 			status:            metrics.ActiveStatus,
 		})
-		r.constraintsCache.reportMetrics = true
+		reportMetrics = true
 	} else {
 		r.log.Info("handling constraint delete", "instance", instance)
 		if _, err := r.cfClient.RemoveConstraint(ctx, instance); err != nil {
@@ -313,7 +315,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		t.CancelExpect(instance)
 
 		r.constraintsCache.deleteConstraintKey(constraintKey)
-		r.constraintsCache.reportMetrics = true
+		reportMetrics = true
 
 		sName, err := constraintstatusv1beta1.KeyForConstraint(util.GetPodName(), instance)
 		if err != nil {
@@ -411,8 +413,7 @@ func (r *ReconcileConstraint) cacheConstraint(ctx context.Context, instance *uns
 
 func NewConstraintsCache() *ConstraintsCache {
 	return &ConstraintsCache{
-		cache:         make(map[string]tags),
-		reportMetrics: false,
+		cache: make(map[string]tags),
 	}
 }
 
@@ -431,4 +432,27 @@ func (c *ConstraintsCache) deleteConstraintKey(constraintKey string) {
 	defer c.mux.Unlock()
 
 	delete(c.cache, constraintKey)
+}
+
+func (c *ConstraintsCache) reportTotalConstraints(ctx context.Context, reporter StatsReporter) {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
+
+	totals := make(map[tags]int)
+	// report total number of constraints
+	for _, v := range c.cache {
+		totals[v]++
+	}
+
+	for _, enforcementAction := range util.KnownEnforcementActions {
+		for _, status := range metrics.AllStatuses {
+			t := tags{
+				enforcementAction: enforcementAction,
+				status:            status,
+			}
+			if err := reporter.reportConstraints(ctx, t, int64(totals[t])); err != nil {
+				log.Error(err, "failed to report total constraints")
+			}
+		}
+	}
 }

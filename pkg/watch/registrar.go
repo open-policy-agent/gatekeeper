@@ -21,7 +21,6 @@ import (
 	"sort"
 	"sync"
 
-	"go.opentelemetry.io/otel/metric"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
@@ -100,6 +99,12 @@ func (r *recordKeeper) Update(parentName string, m vitalsByGVK) {
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
 
+	defer func() {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
+			log.Error(err, "while reporting gvk intent count metric")
+		}
+	}()
+
 	if _, ok := r.intent[parentName]; !ok {
 		r.intent[parentName] = make(vitalsByGVK)
 	}
@@ -113,6 +118,11 @@ func (r *recordKeeper) Update(parentName string, m vitalsByGVK) {
 func (r *recordKeeper) ReplaceRegistrarRoster(reg *Registrar, roster map[schema.GroupVersionKind]vitals) {
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
+	defer func() {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
+			log.Error(err, "while reporting gvk intent count metric")
+		}
+	}()
 
 	r.intent[reg.parentName] = roster
 }
@@ -129,6 +139,11 @@ func (r *recordKeeper) Watching(parentName string, gvk schema.GroupVersionKind) 
 func (r *recordKeeper) Remove(parentName string, gvk schema.GroupVersionKind) {
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
+	defer func() {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
+			log.Error(err, "while reporting gvk intent count metric")
+		}
+	}()
 
 	delete(r.intent[parentName], gvk)
 }
@@ -159,15 +174,14 @@ func (r *recordKeeper) Get() vitalsByGVK {
 }
 
 // count returns total gvk count across all registrars.
-func (r *recordKeeper) Count(_ context.Context, observer metric.Observer) error {
+func (r *recordKeeper) count() int {
 	managedKinds := make(map[schema.GroupVersionKind]bool)
 	for _, registrar := range r.intent {
 		for gvk := range registrar {
 			managedKinds[gvk] = true
 		}
 	}
-	observer.ObserveInt64(gvkIntentCountM, int64(len(managedKinds)))
-	return nil
+	return len(managedKinds)
 }
 
 // GetGVK returns all managed kinds, merged across registrars.
@@ -190,13 +204,11 @@ func newRecordKeeper() (*recordKeeper, error) {
 	if err != nil {
 		return nil, err
 	}
-	ret := &recordKeeper{
+	return &recordKeeper{
 		intent:     make(map[string]vitalsByGVK),
 		registrars: make(map[string]*Registrar),
 		metrics:    metrics,
-	}
-	err = ret.registerGvkIntentCountMCallback()
-	return ret, err
+	}, nil
 }
 
 // A Registrar allows a parent to add/remove child watches.

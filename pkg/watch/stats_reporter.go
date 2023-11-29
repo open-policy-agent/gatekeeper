@@ -1,6 +1,10 @@
 package watch
 
 import (
+	"context"
+	"sync"
+	"errors"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -35,23 +39,47 @@ func init() {
 	}
 }
 
-func (r *recordKeeper) registerGvkIntentCountMCallback() error {
-	if _, err := meter.RegisterCallback(r.Count, gvkIntentCountM); err != nil {
-		return err
-	}
+func (r *reporter) reportGvkCount(count int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.gvkCount = count
 	return nil
 }
 
-func (r *reporter) registerGvkCountMCallBack(wm *Manager) error {
-	if _, err := meter.RegisterCallback(wm.reportGvkCount, gvkCountM); err != nil {
-		return err
-	}
+func (r *reporter) reportGvkIntentCount(count int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.intentCount = count
 	return nil
+}
+
+func (r *reporter) registerCallback() error {
+	_, err1 := meter.RegisterCallback(r.observeGvkIntentCount, gvkIntentCountM)
+	_, err2 := meter.RegisterCallback(r.observeGvkCount, gvkCountM)
+	
+	return errors.Join(err1, err2)
 }
 
 // newStatsReporter creates a reporter for watch metrics.
 func newStatsReporter() (*reporter, error) {
-	return &reporter{}, nil
+	r := &reporter{}
+	return r, r.registerCallback()
 }
 
-type reporter struct{}
+type reporter struct{
+	mu sync.RWMutex
+	gvkCount int64
+	intentCount int64
+}
+
+func (r *reporter) observeGvkCount(ctx context.Context, observer metric.Observer) error {
+	log.Info("reporting gvk count")
+	observer.ObserveInt64(gvkCountM, r.gvkCount)
+	return nil
+}
+
+// count returns total gvk count across all registrars.
+func (r *reporter) observeGvkIntentCount(_ context.Context, observer metric.Observer) error {
+	observer.ObserveInt64(gvkIntentCountM, r.intentCount)
+	return nil
+}

@@ -103,7 +103,7 @@ func TestReportSync(t *testing.T) {
 			// Ensure the pipeline has a callback setup
 			syncM, err = meter.Int64ObservableGauge("test")
 			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(tt.c.ReportSync, syncM)
+			_, err = meter.RegisterCallback(tt.c.ObserveSync, syncM)
 			assert.NoError(t, err)
 
 			rm := &metricdata.ResourceMetrics{}
@@ -211,7 +211,7 @@ func TestLastRunSync(t *testing.T) {
 			// Ensure the pipeline has a callback setup
 			lastRunSyncM, err = meter.Float64ObservableGauge("test")
 			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(r.ReportLastSync, lastRunSyncM)
+			_, err = meter.RegisterCallback(r.ObserveLastSync, lastRunSyncM)
 			assert.NoError(t, err)
 
 			rm := &metricdata.ResourceMetrics{}

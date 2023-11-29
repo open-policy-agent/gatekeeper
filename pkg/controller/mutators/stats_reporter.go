@@ -3,6 +3,7 @@ package mutators
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
@@ -88,14 +89,23 @@ func init() {
 // StatsReporter reports mutator-related controller metrics.
 type StatsReporter interface {
 	ReportMutatorIngestionRequest(ms MutatorIngestionStatus, d time.Duration) error
+	ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error
+	ReportMutatorsInConflict(n int) error
 }
 
 // reporter implements StatsReporter interface.
-type reporter struct{}
+type reporter struct{
+	mu sync.RWMutex
+	mutatorStatusReport map[MutatorIngestionStatus]int
+	mutatorsInConflict int
+	
+}
 
 // NewStatsReporter creates a reporter for webhook metrics.
 func NewStatsReporter() StatsReporter {
-	return &reporter{}
+	r := &reporter{}
+	_ = r.registerCallback()
+	return r
 }
 
 // ReportMutatorIngestionRequest reports both the action of a mutator ingestion and the time
@@ -109,8 +119,19 @@ func (r *reporter) ReportMutatorIngestionRequest(ms MutatorIngestionStatus, d ti
 
 // ReportMutatorsStatus reports the number of mutators of a specific status that are present in the
 // mutation System.
-func (r *Cache) ReportMutatorsStatus(_ context.Context, observer metric.Observer) error {
-	for status, count := range r.TallyStatus() {
+func (r *reporter) ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.mutatorStatusReport == nil {
+		r.mutatorStatusReport = make(map[MutatorIngestionStatus]int)
+	}
+	r.mutatorStatusReport[ms] = n
+	return nil
+}
+
+func (r *reporter) observeMutatorsStatus(_ context.Context, observer metric.Observer) error {
+	for status, count := range r.mutatorStatusReport {
 		observer.ObserveInt64(mutatorsM, int64(count), metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
 	return nil
@@ -118,13 +139,20 @@ func (r *Cache) ReportMutatorsStatus(_ context.Context, observer metric.Observer
 
 // ReportMutatorsInConflict reports the number of mutators that have schema
 // conflicts with other mutators in the mutation system.
-func (r *Cache) ReportMutatorsInConflict(_ context.Context, observer metric.Observer) error {
-	observer.ObserveInt64(conflictingMutatorsM, int64(r.TallyConflict()))
+func (r *reporter) ReportMutatorsInConflict(n int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mutatorsInConflict = n
 	return nil
 }
 
-func RegisterCallback(r *Cache) error {
-	_, err1 := meter.RegisterCallback(r.ReportMutatorsStatus, mutatorsM)
-	_, err2 := meter.RegisterCallback(r.ReportMutatorsInConflict, conflictingMutatorsM)
+func (r *reporter) observeMutatorsInConflict(_ context.Context, observer metric.Observer) error {
+	observer.ObserveInt64(conflictingMutatorsM, int64(r.mutatorsInConflict))
+	return nil
+}
+
+func (r *reporter) registerCallback() error {
+	_, err1 := meter.RegisterCallback(r.observeMutatorsStatus, mutatorsM)
+	_, err2 := meter.RegisterCallback(r.observeMutatorsInConflict, conflictingMutatorsM)
 	return errors.Join(err1, err2)
 }

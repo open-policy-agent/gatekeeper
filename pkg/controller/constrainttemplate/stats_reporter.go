@@ -2,6 +2,7 @@ package constrainttemplate
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
@@ -75,10 +76,14 @@ func (r *reporter) reportIngestDuration(ctx context.Context, status metrics.Stat
 // newStatsReporter creates a reporter for watch metrics.
 func newStatsReporter() *reporter {
 	reg := &ctRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
-	return &reporter{registry: reg}
+	r := &reporter{registry: reg}
+	_ = r.registerCallback()
+	return r
 }
 
 type reporter struct {
+	mu sync.RWMutex
+	ctReport map[metrics.Status]int64
 	registry *ctRegistry
 }
 
@@ -96,6 +101,16 @@ func (r *ctRegistry) add(key types.NamespacedName, status metrics.Status) {
 	r.dirty = true
 }
 
+func (r *reporter) reportCtMetric(status metrics.Status, count int64) error {
+	r.mu.Lock()	
+	defer r.mu.Unlock()
+	if r.ctReport == nil {
+		r.ctReport = make(map[metrics.Status]int64)
+	}
+	r.ctReport[status] = count
+	return nil
+}
+
 func (r *ctRegistry) remove(key types.NamespacedName) {
 	if _, ok := r.cache[key]; !ok {
 		return
@@ -104,18 +119,34 @@ func (r *ctRegistry) remove(key types.NamespacedName) {
 	r.dirty = true
 }
 
-func (r *ctRegistry) registerCallback() error {
-	_, err := meter.RegisterCallback(r.observeCTM, ctM)
-	return err
-}
-
-func (r *ctRegistry) observeCTM(_ context.Context, o metric.Observer) error {
+func (r *ctRegistry) report(_ context.Context, mReporter *reporter) {
+	if !r.dirty {
+		return
+	}
 	totals := make(map[metrics.Status]int64)
 	for _, status := range r.cache {
 		totals[status]++
 	}
+	hadErr := false
 	for _, status := range metrics.AllStatuses {
-		o.ObserveInt64(ctM, totals[status], metric.WithAttributes(attribute.String(statusKey, string(status))))
+		if err := mReporter.reportCtMetric(status, totals[status]); err != nil {
+			logger.Error(err, "failed to report total constraint templates")
+			hadErr = true
+		}
+	}
+	if !hadErr {
+		r.dirty = false
+	}
+}
+
+func (r *reporter) registerCallback() error {
+	_, err := meter.RegisterCallback(r.observeCTM, ctM)
+	return err
+}
+
+func (r *reporter) observeCTM(_ context.Context, o metric.Observer) error {
+	for status, count := range r.ctReport {
+		o.ObserveInt64(ctM, count, metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
 	return nil
 }
