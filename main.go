@@ -117,7 +117,7 @@ var (
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
-	shutdownWaitPeriod                   = flag.Duration("shutdown-wait-period", 10*time.Second, "The amount of time to wait before shutting down gracefully. This is used to delay webhook shutdown until the API Server stops sending new connections")
+	shutdownDelayDuration                = flag.Duration("shutdown-delay-duration", 10*time.Second, "The amount of time to wait before shutting down gracefully. This can be used to delay webhook shutdown until the API Server stops trying to make new connections")
 )
 
 func init() {
@@ -312,7 +312,7 @@ func innerMain() int {
 
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
 	setupErr := make(chan error)
-	ctx := setupSignalHandler(*shutdownWaitPeriod)
+	ctx := setupSignalHandler(*shutdownDelayDuration)
 	go func() {
 		setupErr <- setupControllers(ctx, mgr, sw, tracker, setupFinished)
 	}()
@@ -585,21 +585,21 @@ func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
 
 // setupSignalHandler registers a signal handler for SIGTERM and SIGINT and
 // returns a context which is canceled when one of these signals is caught after
-// waiting for the specified period. If a second signal is caught then we
+// waiting for the specified duration. If a second signal is caught then we
 // terminate immediately with exit code 1. The implementation has been stolen
-// from controller-runtime and then extended with wait period support:
+// from controller-runtime and then extended to support delay:
 // https://github.com/kubernetes-sigs/controller-runtime/blob/2154ffbc22e26ffd8c3b713927f0df2fa40841f2/pkg/manager/signals/signal.go#L27-L45
-func setupSignalHandler(waitPeriod time.Duration) context.Context {
+func setupSignalHandler(delayDuration time.Duration) context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		// Cancel the context once the wait period expires but avoid blocking if
-		// a second signal is received
+		// Cancel the context after delaying for the specified duration but
+		// avoid blocking if a second signal is received
 		go func() {
-			<-time.After(waitPeriod)
+			<-time.After(delayDuration)
 			cancel()
 		}()
 		<-c
