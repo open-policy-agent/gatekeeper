@@ -117,7 +117,7 @@ var (
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
-	shutdownDelayDuration                = flag.Duration("shutdown-delay-duration", 10*time.Second, "The amount of time to wait before shutting down gracefully. This can be used to delay webhook shutdown until the API Server stops trying to make new connections")
+	shutdownDelayDuration                = flag.Duration("shutdown-delay-duration", 10*time.Second, "The amount of time to wait before shutting down gracefully. This can be used to delay webhook shutdown until the Kubernetes API Server stops trying to make new connections")
 )
 
 func init() {
