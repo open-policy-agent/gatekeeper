@@ -57,15 +57,33 @@ func (e *fnExporter) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func TestReportIngestion(t *testing.T) {
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
 	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(fnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter = mp.Meter("test")
+
+	// Ensure the pipeline has a callback setup
+	ingestDurationM, err = meter.Float64Histogram(ingestDuration)
+	assert.NoError(t, err)
+
+	ingestCountM, err = meter.Int64Counter(ingestCount)
+	assert.NoError(t, err)
+
+	ctM, err = meter.Int64ObservableGauge(ctMetricName)
+	assert.NoError(t, err)
+	r = newStatsReporter()
+	return rdr, r
+}
+
+func TestReportIngestion(t *testing.T) {
 	const (
 		minIngestDuration = 1 * time.Second
 		maxIngestDuration = 5 * time.Second
 	)
 
 	want1 := metricdata.Metrics{
-		Name: "ingestDurationM",
+		Name: ingestDuration,
 		Data: metricdata.Histogram[float64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.HistogramDataPoint[float64]{
@@ -82,7 +100,7 @@ func TestReportIngestion(t *testing.T) {
 		},
 	}
 	want2 := metricdata.Metrics{
-		Name: "ingestCountM",
+		Name: ingestCount,
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.DataPoint[int64]{
@@ -92,25 +110,11 @@ func TestReportIngestion(t *testing.T) {
 		},
 	}
 
-	rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter := mp.Meter("test")
-
-	// Ensure the pipeline has a callback setup
-	ingestDurationM, err = meter.Float64Histogram("ingestDurationM")
-	assert.NoError(t, err)
-
-	ingestCountM, err = meter.Int64Counter("ingestCountM")
-	assert.NoError(t, err)
-	r := newStatsReporter()
-
 	ctx := context.Background()
+	rdr, r := initializeTestInstruments(t)
+	assert.NoError(t, r.reportIngestDuration(ctx, metrics.ActiveStatus, minIngestDuration))
 
-	err = r.reportIngestDuration(ctx, metrics.ActiveStatus, minIngestDuration)
-	assert.NoError(t, err)
-
-	err = r.reportIngestDuration(ctx, metrics.ActiveStatus, maxIngestDuration)
-	assert.NoError(t, err)
+	assert.NoError(t, r.reportIngestDuration(ctx, metrics.ActiveStatus, maxIngestDuration))
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
@@ -140,7 +144,7 @@ func TestObserveCTM(t *testing.T) {
 				},
 			},
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: ctMetricName,
 				Data: metricdata.Gauge[int64]{
 					DataPoints: []metricdata.DataPoint[int64]{
 						{Attributes: attribute.NewSet(attribute.String(statusKey, string(metrics.ActiveStatus))), Value: 2},
@@ -153,16 +157,8 @@ func TestObserveCTM(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var err error
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
-
-			// Ensure the pipeline has a callback setup
-			ctM, err = meter.Int64ObservableGauge("test")
-			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(tt.c.observeCTM, ctM)
-			assert.NoError(t, err)
+			rdr, r := initializeTestInstruments(t)
+			tt.c.report(tt.ctx, r)
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))

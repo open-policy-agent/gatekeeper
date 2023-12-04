@@ -2,8 +2,8 @@ package watch
 
 import (
 	"context"
-	"sync"
 	"errors"
+	"sync"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -56,7 +56,7 @@ func (r *reporter) reportGvkIntentCount(count int64) error {
 func (r *reporter) registerCallback() error {
 	_, err1 := meter.RegisterCallback(r.observeGvkIntentCount, gvkIntentCountM)
 	_, err2 := meter.RegisterCallback(r.observeGvkCount, gvkCountM)
-	
+
 	return errors.Join(err1, err2)
 }
 
@@ -66,9 +66,9 @@ func newStatsReporter() (*reporter, error) {
 	return r, r.registerCallback()
 }
 
-type reporter struct{
-	mu sync.RWMutex
-	gvkCount int64
+type reporter struct {
+	mu          sync.RWMutex
+	gvkCount    int64
 	intentCount int64
 }
 

@@ -7,13 +7,13 @@ import (
 	"sync"
 	"time"
 
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var log = logf.Log.WithName("reporter").WithValues("metaKind", "Sync")
@@ -172,10 +172,10 @@ func (c *MetricsCache) ReportSync() {
 }
 
 type Reporter struct {
-	mu sync.RWMutex
-	lastRun float64
+	mu         sync.RWMutex
+	lastRun    float64
 	syncReport map[Tags]int64
-	now func() float64
+	now        func() float64
 }
 
 // NewStatsReporter creates a reporter for sync metrics.
@@ -195,7 +195,6 @@ func (r *Reporter) ReportSyncDuration(d time.Duration) error {
 	syncDurationM.Record(ctx, d.Seconds())
 	return nil
 }
-
 
 func (r *Reporter) ReportLastSync() error {
 	r.mu.Lock()
@@ -217,9 +216,9 @@ func (r *Reporter) observeLastSync(_ context.Context, observer metric.Observer) 
 	return nil
 }
 
-func (c *Reporter) observeSync(_ context.Context, observer metric.Observer) error {
-	for t, v := range c.syncReport {
-			observer.ObserveInt64(syncM, v, metric.WithAttributes(attribute.String(kindKey, t.Kind), attribute.String(statusKey, string(t.Status))))
+func (r *Reporter) observeSync(_ context.Context, observer metric.Observer) error {
+	for t, v := range r.syncReport {
+		observer.ObserveInt64(syncM, v, metric.WithAttributes(attribute.String(kindKey, t.Kind), attribute.String(statusKey, string(t.Status))))
 	}
 	return nil
 }

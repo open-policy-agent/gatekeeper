@@ -56,10 +56,21 @@ func (e *fnExporter) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func TestReportConstraints(t *testing.T) {
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
 	var err error
-	constraintCache := NewConstraintsCache()
-	constraintCache.reportMetrics = true
+	rdr = sdkmetric.NewPeriodicReader(new(fnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter = mp.Meter("test")
+
+	// Ensure the pipeline has a callback setup
+	constraintsM, err = meter.Int64ObservableGauge(constraintsMetricName)
+	assert.NoError(t, err)
+	r, err = newStatsReporter()
+	assert.NoError(t, err)
+	return rdr, r
+}
+
+func TestReportConstraints(t *testing.T) {
 	tests := []struct {
 		name        string
 		ctx         context.Context
@@ -71,7 +82,7 @@ func TestReportConstraints(t *testing.T) {
 			ctx:         context.Background(),
 			expectedErr: nil,
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: constraintsMetricName,
 				Data: metricdata.Gauge[int64]{
 					DataPoints: []metricdata.DataPoint[int64]{
 						{Attributes: attribute.NewSet(attribute.String(enforcementActionKey, string(util.Warn)), attribute.String(statusKey, string(metrics.ActiveStatus))), Value: 0},
@@ -90,27 +101,18 @@ func TestReportConstraints(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
-
-			// Ensure the pipeline has a callback setup
-			constraintsM, err = meter.Int64ObservableGauge("test")
-			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(constraintCache.observeConstraints, constraintsM)
-			assert.NoError(t, err)
+			rdr, r := initializeTestInstruments(t)
+			for _, enforcementAction := range util.KnownEnforcementActions {
+				for _, status := range metrics.AllStatuses {
+					assert.NoError(t, r.reportConstraints(tt.ctx, tags{
+						enforcementAction: enforcementAction,
+						status:            status,
+					}, 0))
+				}
+			}
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
-
-			for _, enforcementAction := range util.KnownEnforcementActions {
-				for _, status := range metrics.AllStatuses {
-					_ = tags{
-						enforcementAction: enforcementAction,
-						status:            status,
-					}
-				}
-			}
 			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
 		})
 	}

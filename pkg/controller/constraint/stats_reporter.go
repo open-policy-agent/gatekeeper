@@ -33,7 +33,7 @@ func init() {
 
 func (r *reporter) observeConstraints(ctx context.Context, observer metric.Observer) error {
 	for t, v := range r.constraintsReport {
-		observer.ObserveInt64(constraintsM, int64(v), metric.WithAttributes(attribute.String(enforcementActionKey, string(t.enforcementAction)), attribute.String(statusKey, string(t.status))))
+		observer.ObserveInt64(constraintsM, v, metric.WithAttributes(attribute.String(enforcementActionKey, string(t.enforcementAction)), attribute.String(statusKey, string(t.status))))
 	}
 	return nil
 }

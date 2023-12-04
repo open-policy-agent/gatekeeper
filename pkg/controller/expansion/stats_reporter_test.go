@@ -129,6 +129,19 @@ func TestEtRegistry_remove(t *testing.T) {
 	}
 }
 
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *etRegistry) {
+	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(fnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter = mp.Meter("test")
+
+	etM, err = meter.Int64ObservableGauge(etMetricName)
+	assert.NoError(t, err)
+	r = newRegistry()
+
+	return rdr, r
+}
+
 func TestReport(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -136,10 +149,12 @@ func TestReport(t *testing.T) {
 		expectedErr error
 		want        metricdata.Metrics
 		r           *etRegistry
+		dirty       bool
 	}{
 		{
 			name:        "reporting total expansion templates with attributes",
 			ctx:         context.Background(),
+			dirty:       false,
 			expectedErr: nil,
 			r: &etRegistry{
 				dirty: true,
@@ -150,7 +165,7 @@ func TestReport(t *testing.T) {
 				},
 			},
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: etMetricName,
 				Data: metricdata.Gauge[int64]{
 					DataPoints: []metricdata.DataPoint[int64]{
 						{Attributes: attribute.NewSet(attribute.String(statusKey, string(metrics.ActiveStatus))), Value: 2},
@@ -163,16 +178,10 @@ func TestReport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var err error
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
-
-			// Ensure the pipeline has a callback setup
-			etM, err = meter.Int64ObservableGauge("test")
-			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(tt.r.observeETM, etM)
-			assert.NoError(t, err)
+			rdr, reg := initializeTestInstruments(t)
+			reg.dirty = tt.r.dirty
+			reg.cache = tt.r.cache
+			reg.report(tt.ctx)
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))

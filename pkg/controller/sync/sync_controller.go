@@ -57,14 +57,14 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r := newReconciler(mgr, *reporter, a.CacheManager)
+	r := newReconciler(mgr, reporter, a.CacheManager)
 	return add(mgr, r, a.Events)
 }
 
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
-	reporter syncutil.Reporter,
+	reporter *syncutil.Reporter,
 	cm *cachemanager.CacheManager,
 ) reconcile.Reconciler {
 	return &ReconcileSync{
@@ -102,7 +102,7 @@ type ReconcileSync struct {
 
 	scheme   *runtime.Scheme
 	log      logr.Logger
-	reporter syncutil.Reporter
+	reporter *syncutil.Reporter
 	cm       *cachemanager.CacheManager
 }
 

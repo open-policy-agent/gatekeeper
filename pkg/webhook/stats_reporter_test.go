@@ -68,15 +68,36 @@ const (
 	dryRun string = "false"
 )
 
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r StatsReporter) {
+	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(fnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter := mp.Meter("test")
+
+	// Ensure the pipeline has a callback setup
+	validationResponseTimeInSecM, err = meter.Float64Histogram(validationRequestDurationMetricName)
+	assert.NoError(t, err)
+
+	validationRequestCountM, err = meter.Int64Counter(validationRequestCountMetricName)
+	assert.NoError(t, err)
+
+	// Ensure the pipeline has a callback setup
+	mutationResponseTimeInSecM, err = meter.Float64Histogram(mutationRequestDurationMetricName)
+	assert.NoError(t, err)
+
+	mutationRequestCountM, err = meter.Int64Counter(mutationRequestCountMetricName)
+	assert.NoError(t, err)
+
+	r, err = newStatsReporter()
+	assert.NoError(t, err)
+	return rdr, r
+}
+
 func TestValidationReportRequest(t *testing.T) {
 	ctx := context.Background()
-	r, err := newStatsReporter()
-	if err != nil {
-		t.Fatalf("got newStatsReporter() error %v, want nil", err)
-	}
 
 	want1 := metricdata.Metrics{
-		Name: "validationResponseTimeInSecM",
+		Name: validationRequestDurationMetricName,
 		Data: metricdata.Histogram[float64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.HistogramDataPoint[float64]{
@@ -93,7 +114,7 @@ func TestValidationReportRequest(t *testing.T) {
 		},
 	}
 	want2 := metricdata.Metrics{
-		Name: "validationRequestCountM",
+		Name: validationRequestCountMetricName,
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.DataPoint[int64]{
@@ -103,22 +124,10 @@ func TestValidationReportRequest(t *testing.T) {
 		},
 	}
 
-	rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter := mp.Meter("test")
+	rdr, r := initializeTestInstruments(t)
 
-	// Ensure the pipeline has a callback setup
-	validationResponseTimeInSecM, err = meter.Float64Histogram("validationResponseTimeInSecM")
-	assert.NoError(t, err)
-
-	validationRequestCountM, err = meter.Int64Counter("validationRequestCountM")
-	assert.NoError(t, err)
-
-	err = r.ReportValidationRequest(ctx, successResponse, dryRun, minValidationDuration)
-	assert.NoError(t, err)
-
-	err = r.ReportValidationRequest(ctx, successResponse, dryRun, maxValidationDuration)
-	assert.NoError(t, err)
+	assert.NoError(t, r.ReportValidationRequest(ctx, successResponse, dryRun, minValidationDuration))
+	assert.NoError(t, r.ReportValidationRequest(ctx, successResponse, dryRun, maxValidationDuration))
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
@@ -129,13 +138,9 @@ func TestValidationReportRequest(t *testing.T) {
 
 func TestMutationReportRequest(t *testing.T) {
 	ctx := context.Background()
-	r, err := newStatsReporter()
-	if err != nil {
-		t.Fatalf("got newStatsReporter() error %v, want nil", err)
-	}
 
 	want1 := metricdata.Metrics{
-		Name: "mutationResponseTimeInSecM",
+		Name: mutationRequestDurationMetricName,
 		Data: metricdata.Histogram[float64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.HistogramDataPoint[float64]{
@@ -152,7 +157,7 @@ func TestMutationReportRequest(t *testing.T) {
 		},
 	}
 	want2 := metricdata.Metrics{
-		Name: "mutationRequestCountM",
+		Name: mutationRequestCountMetricName,
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.DataPoint[int64]{
@@ -162,22 +167,10 @@ func TestMutationReportRequest(t *testing.T) {
 		},
 	}
 
-	rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter := mp.Meter("test")
+	rdr, r := initializeTestInstruments(t)
 
-	// Ensure the pipeline has a callback setup
-	mutationResponseTimeInSecM, err = meter.Float64Histogram("mutationResponseTimeInSecM")
-	assert.NoError(t, err)
-
-	mutationRequestCountM, err = meter.Int64Counter("mutationRequestCountM")
-	assert.NoError(t, err)
-
-	err = r.ReportMutationRequest(ctx, successResponse, minValidationDuration)
-	assert.NoError(t, err)
-
-	err = r.ReportMutationRequest(ctx, successResponse, maxValidationDuration)
-	assert.NoError(t, err)
+	assert.NoError(t, r.ReportMutationRequest(ctx, successResponse, minValidationDuration))
+	assert.NoError(t, r.ReportMutationRequest(ctx, successResponse, maxValidationDuration))
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))

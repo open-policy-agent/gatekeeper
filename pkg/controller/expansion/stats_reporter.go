@@ -40,8 +40,8 @@ func newRegistry() *etRegistry {
 }
 
 type etRegistry struct {
-	cache map[types.NamespacedName]metrics.Status
-	dirty bool
+	cache        map[types.NamespacedName]metrics.Status
+	dirty        bool
 	statusReport map[metrics.Status]int64
 }
 

@@ -56,6 +56,24 @@ func (e *fnExporter) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r StatsReporter) {
+	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(fnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter = mp.Meter("test")
+	responseTimeInSecM, err = meter.Float64Histogram(mutatorIngestionDurationMetricName)
+	assert.NoError(t, err)
+	mutatorIngestionCountM, err = meter.Int64Counter(mutatorIngestionCountMetricName)
+	assert.NoError(t, err)
+	mutatorsM, err = meter.Int64ObservableGauge(mutatorsMetricName)
+	assert.NoError(t, err)
+	conflictingMutatorsM, err = meter.Int64ObservableGauge(mutatorsConflictingCountMetricsName)
+	assert.NoError(t, err)
+	r = NewStatsReporter()
+
+	return rdr, r
+}
+
 func TestReportMutatorIngestionRequest(t *testing.T) {
 	var err error
 	const (
@@ -64,7 +82,7 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	)
 
 	want1 := metricdata.Metrics{
-		Name: "responseTimeInSecM",
+		Name: mutatorIngestionDurationMetricName,
 		Data: metricdata.Histogram[float64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.HistogramDataPoint[float64]{
@@ -81,7 +99,7 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 		},
 	}
 	want2 := metricdata.Metrics{
-		Name: "mutatorIngestionCountM",
+		Name: mutatorIngestionCountMetricName,
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.DataPoint[int64]{
@@ -91,17 +109,7 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 		},
 	}
 
-	rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter := mp.Meter("test")
-
-	// Ensure the pipeline has a callback setup
-	responseTimeInSecM, err = meter.Float64Histogram("responseTimeInSecM")
-	assert.NoError(t, err)
-
-	mutatorIngestionCountM, err = meter.Int64Counter("mutatorIngestionCountM")
-	assert.NoError(t, err)
-	r := NewStatsReporter()
+	rdr, r := initializeTestInstruments(t)
 
 	ctx := context.Background()
 
@@ -146,7 +154,7 @@ func TestReportMutatorsStatus(t *testing.T) {
 				},
 			},
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: mutatorsMetricName,
 				Data: metricdata.Gauge[int64]{
 					DataPoints: []metricdata.DataPoint[int64]{
 						{Attributes: attribute.NewSet(attribute.String(statusKey, string(MutatorStatusActive))), Value: 1},
@@ -159,16 +167,10 @@ func TestReportMutatorsStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var err error
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
-
-			// Ensure the pipeline has a callback setup
-			mutatorsM, err = meter.Int64ObservableGauge("test")
-			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(tt.c.ReportMutatorsStatus, mutatorsM)
-			assert.NoError(t, err)
+			rdr, r := initializeTestInstruments(t)
+			for status, count := range tt.c.TallyStatus() {
+				assert.NoError(t, r.ReportMutatorsStatus(status, count))
+			}
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
@@ -205,7 +207,7 @@ func TestReportMutatorsInConflict(t *testing.T) {
 				},
 			},
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: mutatorsConflictingCountMetricsName,
 				Data: metricdata.Gauge[int64]{
 					DataPoints: []metricdata.DataPoint[int64]{
 						{Value: 1},
@@ -217,16 +219,8 @@ func TestReportMutatorsInConflict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var err error
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
-
-			// Ensure the pipeline has a callback setup
-			conflictingMutatorsM, err = meter.Int64ObservableGauge("test")
-			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(tt.c.ReportMutatorsInConflict, conflictingMutatorsM)
-			assert.NoError(t, err)
+			rdr, r := initializeTestInstruments(t)
+			assert.NoError(t, r.ReportMutatorsInConflict(tt.c.TallyConflict()))
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))

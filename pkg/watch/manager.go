@@ -278,7 +278,6 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 		}
 	}
 
-
 	if err := wm.metrics.reportGvkCount(int64(len(wm.watchedKinds))); err != nil {
 		log.Error(err, "while trying to report gvk count metric")
 	}

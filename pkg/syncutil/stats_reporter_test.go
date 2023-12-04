@@ -56,12 +56,30 @@ func (e *fnExporter) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *Reporter) {
+	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(fnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter = mp.Meter("test")
+
+	syncM, err = meter.Int64ObservableGauge(syncMetricName)
+	assert.NoError(t, err)
+	syncDurationM, err = meter.Float64Histogram(syncDurationMetricName)
+	assert.NoError(t, err)
+	lastRunSyncM, err = meter.Float64ObservableGauge(lastRunTimeMetricName)
+	assert.NoError(t, err)
+
+	r, err = NewStatsReporter()
+	assert.NoError(t, err)
+
+	return rdr, r
+}
+
 func TestReportSync(t *testing.T) {
 	wantTags := Tags{
 		Kind:   "Pod",
 		Status: metrics.ActiveStatus,
 	}
-
 	tests := []struct {
 		name        string
 		ctx         context.Context
@@ -82,7 +100,7 @@ func TestReportSync(t *testing.T) {
 				},
 			},
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: syncMetricName,
 				Data: metricdata.Gauge[int64]{
 					DataPoints: []metricdata.DataPoint[int64]{
 						{Attributes: attribute.NewSet(attribute.String(kindKey, wantTags.Kind), attribute.String(statusKey, string(wantTags.Status))), Value: 1},
@@ -95,20 +113,30 @@ func TestReportSync(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var err error
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
+			rdr, r := initializeTestInstruments(t)
+			totals := make(map[Tags]int)
+			for _, v := range tt.c.Cache {
+				totals[v]++
+			}
 
-			// Ensure the pipeline has a callback setup
-			syncM, err = meter.Int64ObservableGauge("test")
-			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(tt.c.ObserveSync, syncM)
-			assert.NoError(t, err)
+			for kind := range tt.c.KnownKinds {
+				for _, status := range metrics.AllStatuses {
+					if err := r.ReportSync(
+						Tags{
+							Kind:   kind,
+							Status: status,
+						},
+						int64(totals[Tags{
+							Kind:   kind,
+							Status: status,
+						}])); err != nil {
+						log.Error(err, "failed to report sync")
+					}
+				}
+			}
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
-
 			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
 		})
 	}
@@ -122,7 +150,7 @@ func TestReportSyncLatency(t *testing.T) {
 	const wantLatencyMax float64 = 500
 
 	want := metricdata.Metrics{
-		Name: "test",
+		Name: syncDurationMetricName,
 		Data: metricdata.Histogram[float64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.HistogramDataPoint[float64]{
@@ -138,29 +166,11 @@ func TestReportSyncLatency(t *testing.T) {
 			},
 		},
 	}
+	rdr, r := initializeTestInstruments(t)
 
-	r, err := NewStatsReporter()
-	if err != nil {
-		t.Fatalf("got newStatsReporter() error %v, want nil", err)
-	}
+	assert.NoError(t, r.ReportSyncDuration(minLatency))
 
-	rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter := mp.Meter("test")
-
-	// Ensure the pipeline has a callback setup
-	syncDurationM, err = meter.Float64Histogram("test")
-	assert.NoError(t, err)
-
-	err = r.ReportSyncDuration(minLatency)
-	if err != nil {
-		t.Fatalf("got reportSyncDuration() error %v, want nil", err)
-	}
-
-	err = r.ReportSyncDuration(maxLatency)
-	if err != nil {
-		t.Fatalf("got reportSyncDuration error %v, want nil", err)
-	}
+	assert.NoError(t, r.ReportSyncDuration(maxLatency))
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.Equal(t, nil, rdr.Collect(context.Background(), rm))
@@ -174,12 +184,6 @@ func TestLastRunSync(t *testing.T) {
 		return wantTime
 	}
 
-	r, err := NewStatsReporter()
-	if err != nil {
-		t.Fatalf("got NewStatsReporter() error %v, want nil", err)
-	}
-
-	r.now = fakeNow
 	tests := []struct {
 		name        string
 		ctx         context.Context
@@ -191,7 +195,7 @@ func TestLastRunSync(t *testing.T) {
 			ctx:         context.Background(),
 			expectedErr: nil,
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: lastRunTimeMetricName,
 				Data: metricdata.Gauge[float64]{
 					DataPoints: []metricdata.DataPoint[float64]{
 						{Value: wantTime},
@@ -203,16 +207,9 @@ func TestLastRunSync(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var err error
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
-
-			// Ensure the pipeline has a callback setup
-			lastRunSyncM, err = meter.Float64ObservableGauge("test")
-			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(r.ObserveLastSync, lastRunSyncM)
-			assert.NoError(t, err)
+			rdr, r := initializeTestInstruments(t)
+			r.now = fakeNow
+			assert.NoError(t, r.ReportLastSync())
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))

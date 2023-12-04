@@ -82,7 +82,7 @@ func newStatsReporter() *reporter {
 }
 
 type reporter struct {
-	mu sync.RWMutex
+	mu       sync.RWMutex
 	ctReport map[metrics.Status]int64
 	registry *ctRegistry
 }
@@ -102,7 +102,7 @@ func (r *ctRegistry) add(key types.NamespacedName, status metrics.Status) {
 }
 
 func (r *reporter) reportCtMetric(status metrics.Status, count int64) error {
-	r.mu.Lock()	
+	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.ctReport == nil {
 		r.ctReport = make(map[metrics.Status]int64)

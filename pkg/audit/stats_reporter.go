@@ -3,8 +3,8 @@ package audit
 import (
 	"context"
 	"errors"
-	"time"
 	"sync"
+	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -132,11 +132,11 @@ func (r *reporter) observeRunEnd(_ context.Context, o metric.Observer) error {
 // newStatsReporter creates a reporter for audit metrics.
 func newStatsReporter() (*reporter, error) {
 	r := &reporter{}
-	return r, r.registerCallback() 
+	return r, r.registerCallback()
 }
 
 type reporter struct {
-	mu sync.RWMutex
+	mu                                  sync.RWMutex
 	endTime                             time.Time
 	startTime                           time.Time
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64

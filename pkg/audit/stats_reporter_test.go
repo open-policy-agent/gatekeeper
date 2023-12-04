@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -56,23 +57,40 @@ func (e *fnExporter) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func TestReporter_observeTotalViolations(t *testing.T) {
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
 	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(fnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter = mp.Meter("test")
 
+	violationsM, err = meter.Int64ObservableGauge(violationsMetricName)
+	assert.NoError(t, err)
+	auditDurationM, err = meter.Float64Histogram(auditDurationMetricName)
+	assert.NoError(t, err)
+	lastRunStartTimeM, err = meter.Float64ObservableGauge(lastRunStartTimeMetricName)
+	assert.NoError(t, err)
+	lastRunEndTimeM, err = meter.Float64ObservableGauge(lastRunEndTimeMetricName)
+	assert.NoError(t, err)
+
+	r, err = newStatsReporter()
+	assert.NoError(t, err)
+
+	return rdr, r
+}
+
+func TestReporter_observeTotalViolations(t *testing.T) {
 	tests := []struct {
 		name        string
 		ctx         context.Context
 		expectedErr error
 		want        metricdata.Metrics
-		r           *reporter
 	}{
 		{
 			name:        "reporting total violations with attributes",
 			ctx:         context.Background(),
 			expectedErr: nil,
-			r:           newStatsReporter(),
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: violationsMetricName,
 				Data: metricdata.Gauge[int64]{
 					DataPoints: []metricdata.DataPoint[int64]{
 						{Attributes: attribute.NewSet(attribute.String(enforcementActionKey, string(util.Deny))), Value: 1},
@@ -87,22 +105,17 @@ func TestReporter_observeTotalViolations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
-
-			tt.r.totalViolationsPerEnforcementAction = map[util.EnforcementAction]int64{
+			totalViolationsPerEnforcementAction := map[util.EnforcementAction]int64{
 				util.Deny:         1,
 				util.Dryrun:       2,
 				util.Warn:         3,
 				util.Unrecognized: 4,
 			}
+			rdr, r := initializeTestInstruments(t)
 
-			// Ensure the pipeline has a callback setup
-			violationsM, err = meter.Int64ObservableGauge("test")
-			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(tt.r.observeTotalViolations, violationsM)
-			assert.NoError(t, err)
+			for k, v := range totalViolationsPerEnforcementAction {
+				assert.NoError(t, r.reportTotalViolations(k, v))
+			}
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
@@ -125,10 +138,9 @@ func TestReporter_reportLatency(t *testing.T) {
 			name:        "reporting audit latency",
 			ctx:         context.Background(),
 			expectedErr: nil,
-			r:           newStatsReporter(),
 			duration:    7000000000,
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: auditDurationMetricName,
 				Data: metricdata.Histogram[float64]{
 					Temporality: metricdata.CumulativeTemporality,
 					DataPoints: []metricdata.HistogramDataPoint[float64]{
@@ -149,15 +161,8 @@ func TestReporter_reportLatency(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var err error
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
-
-			// Ensure the pipeline has a callback setup
-			auditDurationM, err = meter.Float64Histogram("test")
-			assert.NoError(t, err)
-			assert.NoError(t, tt.r.reportLatency(tt.duration))
+			rdr, r := initializeTestInstruments(t)
+			assert.NoError(t, r.reportLatency(tt.duration))
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
@@ -179,9 +184,8 @@ func TestReporter_observeRunStart(t *testing.T) {
 			name:        "reporting audit start time",
 			ctx:         context.Background(),
 			expectedErr: nil,
-			r:           newStatsReporter(),
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: lastRunStartTimeMetricName,
 				Data: metricdata.Gauge[float64]{
 					DataPoints: []metricdata.DataPoint[float64]{
 						{Value: float64(startTime.Unix())},
@@ -193,17 +197,8 @@ func TestReporter_observeRunStart(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.r.startTime = startTime
-			var err error
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
-
-			// Ensure the pipeline has a callback setup
-			lastRunStartTimeM, err = meter.Float64ObservableGauge("test")
-			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(tt.r.observeRunStart, lastRunStartTimeM)
-			assert.NoError(t, err)
+			rdr, r := initializeTestInstruments(t)
+			assert.NoError(t, r.reportRunStart(startTime))
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
@@ -220,15 +215,13 @@ func TestReporter_observeRunEnd(t *testing.T) {
 		ctx         context.Context
 		expectedErr error
 		want        metricdata.Metrics
-		r           *reporter
 	}{
 		{
 			name:        "reporting audit end time",
 			ctx:         context.Background(),
 			expectedErr: nil,
-			r:           newStatsReporter(),
 			want: metricdata.Metrics{
-				Name: "test",
+				Name: lastRunEndTimeMetricName,
 				Data: metricdata.Gauge[float64]{
 					DataPoints: []metricdata.DataPoint[float64]{
 						{Value: float64(endTime.Unix())},
@@ -240,22 +233,13 @@ func TestReporter_observeRunEnd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var err error
-			tt.r.endTime = endTime
-			rdr := sdkmetric.NewPeriodicReader(new(fnExporter))
-			mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-			meter := mp.Meter("test")
-
-			// Ensure the pipeline has a callback setup
-			lastRunEndTimeM, err = meter.Float64ObservableGauge("test")
-			assert.NoError(t, err)
-			_, err = meter.RegisterCallback(tt.r.observeRunEnd, lastRunEndTimeM)
-			assert.NoError(t, err)
+			rdr, r := initializeTestInstruments(t)
+			assert.NoError(t, r.reportRunEnd(endTime))
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
-
-			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+			fmt.Println(rm.ScopeMetrics[0])
+			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[1], metricdatatest.IgnoreTimestamp())
 		})
 	}
 }

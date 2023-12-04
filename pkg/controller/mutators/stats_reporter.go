@@ -94,11 +94,10 @@ type StatsReporter interface {
 }
 
 // reporter implements StatsReporter interface.
-type reporter struct{
-	mu sync.RWMutex
+type reporter struct {
+	mu                  sync.RWMutex
 	mutatorStatusReport map[MutatorIngestionStatus]int
-	mutatorsInConflict int
-	
+	mutatorsInConflict  int
 }
 
 // NewStatsReporter creates a reporter for webhook metrics.
