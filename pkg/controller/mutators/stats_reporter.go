@@ -130,6 +130,8 @@ func (r *reporter) ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error 
 }
 
 func (r *reporter) observeMutatorsStatus(_ context.Context, observer metric.Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for status, count := range r.mutatorStatusReport {
 		observer.ObserveInt64(mutatorsM, int64(count), metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
@@ -146,6 +148,8 @@ func (r *reporter) ReportMutatorsInConflict(n int) error {
 }
 
 func (r *reporter) observeMutatorsInConflict(_ context.Context, observer metric.Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	observer.ObserveInt64(conflictingMutatorsM, int64(r.mutatorsInConflict))
 	return nil
 }

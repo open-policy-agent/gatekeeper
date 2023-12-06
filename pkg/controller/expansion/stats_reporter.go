@@ -2,6 +2,7 @@ package expansion
 
 import (
 	"context"
+	"sync"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"go.opentelemetry.io/otel"
@@ -40,6 +41,7 @@ func newRegistry() *etRegistry {
 }
 
 type etRegistry struct {
+	mu           sync.RWMutex
 	cache        map[types.NamespacedName]metrics.Status
 	dirty        bool
 	statusReport map[metrics.Status]int64
@@ -66,6 +68,8 @@ func (r *etRegistry) report(ctx context.Context) {
 	if !r.dirty {
 		return
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	if r.statusReport == nil {
 		r.statusReport = make(map[metrics.Status]int64)
@@ -87,6 +91,8 @@ func (r *etRegistry) registerCallback() error {
 }
 
 func (r *etRegistry) observeETM(_ context.Context, o metric.Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for s, v := range r.statusReport {
 		o.ObserveInt64(etM, v, metric.WithAttributes(attribute.String(statusKey, string(s))))
 	}

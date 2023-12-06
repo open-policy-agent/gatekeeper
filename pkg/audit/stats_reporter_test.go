@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -14,52 +15,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 )
 
-type fnExporter struct {
-	temporalityFunc sdkmetric.TemporalitySelector
-	aggregationFunc sdkmetric.AggregationSelector
-	exportFunc      func(context.Context, *metricdata.ResourceMetrics) error
-	flushFunc       func(context.Context) error
-	shutdownFunc    func(context.Context) error
-}
-
-func (e *fnExporter) Temporality(k sdkmetric.InstrumentKind) metricdata.Temporality {
-	if e.temporalityFunc != nil {
-		return e.temporalityFunc(k)
-	}
-	return sdkmetric.DefaultTemporalitySelector(k)
-}
-
-func (e *fnExporter) Aggregation(k sdkmetric.InstrumentKind) sdkmetric.Aggregation {
-	if e.aggregationFunc != nil {
-		return e.aggregationFunc(k)
-	}
-	return sdkmetric.DefaultAggregationSelector(k)
-}
-
-func (e *fnExporter) Export(ctx context.Context, m *metricdata.ResourceMetrics) error {
-	if e.exportFunc != nil {
-		return e.exportFunc(ctx, m)
-	}
-	return nil
-}
-
-func (e *fnExporter) ForceFlush(ctx context.Context) error {
-	if e.flushFunc != nil {
-		return e.flushFunc(ctx)
-	}
-	return nil
-}
-
-func (e *fnExporter) Shutdown(ctx context.Context) error {
-	if e.shutdownFunc != nil {
-		return e.shutdownFunc(ctx)
-	}
-	return nil
-}
-
 func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
 	var err error
-	rdr = sdkmetric.NewPeriodicReader(new(fnExporter))
+	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
 	meter = mp.Meter("test")
 

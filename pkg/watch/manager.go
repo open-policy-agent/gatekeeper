@@ -87,7 +87,6 @@ func New(c RemovableCache) (*Manager, error) {
 		replayTracker:  newReplayTracker(),
 	}
 	wm.managedKinds.mgr = wm
-
 	return wm, nil
 }
 

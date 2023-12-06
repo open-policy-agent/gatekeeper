@@ -212,11 +212,15 @@ func (r *Reporter) ReportSync(t Tags, v int64) error {
 }
 
 func (r *Reporter) observeLastSync(_ context.Context, observer metric.Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	observer.ObserveFloat64(lastRunSyncM, r.lastRun)
 	return nil
 }
 
 func (r *Reporter) observeSync(_ context.Context, observer metric.Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for t, v := range r.syncReport {
 		observer.ObserveInt64(syncM, v, metric.WithAttributes(attribute.String(kindKey, t.Kind), attribute.String(statusKey, string(t.Status))))
 	}

@@ -84,6 +84,8 @@ func (r *reporter) registerCallback() error {
 }
 
 func (r *reporter) observeTotalViolations(_ context.Context, o metric.Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for k, v := range r.totalViolationsPerEnforcementAction {
 		o.ObserveInt64(violationsM, v, metric.WithAttributes(attribute.String(enforcementActionKey, string(k))))
 	}
@@ -120,11 +122,15 @@ func (r *reporter) reportRunEnd(t time.Time) error {
 }
 
 func (r *reporter) observeRunStart(_ context.Context, o metric.Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	o.ObserveFloat64(lastRunStartTimeM, float64(r.startTime.Unix()))
 	return nil
 }
 
 func (r *reporter) observeRunEnd(_ context.Context, o metric.Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	o.ObserveFloat64(lastRunEndTimeM, float64(r.endTime.Unix()))
 	return nil
 }

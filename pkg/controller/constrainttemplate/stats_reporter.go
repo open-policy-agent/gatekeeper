@@ -145,6 +145,8 @@ func (r *reporter) registerCallback() error {
 }
 
 func (r *reporter) observeCTM(_ context.Context, o metric.Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for status, count := range r.ctReport {
 		o.ObserveInt64(ctM, count, metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
