@@ -7,15 +7,18 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -23,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var (
@@ -86,7 +90,7 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 		t.Helper()
 
 		// Construct a single-use Unstructured to send the Delete request.
-		toDelete := makeUnstructured(gvk, namespace, name)
+		toDelete := fakes.UnstructuredFor(gvk, namespace, name)
 		err := c.Delete(ctx, toDelete)
 		if apierrors.IsNotFound(err) {
 			return
@@ -99,7 +103,7 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 		}, func() error {
 			// Construct a single-use Unstructured to send the Get request. It isn't
 			// safe to reuse Unstructureds for each retry as Get modifies its input.
-			toGet := makeUnstructured(gvk, namespace, name)
+			toGet := fakes.UnstructuredFor(gvk, namespace, name)
 			key := client.ObjectKey{Namespace: namespace, Name: name}
 			err2 := c.Get(ctx, key, toGet)
 			if apierrors.IsGone(err2) || apierrors.IsNotFound(err2) {
@@ -168,12 +172,27 @@ func CreateThenCleanup(ctx context.Context, t *testing.T, c client.Client, obj c
 	t.Cleanup(DeleteObjectAndConfirm(ctx, t, c, obj))
 }
 
-func makeUnstructured(gvk schema.GroupVersionKind, namespace, name string) *unstructured.Unstructured {
-	u := &unstructured.Unstructured{
-		Object: make(map[string]interface{}),
+func SetupDataClient(t *testing.T) *constraintclient.Client {
+	driver, err := rego.New(rego.Tracing(false))
+	if err != nil {
+		t.Fatalf("setting up Driver: %v", err)
 	}
-	u.SetGroupVersionKind(gvk)
-	u.SetNamespace(namespace)
-	u.SetName(name)
-	return u
+
+	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	if err != nil {
+		t.Fatalf("setting up constraint framework client: %v", err)
+	}
+	return client
+}
+
+// SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
+// writes the request to requests after Reconcile is finished.
+func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, *sync.Map) {
+	var requests sync.Map
+	fn := reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+		result, err := inner.Reconcile(ctx, req)
+		requests.Store(req, struct{}{})
+		return result, err
+	})
+	return fn, &requests
 }

@@ -64,6 +64,14 @@ func NewSet() *Set {
 	}
 }
 
+// SetFrom constructs a new watchSet from the given gvks.
+func SetFrom(items []schema.GroupVersionKind) *Set {
+	s := NewSet()
+	s.Add(items...)
+
+	return s
+}
+
 func (w *Set) Size() int {
 	w.mux.RLock()
 	defer w.mux.RUnlock()

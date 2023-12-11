@@ -1,0 +1,10 @@
+apiVersion: syncset.gatekeeper.sh/v1alpha1
+kind: SyncSet
+metadata:
+  name: syncset-1
+  namespace: "gatekeeper-system"
+spec:
+  gvks:
+    - group: ""
+      version: "v1"
+      kind: "ConfigMap"

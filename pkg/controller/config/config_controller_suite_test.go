@@ -16,11 +16,9 @@ limitations under the License.
 package config
 
 import (
-	"context"
 	stdlog "log"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
@@ -28,7 +26,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var cfg *rest.Config
@@ -59,16 +56,4 @@ func TestMain(m *testing.M) {
 		stdlog.Printf("error while trying to stop server: %v", err)
 	}
 	os.Exit(code)
-}
-
-// SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
-// writes the request to requests after Reconcile is finished.
-func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, *sync.Map) {
-	var requests sync.Map
-	fn := reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
-		result, err := inner.Reconcile(ctx, req)
-		requests.Store(req, struct{}{})
-		return result, err
-	})
-	return fn, &requests
 }
