@@ -29,7 +29,7 @@ spec:
         {{- if .Values.podAnnotations }}
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
         {{- end }}
-        {{- if and .Values.audit.enablePubsub .Values.auditPodAnnotations }}
+        {{- if .Values.auditPodAnnotations }}
         {{- toYaml .Values.auditPodAnnotations | trim | nindent 8 }}
         {{- end }}
       labels:
