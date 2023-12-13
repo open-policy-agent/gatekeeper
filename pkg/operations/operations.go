@@ -124,7 +124,8 @@ func AssignedStringList() []string {
 }
 
 // HasValidationOperations returns `true` if there
-// are any operations that would require a constraint/template controller.
+// are any operations that would require a constraint or template controller
+// or a sync controller.
 func HasValidationOperations() bool {
 	return IsAssigned(Audit) || IsAssigned(Status) || IsAssigned(Webhook)
 }

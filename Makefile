@@ -13,7 +13,7 @@ ENABLE_PUBSUB ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 
-VERSION := v3.14.0-beta.0
+VERSION := v3.15.0-beta.0
 
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -461,6 +461,7 @@ release-manifest:
 	@sed -i "s/tag: $(VERSION)/tag: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
 	@sed -i 's/Current release version: `$(VERSION)`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
 	@sed -i -e 's/^VERSION := $(VERSION)/VERSION := ${NEWVERSION}/' ./Makefile
+	@sed -i 's/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/master\/deploy\/gatekeeper\.yaml.*/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${NEWVERSION}\/deploy\/gatekeeper\.yaml/' ./website/docs/install.md
 	export
 	$(MAKE) manifests
 

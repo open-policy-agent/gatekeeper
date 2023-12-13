@@ -124,6 +124,10 @@ func (m *Mutator) String() string {
 
 // MutatorForAssignMetadata builds a Mutator from the given AssignMetadata object.
 func MutatorForAssignMetadata(assignMeta *mutationsunversioned.AssignMetadata) (*Mutator, error) {
+	if err := core.ValidateName(assignMeta.Name); err != nil {
+		return nil, err
+	}
+
 	// This is not always set by the kubernetes API server
 	assignMeta.SetGroupVersionKind(runtimeschema.GroupVersionKind{Group: mutationsv1beta1.GroupVersion.Group, Kind: "AssignMetadata"})
 

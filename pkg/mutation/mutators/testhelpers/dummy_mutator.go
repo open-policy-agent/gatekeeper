@@ -2,6 +2,7 @@ package testhelpers
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/core"
@@ -64,4 +65,9 @@ func NewDummyMutator(name, path string, value interface{}) *DummyMutator {
 		panic(err)
 	}
 	return &DummyMutator{name: name, path: p, value: value}
+}
+
+// BigName returns a 64-length string.
+func BigName() string {
+	return strings.Repeat("abigname", 8) // 8 X 8 = 64
 }

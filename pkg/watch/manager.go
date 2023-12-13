@@ -254,7 +254,7 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 	wm.watchedMux.Lock()
 	defer wm.watchedMux.Unlock()
 
-	var errlist errorList
+	errlist := NewErrorList()
 
 	desired := wm.managedKinds.Get()
 	for gvk := range wm.watchedKinds {
@@ -263,7 +263,7 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 			continue
 		}
 		if err := wm.doRemoveWatch(ctx, r, gvk); err != nil {
-			errlist = append(errlist, fmt.Errorf("removing watch for %+v %w", gvk, err))
+			errlist.RemoveGVKErr(gvk, fmt.Errorf("removing watch for %+v %w", gvk, err))
 		}
 	}
 
@@ -273,7 +273,7 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 			continue
 		}
 		if err := wm.doAddWatch(ctx, r, gvk); err != nil {
-			errlist = append(errlist, fmt.Errorf("adding watch for %+v %w", gvk, err))
+			errlist.AddGVKErr(gvk, fmt.Errorf("adding watch for %+v %w", gvk, err))
 		}
 	}
 
@@ -281,7 +281,7 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 		log.Error(err, "while trying to report gvk count metric")
 	}
 
-	if errlist != nil {
+	if errlist.Size() > 0 {
 		return errlist
 	}
 	return nil
