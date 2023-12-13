@@ -11,6 +11,8 @@ import (
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/core"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/testhelpers"
 	path "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/stretchr/testify/require"
@@ -1073,11 +1075,32 @@ func nestedMapSlice(u map[string]interface{}, fields ...string) ([]map[string]in
 	return out, nil
 }
 
-// Tests the Assign mutator MutatorForAssign call with an empty spec for graceful handling.
-func Test_Assign_emptySpec(t *testing.T) {
-	assign := &mutationsunversioned.Assign{}
-	mutator, err := MutatorForAssign(assign)
+func Test_Assign_errors(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		mut    *mutationsunversioned.Assign
+		errMsg string
+	}{
+		{
+			name:   "empty path",
+			mut:    &mutationsunversioned.Assign{},
+			errMsg: "empty path",
+		},
+		{
+			name: "name > 63",
+			mut: &mutationsunversioned.Assign{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: testhelpers.BigName(),
+				},
+			},
+			errMsg: core.ErrNameLength.Error(),
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mutator, err := MutatorForAssign(tt.mut)
 
-	require.ErrorContains(t, err, "empty path")
-	require.Nil(t, mutator)
+			require.ErrorContains(t, err, tt.errMsg)
+			require.Nil(t, mutator)
+		})
+	}
 }
