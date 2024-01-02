@@ -18,12 +18,12 @@ import (
 const (
 	Name                          = "stackdriver"
 	metricPrefix                  = "custom.googleapis.com/opencensus/gatekeeper/"
-	defaultMetricsCollectInterval = 10
+	defaultMetricsCollectInterval = 10 * time.Second
 )
 
 var (
 	ignoreMissingCreds = flag.Bool("stackdriver-only-when-available", false, "Only attempt to start the stackdriver exporter if credentials are available")
-	metricInterval     = flag.Uint("stackdriver-metric-interval", defaultMetricsCollectInterval, "interval to read metrics for stackdriver exporter. defaulted to 10 secs if unspecified")
+	metricInterval     = flag.Duration("stackdriver-metric-interval", defaultMetricsCollectInterval, "interval to read metrics for stackdriver exporter. defaulted to 10 secs if unspecified")
 	log                = logf.Log.WithName("stackdriver-exporter")
 )
 
@@ -47,7 +47,7 @@ func Start(ctx context.Context) error {
 		}
 		return err
 	}
-	reader := metric.NewPeriodicReader(e, metric.WithInterval(time.Duration(*metricInterval)*time.Second))
+	reader := metric.NewPeriodicReader(e, metric.WithInterval(*metricInterval))
 	meterProvider := metric.NewMeterProvider(
 		metric.WithReader(reader),
 		metric.WithView(view.Views()...),
