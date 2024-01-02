@@ -17,7 +17,7 @@ func (s *notKeyedSetter) KeyedListValue() (map[string]interface{}, error) {
 	panic("notKeyedSetter setter does not handle keyed lists")
 }
 
-func (s *notKeyedSetter) SetValue(obj map[string]interface{}, key string) error {
+func (s *notKeyedSetter) SetValue(_ map[string]interface{}, _ string) error {
 	panic("NOT IMPLEMENTED")
 }
 

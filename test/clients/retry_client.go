@@ -68,7 +68,7 @@ func retry(ctx context.Context, limiter *rate.Limiter, f func() error) error {
 	}
 }
 
-func (c *RetryClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (c *RetryClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
 	return retry(ctx, c.Limiter, func() error {
 		return c.Client.Get(ctx, key, obj)
 	})

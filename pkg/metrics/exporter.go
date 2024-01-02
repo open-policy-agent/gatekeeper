@@ -17,11 +17,11 @@ type runner struct {
 }
 
 func AddToManager(m manager.Manager) error {
-	mr := new(m)
+	mr := create(m)
 	return m.Add(mr)
 }
 
-func new(mgr manager.Manager) *runner {
+func create(mgr manager.Manager) *runner {
 	mr := &runner{
 		mgr: mgr,
 	}
