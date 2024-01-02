@@ -204,6 +204,8 @@ func (r *Reporter) ReportLastSync() error {
 }
 
 func (r *Reporter) ReportSync(t Tags, v int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.syncReport == nil {
 		r.syncReport = make(map[Tags]int64)
 	}

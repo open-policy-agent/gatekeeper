@@ -10,13 +10,14 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"golang.org/x/oauth2/google"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
 	Name                          = "stackdriver"
-	metricPrefix                  = "custom.googleapis.com/opentelemetry/gatekeeper/"
+	metricPrefix                  = "custom.googleapis.com/opencensus/gatekeeper/"
 	defaultMetricsCollectInterval = 10
 )
 
@@ -36,7 +37,9 @@ func Start(ctx context.Context) error {
 		return err
 	}
 
-	e, err := stackdriver.New(stackdriver.WithProjectID(metricPrefix))
+	e, err := stackdriver.New(stackdriver.WithMetricDescriptorTypeFormatter(func(desc metricdata.Metrics) string {
+		return metricPrefix + desc.Name
+	}))
 	if err != nil {
 		if *ignoreMissingCreds {
 			log.Error(err, "Error initializing stackdriver exporter, not exporting stackdriver metrics")
