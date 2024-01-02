@@ -23,6 +23,7 @@ KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.8.2
 ORAS_VERSION ?= 0.16.0
 BATS_TESTS_FILE ?= test/bats/test.bats
+KIND_CLUSTER_FILE ?= test/bats/tests/kindcluster.yml
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
 YQ_VERSION ?= 4.30.6
@@ -32,7 +33,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v1.51.2
+GOLANGCI_LINT_VERSION := v1.55.2
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -70,6 +71,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --disable-opa-builtin=http.send\
 \n        - --log-mutations\
 \n        - --mutation-annotations\
+\n        - --vap-enforcement=GATEKEEPER_DEFAULT\
+\n        - --experimental-enable-k8s-native-validation\
 \n---\
 \napiVersion: apps/v1\
 \nkind: Deployment\
@@ -89,7 +92,10 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=status\
 \n        - --operation=mutation-status\
 \n        - --audit-chunk-size=500\
-\n        - --logtostderr"
+\n        - --logtostderr\
+\n        - --vap-enforcement=GATEKEEPER_DEFAULT\
+\n        - --experimental-enable-k8s-native-validation\
+\n"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -160,8 +166,10 @@ KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
 e2e-bootstrap: e2e-dependencies
 	# Check for existing kind cluster
 	if [ $$(${GITHUB_WORKSPACE}/bin/kind get clusters) ]; then ${GITHUB_WORKSPACE}/bin/kind delete cluster; fi
+
 	# Create a new kind cluster
-	TERM=dumb ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m
+	# TODO(ritazh): remove KIND_CLUSTER_FILE when vap feature is GA
+	if [ $$(echo $(KUBERNETES_VERSION) | cut -d'.' -f2) -lt 28 ]; then ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m; else ${GITHUB_WORKSPACE}/bin/kind create cluster --config $(KIND_CLUSTER_FILE) --image $(KIND_NODE_VERSION) --wait 5m; fi
 
 e2e-build-load-image: docker-buildx e2e-build-load-externaldata-image
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}

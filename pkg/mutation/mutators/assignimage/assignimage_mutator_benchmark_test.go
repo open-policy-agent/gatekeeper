@@ -12,6 +12,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+const (
+	spec = "spec"
+)
+
 func assignImage(domain, path, tag, location string) *unversioned.AssignImage {
 	result := &unversioned.AssignImage{
 		Spec: unversioned.AssignImageSpec{
@@ -33,7 +37,7 @@ func assignImage(domain, path, tag, location string) *unversioned.AssignImage {
 }
 
 func benchmarkAssignImageMutator(b *testing.B, n int) {
-	ai := assignImage("a.b.c", "lib/repo", ":latest", "spec"+strings.Repeat(".spec", n-1))
+	ai := assignImage("a.b.c", "lib/repo", ":latest", spec+strings.Repeat(".spec", n-1))
 	mutator, err := MutatorForAssignImage(ai)
 	if err != nil {
 		b.Fatal(err)
@@ -44,7 +48,7 @@ func benchmarkAssignImageMutator(b *testing.B, n int) {
 	}
 	p := make([]string, n)
 	for i := 0; i < n; i++ {
-		p[i] = "spec"
+		p[i] = spec
 	}
 	_, err = mutator.Mutate(&types.Mutable{Object: obj})
 	if err != nil {
@@ -58,7 +62,7 @@ func benchmarkAssignImageMutator(b *testing.B, n int) {
 }
 
 func benchmarkNoAssignImageMutator(b *testing.B, n int) {
-	location := "spec" + strings.Repeat(".spec", n-1)
+	location := spec + strings.Repeat(".spec", n-1)
 	a := assignImage("a.b.c", "lib/repo", ":latest", location)
 	a.Spec.Parameters.PathTests = []unversioned.PathTest{{
 		SubPath:   location,
@@ -74,7 +78,7 @@ func benchmarkNoAssignImageMutator(b *testing.B, n int) {
 	}
 	p := make([]string, n)
 	for i := 0; i < n; i++ {
-		p[i] = "spec"
+		p[i] = spec
 	}
 	_, err = mutator.Mutate(&types.Mutable{Object: obj})
 	if err != nil {

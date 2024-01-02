@@ -16,6 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -134,7 +135,16 @@ func StartControlPlane(m *testing.M, cfg **rest.Config, testerDepth int) {
 		},
 		ErrorIfCRDPathMissing: true,
 	}
+	///TODO(ritazh): remove when vap is GAed in k/k
+	args := t.ControlPlane.GetAPIServer().Configure()
+	args.Append("runtime-config", "api/all=true")
+	args.Append("feature-gates", "ValidatingAdmissionPolicy=true")
+
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := admissionregistrationv1beta1.AddToScheme(scheme.Scheme); err != nil {
 		log.Fatal(err)
 	}
 
@@ -161,7 +171,6 @@ func CreateThenCleanup(ctx context.Context, t *testing.T, c client.Client, obj c
 	if !ok {
 		t.Fatalf("got obj.DeepCopyObject() type = %T, want %T", cpy, client.Object(nil))
 	}
-
 	err := c.Create(ctx, cpyObj)
 	if err != nil {
 		t.Fatal(err)

@@ -46,7 +46,7 @@ spec:
               errors:
                 items:
                   description: Error represents a single error caught while adding
-                    a constraint to OPA.
+                    a constraint to engine.
                   properties:
                     code:
                       type: string
