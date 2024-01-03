@@ -63,7 +63,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 
    * Finally, deploy:
      ```sh
-     make deploy REPOSITORY=$DESTINATION_GATEKEEPER_DOCKER_IMAGE
+     make deploy REPOSITORY=$DESTINATION_GATEKEEPER_IMAGE
      ```
 
 ### Deploying via Helm
