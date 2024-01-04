@@ -3,11 +3,14 @@ package stackdriver
 import (
 	"context"
 	"flag"
+	"fmt"
 	"time"
 
 	traceapi "cloud.google.com/go/trace/apiv2"
 	stackdriver "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
+	"go.opentelemetry.io/contrib/detectors/aws/ec2"
+	"go.opentelemetry.io/contrib/detectors/gcp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -17,7 +20,7 @@ import (
 
 const (
 	Name                          = "stackdriver"
-	metricPrefix                  = "custom.googleapis.com/opencensus/gatekeeper/"
+	metricPrefix                  = "custom.googleapis.com/opencensus/gatekeeper"
 	defaultMetricsCollectInterval = 10 * time.Second
 )
 
@@ -38,7 +41,7 @@ func Start(ctx context.Context) error {
 	}
 
 	e, err := stackdriver.New(stackdriver.WithMetricDescriptorTypeFormatter(func(desc metricdata.Metrics) string {
-		return metricPrefix + desc.Name
+		return fmt.Sprintf("%s/%s", metricPrefix, desc.Name)
 	}))
 	if err != nil {
 		if *ignoreMissingCreds {
@@ -47,10 +50,23 @@ func Start(ctx context.Context) error {
 		}
 		return err
 	}
+	awsResource, err := ec2.NewResourceDetector().Detect(ctx)
+	if err != nil {
+		return err
+	}
+	resource := awsResource
+	gcpResource, err := gcp.NewDetector().Detect(ctx)
+	if err != nil {
+		return err
+	}
+	if gcpResource != nil {
+		resource = gcpResource
+	}
 	reader := metric.NewPeriodicReader(e, metric.WithInterval(*metricInterval))
 	meterProvider := metric.NewMeterProvider(
 		metric.WithReader(reader),
 		metric.WithView(view.Views()...),
+		metric.WithResource(resource),
 	)
 
 	otel.SetMeterProvider(meterProvider)
