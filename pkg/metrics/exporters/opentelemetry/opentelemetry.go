@@ -20,13 +20,13 @@ const (
 )
 
 var (
-	otlpEndPoint   = flag.String("otlp-end-point", "", "Opentelemetry exporter endpoint")
+	otlpEndPoint   = flag.String("otlp-endpoint", "", "Opentelemetry exporter endpoint")
 	metricInterval = flag.Duration("otlp-metric-interval", defaultMetricsCollectInterval, "interval to read metrics for opentelemetry exporter. defaulted to 10 secs if unspecified")
 )
 
 func Start(ctx context.Context) error {
 	if *otlpEndPoint == "" {
-		return fmt.Errorf("otlp-end-point must be specified")
+		return fmt.Errorf("otlp-endpoint must be specified")
 	}
 	exp, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithInsecure(), otlpmetrichttp.WithEndpoint(*otlpEndPoint))
 	if err != nil {
