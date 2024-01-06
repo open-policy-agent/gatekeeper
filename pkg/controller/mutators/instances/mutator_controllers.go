@@ -129,7 +129,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return assignMetadata.Add(mgr)
 }
 
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {}
+func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t

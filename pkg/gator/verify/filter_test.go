@@ -168,7 +168,7 @@ func TestFilter_MatchesTest(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got := filter.MatchesTest(tc.test)
+			got := filter.MatchesTest(&tc.test)
 			if got != tc.want {
 				t.Errorf("got MatchesTest(%q) = %t, want %t", tc.test.Name, got, tc.want)
 			}
