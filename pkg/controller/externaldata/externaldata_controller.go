@@ -45,7 +45,7 @@ func (a *Adder) InjectCFClient(c *constraintclient.Client) {
 	a.CFClient = c
 }
 
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {}
+func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t

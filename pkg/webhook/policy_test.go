@@ -213,11 +213,11 @@ type nsGetter struct {
 	testclients.NoopClient
 }
 
-func (f *nsGetter) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+func (f *nsGetter) IsObjectNamespaced(_ runtime.Object) (bool, error) {
 	return false, nil
 }
 
-func (f *nsGetter) GroupVersionKindFor(obj runtime.Object) (k8schema.GroupVersionKind, error) {
+func (f *nsGetter) GroupVersionKindFor(_ runtime.Object) (k8schema.GroupVersionKind, error) {
 	return k8schema.GroupVersionKind{}, nil
 }
 
@@ -240,11 +240,11 @@ type errorNSGetter struct {
 	testclients.NoopClient
 }
 
-func (f *errorNSGetter) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+func (f *errorNSGetter) IsObjectNamespaced(_ runtime.Object) (bool, error) {
 	return false, nil
 }
 
-func (f *errorNSGetter) GroupVersionKindFor(obj runtime.Object) (k8schema.GroupVersionKind, error) {
+func (f *errorNSGetter) GroupVersionKindFor(_ runtime.Object) (k8schema.GroupVersionKind, error) {
 	return k8schema.GroupVersionKind{}, nil
 }
 

@@ -223,7 +223,7 @@ func (r *Reconciler) defaultGetPod(_ context.Context) (*corev1.Pod, error) {
 	panic("GetPod must be injected to Reconciler")
 }
 
-func (r *Reconciler) reportMutator(id types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time, deleted bool) {
+func (r *Reconciler) reportMutator(_ types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time, deleted bool) {
 	if r.reporter == nil {
 		return
 	}
