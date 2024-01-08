@@ -9,7 +9,7 @@ Some constraints are impossible to write without access to more state than just 
 
 ### Replicating Data with SyncSets (Recommended)
 
-> `Feature State`: The `SyncSet` resource is currently in `alpha`.
+`Feature State`: Gatekeeper version v3.15+ (alpha)
 
 Kubernetes data can be replicated into the data client using `SyncSet` resources. Below is an example of a `SyncSet`:
 
@@ -21,16 +21,16 @@ metadata:
   namespace: "gatekeeper-system"
 spec:
   gvks:
-    - group: ""
+    - group: "networking.k8s.io"
       version: "v1"
-      kind: "ConfigMap"
+      kind: "Ingress"
 ```
 
 The resources defined in the `gvks` field of a SyncSet will be eventually synced into the data client.
 
 ### Replicating Data with Config
 
-> `Feature State`: The `Config` resource is currently in `alpha`.
+`Feature State`: Gatekeeper version v3.6+ (alpha)
 
 > The "Config" resource must be named `config` for it to be reconciled by Gatekeeper. Gatekeeper will ignore the resource if you do not name it `config`.
 
