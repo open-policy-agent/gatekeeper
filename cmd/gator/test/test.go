@@ -78,7 +78,7 @@ func init() {
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 }
 
-func run(cmd *cobra.Command, args []string) {
+func run(_ *cobra.Command, _ []string) {
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
 		cmdutils.ErrFatalf("reading: %v", err)

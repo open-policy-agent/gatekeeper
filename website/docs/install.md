@@ -56,14 +56,14 @@ Currently the most reliable way of installing Gatekeeper is to build and install
    * Build and push Gatekeeper image:
       ```sh
       export DESTINATION_GATEKEEPER_IMAGE=<add registry like "myregistry.docker.io/gatekeeper">
-      make docker-buildx REPOSITORY=$DESTINATION_GATEKEEPER_DOCKER_IMAGE OUTPUT_TYPE=type=registry
+      make docker-buildx REPOSITORY=$DESTINATION_GATEKEEPER_IMAGE OUTPUT_TYPE=type=registry
       ```
 
       > If you want to use a local image, don't set OUTPUT_TYPE and it will default to `OUTPUT_TYPE=type=docker`.
 
    * Finally, deploy:
      ```sh
-     make deploy REPOSITORY=$DESTINATION_GATEKEEPER_DOCKER_IMAGE
+     make deploy REPOSITORY=$DESTINATION_GATEKEEPER_IMAGE
      ```
 
 ### Deploying via Helm

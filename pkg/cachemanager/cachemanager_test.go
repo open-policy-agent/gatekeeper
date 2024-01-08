@@ -245,6 +245,7 @@ func TestCacheManager_AddObject(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.cm.AddObject(context.Background(), &unstructured.Unstructured{Object: unstructuredPod})
 			if tc.expectedMetricStatus == metrics.ActiveStatus {
@@ -762,7 +763,7 @@ type fakeRegistrar struct {
 	generalErr        error
 }
 
-func (f *fakeRegistrar) ReplaceWatch(ctx context.Context, gvks []schema.GroupVersionKind) error {
+func (f *fakeRegistrar) ReplaceWatch(_ context.Context, _ []schema.GroupVersionKind) error {
 	err := watch.NewErrorList()
 	if f.generalErr != nil {
 		err.Err(f.generalErr)

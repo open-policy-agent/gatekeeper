@@ -69,11 +69,11 @@ func (es *exporterSet) Set(s string) error {
 	splt := strings.Split(s, ",")
 	for _, v := range splt {
 		lower := strings.ToLower(v)
-		new, ok := es.registeredExporters[lower]
+		newExporter, ok := es.registeredExporters[lower]
 		if !ok {
 			return fmt.Errorf("exporter %s is not a valid exporter: %v", v, es.validExporters)
 		}
-		es.assignedExporters[lower] = new
+		es.assignedExporters[lower] = newExporter
 	}
 	return nil
 }

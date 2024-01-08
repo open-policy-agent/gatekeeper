@@ -71,19 +71,19 @@ type testDaprServer struct {
 	configurationSubscriptionID       map[string]chan struct{}
 }
 
-func (s *testDaprServer) TryLockAlpha1(ctx context.Context, req *pb.TryLockRequest) (*pb.TryLockResponse, error) {
+func (s *testDaprServer) TryLockAlpha1(_ context.Context, _ *pb.TryLockRequest) (*pb.TryLockResponse, error) {
 	return &pb.TryLockResponse{
 		Success: true,
 	}, nil
 }
 
-func (s *testDaprServer) UnlockAlpha1(ctx context.Context, req *pb.UnlockRequest) (*pb.UnlockResponse, error) {
+func (s *testDaprServer) UnlockAlpha1(_ context.Context, _ *pb.UnlockRequest) (*pb.UnlockResponse, error) {
 	return &pb.UnlockResponse{
 		Status: pb.UnlockResponse_SUCCESS,
 	}, nil
 }
 
-func (s *testDaprServer) InvokeService(ctx context.Context, req *pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
+func (s *testDaprServer) InvokeService(_ context.Context, req *pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if req.Message == nil {
 		return &commonv1pb.InvokeResponse{
 			ContentType: "text/plain",
@@ -98,14 +98,14 @@ func (s *testDaprServer) InvokeService(ctx context.Context, req *pb.InvokeServic
 	}, nil
 }
 
-func (s *testDaprServer) GetState(ctx context.Context, req *pb.GetStateRequest) (*pb.GetStateResponse, error) {
+func (s *testDaprServer) GetState(_ context.Context, req *pb.GetStateRequest) (*pb.GetStateResponse, error) {
 	return &pb.GetStateResponse{
 		Data: s.state[req.Key],
 		Etag: "1",
 	}, nil
 }
 
-func (s *testDaprServer) GetBulkState(ctx context.Context, in *pb.GetBulkStateRequest) (*pb.GetBulkStateResponse, error) {
+func (s *testDaprServer) GetBulkState(_ context.Context, in *pb.GetBulkStateRequest) (*pb.GetBulkStateResponse, error) {
 	items := make([]*pb.BulkStateItem, 0)
 	for _, k := range in.GetKeys() {
 		if v, found := s.state[k]; found {
@@ -122,14 +122,14 @@ func (s *testDaprServer) GetBulkState(ctx context.Context, in *pb.GetBulkStateRe
 	}, nil
 }
 
-func (s *testDaprServer) SaveState(ctx context.Context, req *pb.SaveStateRequest) (*empty.Empty, error) {
+func (s *testDaprServer) SaveState(_ context.Context, req *pb.SaveStateRequest) (*empty.Empty, error) {
 	for _, item := range req.States {
 		s.state[item.Key] = item.Value
 	}
 	return &empty.Empty{}, nil
 }
 
-func (s *testDaprServer) QueryStateAlpha1(ctx context.Context, req *pb.QueryStateRequest) (*pb.QueryStateResponse, error) {
+func (s *testDaprServer) QueryStateAlpha1(_ context.Context, req *pb.QueryStateRequest) (*pb.QueryStateResponse, error) {
 	var v map[string]interface{}
 	if err := json.Unmarshal([]byte(req.Query), &v); err != nil {
 		return nil, err
@@ -144,19 +144,19 @@ func (s *testDaprServer) QueryStateAlpha1(ctx context.Context, req *pb.QueryStat
 	return ret, nil
 }
 
-func (s *testDaprServer) DeleteState(ctx context.Context, req *pb.DeleteStateRequest) (*empty.Empty, error) {
+func (s *testDaprServer) DeleteState(_ context.Context, req *pb.DeleteStateRequest) (*empty.Empty, error) {
 	delete(s.state, req.Key)
 	return &empty.Empty{}, nil
 }
 
-func (s *testDaprServer) DeleteBulkState(ctx context.Context, req *pb.DeleteBulkStateRequest) (*empty.Empty, error) {
+func (s *testDaprServer) DeleteBulkState(_ context.Context, req *pb.DeleteBulkStateRequest) (*empty.Empty, error) {
 	for _, item := range req.States {
 		delete(s.state, item.Key)
 	}
 	return &empty.Empty{}, nil
 }
 
-func (s *testDaprServer) ExecuteStateTransaction(ctx context.Context, in *pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
+func (s *testDaprServer) ExecuteStateTransaction(_ context.Context, in *pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	for _, op := range in.GetOperations() {
 		item := op.GetRequest()
 		switch opType := op.GetOperationType(); opType {
@@ -171,11 +171,11 @@ func (s *testDaprServer) ExecuteStateTransaction(ctx context.Context, in *pb.Exe
 	return &empty.Empty{}, nil
 }
 
-func (s *testDaprServer) PublishEvent(ctx context.Context, req *pb.PublishEventRequest) (*empty.Empty, error) {
+func (s *testDaprServer) PublishEvent(_ context.Context, _ *pb.PublishEventRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (s *testDaprServer) InvokeBinding(ctx context.Context, req *pb.InvokeBindingRequest) (*pb.InvokeBindingResponse, error) {
+func (s *testDaprServer) InvokeBinding(_ context.Context, req *pb.InvokeBindingRequest) (*pb.InvokeBindingResponse, error) {
 	if req.Data == nil {
 		return &pb.InvokeBindingResponse{
 			Data:     []byte("test"),
@@ -188,7 +188,7 @@ func (s *testDaprServer) InvokeBinding(ctx context.Context, req *pb.InvokeBindin
 	}, nil
 }
 
-func (s *testDaprServer) GetSecret(ctx context.Context, req *pb.GetSecretRequest) (*pb.GetSecretResponse, error) {
+func (s *testDaprServer) GetSecret(_ context.Context, _ *pb.GetSecretRequest) (*pb.GetSecretResponse, error) {
 	d := make(map[string]string)
 	d["test"] = "value"
 	return &pb.GetSecretResponse{
@@ -196,7 +196,7 @@ func (s *testDaprServer) GetSecret(ctx context.Context, req *pb.GetSecretRequest
 	}, nil
 }
 
-func (s *testDaprServer) GetBulkSecret(ctx context.Context, req *pb.GetBulkSecretRequest) (*pb.GetBulkSecretResponse, error) {
+func (s *testDaprServer) GetBulkSecret(_ context.Context, _ *pb.GetBulkSecretRequest) (*pb.GetBulkSecretResponse, error) {
 	d := make(map[string]*pb.SecretResponse)
 	d["test"] = &pb.SecretResponse{
 		Secrets: map[string]string{
@@ -208,15 +208,15 @@ func (s *testDaprServer) GetBulkSecret(ctx context.Context, req *pb.GetBulkSecre
 	}, nil
 }
 
-func (s *testDaprServer) RegisterActorReminder(ctx context.Context, req *pb.RegisterActorReminderRequest) (*empty.Empty, error) {
+func (s *testDaprServer) RegisterActorReminder(_ context.Context, _ *pb.RegisterActorReminderRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (s *testDaprServer) UnregisterActorReminder(ctx context.Context, req *pb.UnregisterActorReminderRequest) (*empty.Empty, error) {
+func (s *testDaprServer) UnregisterActorReminder(_ context.Context, _ *pb.UnregisterActorReminderRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (s *testDaprServer) RenameActorReminder(ctx context.Context, req *pb.RenameActorReminderRequest) (*empty.Empty, error) {
+func (s *testDaprServer) RenameActorReminder(_ context.Context, _ *pb.RenameActorReminderRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
@@ -234,11 +234,11 @@ func (s *testDaprServer) UnregisterActorTimer(context.Context, *pb.UnregisterAct
 	return &empty.Empty{}, nil
 }
 
-func (s *testDaprServer) Shutdown(ctx context.Context, req *empty.Empty) (*empty.Empty, error) {
+func (s *testDaprServer) Shutdown(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (s *testDaprServer) GetConfiguration(ctx context.Context, in *pb.GetConfigurationRequest) (*pb.GetConfigurationResponse, error) {
+func (s *testDaprServer) GetConfiguration(_ context.Context, in *pb.GetConfigurationRequest) (*pb.GetConfigurationResponse, error) {
 	if in.GetStoreName() == "" {
 		return &pb.GetConfigurationResponse{}, errors.New("store name notfound")
 	}
@@ -290,7 +290,7 @@ func (s *testDaprServer) SubscribeConfiguration(in *pb.SubscribeConfigurationReq
 	return nil
 }
 
-func (s *testDaprServer) UnsubscribeConfiguration(ctx context.Context, in *pb.UnsubscribeConfigurationRequest) (*pb.UnsubscribeConfigurationResponse, error) {
+func (s *testDaprServer) UnsubscribeConfiguration(_ context.Context, in *pb.UnsubscribeConfigurationRequest) (*pb.UnsubscribeConfigurationResponse, error) {
 	s.configurationSubscriptionIDMapLoc.Lock()
 	defer s.configurationSubscriptionIDMapLoc.Unlock()
 	ch, ok := s.configurationSubscriptionID[in.Id]
@@ -305,7 +305,7 @@ func (s *testDaprServer) UnsubscribeConfiguration(ctx context.Context, in *pb.Un
 // BulkPublishEventAlpha1 mocks the BulkPublishEventAlpha1 API.
 // It will fail to publish events that start with "fail".
 // It will fail the entire request if an event starts with "failall".
-func (s *testDaprServer) BulkPublishEventAlpha1(ctx context.Context, req *pb.BulkPublishRequest) (*pb.BulkPublishResponse, error) {
+func (s *testDaprServer) BulkPublishEventAlpha1(_ context.Context, req *pb.BulkPublishRequest) (*pb.BulkPublishResponse, error) {
 	failedEntries := make([]*pb.BulkPublishResponseFailedEntry, 0)
 	for _, entry := range req.Entries {
 		if bytes.HasPrefix(entry.Event, []byte("failall")) {
@@ -342,7 +342,7 @@ type FakeDapr struct {
 	f func()
 }
 
-func (r *FakeDapr) Publish(ctx context.Context, data interface{}, topic string) error {
+func (r *FakeDapr) Publish(_ context.Context, _ interface{}, _ string) error {
 	return nil
 }
 

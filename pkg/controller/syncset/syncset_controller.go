@@ -56,7 +56,7 @@ func (a *Adder) InjectCacheManager(o *cm.CacheManager) {
 	a.CacheManager = o
 }
 
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
+func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {
 }
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {

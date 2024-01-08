@@ -52,7 +52,7 @@ func KeyFor(obj interface{}) (CfDataKey, error) {
 	return CfDataKey{Gvk: gvk, Key: fmt.Sprintf("%s/%s", ns, o.GetName())}, nil
 }
 
-func (f *FakeCfClient) AddData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
+func (f *FakeCfClient) AddData(_ context.Context, data interface{}) (*constraintTypes.Responses, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -73,7 +73,7 @@ func (f *FakeCfClient) AddData(ctx context.Context, data interface{}) (*constrai
 	return &constraintTypes.Responses{}, nil
 }
 
-func (f *FakeCfClient) RemoveData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
+func (f *FakeCfClient) RemoveData(_ context.Context, data interface{}) (*constraintTypes.Responses, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 

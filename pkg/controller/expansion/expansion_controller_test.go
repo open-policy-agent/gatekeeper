@@ -174,6 +174,7 @@ func TestAddStatusError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			setStatusError(&tc.inputStatus, tc.etErr)
 			if diff := cmp.Diff(tc.inputStatus, tc.wantStatus); diff != "" {
