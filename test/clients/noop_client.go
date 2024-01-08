@@ -25,31 +25,31 @@ import (
 
 type NoopClient struct{}
 
-func (f *NoopClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+func (f *NoopClient) Get(_ context.Context, _ client.ObjectKey, _ runtime.Object) error {
 	return nil
 }
 
-func (f *NoopClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+func (f *NoopClient) List(_ context.Context, _ client.ObjectList, _ ...client.ListOption) error {
 	return nil
 }
 
-func (f *NoopClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+func (f *NoopClient) Create(_ context.Context, _ client.Object, _ ...client.CreateOption) error {
 	return nil
 }
 
-func (f *NoopClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+func (f *NoopClient) Delete(_ context.Context, _ client.Object, _ ...client.DeleteOption) error {
 	return nil
 }
 
-func (f *NoopClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+func (f *NoopClient) Update(_ context.Context, _ client.Object, _ ...client.UpdateOption) error {
 	return nil
 }
 
-func (f *NoopClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (f *NoopClient) Patch(_ context.Context, _ client.Object, _ client.Patch, _ ...client.PatchOption) error {
 	return nil
 }
 
-func (f *NoopClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+func (f *NoopClient) DeleteAllOf(_ context.Context, _ client.Object, _ ...client.DeleteAllOfOption) error {
 	return nil
 }
 
@@ -67,14 +67,14 @@ func (f *NoopClient) Scheme() *runtime.Scheme {
 
 type SubResourceNoopClient struct{}
 
-func (f *SubResourceNoopClient) Create(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceCreateOption) error {
+func (f *SubResourceNoopClient) Create(_ context.Context, _, _ client.Object, _ ...client.SubResourceCreateOption) error {
 	return nil
 }
 
-func (f *SubResourceNoopClient) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+func (f *SubResourceNoopClient) Update(_ context.Context, _ client.Object, _ ...client.SubResourceUpdateOption) error {
 	return nil
 }
 
-func (f *SubResourceNoopClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+func (f *SubResourceNoopClient) Patch(_ context.Context, _ client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) error {
 	return nil
 }

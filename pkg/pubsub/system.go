@@ -19,7 +19,7 @@ func NewSystem() *System {
 	return &System{}
 }
 
-func (s *System) Publish(ctx context.Context, connection string, topic string, msg interface{}) error {
+func (s *System) Publish(_ context.Context, connection string, topic string, msg interface{}) error {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 	if len(s.connections) > 0 {

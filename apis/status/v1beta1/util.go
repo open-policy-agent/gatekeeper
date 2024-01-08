@@ -21,10 +21,9 @@ func dashExtractor(val string) []string {
 				b.WriteRune(chr)
 				prevDash = false
 				continue
-			} else {
-				prevDash = true
-				continue
 			}
+			prevDash = true
+			continue
 		}
 		b.WriteRune(chr)
 	}

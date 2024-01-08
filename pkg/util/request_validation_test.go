@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -13,21 +14,21 @@ func TestSetObjectOnDelete(t *testing.T) {
 	testCases := []struct {
 		name    string
 		req     *admission.Request
-		wantErr bool
+		wantErr error
 	}{
 		{
 			name: "request not on delete",
 			req: &admission.Request{AdmissionRequest: v1.AdmissionRequest{
 				Operation: "CREATE",
 			}},
-			wantErr: false,
+			wantErr: nil,
 		},
 		{
-			name: "err on request and nil object",
+			name: "err on request and nil oldObject",
 			req: &admission.Request{AdmissionRequest: v1.AdmissionRequest{
 				Operation: "DELETE",
 			}},
-			wantErr: true,
+			wantErr: ErrOldObjectIsNil,
 		},
 		{
 			name: "handle ok oldObject not nil",
@@ -37,7 +38,7 @@ func TestSetObjectOnDelete(t *testing.T) {
 					Raw: []byte{'a', 'b', 'c'},
 				},
 			}},
-			wantErr: false,
+			wantErr: nil,
 		},
 	}
 
@@ -49,21 +50,13 @@ func TestSetObjectOnDelete(t *testing.T) {
 
 			err := SetObjectOnDelete(tc.req)
 
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("wanted error on validation, got nil")
+			if !errors.Is(tc.wantErr, err) {
+				t.Fatalf("error did not match what was expected\n want: %v \n got: %v \n", tc.wantErr, err)
+			}
 
-					if err != nil && err.Error() != ErrOldObjectIsNil.Error() {
-						t.Fatalf("error did not match what was expected\n want: %v \n got: %v \n", ErrOldObjectIsNil, err)
-					}
-				}
-
-				// open box: make sure that the OldObject field has been copied into the Object field
-				if !reflect.DeepEqual(tc.req.AdmissionRequest.OldObject, tc.req.AdmissionRequest.Object) {
-					t.Fatal("oldObject and object need to match")
-				}
-			} else if err != nil {
-				t.Fatal("did not expect error on validation")
+			// open box: make sure that the OldObject field has been copied into the Object field
+			if !reflect.DeepEqual(tc.req.AdmissionRequest.OldObject, tc.req.AdmissionRequest.Object) {
+				t.Fatal("oldObject and object need to match")
 			}
 		})
 	}
