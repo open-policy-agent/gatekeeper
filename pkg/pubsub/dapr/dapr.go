@@ -27,7 +27,7 @@ const (
 	Name = "dapr"
 )
 
-func (r *Dapr) Publish(ctx context.Context, data interface{}, topic string) error {
+func (r *Dapr) Publish(_ context.Context, data interface{}, topic string) error {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("error marshaling data: %w", err)

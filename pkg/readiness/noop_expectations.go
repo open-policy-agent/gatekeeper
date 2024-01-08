@@ -20,17 +20,17 @@ import "k8s.io/apimachinery/pkg/runtime"
 // noopExpectations returns an Expectations that is always satisfied.
 type noopExpectations struct{}
 
-func (n noopExpectations) Expect(o runtime.Object) {}
+func (n noopExpectations) Expect(_ runtime.Object) {}
 
-func (n noopExpectations) CancelExpect(o runtime.Object) {}
+func (n noopExpectations) CancelExpect(_ runtime.Object) {}
 
-func (n noopExpectations) TryCancelExpect(o runtime.Object) bool {
+func (n noopExpectations) TryCancelExpect(_ runtime.Object) bool {
 	return false
 }
 
 func (n noopExpectations) ExpectationsDone() {}
 
-func (n noopExpectations) Observe(o runtime.Object) {}
+func (n noopExpectations) Observe(_ runtime.Object) {}
 
 func (n noopExpectations) Satisfied() bool {
 	return true

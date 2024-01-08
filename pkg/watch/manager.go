@@ -207,7 +207,7 @@ func (wm *Manager) removeWatch(ctx context.Context, r *Registrar, gvk schema.Gro
 	return wm.doRemoveWatch(ctx, r, gvk)
 }
 
-func (wm *Manager) doRemoveWatch(ctx context.Context, r *Registrar, gvk schema.GroupVersionKind) error {
+func (wm *Manager) doRemoveWatch(_ context.Context, r *Registrar, gvk schema.GroupVersionKind) error {
 	// lock acquired by caller
 
 	v, ok := wm.watchedKinds[gvk]

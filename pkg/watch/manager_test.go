@@ -50,15 +50,15 @@ func (f *fakeCacheInformer) AddEventHandler(h kcache.ResourceEventHandler) (kcac
 	return nil, nil
 }
 
-func (f *fakeCacheInformer) RemoveEventHandler(handle kcache.ResourceEventHandlerRegistration) error {
+func (f *fakeCacheInformer) RemoveEventHandler(_ kcache.ResourceEventHandlerRegistration) error {
 	return nil
 }
 
-func (f *fakeCacheInformer) AddEventHandlerWithResyncPeriod(h kcache.ResourceEventHandler, resyncPeriod time.Duration) (kcache.ResourceEventHandlerRegistration, error) {
+func (f *fakeCacheInformer) AddEventHandlerWithResyncPeriod(h kcache.ResourceEventHandler, _ time.Duration) (kcache.ResourceEventHandlerRegistration, error) {
 	return f.AddEventHandler(h)
 }
 
-func (f *fakeCacheInformer) AddIndexers(indexers kcache.Indexers) error {
+func (f *fakeCacheInformer) AddIndexers(_ kcache.Indexers) error {
 	return errors.New("not implemented")
 }
 
@@ -85,11 +85,11 @@ type fakeRemovableCache struct {
 	removeCounter int
 }
 
-func (f *fakeRemovableCache) GetInformer(_ context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
+func (f *fakeRemovableCache) GetInformer(_ context.Context, _ client.Object, _ ...cache.InformerGetOption) (cache.Informer, error) {
 	return f.informer, nil
 }
 
-func (f *fakeRemovableCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+func (f *fakeRemovableCache) List(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
 	switch v := list.(type) {
 	case *unstructured.UnstructuredList:
 		v.Items = f.items
@@ -99,7 +99,7 @@ func (f *fakeRemovableCache) List(ctx context.Context, list client.ObjectList, o
 	return nil
 }
 
-func (f *fakeRemovableCache) Remove(obj client.Object) error {
+func (f *fakeRemovableCache) Remove(_ client.Object) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.removeCounter++
@@ -117,7 +117,7 @@ type funcCache struct {
 	GetInformerNonBlockingFunc func(ctx context.Context, obj client.Object) (cache.Informer, error)
 }
 
-func (f *funcCache) GetInformer(ctx context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
+func (f *funcCache) GetInformer(ctx context.Context, obj client.Object, _ ...cache.InformerGetOption) (cache.Informer, error) {
 	if f.GetInformerNonBlockingFunc != nil {
 		return f.GetInformerNonBlockingFunc(ctx, obj)
 	}
@@ -131,7 +131,7 @@ func (f *funcCache) List(ctx context.Context, list client.ObjectList, opts ...cl
 	return errors.New("ListFunc not initialized")
 }
 
-func (f *funcCache) Remove(obj client.Object) error {
+func (f *funcCache) Remove(_ client.Object) error {
 	return nil
 }
 

@@ -10,7 +10,7 @@ import (
 
 type Filter interface {
 	// MatchesTest returns true if the Test should be run.
-	MatchesTest(Test) bool
+	MatchesTest(*Test) bool
 	// MatchesCase returns true if Case caseName in Test testName should be run.
 	MatchesCase(testName, caseName string) bool
 }
@@ -68,7 +68,7 @@ type nilFilter struct{}
 
 var _ Filter = &nilFilter{}
 
-func (f *nilFilter) MatchesTest(Test) bool {
+func (f *nilFilter) MatchesTest(*Test) bool {
 	return true
 }
 
@@ -93,7 +93,7 @@ func newOrFilter(filter string) (Filter, error) {
 	return &orFilter{regex: regex}, nil
 }
 
-func (f *orFilter) MatchesTest(t Test) bool {
+func (f *orFilter) MatchesTest(t *Test) bool {
 	if f.regex.MatchString(t.Name) {
 		return true
 	}
@@ -134,7 +134,7 @@ func newAndFilter(testFilter, caseFilter string) (Filter, error) {
 	return &andFilter{testRegex: testRegex, caseRegex: caseRegex}, nil
 }
 
-func (f *andFilter) MatchesTest(t Test) bool {
+func (f *andFilter) MatchesTest(t *Test) bool {
 	return f.testRegex.MatchString(t.Name)
 }
 
