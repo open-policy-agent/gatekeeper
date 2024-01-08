@@ -7,7 +7,7 @@ title: Replicating Data
 
 Some constraints are impossible to write without access to more state than just the object under test. For example, it is impossible to know if an ingress's hostname is unique among all ingresses unless a ConstraintTemplate has access to all other ingresses. To enable this use case, we provide syncing of data into a data client.
 
-### Replicating Data with SyncSets (preferred)
+### Replicating Data with SyncSets (Recommended)
 
 > `Feature State`: The `SyncSet` resource is currently in `alpha`.
 
