@@ -28,7 +28,7 @@ For either installation method, make sure you have cluster admin permissions:
 If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.11.1/deploy/gatekeeper.yaml
 ```
 
 ### Deploying a Release using development image
@@ -53,16 +53,16 @@ Currently the most reliable way of installing Gatekeeper is to build and install
    * `cd` to the repository directory.
    * Define your destination Docker image location:
       ```sh
-      export DESTINATION_GATEKEEPER_DOCKER_IMAGE=<YOUR DESIRED DESTINATION DOCKER IMAGE>
+      export DESTINATION_GATEKEEPER_IMAGE=<YOUR DESIRED DESTINATION DOCKER IMAGE>
       ```
    * Build and push your Docker image:
       ```sh
-      make docker-buildx REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
-      make docker-push REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
+      make docker-buildx REPOSITORY="$DESTINATION_GATEKEEPER_IMAGE"
+      make docker-push REPOSITORY="$DESTINATION_GATEKEEPER_IMAGE"
       ```
    * Finally, deploy:
      ```sh
-     make deploy REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
+     make deploy REPOSITORY="$DESTINATION_GATEKEEPER_IMAGE"
      ```
 
 ### Deploying via Helm
@@ -91,7 +91,7 @@ You can alter the variables in `charts/gatekeeper/values.yaml` to customize your
 If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
 
   ```sh
-  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
+  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.11.1/deploy/gatekeeper.yaml
   ```
 
 ### Using make

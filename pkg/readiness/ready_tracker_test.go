@@ -30,6 +30,8 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
@@ -44,6 +46,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,6 +59,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+)
+
+const (
+	ttimeout = 20 * time.Second
+	ttick    = 1 * time.Second
 )
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
@@ -541,41 +550,58 @@ func Test_Tracker(t *testing.T) {
 	}
 }
 
-// Verifies that a Config resource referencing bogus (unregistered) GVKs will not halt readiness.
-func Test_Tracker_UnregisteredCachedData(t *testing.T) {
-	g := gomega.NewWithT(t)
-
-	testutils.Setenv(t, "POD_NAME", "no-pod")
-
-	// Apply fixtures *before* the controllers are setup.
-	err := applyFixtures("testdata")
-	if err != nil {
-		t.Fatalf("applying fixtures: %v", err)
+// Verifies additional scenarios to the base "testdata/" fixtures, such as
+// invalid Config resources or overlapping SyncSets, which we want to
+// make sure the ReadyTracker can handle gracefully.
+func Test_Tracker_SyncSourceEdgeCases(t *testing.T) {
+	tts := []struct {
+		name         string
+		fixturesPath string
+	}{
+		{
+			name:         "overlapping syncsets",
+			fixturesPath: "testdata/syncset",
+		},
+		{
+			// bad gvk in Config doesn't halt readiness
+			name:         "bad gvk",
+			fixturesPath: "testdata/config/bad-gvk",
+		},
+		{
+			// repeating gvk in Config doesn't halt readiness
+			name:         "repeating gvk",
+			fixturesPath: "testdata/config/repeating-gvk",
+		},
 	}
 
-	// Apply config resource with bogus GVK reference
-	err = applyFixtures("testdata/bogus-config")
-	if err != nil {
-		t.Fatalf("applying config: %v", err)
+	for _, tt := range tts {
+		t.Run(tt.name, func(t *testing.T) {
+			testutils.Setenv(t, "POD_NAME", "no-pod")
+			require.NoError(t, applyFixtures("testdata"), "base fixtures")
+			require.NoError(t, applyFixtures(tt.fixturesPath), fmt.Sprintf("test fixtures: %s", tt.fixturesPath))
+
+			mgr, wm := setupManager(t)
+			cfClient := testutils.SetupDataClient(t)
+			providerCache := frameworksexternaldata.NewCache()
+
+			require.NoError(t, setupController(mgr, wm, cfClient, mutation.NewSystem(mutation.SystemOpts{}), nil, providerCache))
+
+			ctx, cancelFunc := context.WithCancel(context.Background())
+			testutils.StartManager(ctx, t, mgr)
+
+			require.Eventually(t, func() bool {
+				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+				defer cancel()
+
+				ready, err := probeIsReady(ctx)
+				assert.NoError(t, err, "error while waiting for probe to be ready")
+
+				return ready
+			}, ttimeout, ttick, "tracker not healthy")
+
+			cancelFunc()
+		})
 	}
-
-	// Wire up the rest.
-	mgr, wm := setupManager(t)
-	cfClient := setupDataClient(t)
-	providerCache := frameworksexternaldata.NewCache()
-
-	if err := setupController(mgr, wm, cfClient, mutation.NewSystem(mutation.SystemOpts{}), nil, providerCache); err != nil {
-		t.Fatalf("setupControllers: %v", err)
-	}
-
-	ctx := context.Background()
-	testutils.StartManager(ctx, t, mgr)
-
-	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		return probeIsReady(ctx)
-	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
 }
 
 // Test_CollectDeleted adds resources and starts the readiness tracker, then
@@ -640,6 +666,13 @@ func Test_CollectDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retrieving ConstraintTemplate GVK: %v", err)
 	}
+	config := &configv1alpha1.Config{}
+	configGvk, err := apiutil.GVKForObject(config, mgr.GetScheme())
+	require.NoError(t, err)
+
+	syncset := &syncsetv1alpha1.SyncSet{}
+	syncsetGvk, err := apiutil.GVKForObject(syncset, mgr.GetScheme())
+	require.NoError(t, err)
 
 	// note: state can leak between these test cases because we do not reset the environment
 	// between them to keep the test short. Trackers are mostly independent per GVK.
@@ -647,8 +680,9 @@ func Test_CollectDeleted(t *testing.T) {
 		{description: "constraints", gvk: cgvk},
 		{description: "data (configmaps)", gvk: cmgvk, tracker: &cmtracker},
 		{description: "templates", gvk: ctgvk},
-		// no need to check Config here since it is not actually Expected for readiness
 		// (the objects identified in a Config's syncOnly are Expected, tested in data case above)
+		{description: "config", gvk: configGvk},
+		{description: "syncset", gvk: syncsetGvk},
 	}
 
 	for _, tc := range tests {

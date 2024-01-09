@@ -99,6 +99,8 @@ func (h *webhookHandler) isGatekeeperResource(req *admission.Request) bool {
 		req.AdmissionRequest.Kind.Group == "constraints.gatekeeper.sh" ||
 		req.AdmissionRequest.Kind.Group == mutationsGroup ||
 		req.AdmissionRequest.Kind.Group == "config.gatekeeper.sh" ||
+		req.AdmissionRequest.Kind.Group == externalDataGroup ||
+		req.AdmissionRequest.Kind.Group == "expansion.gatekeeper.sh" ||
 		req.AdmissionRequest.Kind.Group == "status.gatekeeper.sh" {
 		return true
 	}

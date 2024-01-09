@@ -84,6 +84,7 @@ spec:
         - --log-file={{ .Values.audit.logFile }}
         {{- end }}
         - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
+        - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         command:
         - /manager
         env:
