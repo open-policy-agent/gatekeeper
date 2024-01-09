@@ -579,7 +579,7 @@ func testAssignMetadataMutation(
 	return testMutation(mutator, unstructured, testFunc, t)
 }
 
-func testMutation(mutator types.Mutator, unstructured *unstructured.Unstructured, testFunc func(*unstructured.Unstructured), t *testing.T) error {
+func testMutation(mutator types.Mutator, unstructured *unstructured.Unstructured, testFunc func(*unstructured.Unstructured), _ *testing.T) error {
 	_, err := mutator.Mutate(&types.Mutable{Object: unstructured})
 	if err != nil {
 		return err

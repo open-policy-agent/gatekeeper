@@ -45,7 +45,7 @@ var _ admission.Handler = &namespaceLabelHandler{}
 type namespaceLabelHandler struct{}
 
 //nolint:gocritic // Must accept admission.Request as a struct to satisfy Handler interface.
-func (h *namespaceLabelHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
+func (h *namespaceLabelHandler) Handle(_ context.Context, req admission.Request) admission.Response {
 	if req.Operation == admissionv1.Delete {
 		return admission.Allowed("Delete is always allowed")
 	}
