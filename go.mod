@@ -54,7 +54,7 @@ require (
 	cloud.google.com/go/monitoring v1.15.1 // indirect
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
-	github.com/Microsoft/hcsshim v0.11.0 // indirect
+	github.com/Microsoft/hcsshim v0.11.4 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/agnivade/levenshtein v1.1.1 // indirect
 	github.com/antlr/antlr4/runtime/Go/antlr v1.4.10 // indirect
@@ -66,7 +66,8 @@ require (
 	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
-	github.com/containerd/containerd v1.7.6 // indirect
+	github.com/containerd/containerd v1.7.11 // indirect
+	github.com/containerd/log v0.1.0 // indirect
 	github.com/docker/cli v24.0.6+incompatible // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/docker/docker v24.0.6+incompatible // indirect
@@ -142,7 +143,6 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	golang.org/x/crypto v0.17.0 // indirect
-	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/term v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
