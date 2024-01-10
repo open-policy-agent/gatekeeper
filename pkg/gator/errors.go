@@ -22,11 +22,11 @@ var (
 	ErrAddingTemplate = errors.New("adding template")
 	// ErrAddingConstraint indicates a problem instantiating a Suite's Constraint.
 	ErrAddingConstraint = errors.New("adding constraint")
-	// ErrAddingSyncSet indicates a problem instantiating a Suite's SyncSet.
+	// ErrAddingSyncSet indicates a problem instantiating a user-indicated SyncSet.
 	ErrAddingSyncSet = errors.New("adding syncset")
-	// ErrAddingGVKManifest indicates a problem instantiating a Suite's GVKManifest.
+	// ErrAddingGVKManifest indicates a problem instantiating a user-indicated GVKManifest.
 	ErrAddingGVKManifest = errors.New("adding gvkmanifest")
-	// ErrAddingConfig indicates a problem instantiating a Suite's Config.
+	// ErrAddingConfig indicates a problem instantiating a user-indicated Config.
 	ErrAddingConfig = errors.New("adding config")
 	// ErrInvalidSuite indicates a Suite does not define the required fields.
 	ErrInvalidSuite = errors.New("invalid Suite")

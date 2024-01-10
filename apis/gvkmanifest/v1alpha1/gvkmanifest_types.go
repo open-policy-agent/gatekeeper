@@ -5,13 +5,12 @@ import (
 )
 
 type GVKManifestSpec struct {
-	Groups []Group `json:"groups,omitempty"`
+	Groups map[string]Versions `json:"groups,omitempty"`
 }
 
-type Group struct {
-	Name     string    `json:"name,omitempty"`
-	Versions []Version `json:"versions,omitempty"`
-}
+type Versions map[string]Kinds
+
+type Kinds []string
 
 type Version struct {
 	Name  string   `json:"name,omitempty"`

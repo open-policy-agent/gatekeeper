@@ -106,15 +106,15 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 		if !omitGVKManifest {
 			return nil, nil, fmt.Errorf("no GVK manifest found; please provide a manifest enumerating the GVKs supported by the cluster")
 		}
-		fmt.Print("ignoring absence of supported GVK manifest due to --omit-gvk-manifest flag; will assume all synced GVKs are supported by cluster")
+		fmt.Print("ignoring absence of supported GVK manifest due to --force-omit-gvk-manifest flag; will assume all synced GVKs are supported by cluster\n")
 	} else {
 		supportedGVKs := map[schema.GroupVersionKind]struct{}{}
-		for _, group := range gvkManifest.Spec.Groups {
-			for _, version := range group.Versions {
-				for _, kind := range version.Kinds {
+		for group, versions := range gvkManifest.Spec.Groups {
+			for version, kinds := range versions {
+				for _, kind := range kinds {
 					gvk := schema.GroupVersionKind{
-						Group:   group.Name,
-						Version: version.Name,
+						Group:   group,
+						Version: version,
 						Kind:    kind,
 					}
 					supportedGVKs[gvk] = struct{}{}
@@ -144,5 +144,5 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 			}
 		}
 	}
-	return missingReqs, templateErrs, nil
+	return missingReqs, nil, nil
 }
