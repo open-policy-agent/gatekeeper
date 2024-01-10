@@ -77,4 +77,4 @@ The `data.inventory` document has the following format:
 
 ### Auditing From Cache
 
-The [audit](audit.md) feature does not require replication by default. However, when the ``audit-from-cache`` flag is set to true, the audit informer cache will be used as the source-of-truth for audit queries; thus, an object must first be cached before it can be audited for constraint violations. Kubernetes data can be replicated into the audit cache via one of the resources above.
+The [audit](audit.md) feature does not require replication by default. However, when the `audit-from-cache` flag is set to true, the audit informer cache will be used as the source-of-truth for audit queries; thus, an object must first be cached before it can be audited for constraint violations. Kubernetes data can be replicated into the audit cache via one of the resources above.
