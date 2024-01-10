@@ -616,20 +616,6 @@ spec:
       - apiGroups: ["*"]
         kinds: ["*"]
 `
-	SyncSet = `
-apiVersion: syncset.gatekeeper.sh/v1alpha1
-kind: SyncSet
-metadata:
-  name: syncset
-spec:
-  gvks:
-    - group: "networking.k8s.io"
-      version: "v1"
-      kind: "Ingress"
-    - group: "apps"
-      version: "v1"
-      kind: "Deployment"
-`
 	BadSyncSet = `
 apiVersion: syncset.gatekeeper.sh/v1alpha1
 kind: SyncSet
@@ -637,21 +623,6 @@ metadata:
   name: syncset
 spec:
   unknownField: "unknown"
-`
-	Config = `
-apiVersion: config.gatekeeper.sh/v1alpha1
-kind: Config
-metadata:
-  name: config
-spec:
-  sync:
-    syncOnly:
-      - group: ""
-        version: "v1"
-        kind: "Service"
-      - group: "apps"
-        version: "v1"
-        kind: "Deployment"
 `
 	BadConfig = `
 apiVersion: config.gatekeeper.sh/v1alpha1

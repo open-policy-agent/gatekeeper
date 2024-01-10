@@ -6,10 +6,14 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/parser"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/yaml"
 )
 
 func TestTest(t *testing.T) {
@@ -41,7 +45,18 @@ func TestTest(t *testing.T) {
 			name: "basic req fulfilled by config",
 			inputs: []string{
 				fixtures.TemplateReferential,
-				fixtures.Config,
+				toYAMLString(fakes.ConfigFor([]schema.GroupVersionKind{
+					{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Service",
+					},
+					{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+				})),
 			},
 			omitManifest: true,
 			wantReqs:     map[string]parser.SyncRequirements{},
@@ -50,8 +65,25 @@ func TestTest(t *testing.T) {
 			name: "basic req fulfilled by config and supported by cluster",
 			inputs: []string{
 				fixtures.TemplateReferential,
-				fixtures.Config,
-				fixtures.GVKManifestServices,
+				toYAMLString(fakes.ConfigFor([]schema.GroupVersionKind{
+					{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Service",
+					},
+					{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+				})),
+				toYAMLString(fakes.GVKManifestFor("gvkmanifest", []schema.GroupVersionKind{
+					{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Service",
+					},
+				})),
 			},
 			wantReqs: map[string]parser.SyncRequirements{},
 		},
@@ -59,8 +91,25 @@ func TestTest(t *testing.T) {
 			name: "basic req fulfilled by config but not supported by cluster",
 			inputs: []string{
 				fixtures.TemplateReferential,
-				fixtures.Config,
-				fixtures.GVKManifestDeployments,
+				toYAMLString(fakes.ConfigFor([]schema.GroupVersionKind{
+					{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Service",
+					},
+					{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+				})),
+				toYAMLString(fakes.GVKManifestFor("gvkmanifest", []schema.GroupVersionKind{
+					{
+						Group:   "app",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+				})),
 			},
 			wantReqs: map[string]parser.SyncRequirements{
 				"k8suniqueserviceselector": {
@@ -78,7 +127,18 @@ func TestTest(t *testing.T) {
 			name: "multi equivalentset req fulfilled by syncset",
 			inputs: []string{
 				fixtures.TemplateReferentialMultEquivSets,
-				fixtures.SyncSet,
+				toYAMLString(fakes.SyncSetFor("syncset", []schema.GroupVersionKind{
+					{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+					{
+						Group:   "networking.k8s.io",
+						Version: "v1",
+						Kind:    "Ingress",
+					},
+				})),
 			},
 			omitManifest: true,
 			wantReqs:     map[string]parser.SyncRequirements{},
@@ -87,8 +147,18 @@ func TestTest(t *testing.T) {
 			name: "multi requirement, one req fulfilled by syncset",
 			inputs: []string{
 				fixtures.TemplateReferentialMultReqs,
-				fixtures.SyncSet,
-			},
+				toYAMLString(fakes.SyncSetFor("syncset", []schema.GroupVersionKind{
+					{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+					{
+						Group:   "networking.k8s.io",
+						Version: "v1",
+						Kind:    "Ingress",
+					},
+				}))},
 			omitManifest: true,
 			wantReqs: map[string]parser.SyncRequirements{
 				"k8suniqueingresshostmultireq": {
@@ -108,8 +178,30 @@ func TestTest(t *testing.T) {
 				fixtures.TemplateReferential,
 				fixtures.TemplateReferentialMultEquivSets,
 				fixtures.TemplateReferentialMultReqs,
-				fixtures.Config,
-				fixtures.SyncSet,
+				toYAMLString(fakes.ConfigFor([]schema.GroupVersionKind{
+					{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Service",
+					},
+					{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+				})),
+				toYAMLString(fakes.SyncSetFor("syncset", []schema.GroupVersionKind{
+					{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+					{
+						Group:   "networking.k8s.io",
+						Version: "v1",
+						Kind:    "Ingress",
+					},
+				})),
 			},
 			omitManifest: true,
 			wantReqs: map[string]parser.SyncRequirements{
@@ -180,7 +272,18 @@ func TestTest_Errors(t *testing.T) {
 			name: "error if manifest not provided and omitGVKManifest not set",
 			inputs: []string{
 				fixtures.TemplateReferential,
-				fixtures.Config,
+				toYAMLString(fakes.ConfigFor([]schema.GroupVersionKind{
+					{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Service",
+					},
+					{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+				})),
 			},
 			wantErrs: map[string]error{},
 			err:      fmt.Errorf("no GVK manifest found; please provide a manifest enumerating the GVKs supported by the cluster"),
@@ -221,4 +324,9 @@ func TestTest_Errors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func toYAMLString(obj runtime.Object) string {
+	yaml, _ := yaml.Marshal(obj)
+	return string(yaml)
 }
