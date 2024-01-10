@@ -464,7 +464,8 @@ func (p *Planner) planDotOr(obj ir.Local, key ir.Operand, or stmtFactory, iter p
 	// | | | dot &{Source:Local<obj> Key:{Value:Local<key>} Target:Local<val>}
 	// | | | break 1
 	// | | or &{Target:Local<val>}
-	// | | *ir.ObjectInsertOnceStmt &{Key:{Value:Local<key>} Value:{Value:Local<val>} Object:Local<obj>}
+	// | iter &{Target:Local<val>} # may update Local<val>.
+	// | *ir.ObjectInsertStmt &{Key:{Value:Local<key>} Value:{Value:Local<val>} Object:Local<obj>}
 
 	prev := p.curr
 	dotBlock := &ir.Block{}
@@ -482,13 +483,16 @@ func (p *Planner) planDotOr(obj ir.Local, key ir.Operand, or stmtFactory, iter p
 		Stmts: []ir.Stmt{
 			&ir.BlockStmt{Blocks: []*ir.Block{dotBlock}}, // FIXME: Set Location
 			or(val),
-			&ir.ObjectInsertOnceStmt{Key: key, Value: op(val), Object: obj},
 		},
 	}
 
 	p.curr = prev
 	p.appendStmt(&ir.BlockStmt{Blocks: []*ir.Block{outerBlock}})
-	return iter(val)
+	if err := iter(val); err != nil {
+		return err
+	}
+	p.appendStmt(&ir.ObjectInsertStmt{Key: key, Value: op(val), Object: obj})
+	return nil
 }
 
 func (p *Planner) planNestedObjects(obj ir.Local, ref ast.Ref, iter planLocalIter) error {
@@ -841,13 +845,29 @@ func (p *Planner) dataRefsShadowRuletrie(refs []ast.Ref) bool {
 }
 
 func (p *Planner) planExprTerm(e *ast.Expr, iter planiter) error {
-	return p.planTerm(e.Terms.(*ast.Term), func() error {
-		p.appendStmt(&ir.NotEqualStmt{
-			A: p.ltarget,
-			B: op(ir.Bool(false)),
+	// NOTE(sr): There are only three cases to deal with when we see a naked term
+	// in a rule body:
+	//  1. it's `false` -- so we can stop, emit a break stmt
+	//  2. it's a var or a ref, like `input` or `data.foo.bar`, where we need to
+	//     check what it ends up being (at run time) to determine if it's not false
+	//  3. it's any other term -- `true`, a string, a number, whatever. We can skip
+	//     that, since it's true-ish enough for evaluating the rule body.
+	switch t := e.Terms.(*ast.Term).Value.(type) {
+	case ast.Boolean:
+		if !bool(t) { // We know this cannot hold, break unconditionally
+			p.appendStmt(&ir.BreakStmt{})
+			return iter()
+		}
+	case ast.Ref, ast.Var: // We don't know these at plan-time
+		return p.planTerm(e.Terms.(*ast.Term), func() error {
+			p.appendStmt(&ir.NotEqualStmt{
+				A: p.ltarget,
+				B: op(ir.Bool(false)),
+			})
+			return iter()
 		})
-		return iter()
-	})
+	}
+	return iter()
 }
 
 func (p *Planner) planExprEvery(e *ast.Expr, iter planiter) error {
@@ -1203,6 +1223,24 @@ func (p *Planner) planUnifyVar(a ast.Var, b *ast.Term, iter planiter) error {
 }
 
 func (p *Planner) planUnifyLocal(a ir.Operand, b *ast.Term, iter planiter) error {
+	// special cases: when a is StringIndex or Bool, and b is a string, or a bool, we can shortcut
+	switch va := a.Value.(type) {
+	case ir.StringIndex:
+		if vb, ok := b.Value.(ast.String); ok {
+			if va != ir.StringIndex(p.getStringConst(string(vb))) {
+				p.appendStmt(&ir.BreakStmt{})
+			}
+			return iter() // Don't plan EqualStmt{A: "foo", B: "foo"}
+		}
+	case ir.Bool:
+		if vb, ok := b.Value.(ast.Boolean); ok {
+			if va != ir.Bool(vb) {
+				p.appendStmt(&ir.BreakStmt{})
+			}
+			return iter() // Don't plan EqualStmt{A: true, B: true}
+		}
+	}
+
 	switch vb := b.Value.(type) {
 	case ast.Null, ast.Boolean, ast.Number, ast.String, ast.Ref, ast.Set, *ast.SetComprehension, *ast.ArrayComprehension, *ast.ObjectComprehension:
 		return p.planTerm(b, func() error {

@@ -24,12 +24,15 @@ type exprChecker func(*TypeEnv, *Expr) *Error
 // accumulated on the typeChecker so that a single run can report multiple
 // issues.
 type typeChecker struct {
-	errs         Errors
-	exprCheckers map[string]exprChecker
-	varRewriter  varRewriter
-	ss           *SchemaSet
-	allowNet     []string
-	input        types.Type
+	builtins            map[string]*Builtin
+	required            *Capabilities
+	errs                Errors
+	exprCheckers        map[string]exprChecker
+	varRewriter         varRewriter
+	ss                  *SchemaSet
+	allowNet            []string
+	input               types.Type
+	allowUndefinedFuncs bool
 }
 
 // newTypeChecker returns a new typeChecker object that has no errors.
@@ -60,6 +63,16 @@ func (tc *typeChecker) copy() *typeChecker {
 		WithInputType(tc.input)
 }
 
+func (tc *typeChecker) WithRequiredCapabilities(c *Capabilities) *typeChecker {
+	tc.required = c
+	return tc
+}
+
+func (tc *typeChecker) WithBuiltins(builtins map[string]*Builtin) *typeChecker {
+	tc.builtins = builtins
+	return tc
+}
+
 func (tc *typeChecker) WithSchemaSet(ss *SchemaSet) *typeChecker {
 	tc.ss = ss
 	return tc
@@ -77,6 +90,11 @@ func (tc *typeChecker) WithVarRewriter(f varRewriter) *typeChecker {
 
 func (tc *typeChecker) WithInputType(tpe types.Type) *typeChecker {
 	tc.input = tpe
+	return tc
+}
+
+func (tc *typeChecker) WithAllowUndefinedFunctionCalls(allow bool) *typeChecker {
+	tc.allowUndefinedFuncs = allow
 	return tc
 }
 
@@ -299,7 +317,18 @@ func (tc *typeChecker) checkExpr(env *TypeEnv, expr *Expr) *Error {
 		return nil
 	}
 
-	checker := tc.exprCheckers[expr.Operator().String()]
+	operator := expr.Operator().String()
+
+	// If the type checker wasn't provided with a required capabilities
+	// structure then just skip. In some cases, type checking might be run
+	// without the need to record what builtins are required.
+	if tc.required != nil {
+		if bi, ok := tc.builtins[operator]; ok {
+			tc.required.addBuiltinSorted(bi)
+		}
+	}
+
+	checker := tc.exprCheckers[operator]
 	if checker != nil {
 		return checker(env, expr)
 	}
@@ -324,6 +353,9 @@ func (tc *typeChecker) checkExprBuiltin(env *TypeEnv, expr *Expr) *Error {
 	tpe := env.Get(name)
 
 	if tpe == nil {
+		if tc.allowUndefinedFuncs {
+			return nil
+		}
 		return NewError(TypeErr, expr.Location, "undefined function %v", name)
 	}
 
@@ -407,7 +439,7 @@ func (tc *typeChecker) checkExprWith(env *TypeEnv, expr *Expr, i int) *Error {
 		switch v := valueType.(type) {
 		case *types.Function: // ...by function
 			if !unifies(targetType, valueType) {
-				return newArgError(expr.With[i].Loc(), target.Value.(Ref), "arity mismatch", v.Args(), t.NamedFuncArgs())
+				return newArgError(expr.With[i].Loc(), target.Value.(Ref), "arity mismatch", v.FuncArgs().Args, t.NamedFuncArgs())
 			}
 		default: // ... by value, nothing to check
 		}
@@ -1218,7 +1250,7 @@ func getRuleAnnotation(as *AnnotationSet, rule *Rule) (result []*SchemaAnnotatio
 		result = append(result, x.Schemas...)
 	}
 
-	if x := as.GetDocumentScope(rule.Path()); x != nil {
+	if x := as.GetDocumentScope(rule.Ref().GroundPrefix()); x != nil {
 		result = append(result, x.Schemas...)
 	}
 
