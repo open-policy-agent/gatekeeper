@@ -101,23 +101,24 @@ func (r *Runner) runTests(ctx context.Context, filter Filter, suitePath string, 
 
 	results := make([]TestResult, len(tests))
 	for i, t := range tests {
-		if t.Skip || !filter.MatchesTest(t) {
-			results[i] = r.skipTest(t)
+		t := t
+		if t.Skip || !filter.MatchesTest(&t) {
+			results[i] = r.skipTest(&t)
 			continue
 		}
 
-		results[i] = r.runTest(ctx, suiteDir, filter, t)
+		results[i] = r.runTest(ctx, suiteDir, filter, &t)
 	}
 
 	return results, nil
 }
 
-func (r *Runner) skipTest(t Test) TestResult {
+func (r *Runner) skipTest(t *Test) TestResult {
 	return TestResult{Name: t.Name, Skipped: true}
 }
 
 // runTest runs an individual Test.
-func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t Test) TestResult {
+func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t *Test) TestResult {
 	start := time.Now()
 
 	err := r.tryAddConstraint(ctx, suiteDir, t)
@@ -140,7 +141,7 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 	}
 }
 
-func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) error {
+func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t *Test) error {
 	client, err := r.newClient(r.includeTrace, r.useK8sCEL)
 	if err != nil {
 		return fmt.Errorf("%w: %w", gator.ErrCreatingClient, err)
@@ -167,7 +168,7 @@ func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) 
 
 // runCases executes every Case in the Test. Returns the results for every Case,
 // or an error if there was a problem executing the Test.
-func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t Test) ([]CaseResult, error) {
+func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t *Test) ([]CaseResult, error) {
 	newClient := func() (gator.Client, error) {
 		c, err := r.makeTestClient(ctx, suiteDir, t)
 		if err != nil {
@@ -195,7 +196,7 @@ func (r *Runner) skipCase(tc *Case) CaseResult {
 	return CaseResult{Name: tc.Name, Skipped: true}
 }
 
-func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (gator.Client, error) {
+func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t *Test) (gator.Client, error) {
 	client, err := r.newClient(r.includeTrace, r.useK8sCEL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", gator.ErrCreatingClient, err)
