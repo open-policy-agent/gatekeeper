@@ -27,8 +27,8 @@ func Test_Flags(t *testing.T) {
 			},
 		},
 		"one": {
-			input:    []string{"--metrics-backend", "opencensus"},
-			expected: map[string]StartExporter{"opencensus": exporters.registeredExporters["opencensus"]},
+			input:    []string{"--metrics-backend", "opentelemetry"},
+			expected: map[string]StartExporter{"opentelemetry": exporters.registeredExporters["opentelemetry"]},
 		},
 	}
 

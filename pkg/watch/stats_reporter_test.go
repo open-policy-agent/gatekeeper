@@ -1,63 +1,81 @@
 package watch
 
 import (
+	"context"
 	"testing"
 
-	"go.opencensus.io/stats/view"
+	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
+	"github.com/stretchr/testify/assert"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 )
 
-func TestGauges(t *testing.T) {
-	r, err := newStatsReporter()
-	if err != nil {
-		t.Fatalf("newStatsReporter() error %v", err)
-	}
-	tc := []struct {
-		name string
-		fn   func(int64) error
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
+	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter = mp.Meter("test")
+
+	// Ensure the pipeline has a callback setup
+	gvkIntentCountM, err = meter.Int64ObservableGauge(gvkIntentCountMetricName)
+	assert.NoError(t, err)
+	gvkCountM, err = meter.Int64ObservableGauge(gvkCountMetricName)
+	assert.NoError(t, err)
+	r, err = newStatsReporter()
+	assert.NoError(t, err)
+	return rdr, r
+}
+
+func TestReporter_reportGvkCount(t *testing.T) {
+	tests := []struct {
+		name        string
+		ctx         context.Context
+		expectedErr error
+		want        metricdata.Metrics
+		wm          *Manager
 	}{
 		{
-			name: gvkCountMetricName,
-			fn:   r.reportGvkCount,
-		},
-		{
-			name: gvkIntentCountMetricName,
-			fn:   r.reportGvkIntentCount,
+			name:        "reporting total violations with attributes",
+			ctx:         context.Background(),
+			expectedErr: nil,
+			wm:          &Manager{watchedKinds: make(vitalsByGVK)},
+			want: metricdata.Metrics{
+				Name: gvkCountMetricName,
+				Data: metricdata.Gauge[int64]{
+					DataPoints: []metricdata.DataPoint[int64]{
+						{Value: 0},
+					},
+				},
+			},
 		},
 	}
-	for _, tt := range tc {
-		t.Run(tt.name, func(t *testing.T) {
-			const expectedValue int64 = 10
-			const expectedRowLength = 1
 
-			err = tt.fn(expectedValue)
-			if err != nil {
-				t.Errorf("function error %v", err)
-			}
-			row := checkData(t, tt.name, expectedRowLength)
-			value, ok := row.Data.(*view.LastValueData)
-			if !ok {
-				t.Errorf("metric %s should have aggregation LastValue()", tt.name)
-			}
-			if len(row.Tags) != 0 {
-				t.Errorf("%s tags is non-empty, got: %v", tt.name, row.Tags)
-			}
-			if int64(value.Value) != expectedValue {
-				t.Errorf("Metric: %v - Expected %v, got %v", tt.name, expectedValue, value.Value)
-			}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rdr, r := initializeTestInstruments(t)
+			assert.NoError(t, r.reportGvkCount(0))
+			rm := &metricdata.ResourceMetrics{}
+			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
+
+			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[1], metricdatatest.IgnoreTimestamp())
 		})
 	}
 }
 
-func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
-	row, err := view.RetrieveData(name)
-	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, name)
+func TestRecordKeeper_reportGvkIntentCount(t *testing.T) {
+	// var err error
+	want := metricdata.Metrics{
+		Name: gvkIntentCountMetricName,
+		Data: metricdata.Gauge[int64]{
+			DataPoints: []metricdata.DataPoint[int64]{
+				{Value: 0},
+			},
+		},
 	}
-	if len(row) != expectedRowLength {
-		t.Errorf("Expected length %v, got %v", expectedRowLength, len(row))
-	}
-	if row[0].Data == nil {
-		t.Errorf("Expected row data not to be nil")
-	}
-	return row[0]
+	rdr, r := initializeTestInstruments(t)
+	assert.NoError(t, r.reportGvkIntentCount(0))
+	rm := &metricdata.ResourceMetrics{}
+	assert.Equal(t, nil, rdr.Collect(context.Background(), rm))
+	metricdatatest.AssertEqual(t, want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
 }

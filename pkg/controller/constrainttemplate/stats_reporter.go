@@ -2,12 +2,15 @@ package constrainttemplate
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -15,86 +18,72 @@ const (
 	ctMetricName   = "constraint_templates"
 	ingestCount    = "constraint_template_ingestion_count"
 	ingestDuration = "constraint_template_ingestion_duration_seconds"
+	statusKey      = "status"
 
 	ctDesc = "Number of observed constraint templates"
 )
 
 var (
-	ctM             = stats.Int64(ctMetricName, ctDesc, stats.UnitDimensionless)
-	ingestDurationM = stats.Float64(ingestDuration, "How long it took to ingest a constraint template in seconds", stats.UnitSeconds)
-
-	statusKey = tag.MustNewKey("status")
-
-	views = []*view.View{
-		{
-			Name:        ctMetricName,
-			Measure:     ctM,
-			Description: ctDesc,
-			Aggregation: view.LastValue(),
-			TagKeys:     []tag.Key{statusKey},
-		},
-		{
-			Name:        ingestCount,
-			Measure:     ingestDurationM,
-			Description: "Total number of constraint template ingestion actions",
-			Aggregation: view.Count(),
-			TagKeys:     []tag.Key{statusKey},
-		},
-		{
-			Name:        ingestDuration,
-			Measure:     ingestDurationM,
-			Description: "Distribution of how long it took to ingest a constraint template in seconds",
-			Aggregation: view.Distribution(0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 1, 2, 3, 4, 5),
-			TagKeys:     []tag.Key{statusKey},
-		},
-	}
+	ctM             metric.Int64ObservableGauge
+	ingestCountM    metric.Int64Counter
+	ingestDurationM metric.Float64Histogram
+	meter           metric.Meter
 )
 
 func init() {
-	if err := register(); err != nil {
+	var err error
+	meter = otel.GetMeterProvider().Meter("gatekeeper")
+	ctM, err = meter.Int64ObservableGauge(
+		ctMetricName,
+		metric.WithDescription(ctDesc),
+	)
+
+	if err != nil {
 		panic(err)
 	}
-}
 
-func register() error {
-	return view.Register(views...)
-}
-
-func reset() error {
-	view.Unregister(views...)
-	return register()
-}
-
-func (r *reporter) reportCtMetric(ctx context.Context, status metrics.Status, count int64) error {
-	ctx, err := tag.New(
-		ctx,
-		tag.Insert(statusKey, string(status)),
+	ingestCountM, err = meter.Int64Counter(
+		ingestCount,
+		metric.WithDescription("Total number of constraint template ingestion actions"),
 	)
 	if err != nil {
-		return err
+		panic(err)
 	}
-	return metrics.Record(ctx, ctM.M(count))
+
+	ingestDurationM, err = meter.Float64Histogram(
+		ingestDuration,
+		metric.WithDescription("Distribution of how long it took to ingest a constraint template in seconds"),
+	)
+	if err != nil {
+		panic(err)
+	}
+	view.Register(sdkmetric.NewView(
+		sdkmetric.Instrument{Name: ingestDuration},
+		sdkmetric.Stream{
+			Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
+				Boundaries: []float64{0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 1, 2, 3, 4, 5},
+			},
+		},
+	))
 }
 
 func (r *reporter) reportIngestDuration(ctx context.Context, status metrics.Status, d time.Duration) error {
-	ctx, err := tag.New(
-		ctx,
-		tag.Insert(statusKey, string(status)),
-	)
-	if err != nil {
-		return err
-	}
-
-	return metrics.Record(ctx, ingestDurationM.M(d.Seconds()))
+	ingestDurationM.Record(ctx, d.Seconds(), metric.WithAttributes(attribute.String(statusKey, string(status))))
+	ingestCountM.Add(ctx, 1, metric.WithAttributes(attribute.String(statusKey, string(status))))
+	return nil
 }
 
 // newStatsReporter creates a reporter for watch metrics.
 func newStatsReporter() *reporter {
 	reg := &ctRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
-	return &reporter{registry: reg}
+	r := &reporter{registry: reg}
+	_ = r.registerCallback()
+	return r
 }
 
 type reporter struct {
+	mu       sync.RWMutex
+	ctReport map[metrics.Status]int64
 	registry *ctRegistry
 }
 
@@ -112,6 +101,16 @@ func (r *ctRegistry) add(key types.NamespacedName, status metrics.Status) {
 	r.dirty = true
 }
 
+func (r *reporter) reportCtMetric(status metrics.Status, count int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.ctReport == nil {
+		r.ctReport = make(map[metrics.Status]int64)
+	}
+	r.ctReport[status] = count
+	return nil
+}
+
 func (r *ctRegistry) remove(key types.NamespacedName) {
 	if _, ok := r.cache[key]; !ok {
 		return
@@ -120,7 +119,7 @@ func (r *ctRegistry) remove(key types.NamespacedName) {
 	r.dirty = true
 }
 
-func (r *ctRegistry) report(ctx context.Context, mReporter *reporter) {
+func (r *ctRegistry) report(_ context.Context, mReporter *reporter) {
 	if !r.dirty {
 		return
 	}
@@ -130,7 +129,7 @@ func (r *ctRegistry) report(ctx context.Context, mReporter *reporter) {
 	}
 	hadErr := false
 	for _, status := range metrics.AllStatuses {
-		if err := mReporter.reportCtMetric(ctx, status, totals[status]); err != nil {
+		if err := mReporter.reportCtMetric(status, totals[status]); err != nil {
 			logger.Error(err, "failed to report total constraint templates")
 			hadErr = true
 		}
@@ -138,4 +137,18 @@ func (r *ctRegistry) report(ctx context.Context, mReporter *reporter) {
 	if !hadErr {
 		r.dirty = false
 	}
+}
+
+func (r *reporter) registerCallback() error {
+	_, err := meter.RegisterCallback(r.observeCTM, ctM)
+	return err
+}
+
+func (r *reporter) observeCTM(_ context.Context, o metric.Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for status, count := range r.ctReport {
+		o.ObserveInt64(ctM, count, metric.WithAttributes(attribute.String(statusKey, string(status))))
+	}
+	return nil
 }

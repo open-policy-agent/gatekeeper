@@ -1,151 +1,178 @@
 package syncutil
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
+	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 )
 
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *Reporter) {
+	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter = mp.Meter("test")
+
+	syncM, err = meter.Int64ObservableGauge(syncMetricName)
+	assert.NoError(t, err)
+	syncDurationM, err = meter.Float64Histogram(syncDurationMetricName)
+	assert.NoError(t, err)
+	lastRunSyncM, err = meter.Float64ObservableGauge(lastRunTimeMetricName)
+	assert.NoError(t, err)
+
+	r, err = NewStatsReporter()
+	assert.NoError(t, err)
+
+	return rdr, r
+}
+
 func TestReportSync(t *testing.T) {
-	const wantValue = 10
-	const wantRowLength = 1
 	wantTags := Tags{
 		Kind:   "Pod",
 		Status: metrics.ActiveStatus,
 	}
-
-	r, err := NewStatsReporter()
-	if err != nil {
-		t.Errorf("newStatsReporter() error %v", err)
+	tests := []struct {
+		name        string
+		ctx         context.Context
+		expectedErr error
+		want        metricdata.Metrics
+		c           *MetricsCache
+	}{
+		{
+			name:        "reporting sync",
+			ctx:         context.Background(),
+			expectedErr: nil,
+			c: &MetricsCache{
+				Cache: map[string]Tags{
+					"Pod": wantTags,
+				},
+				KnownKinds: map[string]bool{
+					"Pod": true,
+				},
+			},
+			want: metricdata.Metrics{
+				Name: syncMetricName,
+				Data: metricdata.Gauge[int64]{
+					DataPoints: []metricdata.DataPoint[int64]{
+						{Attributes: attribute.NewSet(attribute.String(kindKey, wantTags.Kind), attribute.String(statusKey, string(wantTags.Status))), Value: 1},
+						{Attributes: attribute.NewSet(attribute.String(kindKey, wantTags.Kind), attribute.String(statusKey, string(metrics.ErrorStatus))), Value: 0},
+					},
+				},
+			},
+		},
 	}
 
-	err = r.ReportSync(wantTags, wantValue)
-	if err != nil {
-		t.Fatalf("got reportSync() error %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rdr, r := initializeTestInstruments(t)
+			totals := make(map[Tags]int)
+			for _, v := range tt.c.Cache {
+				totals[v]++
+			}
 
-	row := checkData(t, syncMetricName, wantRowLength)
-	gotLast, ok := row.Data.(*view.LastValueData)
-	if !ok {
-		t.Fatalf("got %q type %T, want %T", syncMetricName, row.Data, &view.LastValueData{})
-	}
+			for kind := range tt.c.KnownKinds {
+				for _, status := range metrics.AllStatuses {
+					if err := r.ReportSync(
+						Tags{
+							Kind:   kind,
+							Status: status,
+						},
+						int64(totals[Tags{
+							Kind:   kind,
+							Status: status,
+						}])); err != nil {
+						log.Error(err, "failed to report sync")
+					}
+				}
+			}
 
-	found := contains(row.Tags, wantTags.Kind)
-	if !found {
-		t.Errorf("reportSync tags %+v does not contain %q", row.Tags, wantTags.Kind)
-	}
-
-	found = contains(row.Tags, string(wantTags.Status))
-	if !found {
-		t.Errorf("reportSync tags %+v does not contain %v", row.Tags, wantTags.Status)
-	}
-
-	if gotLast.Value != wantValue {
-		t.Errorf("got %v = %v, want %v", syncMetricName, gotLast.Value, wantValue)
+			rm := &metricdata.ResourceMetrics{}
+			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
+			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+		})
 	}
 }
 
 func TestReportSyncLatency(t *testing.T) {
 	const minLatency = 100 * time.Second
 	const maxLatency = 500 * time.Second
-
-	const wantLatencyCount int64 = 2
+	const wantLatencyCount uint64 = 2
 	const wantLatencyMin float64 = 100
 	const wantLatencyMax float64 = 500
-	const wantRowLength int = 1
 
-	r, err := NewStatsReporter()
-	if err != nil {
-		t.Fatalf("got newStatsReporter() error %v, want nil", err)
+	want := metricdata.Metrics{
+		Name: syncDurationMetricName,
+		Data: metricdata.Histogram[float64]{
+			Temporality: metricdata.CumulativeTemporality,
+			DataPoints: []metricdata.HistogramDataPoint[float64]{
+				{
+					Attributes:   attribute.Set{},
+					Count:        wantLatencyCount,
+					Bounds:       []float64{0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000},
+					BucketCounts: []uint64{0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0},
+					Min:          metricdata.NewExtrema[float64](wantLatencyMin),
+					Max:          metricdata.NewExtrema[float64](wantLatencyMax),
+					Sum:          600,
+				},
+			},
+		},
 	}
+	rdr, r := initializeTestInstruments(t)
 
-	err = r.ReportSyncDuration(minLatency)
-	if err != nil {
-		t.Fatalf("got reportSyncDuration() error %v, want nil", err)
-	}
+	assert.NoError(t, r.ReportSyncDuration(minLatency))
 
-	err = r.ReportSyncDuration(maxLatency)
-	if err != nil {
-		t.Fatalf("got reportSyncDuration error %v, want nil", err)
-	}
+	assert.NoError(t, r.ReportSyncDuration(maxLatency))
 
-	row := checkData(t, syncDurationMetricName, wantRowLength)
-	gotLatency, ok := row.Data.(*view.DistributionData)
-	if !ok {
-		t.Fatalf("got %q type %T, want %T", syncDurationMetricName, row.Data, &view.DistributionData{})
-	}
-
-	if gotLatency.Count != wantLatencyCount {
-		t.Errorf("got %q = %v, want %v", syncDurationMetricName, gotLatency.Count, wantLatencyCount)
-	}
-
-	if gotLatency.Min != wantLatencyMin {
-		t.Errorf("got %q = %v, want %v", syncDurationMetricName, gotLatency.Min, wantLatencyMin)
-	}
-
-	if gotLatency.Max != wantLatencyMax {
-		t.Errorf("got %q = %v, want %v", syncDurationMetricName, gotLatency.Max, wantLatencyMax)
-	}
+	rm := &metricdata.ResourceMetrics{}
+	assert.Equal(t, nil, rdr.Collect(context.Background(), rm))
+	metricdatatest.AssertEqual(t, want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
 }
 
 func TestLastRunSync(t *testing.T) {
 	const wantTime float64 = 11
-	const wantRowLength = 1
 
 	fakeNow := func() float64 {
 		return wantTime
 	}
 
-	r, err := NewStatsReporter()
-	if err != nil {
-		t.Fatalf("got NewStatsReporter() error %v, want nil", err)
+	tests := []struct {
+		name        string
+		ctx         context.Context
+		expectedErr error
+		want        metricdata.Metrics
+	}{
+		{
+			name:        "reporting last sync run",
+			ctx:         context.Background(),
+			expectedErr: nil,
+			want: metricdata.Metrics{
+				Name: lastRunTimeMetricName,
+				Data: metricdata.Gauge[float64]{
+					DataPoints: []metricdata.DataPoint[float64]{
+						{Value: wantTime},
+					},
+				},
+			},
+		},
 	}
 
-	r.now = fakeNow
-	err = r.ReportLastSync()
-	if err != nil {
-		t.Fatalf("got reportLastSync() error %v, want nil", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rdr, r := initializeTestInstruments(t)
+			r.now = fakeNow
+			assert.NoError(t, r.ReportLastSync())
 
-	row := checkData(t, lastRunTimeMetricName, wantRowLength)
-	gotLast, ok := row.Data.(*view.LastValueData)
-	if !ok {
-		t.Fatalf("got %q type %T, want %T", lastRunTimeMetricName, row.Data, &view.LastValueData{})
-	}
+			rm := &metricdata.ResourceMetrics{}
+			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
 
-	if len(row.Tags) != 0 {
-		t.Errorf("reportRestartCheck tags is non-empty, got: %v", row.Tags)
+			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+		})
 	}
-
-	if gotLast.Value != wantTime {
-		t.Errorf("got %q = %v, want %v", lastRunTimeMetricName, gotLast.Value, wantTime)
-	}
-}
-
-func contains(s []tag.Tag, e string) bool {
-	for _, a := range s {
-		if a.Value == e {
-			return true
-		}
-	}
-	return false
-}
-
-func checkData(t *testing.T, name string, wantRowLength int) *view.Row {
-	row, err := view.RetrieveData(name)
-	if err != nil {
-		t.Fatalf("got %v RetrieveData() error = %v", name, err)
-	}
-
-	if len(row) != wantRowLength {
-		t.Fatalf("got row length %v, want %v", len(row), wantRowLength)
-	}
-
-	if row[0].Data == nil {
-		t.Fatalf("got row[0].Data = nil, want non-nil")
-	}
-	return row[0]
 }
