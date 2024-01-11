@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"golang.org/x/oauth2/google"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -50,23 +51,19 @@ func Start(ctx context.Context) error {
 		}
 		return err
 	}
-	awsResource, err := ec2.NewResourceDetector().Detect(ctx)
+	res, err := resource.New(ctx,
+		resource.WithDetectors(gcp.NewDetector(), ec2.NewResourceDetector()),
+		resource.WithTelemetrySDK(),
+		resource.WithFromEnv(),
+	)
 	if err != nil {
 		return err
-	}
-	resource := awsResource
-	gcpResource, err := gcp.NewDetector().Detect(ctx)
-	if err != nil {
-		return err
-	}
-	if gcpResource != nil {
-		resource = gcpResource
 	}
 	reader := metric.NewPeriodicReader(e, metric.WithInterval(*metricInterval))
 	meterProvider := metric.NewMeterProvider(
 		metric.WithReader(reader),
 		metric.WithView(view.Views()...),
-		metric.WithResource(resource),
+		metric.WithResource(res),
 	)
 
 	otel.SetMeterProvider(meterProvider)
