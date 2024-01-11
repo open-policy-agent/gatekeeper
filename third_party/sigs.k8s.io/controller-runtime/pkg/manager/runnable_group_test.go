@@ -9,7 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
@@ -105,7 +105,7 @@ var _ = Describe("runnableGroup", func() {
 	It("should be able to close the group and wait for all runnables to finish", func() {
 		ctx, cancel := context.WithCancel(context.Background())
 
-		exited := pointer.Int64(0)
+		exited := ptr.To[int64](0)
 		rg := newRunnableGroup(defaultBaseContext, errCh)
 		for i := 0; i < 10; i++ {
 			Expect(rg.Add(RunnableFunc(func(c context.Context) error {

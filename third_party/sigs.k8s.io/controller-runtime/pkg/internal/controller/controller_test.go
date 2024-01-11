@@ -33,7 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -111,7 +111,7 @@ var _ = Describe("controller", func() {
 			defer func() {
 				Expect(recover()).To(BeNil())
 			}()
-			ctrl.RecoverPanic = pointer.Bool(true)
+			ctrl.RecoverPanic = ptr.To[bool](true)
 			ctrl.Do = reconcile.Func(func(context.Context, reconcile.Request) (reconcile.Result, error) {
 				var res *reconcile.Result
 				return *res, nil

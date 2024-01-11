@@ -13,7 +13,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 func TestRunner_Run(t *testing.T) {
@@ -983,7 +983,7 @@ func TestRunner_Run(t *testing.T) {
 					}, {
 						Name:       "missing-namespace",
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message: pointer.String("missing Namespace")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message:    ptr.To[string]("missing Namespace")}},
 					}},
 				}},
 			},
@@ -1034,7 +1034,7 @@ func TestRunner_Run(t *testing.T) {
 							{
 								Name:       "user doesn't begin with \"system:\"",
 								Object:     "non-system-ar.yaml",
-								Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message: pointer.String("username is not allowed to perform this operation")}},
+								Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message: ptr.To[string]("username is not allowed to perform this operation")}},
 							},
 						},
 					},
@@ -1306,7 +1306,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintAlwaysValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.String("first message"),
+				Message: ptr.To[string]("first message"),
 			}},
 			want: CaseResult{
 				Error: gator.ErrNumViolations,
@@ -1381,7 +1381,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintAlwaysValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.String("never validate"),
+				Message: ptr.To[string]("never validate"),
 			}},
 			want: CaseResult{
 				Error: gator.ErrNumViolations,
@@ -1393,7 +1393,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.String("[enrv]+ [adeiltv]+"),
+				Message: ptr.To[string]("[enrv]+ [adeiltv]+"),
 			}},
 			want: CaseResult{},
 		},
@@ -1403,7 +1403,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.String("never validate [("),
+				Message: ptr.To[string]("never validate [("),
 			}},
 			want: CaseResult{
 				Error: gator.ErrInvalidRegex,
@@ -1415,7 +1415,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.String("[enrv]+x [adeiltv]+"),
+				Message: ptr.To[string]("[enrv]+x [adeiltv]+"),
 			}},
 			want: CaseResult{
 				Error: gator.ErrNumViolations,
@@ -1438,9 +1438,9 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidateTwice,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.String("first message"),
+				Message: ptr.To[string]("first message"),
 			}, {
-				Message: pointer.String("second message"),
+				Message: ptr.To[string]("second message"),
 			}},
 			want: CaseResult{},
 		},
@@ -1451,10 +1451,10 @@ func TestRunner_RunCase(t *testing.T) {
 			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: gator.IntStrFromInt(1),
-				Message:    pointer.String("first message"),
+				Message:    ptr.To[string]("first message"),
 			}, {
 				Violations: gator.IntStrFromInt(1),
-				Message:    pointer.String("second message"),
+				Message:    ptr.To[string]("second message"),
 			}},
 			want: CaseResult{},
 		},
@@ -1464,7 +1464,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidateTwice,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.String("[cdefinorst]+ [aegms]+"),
+				Message: ptr.To[string]("[cdefinorst]+ [aegms]+"),
 			}},
 			want: CaseResult{},
 		},
@@ -1475,7 +1475,7 @@ func TestRunner_RunCase(t *testing.T) {
 			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: gator.IntStrFromInt(2),
-				Message:    pointer.String("[cdefinorst]+ [aegms]+"),
+				Message:    ptr.To[string]("[cdefinorst]+ [aegms]+"),
 			}},
 			want: CaseResult{},
 		},
@@ -1485,9 +1485,9 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidateTwice,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.String("first message"),
+				Message: ptr.To[string]("first message"),
 			}, {
-				Message: pointer.String("third message"),
+				Message: ptr.To[string]("third message"),
 			}},
 			want: CaseResult{
 				Error: gator.ErrNumViolations,
