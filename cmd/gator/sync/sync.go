@@ -14,7 +14,7 @@ var commands = []*cobra.Command{
 var Cmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Manage SyncSets and Config",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Println("Usage: gator sync test")
 	},
 }

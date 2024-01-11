@@ -36,7 +36,7 @@ func init() {
 		"and configs are supported by the cluster under test. If this assumption isn't true, the given config may cause errors or templates may not be enforced correctly even after passing this test.")
 }
 
-func run(cmd *cobra.Command, args []string) {
+func run(_ *cobra.Command, _ []string) {
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, "")
 	if err != nil {
 		cmdutils.ErrFatalf("reading: %v", err)

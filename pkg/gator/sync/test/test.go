@@ -6,7 +6,6 @@ import (
 	cfapis "github.com/open-policy-agent/frameworks/constraint/pkg/apis"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	gkapis "github.com/open-policy-agent/gatekeeper/v3/apis"
-
 	gvkmanifestv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/gvkmanifest/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/parser"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
@@ -40,7 +39,8 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 	var err error
 
 	for _, obj := range unstrucs {
-		if reader.IsSyncSet(obj) {
+		switch {
+		case reader.IsSyncSet(obj):
 			syncSet, err := reader.ToSyncSet(scheme, obj)
 			if err != nil {
 				return nil, nil, fmt.Errorf("converting unstructured %q to syncset: %w", obj.GetName(), err)
@@ -53,7 +53,7 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 				}
 				syncedGVKs[gvk] = struct{}{}
 			}
-		} else if reader.IsConfig(obj) {
+		case reader.IsConfig(obj):
 			if hasConfig {
 				return nil, nil, fmt.Errorf("multiple configs found; Config is a singleton resource")
 			}
@@ -70,7 +70,7 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 				}
 				syncedGVKs[gvk] = struct{}{}
 			}
-		} else if reader.IsTemplate(obj) {
+		case reader.IsTemplate(obj):
 			templ, err := reader.ToTemplate(scheme, obj)
 			if err != nil {
 				templateErrs[obj.GetName()] = err
@@ -82,7 +82,7 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 				continue
 			}
 			templates[templ] = syncRequirements
-		} else if reader.IsGVKManifest(obj) {
+		case reader.IsGVKManifest(obj):
 			if gvkManifest == nil {
 				gvkManifest, err = reader.ToGVKManifest(scheme, obj)
 				if err != nil {
@@ -91,7 +91,7 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 			} else {
 				return nil, nil, fmt.Errorf("multiple GVK manifests found; please provide one manifest enumerating the GVKs supported by the cluster")
 			}
-		} else {
+		default:
 			fmt.Printf("skipping unstructured %q because it is not a syncset, config, gvk manifest, or template\n", obj.GetName())
 		}
 	}

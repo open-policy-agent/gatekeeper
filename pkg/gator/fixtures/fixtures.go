@@ -336,6 +336,46 @@ metadata:
           }
         ]
       ]"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sUniqueServiceSelector
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8suniqueserviceselector
+        make_apiversion(kind) = apiVersion {
+          g := kind.group
+          v := kind.version
+          g != ""
+          apiVersion = sprintf("%v/%v", [g, v])
+        }
+        make_apiversion(kind) = apiVersion {
+          kind.group == ""
+          apiVersion = kind.version
+        }
+        identical(obj, review) {
+          obj.metadata.namespace == review.namespace
+          obj.metadata.name == review.name
+          obj.kind == review.kind.kind
+          obj.apiVersion == make_apiversion(review.kind)
+        }
+        flatten_selector(obj) = flattened {
+          selectors := [s | s = concat(":", [key, val]); val = obj.spec.selector[key]]
+          flattened := concat(",", sort(selectors))
+        }
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Service"
+          input.review.kind.version == "v1"
+          input.review.kind.group == ""
+          input_selector := flatten_selector(input.review.object)
+          other := data.inventory.namespace[namespace][_]["Service"][name]
+          not identical(other, input.review)
+          other_selector := flatten_selector(other)
+          input_selector == other_selector
+          msg := sprintf("same selector as service <%v> in namespace <%v>", [name, namespace])
+        }
 `
 
 	TemplateReferentialMultEquivSets = `
@@ -615,41 +655,5 @@ spec:
     kinds:
       - apiGroups: ["*"]
         kinds: ["*"]
-`
-	BadSyncSet = `
-apiVersion: syncset.gatekeeper.sh/v1alpha1
-kind: SyncSet
-metadata:
-  name: syncset
-spec:
-  unknownField: "unknown"
-`
-	BadConfig = `
-apiVersion: config.gatekeeper.sh/v1alpha1
-kind: Config
-metadata:
-  name: config
-spec:
-  unknownField: "unknown"
-`
-	GVKManifestServices = `
-apiVersion: gvkmanifest.gatekeeper.sh/v1alpha1
-kind: GVKManifest
-metadata:
-  name: gvkmanifest
-spec:
-  groups:
-    "":
-      "v1": ["Service"]
-`
-	GVKManifestDeployments = `
-apiVersion: gvkmanifest.gatekeeper.sh/v1alpha1
-kind: GVKManifest
-metadata:
-  name: gvkmanifest
-spec:
-  groups:
-    apps:
-      "v1": ["Deployment"]
 `
 )
