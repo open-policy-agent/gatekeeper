@@ -30,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -595,7 +595,7 @@ var _ = Describe("Controllerutil", func() {
 			assertLocalDeployWasUpdated(nil)
 
 			op, err = controllerutil.CreateOrPatch(context.TODO(), c, deploy, func() error {
-				deploy.Spec.Replicas = pointer.Int32(5)
+				deploy.Spec.Replicas = ptr.To[int64](5)
 				deploy.Status.Conditions = []appsv1.DeploymentCondition{{
 					Type:   appsv1.DeploymentProgressing,
 					Status: corev1.ConditionTrue,

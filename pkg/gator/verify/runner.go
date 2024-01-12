@@ -19,7 +19,7 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -280,7 +280,7 @@ func (r *Runner) checkCase(ctx context.Context, newClient func() (gator.Client, 
 
 	results := review.Results()
 	if r.includeTrace {
-		trace = pointer.String(review.TraceDump())
+		trace = ptr.To[string](review.TraceDump())
 	}
 	for i := range tc.Assertions {
 		err = tc.Assertions[i].Run(results)

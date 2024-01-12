@@ -40,7 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/controller-runtime/examples/crd/pkg"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -378,7 +378,7 @@ U5wwSivyi7vmegHKmblOzNVKA5qPO8zWzqBC
 
 			Context("with the DryRun option", func() {
 				It("should not create a new object, global option", func() {
-					cl, err := client.New(cfg, client.Options{DryRun: pointer.Bool(true)})
+					cl, err := client.New(cfg, client.Options{DryRun: ptr.To[bool](true)})
 					Expect(err).NotTo(HaveOccurred())
 					Expect(cl).NotTo(BeNil())
 

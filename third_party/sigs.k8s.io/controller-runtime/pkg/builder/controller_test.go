@@ -33,7 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -668,7 +668,7 @@ func doReconcileTest(ctx context.Context, nameSuffix string, mgr manager.Manager
 					Name:       deployName,
 					Kind:       "Deployment",
 					APIVersion: "apps/v1",
-					Controller: pointer.Bool(true),
+					Controller: ptr.To[bool](true),
 					UID:        dep.UID,
 				},
 			},

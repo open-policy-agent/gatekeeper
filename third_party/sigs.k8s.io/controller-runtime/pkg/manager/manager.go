@@ -32,7 +32,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -478,7 +478,7 @@ func New(config *rest.Config, options Options) (Manager, error) {
 	runnables := newRunnables(options.BaseContext, errChan)
 
 	return &controllerManager{
-		stopProcedureEngaged:          pointer.Int64(0),
+		stopProcedureEngaged:          ptr.To[int64](0),
 		cluster:                       cluster,
 		runnables:                     runnables,
 		errChan:                       errChan,

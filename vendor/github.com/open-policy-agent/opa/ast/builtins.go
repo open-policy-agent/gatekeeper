@@ -133,6 +133,7 @@ var DefaultBuiltins = [...]*Builtin{
 	TrimSpace,
 	Sprintf,
 	StringReverse,
+	RenderTemplate,
 
 	// Numbers
 	NumbersRange,
@@ -1317,6 +1318,20 @@ var StringReverse = &Builtin{
 	Categories: stringsCat,
 }
 
+var RenderTemplate = &Builtin{
+	Name: "strings.render_template",
+	Description: `Renders a templated string with given template variables injected. For a given templated string and key/value mapping, values will be injected into the template where they are referenced by key.
+	For examples of templating syntax, see https://pkg.go.dev/text/template`,
+	Decl: types.NewFunction(
+		types.Args(
+			types.Named("value", types.S).Description("a templated string"),
+			types.Named("vars", types.NewObject(nil, types.NewDynamicProperty(types.S, types.A))).Description("a mapping of template variable keys to values"),
+		),
+		types.Named("result", types.S).Description("rendered template with template variables injected"),
+	),
+	Categories: stringsCat,
+}
+
 /**
  * Numbers
  */
@@ -2470,7 +2485,7 @@ var WalkBuiltin = &Builtin{
 				types.A,
 			},
 			nil,
-		)).Description("pairs of `path` and `value`: `path` is an array representing the pointer to `value` in `x`"),
+		)).Description("pairs of `path` and `value`: `path` is an array representing the pointer to `value` in `x`. If `path` is assigned a wildcard (`_`), the `walk` function will skip path creation entirely for faster evaluation."),
 	),
 	Categories: graphs,
 }
@@ -3226,6 +3241,21 @@ func category(cs ...string) []string {
 	return cs
 }
 
+// Minimal returns a shallow copy of b with the descriptions and categories and
+// named arguments stripped out.
+func (b *Builtin) Minimal() *Builtin {
+	cpy := *b
+	fargs := b.Decl.FuncArgs()
+	if fargs.Variadic != nil {
+		cpy.Decl = types.NewVariadicFunction(fargs.Args, fargs.Variadic, b.Decl.Result())
+	} else {
+		cpy.Decl = types.NewFunction(fargs.Args, b.Decl.Result())
+	}
+	cpy.Categories = nil
+	cpy.Description = ""
+	return &cpy
+}
+
 // IsDeprecated returns true if the Builtin function is deprecated and will be removed in a future release.
 func (b *Builtin) IsDeprecated() bool {
 	return b.deprecated
@@ -3272,7 +3302,7 @@ func (b *Builtin) Ref() Ref {
 // IsTargetPos returns true if a variable in the i-th position will be bound by
 // evaluating the call expression.
 func (b *Builtin) IsTargetPos(i int) bool {
-	return len(b.Decl.Args()) == i
+	return len(b.Decl.FuncArgs().Args) == i
 }
 
 func init() {

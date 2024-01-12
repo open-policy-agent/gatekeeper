@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -20,7 +20,7 @@ func exampleDeployment() *appsv1.Deployment {
 			Name:      "test",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: pointer.Int32(5),
+			Replicas: ptr.To[int64](5),
 		},
 	}
 }
@@ -117,7 +117,7 @@ func TestObject(t *testing.T) {
 	}
 	g.Eventually(k.Object(&fetched)).Should(And(
 		Not(BeNil()),
-		HaveField("Spec.Replicas", Equal(pointer.Int32(5))),
+		HaveField("Spec.Replicas", Equal(ptr.To[int64](5))),
 	))
 }
 
@@ -132,7 +132,7 @@ func TestObjectList(t *testing.T) {
 		Not(BeNil()),
 		HaveField("Items", And(
 			HaveLen(1),
-			ContainElement(HaveField("Spec.Replicas", Equal(pointer.Int32(5)))),
+			ContainElement(HaveField("Spec.Replicas", Equal(ptr.To[int64](5)))),
 		)),
 	))
 }
