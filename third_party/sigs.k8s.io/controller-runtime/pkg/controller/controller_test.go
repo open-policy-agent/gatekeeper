@@ -24,7 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/goleak"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -134,7 +134,7 @@ var _ = Describe("controller.Controller", func() {
 		})
 
 		It("should default RecoverPanic from the manager", func() {
-			m, err := manager.New(cfg, manager.Options{Controller: config.Controller{RecoverPanic: pointer.Bool(true)}})
+			m, err := manager.New(cfg, manager.Options{Controller: config.Controller{RecoverPanic: ptr.To[bool](true)}})
 			Expect(err).NotTo(HaveOccurred())
 
 			c, err := controller.New("new-controller", m, controller.Options{
@@ -150,11 +150,11 @@ var _ = Describe("controller.Controller", func() {
 		})
 
 		It("should not override RecoverPanic on the controller", func() {
-			m, err := manager.New(cfg, manager.Options{Controller: config.Controller{RecoverPanic: pointer.Bool(true)}})
+			m, err := manager.New(cfg, manager.Options{Controller: config.Controller{RecoverPanic: ptr.To[bool](true)}})
 			Expect(err).NotTo(HaveOccurred())
 
 			c, err := controller.New("new-controller", m, controller.Options{
-				RecoverPanic: pointer.Bool(false),
+				RecoverPanic: ptr.To[bool](false),
 				Reconciler:   reconcile.Func(nil),
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -167,7 +167,7 @@ var _ = Describe("controller.Controller", func() {
 		})
 
 		It("should default NeedLeaderElection from the manager", func() {
-			m, err := manager.New(cfg, manager.Options{Controller: config.Controller{NeedLeaderElection: pointer.Bool(true)}})
+			m, err := manager.New(cfg, manager.Options{Controller: config.Controller{NeedLeaderElection: ptr.To[bool](true)}})
 			Expect(err).NotTo(HaveOccurred())
 
 			c, err := controller.New("new-controller", m, controller.Options{
@@ -182,11 +182,11 @@ var _ = Describe("controller.Controller", func() {
 		})
 
 		It("should not override NeedLeaderElection on the controller", func() {
-			m, err := manager.New(cfg, manager.Options{Controller: config.Controller{NeedLeaderElection: pointer.Bool(true)}})
+			m, err := manager.New(cfg, manager.Options{Controller: config.Controller{NeedLeaderElection: ptr.To[bool](true)}})
 			Expect(err).NotTo(HaveOccurred())
 
 			c, err := controller.New("new-controller", m, controller.Options{
-				NeedLeaderElection: pointer.Bool(false),
+				NeedLeaderElection: ptr.To[bool](false),
 				Reconciler:         reconcile.Func(nil),
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -309,7 +309,7 @@ var _ = Describe("controller.Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			c, err := controller.New("new-controller", m, controller.Options{
-				NeedLeaderElection: pointer.Bool(false),
+				NeedLeaderElection: ptr.To[bool](false),
 				Reconciler:         rec,
 			})
 			Expect(err).NotTo(HaveOccurred())

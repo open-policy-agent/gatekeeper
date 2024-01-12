@@ -9,7 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 func TestReadSuites(t *testing.T) {
@@ -369,7 +369,7 @@ tests:
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
 							Violations: gator.IntStrFromInt(2),
-							Message:    pointer.String("some message"),
+							Message:    ptr.To[string]("some message"),
 						}},
 					}},
 				}},
@@ -410,7 +410,7 @@ tests:
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
 							Violations: gator.IntStrFromInt(2),
-							Message:    pointer.String("some message"),
+							Message:    ptr.To[string]("some message"),
 						}},
 					}},
 				}},
@@ -451,7 +451,7 @@ tests:
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
 							Violations: gator.IntStrFromInt(2),
-							Message:    pointer.String("some message"),
+							Message:    ptr.To[string]("some message"),
 						}},
 					}},
 				}},
@@ -492,7 +492,7 @@ tests:
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
 							Violations: gator.IntStrFromInt(2),
-							Message:    pointer.String("some message"),
+							Message:    ptr.To[string]("some message"),
 						}},
 					}},
 				}},

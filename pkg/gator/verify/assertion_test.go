@@ -6,7 +6,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 func TestAssertion_Run(t *testing.T) {
@@ -38,7 +38,7 @@ func TestAssertion_Run(t *testing.T) {
 		name: "violation with message",
 		assertion: &Assertion{
 			Violations: gator.IntStrFromInt(1),
-			Message:    pointer.String("message"),
+			Message:    ptr.To[string]("message"),
 		},
 		results: nil,
 		wantErr: gator.ErrNumViolations,
@@ -46,7 +46,7 @@ func TestAssertion_Run(t *testing.T) {
 		name: "no violations with message",
 		assertion: &Assertion{
 			Violations: gator.IntStrFromStr("no"),
-			Message:    pointer.String("message"),
+			Message:    ptr.To[string]("message"),
 		},
 		results: nil,
 		wantErr: nil,
@@ -54,7 +54,7 @@ func TestAssertion_Run(t *testing.T) {
 		name: "fail no violations with message",
 		assertion: &Assertion{
 			Violations: gator.IntStrFromStr("no"),
-			Message:    pointer.String("message"),
+			Message:    ptr.To[string]("message"),
 		},
 		results: []*types.Result{{
 			Msg: "message",
