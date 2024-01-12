@@ -983,7 +983,7 @@ func TestRunner_Run(t *testing.T) {
 					}, {
 						Name:       "missing-namespace",
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message:    ptr.To[string]("missing Namespace")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message: ptr.To[string]("missing Namespace")}},
 					}},
 				}},
 			},
