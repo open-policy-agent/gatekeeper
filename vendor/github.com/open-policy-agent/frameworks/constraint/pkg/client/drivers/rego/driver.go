@@ -25,7 +25,7 @@ import (
 	"github.com/open-policy-agent/opa/topdown"
 	"github.com/open-policy-agent/opa/topdown/print"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 )
 
@@ -235,7 +235,7 @@ func (d *Driver) eval(ctx context.Context, compiler *ast.Compiler, target string
 	if d.traceEnabled || cfg.TracingEnabled {
 		b := &bytes.Buffer{}
 		topdown.PrettyTrace(b, *buf)
-		t = pointer.String(b.String())
+		t = ptr.To[string](b.String())
 	}
 
 	return res, t, err

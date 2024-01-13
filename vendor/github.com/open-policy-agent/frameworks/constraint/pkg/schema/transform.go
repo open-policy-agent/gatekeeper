@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 // AddPreserveUnknownFields recurses through an *apiextensionsv1.JSONSchemaProps
@@ -30,7 +30,7 @@ func AddPreserveUnknownFields(sch *apiextensionsv1.JSONSchemaProps) error {
 	// An object can have values not described in the schema.  A blank Type could be anything,
 	// including an object, so we add x-kubernetes-preserve-unknown-fields: true to both.
 	case "", "object":
-		sch.XPreserveUnknownFields = pointer.Bool(true)
+		sch.XPreserveUnknownFields = ptr.To[bool](true)
 	case "array":
 		// If the type is array, the schema of the array's items must be structural.  If the schema
 		// is undefined, we must add a blank one with x-kubernetes-preserve-unknown-fields to meet
@@ -38,7 +38,7 @@ func AddPreserveUnknownFields(sch *apiextensionsv1.JSONSchemaProps) error {
 		if sch.Items == nil || (sch.Items.Schema == nil && sch.Items.JSONSchemas == nil) {
 			sch.Items = &apiextensionsv1.JSONSchemaPropsOrArray{
 				Schema: &apiextensionsv1.JSONSchemaProps{
-					XPreserveUnknownFields: pointer.Bool(true),
+					XPreserveUnknownFields: ptr.To[bool](true),
 				},
 			}
 		}
