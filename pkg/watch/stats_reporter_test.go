@@ -6,6 +6,7 @@ import (
 
 	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
@@ -17,12 +18,12 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
 	meter = mp.Meter("test")
 
-	// Ensure the pipeline has a callback setup
-	gvkIntentCountM, err = meter.Int64ObservableGauge(gvkIntentCountMetricName)
-	assert.NoError(t, err)
-	gvkCountM, err = meter.Int64ObservableGauge(gvkCountMetricName)
-	assert.NoError(t, err)
 	r, err = newStatsReporter()
+	assert.NoError(t, err)
+	// Ensure the pipeline has a callback setup
+	_, err = meter.Int64ObservableGauge(gvkIntentCountMetricName, metric.WithInt64Callback(r.observeGvkIntentCount))
+	assert.NoError(t, err)
+	_, err = meter.Int64ObservableGauge(gvkCountMetricName, metric.WithInt64Callback(r.observeGvkCount))
 	assert.NoError(t, err)
 	return rdr, r
 }

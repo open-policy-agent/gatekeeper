@@ -31,7 +31,7 @@ func init() {
 	}
 }
 
-func (r *reporter) observeConstraints(ctx context.Context, observer metric.Observer) error {
+func (r *reporter) observeConstraints(_ context.Context, observer metric.Observer) error {
 	r.mux.RLock()
 	defer r.mux.RUnlock()
 	for t, v := range r.constraintsReport {
@@ -40,7 +40,7 @@ func (r *reporter) observeConstraints(ctx context.Context, observer metric.Obser
 	return nil
 }
 
-func (r *reporter) reportConstraints(ctx context.Context, t tags, v int64) error {
+func (r *reporter) reportConstraints(_ context.Context, t tags, v int64) error {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 	if r.constraintsReport == nil {

@@ -14,7 +14,6 @@ import (
 
 const (
 	Name                          = "opentelemetry"
-	metricPrefix                  = "gatekeeper"
 	defaultMetricsCollectInterval = 10 * time.Second
 	defaultMetricsTimeout         = 30 * time.Second
 )

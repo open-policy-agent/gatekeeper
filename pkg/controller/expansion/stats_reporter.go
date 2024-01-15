@@ -64,7 +64,7 @@ func (r *etRegistry) remove(key types.NamespacedName) {
 	r.dirty = true
 }
 
-func (r *etRegistry) report(ctx context.Context) {
+func (r *etRegistry) report(_ context.Context) {
 	if !r.dirty {
 		return
 	}

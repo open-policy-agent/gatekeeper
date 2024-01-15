@@ -9,6 +9,7 @@ import (
 	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
@@ -20,14 +21,13 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
 	meter = mp.Meter("test")
 
-	syncM, err = meter.Int64ObservableGauge(syncMetricName)
+	r, err = NewStatsReporter()
+	assert.NoError(t, err)
+	_, err = meter.Int64ObservableGauge(syncMetricName, metric.WithInt64Callback(r.observeSync))
 	assert.NoError(t, err)
 	syncDurationM, err = meter.Float64Histogram(syncDurationMetricName)
 	assert.NoError(t, err)
-	lastRunSyncM, err = meter.Float64ObservableGauge(lastRunTimeMetricName)
-	assert.NoError(t, err)
-
-	r, err = NewStatsReporter()
+	_, err = meter.Float64ObservableGauge(lastRunTimeMetricName, metric.WithFloat64Callback(r.observeLastSync))
 	assert.NoError(t, err)
 
 	return rdr, r

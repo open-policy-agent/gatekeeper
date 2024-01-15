@@ -68,7 +68,7 @@ func newPromSrv(port int) *http.Server {
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%v", port),
 		Handler:           sm,
-		ReadHeaderTimeout: 30 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	return server
 }

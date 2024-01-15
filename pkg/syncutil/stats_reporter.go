@@ -2,7 +2,6 @@ package syncutil
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -27,17 +26,17 @@ const (
 )
 
 var (
-	syncM         metric.Int64ObservableGauge
 	syncDurationM metric.Float64Histogram
-	lastRunSyncM  metric.Float64ObservableGauge
 	meter         metric.Meter
+	r             *Reporter
 )
 
 func init() {
 	var err error
 	meter = otel.GetMeterProvider().Meter("gatekeeper")
+	r = &Reporter{now: now}
 
-	syncM, err = meter.Int64ObservableGauge(syncMetricName, metric.WithDescription("Total number of resources of each kind being cached"))
+	_, err = meter.Int64ObservableGauge(syncMetricName, metric.WithDescription("Total number of resources of each kind being cached"), metric.WithInt64Callback(r.observeSync))
 	if err != nil {
 		panic(err)
 	}
@@ -45,7 +44,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	lastRunSyncM, err = meter.Float64ObservableGauge(lastRunTimeMetricName, metric.WithDescription("Timestamp of last sync operation"), metric.WithUnit("s"))
+	_, err = meter.Float64ObservableGauge(lastRunTimeMetricName, metric.WithDescription("Timestamp of last sync operation"), metric.WithUnit("s"), metric.WithFloat64Callback(r.observeLastSync))
 	if err != nil {
 		panic(err)
 	}
@@ -180,14 +179,7 @@ type Reporter struct {
 
 // NewStatsReporter creates a reporter for sync metrics.
 func NewStatsReporter() (*Reporter, error) {
-	r := &Reporter{now: now}
-	return r, r.registerCallback()
-}
-
-func (r *Reporter) registerCallback() error {
-	_, err1 := meter.RegisterCallback(r.observeSync, syncM)
-	_, err2 := meter.RegisterCallback(r.observeLastSync, lastRunSyncM)
-	return errors.Join(err1, err2)
+	return r, nil
 }
 
 func (r *Reporter) ReportSyncDuration(d time.Duration) error {
@@ -213,18 +205,18 @@ func (r *Reporter) ReportSync(t Tags, v int64) error {
 	return nil
 }
 
-func (r *Reporter) observeLastSync(_ context.Context, observer metric.Observer) error {
+func (r *Reporter) observeLastSync(_ context.Context, observer metric.Float64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	observer.ObserveFloat64(lastRunSyncM, r.lastRun)
+	observer.Observe(r.lastRun)
 	return nil
 }
 
-func (r *Reporter) observeSync(_ context.Context, observer metric.Observer) error {
+func (r *Reporter) observeSync(_ context.Context, observer metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for t, v := range r.syncReport {
-		observer.ObserveInt64(syncM, v, metric.WithAttributes(attribute.String(kindKey, t.Kind), attribute.String(statusKey, string(t.Status))))
+		observer.Observe(v, metric.WithAttributes(attribute.String(kindKey, t.Kind), attribute.String(statusKey, string(t.Status))))
 	}
 	return nil
 }
