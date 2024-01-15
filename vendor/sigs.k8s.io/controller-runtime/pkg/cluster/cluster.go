@@ -28,7 +28,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/internal/log"
 
@@ -248,7 +248,7 @@ func New(config *rest.Config, opts ...Option) (Cluster, error) {
 		if clientOpts.DryRun == nil && options.DryRunClient {
 			// For backward compatibility, the DryRunClient (if set) option should override
 			// the DryRun option in the client (if unset).
-			clientOpts.DryRun = pointer.Bool(true)
+			clientOpts.DryRun = ptr.To[bool](true)
 		}
 	}
 	clientWriter, err := options.NewClient(config, clientOpts)
