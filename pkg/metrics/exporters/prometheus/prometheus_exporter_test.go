@@ -8,17 +8,9 @@ import (
 func TestPrometheusExporter(t *testing.T) {
 	const expectedAddr = ":8888"
 
-	e, err := newExporter()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if e == nil {
-		t.Error("newPrometheusExporter() should not return nil")
-	}
-
-	srv := newPromSrv(e, *prometheusPort)
+	srv := newPromSrv(*prometheusPort)
 	go func() {
-		err = srv.ListenAndServe()
+		err := srv.ListenAndServe()
 		if err != nil {
 			t.Error(err)
 		}

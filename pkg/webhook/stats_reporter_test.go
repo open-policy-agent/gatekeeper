@@ -5,7 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"go.opencensus.io/stats/view"
+	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
+	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 )
 
 const (
@@ -15,117 +20,119 @@ const (
 	wantMinValidationSeconds float64 = 1
 	wantMaxValidationSeconds float64 = 5
 
-	wantCount     int64 = 2
-	wantRowLength int   = 1
+	wantCount     uint64 = 2
+	wantRowLength int    = 1
 
 	dryRun string = "false"
 )
 
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r StatsReporter) {
+	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter := mp.Meter("test")
+
+	// Ensure the pipeline has a callback setup
+	validationResponseTimeInSecM, err = meter.Float64Histogram(validationRequestDurationMetricName)
+	assert.NoError(t, err)
+
+	validationRequestCountM, err = meter.Int64Counter(validationRequestCountMetricName)
+	assert.NoError(t, err)
+
+	// Ensure the pipeline has a callback setup
+	mutationResponseTimeInSecM, err = meter.Float64Histogram(mutationRequestDurationMetricName)
+	assert.NoError(t, err)
+
+	mutationRequestCountM, err = meter.Int64Counter(mutationRequestCountMetricName)
+	assert.NoError(t, err)
+
+	r, err = newStatsReporter()
+	assert.NoError(t, err)
+	return rdr, r
+}
+
 func TestValidationReportRequest(t *testing.T) {
-	wantTags := map[string]string{
-		"admission_status": "allow",
-		"admission_dryrun": "false",
-	}
-
 	ctx := context.Background()
-	r, err := newStatsReporter()
-	if err != nil {
-		t.Fatalf("got newStatsReporter() error %v, want nil", err)
+
+	want1 := metricdata.Metrics{
+		Name: validationRequestDurationMetricName,
+		Data: metricdata.Histogram[float64]{
+			Temporality: metricdata.CumulativeTemporality,
+			DataPoints: []metricdata.HistogramDataPoint[float64]{
+				{
+					Attributes:   attribute.NewSet(attribute.String(admissionStatusKey, string(successResponse))),
+					Count:        wantCount,
+					Bounds:       []float64{0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000},
+					BucketCounts: []uint64{0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+					Min:          metricdata.NewExtrema[float64](wantMinValidationSeconds),
+					Max:          metricdata.NewExtrema[float64](wantMaxValidationSeconds),
+					Sum:          6,
+				},
+			},
+		},
+	}
+	want2 := metricdata.Metrics{
+		Name: validationRequestCountMetricName,
+		Data: metricdata.Sum[int64]{
+			Temporality: metricdata.CumulativeTemporality,
+			DataPoints: []metricdata.DataPoint[int64]{
+				{Attributes: attribute.NewSet(attribute.String(admissionDryRunKey, dryRun), attribute.String(admissionStatusKey, string(successResponse))), Value: 2},
+			},
+			IsMonotonic: true,
+		},
 	}
 
-	err = r.ReportValidationRequest(ctx, allowResponse, dryRun, minValidationDuration)
-	if err != nil {
-		t.Fatalf("got ReportValidationRequest() error = %v, want nil", err)
-	}
+	rdr, r := initializeTestInstruments(t)
 
-	err = r.ReportValidationRequest(ctx, allowResponse, dryRun, maxValidationDuration)
-	if err != nil {
-		t.Fatalf("got ReportValidationRequest() error = %v, want nil", err)
-	}
+	assert.NoError(t, r.ReportValidationRequest(ctx, successResponse, dryRun, minValidationDuration))
+	assert.NoError(t, r.ReportValidationRequest(ctx, successResponse, dryRun, maxValidationDuration))
 
-	check(t, wantTags, validationRequestCountMetricName, validationRequestDurationMetricName)
+	rm := &metricdata.ResourceMetrics{}
+	assert.NoError(t, rdr.Collect(ctx, rm))
+
+	metricdatatest.AssertEqual(t, want1, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+	metricdatatest.AssertEqual(t, want2, rm.ScopeMetrics[0].Metrics[1], metricdatatest.IgnoreTimestamp())
 }
 
 func TestMutationReportRequest(t *testing.T) {
-	wantTags := map[string]string{
-		"mutation_status": "success",
-	}
-
 	ctx := context.Background()
-	r, err := newStatsReporter()
-	if err != nil {
-		t.Fatalf("got newStatsReporter() error %v, want nil", err)
+
+	want1 := metricdata.Metrics{
+		Name: mutationRequestDurationMetricName,
+		Data: metricdata.Histogram[float64]{
+			Temporality: metricdata.CumulativeTemporality,
+			DataPoints: []metricdata.HistogramDataPoint[float64]{
+				{
+					Attributes:   attribute.NewSet(attribute.String(mutationStatusKey, string(successResponse))),
+					Count:        wantCount,
+					Bounds:       []float64{0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000},
+					BucketCounts: []uint64{0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+					Min:          metricdata.NewExtrema[float64](wantMinValidationSeconds),
+					Max:          metricdata.NewExtrema[float64](wantMaxValidationSeconds),
+					Sum:          6,
+				},
+			},
+		},
+	}
+	want2 := metricdata.Metrics{
+		Name: mutationRequestCountMetricName,
+		Data: metricdata.Sum[int64]{
+			Temporality: metricdata.CumulativeTemporality,
+			DataPoints: []metricdata.DataPoint[int64]{
+				{Attributes: attribute.NewSet(attribute.String(mutationStatusKey, string(successResponse))), Value: 2},
+			},
+			IsMonotonic: true,
+		},
 	}
 
-	err = r.ReportMutationRequest(ctx, successResponse, minValidationDuration)
-	if err != nil {
-		t.Fatalf("got ReportMutationRequest error %v, want nil", err)
-	}
+	rdr, r := initializeTestInstruments(t)
 
-	err = r.ReportMutationRequest(ctx, successResponse, maxValidationDuration)
-	if err != nil {
-		t.Fatalf("got ReportRequest error %v, want nil", err)
-	}
+	assert.NoError(t, r.ReportMutationRequest(ctx, successResponse, minValidationDuration))
+	assert.NoError(t, r.ReportMutationRequest(ctx, successResponse, maxValidationDuration))
 
-	check(t, wantTags, mutationRequestCountMetricName, mutationRequestDurationMetricName)
-}
+	rm := &metricdata.ResourceMetrics{}
+	assert.NoError(t, rdr.Collect(ctx, rm))
 
-func check(t *testing.T, wantTags map[string]string, requestCountMetricName string, requestDurationMetricName string) {
-	// count test
-	row := checkData(t, requestCountMetricName, wantRowLength)
-
-	gotCount, ok := row.Data.(*view.CountData)
-	if !ok {
-		t.Fatalf("got %q type %T, want %T", requestCountMetricName, row.Data, &view.CountData{})
-	}
-	for _, gotTag := range row.Tags {
-		tagName := gotTag.Key.Name()
-		want := wantTags[tagName]
-		if gotTag.Value != want {
-			t.Errorf("got tag %q value %q, want %q", tagName, gotTag.Value, want)
-		}
-	}
-
-	if gotCount.Value != wantCount {
-		t.Errorf("got %q = %v, want %v", requestCountMetricName, gotCount.Value, wantCount)
-	}
-
-	// Duration test
-	row = checkData(t, requestDurationMetricName, wantRowLength)
-	gotDuration, ok := row.Data.(*view.DistributionData)
-	if !ok {
-		t.Fatalf("got %q type %T, want %T", requestDurationMetricName, row.Data, &view.DistributionData{})
-	}
-
-	for _, gotTag := range row.Tags {
-		tagName := gotTag.Key.Name()
-		want := wantTags[tagName]
-		if gotTag.Value != want {
-			t.Errorf("got tag %q value %q, want %q", tagName, gotTag.Value, want)
-		}
-	}
-
-	if gotDuration.Min != wantMinValidationSeconds {
-		t.Errorf("got %q min = %v, want %v", requestDurationMetricName, gotDuration.Min, wantMinValidationSeconds)
-	}
-
-	if gotDuration.Max != wantMaxValidationSeconds {
-		t.Errorf("got %q max = %v, want %v", requestDurationMetricName, gotDuration.Max, wantMaxValidationSeconds)
-	}
-}
-
-func checkData(t *testing.T, name string, wantRowLength int) *view.Row {
-	row, err := view.RetrieveData(name)
-	if err != nil {
-		t.Fatalf("got RetrieveData(%q) error %v, want nil", name, err)
-	}
-
-	if len(row) != wantRowLength {
-		t.Fatalf("got row length %v, want %v", len(row), wantRowLength)
-	}
-
-	if row[0].Data == nil {
-		t.Fatalf("got row[0].Data = nil, want non-nil")
-	}
-	return row[0]
+	metricdatatest.AssertEqual(t, want1, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+	metricdatatest.AssertEqual(t, want2, rm.ScopeMetrics[0].Metrics[1], metricdatatest.IgnoreTimestamp())
 }
