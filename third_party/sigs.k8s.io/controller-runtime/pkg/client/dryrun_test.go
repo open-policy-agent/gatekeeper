@@ -28,7 +28,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -41,7 +41,7 @@ var _ = Describe("DryRunClient", func() {
 	ctx := context.Background()
 
 	getClient := func() client.Client {
-		cl, err := client.New(cfg, client.Options{DryRun: pointer.Bool(true)})
+		cl, err := client.New(cfg, client.Options{DryRun: ptr.To[bool](true)})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cl).NotTo(BeNil())
 		return cl

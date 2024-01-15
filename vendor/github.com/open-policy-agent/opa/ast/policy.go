@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/open-policy-agent/opa/ast/internal/tokens"
 	astJSON "github.com/open-policy-agent/opa/ast/json"
 	"github.com/open-policy-agent/opa/util"
 )
@@ -42,6 +43,10 @@ var FunctionArgRootDocument = VarTerm("args")
 // FutureRootDocument names the document containing new, to-become-default,
 // features.
 var FutureRootDocument = VarTerm("future")
+
+// RegoRootDocument names the document containing new, to-become-default,
+// features in a future versioned release.
+var RegoRootDocument = VarTerm("rego")
 
 // RootDocumentNames contains the names of top-level documents that can be
 // referred to in modules and queries.
@@ -146,6 +151,7 @@ type (
 		Rules       []*Rule        `json:"rules,omitempty"`
 		Comments    []*Comment     `json:"comments,omitempty"`
 		stmts       []Statement
+		regoVersion RegoVersion
 	}
 
 	// Comment contains the raw text from the comment in the definition.
@@ -191,7 +197,8 @@ type (
 		// on the rule (e.g., printing, comparison, visiting, etc.)
 		Module *Module `json:"-"`
 
-		jsonOptions astJSON.Options
+		generatedBody bool
+		jsonOptions   astJSON.Options
 	}
 
 	// Head represents the head of a rule.
@@ -204,7 +211,9 @@ type (
 		Assign    bool      `json:"assign,omitempty"`
 		Location  *Location `json:"location,omitempty"`
 
-		jsonOptions astJSON.Options
+		keywords       []tokens.Token
+		generatedValue bool
+		jsonOptions    astJSON.Options
 	}
 
 	// Args represents zero or more arguments to a rule.
@@ -388,6 +397,14 @@ func (mod *Module) UnmarshalJSON(bs []byte) error {
 	})
 
 	return nil
+}
+
+func (mod *Module) regoV1Compatible() bool {
+	return mod.regoVersion == RegoV1 || mod.regoVersion == RegoV0CompatV1
+}
+
+func (mod *Module) RegoVersion() RegoVersion {
+	return mod.regoVersion
 }
 
 // NewComment returns a new Comment object.
@@ -709,6 +726,10 @@ func (rule *Rule) String() string {
 	return strings.Join(buf, " ")
 }
 
+func (rule *Rule) isFunction() bool {
+	return len(rule.Head.Args) > 0
+}
+
 func (rule *Rule) setJSONOptions(opts astJSON.Options) {
 	rule.jsonOptions = opts
 	if rule.Location != nil {
@@ -905,6 +926,7 @@ func (head *Head) Copy() *Head {
 	cpy.Args = head.Args.Copy()
 	cpy.Key = head.Key.Copy()
 	cpy.Value = head.Value.Copy()
+	cpy.keywords = nil
 	return &cpy
 }
 
