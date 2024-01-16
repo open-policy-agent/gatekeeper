@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
-	"go.opentelemetry.io/otel"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/common"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/sdk/metric"
 )
@@ -25,27 +24,21 @@ var (
 
 func Start(ctx context.Context) error {
 	if *otlpEndPoint == "" {
+		common.AddReader(nil)
 		return fmt.Errorf("otlp-endpoint must be specified")
 	}
+	var err error
 	exp, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithInsecure(), otlpmetrichttp.WithEndpoint(*otlpEndPoint))
 	if err != nil {
+		common.AddReader(nil)
 		return err
 	}
-	meterProvider := metric.NewMeterProvider(
-		metric.WithReader(metric.NewPeriodicReader(
-			exp,
-			metric.WithTimeout(defaultMetricsTimeout),
-			metric.WithInterval(*metricInterval),
-		)),
-		metric.WithView(view.Views()...),
-	)
-
-	otel.SetMeterProvider(meterProvider)
-	defer func() {
-		if err := meterProvider.Shutdown(ctx); err != nil {
-			panic(err)
-		}
-	}()
+	reader := metric.WithReader(metric.NewPeriodicReader(
+		exp,
+		metric.WithTimeout(defaultMetricsTimeout),
+		metric.WithInterval(*metricInterval),
+	))
+	common.AddReader(reader)
 
 	<-ctx.Done()
 	return nil

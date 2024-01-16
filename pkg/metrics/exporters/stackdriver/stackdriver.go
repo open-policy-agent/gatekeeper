@@ -8,10 +8,9 @@ import (
 
 	traceapi "cloud.google.com/go/trace/apiv2"
 	stackdriver "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/common"
 	"go.opentelemetry.io/contrib/detectors/aws/ec2"
 	"go.opentelemetry.io/contrib/detectors/gcp"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -35,9 +34,11 @@ func Start(ctx context.Context) error {
 	// Verify that default stackdriver credentials are available
 	if _, err := google.FindDefaultCredentials(ctx, traceapi.DefaultAuthScopes()...); err != nil {
 		if *ignoreMissingCreds {
+			common.AddReader(nil)
 			log.Error(err, "Missing credentials, cannot start stackdriver exporter")
 			return nil
 		}
+		common.AddReader(nil)
 		return err
 	}
 
@@ -49,6 +50,7 @@ func Start(ctx context.Context) error {
 			log.Error(err, "Error initializing stackdriver exporter, not exporting stackdriver metrics")
 			return nil
 		}
+		common.AddReader(nil)
 		return err
 	}
 	res, err := resource.New(ctx,
@@ -57,17 +59,12 @@ func Start(ctx context.Context) error {
 		resource.WithFromEnv(),
 	)
 	if err != nil {
+		common.AddReader(nil)
 		return err
 	}
 	reader := metric.NewPeriodicReader(e, metric.WithInterval(*metricInterval))
-	meterProvider := metric.NewMeterProvider(
-		metric.WithReader(reader),
-		metric.WithView(view.Views()...),
-		metric.WithResource(res),
-	)
-
-	otel.SetMeterProvider(meterProvider)
-	otel.SetLogger(logf.Log.WithName("metrics"))
+	common.SetResource(res)
+	common.AddReader(metric.WithReader(reader))
 
 	<-ctx.Done()
 	return nil

@@ -7,9 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/common"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -27,21 +26,19 @@ var (
 )
 
 func Start(ctx context.Context) error {
+	var err error
 	e, err := prometheus.New(
 		prometheus.WithNamespace(namespace),
 		prometheus.WithoutScopeInfo(),
 	)
 	if err != nil {
+		common.AddReader(nil)
 		return err
 	}
-	meterProvider := metric.NewMeterProvider(
-		metric.WithReader(e),
-		metric.WithView(view.Views()...),
-	)
-	server := newPromSrv(*prometheusPort)
-	otel.SetMeterProvider(meterProvider)
-	otel.SetLogger(logf.Log.WithName("metrics"))
+	reader := metric.WithReader(e)
+	common.AddReader(reader)
 
+	server := newPromSrv(*prometheusPort)
 	errCh := make(chan error)
 	srv := func() {
 		err := server.ListenAndServe()
