@@ -30,7 +30,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllertest"
@@ -525,7 +525,7 @@ var _ = Describe("Eventhandler", func() {
 						Name:       "foo2-parent",
 						Kind:       "ReplicaSet",
 						APIVersion: "apps/v1",
-						Controller: pointer.Bool(true),
+						Controller: ptr.To[bool](true),
 					},
 					{
 						Name:       "foo3-parent",
@@ -536,7 +536,7 @@ var _ = Describe("Eventhandler", func() {
 						Name:       "foo4-parent",
 						Kind:       "ReplicaSet",
 						APIVersion: "apps/v1",
-						Controller: pointer.Bool(true),
+						Controller: ptr.To[bool](true),
 					},
 					{
 						Name:       "foo5-parent",

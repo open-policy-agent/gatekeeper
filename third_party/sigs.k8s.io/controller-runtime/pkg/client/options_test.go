@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -112,7 +112,7 @@ var _ = Describe("CreateOptions", func() {
 
 var _ = Describe("DeleteOptions", func() {
 	It("Should set GracePeriodSeconds", func() {
-		o := &client.DeleteOptions{GracePeriodSeconds: utilpointer.Int64(42)}
+		o := &client.DeleteOptions{GracePeriodSeconds: ptr.To[int64](42)}
 		newDeleteOpts := &client.DeleteOptions{}
 		o.ApplyToDelete(newDeleteOpts)
 		Expect(newDeleteOpts).To(Equal(o))
@@ -185,7 +185,7 @@ var _ = Describe("PatchOptions", func() {
 		Expect(newPatchOpts).To(Equal(o))
 	})
 	It("Should set Force", func() {
-		o := &client.PatchOptions{Force: utilpointer.Bool(true)}
+		o := &client.PatchOptions{Force: ptr.To[bool](true)}
 		newPatchOpts := &client.PatchOptions{}
 		o.ApplyToPatch(newPatchOpts)
 		Expect(newPatchOpts).To(Equal(o))
@@ -218,7 +218,7 @@ var _ = Describe("DeleteAllOfOptions", func() {
 		Expect(newDeleteAllOfOpts).To(Equal(o))
 	})
 	It("Should set DeleleteOptions", func() {
-		o := &client.DeleteAllOfOptions{DeleteOptions: client.DeleteOptions{GracePeriodSeconds: utilpointer.Int64(44)}}
+		o := &client.DeleteAllOfOptions{DeleteOptions: client.DeleteOptions{GracePeriodSeconds: ptr.To[int64](44)}}
 		newDeleteAllOfOpts := &client.DeleteAllOfOptions{}
 		o.ApplyToDeleteAllOf(newDeleteAllOfOpts)
 		Expect(newDeleteAllOfOpts).To(Equal(o))

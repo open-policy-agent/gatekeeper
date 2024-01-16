@@ -11,7 +11,7 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 var scheme = runtime.NewScheme()
@@ -26,7 +26,7 @@ func init() {
 func CreateCRD(templ *templates.ConstraintTemplate, schema *apiextensions.JSONSchemaProps) (*apiextensions.CustomResourceDefinition, error) {
 	crd := &apiextensions.CustomResourceDefinition{
 		Spec: apiextensions.CustomResourceDefinitionSpec{
-			PreserveUnknownFields: pointer.Bool(false),
+			PreserveUnknownFields: ptr.To[bool](false),
 			Group:                 constraints.Group,
 			Names: apiextensions.CustomResourceDefinitionNames{
 				Kind:       templ.Spec.CRD.Spec.Names.Kind,
