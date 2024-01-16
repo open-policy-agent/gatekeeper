@@ -21,8 +21,7 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
 	meter = mp.Meter("test")
 
-	r, err = NewStatsReporter()
-	assert.NoError(t, err)
+	r = &Reporter{now: now}
 	_, err = meter.Int64ObservableGauge(syncMetricName, metric.WithInt64Callback(r.observeSync))
 	assert.NoError(t, err)
 	syncDurationM, err = meter.Float64Histogram(syncDurationMetricName)
