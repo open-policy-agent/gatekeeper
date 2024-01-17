@@ -9,6 +9,7 @@ import (
 	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
@@ -18,16 +19,16 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r S
 	var err error
 	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter = mp.Meter("test")
+	r = NewStatsReporter()
+	meter := mp.Meter("test")
 	responseTimeInSecM, err = meter.Float64Histogram(mutatorIngestionDurationMetricName)
 	assert.NoError(t, err)
 	mutatorIngestionCountM, err = meter.Int64Counter(mutatorIngestionCountMetricName)
 	assert.NoError(t, err)
-	mutatorsM, err = meter.Int64ObservableGauge(mutatorsMetricName)
+	_, err = meter.Int64ObservableGauge(mutatorsMetricName, metric.WithInt64Callback(r.(*reporter).observeMutatorsStatus))
 	assert.NoError(t, err)
-	conflictingMutatorsM, err = meter.Int64ObservableGauge(mutatorsConflictingCountMetricsName)
+	_, err = meter.Int64ObservableGauge(mutatorsConflictingCountMetricsName, metric.WithInt64Callback(r.(*reporter).observeMutatorsInConflict))
 	assert.NoError(t, err)
-	r = NewStatsReporter()
 
 	return rdr, r
 }

@@ -24,18 +24,26 @@ const (
 )
 
 var (
-	ctM             metric.Int64ObservableGauge
 	ingestCountM    metric.Int64Counter
 	ingestDurationM metric.Float64Histogram
-	meter           metric.Meter
 )
 
-func init() {
+func (r *reporter) reportIngestDuration(ctx context.Context, status metrics.Status, d time.Duration) error {
+	ingestDurationM.Record(ctx, d.Seconds(), metric.WithAttributes(attribute.String(statusKey, string(status))))
+	ingestCountM.Add(ctx, 1, metric.WithAttributes(attribute.String(statusKey, string(status))))
+	return nil
+}
+
+// newStatsReporter creates a reporter for watch metrics.
+func newStatsReporter() *reporter {
 	var err error
-	meter = otel.GetMeterProvider().Meter("gatekeeper")
-	ctM, err = meter.Int64ObservableGauge(
+	reg := &ctRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
+	r := &reporter{registry: reg}
+	meter := otel.GetMeterProvider().Meter("gatekeeper")
+	_, err = meter.Int64ObservableGauge(
 		ctMetricName,
 		metric.WithDescription(ctDesc),
+		metric.WithInt64Callback(r.observeCTM),
 	)
 
 	if err != nil {
@@ -65,19 +73,6 @@ func init() {
 			},
 		},
 	))
-}
-
-func (r *reporter) reportIngestDuration(ctx context.Context, status metrics.Status, d time.Duration) error {
-	ingestDurationM.Record(ctx, d.Seconds(), metric.WithAttributes(attribute.String(statusKey, string(status))))
-	ingestCountM.Add(ctx, 1, metric.WithAttributes(attribute.String(statusKey, string(status))))
-	return nil
-}
-
-// newStatsReporter creates a reporter for watch metrics.
-func newStatsReporter() *reporter {
-	reg := &ctRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
-	r := &reporter{registry: reg}
-	_ = r.registerCallback()
 	return r
 }
 
@@ -139,16 +134,11 @@ func (r *ctRegistry) report(_ context.Context, mReporter *reporter) {
 	}
 }
 
-func (r *reporter) registerCallback() error {
-	_, err := meter.RegisterCallback(r.observeCTM, ctM)
-	return err
-}
-
-func (r *reporter) observeCTM(_ context.Context, o metric.Observer) error {
+func (r *reporter) observeCTM(_ context.Context, o metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for status, count := range r.ctReport {
-		o.ObserveInt64(ctM, count, metric.WithAttributes(attribute.String(statusKey, string(status))))
+		o.Observe(count, metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
 	return nil
 }

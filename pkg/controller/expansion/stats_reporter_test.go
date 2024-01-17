@@ -8,6 +8,7 @@ import (
 	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
@@ -89,13 +90,13 @@ func TestEtRegistry_remove(t *testing.T) {
 
 func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *etRegistry) {
 	var err error
+	r = newRegistry()
 	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter = mp.Meter("test")
+	meter := mp.Meter("test")
 
-	etM, err = meter.Int64ObservableGauge(etMetricName)
+	_, err = meter.Int64ObservableGauge(etMetricName, metric.WithInt64Callback(r.observeETM))
 	assert.NoError(t, err)
-	r = newRegistry()
 
 	return rdr, r
 }

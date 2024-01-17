@@ -16,10 +16,10 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 	var err error
 	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter = mp.Meter("test")
-
 	r, err = newStatsReporter()
 	assert.NoError(t, err)
+	meter := mp.Meter("test")
+
 	// Ensure the pipeline has a callback setup
 	_, err = meter.Int64ObservableGauge(gvkIntentCountMetricName, metric.WithInt64Callback(r.observeGvkIntentCount))
 	assert.NoError(t, err)

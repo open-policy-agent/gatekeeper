@@ -10,6 +10,7 @@ import (
 	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
@@ -17,20 +18,19 @@ import (
 
 func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
 	var err error
+	r, err = newStatsReporter()
+	assert.NoError(t, err)
 	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter = mp.Meter("test")
+	meter := mp.Meter("test")
 
-	violationsM, err = meter.Int64ObservableGauge(violationsMetricName)
+	_, err = meter.Int64ObservableGauge(violationsMetricName, metric.WithInt64Callback(r.observeTotalViolations))
 	assert.NoError(t, err)
 	auditDurationM, err = meter.Float64Histogram(auditDurationMetricName)
 	assert.NoError(t, err)
-	lastRunStartTimeM, err = meter.Float64ObservableGauge(lastRunStartTimeMetricName)
+	_, err = meter.Float64ObservableGauge(lastRunStartTimeMetricName, metric.WithFloat64Callback(r.observeRunStart))
 	assert.NoError(t, err)
-	lastRunEndTimeM, err = meter.Float64ObservableGauge(lastRunEndTimeMetricName)
-	assert.NoError(t, err)
-
-	r, err = newStatsReporter()
+	_, err = meter.Float64ObservableGauge(lastRunEndTimeMetricName, metric.WithFloat64Callback(r.observeRunEnd))
 	assert.NoError(t, err)
 
 	return rdr, r

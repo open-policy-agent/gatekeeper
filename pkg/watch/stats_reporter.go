@@ -13,33 +13,7 @@ const (
 	gvkIntentCountMetricName = "watch_manager_intended_watch_gvk"
 )
 
-var (
-	meter metric.Meter
-	r     *reporter
-)
-
-func init() {
-	var err error
-	meterProvider := otel.GetMeterProvider()
-	meter = meterProvider.Meter("gatekeeper")
-	r = &reporter{}
-	_, err = meter.Int64ObservableGauge(
-		gvkCountMetricName,
-		metric.WithDescription("The total number of Group/Version/Kinds currently watched by the watch manager"),
-		metric.WithInt64Callback(r.observeGvkCount),
-	)
-	if err != nil {
-		panic(err)
-	}
-	_, err = meter.Int64ObservableGauge(
-		gvkIntentCountMetricName,
-		metric.WithDescription("The total number of Group/Version/Kinds that the watch manager has instructions to watch. This could differ from the actual count due to resources being pending, non-existent, or a failure of the watch manager to restart"),
-		metric.WithInt64Callback(r.observeGvkIntentCount),
-	)
-	if err != nil {
-		panic(err)
-	}
-}
+var r *reporter
 
 func (r *reporter) reportGvkCount(count int64) error {
 	r.mu.Lock()
@@ -57,6 +31,28 @@ func (r *reporter) reportGvkIntentCount(count int64) error {
 
 // newStatsReporter creates a reporter for watch metrics.
 func newStatsReporter() (*reporter, error) {
+	if r == nil {
+		var err error
+		meterProvider := otel.GetMeterProvider()
+		meter := meterProvider.Meter("gatekeeper")
+		r = &reporter{}
+		_, err = meter.Int64ObservableGauge(
+			gvkCountMetricName,
+			metric.WithDescription("The total number of Group/Version/Kinds currently watched by the watch manager"),
+			metric.WithInt64Callback(r.observeGvkCount),
+		)
+		if err != nil {
+			return nil, err
+		}
+		_, err = meter.Int64ObservableGauge(
+			gvkIntentCountMetricName,
+			metric.WithDescription("The total number of Group/Version/Kinds that the watch manager has instructions to watch. This could differ from the actual count due to resources being pending, non-existent, or a failure of the watch manager to restart"),
+			metric.WithInt64Callback(r.observeGvkIntentCount),
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return r, nil
 }
 

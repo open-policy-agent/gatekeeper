@@ -9,6 +9,7 @@ import (
 	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
@@ -18,12 +19,12 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 	var err error
 	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter = mp.Meter("test")
+	r, err = newStatsReporter()
+	assert.NoError(t, err)
+	meter := mp.Meter("test")
 
 	// Ensure the pipeline has a callback setup
-	constraintsM, err = meter.Int64ObservableGauge(constraintsMetricName)
-	assert.NoError(t, err)
-	r, err = newStatsReporter()
+	_, err = meter.Int64ObservableGauge(constraintsMetricName, metric.WithInt64Callback(r.observeConstraints))
 	assert.NoError(t, err)
 	return rdr, r
 }

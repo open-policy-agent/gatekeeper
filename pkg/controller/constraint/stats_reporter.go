@@ -15,27 +15,11 @@ const (
 	statusKey             = "status"
 )
 
-var (
-	constraintsM metric.Int64ObservableGauge
-	meter        metric.Meter
-)
-
-func init() {
-	var err error
-	meter = otel.GetMeterProvider().Meter("gatekeeper")
-	constraintsM, err = meter.Int64ObservableGauge(
-		constraintsMetricName,
-		metric.WithDescription("Current number of known constraints"))
-	if err != nil {
-		panic(err)
-	}
-}
-
-func (r *reporter) observeConstraints(_ context.Context, observer metric.Observer) error {
+func (r *reporter) observeConstraints(_ context.Context, observer metric.Int64Observer) error {
 	r.mux.RLock()
 	defer r.mux.RUnlock()
 	for t, v := range r.constraintsReport {
-		observer.ObserveInt64(constraintsM, v, metric.WithAttributes(attribute.String(enforcementActionKey, string(t.enforcementAction)), attribute.String(statusKey, string(t.status))))
+		observer.Observe(v, metric.WithAttributes(attribute.String(enforcementActionKey, string(t.enforcementAction)), attribute.String(statusKey, string(t.status))))
 	}
 	return nil
 }
@@ -58,12 +42,15 @@ type StatsReporter interface {
 // newStatsReporter creates a reporter for audit metrics.
 func newStatsReporter() (*reporter, error) {
 	r := &reporter{}
-	return r, r.registerCallback()
-}
-
-func (r *reporter) registerCallback() error {
-	_, err := meter.RegisterCallback(r.observeConstraints, constraintsM)
-	return err
+	var err error
+	meter := otel.GetMeterProvider().Meter("gatekeeper")
+	_, err = meter.Int64ObservableGauge(
+		constraintsMetricName,
+		metric.WithDescription("Current number of known constraints"), metric.WithInt64Callback(r.observeConstraints))
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 type reporter struct {

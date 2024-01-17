@@ -41,6 +41,9 @@ func SetResource(r *resource.Resource) {
 }
 
 // setMeterProvider sets the MeterProvider if the required conditions are met.
+// The required conditions are:
+// 1. The number of readers initiated is equal to the number of metrics backends that are not in error state.
+// 2. There is at least one reader.
 func setMeterProvider() {
 	// Check if we have the required number of readers and at least one reader.
 	if len(opts) != requiredReaders || len(opts) == 0 {

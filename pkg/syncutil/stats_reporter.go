@@ -27,38 +27,8 @@ const (
 
 var (
 	syncDurationM metric.Float64Histogram
-	meter         metric.Meter
 	r             *Reporter
 )
-
-func init() {
-	var err error
-	meter = otel.GetMeterProvider().Meter("gatekeeper")
-	r = &Reporter{now: now}
-
-	_, err = meter.Int64ObservableGauge(syncMetricName, metric.WithDescription("Total number of resources of each kind being cached"), metric.WithInt64Callback(r.observeSync))
-	if err != nil {
-		panic(err)
-	}
-	syncDurationM, err = meter.Float64Histogram(syncDurationMetricName, metric.WithDescription("Latency of sync operation in seconds"), metric.WithUnit("s"))
-	if err != nil {
-		panic(err)
-	}
-	_, err = meter.Float64ObservableGauge(lastRunTimeMetricName, metric.WithDescription("Timestamp of last sync operation"), metric.WithUnit("s"), metric.WithFloat64Callback(r.observeLastSync))
-	if err != nil {
-		panic(err)
-	}
-
-	view.Register(
-		sdkmetric.NewView(
-			sdkmetric.Instrument{Name: syncDurationMetricName},
-			sdkmetric.Stream{
-				Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
-					Boundaries: []float64{0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.001, 0.002, 0.003, 0.004, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05},
-				},
-			},
-		))
-}
 
 type MetricsCache struct {
 	mux        sync.RWMutex
@@ -179,6 +149,34 @@ type Reporter struct {
 
 // NewStatsReporter creates a reporter for sync metrics.
 func NewStatsReporter() (*Reporter, error) {
+	if r == nil {
+		var err error
+		meter := otel.GetMeterProvider().Meter("gatekeeper")
+		r = &Reporter{now: now}
+
+		_, err = meter.Int64ObservableGauge(syncMetricName, metric.WithDescription("Total number of resources of each kind being cached"), metric.WithInt64Callback(r.observeSync))
+		if err != nil {
+			return nil, err
+		}
+		syncDurationM, err = meter.Float64Histogram(syncDurationMetricName, metric.WithDescription("Latency of sync operation in seconds"), metric.WithUnit("s"))
+		if err != nil {
+			return nil, err
+		}
+		_, err = meter.Float64ObservableGauge(lastRunTimeMetricName, metric.WithDescription("Timestamp of last sync operation"), metric.WithUnit("s"), metric.WithFloat64Callback(r.observeLastSync))
+		if err != nil {
+			return nil, err
+		}
+
+		view.Register(
+			sdkmetric.NewView(
+				sdkmetric.Instrument{Name: syncDurationMetricName},
+				sdkmetric.Stream{
+					Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
+						Boundaries: []float64{0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.001, 0.002, 0.003, 0.004, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05},
+					},
+				},
+			))
+	}
 	return r, nil
 }
 

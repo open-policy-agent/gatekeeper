@@ -17,26 +17,18 @@ const (
 	statusKey    = "status"
 )
 
-var (
-	etM   metric.Int64ObservableGauge
-	meter metric.Meter
-)
-
-func init() {
+func newRegistry() *etRegistry {
+	r := &etRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
 	var err error
-	meter = otel.GetMeterProvider().Meter("gatekeeper")
-	etM, err = meter.Int64ObservableGauge(
+	meter := otel.GetMeterProvider().Meter("gatekeeper")
+	_, err = meter.Int64ObservableGauge(
 		etMetricName,
-		metric.WithDescription(etDesc))
+		metric.WithDescription(etDesc),
+		metric.WithInt64Callback(r.observeETM))
 
 	if err != nil {
 		panic(err)
 	}
-}
-
-func newRegistry() *etRegistry {
-	r := &etRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
-	_ = r.registerCallback()
 	return r
 }
 
@@ -85,16 +77,11 @@ func (r *etRegistry) report(_ context.Context) {
 	}
 }
 
-func (r *etRegistry) registerCallback() error {
-	_, err := meter.RegisterCallback(r.observeETM, etM)
-	return err
-}
-
-func (r *etRegistry) observeETM(_ context.Context, o metric.Observer) error {
+func (r *etRegistry) observeETM(_ context.Context, o metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for s, v := range r.statusReport {
-		o.ObserveInt64(etM, v, metric.WithAttributes(attribute.String(statusKey, string(s))))
+		o.Observe(v, metric.WithAttributes(attribute.String(statusKey, string(s))))
 	}
 	return nil
 }

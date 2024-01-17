@@ -2,7 +2,6 @@ package audit
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -22,72 +21,13 @@ const (
 	enforcementActionKey       = "enforcement_action"
 )
 
-var (
-	violationsM       metric.Int64ObservableGauge
-	auditDurationM    metric.Float64Histogram
-	lastRunStartTimeM metric.Float64ObservableGauge
-	lastRunEndTimeM   metric.Float64ObservableGauge
-	meter             metric.Meter
-)
+var auditDurationM metric.Float64Histogram
 
-func init() {
-	var err error
-	meter = otel.GetMeterProvider().Meter("gatekeeper")
-
-	violationsM, err = meter.Int64ObservableGauge(
-		violationsMetricName,
-		metric.WithDescription("Total number of audited violations"),
-	)
-
-	if err != nil {
-		panic(err)
-	}
-
-	auditDurationM, err = meter.Float64Histogram(
-		auditDurationMetricName,
-		metric.WithDescription("Latency of audit operation in seconds"))
-	if err != nil {
-		panic(err)
-	}
-
-	lastRunStartTimeM, err = meter.Float64ObservableGauge(
-		lastRunStartTimeMetricName,
-		metric.WithDescription("Timestamp of last audit run starting time"),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	lastRunEndTimeM, err = meter.Float64ObservableGauge(
-		lastRunEndTimeMetricName,
-		metric.WithDescription("Timestamp of last audit run ending time"),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	view.Register(sdkmetric.NewView(
-		sdkmetric.Instrument{Name: auditDurationMetricName},
-		sdkmetric.Stream{
-			Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
-				Boundaries: []float64{1 * 60, 3 * 60, 5 * 60, 10 * 60, 15 * 60, 20 * 60, 40 * 60, 80 * 60, 160 * 60, 320 * 60},
-			},
-		},
-	))
-}
-
-func (r *reporter) registerCallback() error {
-	_, err1 := meter.RegisterCallback(r.observeTotalViolations, violationsM)
-	_, err2 := meter.RegisterCallback(r.observeRunEnd, lastRunEndTimeM)
-	_, err3 := meter.RegisterCallback(r.observeRunStart, lastRunStartTimeM)
-	return errors.Join(err1, err2, err3)
-}
-
-func (r *reporter) observeTotalViolations(_ context.Context, o metric.Observer) error {
+func (r *reporter) observeTotalViolations(_ context.Context, o metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for k, v := range r.totalViolationsPerEnforcementAction {
-		o.ObserveInt64(violationsM, v, metric.WithAttributes(attribute.String(enforcementActionKey, string(k))))
+		o.Observe(v, metric.WithAttributes(attribute.String(enforcementActionKey, string(k))))
 	}
 	return nil
 }
@@ -121,24 +61,70 @@ func (r *reporter) reportRunEnd(t time.Time) error {
 	return nil
 }
 
-func (r *reporter) observeRunStart(_ context.Context, o metric.Observer) error {
+func (r *reporter) observeRunStart(_ context.Context, o metric.Float64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	o.ObserveFloat64(lastRunStartTimeM, float64(r.startTime.Unix()))
+	o.Observe(float64(r.startTime.Unix()))
 	return nil
 }
 
-func (r *reporter) observeRunEnd(_ context.Context, o metric.Observer) error {
+func (r *reporter) observeRunEnd(_ context.Context, o metric.Float64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	o.ObserveFloat64(lastRunEndTimeM, float64(r.endTime.Unix()))
+	o.Observe(float64(r.endTime.Unix()))
 	return nil
 }
 
 // newStatsReporter creates a reporter for audit metrics.
 func newStatsReporter() (*reporter, error) {
 	r := &reporter{}
-	return r, r.registerCallback()
+	var err error
+	meter := otel.GetMeterProvider().Meter("gatekeeper")
+
+	_, err = meter.Int64ObservableGauge(
+		violationsMetricName,
+		metric.WithDescription("Total number of audited violations"),
+		metric.WithInt64Callback(r.observeTotalViolations),
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	auditDurationM, err = meter.Float64Histogram(
+		auditDurationMetricName,
+		metric.WithDescription("Latency of audit operation in seconds"))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = meter.Float64ObservableGauge(
+		lastRunStartTimeMetricName,
+		metric.WithDescription("Timestamp of last audit run starting time"),
+		metric.WithFloat64Callback(r.observeRunStart),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = meter.Float64ObservableGauge(
+		lastRunEndTimeMetricName,
+		metric.WithDescription("Timestamp of last audit run ending time"),
+		metric.WithFloat64Callback(r.observeRunEnd),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	view.Register(sdkmetric.NewView(
+		sdkmetric.Instrument{Name: auditDurationMetricName},
+		sdkmetric.Stream{
+			Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
+				Boundaries: []float64{1 * 60, 3 * 60, 5 * 60, 10 * 60, 15 * 60, 20 * 60, 40 * 60, 80 * 60, 160 * 60, 320 * 60},
+			},
+		},
+	))
+	return r, nil
 }
 
 type reporter struct {

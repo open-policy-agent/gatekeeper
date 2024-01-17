@@ -19,7 +19,7 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 	var err error
 	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
-	meter = mp.Meter("test")
+	meter := mp.Meter("test")
 
 	r = &Reporter{now: now}
 	_, err = meter.Int64ObservableGauge(syncMetricName, metric.WithInt64Callback(r.observeSync))

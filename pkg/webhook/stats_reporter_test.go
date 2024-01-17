@@ -30,6 +30,8 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r S
 	var err error
 	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	r, err = newStatsReporter()
+	assert.NoError(t, err)
 	meter := mp.Meter("test")
 
 	// Ensure the pipeline has a callback setup
@@ -46,8 +48,6 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r S
 	mutationRequestCountM, err = meter.Int64Counter(mutationRequestCountMetricName)
 	assert.NoError(t, err)
 
-	r, err = newStatsReporter()
-	assert.NoError(t, err)
 	return rdr, r
 }
 

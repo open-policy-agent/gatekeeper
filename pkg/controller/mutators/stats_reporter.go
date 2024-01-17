@@ -2,7 +2,6 @@ package mutators
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -24,9 +23,6 @@ const (
 var (
 	mutatorIngestionCountM metric.Int64Counter
 	responseTimeInSecM     metric.Float64Histogram
-	mutatorsM              metric.Int64ObservableGauge
-	conflictingMutatorsM   metric.Int64ObservableGauge
-	meter                  metric.Meter
 )
 
 // MutatorIngestionStatus defines the outcomes of an attempt to add a Mutator to the mutation System.
@@ -38,53 +34,6 @@ const (
 	// MutatorStatusError denotes a mutator that failed to ingest.
 	MutatorStatusError MutatorIngestionStatus = "error"
 )
-
-func init() {
-	var err error
-	meter = otel.GetMeterProvider().Meter("gatekeeper")
-
-	mutatorIngestionCountM, err = meter.Int64Counter(
-		mutatorIngestionCountMetricName,
-		metric.WithDescription("Total number of Mutator ingestion actions"),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	responseTimeInSecM, err = meter.Float64Histogram(
-		mutatorIngestionDurationMetricName,
-		metric.WithDescription("The distribution of Mutator ingestion durations"),
-		metric.WithUnit("s"),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	mutatorsM, err = meter.Int64ObservableGauge(
-		mutatorsMetricName,
-		metric.WithDescription("The current number of Mutator objects"),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	conflictingMutatorsM, err = meter.Int64ObservableGauge(
-		mutatorsConflictingCountMetricsName,
-		metric.WithDescription("The current number of conflicting Mutator objects"),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	view.Register(sdkmetric.NewView(
-		sdkmetric.Instrument{Name: mutatorIngestionDurationMetricName},
-		sdkmetric.Stream{
-			Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
-				Boundaries: []float64{0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05},
-			},
-		},
-	))
-}
 
 // StatsReporter reports mutator-related controller metrics.
 type StatsReporter interface {
@@ -103,7 +52,52 @@ type reporter struct {
 // NewStatsReporter creates a reporter for webhook metrics.
 func NewStatsReporter() StatsReporter {
 	r := &reporter{}
-	_ = r.registerCallback()
+	var err error
+	meter := otel.GetMeterProvider().Meter("gatekeeper")
+
+	mutatorIngestionCountM, err = meter.Int64Counter(
+		mutatorIngestionCountMetricName,
+		metric.WithDescription("Total number of Mutator ingestion actions"),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	responseTimeInSecM, err = meter.Float64Histogram(
+		mutatorIngestionDurationMetricName,
+		metric.WithDescription("The distribution of Mutator ingestion durations"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = meter.Int64ObservableGauge(
+		mutatorsMetricName,
+		metric.WithDescription("The current number of Mutator objects"),
+		metric.WithInt64Callback(r.observeMutatorsStatus),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = meter.Int64ObservableGauge(
+		mutatorsConflictingCountMetricsName,
+		metric.WithDescription("The current number of conflicting Mutator objects"),
+		metric.WithInt64Callback(r.observeMutatorsInConflict),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	view.Register(sdkmetric.NewView(
+		sdkmetric.Instrument{Name: mutatorIngestionDurationMetricName},
+		sdkmetric.Stream{
+			Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
+				Boundaries: []float64{0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05},
+			},
+		},
+	))
 	return r
 }
 
@@ -129,11 +123,11 @@ func (r *reporter) ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error 
 	return nil
 }
 
-func (r *reporter) observeMutatorsStatus(_ context.Context, observer metric.Observer) error {
+func (r *reporter) observeMutatorsStatus(_ context.Context, observer metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for status, count := range r.mutatorStatusReport {
-		observer.ObserveInt64(mutatorsM, int64(count), metric.WithAttributes(attribute.String(statusKey, string(status))))
+		observer.Observe(int64(count), metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
 	return nil
 }
@@ -147,15 +141,9 @@ func (r *reporter) ReportMutatorsInConflict(n int) error {
 	return nil
 }
 
-func (r *reporter) observeMutatorsInConflict(_ context.Context, observer metric.Observer) error {
+func (r *reporter) observeMutatorsInConflict(_ context.Context, observer metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	observer.ObserveInt64(conflictingMutatorsM, int64(r.mutatorsInConflict))
+	observer.Observe(int64(r.mutatorsInConflict))
 	return nil
-}
-
-func (r *reporter) registerCallback() error {
-	_, err1 := meter.RegisterCallback(r.observeMutatorsStatus, mutatorsM)
-	_, err2 := meter.RegisterCallback(r.observeMutatorsInConflict, conflictingMutatorsM)
-	return errors.Join(err1, err2)
 }
