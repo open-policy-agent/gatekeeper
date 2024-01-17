@@ -575,7 +575,18 @@ Config are successfully ingested and all requirements are fulfilled.
 An error during evaluation, for example a failure to read a file, will result in
 a `1` exit status with an error message printed to stderr.
 
-Unfulfilled requirements will generate a `1` exit status as well, and the unfulfilled requirements per template will be printed to stderr.
+Unfulfilled requirements will generate a `1` exit status as well, and the unfulfilled requirements per template will be printed to stderr, like so:
+```
+the following requirements were not met:
+templatename1:
+- extensions/v1beta1:Ingress
+- networking.k8s.io/v1beta1:Ingress OR networking.k8s.io/v1:Ingress
+templatename2:
+- apps/v1:Deployment
+templatename3:
+- /v1:Service
+```
+
 
 
 ## Bundling Policy into OCI Artifacts

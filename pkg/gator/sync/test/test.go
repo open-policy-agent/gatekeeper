@@ -7,6 +7,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	gkapis "github.com/open-policy-agent/gatekeeper/v3/apis"
 	gvkmanifestv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/gvkmanifest/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/parser"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -31,8 +32,8 @@ func init() {
 // Reads a list of unstructured objects and a string containing supported GVKs and
 // outputs a set of missing sync requirements per template and ingestion problems per template.
 func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[string]parser.SyncRequirements, map[string]error, error) {
+	gvkAggregator := aggregator.NewGVKAggregator()
 	templates := map[*templates.ConstraintTemplate]parser.SyncRequirements{}
-	syncedGVKs := map[schema.GroupVersionKind]struct{}{}
 	templateErrs := map[string]error{}
 	hasConfig := false
 	var gvkManifest *gvkmanifestv1alpha1.GVKManifest
@@ -45,13 +46,16 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 			if err != nil {
 				return nil, nil, fmt.Errorf("converting unstructured %q to syncset: %w", obj.GetName(), err)
 			}
+			key := aggregator.Key{Source: "syncset", ID: syncSet.ObjectMeta.Name}
+			gvks := make([]schema.GroupVersionKind, len(syncSet.Spec.GVKs))
 			for _, gvkEntry := range syncSet.Spec.GVKs {
 				gvk := schema.GroupVersionKind{
 					Group:   gvkEntry.Group,
 					Version: gvkEntry.Version,
 					Kind:    gvkEntry.Kind,
 				}
-				syncedGVKs[gvk] = struct{}{}
+				gvks = append(gvks, gvk)
+				gvkAggregator.Upsert(key, gvks)
 			}
 		case reader.IsConfig(obj):
 			if hasConfig {
@@ -62,13 +66,17 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 				return nil, nil, fmt.Errorf("converting unstructured %q to config: %w", obj.GetName(), err)
 			}
 			hasConfig = true
+
+			key := aggregator.Key{Source: "config", ID: config.ObjectMeta.Name}
+			gvks := make([]schema.GroupVersionKind, len(config.Spec.Sync.SyncOnly))
 			for _, syncOnlyEntry := range config.Spec.Sync.SyncOnly {
 				gvk := schema.GroupVersionKind{
 					Group:   syncOnlyEntry.Group,
 					Version: syncOnlyEntry.Version,
 					Kind:    syncOnlyEntry.Kind,
 				}
-				syncedGVKs[gvk] = struct{}{}
+				gvks = append(gvks, gvk)
+				gvkAggregator.Upsert(key, gvks)
 			}
 		case reader.IsTemplate(obj):
 			templ, err := reader.ToTemplate(scheme, obj)
@@ -101,6 +109,7 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 		return nil, templateErrs, nil
 	}
 
+	supportedGVKs := map[schema.GroupVersionKind]struct{}{}
 	// Crosscheck synced gvks with supported gvks.
 	if gvkManifest == nil {
 		if !omitGVKManifest {
@@ -108,7 +117,6 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 		}
 		fmt.Print("ignoring absence of supported GVK manifest due to --force-omit-gvk-manifest flag; will assume all synced GVKs are supported by cluster\n")
 	} else {
-		supportedGVKs := map[schema.GroupVersionKind]struct{}{}
 		for group, versions := range gvkManifest.Spec.Groups {
 			for version, kinds := range versions {
 				for _, kind := range kinds {
@@ -121,11 +129,6 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 				}
 			}
 		}
-		for gvk := range syncedGVKs {
-			if _, exists := supportedGVKs[gvk]; !exists {
-				delete(syncedGVKs, gvk)
-			}
-		}
 	}
 
 	missingReqs := map[string]parser.SyncRequirements{}
@@ -135,8 +138,10 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 		for _, requirement := range reqs {
 			requirementMet := false
 			for gvk := range requirement {
-				if _, exists := syncedGVKs[gvk]; exists {
-					requirementMet = true
+				if gvkAggregator.IsPresent(gvk) {
+					if _, isPresent := supportedGVKs[gvk]; isPresent || omitGVKManifest {
+						requirementMet = true
+					}
 				}
 			}
 			if !requirementMet {
