@@ -21,12 +21,14 @@ var (
 	flagFilenames       []string
 	flagImages          []string
 	flagOmitGVKManifest bool
+	flagTempDir         string
 )
 
 const (
 	flagNameFilename = "filename"
 	flagNameImage    = "image"
 	flagNameForce    = "force-omit-gvk-manifest"
+	flagNameTempDir  = "tempdir"
 )
 
 func init() {
@@ -34,10 +36,11 @@ func init() {
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().BoolVarP(&flagOmitGVKManifest, flagNameForce, "f", false, "Do not require a GVK manifest; if one is not provided, assume all GVKs listed in the requirements "+
 		"and configs are supported by the cluster under test. If this assumption isn't true, the given config may cause errors or templates may not be enforced correctly even after passing this test.")
+	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 }
 
 func run(_ *cobra.Command, _ []string) {
-	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, "")
+	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
 		cmdutils.ErrFatalf("reading: %v", err)
 	}
