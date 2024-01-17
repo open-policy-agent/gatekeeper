@@ -570,7 +570,7 @@ Optionally, the `--omit-gvk-manifest` flag can be used to skip the requirement o
 #### Exit Codes
 
 `gator sync test` will return a `0` exit status when the Templates, SyncSets, and
-Config are successfully ingested and no requirements are unfulfilled.
+Config are successfully ingested and all requirements are fulfilled.
 
 An error during evaluation, for example a failure to read a file, will result in
 a `1` exit status with an error message printed to stderr.
