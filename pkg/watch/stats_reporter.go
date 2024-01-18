@@ -2,11 +2,10 @@ package watch
 
 import (
 	"context"
+	"sync"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -14,57 +13,66 @@ const (
 	gvkIntentCountMetricName = "watch_manager_intended_watch_gvk"
 )
 
-var (
-	gvkCountM       = stats.Int64(gvkCountMetricName, "Total number of watched GroupVersionKinds", stats.UnitDimensionless)
-	gvkIntentCountM = stats.Int64(gvkIntentCountMetricName, "Total number of GroupVersionKinds with a registered watch intent", stats.UnitDimensionless)
-
-	views = []*view.View{
-		{
-			Name:        gvkCountMetricName,
-			Measure:     gvkCountM,
-			Description: "The total number of Group/Version/Kinds currently watched by the watch manager",
-			Aggregation: view.LastValue(),
-		},
-		{
-			Name:        gvkIntentCountMetricName,
-			Measure:     gvkIntentCountM,
-			Description: "The total number of Group/Version/Kinds that the watch manager has instructions to watch. This could differ from the actual count due to resources being pending, non-existent, or a failure of the watch manager to restart",
-			Aggregation: view.LastValue(),
-		},
-	}
-)
-
-func init() {
-	if err := register(); err != nil {
-		panic(err)
-	}
-}
-
-func register() error {
-	return view.Register(views...)
-}
+var r *reporter
 
 func (r *reporter) reportGvkCount(count int64) error {
-	ctx, err := tag.New(context.Background())
-	if err != nil {
-		return err
-	}
-
-	return metrics.Record(ctx, gvkCountM.M(count))
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.gvkCount = count
+	return nil
 }
 
 func (r *reporter) reportGvkIntentCount(count int64) error {
-	ctx, err := tag.New(context.Background())
-	if err != nil {
-		return err
-	}
-
-	return metrics.Record(ctx, gvkIntentCountM.M(count))
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.intentCount = count
+	return nil
 }
 
 // newStatsReporter creates a reporter for watch metrics.
 func newStatsReporter() (*reporter, error) {
-	return &reporter{}, nil
+	if r == nil {
+		var err error
+		meterProvider := otel.GetMeterProvider()
+		meter := meterProvider.Meter("gatekeeper")
+		r = &reporter{}
+		_, err = meter.Int64ObservableGauge(
+			gvkCountMetricName,
+			metric.WithDescription("The total number of Group/Version/Kinds currently watched by the watch manager"),
+			metric.WithInt64Callback(r.observeGvkCount),
+		)
+		if err != nil {
+			return nil, err
+		}
+		_, err = meter.Int64ObservableGauge(
+			gvkIntentCountMetricName,
+			metric.WithDescription("The total number of Group/Version/Kinds that the watch manager has instructions to watch. This could differ from the actual count due to resources being pending, non-existent, or a failure of the watch manager to restart"),
+			metric.WithInt64Callback(r.observeGvkIntentCount),
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return r, nil
 }
 
-type reporter struct{}
+type reporter struct {
+	mu          sync.RWMutex
+	gvkCount    int64
+	intentCount int64
+}
+
+func (r *reporter) observeGvkCount(_ context.Context, observer metric.Int64Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	observer.Observe(r.gvkCount)
+	return nil
+}
+
+// count returns total gvk count across all registrars.
+func (r *reporter) observeGvkIntentCount(_ context.Context, observer metric.Int64Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	observer.Observe(r.intentCount)
+	return nil
+}
