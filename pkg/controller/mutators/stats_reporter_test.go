@@ -1,200 +1,190 @@
 package mutators
 
 import (
-	"fmt"
+	"context"
 	"testing"
 	"time"
 
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
+	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 )
 
+func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r StatsReporter) {
+	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	r = NewStatsReporter()
+	meter := mp.Meter("test")
+	responseTimeInSecM, err = meter.Float64Histogram(mutatorIngestionDurationMetricName)
+	assert.NoError(t, err)
+	mutatorIngestionCountM, err = meter.Int64Counter(mutatorIngestionCountMetricName)
+	assert.NoError(t, err)
+	_, err = meter.Int64ObservableGauge(mutatorsMetricName, metric.WithInt64Callback(r.(*reporter).observeMutatorsStatus))
+	assert.NoError(t, err)
+	_, err = meter.Int64ObservableGauge(mutatorsConflictingCountMetricsName, metric.WithInt64Callback(r.(*reporter).observeMutatorsInConflict))
+	assert.NoError(t, err)
+
+	return rdr, r
+}
+
 func TestReportMutatorIngestionRequest(t *testing.T) {
-	wantTags := map[string]string{
-		"status": "active",
-	}
-
+	var err error
 	const (
-		minIngestionDuration = 1 * time.Second
-		maxIngestionDuration = 5 * time.Second
-
-		wantMinIngestionDuration = 1.0
-		wantMaxIngestionDuration = 5.0
-
-		wantRowLength      = 1
-		wantIngestionCount = 2
+		minIngestDuration = 1 * time.Second
+		maxIngestDuration = 5 * time.Second
 	)
 
-	r := NewStatsReporter()
-	err := r.ReportMutatorIngestionRequest(MutatorStatusActive, minIngestionDuration)
-	if err != nil {
-		t.Fatalf("got ReportRequest error %v, want nil", err)
+	want1 := metricdata.Metrics{
+		Name: mutatorIngestionDurationMetricName,
+		Data: metricdata.Histogram[float64]{
+			Temporality: metricdata.CumulativeTemporality,
+			DataPoints: []metricdata.HistogramDataPoint[float64]{
+				{
+					Attributes:   attribute.NewSet(attribute.String(statusKey, string(MutatorStatusActive))),
+					Count:        2,
+					Bounds:       []float64{0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000},
+					BucketCounts: []uint64{0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+					Min:          metricdata.NewExtrema[float64](1.),
+					Max:          metricdata.NewExtrema[float64](5.),
+					Sum:          6,
+				},
+			},
+		},
+	}
+	want2 := metricdata.Metrics{
+		Name: mutatorIngestionCountMetricName,
+		Data: metricdata.Sum[int64]{
+			Temporality: metricdata.CumulativeTemporality,
+			DataPoints: []metricdata.DataPoint[int64]{
+				{Attributes: attribute.NewSet(attribute.String(statusKey, string(MutatorStatusActive))), Value: 2},
+			},
+			IsMonotonic: true,
+		},
 	}
 
-	err = r.ReportMutatorIngestionRequest(MutatorStatusActive, maxIngestionDuration)
-	if err != nil {
-		t.Fatalf("got ReportRequest error %v, want nil", err)
-	}
+	rdr, r := initializeTestInstruments(t)
 
-	// Count test
-	rows, err := checkData(mutatorIngestionCountMetricName, wantRowLength)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx := context.Background()
 
-	gotCount, ok := rows[0].Data.(*view.CountData)
-	if !ok {
-		t.Fatalf("got %q type %T, want %T", mutatorIngestionCountMetricName, rows[0].Data, &view.CountData{})
-	}
+	err = r.ReportMutatorIngestionRequest(MutatorStatusActive, minIngestDuration)
+	assert.NoError(t, err)
 
-	if gotCount.Value != wantIngestionCount {
-		t.Errorf("got %q = %v, want %v", mutatorIngestionCountMetricName, gotCount.Value, wantIngestionCount)
-	}
+	err = r.ReportMutatorIngestionRequest(MutatorStatusActive, maxIngestDuration)
+	assert.NoError(t, err)
 
-	verifyTags(t, wantTags, rows[0].Tags)
+	rm := &metricdata.ResourceMetrics{}
+	assert.NoError(t, rdr.Collect(ctx, rm))
 
-	// Duration test
-	rows, err = checkData(mutatorIngestionDurationMetricName, wantRowLength)
-	if err != nil {
-		t.Error(err)
-	}
-
-	durationValue, ok := rows[0].Data.(*view.DistributionData)
-	if !ok {
-		t.Fatalf("got %q type %T, want %T", mutatorIngestionCountMetricName, rows[0].Data, &view.DistributionData{})
-	}
-
-	if durationValue.Min != wantMinIngestionDuration {
-		t.Errorf("got tag %q min %v, want %v", mutatorIngestionDurationMetricName, durationValue.Min, wantMinIngestionDuration)
-	}
-
-	if durationValue.Max != wantMaxIngestionDuration {
-		t.Errorf("got tag %q max %v, want %v", mutatorIngestionDurationMetricName, durationValue.Max, wantMaxIngestionDuration)
-	}
-
-	verifyTags(t, wantTags, rows[0].Tags)
+	metricdatatest.AssertEqual(t, want1, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+	metricdatatest.AssertEqual(t, want2, rm.ScopeMetrics[0].Metrics[1], metricdatatest.IgnoreTimestamp())
 }
 
 func TestReportMutatorsStatus(t *testing.T) {
-	r := NewStatsReporter()
-
-	activeMutators := 5
-	errorMutators := 1
-	if err := r.ReportMutatorsStatus(MutatorStatusActive, activeMutators); err != nil {
-		t.Errorf("ReportMutatorsStatus error %v", err)
+	// Set up some test data.
+	mID := types.ID{
+		Group:     "test",
+		Kind:      "test",
+		Name:      "test",
+		Namespace: "test",
 	}
-	if err := r.ReportMutatorsStatus(MutatorStatusError, errorMutators); err != nil {
-		t.Errorf("ReportMutatorsStatus error %v", err)
-	}
-
-	rows, err := checkData(mutatorsMetricName, 2)
-	if err != nil {
-		t.Error(err)
-	}
-
-	activeRow, err := getRow(rows, string(MutatorStatusActive))
-	if err != nil {
-		t.Error(err)
-	}
-
-	lastValueData, ok := activeRow.Data.(*view.LastValueData)
-	if !ok {
-		t.Fatalf("got row type %T, want type 'view.LastValueData'", activeRow.Data)
-	}
-
-	if lastValueData.Value != float64(activeMutators) {
-		t.Errorf("got row value %v for status %q, want %v", lastValueData.Value, MutatorStatusActive, activeMutators)
-	}
-
-	errorRow, err := getRow(rows, string(MutatorStatusError))
-	if err != nil {
-		t.Error(err)
-	}
-
-	lastValueData, ok = errorRow.Data.(*view.LastValueData)
-	if !ok {
-		t.Fatalf("got row type %T, want type 'view.LastValueData'", errorRow.Data)
+	tests := []struct {
+		name        string
+		ctx         context.Context
+		expectedErr error
+		want        metricdata.Metrics
+		c           *Cache
+	}{
+		{
+			name:        "reporting mutator status",
+			ctx:         context.Background(),
+			expectedErr: nil,
+			c: &Cache{
+				cache: map[types.ID]mutatorStatus{
+					mID: {
+						ingestion: MutatorStatusActive,
+						conflict:  true,
+					},
+				},
+			},
+			want: metricdata.Metrics{
+				Name: mutatorsMetricName,
+				Data: metricdata.Gauge[int64]{
+					DataPoints: []metricdata.DataPoint[int64]{
+						{Attributes: attribute.NewSet(attribute.String(statusKey, string(MutatorStatusActive))), Value: 1},
+						{Attributes: attribute.NewSet(attribute.String(statusKey, string(MutatorStatusError))), Value: 0},
+					},
+				},
+			},
+		},
 	}
 
-	if lastValueData.Value != float64(errorMutators) {
-		t.Errorf("got row value %v for status %q, want %v", lastValueData.Value, MutatorStatusError, errorMutators)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rdr, r := initializeTestInstruments(t)
+			for status, count := range tt.c.TallyStatus() {
+				assert.NoError(t, r.ReportMutatorsStatus(status, count))
+			}
+
+			rm := &metricdata.ResourceMetrics{}
+			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
+
+			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+		})
 	}
 }
 
 func TestReportMutatorsInConflict(t *testing.T) {
-	r := NewStatsReporter()
-
-	conflicts := 3
-
-	// Report conflicts for the first time
-	err := r.ReportMutatorsInConflict(conflicts)
-	if err != nil {
-		t.Errorf("ReportMutatorsInConflict error %v", err)
+	mID := types.ID{
+		Group:     "test",
+		Kind:      "test",
+		Name:      "test",
+		Namespace: "test",
+	}
+	tests := []struct {
+		name        string
+		ctx         context.Context
+		expectedErr error
+		want        metricdata.Metrics
+		c           *Cache
+	}{
+		{
+			name:        "reporting mutator conflict status",
+			ctx:         context.Background(),
+			expectedErr: nil,
+			c: &Cache{
+				cache: map[types.ID]mutatorStatus{
+					mID: {
+						ingestion: MutatorStatusActive,
+						conflict:  true,
+					},
+				},
+			},
+			want: metricdata.Metrics{
+				Name: mutatorsConflictingCountMetricsName,
+				Data: metricdata.Gauge[int64]{
+					DataPoints: []metricdata.DataPoint[int64]{
+						{Value: 1},
+					},
+				},
+			},
+		},
 	}
 
-	rows, err := checkData(mutatorsConflictingCountMetricsName, 1)
-	if err != nil {
-		t.Error(err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rdr, r := initializeTestInstruments(t)
+			assert.NoError(t, r.ReportMutatorsInConflict(tt.c.TallyConflict()))
 
-	lastValueData, ok := rows[0].Data.(*view.LastValueData)
-	if !ok {
-		t.Fatalf("wanted row of type LastValueData. got: %v", rows[0].Data)
-	}
+			rm := &metricdata.ResourceMetrics{}
+			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
 
-	if lastValueData.Value != float64(conflicts) {
-		t.Errorf("wanted metric value %v, got %v", conflicts, lastValueData.Value)
-	}
-
-	// Report conflicts again, confirming the updated value
-	conflicts = 2
-	err = r.ReportMutatorsInConflict(conflicts)
-	if err != nil {
-		t.Errorf("ReportMutatorsInConflict error %v", err)
-	}
-
-	rows, err = checkData(mutatorsConflictingCountMetricsName, 1)
-	if err != nil {
-		t.Error(err)
-	}
-
-	lastValueData, ok = rows[0].Data.(*view.LastValueData)
-	if !ok {
-		t.Fatalf("wanted row of type LastValueData. got: %v", rows[0].Data)
-	}
-
-	if lastValueData.Value != float64(conflicts) {
-		t.Errorf("wanted metric value %v, got %v", conflicts, lastValueData.Value)
-	}
-}
-
-func getRow(rows []*view.Row, tagValue string) (*view.Row, error) {
-	for _, row := range rows {
-		if row.Tags[0].Value == tagValue {
-			return row, nil
-		}
-	}
-
-	return nil, fmt.Errorf("no rows found with tag key name %q", tagValue)
-}
-
-func checkData(name string, rowLength int) ([]*view.Row, error) {
-	rows, err := view.RetrieveData(name)
-	if err != nil {
-		return nil, fmt.Errorf("got RetrieveData error %w from %v, want nil", err, name)
-	}
-	if len(rows) != rowLength {
-		return nil, fmt.Errorf("got %q row length %v, want %v", name, len(rows), rowLength)
-	}
-	return rows, nil
-}
-
-func verifyTags(t *testing.T, wantTags map[string]string, actual []tag.Tag) {
-	for _, gotTag := range actual {
-		tagName := gotTag.Key.Name()
-		want := wantTags[tagName]
-		if gotTag.Value != want {
-			t.Errorf("got tag %q value %q, want %q", tagName, gotTag.Value, want)
-		}
+			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+		})
 	}
 }

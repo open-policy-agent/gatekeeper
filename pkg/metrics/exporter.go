@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/common"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/registry"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -34,6 +35,7 @@ func (r *runner) Start(ctx context.Context) error {
 	defer log.Info("Stopping metrics runner workers")
 	errCh := make(chan error)
 	exporters := registry.Exporters()
+	common.SetRequiredReaders(len(exporters))
 	for i := range exporters {
 		startExporter := exporters[i]
 		go func() {

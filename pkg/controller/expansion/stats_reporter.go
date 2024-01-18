@@ -2,51 +2,41 @@ package expansion
 
 import (
 	"context"
+	"sync"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
 	etMetricName = "expansion_templates"
 	etDesc       = "Number of observed expansion templates"
+	statusKey    = "status"
 )
-
-var (
-	etM       = stats.Int64(etMetricName, etDesc, stats.UnitDimensionless)
-	statusKey = tag.MustNewKey("status")
-
-	views = []*view.View{
-		{
-			Name:        etMetricName,
-			Measure:     etM,
-			Description: etDesc,
-			Aggregation: view.LastValue(),
-			TagKeys:     []tag.Key{statusKey},
-		},
-	}
-)
-
-func init() {
-	if err := register(); err != nil {
-		panic(err)
-	}
-}
-
-func register() error {
-	return view.Register(views...)
-}
 
 func newRegistry() *etRegistry {
-	return &etRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
+	r := &etRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
+	var err error
+	meter := otel.GetMeterProvider().Meter("gatekeeper")
+	_, err = meter.Int64ObservableGauge(
+		etMetricName,
+		metric.WithDescription(etDesc),
+		metric.WithInt64Callback(r.observeETM))
+
+	if err != nil {
+		panic(err)
+	}
+	return r
 }
 
 type etRegistry struct {
-	cache map[types.NamespacedName]metrics.Status
-	dirty bool
+	mu           sync.RWMutex
+	cache        map[types.NamespacedName]metrics.Status
+	dirty        bool
+	statusReport map[metrics.Status]int64
 }
 
 func (r *etRegistry) add(key types.NamespacedName, status metrics.Status) {
@@ -66,9 +56,15 @@ func (r *etRegistry) remove(key types.NamespacedName) {
 	r.dirty = true
 }
 
-func (r *etRegistry) report(ctx context.Context) {
+func (r *etRegistry) report(_ context.Context) {
 	if !r.dirty {
 		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.statusReport == nil {
+		r.statusReport = make(map[metrics.Status]int64)
 	}
 
 	totals := make(map[metrics.Status]int64)
@@ -77,14 +73,15 @@ func (r *etRegistry) report(ctx context.Context) {
 	}
 
 	for _, s := range metrics.AllStatuses {
-		ctx, err := tag.New(ctx, tag.Insert(statusKey, string(s)))
-		if err != nil {
-			log.Error(err, "failed to create status tag for expansion templates")
-			continue
-		}
-		err = metrics.Record(ctx, etM.M(totals[s]))
-		if err != nil {
-			log.Error(err, "failed to record total expansion templates")
-		}
+		r.statusReport[s] = totals[s]
 	}
+}
+
+func (r *etRegistry) observeETM(_ context.Context, o metric.Int64Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for s, v := range r.statusReport {
+		o.Observe(v, metric.WithAttributes(attribute.String(statusKey, string(s))))
+	}
+	return nil
 }
