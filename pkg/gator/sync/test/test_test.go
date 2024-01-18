@@ -242,7 +242,11 @@ func TestTest_Errors(t *testing.T) {
 	}
 }
 
-func toYAMLString(obj runtime.Object) string {
-	yaml, _ := yaml.Marshal(obj)
+func toYAMLString(t *testing.T, obj runtime.Object) string {
+        t.Helper()
+        
+	yaml, err := yaml.Marshal(obj)
+	require.NoError(t, err)
+	
 	return string(yaml)
 }
