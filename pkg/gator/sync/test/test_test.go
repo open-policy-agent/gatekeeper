@@ -62,7 +62,7 @@ func TestTest(t *testing.T) {
 			name: "basic req fulfilled by config",
 			inputs: []string{
 				fixtures.TemplateReferential,
-				toYAMLString(fakes.ConfigFor([]schema.GroupVersionKind{ServiceGVK, DeploymentGVK})),
+				toYAMLString(t, fakes.ConfigFor([]schema.GroupVersionKind{ServiceGVK, DeploymentGVK})),
 			},
 			omitManifest: true,
 			wantReqs:     map[string]parser.SyncRequirements{},
@@ -71,8 +71,8 @@ func TestTest(t *testing.T) {
 			name: "basic req fulfilled by config and supported by cluster",
 			inputs: []string{
 				fixtures.TemplateReferential,
-				toYAMLString(fakes.ConfigFor([]schema.GroupVersionKind{ServiceGVK, DeploymentGVK})),
-				toYAMLString(fakes.GVKManifestFor("gvkmanifest", []schema.GroupVersionKind{ServiceGVK})),
+				toYAMLString(t, fakes.ConfigFor([]schema.GroupVersionKind{ServiceGVK, DeploymentGVK})),
+				toYAMLString(t, fakes.GVKManifestFor("gvkmanifest", []schema.GroupVersionKind{ServiceGVK})),
 			},
 			wantReqs: map[string]parser.SyncRequirements{},
 		},
@@ -80,8 +80,8 @@ func TestTest(t *testing.T) {
 			name: "basic req fulfilled by config but not supported by cluster",
 			inputs: []string{
 				fixtures.TemplateReferential,
-				toYAMLString(fakes.ConfigFor([]schema.GroupVersionKind{ServiceGVK, DeploymentGVK})),
-				toYAMLString(fakes.GVKManifestFor("gvkmanifest", []schema.GroupVersionKind{DeploymentGVK})),
+				toYAMLString(t, fakes.ConfigFor([]schema.GroupVersionKind{ServiceGVK, DeploymentGVK})),
+				toYAMLString(t, fakes.GVKManifestFor("gvkmanifest", []schema.GroupVersionKind{DeploymentGVK})),
 			},
 			wantReqs: map[string]parser.SyncRequirements{
 				"k8suniqueserviceselector": {
@@ -95,7 +95,7 @@ func TestTest(t *testing.T) {
 			name: "multi equivalentset req fulfilled by syncset",
 			inputs: []string{
 				fixtures.TemplateReferentialMultEquivSets,
-				toYAMLString(fakes.SyncSetFor("syncset", []schema.GroupVersionKind{DeploymentGVK, IngressGVK})),
+				toYAMLString(t, fakes.SyncSetFor("syncset", []schema.GroupVersionKind{DeploymentGVK, IngressGVK})),
 			},
 			omitManifest: true,
 			wantReqs:     map[string]parser.SyncRequirements{},
@@ -104,7 +104,7 @@ func TestTest(t *testing.T) {
 			name: "multi requirement, one req fulfilled by syncset",
 			inputs: []string{
 				fixtures.TemplateReferentialMultReqs,
-				toYAMLString(fakes.SyncSetFor("syncset", []schema.GroupVersionKind{DeploymentGVK, IngressGVK})),
+				toYAMLString(t, fakes.SyncSetFor("syncset", []schema.GroupVersionKind{DeploymentGVK, IngressGVK})),
 			},
 			omitManifest: true,
 			wantReqs: map[string]parser.SyncRequirements{
@@ -121,8 +121,8 @@ func TestTest(t *testing.T) {
 				fixtures.TemplateReferential,
 				fixtures.TemplateReferentialMultEquivSets,
 				fixtures.TemplateReferentialMultReqs,
-				toYAMLString(fakes.ConfigFor([]schema.GroupVersionKind{ServiceGVK, DeploymentGVK})),
-				toYAMLString(fakes.SyncSetFor("syncset", []schema.GroupVersionKind{DeploymentGVK, IngressGVK})),
+				toYAMLString(t, fakes.ConfigFor([]schema.GroupVersionKind{ServiceGVK, DeploymentGVK})),
+				toYAMLString(t, fakes.SyncSetFor("syncset", []schema.GroupVersionKind{DeploymentGVK, IngressGVK})),
 			},
 			omitManifest: true,
 			wantReqs: map[string]parser.SyncRequirements{
@@ -199,7 +199,7 @@ func TestTest_Errors(t *testing.T) {
 			name: "error if manifest not provided and omitGVKManifest not set",
 			inputs: []string{
 				fixtures.TemplateReferential,
-				toYAMLString(fakes.ConfigFor([]schema.GroupVersionKind{ServiceGVK, DeploymentGVK})),
+				toYAMLString(t, fakes.ConfigFor([]schema.GroupVersionKind{ServiceGVK, DeploymentGVK})),
 			},
 			wantErrs: map[string]error{},
 			err:      fmt.Errorf("no GVK manifest found; please provide a manifest enumerating the GVKs supported by the cluster"),
@@ -243,10 +243,10 @@ func TestTest_Errors(t *testing.T) {
 }
 
 func toYAMLString(t *testing.T, obj runtime.Object) string {
-        t.Helper()
-        
+	t.Helper()
+
 	yaml, err := yaml.Marshal(obj)
 	require.NoError(t, err)
-	
+
 	return string(yaml)
 }
