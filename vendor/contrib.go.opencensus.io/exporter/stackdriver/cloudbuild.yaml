@@ -1,4 +1,0 @@
-steps:
-  - name: golang:1.17
-    args: ["make", "install-tools", "ci"]
-logsBucket: gs://opentelemetry-ops-e2e-cloud-build-logs
