@@ -54,11 +54,7 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 	}
 
 	externalData, errors := s.sendRequests(providerKeys, clientCert)
-	if err := s.mutateWithExternalData(obj, externalData, errors); err != nil {
-		return err
-	}
-
-	return nil
+	return s.mutateWithExternalData(obj, externalData, errors)
 }
 
 // sendRequests sends requests to all providers in parallel.

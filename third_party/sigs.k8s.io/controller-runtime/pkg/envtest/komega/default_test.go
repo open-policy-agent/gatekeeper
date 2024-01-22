@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 func TestDefaultGet(t *testing.T) {
@@ -95,7 +95,7 @@ func TestDefaultObject(t *testing.T) {
 	}
 	g.Eventually(Object(&fetched)).Should(And(
 		Not(BeNil()),
-		HaveField("Spec.Replicas", Equal(pointer.Int32(5))),
+		HaveField("Spec.Replicas", Equal(ptr.To[int64](5))),
 	))
 }
 
@@ -110,7 +110,7 @@ func TestDefaultObjectList(t *testing.T) {
 		Not(BeNil()),
 		HaveField("Items", And(
 			HaveLen(1),
-			ContainElement(HaveField("Spec.Replicas", Equal(pointer.Int32(5)))),
+			ContainElement(HaveField("Spec.Replicas", Equal(ptr.To[int64](5)))),
 		)),
 	))
 }

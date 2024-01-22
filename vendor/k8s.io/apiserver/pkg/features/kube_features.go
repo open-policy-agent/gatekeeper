@@ -37,6 +37,7 @@ const (
 
 	// owner: @ivelichkovich, @tallclair
 	// alpha: v1.27
+	// beta: v1.28
 	// kep: https://kep.k8s.io/3716
 	//
 	// Enables usage of MatchConditions fields to use CEL expressions for matching on admission webhooks
@@ -87,16 +88,6 @@ const (
 	// Add support for distributed tracing in the API Server
 	APIServerTracing featuregate.Feature = "APIServerTracing"
 
-	// owner: @tallclair
-	// alpha: v1.7
-	// beta: v1.8
-	// GA: v1.12
-	//
-	// AdvancedAuditing enables a much more general API auditing pipeline, which includes support for
-	// pluggable output backends and an audit policy specifying how different requests should be
-	// audited.
-	AdvancedAuditing featuregate.Feature = "AdvancedAuditing"
-
 	// owner: @cici37 @jpbetz
 	// kep: http://kep.k8s.io/3488
 	// alpha: v1.26
@@ -112,17 +103,6 @@ const (
 	// Enables expression validation for Custom Resource
 	CustomResourceValidationExpressions featuregate.Feature = "CustomResourceValidationExpressions"
 
-	// owner: @apelisse
-	// alpha: v1.12
-	// beta: v1.13
-	// stable: v1.18
-	//
-	// Allow requests to be processed but not stored, so that
-	// validation, merging, mutation can be tested without
-	// committing.
-	DryRun featuregate.Feature = "DryRun"
-
-	// owner: @wojtek-t
 	// alpha: v1.20
 	// beta: v1.21
 	// GA: v1.24
@@ -132,11 +112,25 @@ const (
 
 	// owner: @aramase
 	// kep: https://kep.k8s.io/3299
+	// deprecated: v1.28
+	//
+	// Enables KMS v1 API for encryption at rest.
+	KMSv1 featuregate.Feature = "KMSv1"
+
+	// owner: @aramase
+	// kep: https://kep.k8s.io/3299
 	// alpha: v1.25
 	// beta: v1.27
 	//
 	// Enables KMS v2 API for encryption at rest.
 	KMSv2 featuregate.Feature = "KMSv2"
+
+	// owner: @enj
+	// kep: https://kep.k8s.io/3299
+	// beta: v1.28
+	//
+	// Enables the use of derived encryption keys with KMS v2.
+	KMSv2KDF featuregate.Feature = "KMSv2KDF"
 
 	// owner: @jiahuif
 	// kep: https://kep.k8s.io/2887
@@ -188,6 +182,24 @@ const (
 	// Enables server-side field validation.
 	ServerSideFieldValidation featuregate.Feature = "ServerSideFieldValidation"
 
+	// owner: @enj
+	// beta: v1.29
+	//
+	// Enables http2 DOS mitigations for unauthenticated clients.
+	//
+	// Some known reasons to disable these mitigations:
+	//
+	// An API server that is fronted by an L7 load balancer that is set up
+	// to mitigate http2 attacks may opt to disable this protection to prevent
+	// unauthenticated clients from disabling connection reuse between the load
+	// balancer and the API server (many incoming connections could share the
+	// same backend connection).
+	//
+	// An API server that is on a private network may opt to disable this
+	// protection to prevent performance regressions for unauthenticated
+	// clients.
+	UnauthenticatedHTTP2DOSMitigation featuregate.Feature = "UnauthenticatedHTTP2DOSMitigation"
+
 	// owner: @caesarxuchao @roycaihw
 	// alpha: v1.20
 	//
@@ -222,6 +234,13 @@ const (
 	//
 	// Allow the API server to stream individual items instead of chunking
 	WatchList featuregate.Feature = "WatchList"
+
+	// owner: @serathius
+	// kep: http://kep.k8s.io/2340
+	// alpha: v1.28
+	//
+	// Allow the API server to serve consistent lists from cache
+	ConsistentListFromCache featuregate.Feature = "ConsistentListFromCache"
 )
 
 func init() {
@@ -235,7 +254,7 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 
 	AggregatedDiscoveryEndpoint: {Default: true, PreRelease: featuregate.Beta},
 
-	AdmissionWebhookMatchConditions: {Default: false, PreRelease: featuregate.Alpha},
+	AdmissionWebhookMatchConditions: {Default: true, PreRelease: featuregate.Beta},
 
 	APIListChunking: {Default: true, PreRelease: featuregate.Beta},
 
@@ -247,17 +266,17 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 
 	APIServerTracing: {Default: true, PreRelease: featuregate.Beta},
 
-	AdvancedAuditing: {Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.28
-
-	ValidatingAdmissionPolicy: {Default: false, PreRelease: featuregate.Alpha},
+	ValidatingAdmissionPolicy: {Default: false, PreRelease: featuregate.Beta},
 
 	CustomResourceValidationExpressions: {Default: true, PreRelease: featuregate.Beta},
 
-	DryRun: {Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.28
-
 	EfficientWatchResumption: {Default: true, PreRelease: featuregate.GA, LockToDefault: true},
 
+	KMSv1: {Default: true, PreRelease: featuregate.Deprecated},
+
 	KMSv2: {Default: true, PreRelease: featuregate.Beta},
+
+	KMSv2KDF: {Default: false, PreRelease: featuregate.Beta}, // default and lock to true in 1.29, remove in 1.31
 
 	OpenAPIEnums: {Default: true, PreRelease: featuregate.Beta},
 
@@ -275,9 +294,13 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 
 	StorageVersionHash: {Default: true, PreRelease: featuregate.Beta},
 
+	UnauthenticatedHTTP2DOSMitigation: {Default: false, PreRelease: featuregate.Beta},
+
 	WatchBookmark: {Default: true, PreRelease: featuregate.GA, LockToDefault: true},
 
 	InPlacePodVerticalScaling: {Default: false, PreRelease: featuregate.Alpha},
 
 	WatchList: {Default: false, PreRelease: featuregate.Alpha},
+
+	ConsistentListFromCache: {Default: false, PreRelease: featuregate.Alpha},
 }

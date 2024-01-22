@@ -49,7 +49,7 @@ type testResources struct {
 	k8sClient          client.Client
 }
 
-func setupTest(ctx context.Context, t *testing.T, readyTrackerClient readiness.Lister) *testResources {
+func setupTest(_ context.Context, t *testing.T, readyTrackerClient readiness.Lister) *testResources {
 	t.Helper()
 
 	mgr, wm := testutils.SetupManager(t, cfg)

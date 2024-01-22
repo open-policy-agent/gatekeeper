@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	// register exporters with the registry.
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/opencensus"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/opentelemetry"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/prometheus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/stackdriver"
 )
@@ -27,9 +27,9 @@ type Exporter interface {
 
 var exporters = newExporterSet(
 	map[string]StartExporter{
-		opencensus.Name:  opencensus.Start,
-		prometheus.Name:  prometheus.Start,
-		stackdriver.Name: stackdriver.Start,
+		opentelemetry.Name: opentelemetry.Start,
+		prometheus.Name:    prometheus.Start,
+		stackdriver.Name:   stackdriver.Start,
 	},
 )
 
@@ -69,11 +69,11 @@ func (es *exporterSet) Set(s string) error {
 	splt := strings.Split(s, ",")
 	for _, v := range splt {
 		lower := strings.ToLower(v)
-		new, ok := es.registeredExporters[lower]
+		newExporter, ok := es.registeredExporters[lower]
 		if !ok {
 			return fmt.Errorf("exporter %s is not a valid exporter: %v", v, es.validExporters)
 		}
-		es.assignedExporters[lower] = new
+		es.assignedExporters[lower] = newExporter
 	}
 	return nil
 }

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/open-policy-agent/opa/ast/internal/tokens"
 	astJSON "github.com/open-policy-agent/opa/ast/json"
 )
 
@@ -286,6 +287,7 @@ func ParseCompleteDocRuleWithDotsFromTerm(module *Module, term *Term) (*Rule, er
 		return nil, fmt.Errorf("invalid rule head: %v", ref)
 	}
 	head := RefHead(ref, BooleanTerm(true).SetLocation(term.Location))
+	head.generatedValue = true
 	head.Location = term.Location
 	head.jsonOptions = term.jsonOptions
 
@@ -475,7 +477,7 @@ func ParseModuleWithOpts(filename, input string, popts ParserOptions) (*Module, 
 	if err != nil {
 		return nil, err
 	}
-	return parseModule(filename, stmts, comments)
+	return parseModule(filename, stmts, comments, popts.EffectiveRegoVersion())
 }
 
 // ParseBody returns exactly one body.
@@ -624,6 +626,7 @@ func ParseStatementsWithOpts(filename, input string, popts ParserOptions) ([]Sta
 		WithCapabilities(popts.Capabilities).
 		WithSkipRules(popts.SkipRules).
 		WithJSONOptions(popts.JSONOptions).
+		WithRegoVersion(popts.EffectiveRegoVersion()).
 		withUnreleasedKeywords(popts.unreleasedKeywords)
 
 	stmts, comments, errs := parser.Parse()
@@ -635,7 +638,7 @@ func ParseStatementsWithOpts(filename, input string, popts ParserOptions) ([]Sta
 	return stmts, comments, nil
 }
 
-func parseModule(filename string, stmts []Statement, comments []*Comment) (*Module, error) {
+func parseModule(filename string, stmts []Statement, comments []*Comment, regoCompatibilityMode RegoVersion) (*Module, error) {
 
 	if len(stmts) == 0 {
 		return nil, NewError(ParseErr, &Location{File: filename}, "empty module")
@@ -656,11 +659,15 @@ func parseModule(filename string, stmts []Statement, comments []*Comment) (*Modu
 
 	// The comments slice only holds comments that were not their own statements.
 	mod.Comments = append(mod.Comments, comments...)
+	mod.regoVersion = regoCompatibilityMode
 
 	for i, stmt := range stmts[1:] {
 		switch stmt := stmt.(type) {
 		case *Import:
 			mod.Imports = append(mod.Imports, stmt)
+			if mod.regoVersion == RegoV0 && Compare(stmt.Path.Value, RegoV1CompatibleRef) == 0 {
+				mod.regoVersion = RegoV0CompatV1
+			}
 		case *Rule:
 			setRuleModule(stmt, mod)
 			mod.Rules = append(mod.Rules, stmt)
@@ -670,6 +677,7 @@ func parseModule(filename string, stmts []Statement, comments []*Comment) (*Modu
 				errs = append(errs, NewError(ParseErr, stmt[0].Location, err.Error()))
 				continue
 			}
+			rule.generatedBody = true
 			mod.Rules = append(mod.Rules, rule)
 
 			// NOTE(tsandall): the statement should now be interpreted as a
@@ -687,6 +695,29 @@ func parseModule(filename string, stmts []Statement, comments []*Comment) (*Modu
 		}
 	}
 
+	if mod.regoVersion == RegoV0CompatV1 || mod.regoVersion == RegoV1 {
+		for _, rule := range mod.Rules {
+			for r := rule; r != nil; r = r.Else {
+				var t string
+				if r.isFunction() {
+					t = "function"
+				} else {
+					t = "rule"
+				}
+
+				if r.generatedBody && r.Head.generatedValue {
+					errs = append(errs, NewError(ParseErr, r.Location, "%s must have value assignment and/or body declaration", t))
+				}
+				if r.Body != nil && !r.generatedBody && !ruleDeclarationHasKeyword(r, tokens.If) && !r.Default {
+					errs = append(errs, NewError(ParseErr, r.Location, "`if` keyword is required before %s body", t))
+				}
+				if r.Head.RuleKind() == MultiValue && !ruleDeclarationHasKeyword(r, tokens.Contains) {
+					errs = append(errs, NewError(ParseErr, r.Location, "`contains` keyword is required for partial set rules"))
+				}
+			}
+		}
+	}
+
 	if len(errs) > 0 {
 		return nil, errs
 	}
@@ -698,6 +729,15 @@ func parseModule(filename string, stmts []Statement, comments []*Comment) (*Modu
 	}
 
 	return mod, nil
+}
+
+func ruleDeclarationHasKeyword(rule *Rule, keyword tokens.Token) bool {
+	for _, kw := range rule.Head.keywords {
+		if kw == keyword {
+			return true
+		}
+	}
+	return false
 }
 
 func newScopeAttachmentErr(a *Annotations, want string) *Error {

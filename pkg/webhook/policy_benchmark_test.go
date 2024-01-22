@@ -77,11 +77,11 @@ func getFiles(dir string) ([]string, error) {
 	return filePaths, nil
 }
 
-func (f *fakeNsGetter) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+func (f *fakeNsGetter) IsObjectNamespaced(_ runtime.Object) (bool, error) {
 	return false, nil
 }
 
-func (f *fakeNsGetter) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+func (f *fakeNsGetter) GroupVersionKindFor(_ runtime.Object) (schema.GroupVersionKind, error) {
 	return schema.GroupVersionKind{}, nil
 }
 

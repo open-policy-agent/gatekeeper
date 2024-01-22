@@ -7,13 +7,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 func TestSystem_Mutate_Annotations(t *testing.T) {
-	MutationAnnotationsEnabled = pointer.Bool(true)
+	MutationAnnotationsEnabled = ptr.To[bool](true)
 	t.Cleanup(func() {
-		MutationAnnotationsEnabled = pointer.Bool(false)
+		MutationAnnotationsEnabled = ptr.To[bool](false)
 	})
 
 	m := &fakeMutator{
