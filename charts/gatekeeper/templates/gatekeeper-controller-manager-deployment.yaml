@@ -32,14 +32,9 @@ spec:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
         {{- end }}
       labels:
-{{- include "gatekeeper.podLabels" . }}
-        app: '{{ template "gatekeeper.name" . }}'
-        chart: '{{ template "gatekeeper.name" . }}'
-        control-plane: controller-manager
-        gatekeeper.sh/operation: webhook
-        gatekeeper.sh/system: "yes"
-        heritage: '{{ .Release.Service }}'
-        release: '{{ .Release.Name }}'
+        {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "gatekeeper.mandatoryLabels" . | nindent 8 }}
+        {{- include "gatekeeper.commonLabels" . | nindent 8 }}
     spec:
       affinity:
         {{- toYaml .Values.controllerManager.affinity | nindent 8 }}
