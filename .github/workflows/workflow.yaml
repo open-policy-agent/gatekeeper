@@ -75,7 +75,7 @@ jobs:
         run: make native-test
 
       - name: Codecov Upload
-        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
+        uses: codecov/codecov-action@4fe8c5f003fae66aa5ebb77cfd3e7bfbbda0b6b0 # v3.1.5
         with:
           flags: unittests
           file: ./cover.out
@@ -186,7 +186,7 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         if: ${{ always() }}
         with:
           name: logs
@@ -251,7 +251,7 @@ jobs:
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l run=dummy-provider --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-dummy-provider.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         if: ${{ always() }}
         with:
           name: helm-logs
@@ -308,7 +308,7 @@ jobs:
         kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-generatorexpansion-audit.json
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+      uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
       if: ${{ always() }}
       with:
         name: generatorexpansion-logs
