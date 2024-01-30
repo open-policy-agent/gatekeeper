@@ -34,8 +34,13 @@ spec:
         {{- end }}
       labels:
         {{- include "gatekeeper.podLabels" . | nindent 8 }}
-        {{- include "gatekeeper.mandatoryLabels" . | nindent 8 }}
-        {{- include "gatekeeper.commonLabels" . | nindent 8 }}
+        app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        control-plane: controller-manager
+        gatekeeper.sh/operation: webhook
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
+        release: '{{ .Release.Name }}'
     spec:
       affinity:
         {{- toYaml .Values.audit.affinity | nindent 8 }}
