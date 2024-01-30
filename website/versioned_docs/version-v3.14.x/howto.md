@@ -137,3 +137,5 @@ You can list all constraints in a cluster with the following command:
 kubectl get constraints
 ```
 
+### Input Review
+You can view information on the `input.review` object that Gatekeeper takes as input [here](./input.md)
