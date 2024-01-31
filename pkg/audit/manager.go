@@ -510,12 +510,12 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 
 		excluded, err := am.skipExcludedNamespace(&obj)
 		if err != nil {
-			am.log.Error(err, "Unable to exclude object namespace for audit from cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
+			am.log.Error(err, fmt.Sprintf("Unable to exclude object namespace for audit from cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
 			continue
 		}
 
 		if excluded {
-			am.log.V(logging.DebugLevel).Info("excluding object from audit from cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
+			am.log.V(logging.DebugLevel).Info(fmt.Sprintf("excluding object from audit from cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
 			continue
 		}
 
@@ -525,7 +525,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		}
 		resp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
 		if err != nil {
-			am.log.Error(err, "Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
+			am.log.Error(err, fmt.Sprintf("Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
 			continue
 		}
 
