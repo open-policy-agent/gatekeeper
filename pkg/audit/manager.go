@@ -515,7 +515,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		}
 
 		if excluded {
-			am.log.V(logging.DebugLevel).Info("excluding object from audit from cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
+			am.log.V(logging.DebugLevel).Info(fmt.Sprintf("excluding object from audit from cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
 			continue
 		}
 
