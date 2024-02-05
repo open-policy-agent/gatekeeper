@@ -113,3 +113,7 @@ If you want to contribute to Helm chart, Gatekeeper auto-generates versioned Hel
 ## Contributing to Code
 
 If you want to contribute code, check out the [Developers](developers.md) guide to get started.
+
+## Contributing Templates
+
+If you'd like to contribute a Constraint Template to the [Gatekeeper Policy Library](https://open-policy-agent.github.io/gatekeeper-library/website/), you can find documentation on how to do that [here in the library's README](https://github.com/open-policy-agent/gatekeeper-library?tab=readme-ov-file#how-to-contribute-to-the-library).

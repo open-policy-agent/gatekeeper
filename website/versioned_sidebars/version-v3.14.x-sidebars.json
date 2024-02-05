@@ -53,6 +53,7 @@
       "label": "Concepts",
       "collapsed": false,
       "items": [
+        "input",
         "mutation-background"
       ]
     },
