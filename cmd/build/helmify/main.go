@@ -137,7 +137,7 @@ func (ks *kindSet) Write() error {
 			}
 
 			if kind == DeploymentKind {
-				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
+				obj = strings.Replace(obj, "      labels:", "      labels:\n        {{- include \"gatekeeper.podLabels\" . | nindent 8 }}\n        {{- include \"gatekeeper.commonLabels\" . | nindent 8 }}", 1)
 			}
 
 			if name == "gatekeeper-manager-role" && kind == "Role" {

@@ -33,7 +33,8 @@ spec:
         {{- toYaml .Values.auditPodAnnotations | trim | nindent 8 }}
         {{- end }}
       labels:
-{{- include "gatekeeper.podLabels" . }}
+        {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "gatekeeper.commonLabels" . | nindent 8 }}
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
         control-plane: audit-controller
