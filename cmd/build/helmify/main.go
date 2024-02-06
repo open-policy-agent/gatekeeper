@@ -137,7 +137,11 @@ func (ks *kindSet) Write() error {
 			}
 
 			if kind == DeploymentKind {
+<<<<<<< HEAD
 				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
+=======
+				obj = strings.Replace(obj, "      labels:", "      labels:\n        {{- include \"gatekeeper.podLabels\" . | nindent 8 }}\n        {{- include \"gatekeeper.commonLabels\" . | nindent 8 }}", 1)
+>>>>>>> 902a1b4f7 (feat: Update audit and controller manager with pod labels (#3240))
 			}
 
 			if name == "gatekeeper-manager-role" && kind == "Role" {
