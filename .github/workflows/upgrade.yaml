@@ -42,7 +42,7 @@ jobs:
 
       - name: Deploy Helm release
         run: |
-          make e2e-helm-upgrade-init HELM_VERSION=${{ matrix.HELM_VERSION }} BASE_RELEASE=${{ env.BASE_RELEASE }}
+          make e2e-helm-upgrade-init HELM_VERSION=${{ matrix.HELM_VERSION }} BASE_RELEASE=${{ env.BASE_RELEASE }} LOG_LEVEL=DEBUG
 
       - name: Run e2e after install
         run: |
@@ -85,7 +85,8 @@ jobs:
             HELM_VERSION=${{ matrix.HELM_VERSION }} \
             HELM_REPO=gatekeeper-e2e \
             HELM_CRD_REPO=gatekeeper-crds \
-            HELM_RELEASE=latest
+            HELM_RELEASE=latest \
+            LOG_LEVEL=DEBUG
 
       - name: Run e2e after upgrade
         run: |

@@ -238,7 +238,8 @@ jobs:
             HELM_CRD_REPO=gatekeeper-crds \
             HELM_RELEASE=latest \
             HELM_VERSION=${{ matrix.HELM_VERSION }} \
-            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
+            LOG_LEVEL=DEBUG
 
           make test-e2e \
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}

@@ -12,6 +12,7 @@ ENABLE_GENERATOR_EXPANSION ?= false
 ENABLE_PUBSUB ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
+LOG_LEVEL ?= "INFO"
 
 VERSION := v3.17.0-beta.0
 
@@ -208,6 +209,7 @@ ifeq ($(ENABLE_PUBSUB),true)
 		--set-string auditPodAnnotations.dapr\\.io/enabled=true \
 		--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 		--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
+		--set logLevel=${LOG_LEVEL} \
 		--set mutationAnnotations=true;
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
@@ -226,6 +228,7 @@ else
 		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
+		--set logLevel=${LOG_LEVEL} \
 		--set mutationAnnotations=true
 endif
 
@@ -243,6 +246,7 @@ e2e-helm-upgrade-init: e2e-helm-install
 		--set disabledBuiltins={http.send} \
 		--set enableExternalData=true \
 		--set logMutations=true \
+		--set logLevel=${LOG_LEVEL} \
 		--set mutationAnnotations=true;\
 
 e2e-helm-upgrade:
@@ -263,6 +267,7 @@ e2e-helm-upgrade:
 		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
+		--set logLevel=${LOG_LEVEL} \
 		--set mutationAnnotations=true;\
 
 e2e-subscriber-build-load-image:
