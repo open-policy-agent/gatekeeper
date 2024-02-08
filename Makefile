@@ -13,7 +13,7 @@ ENABLE_PUBSUB ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 
-VERSION := v3.16.0-beta.0
+VERSION := v3.17.0-beta.0
 
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -475,6 +475,10 @@ version-docs:
 		node:${NODE_VERSION} \
 		sh -c "yarn install --frozen-lockfile && yarn run docusaurus docs:version ${NEWVERSION}"
 	@sed -i 's/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/master\/deploy\/gatekeeper\.yaml.*/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${TAG}\/deploy\/gatekeeper\.yaml/' ./website/versioned_docs/version-${NEWVERSION}/install.md
+
+.PHONY: patch-version-docs
+patch-version-docs:
+	@sed -i 's/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${OLDVERSION}\/deploy\/gatekeeper\.yaml.*/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${TAG}\/deploy\/gatekeeper\.yaml/' ./website/versioned_docs/version-${NEWVERSION}/install.md
 
 promote-staging-manifest:
 	@rm -rf deploy
