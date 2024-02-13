@@ -68,9 +68,7 @@ import (
 // https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#response
 const httpStatusWarning = 299
 
-var (
-	maxServingThreads = flag.Int("max-serving-threads", -1, "cap the number of threads handling non-trivial requests, -1 caps the number of threads to GOMAXPROCS. Defaults to -1.")
-)
+var maxServingThreads = flag.Int("max-serving-threads", -1, "cap the number of threads handling non-trivial requests, -1 caps the number of threads to GOMAXPROCS. Defaults to -1.")
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
