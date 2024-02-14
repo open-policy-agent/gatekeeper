@@ -10,6 +10,6 @@ spec:
       protocol: TCP
       port: 80
       targetPort: 8080
-  externalTrafficPolicy: Local
+  type: NodePort
   externalIPs:
     - 1.1.1.1
