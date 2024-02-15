@@ -53,6 +53,7 @@ const (
 	defaultConstraintViolationsLimit = 20
 	defaultListLimit                 = 500
 	defaultAPICacheDir               = "/tmp/audit"
+	defaultConnection                = "audit-connection"
 	defaultChannel                   = "audit-channel"
 )
 
