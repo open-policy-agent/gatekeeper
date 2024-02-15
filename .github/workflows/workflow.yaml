@@ -140,8 +140,9 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        KUBERNETES_VERSION: ["1.25.8", "1.26.3", "1.27.1", "1.28.0"]
+        KUBERNETES_VERSION: ["1.26.3", "1.27.1", "1.28.0", "1.29.0"]
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
@@ -198,8 +199,9 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        HELM_VERSION: ["3.7.2"]
+        HELM_VERSION: ["3.14.1"]
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
     steps:
       - name: Harden Runner
