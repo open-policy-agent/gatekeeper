@@ -5,6 +5,7 @@ metricsBackends: ["prometheus"]
 auditMatchKindOnly: false
 constraintViolationsLimit: 20
 auditFromCache: false
+disableAudit: false
 disableMutation: false
 disableValidatingWebhook: false
 validatingWebhookName: gatekeeper-validating-webhook-configuration
