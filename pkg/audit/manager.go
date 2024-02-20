@@ -147,22 +147,22 @@ func (a byGVKNNMsg) Len() int {
 }
 
 func (a byGVKNNMsg) Less(i, j int) bool {
-	if a[i].group == a[j].group {
-		if a[i].version == a[j].version {
-			if a[i].kind == a[j].kind {
-				if a[i].namespace == a[j].namespace {
-					if a[i].name == a[j].name {
-						return a[i].msg < a[j].msg
-					}
-					return a[i].name < a[j].name
-				}
-				return a[i].namespace < a[j].namespace
-			}
-			return a[i].kind < a[j].kind
-		}
+	if a[i].group != a[j].group {
+		return a[i].group < a[j].group
+	}
+	if a[i].version != a[j].version {
 		return a[i].version < a[j].version
 	}
-	return a[i].group < a[j].group
+	if a[i].kind != a[j].kind {
+		return a[i].kind < a[j].kind
+	}
+	if a[i].namespace != a[j].namespace {
+		return a[i].namespace < a[j].namespace
+	}
+	if a[i].name != a[j].name {
+		return a[i].name < a[j].name
+	}
+	return a[i].msg < a[j].msg
 }
 
 func (a byGVKNNMsg) Swap(i, j int) {
