@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -136,6 +137,36 @@ type updateListEntry struct {
 	name              string
 	msg               string
 	enforcementAction util.EnforcementAction
+}
+
+// ByGVKNNMsg implements sort.Interface based on the group, version, kind, name, namespace, and msg fields.
+type byGVKNNMsg []updateListEntry
+
+func (a byGVKNNMsg) Len() int {
+	return len(a)
+}
+
+func (a byGVKNNMsg) Less(i, j int) bool {
+	if a[i].group == a[j].group {
+		if a[i].version == a[j].version {
+			if a[i].kind == a[j].kind {
+				if a[i].namespace == a[j].namespace {
+					if a[i].name == a[j].name {
+						return a[i].msg < a[j].msg
+					}
+					return a[i].name < a[j].name
+				}
+				return a[i].namespace < a[j].namespace
+			}
+			return a[i].kind < a[j].kind
+		}
+		return a[i].version < a[j].version
+	}
+	return a[i].group < a[j].group
+}
+
+func (a byGVKNNMsg) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
 }
 
 // nsCache is used for caching namespaces and their labels.
@@ -863,6 +894,9 @@ func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, 
 func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []updateListEntry, timestamp string, totalViolations int64) error {
 	constraintName := instance.GetName()
 	ucloop.log.Info("updating constraint status", "constraintName", constraintName)
+	// sort audit results
+	sort.Sort(byGVKNNMsg(auditResults))
+
 	// create constraint status violations
 	var statusViolations []interface{}
 	for i := range auditResults {
