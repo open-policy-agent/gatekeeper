@@ -16,6 +16,7 @@ func MergeChans[T any](chans ...<-chan T) (<-chan T, context.CancelFunc) {
 		once.Do(func() {
 			close(cancel)
 		})
+		<-out
 	}
 	cases := make([]reflect.SelectCase, len(chans)+1)
 	for i := range chans {
