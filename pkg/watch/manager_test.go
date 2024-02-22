@@ -40,6 +40,8 @@ type fakeCacheInformer struct {
 	handlers map[kcache.ResourceEventHandler]int
 }
 
+func (f *fakeCacheInformer) IsStopped() bool { return false }
+
 func (f *fakeCacheInformer) AddEventHandler(h kcache.ResourceEventHandler) (kcache.ResourceEventHandlerRegistration, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -99,7 +101,7 @@ func (f *fakeRemovableCache) List(_ context.Context, list client.ObjectList, _ .
 	return nil
 }
 
-func (f *fakeRemovableCache) Remove(_ client.Object) error {
+func (f *fakeRemovableCache) RemoveInformer(_ context.Context, _ client.Object) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.removeCounter++
@@ -131,7 +133,7 @@ func (f *funcCache) List(ctx context.Context, list client.ObjectList, opts ...cl
 	return errors.New("ListFunc not initialized")
 }
 
-func (f *funcCache) Remove(_ client.Object) error {
+func (f *funcCache) RemoveInformer(_ context.Context, _ client.Object) error {
 	return nil
 }
 

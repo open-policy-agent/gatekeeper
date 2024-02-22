@@ -75,6 +75,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	crWebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
@@ -219,11 +220,16 @@ func innerMain() int {
 	// Must be called before ctrl.NewManager!
 	metrics.DisableRESTClientMetrics()
 
+	tlsVersion, err := webhook.ParseTLSVersion(*webhook.TLSMinVersion)
+	if err != nil {
+		setupLog.Error(err, "unable to parse TLS version")
+		return 1
+	}
 	serverOpts := crWebhook.Options{
-		Host:          *host,
-		Port:          *port,
-		CertDir:       *certDir,
-		TLSMinVersion: *webhook.TLSMinVersion,
+		Host:    *host,
+		Port:    *port,
+		CertDir: *certDir,
+		TLSOpts: []func(c *tls.Config){func(c *tls.Config) { c.MinVersion = tlsVersion }},
 	}
 	if *webhook.ClientCAName != "" {
 		serverOpts.ClientCAName = *webhook.ClientCAName
@@ -234,13 +240,12 @@ func innerMain() int {
 		}
 	}
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     *metricsAddr,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: *metricsAddr,
+		},
 		LeaderElection:         false,
-		Port:                   *port,
-		Host:                   *host,
 		WebhookServer:          crWebhook.NewServer(serverOpts),
-		CertDir:                *certDir,
 		HealthProbeBindAddress: *healthAddr,
 		MapperProvider:         apiutil.NewDynamicRESTMapper,
 	})

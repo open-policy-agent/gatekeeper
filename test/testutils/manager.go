@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 // StartManager starts mgr. Registers a cleanup function to stop the manager at the completion of the test.
@@ -45,9 +46,11 @@ func SetupManager(t *testing.T, cfg *rest.Config) (manager.Manager, *watch.Manag
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
-		MetricsBindAddress: "0",
-		MapperProvider:     apiutil.NewDynamicRESTMapper,
-		Logger:             NewLogger(t),
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
+		MapperProvider: apiutil.NewDynamicRESTMapper,
+		Logger:         NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
