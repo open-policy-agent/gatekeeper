@@ -59,6 +59,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 const (
@@ -75,9 +76,11 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		HealthProbeBindAddress: "127.0.0.1:29090",
-		MetricsBindAddress:     "0",
-		MapperProvider:         apiutil.NewDynamicRESTMapper,
-		Logger:                 logger,
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
+		MapperProvider: apiutil.NewDynamicRESTMapper,
+		Logger:         logger,
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
