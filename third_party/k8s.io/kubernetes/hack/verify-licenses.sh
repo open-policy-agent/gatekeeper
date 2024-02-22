@@ -59,7 +59,7 @@ go-licenses report ./... >>"${ARTIFACTS}"/licenses.csv 2>"${ARTIFACTS}"/logs/go-
 echo -e 'PACKAGE_NAME  LICENSE_NAME  LICENSE_URL\n' >>"${ARTIFACTS}"/approved_licenses.dump
 while IFS=, read -r GO_PACKAGE LICENSE_URL LICENSE_NAME; do
     if [[ "${GO_PACKAGE}" == "github.com/rcrowley/go-metrics" ]] && [[ "${LICENSE_NAME}" == "BSD-2-Clause-FreeBSD" ]]; then
-        # as per https://github.com/cncf/foundation/blob/main/license-exceptions/cncf-exceptions-2019-11-01.json#L723-L726
+        # as per https://github.com/cncf/foundation/blob/86cab8e303153005492c07d2304e8c8808d896be/license-exceptions/cncf-exceptions-2019-11-01.spdx#L1594-L1603
         echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >>"${ARTIFACTS}"/approved_licenses.dump
         continue
     fi
