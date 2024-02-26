@@ -21,7 +21,10 @@ var kindRegex = regexp.MustCompile(`(?m)^kind:[\s]+([\S]+)[\s]*$`)
 // use exactly two spaces to be sure we are capturing metadata.name.
 var nameRegex = regexp.MustCompile(`(?m)^  name:[\s]+([\S]+)[\s]*$`)
 
-const DeploymentKind = "Deployment"
+const (
+	DeploymentKind = "Deployment"
+	end            = "{{- end }}"
+)
 
 func isRbacKind(str string) bool {
 	rbacKinds := [4]string{"Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding"}
@@ -125,7 +128,7 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-critical-pods" && kind == "ResourceQuota" {
-				obj = "{{- if .Values.resourceQuota }}\n" + obj + "{{- end }}\n"
+				obj = "{{- if .Values.resourceQuota }}\n" + obj + end + "\n"
 			}
 
 			if name == "gatekeeper-controller-manager" && kind == DeploymentKind {
@@ -147,7 +150,7 @@ func (ks *kindSet) Write() error {
 			}
 
 			if isRbacKind(kind) {
-				obj = "{{- if .Values.rbac.create }}\n" + obj + "{{- end }}\n"
+				obj = "{{- if .Values.rbac.create }}\n" + obj + end + "\n"
 			}
 
 			if name == "gatekeeper-controller-manager" && kind == "PodDisruptionBudget" {

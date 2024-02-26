@@ -46,6 +46,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
@@ -132,6 +133,7 @@ func init() {
 
 	// +kubebuilder:scaffold:scheme
 	flag.Var(disabledBuiltins, "disable-opa-builtin", "disable opa built-in function, this flag can be declared more than once.")
+	flag.Var(&constraint.VapEnforcement, "vap-enforcement", "control VAP resource generation. Allowed values are NONE: do not generate, GATEKEEPER_DEFAULT: do not generate unless label gatekeeper.sh/use-vap: yes is added to policy explicitly, VAP_DEFAULT: generate unless label gatekeeper.sh/use-vap: no is added to policy explicitly.")
 }
 
 func main() {

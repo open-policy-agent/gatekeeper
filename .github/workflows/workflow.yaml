@@ -50,7 +50,7 @@ jobs:
         uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v4.0.0
         with:
           # version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
-          version: v1.54.2
+          version: v1.55.2
 
   test:
     name: "Unit test"
@@ -178,7 +178,7 @@ jobs:
             IMG=gatekeeper-e2e:latest \
             USE_LOCAL_IMG=true
 
-          make test-e2e
+          make test-e2e KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} ENABLE_VAP_TESTS=1
 
       - name: Save logs
         if: ${{ always() }}
@@ -219,6 +219,7 @@ jobs:
           make e2e-bootstrap
 
       - name: Run e2e
+        # TODO(ritazh): add helm chart values for vap feature before alpha release
         run: |
           make docker-buildx \
             IMG=gatekeeper-e2e:latest \
@@ -288,7 +289,7 @@ jobs:
         make e2e-bootstrap
 
     - name: Run e2e
-      run: |
+      run: | # TODO(ritazh): set ENABLE_VAP_TESTS=1 before alpha release
         make docker-buildx \
           IMG=gatekeeper-e2e:latest
 

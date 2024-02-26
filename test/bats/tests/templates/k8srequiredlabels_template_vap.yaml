@@ -1,14 +1,14 @@
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
-  name: k8srequiredlabels
+  name: k8srequiredlabelsvap
   labels:
     "gatekeeper.sh/use-vap": "yes"
 spec:
   crd:
     spec:
       names:
-        kind: K8sRequiredLabels
+        kind: K8sRequiredLabelsVap
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
