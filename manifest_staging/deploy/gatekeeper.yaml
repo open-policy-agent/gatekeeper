@@ -1829,7 +1829,7 @@ spec:
                 type: boolean
               errors:
                 items:
-                  description: Error represents a single error caught while adding a constraint to OPA.
+                  description: Error represents a single error caught while adding a constraint to engine.
                   properties:
                     code:
                       type: string
@@ -3491,6 +3491,19 @@ rules:
   resources:
   - mutatingwebhookconfigurations
   verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingadmissionpolicies
+  - validatingadmissionpolicybindings
+  verbs:
+  - create
+  - delete
   - get
   - list
   - patch

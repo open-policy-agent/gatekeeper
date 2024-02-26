@@ -12,6 +12,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+const (
+	spec = "spec"
+)
+
 func assign(value interface{}, location string) *unversioned.Assign {
 	result := &unversioned.Assign{
 		Spec: unversioned.AssignSpec{
@@ -31,7 +35,7 @@ func assign(value interface{}, location string) *unversioned.Assign {
 }
 
 func benchmarkAssignMutator(b *testing.B, n int) {
-	mutator, err := MutatorForAssign(assign("foo", "spec"+strings.Repeat(".spec", n-1)))
+	mutator, err := MutatorForAssign(assign("foo", spec+strings.Repeat(".spec", n-1)))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -41,7 +45,7 @@ func benchmarkAssignMutator(b *testing.B, n int) {
 	}
 	p := make([]string, n)
 	for i := 0; i < n; i++ {
-		p[i] = "spec"
+		p[i] = spec
 	}
 	_, err = mutator.Mutate(&types.Mutable{Object: obj})
 	if err != nil {
@@ -55,7 +59,7 @@ func benchmarkAssignMutator(b *testing.B, n int) {
 }
 
 func benchmarkNoAssignMutator(b *testing.B, n int) {
-	path := "spec" + strings.Repeat(".spec", n-1)
+	path := spec + strings.Repeat(".spec", n-1)
 	a := assign("foo", path)
 	a.Spec.Parameters.PathTests = []unversioned.PathTest{{
 		SubPath:   path,
@@ -71,7 +75,7 @@ func benchmarkNoAssignMutator(b *testing.B, n int) {
 	}
 	p := make([]string, n)
 	for i := 0; i < n; i++ {
-		p[i] = "spec"
+		p[i] = spec
 	}
 	_, err = mutator.Mutate(&types.Mutable{Object: obj})
 	if err != nil {

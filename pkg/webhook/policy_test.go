@@ -128,6 +128,8 @@ spec:
         kinds: ["Pod"]
 `
 	nameLargerThan63 = "abignameabignameabignameabignameabignameabignameabignameabigname"
+
+	withMaxThreads = " with max threads"
 )
 
 func validProvider() *externadatav1alpha1.Provider {
@@ -339,7 +341,7 @@ func TestReviewRequest(t *testing.T) {
 		t.Run(tt.Name, testFn)
 
 		maxThreads = 1
-		t.Run(tt.Name+" with max threads", testFn)
+		t.Run(tt.Name+withMaxThreads, testFn)
 	}
 }
 
@@ -684,7 +686,7 @@ func TestTracing(t *testing.T) {
 		}
 		t.Run(tt.Name, testFn)
 		maxThreads = 1
-		t.Run(tt.Name+" with max threads", testFn)
+		t.Run(tt.Name+withMaxThreads, testFn)
 	}
 }
 
@@ -849,7 +851,7 @@ func TestGetValidationMessages(t *testing.T) {
 		t.Run(tt.Name, testFn)
 
 		maxThreads = 1
-		t.Run(tt.Name+" with max threads", testFn)
+		t.Run(tt.Name+withMaxThreads, testFn)
 	}
 }
 

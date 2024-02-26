@@ -36,7 +36,6 @@ var cfg *rest.Config
 
 func TestMain(m *testing.M) {
 	var err error
-
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
@@ -45,6 +44,10 @@ func TestMain(m *testing.M) {
 		},
 		ErrorIfCRDPathMissing: true,
 	}
+	///TODO(ritazh): remove when vap is GAed in k/k
+	args := t.ControlPlane.GetAPIServer().Configure()
+	args.Append("runtime-config", "api/all=true")
+	args.Append("feature-gates", "ValidatingAdmissionPolicy=true")
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		stdlog.Fatal(err)
 	}

@@ -169,8 +169,10 @@ func (in *Anything) DeepCopyInto(out *Anything) {
 }
 
 // SemanticEqual returns whether there have been changes to a constraint that
-// the framework should know about. It can ignore metadata as it assumes the
-// two comparables share the same identity.
+// the framework should know about. It can ignore most metadata as it assumes the
+// two comparables share the same identity. Labels are compared
+// because the labels of a constraint may impact functionality (e.g. whether
+// a constraint is expected to be enforced by Kubernetes' Validating Admission Policy).
 func (ct *ConstraintTemplate) SemanticEqual(other *ConstraintTemplate) bool {
-	return reflect.DeepEqual(ct.Spec, other.Spec)
+	return reflect.DeepEqual(ct.Spec, other.Spec) && reflect.DeepEqual(ct.ObjectMeta.Labels, other.ObjectMeta.Labels)
 }

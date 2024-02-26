@@ -625,6 +625,7 @@ func (h *validationHandler) createReviewForRequest(ctx context.Context, req *adm
 	review := &target.AugmentedReview{
 		AdmissionRequest: &req.AdmissionRequest,
 		Source:           mutationtypes.SourceTypeOriginal,
+		IsAdmission:      true,
 	}
 	if req.AdmissionRequest.Namespace != "" {
 		ns := &corev1.Namespace{}
