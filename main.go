@@ -46,6 +46,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
@@ -75,6 +76,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	crWebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
@@ -131,6 +133,7 @@ func init() {
 
 	// +kubebuilder:scaffold:scheme
 	flag.Var(disabledBuiltins, "disable-opa-builtin", "disable opa built-in function, this flag can be declared more than once.")
+	flag.Var(&constraint.VapEnforcement, "vap-enforcement", "control VAP resource generation. Allowed values are NONE: do not generate, GATEKEEPER_DEFAULT: do not generate unless label gatekeeper.sh/use-vap: yes is added to policy explicitly, VAP_DEFAULT: generate unless label gatekeeper.sh/use-vap: no is added to policy explicitly.")
 }
 
 func main() {
@@ -219,11 +222,16 @@ func innerMain() int {
 	// Must be called before ctrl.NewManager!
 	metrics.DisableRESTClientMetrics()
 
+	tlsVersion, err := webhook.ParseTLSVersion(*webhook.TLSMinVersion)
+	if err != nil {
+		setupLog.Error(err, "unable to parse TLS version")
+		return 1
+	}
 	serverOpts := crWebhook.Options{
-		Host:          *host,
-		Port:          *port,
-		CertDir:       *certDir,
-		TLSMinVersion: *webhook.TLSMinVersion,
+		Host:    *host,
+		Port:    *port,
+		CertDir: *certDir,
+		TLSOpts: []func(c *tls.Config){func(c *tls.Config) { c.MinVersion = tlsVersion }},
 	}
 	if *webhook.ClientCAName != "" {
 		serverOpts.ClientCAName = *webhook.ClientCAName
@@ -234,13 +242,12 @@ func innerMain() int {
 		}
 	}
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     *metricsAddr,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: *metricsAddr,
+		},
 		LeaderElection:         false,
-		Port:                   *port,
-		Host:                   *host,
 		WebhookServer:          crWebhook.NewServer(serverOpts),
-		CertDir:                *certDir,
 		HealthProbeBindAddress: *healthAddr,
 		MapperProvider:         apiutil.NewDynamicRESTMapper,
 	})
@@ -404,12 +411,6 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	}
 
 	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
-
-	if *webhook.ValidateTemplateRego && *enableK8sCel {
-		err := fmt.Errorf("cannot validate template rego when K8s cel is enabled. Please disable K8s cel by setting --experimental-enable-k8s-native-validation=false or disable template rego validation by setting --validate-template-rego=false")
-		setupLog.Error(err, "unable to set up OPA and K8s native drivers")
-		return err
-	}
 
 	if *enableK8sCel {
 		// initialize K8sValidation

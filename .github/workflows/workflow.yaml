@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 7
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
         with:
           egress-policy: audit
 
@@ -47,10 +47,10 @@ jobs:
 
       # source: https://github.com/golangci/golangci-lint-action
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3.7.0
+        uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v4.0.0
         with:
           # version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
-          version: v1.54.2
+          version: v1.55.2
 
   test:
     name: "Unit test"
@@ -58,7 +58,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
         with:
           egress-policy: audit
 
@@ -75,7 +75,7 @@ jobs:
         run: make native-test
 
       - name: Codecov Upload
-        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
+        uses: codecov/codecov-action@e0b68c6749509c5f83f984dd99a76a1c1a231044 # v4.0.1
         with:
           flags: unittests
           file: ./cover.out
@@ -87,7 +87,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
         with:
           egress-policy: audit
 
@@ -113,7 +113,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
         with:
           egress-policy: audit
 
@@ -140,11 +140,12 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        KUBERNETES_VERSION: ["1.25.8", "1.26.3", "1.27.1", "1.28.0"]
+        KUBERNETES_VERSION: ["1.26.3", "1.27.1", "1.28.0", "1.29.0"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
         with:
           egress-policy: audit
 
@@ -177,7 +178,7 @@ jobs:
             IMG=gatekeeper-e2e:latest \
             USE_LOCAL_IMG=true
 
-          make test-e2e
+          make test-e2e KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} ENABLE_VAP_TESTS=1
 
       - name: Save logs
         if: ${{ always() }}
@@ -198,12 +199,13 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        HELM_VERSION: ["3.7.2"]
+        HELM_VERSION: ["3.14.1"]
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
         with:
           egress-policy: audit
 
@@ -217,6 +219,7 @@ jobs:
           make e2e-bootstrap
 
       - name: Run e2e
+        # TODO(ritazh): add helm chart values for vap feature before alpha release
         run: |
           make docker-buildx \
             IMG=gatekeeper-e2e:latest \
@@ -266,7 +269,7 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+      uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
       with:
         egress-policy: audit
 
@@ -286,7 +289,7 @@ jobs:
         make e2e-bootstrap
 
     - name: Run e2e
-      run: |
+      run: | # TODO(ritazh): set ENABLE_VAP_TESTS=1 before alpha release
         make docker-buildx \
           IMG=gatekeeper-e2e:latest
 
