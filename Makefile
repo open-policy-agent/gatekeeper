@@ -475,7 +475,6 @@ release-manifest:
 	@sed -i "s/tag: $(VERSION)/tag: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
 	@sed -i 's/Current release version: `$(VERSION)`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
 	@sed -i -e 's/^VERSION := $(VERSION)/VERSION := ${NEWVERSION}/' ./Makefile
-	@sed -i 's/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/master\/deploy\/gatekeeper\.yaml.*/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${NEWVERSION}\/deploy\/gatekeeper\.yaml/' ./website/docs/install.md
 	export
 	$(MAKE) manifests
 
@@ -488,6 +487,11 @@ version-docs:
 		-u $(shell id -u):$(shell id -g) \
 		node:${NODE_VERSION} \
 		sh -c "yarn install --frozen-lockfile && yarn run docusaurus docs:version ${NEWVERSION}"
+	@sed -i 's/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/master\/deploy\/gatekeeper\.yaml.*/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${TAG}\/deploy\/gatekeeper\.yaml/' ./website/versioned_docs/version-${NEWVERSION}/install.md
+
+.PHONY: patch-version-docs
+patch-version-docs:
+	@sed -i 's/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${OLDVERSION}\/deploy\/gatekeeper\.yaml.*/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${TAG}\/deploy\/gatekeeper\.yaml/' ./website/versioned_docs/version-${NEWVERSION}/install.md
 
 promote-staging-manifest:
 	@rm -rf deploy
