@@ -165,13 +165,13 @@ setting the `Constraint`'s `spec.match.source` field to `Generated`. This can
 also be used to define different enforcement actions for expanded resources and
 original resources.
 
-For example, suppose a cluster has a policy that requires all ["naked" pods](https://kubernetes.io/docs/concepts/configuration/overview/#naked-pods-vs-replicasets-deployments-and-jobs) to be denied, but allows them to be created as a workload resource, such as `Deployment`. A user could create a `Constraint` that only targets original resources, like so:
+For example, suppose a cluster has a policy that blocks all [standalone pods](https://kubernetes.io/docs/concepts/configuration/overview/#naked-pods-vs-replicasets-deployments-and-jobs), but allows them to be created as part of a workload resource, such as `Deployment`. A user could create a `Constraint` that only targets original resources, like so:
 
 ```yaml
 apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: block-naked-pods
+kind: block-standalone-pods
 metadata:
-  name: block-naked-pods
+  name: block-standalone-pods
 spec:
   match:
     source: Original
