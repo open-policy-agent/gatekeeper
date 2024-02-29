@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"container/heap"
 	"context"
 	"os"
 	"reflect"
@@ -23,6 +24,65 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func Test_SVQueue(t *testing.T) {
+	sv1 := &StatusViolation{
+		Group:   "rbac.authorization.k8s.io",
+		Version: "v1",
+		Kind:    "ClusterRoleBinding",
+	}
+	sv2 := &StatusViolation{
+		Group:   "authorization.k8s.io",
+		Version: "v1",
+		Kind:    "SubjectAccessReview",
+	}
+	sv3 := &StatusViolation{
+		Group:   "rbac.authorization.k8s.io",
+		Version: "v1",
+		Kind:    "RoleBinding",
+	}
+
+	svq := make(SVQueue, 0, 3)
+	heap.Init(&svq)
+	// Push into queue in unordered fashion, expect length to be correct, and pop in sort order.
+	heap.Push(&svq, sv1)
+	heap.Push(&svq, sv2)
+	heap.Push(&svq, sv3)
+	require.EqualValues(t, svq.Len(), 3)
+	require.EqualValues(t, heap.Pop(&svq).(*StatusViolation), sv3)
+	require.EqualValues(t, heap.Pop(&svq).(*StatusViolation), sv1)
+	require.EqualValues(t, heap.Pop(&svq).(*StatusViolation), sv2)
+	require.EqualValues(t, svq.Len(), 0)
+}
+
+func Test_LimitQueue(t *testing.T) {
+	sv1 := &StatusViolation{
+		Group:   "rbac.authorization.k8s.io",
+		Version: "v1",
+		Kind:    "ClusterRoleBinding",
+	}
+	sv2 := &StatusViolation{
+		Group:   "authorization.k8s.io",
+		Version: "v1",
+		Kind:    "SubjectAccessReview",
+	}
+	sv3 := &StatusViolation{
+		Group:   "rbac.authorization.k8s.io",
+		Version: "v1",
+		Kind:    "RoleBinding",
+	}
+
+	lq := newLimitQueue(2)
+	// Push into queue in unordered fashion, expect length to stay <= 2, peek the max object, and pop in sort order.
+	lq.Push(sv1)
+	lq.Push(sv2)
+	lq.Push(sv3)
+	require.EqualValues(t, lq.Len(), 2)
+	require.EqualValues(t, lq.Peek(), sv1)
+	require.EqualValues(t, lq.Pop(), sv1)
+	require.EqualValues(t, lq.Pop(), sv2)
+	require.EqualValues(t, lq.Len(), 0)
+}
 
 func Test_auditFromCache(t *testing.T) {
 	podToReview := fakes.Pod(fakes.WithNamespace("test-namespace-1"))
