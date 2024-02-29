@@ -49,9 +49,9 @@ func Test_SVQueue(t *testing.T) {
 	heap.Push(&svq, sv2)
 	heap.Push(&svq, sv3)
 	require.EqualValues(t, svq.Len(), 3)
-	require.EqualValues(t, heap.Pop(&svq).(*StatusViolation), sv3)
-	require.EqualValues(t, heap.Pop(&svq).(*StatusViolation), sv1)
-	require.EqualValues(t, heap.Pop(&svq).(*StatusViolation), sv2)
+	require.EqualValues(t, heap.Pop(&svq), sv3)
+	require.EqualValues(t, heap.Pop(&svq), sv1)
+	require.EqualValues(t, heap.Pop(&svq), sv2)
 	require.EqualValues(t, svq.Len(), 0)
 }
 
@@ -81,6 +81,9 @@ func Test_LimitQueue(t *testing.T) {
 	require.EqualValues(t, lq.Peek(), sv1)
 	require.EqualValues(t, lq.Pop(), sv1)
 	require.EqualValues(t, lq.Pop(), sv2)
+	require.EqualValues(t, lq.Len(), 0)
+	// Ensure that Peek does not add a nil element if the queue is empty.
+	lq.Peek()
 	require.EqualValues(t, lq.Len(), 0)
 }
 

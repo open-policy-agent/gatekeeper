@@ -134,25 +134,25 @@ func (svq SVQueue) Len() int { return len(svq) }
 // Implements sort.Interface based on the group, version, kind, namespace, name, message and enforcement action fields.
 // For Pop to give us the highest priority, use greater than here.
 func (svq SVQueue) Less(i, j int) bool {
-	if svq[i].Group == svq[j].Group {
-		if svq[i].Version == svq[j].Version {
-			if svq[i].Kind == svq[j].Kind {
-				if svq[i].Namespace == svq[j].Namespace {
-					if svq[i].Name == svq[j].Name {
-						if svq[i].Message == svq[j].Message {
-							return svq[i].EnforcementAction > svq[j].EnforcementAction
-						}
-						return svq[i].Message > svq[j].Message
-					}
-					return svq[i].Name > svq[j].Name
-				}
-				return svq[i].Namespace > svq[j].Namespace
-			}
-			return svq[i].Kind > svq[j].Kind
-		}
+	if svq[i].Group != svq[j].Group {
+		return svq[i].Group > svq[j].Group
+	}
+	if svq[i].Version != svq[j].Version {
 		return svq[i].Version > svq[j].Version
 	}
-	return svq[i].Group > svq[j].Group
+	if svq[i].Kind != svq[j].Kind {
+		return svq[i].Kind > svq[j].Kind
+	}
+	if svq[i].Namespace != svq[j].Namespace {
+		return svq[i].Namespace > svq[j].Namespace
+	}
+	if svq[i].Name != svq[j].Name {
+		return svq[i].Name > svq[j].Name
+	}
+	if svq[i].Message != svq[j].Message {
+		return svq[i].Message > svq[j].Message
+	}
+	return svq[i].EnforcementAction > svq[j].EnforcementAction
 }
 
 func (svq SVQueue) Swap(i, j int) {
@@ -171,6 +171,7 @@ func (svq *SVQueue) Pop() any {
 	old := *svq
 	n := len(old)
 	sv := old[n-1]
+	old[n-1] = nil
 	*svq = old[:n-1]
 	return sv
 }
@@ -181,16 +182,16 @@ type LimitQueue struct {
 	svq   SVQueue
 }
 
-func newLimitQueue(l int) LimitQueue {
+func newLimitQueue(l int) *LimitQueue {
 	lq := LimitQueue{
 		limit: l,
 		svq:   make(SVQueue, 0, l),
 	}
 	heap.Init(&lq.svq)
-	return lq
+	return &lq
 }
 
-func (lq LimitQueue) Len() int { return lq.svq.Len() }
+func (lq *LimitQueue) Len() int { return lq.svq.Len() }
 
 func (lq *LimitQueue) Push(x *StatusViolation) {
 	heap.Push(&lq.svq, x)
@@ -207,7 +208,10 @@ func (lq *LimitQueue) Pop() *StatusViolation {
 	return sv
 }
 
-func (lq LimitQueue) Peek() *StatusViolation {
+func (lq *LimitQueue) Peek() *StatusViolation {
+	if lq.Len() == 0 {
+		return nil
+	}
 	sv := lq.Pop()
 	lq.Push(sv)
 	return sv
@@ -308,7 +312,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		return nil
 	}
 
-	updateLists := make(map[util.KindVersionName]LimitQueue)
+	updateLists := make(map[util.KindVersionName]*LimitQueue)
 	totalViolationsPerConstraint := make(map[util.KindVersionName]int64)
 	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
 	// resetting total violations per enforcement action
@@ -337,7 +341,9 @@ func (am *Manager) audit(ctx context.Context) error {
 	// log constraints with violations
 	for gvknn := range updateLists {
 		ar := updateLists[gvknn].Peek()
-		logConstraint(am.log, &gvknn, ar.EnforcementAction, totalViolationsPerConstraint[gvknn])
+		if ar != nil {
+			logConstraint(am.log, &gvknn, ar.EnforcementAction, totalViolationsPerConstraint[gvknn])
+		}
 	}
 
 	for k, v := range totalViolationsPerEnforcementAction {
@@ -356,7 +362,7 @@ func (am *Manager) audit(ctx context.Context) error {
 func (am *Manager) auditResources(
 	ctx context.Context,
 	constraintsGVK []schema.GroupVersionKind,
-	updateLists map[util.KindVersionName]LimitQueue,
+	updateLists map[util.KindVersionName]*LimitQueue,
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
@@ -645,7 +651,7 @@ func nsMapFromObjs(objs []unstructured.Unstructured) (map[string]*corev1.Namespa
 }
 
 func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache,
-	updateLists map[util.KindVersionName]LimitQueue,
+	updateLists map[util.KindVersionName]*LimitQueue,
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
@@ -848,7 +854,7 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 }
 
 func (am *Manager) addAuditResponsesToUpdateLists(
-	updateLists map[util.KindVersionName]LimitQueue,
+	updateLists map[util.KindVersionName]*LimitQueue,
 	res []Result,
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
@@ -905,7 +911,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	}
 }
 
-func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) {
+func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]*LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) {
 	// if there is a previous reporting thread, close it before starting a new one
 	if am.ucloop != nil {
 		// this is closing the previous audit reporting thread
@@ -942,7 +948,7 @@ func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, 
 	return isNamespaceExcluded, err
 }
 
-func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults LimitQueue, timestamp string, totalViolations int64) error {
+func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults *LimitQueue, timestamp string, totalViolations int64) error {
 	constraintName := instance.GetName()
 	ucloop.log.Info("updating constraint status", "constraintName", constraintName)
 
@@ -1017,7 +1023,7 @@ type updateConstraintLoop struct {
 	client  client.Client
 	stop    chan struct{}
 	stopped chan struct{}
-	ul      map[util.KindVersionName]LimitQueue
+	ul      map[util.KindVersionName]*LimitQueue
 	ts      string
 	tv      map[util.KindVersionName]int64
 	log     logr.Logger
