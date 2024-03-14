@@ -2,7 +2,7 @@ package wildcard
 
 import "strings"
 
-// +kubebuilder:validation:Pattern=`^\*?[-a-z0-9]*\*?$`
+// +kubebuilder:validation:Pattern=`^\*?[-:a-z0-9]*\*?$`
 
 // A string that supports globbing at its front and end. Ex: "kube-*" will match "kube-system" or
 // "kube-public", "*-system" will match "kube-system" or "gatekeeper-system", "*system*" will
