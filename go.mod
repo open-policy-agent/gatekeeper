@@ -15,7 +15,7 @@ require (
 	github.com/dominikbraun/graph v0.16.2
 	github.com/go-logr/logr v1.2.4
 	github.com/go-logr/zapr v1.2.4
-	github.com/golang/protobuf v1.5.3
+	github.com/golang/protobuf v1.5.4
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.1
 	github.com/onsi/gomega v1.27.7
@@ -33,7 +33,7 @@ require (
 	golang.org/x/sync v0.3.0
 	golang.org/x/time v0.3.0
 	google.golang.org/grpc v1.58.2
-	google.golang.org/protobuf v1.31.0
+	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.27.4
