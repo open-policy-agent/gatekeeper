@@ -201,6 +201,9 @@ func (lq *LimitQueue) Push(x *StatusViolation) {
 }
 
 func (lq *LimitQueue) Pop() *StatusViolation {
+	if lq.Len() == 0 {
+		return &StatusViolation{}
+	}
 	sv, ok := heap.Pop(&lq.svq).(*StatusViolation)
 	if !ok {
 		return &StatusViolation{}

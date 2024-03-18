@@ -85,6 +85,8 @@ func Test_LimitQueue(t *testing.T) {
 	// Ensure that Peek does not add a nil element if the queue is empty.
 	lq.Peek()
 	require.EqualValues(t, lq.Len(), 0)
+	// Ensure that Pop is nil if the queue is empty.
+	require.EqualValues(t, lq.Pop(), &StatusViolation{})
 }
 
 func Test_auditFromCache(t *testing.T) {
