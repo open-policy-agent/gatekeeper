@@ -1829,7 +1829,7 @@ spec:
                 type: boolean
               errors:
                 items:
-                  description: Error represents a single error caught while adding a constraint to OPA.
+                  description: Error represents a single error caught while adding a constraint to engine.
                   properties:
                     code:
                       type: string
@@ -3497,6 +3497,19 @@ rules:
   - update
   - watch
 - apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingadmissionpolicies
+  - validatingadmissionpolicybindings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - apiextensions.k8s.io
   resources:
   - customresourcedefinitions
@@ -3749,7 +3762,7 @@ spec:
           value: manager
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-        image: openpolicyagent/gatekeeper:v3.16.0-beta.0
+        image: openpolicyagent/gatekeeper:v3.16.0-beta.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -3868,7 +3881,7 @@ spec:
           value: manager
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-        image: openpolicyagent/gatekeeper:v3.16.0-beta.0
+        image: openpolicyagent/gatekeeper:v3.16.0-beta.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

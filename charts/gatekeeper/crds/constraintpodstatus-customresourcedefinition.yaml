@@ -39,7 +39,7 @@ spec:
                 type: boolean
               errors:
                 items:
-                  description: Error represents a single error caught while adding a constraint to OPA.
+                  description: Error represents a single error caught while adding a constraint to engine.
                   properties:
                     code:
                       type: string
