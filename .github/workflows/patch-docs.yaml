@@ -29,7 +29,7 @@ jobs:
           echo "PATCH_VERSION=${PATCH_VERSION}" >> ${GITHUB_ENV}
           echo "TAG=${TAG}" >> ${GITHUB_ENV}
       
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
         with:
           fetch-depth: 0
 
@@ -41,7 +41,7 @@ jobs:
         run: make patch-version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x TAG=v${TAG} OLDVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.$((PATCH_VERSION-1))
       
       - name: Create release pull request
-        uses: peter-evans/create-pull-request@a4f52f8033a6168103c2538976c07b467e8163bc # v6.0.1
+        uses: peter-evans/create-pull-request@70a41aba780001da0a30141984ae2a0c95d8704e # v6.0.2
         with:
           commit-message: "chore: Patch docs for ${{ env.TAG }} release"
           title: "chore: Patch docs for ${{ env.TAG }} release"
