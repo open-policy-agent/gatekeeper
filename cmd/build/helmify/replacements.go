@@ -217,7 +217,7 @@ var replacements = map[string]string{
     - 'services/status'
   {{- end }}`,
 
-	"HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE": `{{ .Values.pdb.controllerManager.minAvailable }}`,
+	"HELMSUBST_PDB_CONTROLLER_MANAGER": `{{ .Values.pdb.controllerManager | toYaml | nindent 2 }}`,
 
 	`HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""`: `{{- if .Values.image.release }}
         image: {{ .Values.image.repository }}:{{ .Values.image.release }}
