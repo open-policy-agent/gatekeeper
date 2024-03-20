@@ -5,6 +5,7 @@ metricsBackends: ["prometheus"]
 auditMatchKindOnly: false
 constraintViolationsLimit: 20
 auditFromCache: false
+disableAudit: false
 disableMutation: false
 disableValidatingWebhook: false
 validatingWebhookName: gatekeeper-validating-webhook-configuration
@@ -44,20 +45,20 @@ externaldataProviderResponseCacheTTL: 3m
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.16.0-beta.0
+  release: v3.16.0-beta.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.16.0-beta.0
+      tag: v3.16.0-beta.1
 postUpgrade:
   labelNamespace:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.16.0-beta.0
+      tag: v3.16.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -88,7 +89,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.16.0-beta.0
+      tag: v3.16.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -129,7 +130,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.16.0-beta.0
+      tag: v3.16.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""
