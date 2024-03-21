@@ -29,5 +29,5 @@ type Client interface {
 	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
 
 	// Review runs all Constraints against obj.
-	Review(ctx context.Context, obj interface{}, opts ...drivers.QueryOpt) (*types.Responses, error)
+	Review(ctx context.Context, obj interface{}, sourceEP string, opts ...drivers.QueryOpt) (*types.Responses, error)
 }

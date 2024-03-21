@@ -607,7 +607,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			Object:    obj,
 			Namespace: ns,
 		}
-		resp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
+		resp, err := am.opa.Review(ctx, au, util.AuditEnforcementPoint, drivers.Stats(*logStatsAudit))
 		if err != nil {
 			am.log.Error(err, fmt.Sprintf("Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
 			continue
@@ -697,7 +697,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				Source:    mutationtypes.SourceTypeOriginal,
 			}
 
-			resp, err := am.opa.Review(ctx, augmentedObj, drivers.Stats(*logStatsAudit))
+			resp, err := am.opa.Review(ctx, augmentedObj, util.AuditEnforcementPoint, drivers.Stats(*logStatsAudit))
 			if err != nil {
 				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
 				continue
@@ -721,7 +721,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					Namespace: ns,
 					Source:    mutationtypes.SourceTypeGenerated,
 				}
-				resultantResp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
+				resultantResp, err := am.opa.Review(ctx, au, util.AuditEnforcementPoint, drivers.Stats(*logStatsAudit))
 				if err != nil {
 					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
 					continue

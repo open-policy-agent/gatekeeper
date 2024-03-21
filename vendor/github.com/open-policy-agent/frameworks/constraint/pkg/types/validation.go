@@ -38,8 +38,8 @@ type Response struct {
 	Results []*Result
 }
 
-func (r *Response) AddResult(results *Result) {
-	r.Results = append(r.Results, results)
+func (r *Response) AddResult(results ...*Result) {
+	r.Results = append(r.Results, results...)
 }
 
 // Sort sorts the Results in Response lexicographically first by the Constraint

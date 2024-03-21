@@ -258,7 +258,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 		}
 	}
 	for _, r := range res {
-		if err := util.ValidateEnforcementAction(util.EnforcementAction(r.EnforcementAction)); err != nil {
+		if err := util.ValidateEnforcementAction(util.EnforcementAction(r.EnforcementAction), r.Constraint.Object); err != nil {
 			continue
 		}
 		if *logDenies {
@@ -413,7 +413,7 @@ func (h *validationHandler) validateConstraint(req *admission.Request) (bool, er
 	enforcementAction := util.EnforcementAction(enforcementActionString)
 	if found && enforcementAction != "" {
 		if !*disableEnforcementActionValidation {
-			err = util.ValidateEnforcementAction(enforcementAction)
+			err = util.ValidateEnforcementAction(enforcementAction, obj.Object)
 			if err != nil {
 				return false, err
 			}
@@ -599,7 +599,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 }
 
 func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {
-	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace), drivers.Stats(*logStatsAdmission))
+	resp, err := h.opa.Review(ctx, review, util.WebhookEnforcementPoint, drivers.Tracing(trace), drivers.Stats(*logStatsAdmission))
 	if resp != nil && trace {
 		h.log.Info(resp.TraceDump())
 	}

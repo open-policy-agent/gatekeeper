@@ -407,7 +407,7 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.10.1
 ## explicit; go 1.20
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20240320172527-359cf1b785c9
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20240320172527-359cf1b785c9 => /mount/d/go/src/github.com/open-policy-agent/frameworks/constraint
 ## explicit; go 1.18
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis
@@ -1540,3 +1540,4 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
+# github.com/open-policy-agent/frameworks/constraint => /mount/d/go/src/github.com/open-policy-agent/frameworks/constraint

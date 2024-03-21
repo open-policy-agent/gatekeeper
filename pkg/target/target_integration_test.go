@@ -11,6 +11,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	api "github.com/open-policy-agent/gatekeeper/v3/apis"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -468,7 +469,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			}
 
 			fullReq := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req}
-			res, err := c.Review(ctx, fullReq, drivers.Tracing(true))
+			res, err := c.Review(ctx, fullReq, util.AuditEnforcementPoint, drivers.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing request: %s", err)
 			}
@@ -497,7 +498,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			}
 
 			fullReq2 := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req2}
-			res2, err := c.Review(ctx, fullReq2, drivers.Tracing(true))
+			res2, err := c.Review(ctx, fullReq2, util.AuditEnforcementPoint, drivers.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing OldObject request: %s", err)
 			}
@@ -510,7 +511,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			}
 
 			fullReq3 := &AugmentedUnstructured{Namespace: tc.ns, Object: *tc.obj}
-			res3, err := c.Review(ctx, fullReq3, drivers.Tracing(true))
+			res3, err := c.Review(ctx, fullReq3, util.AuditEnforcementPoint, drivers.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing AugmentedUnstructured request: %s", err)
 			}

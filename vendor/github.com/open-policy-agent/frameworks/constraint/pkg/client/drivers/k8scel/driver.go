@@ -155,7 +155,7 @@ func (d *Driver) RemoveData(_ context.Context, _ string, _ storage.Path) error {
 	return nil
 }
 
-func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...drivers.QueryOpt) (*drivers.QueryResponse, error) {
+func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, sourceEP string, opts ...drivers.QueryOpt) (*drivers.QueryResponse, error) {
 	cfg := &drivers.QueryCfg{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -210,21 +210,29 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		// TODO: should namespace be made available, if possible? Generally that context should be present
 		response := validator.Validate(ctx, versionedAttr.GetResource(), versionedAttr, constraint, nil, celAPI.PerCallLimit, nil)
 
-		enforcementAction, found, err := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
+		enforcementAction, err := apiconstraints.GetEnforcementAction(constraint)
 		if err != nil {
 			return nil, err
 		}
-		if !found {
-			enforcementAction = apiconstraints.EnforcementActionDeny
+
+		actions := []string{enforcementAction}
+		if apiconstraints.IsEnforcementActionScoped(enforcementAction) {
+			actions, err = apiconstraints.GetEnforcementActionsForEP(constraint, sourceEP)
+			if err != nil {
+				return nil, err
+			}
 		}
+
 		for _, decision := range response.Decisions {
 			if decision.Action == validatingadmissionpolicy.ActionDeny {
-				results = append(results, &types.Result{
-					Target:            target,
-					Msg:               decision.Message,
-					Constraint:        constraint,
-					EnforcementAction: enforcementAction,
-				})
+				for _, action := range actions {
+					results = append(results, &types.Result{
+						Target:            target,
+						Msg:               decision.Message,
+						Constraint:        constraint,
+						EnforcementAction: action,
+					})
+				}
 			}
 		}
 		evalElapsedTime := time.Since(evalStartTime)
