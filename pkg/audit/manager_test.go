@@ -101,27 +101,42 @@ func Test_auditFromCache(t *testing.T) {
 
 	_, err = client.AddTemplate(context.Background(), fakes.DenyAllRegoTemplate())
 	require.NoError(t, err, "adding denyall constraint template")
-	_, err = client.AddConstraint(context.Background(), fakes.DenyAllConstraint())
-	require.NoError(t, err, "adding denyall constraint")
 
 	tests := []struct {
 		name            string
 		processExcluder *process.Excluder
+		constraint      *unstructured.Unstructured
 		wantViolation   bool
 	}{
 		{
 			name:            "obj excluded from audit",
 			processExcluder: processExcluderFor([]string{"test-namespace-1"}),
+			constraint:      fakes.DenyAllConstraint(),
 		},
 		{
 			name:            "obj not excluded from audit",
 			processExcluder: processExcluderFor([]string{}),
+			constraint:      fakes.DenyAllConstraint(),
+			wantViolation:   true,
+		},
+		{
+			name:            "audit excluded from constraint",
+			processExcluder: processExcluderFor([]string{}),
+			constraint:      fakes.WebhookDenyAllConstraint(),
+		},
+		{
+			name:            "audit included in constraints",
+			processExcluder: processExcluderFor([]string{}),
+			constraint:      fakes.AuditDenyAllConstraint(),
 			wantViolation:   true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			_, err = client.AddConstraint(context.Background(), tc.constraint)
+			require.NoError(t, err, "adding denyall constraint")
+
 			am := &Manager{
 				processExcluder: tc.processExcluder,
 				auditCache:      testAuditCache,
@@ -131,10 +146,16 @@ func Test_auditFromCache(t *testing.T) {
 			results, errs := am.auditFromCache(context.Background())
 			require.Len(t, errs, 0)
 
+			// fmt.Println(results)
+
 			if tc.wantViolation {
 				require.Len(t, results, 1)
 			} else {
 				require.Len(t, results, 0)
+			}
+
+			if _, err := client.RemoveConstraint(context.Background(), tc.constraint); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}
