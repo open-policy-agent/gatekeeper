@@ -44,6 +44,8 @@ admissionEventsInvolvedNamespace: false
 auditEventsInvolvedNamespace: false
 resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
+enableK8sNativeValidation: false
+vapEnforcement: GATEKEEPER_DEFAULT
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
