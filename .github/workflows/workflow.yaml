@@ -245,7 +245,8 @@ jobs:
             LOG_LEVEL=DEBUG
 
           make test-e2e \
-            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
+            ENABLE_VAP_TESTS=1
 
       - name: Save logs
         if: ${{ always() }}
@@ -289,7 +290,7 @@ jobs:
         make e2e-bootstrap
 
     - name: Run e2e
-      run: | # TODO(ritazh): set ENABLE_VAP_TESTS=1 before alpha release
+      run: |
         make docker-buildx \
           IMG=gatekeeper-e2e:latest
 
