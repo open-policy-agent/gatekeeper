@@ -117,6 +117,7 @@ var (
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "PROTOTYPE (not stable): enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
+	deferToVAP                           = flag.Bool("defer-to-vap", false, "When set, the validation webhook will not evaluate a policy it expects K8s' Validating Admission Policy to enforce. May improve resource usage at the cost of race conditions detecting whether VAP enforcement is in effect.")
 )
 
 func init() {
@@ -414,7 +415,16 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 
 	if *enableK8sCel {
 		// initialize K8sValidation
-		k8sDriver, err := k8scel.New()
+		var k8scelArgs []k8scel.Arg
+		if *deferToVAP && constraint.VapEnforcement != constraint.VapFlagNone {
+			switch constraint.VapEnforcement {
+			case constraint.VapFlagGatekeeperDefault:
+				k8scelArgs = append(k8scelArgs, k8scel.VAPGenerationDefault(k8scel.VAPDefaultNo))
+			case constraint.VapFlagVapDefault:
+				k8scelArgs = append(k8scelArgs, k8scel.VAPGenerationDefault(k8scel.VAPDefaultYes))
+			}
+		}
+		k8sDriver, err := k8scel.New(k8scelArgs...)
 		if err != nil {
 			setupLog.Error(err, "unable to set up K8s native driver")
 			return err
