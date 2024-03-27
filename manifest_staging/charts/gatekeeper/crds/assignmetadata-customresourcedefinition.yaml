@@ -60,10 +60,10 @@ spec:
                       `gatekeeper-system`.
                     items:
                       description: |-
-                        A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or
-                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is
-                        required for wildcard matching.
-                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                        A string that supports globbing at its front and end. Ex: "kube-*" will match "kube-system" or
+                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system", "*system*" will
+                        match "system-kube" or "kube-system".  The asterisk is required for wildcard matching.
+                      pattern: ^\*?[-:a-z0-9]*\*?$
                       type: string
                     type: array
                   kinds:
@@ -141,7 +141,7 @@ spec:
                       Name is the name of an object.  If defined, it will match against objects with the specified
                       name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match
                       both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.
-                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^\*?[-:a-z0-9]*\*?$
                     type: string
                   namespaceSelector:
                     description: |-
@@ -196,10 +196,10 @@ spec:
                       `kube-system` and `gatekeeper-system`.
                     items:
                       description: |-
-                        A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or
-                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is
-                        required for wildcard matching.
-                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                        A string that supports globbing at its front and end. Ex: "kube-*" will match "kube-system" or
+                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system", "*system*" will
+                        match "system-kube" or "kube-system".  The asterisk is required for wildcard matching.
+                      pattern: ^\*?[-:a-z0-9]*\*?$
                       type: string
                     type: array
                   scope:
@@ -358,10 +358,10 @@ spec:
                       `gatekeeper-system`.
                     items:
                       description: |-
-                        A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or
-                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is
-                        required for wildcard matching.
-                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                        A string that supports globbing at its front and end. Ex: "kube-*" will match "kube-system" or
+                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system", "*system*" will
+                        match "system-kube" or "kube-system".  The asterisk is required for wildcard matching.
+                      pattern: ^\*?[-:a-z0-9]*\*?$
                       type: string
                     type: array
                   kinds:
@@ -439,7 +439,7 @@ spec:
                       Name is the name of an object.  If defined, it will match against objects with the specified
                       name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match
                       both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.
-                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^\*?[-:a-z0-9]*\*?$
                     type: string
                   namespaceSelector:
                     description: |-
@@ -494,10 +494,10 @@ spec:
                       `kube-system` and `gatekeeper-system`.
                     items:
                       description: |-
-                        A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or
-                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is
-                        required for wildcard matching.
-                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                        A string that supports globbing at its front and end. Ex: "kube-*" will match "kube-system" or
+                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system", "*system*" will
+                        match "system-kube" or "kube-system".  The asterisk is required for wildcard matching.
+                      pattern: ^\*?[-:a-z0-9]*\*?$
                       type: string
                     type: array
                   scope:
@@ -656,10 +656,10 @@ spec:
                       `gatekeeper-system`.
                     items:
                       description: |-
-                        A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or
-                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is
-                        required for wildcard matching.
-                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                        A string that supports globbing at its front and end. Ex: "kube-*" will match "kube-system" or
+                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system", "*system*" will
+                        match "system-kube" or "kube-system".  The asterisk is required for wildcard matching.
+                      pattern: ^\*?[-:a-z0-9]*\*?$
                       type: string
                     type: array
                   kinds:
@@ -737,7 +737,7 @@ spec:
                       Name is the name of an object.  If defined, it will match against objects with the specified
                       name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match
                       both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.
-                    pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^\*?[-:a-z0-9]*\*?$
                     type: string
                   namespaceSelector:
                     description: |-
@@ -792,10 +792,10 @@ spec:
                       `kube-system` and `gatekeeper-system`.
                     items:
                       description: |-
-                        A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or
-                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is
-                        required for wildcard matching.
-                      pattern: ^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                        A string that supports globbing at its front and end. Ex: "kube-*" will match "kube-system" or
+                        "kube-public", "*-system" will match "kube-system" or "gatekeeper-system", "*system*" will
+                        match "system-kube" or "kube-system".  The asterisk is required for wildcard matching.
+                      pattern: ^\*?[-:a-z0-9]*\*?$
                       type: string
                     type: array
                   scope:
