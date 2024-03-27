@@ -55,9 +55,8 @@ func TestDapr_Publish(t *testing.T) {
 	ctx := context.Background()
 
 	type args struct {
-		ctx   context.Context
-		data  interface{}
-		topic string
+		ctx  context.Context
+		data interface{}
 	}
 
 	tests := []struct {
@@ -72,35 +71,22 @@ func TestDapr_Publish(t *testing.T) {
 				data: map[string]interface{}{
 					"test": "test",
 				},
-				topic: "test",
 			},
 			wantErr: false,
 		},
 		{
 			name: "test publish without data",
 			args: args{
-				ctx:   ctx,
-				data:  nil,
-				topic: "test",
+				ctx:  ctx,
+				data: nil,
 			},
 			wantErr: false,
-		},
-		{
-			name: "test publish without topic",
-			args: args{
-				ctx: ctx,
-				data: map[string]interface{}{
-					"test": "test",
-				},
-				topic: "",
-			},
-			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := testClient
-			if err := r.Publish(tt.args.ctx, tt.args.data, tt.args.topic); (err != nil) != tt.wantErr {
+			if err := r.Publish(tt.args.ctx, tt.args.data); (err != nil) != tt.wantErr {
 				t.Errorf("Dapr.Publish() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

@@ -224,8 +224,6 @@ ifeq ($(ENABLE_PUBSUB),true)
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set audit.enablePubsub=${ENABLE_PUBSUB} \
-		--set audit.connection=${AUDIT_CONNECTION} \
-		--set audit.channel=${AUDIT_CHANNEL} \
 		--set-string auditPodAnnotations.dapr\\.io/enabled=true \
 		--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 		--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \

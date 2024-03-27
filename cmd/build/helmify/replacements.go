@@ -95,8 +95,6 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_PUBSUB_ARGS": `{{ if .Values.audit.enablePubsub}}
         - --enable-pub-sub={{ .Values.audit.enablePubsub }}
-        - --audit-connection={{ .Values.audit.connection }}
-        - --audit-channel={{ .Values.audit.channel }}
         {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.mutatingWebhookFailurePolicy }}`,

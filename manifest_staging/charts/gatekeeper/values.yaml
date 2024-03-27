@@ -212,8 +212,6 @@ controllerManager:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
 audit:
-  enablePubsub: false
-  connection: audit-connection
   channel: audit-channel
   hostNetwork: false
   dnsPolicy: ClusterFirst

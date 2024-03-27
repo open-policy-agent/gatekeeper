@@ -7,7 +7,7 @@ import (
 // PubSub is the interface that wraps pubsub methods.
 type Connection interface {
 	// Publish single message over a specific topic/channel
-	Publish(ctx context.Context, data interface{}, topic string) error
+	Publish(ctx context.Context, data interface{}) error
 
 	// Close connections
 	CloseConnection() error

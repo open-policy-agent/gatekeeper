@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -19,16 +20,19 @@ func NewSystem() *System {
 	return &System{}
 }
 
-func (s *System) Publish(_ context.Context, connection string, topic string, msg interface{}) error {
+func (s *System) Publish(ctx context.Context, msg interface{}) error {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
-	if len(s.connections) > 0 {
-		if c, ok := s.connections[connection]; ok {
-			return c.Publish(context.Background(), msg, topic)
-		}
-		return fmt.Errorf("connection is not initialized, name: %s ", connection)
+	var errs error
+
+	if len(s.connections) == 0 {
+		return fmt.Errorf("no connections are established")
 	}
-	return fmt.Errorf("No connections are established")
+
+	for _, c := range s.connections {
+		errs = errors.Join(errs, c.Publish(ctx, msg))
+	}
+	return errs
 }
 
 func (s *System) UpsertConnection(ctx context.Context, config interface{}, name string, provider string) error {

@@ -116,7 +116,6 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 			s, _ := json.MarshalIndent(toGet, "", "  ")
 			return fmt.Errorf("found %v %v:\n%s", gvk, key, string(s))
 		})
-
 		if err != nil {
 			t.Fatal(err)
 		}
