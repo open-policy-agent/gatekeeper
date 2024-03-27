@@ -14,7 +14,7 @@ AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
 
-VERSION := v3.16.0-beta.0
+VERSION := v3.16.0-beta.1
 
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -249,6 +249,8 @@ else
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set logLevel=${LOG_LEVEL} \
+		--set enableK8sNativeValidation=true \
+		--set vapEnforcement=GATEKEEPER_DEFAULT \
 		--set mutationAnnotations=true
 endif
 
@@ -288,6 +290,8 @@ e2e-helm-upgrade:
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set logLevel=${LOG_LEVEL} \
+		--set enableK8sNativeValidation=true \
+		--set vapEnforcement=GATEKEEPER_DEFAULT \
 		--set mutationAnnotations=true;\
 
 e2e-subscriber-build-load-image:
@@ -344,7 +348,7 @@ manifests: __controller-gen
 		output:crd:artifacts:config=config/crd/bases
 	./build/update-match-schema.sh
 	rm -rf manifest_staging
-	mkdir -p manifest_staging/deploy/experimental
+	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
 	docker run --rm -v $(shell pwd):/gatekeeper \
 		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
