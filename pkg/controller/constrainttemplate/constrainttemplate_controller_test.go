@@ -461,7 +461,7 @@ func TestReconcile(t *testing.T) {
 			Name:      "FooNamespace",
 			Object:    runtime.RawExtension{Object: ns},
 		}
-		resp, err := cfClient.Review(ctx, req)
+		resp, err := cfClient.Review(ctx, req, util.AuditEnforcementPoint)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -655,7 +655,7 @@ func TestReconcile(t *testing.T) {
 			Name:      "FooNamespace",
 			Object:    runtime.RawExtension{Object: ns},
 		}
-		resp, err := cfClient.Review(ctx, req)
+		resp, err := cfClient.Review(ctx, req, util.AuditEnforcementPoint)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -676,7 +676,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 			return true
 		}, func() error {
-			resp, err := cfClient.Review(ctx, req)
+			resp, err := cfClient.Review(ctx, req, util.AuditEnforcementPoint)
 			if err != nil {
 				return err
 			}

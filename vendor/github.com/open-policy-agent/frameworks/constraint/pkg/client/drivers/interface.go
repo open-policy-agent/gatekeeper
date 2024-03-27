@@ -43,7 +43,7 @@ type Driver interface {
 	// Query runs the passed target's Constraints against review.
 	// Returns a QueryResponse type.
 	// Returns an error if there was a problem executing the Query.
-	Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...QueryOpt) (*QueryResponse, error)
+	Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, ep string, opts ...QueryOpt) (*QueryResponse, error)
 
 	// Dump outputs the entire state of compiled Templates, added Constraints, and
 	// cached data used for referential Constraints.

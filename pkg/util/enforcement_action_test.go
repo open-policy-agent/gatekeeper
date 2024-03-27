@@ -7,21 +7,61 @@ import (
 
 func TestValidateEnforcementAction(t *testing.T) {
 	testCases := []struct {
-		name    string
-		action  EnforcementAction
-		wantErr error
+		name       string
+		action     EnforcementAction
+		wantErr    error
+		constraint map[string]interface{}
 	}{
 		{
-			name:    "empty string",
-			action:  "",
-			wantErr: ErrEnforcementAction,
+			name:       "empty string",
+			action:     "",
+			wantErr:    ErrEnforcementAction,
+			constraint: nil,
 		},
 		{
-			action:  "notsupported",
-			wantErr: ErrEnforcementAction,
+			action:     "notsupported",
+			wantErr:    ErrEnforcementAction,
+			constraint: nil,
 		},
 		{
-			action: Dryrun,
+			action:     Dryrun,
+			constraint: nil,
+		},
+		{
+			action: Scoped,
+			constraint: map[string]interface{}{
+				"spec": map[string]interface{}{
+					"scopedEnforcementActions": []ScopedEnforcementAction{
+						{
+							Action: "deny",
+							EnforcementPoints: []EnforcementPoint{
+								{
+									Name: "audit",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:   "invalid scopedEnforcementActions",
+			action: Scoped,
+			constraint: map[string]interface{}{
+				"spec": map[string]interface{}{
+					"scopedEnforcementActions": []map[string]interface{}{
+						{
+							"action": "deny",
+							"enforcementPoints": []map[string]string{
+								{
+									"test": "audit",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: ErrInvalidSpecEnforcementAction,
 		},
 	}
 
@@ -30,7 +70,7 @@ func TestValidateEnforcementAction(t *testing.T) {
 			tc.name = string(tc.action)
 		}
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateEnforcementAction(tc.action)
+			err := ValidateEnforcementAction(tc.action, tc.constraint)
 			if !errors.Is(err, tc.wantErr) {
 				t.Errorf("got ValidateEnforcementAction(%q) == %v, want %v",
 					tc.action, err, tc.wantErr)

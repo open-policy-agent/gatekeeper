@@ -14,6 +14,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -113,7 +114,7 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 			Source:    mutationtypes.SourceTypeOriginal,
 		}
 
-		review, err := client.Review(ctx, au)
+		review, err := client.Review(ctx, au, util.GatorEnforcementPoint)
 		if err != nil {
 			return nil, fmt.Errorf("reviewing %v %s/%s: %w",
 				obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
@@ -130,7 +131,7 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 				Namespace: ns,
 				Source:    mutationtypes.SourceTypeGenerated,
 			}
-			resultantReview, err := client.Review(ctx, au)
+			resultantReview, err := client.Review(ctx, au, util.GatorEnforcementPoint)
 			if err != nil {
 				return nil, fmt.Errorf("reviewing expanded resource %v %s/%s: %w",
 					resultant.Obj.GroupVersionKind(), resultant.Obj.GetNamespace(), resultant.Obj.GetName(), err)

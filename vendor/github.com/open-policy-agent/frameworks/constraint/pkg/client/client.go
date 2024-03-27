@@ -622,7 +622,7 @@ func (c *Client) RemoveData(ctx context.Context, data interface{}) (*types.Respo
 // Review makes sure the provided object satisfies all stored constraints.
 // On error, the responses return value will still be populated so that
 // partial results can be analyzed.
-func (c *Client) Review(ctx context.Context, obj interface{}, opts ...drivers.QueryOpt) (*types.Responses, error) {
+func (c *Client) Review(ctx context.Context, obj interface{}, sourceEP string, opts ...drivers.QueryOpt) (*types.Responses, error) {
 	responses := types.NewResponses()
 	errMap := make(clienterrors.ErrorMap)
 
@@ -661,7 +661,7 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...drivers.Qu
 		var targetConstraints []*unstructured.Unstructured
 
 		for _, template := range templateList {
-			matchingConstraints := template.Matches(target, review)
+			matchingConstraints := template.Matches(target, review, sourceEP)
 			for _, matchResult := range matchingConstraints {
 				if matchResult.error == nil {
 					targetConstraints = append(targetConstraints, matchResult.constraint)
@@ -676,14 +676,14 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...drivers.Qu
 	for target, review := range reviews {
 		constraints := constraintsByTarget[target]
 
-		resp, stats, err := c.review(ctx, target, constraints, review, opts...)
+		resp, stats, err := c.review(ctx, target, constraints, review, sourceEP, opts...)
 		if err != nil {
 			errMap.Add(target, err)
 			continue
 		}
 
 		for _, autorejection := range autorejections[target] {
-			resp.AddResult(autorejection.ToResult())
+			resp.AddResult(autorejection.ToResult()...)
 		}
 
 		// Ensure deterministic result ordering.
@@ -711,7 +711,7 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...drivers.Qu
 	return responses, &errMap
 }
 
-func (c *Client) review(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...drivers.QueryOpt) (*types.Response, []*instrumentation.StatsEntry, error) {
+func (c *Client) review(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, sourceEP string, opts ...drivers.QueryOpt) (*types.Response, []*instrumentation.StatsEntry, error) {
 	var results []*types.Result
 	var stats []*instrumentation.StatsEntry
 	var tracesBuilder strings.Builder
@@ -735,7 +735,7 @@ func (c *Client) review(ctx context.Context, target string, constraints []*unstr
 		if len(driverToConstraints[driverName]) == 0 {
 			continue
 		}
-		qr, err := driver.Query(ctx, target, driverToConstraints[driverName], review, opts...)
+		qr, err := driver.Query(ctx, target, driverToConstraints[driverName], review, sourceEP, opts...)
 		if err != nil {
 			errs.Add(driverName, err)
 			continue

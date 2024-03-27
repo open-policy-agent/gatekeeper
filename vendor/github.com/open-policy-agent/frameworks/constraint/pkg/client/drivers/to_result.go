@@ -21,21 +21,21 @@ func KeyMap(constraints []*unstructured.Unstructured) map[ConstraintKey]*unstruc
 	return result
 }
 
-func ToResults(constraints map[ConstraintKey]*unstructured.Unstructured, resultSet rego.ResultSet) ([]*types.Result, error) {
+func ToResults(constraints map[ConstraintKey]*unstructured.Unstructured, resultSet rego.ResultSet, sourceEP string) ([]*types.Result, error) {
 	var results []*types.Result
 	for _, r := range resultSet {
-		result, err := ToResult(constraints, r)
+		result, err := ToResult(constraints, r, sourceEP)
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, result)
+		results = append(results, result...)
 	}
 
 	return results, nil
 }
 
-func ToResult(constraints map[ConstraintKey]*unstructured.Unstructured, r rego.Result) (*types.Result, error) {
-	result := &types.Result{}
+func ToResult(constraints map[ConstraintKey]*unstructured.Unstructured, r rego.Result, sourceEP string) ([]*types.Result, error) {
+	results := []*types.Result{}
 
 	resultMap, found, err := unstructured.NestedMap(r.Bindings, "result")
 	if err != nil {
@@ -55,12 +55,6 @@ func ToResult(constraints map[ConstraintKey]*unstructured.Unstructured, r rego.R
 		return nil, errors.New("no binding for msg")
 	}
 
-	result.Msg = message
-
-	result.Metadata = map[string]interface{}{
-		"details": resultMap["details"],
-	}
-
 	keyMap, found, err := unstructured.NestedStringMap(resultMap, "key")
 	if err != nil {
 		return nil, fmt.Errorf("extracting key binding: %v", err)
@@ -74,20 +68,33 @@ func ToResult(constraints map[ConstraintKey]*unstructured.Unstructured, r rego.R
 		Kind: keyMap["kind"],
 		Name: keyMap["name"],
 	}
-
 	constraint := constraints[key]
-	// DeepCopy the result so we don't leak internal state.
-	result.Constraint = constraint.DeepCopy()
 
-	enforcementAction, found, err := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
+	enforcementAction, err := apiconstraints.GetEnforcementAction(constraint)
 	if err != nil {
 		return nil, err
 	}
-	if !found {
-		enforcementAction = apiconstraints.EnforcementActionDeny
+
+	actions := []string{enforcementAction}
+	if apiconstraints.IsEnforcementActionScoped(enforcementAction) {
+		actions, err = apiconstraints.GetEnforcementActionsForEP(constraint, sourceEP)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	result.EnforcementAction = enforcementAction
+	for _, action := range actions {
+		result := &types.Result{}
+		result.Msg = message
+		// DeepCopy the result so we don't leak internal state.
+		result.Constraint = constraint.DeepCopy()
+		result.EnforcementAction = action
+		result.Metadata = map[string]interface{}{
+			"details": resultMap["details"],
+		}
 
-	return result, nil
+		results = append(results, result)
+	}
+
+	return results, nil
 }

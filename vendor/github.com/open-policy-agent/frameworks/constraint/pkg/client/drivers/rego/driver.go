@@ -241,7 +241,7 @@ func (d *Driver) eval(ctx context.Context, compiler *ast.Compiler, target string
 	return res, t, err
 }
 
-func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...drivers.QueryOpt) (*drivers.QueryResponse, error) {
+func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, sourceEP string, opts ...drivers.QueryOpt) (*drivers.QueryResponse, error) {
 	if len(constraints) == 0 {
 		return nil, nil
 	}
@@ -310,7 +310,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 			traceBuilder.WriteString(*trace)
 		}
 
-		kindResults, err := drivers.ToResults(constraintsMap, resultSet)
+		kindResults, err := drivers.ToResults(constraintsMap, resultSet, sourceEP)
 		if err != nil {
 			return nil, err
 		}

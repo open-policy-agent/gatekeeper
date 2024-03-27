@@ -326,7 +326,7 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (gator.Client, 
 		Object: *toReview,
 		Source: mutationtypes.SourceTypeOriginal,
 	}
-	return c.Review(ctx, au)
+	return c.Review(ctx, au, util.GatorEnforcementPoint)
 }
 
 func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c gator.Client, toReview *unstructured.Unstructured) (*types.Responses, error) {
@@ -369,7 +369,7 @@ func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c 
 		Source:           mutationtypes.SourceTypeOriginal,
 	}
 
-	return c.Review(ctx, arr)
+	return c.Review(ctx, arr, util.GatorEnforcementPoint)
 }
 
 func (r *Runner) addInventory(ctx context.Context, c gator.Client, suiteDir, inventoryPath string) error {
