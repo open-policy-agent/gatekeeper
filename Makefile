@@ -364,7 +364,7 @@ lint:
 	docker run -t --rm -v $(shell pwd):/app \
 		-v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
 		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} \
-		golangci-lint run -v
+		golangci-lint run -v --fix
 
 # Generate code
 generate: __conversion-gen __controller-gen
