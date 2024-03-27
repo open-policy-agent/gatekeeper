@@ -56,7 +56,6 @@ func newStatsReporter() *reporter {
 		metric.WithDescription(ctDesc),
 		metric.WithInt64Callback(r.observeCTM),
 	)
-
 	if err != nil {
 		panic(err)
 	}

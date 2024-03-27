@@ -26,32 +26,6 @@ on:
 permissions: read-all
 
 jobs:
-  lint:
-    name: "Lint"
-    runs-on: ubuntu-22.04
-    timeout-minutes: 7
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
-        with:
-          egress-policy: audit
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
-
-      - name: Set up Go
-        uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
-        with:
-          go-version: "1.22"
-          check-latest: true
-
-      # source: https://github.com/golangci/golangci-lint-action
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v4.0.0
-        with:
-          # version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
-          version: v1.55.2
-
   test:
     name: "Unit test"
     runs-on: ubuntu-22.04

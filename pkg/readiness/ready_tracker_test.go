@@ -163,7 +163,7 @@ func setupController(
 		WatchManger:      wm,
 		ControllerSwitch: sw,
 		Tracker:          tracker,
-		GetPod:           func(ctx context.Context) (*corev1.Pod, error) { return pod, nil },
+		GetPod:           func(_ context.Context) (*corev1.Pod, error) { return pod, nil },
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
 		ExpansionSystem:  expansionSystem,
