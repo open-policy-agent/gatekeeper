@@ -167,7 +167,7 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 			return err
 		}
 
-		fakePodGetter := func(ctx context.Context) (*corev1.Pod, error) {
+		fakePodGetter := func(_ context.Context) (*corev1.Pod, error) {
 			pod := fakes.Pod(
 				fakes.WithNamespace(util.GetNamespace()),
 				fakes.WithName(util.GetPodName()),

@@ -236,7 +236,7 @@ func TestReconcile(t *testing.T) {
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		clientset := kubernetes.NewForConfigOrDie(cfg)
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			crd := &apiextensionsv1.CustomResourceDefinition{}
@@ -270,7 +270,7 @@ func TestReconcile(t *testing.T) {
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// check if vap resource exists now
@@ -297,7 +297,7 @@ func TestReconcile(t *testing.T) {
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// check if vap resource exists now
@@ -325,7 +325,7 @@ func TestReconcile(t *testing.T) {
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// check if vap resource exists now
@@ -355,7 +355,7 @@ func TestReconcile(t *testing.T) {
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// check if vap resource exists now
@@ -394,7 +394,7 @@ func TestReconcile(t *testing.T) {
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// check if vap resource exists now
@@ -487,7 +487,7 @@ func TestReconcile(t *testing.T) {
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		var crd *apiextensionsv1.CustomResourceDefinition
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			crd = &apiextensionsv1.CustomResourceDefinition{}
@@ -504,7 +504,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			crd := &apiextensionsv1.CustomResourceDefinition{}
@@ -528,7 +528,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			sList := &statusv1beta1.ConstraintPodStatusList{}
@@ -544,7 +544,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			return c.Create(ctx, newDenyAllCstr(suffix))
@@ -598,7 +598,7 @@ func TestReconcile(t *testing.T) {
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, instanceInvalidRego))
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			ct := &v1beta1.ConstraintTemplate{}
@@ -673,7 +673,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			resp, err := cfClient.Review(ctx, req)
@@ -810,7 +810,7 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unexpected tracker, got %T", ot)
 	}
 	// ensure that expectations are set for the constraint gvk
-	err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 		return true
 	}, func() error {
 		gotExpected := tr.IsExpecting(gvk, types.NamespacedName{Name: "denyallconstraint"})
@@ -836,7 +836,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// Check readiness tracker is satisfied post-reconcile
-	err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 		return true
 	}, func() error {
 		satisfied := tracker.For(gvk).Satisfied()
@@ -851,7 +851,7 @@ violation[{"msg": "denied!"}] {
 }
 
 func constraintEnforced(ctx context.Context, c client.Client, suffix string) error {
-	return retry.OnError(testutils.ConstantRetry, func(err error) bool {
+	return retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 		return true
 	}, func() error {
 		cstr := newDenyAllCstr(suffix)
@@ -978,7 +978,7 @@ func applyCRD(ctx context.Context, client client.Client, gvk schema.GroupVersion
 
 	u := &unstructured.UnstructuredList{}
 	u.SetGroupVersionKind(gvk)
-	return retry.OnError(testutils.ConstantRetry, func(err error) bool {
+	return retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 		return true
 	}, func() error {
 		if ctx.Err() != nil {

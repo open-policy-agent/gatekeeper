@@ -90,7 +90,7 @@ func TestReconcile(t *testing.T) {
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, et))
 		testutils.CreateThenCleanup(ctx, t, c, et)
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// First, get the ET
@@ -128,7 +128,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("error deleting ET: %s", err)
 		}
 
-		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// Get the ETPodStatus
