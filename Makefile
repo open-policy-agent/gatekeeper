@@ -33,7 +33,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v1.55.2
+GOLANGCI_LINT_VERSION := v1.57.1
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -361,10 +361,10 @@ manifests: __controller-gen
 # across systems.
 # Source: https://golangci-lint.run/usage/install/#docker
 lint:
-	docker run --rm -v $(shell pwd):/app \
+	docker run -t --rm -v $(shell pwd):/app \
 		-v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
-		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION}-alpine \
-		golangci-lint run -v
+		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} \
+		golangci-lint run -v --fix
 
 # Generate code
 generate: __conversion-gen __controller-gen

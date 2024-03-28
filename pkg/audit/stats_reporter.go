@@ -97,7 +97,6 @@ func newStatsReporter() (*reporter, error) {
 		metric.WithDescription("Total number of audited violations"),
 		metric.WithInt64Callback(r.observeTotalViolations),
 	)
-
 	if err != nil {
 		return nil, err
 	}

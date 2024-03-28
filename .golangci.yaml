@@ -1,6 +1,8 @@
 run:
   timeout: 5m
-  skip-files:
+
+issues:
+  exclude-files:
     - pkg/target/matchcrd_constant.go
 
 linters-settings:

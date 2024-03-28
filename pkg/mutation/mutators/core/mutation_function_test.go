@@ -171,7 +171,7 @@ func TestObjectsAndLists(t *testing.T) {
 }
 
 func TestListsAsLastElementWithStringValue(t *testing.T) {
-	testFunc := func(u *unstructured.Unstructured) {}
+	testFunc := func(_ *unstructured.Unstructured) {}
 
 	if err := testDummyMutation(
 		`spec.containers["name": "notExists"]`,
@@ -382,7 +382,7 @@ func TestAssignDoesNotMatchObjectStructure(t *testing.T) {
 }
 
 func TestListsAsLastElementAlreadyExistsWithKeyConflict(t *testing.T) {
-	testFunc := func(u *unstructured.Unstructured) {}
+	testFunc := func(_ *unstructured.Unstructured) {}
 	var v interface{}
 	err := json.Unmarshal([]byte("{\"name\": \"conflictingName\", \"foo\": \"bar\"}"), &v)
 	if err != nil {

@@ -40,7 +40,7 @@ func Test_SingleRunner(t *testing.T) {
 	})
 
 	// Repeat key won't be scheduled.
-	r.Go(ctx, "one", func(ctx context.Context) error {
+	r.Go(ctx, "one", func(_ context.Context) error {
 		t.Fatal("repeat key will never be scheduled")
 		return nil
 	})
