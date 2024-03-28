@@ -18,13 +18,14 @@ import (
 
 func TestExpand(t *testing.T) {
 	tests := []struct {
-		name      string
-		generator *unstructured.Unstructured
-		ns        *corev1.Namespace
-		templates []*expansionunversioned.ExpansionTemplate
-		mutators  []types.Mutator
-		want      []*Resultant
-		expectErr bool
+		name         string
+		generator    *unstructured.Unstructured
+		generatorOld *unstructured.Unstructured
+		ns           *corev1.Namespace
+		templates    []*expansionunversioned.ExpansionTemplate
+		mutators     []types.Mutator
+		want         []*Resultant
+		expectErr    bool
 	}{
 		{
 			name:      "generator with no templates or mutators",
@@ -248,6 +249,51 @@ func TestExpand(t *testing.T) {
 				{Obj: fixtures.LoadFixture(fixtures.ResultantRecursivePod, t), EnforcementAction: "", TemplateName: "expand-jobs"},
 			},
 		},
+		{
+			name:         "recursive expansion with old object",
+			generator:    fixtures.LoadFixture(fixtures.GeneratorCronJob, t),
+			generatorOld: fixtures.LoadFixture(fixtures.GeneratorOldCronJob, t),
+			ns:           &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators:     []types.Mutator{},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				fixtures.LoadTemplate(fixtures.TempExpCronJob, t),
+			},
+			want: []*Resultant{
+				{
+					Obj:               fixtures.LoadFixture(fixtures.ResultantJob, t),
+					OldObj:            fixtures.LoadFixture(fixtures.ResultantOldJob, t),
+					EnforcementAction: "",
+					TemplateName:      "expand-cronjobs",
+				},
+			},
+		},
+		{
+			name:         "recursive expansion with old object and mutators",
+			generator:    fixtures.LoadFixture(fixtures.GeneratorCronJob, t),
+			generatorOld: fixtures.LoadFixture(fixtures.GeneratorOldCronJob, t),
+			ns:           &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				fixtures.LoadAssignMeta(fixtures.AssignMetaAnnotatePod, t),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				fixtures.LoadTemplate(fixtures.TempExpCronJob, t),
+				fixtures.LoadTemplate(fixtures.TempExpJob, t),
+			},
+			want: []*Resultant{
+				{
+					Obj:               fixtures.LoadFixture(fixtures.ResultantJob, t),
+					OldObj:            fixtures.LoadFixture(fixtures.ResultantOldJob, t),
+					EnforcementAction: "",
+					TemplateName:      "expand-cronjobs",
+				},
+				{
+					Obj:               fixtures.LoadFixture(fixtures.ResultantRecursivePod, t),
+					OldObj:            fixtures.LoadFixture(fixtures.ResultantRecursiveOldPod, t),
+					EnforcementAction: "",
+					TemplateName:      "expand-jobs",
+				},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -265,8 +311,9 @@ func TestExpand(t *testing.T) {
 				}
 			}
 
-			base := &types.Mutable{
+			base := &Expandable{
 				Object:    tc.generator,
+				OldObject: tc.generatorOld,
 				Namespace: tc.ns,
 				Username:  "unit-test",
 				Source:    types.SourceTypeGenerated,

@@ -37,12 +37,6 @@ type System struct {
 	db             templateDB
 }
 
-type Resultant struct {
-	Obj               *unstructured.Unstructured
-	TemplateName      string
-	EnforcementAction string
-}
-
 type TemplateID string
 
 type IDSet map[TemplateID]bool
@@ -132,7 +126,7 @@ func genGVKToSchemaGVK(gvk expansionunversioned.GeneratedGVK) schema.GroupVersio
 // Expand expands `base` into resultant resources, and applies any applicable
 // mutators. If no ExpansionTemplates match `base`, an empty slice
 // will be returned. If `s.mutationSystem` is nil, no mutations will be applied.
-func (s *System) Expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
+func (s *System) Expand(base *Expandable) ([]*Resultant, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -143,7 +137,7 @@ func (s *System) Expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 	return res, nil
 }
 
-func (s *System) expandRecursive(base *mutationtypes.Mutable, resultants *[]*Resultant, depth int) error {
+func (s *System) expandRecursive(base *Expandable, resultants *[]*Resultant, depth int) error {
 	if depth >= maxRecursionDepth {
 		return fmt.Errorf("maximum recursion depth of %d reached", maxRecursionDepth)
 	}
@@ -154,8 +148,9 @@ func (s *System) expandRecursive(base *mutationtypes.Mutable, resultants *[]*Res
 	}
 
 	for _, r := range res {
-		mut := &mutationtypes.Mutable{
+		mut := &Expandable{
 			Object:    r.Obj,
+			OldObject: r.OldObj,
 			Namespace: base.Namespace,
 			Username:  base.Username,
 			Source:    base.Source,
@@ -169,7 +164,7 @@ func (s *System) expandRecursive(base *mutationtypes.Mutable, resultants *[]*Res
 	return nil
 }
 
-func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
+func (s *System) expand(base *Expandable) ([]*Resultant, error) {
 	gvk := base.Object.GroupVersionKind()
 	if gvk == (schema.GroupVersionKind{}) {
 		return nil, fmt.Errorf("cannot expand resource %s with empty GVK", base.Object.GetName())
@@ -180,14 +175,24 @@ func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 
 	for _, te := range templates {
 		res, err := expandResource(base.Object, base.Namespace, te)
-		resultants = append(resultants, &Resultant{
-			Obj:               res,
-			TemplateName:      te.ObjectMeta.Name,
-			EnforcementAction: te.Spec.EnforcementAction,
-		})
 		if err != nil {
 			return nil, err
 		}
+
+		var oldRes *unstructured.Unstructured
+		if base.OldObject != nil {
+			oldRes, err = expandResource(base.OldObject, base.Namespace, te)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		resultants = append(resultants, &Resultant{
+			Obj:               res,
+			OldObj:            oldRes,
+			TemplateName:      te.ObjectMeta.Name,
+			EnforcementAction: te.Spec.EnforcementAction,
+		})
 	}
 
 	if s.mutationSystem == nil {

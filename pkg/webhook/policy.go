@@ -54,6 +54,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -567,10 +568,27 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 			Kind:    req.Kind.Kind,
 		})
 
+	// Likewise convert the old version of the request's generator resource
+	var oldObj *unstructured.Unstructured
+	if req.OldObject.Raw != nil {
+		oldObj = &unstructured.Unstructured{}
+		if _, _, err := deserializer.Decode(req.Object.Raw, nil, oldObj); err != nil {
+			return nil, fmt.Errorf("error decoding generator resource %s: %w", req.Name, err)
+		}
+		oldObj.SetNamespace(req.Namespace)
+		oldObj.SetGroupVersionKind(
+			schema.GroupVersionKind{
+				Group:   req.Kind.Group,
+				Version: req.Kind.Version,
+				Kind:    req.Kind.Kind,
+			})
+	}
+
 	// Expand the generator and apply mutators to the resultant resources
 	// The base object is not mutated, so we do not need to specify its source
-	base := &mutationtypes.Mutable{
+	base := &expansion.Expandable{
 		Object:    obj,
+		OldObject: oldObj,
 		Namespace: review.Namespace,
 		Username:  req.AdmissionRequest.UserInfo.Username,
 	}
@@ -586,7 +604,11 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	}
 
 	for _, res := range resultants {
-		resultantResp, err := h.review(ctx, createReviewForResultant(res.Obj, review.Namespace), trace, dump)
+		resReview, err := createReviewForResultant(res, review)
+		if err != nil {
+			return nil, fmt.Errorf("error reviewing resultant resource: %w", err)
+		}
+		resultantResp, err := h.review(ctx, resReview, trace, dump)
 		if err != nil {
 			return nil, fmt.Errorf("error reviewing resultant resource: %w", err)
 		}
@@ -645,12 +667,49 @@ func (h *validationHandler) createReviewForRequest(ctx context.Context, req *adm
 	return review, nil
 }
 
-func createReviewForResultant(obj *unstructured.Unstructured, ns *corev1.Namespace) *target.AugmentedUnstructured {
-	return &target.AugmentedUnstructured{
-		Object:    *obj,
-		Namespace: ns,
-		Source:    mutationtypes.SourceTypeGenerated,
+func createReviewForResultant(res *expansion.Resultant, review *target.AugmentedReview) (*target.AugmentedReview, error) {
+	resourceJSON, err := res.Obj.MarshalJSON()
+	if err != nil {
+		return nil, fmt.Errorf("unable to marshal JSON encoding of object: %w", err)
 	}
+
+	req := admissionv1.AdmissionRequest{
+		Kind: metav1.GroupVersionKind{
+			Group:   res.Obj.GetObjectKind().GroupVersionKind().Group,
+			Version: res.Obj.GetObjectKind().GroupVersionKind().Version,
+			Kind:    res.Obj.GetObjectKind().GroupVersionKind().Kind,
+		},
+
+		Name:      res.Obj.GetName(),
+		Namespace: res.Obj.GetNamespace(),
+		Operation: review.AdmissionRequest.Operation,
+		UserInfo:  *review.AdmissionRequest.UserInfo.DeepCopy(),
+
+		Object: k8sruntime.RawExtension{
+			Raw: resourceJSON,
+		},
+
+		DryRun:  review.AdmissionRequest.DryRun,
+		Options: *review.AdmissionRequest.Options.DeepCopy(),
+	}
+
+	if res.OldObj != nil {
+		resourceJSON, err := res.Obj.MarshalJSON()
+		if err != nil {
+			return nil, fmt.Errorf("unable to marshal JSON encoding of object: %w", err)
+		}
+
+		req.OldObject = k8sruntime.RawExtension{
+			Raw: resourceJSON,
+		}
+	}
+
+	return &target.AugmentedReview{
+		AdmissionRequest: &req,
+		Source:           mutationtypes.SourceTypeGenerated,
+		Namespace:        review.Namespace,
+		IsAdmission:      review.IsAdmission,
+	}, nil
 }
 
 func getViolationRef(gkNamespace, rkind, rname, rnamespace, rrv string, ruid types.UID, ckind, cname, cnamespace string, emitInvolvedNamespace bool) *corev1.ObjectReference {

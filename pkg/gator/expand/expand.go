@@ -86,18 +86,24 @@ func NewExpander(resources []*unstructured.Unstructured) (*Expander, error) {
 func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*expansion.Resultant, error) {
 	ns, _ := er.NamespaceForResource(resource)
 
-	// Mutate the base resource before expanding it
-	base := &types.Mutable{
+	// Mutate the mutable resource before expanding it
+	mutable := &types.Mutable{
 		Object:    resource,
 		Namespace: ns,
 		Username:  "",
 		Source:    types.SourceTypeOriginal,
 	}
-	if _, err := er.mutSystem.Mutate(base); err != nil {
+	if _, err := er.mutSystem.Mutate(mutable); err != nil {
 		return nil, fmt.Errorf("error mutating base resource %s: %w", resource.GetName(), err)
 	}
 
-	resultants, err := er.expSystem.Expand(base)
+	expandable := &expansion.Expandable{
+		Object:    mutable.Object,
+		Namespace: mutable.Namespace,
+		Username:  mutable.Username,
+		Source:    mutable.Source,
+	}
+	resultants, err := er.expSystem.Expand(expandable)
 	if err != nil {
 		return nil, fmt.Errorf("error expanding resource %s: %w", resource.GetName(), err)
 	}

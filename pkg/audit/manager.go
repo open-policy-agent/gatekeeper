@@ -704,7 +704,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			}
 
 			// Expand object and review any resultant resources
-			base := &mutationtypes.Mutable{
+			base := &expansion.Expandable{
 				Object:    objFile,
 				Namespace: ns,
 				Username:  "",

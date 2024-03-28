@@ -622,4 +622,61 @@ spec:
     ports:
     - containerPort: '80'
 `
+
+	GeneratorOldCronJob = `
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-cronjob
+spec:
+  schedule: "* * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - args:
+            - "/bin/sh"
+            image: nginx:1.14.0
+            imagePullPolicy: Always
+            name: nginx
+            ports:
+            - containerPort: '8080'
+`
+
+	ResultantOldJob = `
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-cronjob-job
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+      - args:
+        - "/bin/sh"
+        image: nginx:1.14.0
+        imagePullPolicy: Always
+        name: nginx
+        ports:
+        - containerPort: '8080'
+`
+
+	ResultantRecursiveOldPod = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-cronjob-job-pod
+  namespace: default
+spec:
+  containers:
+  - args:
+    - "/bin/sh"
+    image: nginx:1.14.0
+    imagePullPolicy: Always
+    name: nginx
+    ports:
+    - containerPort: '8080'
+`
 )

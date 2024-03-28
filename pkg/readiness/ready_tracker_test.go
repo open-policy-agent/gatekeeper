@@ -385,7 +385,7 @@ func Test_ExpansionTemplate(t *testing.T) {
 		panic(fmt.Errorf("error converting deployment to unstructured: %w", err))
 	}
 	u := unstructured.Unstructured{Object: o}
-	m := mutationtypes.Mutable{
+	m := expansion.Expandable{
 		Object:    &u,
 		Namespace: testNS,
 		Username:  "",
