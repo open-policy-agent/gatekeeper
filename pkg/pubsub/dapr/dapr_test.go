@@ -103,6 +103,7 @@ func TestDapr_UpdateConnection(t *testing.T) {
 			name: "test update connection",
 			config: map[string]interface{}{
 				"component": "foo",
+				"topic":     "bar",
 			},
 			wantErr: false,
 		},
