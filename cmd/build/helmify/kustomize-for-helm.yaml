@@ -93,6 +93,8 @@ spec:
             - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
+            - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+            - --vap-enforcement={{ .Values.vapEnforcement }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
