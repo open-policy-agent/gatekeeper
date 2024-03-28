@@ -99,7 +99,7 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(ConstantRetry, func(err error) bool {
+		err = retry.OnError(ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// Construct a single-use Unstructured to send the Get request. It isn't
@@ -116,7 +116,6 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 			s, _ := json.MarshalIndent(toGet, "", "  ")
 			return fmt.Errorf("found %v %v:\n%s", gvk, key, string(s))
 		})
-
 		if err != nil {
 			t.Fatal(err)
 		}
