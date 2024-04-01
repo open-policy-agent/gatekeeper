@@ -99,7 +99,7 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(ConstantRetry, func(err error) bool {
+		err = retry.OnError(ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// Construct a single-use Unstructured to send the Get request. It isn't

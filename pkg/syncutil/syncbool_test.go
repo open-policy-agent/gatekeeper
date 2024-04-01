@@ -37,7 +37,7 @@ func Test_SyncBool(t *testing.T) {
 		b.Set(true)
 	}()
 
-	waitErr := wait.PollUntilContextTimeout(context.Background(), 10*time.Millisecond, 5*time.Second, false, func(ctx context.Context) (done bool, err error) {
+	waitErr := wait.PollUntilContextTimeout(context.Background(), 10*time.Millisecond, 5*time.Second, false, func(_ context.Context) (done bool, err error) {
 		return b.Get(), nil
 	})
 

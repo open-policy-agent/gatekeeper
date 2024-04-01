@@ -388,7 +388,7 @@ func TestRegistrar_Replay_Retry(t *testing.T) {
 	resources := generateTestResources(gvk, 10)
 	errCount := 3
 	c := &funcCache{
-		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+		ListFunc: func(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
 			if errCount > 0 {
 				errCount--
 				return fmt.Errorf("failing %d more times", errCount)
@@ -401,7 +401,7 @@ func TestRegistrar_Replay_Retry(t *testing.T) {
 			}
 			return nil
 		},
-		GetInformerNonBlockingFunc: func(_ context.Context, obj client.Object) (cache.Informer, error) {
+		GetInformerNonBlockingFunc: func(_ context.Context, _ client.Object) (cache.Informer, error) {
 			return informer, nil
 		},
 	}
@@ -468,7 +468,7 @@ func TestRegistrar_Replay_Async(t *testing.T) {
 	listCalled := make(chan struct{})
 	listDone := make(chan struct{})
 	c := &funcCache{
-		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+		ListFunc: func(ctx context.Context, _ client.ObjectList, _ ...client.ListOption) error {
 			listCalled <- struct{}{}
 
 			// Block until we're canceled.
@@ -590,7 +590,7 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 	listCalls := make(map[schema.GroupVersionKind]int)
 	getInformerCalls := make(map[schema.GroupVersionKind]int)
 	c := &funcCache{
-		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+		ListFunc: func(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
 			mu.Lock()
 			defer mu.Unlock()
 			gvk := list.GetObjectKind().GroupVersionKind()
