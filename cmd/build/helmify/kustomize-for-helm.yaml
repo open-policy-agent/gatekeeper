@@ -255,6 +255,7 @@ webhooks:
   objectSelector: HELMSUBST_MUTATING_WEBHOOK_OBJECT_SELECTOR
   sideEffects: None
   timeoutSeconds: HELMSUBST_MUTATING_WEBHOOK_TIMEOUT
+  matchConditions: HELMSUBST_MUTATING_WEBHOOK_MATCH_CONDITIONS
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -281,6 +282,7 @@ webhooks:
   failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY
   rules:
   - HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES
+  matchConditions: HELMSUBST_VALIDATING_WEBHOOK_MATCH_CONDITIONS
 - clientConfig:
     service:
       name: gatekeeper-webhook-service
