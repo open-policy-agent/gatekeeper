@@ -16,6 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -98,7 +99,7 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(ConstantRetry, func(err error) bool {
+		err = retry.OnError(ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// Construct a single-use Unstructured to send the Get request. It isn't
@@ -115,7 +116,6 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 			s, _ := json.MarshalIndent(toGet, "", "  ")
 			return fmt.Errorf("found %v %v:\n%s", gvk, key, string(s))
 		})
-
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +134,16 @@ func StartControlPlane(m *testing.M, cfg **rest.Config, testerDepth int) {
 		},
 		ErrorIfCRDPathMissing: true,
 	}
+	///TODO(ritazh): remove when vap is GAed in k/k
+	args := t.ControlPlane.GetAPIServer().Configure()
+	args.Append("runtime-config", "api/all=true")
+	args.Append("feature-gates", "ValidatingAdmissionPolicy=true")
+
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := admissionregistrationv1beta1.AddToScheme(scheme.Scheme); err != nil {
 		log.Fatal(err)
 	}
 
@@ -161,7 +170,6 @@ func CreateThenCleanup(ctx context.Context, t *testing.T, c client.Client, obj c
 	if !ok {
 		t.Fatalf("got obj.DeepCopyObject() type = %T, want %T", cpy, client.Object(nil))
 	}
-
 	err := c.Create(ctx, cpyObj)
 	if err != nil {
 		t.Fatal(err)

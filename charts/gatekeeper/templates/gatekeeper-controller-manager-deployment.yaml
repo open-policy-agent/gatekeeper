@@ -32,7 +32,8 @@ spec:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
         {{- end }}
       labels:
-{{- include "gatekeeper.podLabels" . }}
+        {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "gatekeeper.commonLabels" . | nindent 8 }}
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
         control-plane: controller-manager
@@ -71,6 +72,8 @@ spec:
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
+        - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+        - --vap-enforcement={{ .Values.vapEnforcement }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}
@@ -117,6 +120,8 @@ spec:
               fieldPath: metadata.namespace
         - name: CONTAINER_NAME
           value: manager
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         livenessProbe:
           httpGet:

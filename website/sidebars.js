@@ -52,7 +52,10 @@ module.exports = {
       type: 'category',
       label: 'Concepts',
       collapsed: false,
-      items: ['mutation-background']
+      items: [
+        'input',
+        'mutation-background'
+      ]
     },
     {
       type: 'category',

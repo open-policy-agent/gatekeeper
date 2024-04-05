@@ -21,7 +21,10 @@ var kindRegex = regexp.MustCompile(`(?m)^kind:[\s]+([\S]+)[\s]*$`)
 // use exactly two spaces to be sure we are capturing metadata.name.
 var nameRegex = regexp.MustCompile(`(?m)^  name:[\s]+([\S]+)[\s]*$`)
 
-const DeploymentKind = "Deployment"
+const (
+	DeploymentKind = "Deployment"
+	end            = "{{- end }}"
+)
 
 func isRbacKind(str string) bool {
 	rbacKinds := [4]string{"Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding"}
@@ -105,12 +108,16 @@ func (ks *kindSet) Write() error {
 			fileName := fmt.Sprintf("%s-%s.yaml", strings.ToLower(name), strings.ToLower(kind))
 
 			if name == "validation.gatekeeper.sh" {
-				obj = "{{- if not .Values.disableValidatingWebhook }}\n" + obj + "{{- end }}\n"
+				matchConditions := "  matchConditions: {{ toYaml .Values.validatingWebhookMatchConditions | nindent 4 }}"
+				replace := fmt.Sprintf("  {{- if ge (int .Capabilities.KubeVersion.Minor) 28 }}\n%s\n  {{- end }}", matchConditions)
+				obj = "{{- if not .Values.disableValidatingWebhook }}\n" + strings.Replace(obj, matchConditions, replace, 1) + end + "\n"
 				fileName = fmt.Sprintf("gatekeeper-validating-webhook-configuration-%s.yaml", strings.ToLower(kind))
 			}
 
 			if name == "mutation.gatekeeper.sh" {
-				obj = "{{- if not .Values.disableMutation }}\n" + obj + "{{- end }}\n"
+				matchConditions := "  matchConditions: {{ toYaml .Values.mutatingWebhookMatchConditions | nindent 4 }}"
+				replace := fmt.Sprintf("  {{- if ge (int .Capabilities.KubeVersion.Minor) 28 }}\n%s\n  {{- end }}", matchConditions)
+				obj = "{{- if not .Values.disableMutation }}\n" + strings.Replace(obj, matchConditions, replace, 1) + end + "\n"
 				fileName = fmt.Sprintf("gatekeeper-mutating-webhook-configuration-%s.yaml", strings.ToLower(kind))
 			}
 
@@ -121,7 +128,7 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-critical-pods" && kind == "ResourceQuota" {
-				obj = "{{- if .Values.resourceQuota }}\n" + obj + "{{- end }}\n"
+				obj = "{{- if .Values.resourceQuota }}\n" + obj + end + "\n"
 			}
 
 			if name == "gatekeeper-controller-manager" && kind == DeploymentKind {
@@ -129,15 +136,13 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-audit" && kind == DeploymentKind {
+				obj = "{{- if not .Values.disableAudit }}\n" + obj + "{{- end }}\n"
 				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.audit.priorityClassName }}\n      priorityClassName:  {{ .Values.audit.priorityClassName }}\n      {{- end }}", 1)
-			}
-
-			if name == "gatekeeper-audit" && kind == DeploymentKind {
 				obj = strings.Replace(obj, "      - emptyDir: {}", "      {{- if .Values.audit.writeToRAMDisk }}\n      - emptyDir:\n          medium: Memory\n      {{ else }}\n      - emptyDir: {}\n      {{- end }}", 1)
 			}
 
 			if kind == DeploymentKind {
-				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . | nindent 8 }}", 1)
+				obj = strings.Replace(obj, "      labels:", "      labels:\n        {{- include \"gatekeeper.podLabels\" . | nindent 8 }}\n        {{- include \"gatekeeper.commonLabels\" . | nindent 8 }}", 1)
 			}
 
 			if name == "gatekeeper-manager-role" && kind == "Role" {
@@ -145,7 +150,7 @@ func (ks *kindSet) Write() error {
 			}
 
 			if isRbacKind(kind) {
-				obj = "{{- if .Values.rbac.create }}\n" + obj + "{{- end }}\n"
+				obj = "{{- if .Values.rbac.create }}\n" + obj + end + "\n"
 			}
 
 			if name == "gatekeeper-controller-manager" && kind == "PodDisruptionBudget" {

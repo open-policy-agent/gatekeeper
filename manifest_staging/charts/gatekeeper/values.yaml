@@ -5,6 +5,7 @@ metricsBackends: ["prometheus"]
 auditMatchKindOnly: false
 constraintViolationsLimit: 20
 auditFromCache: false
+disableAudit: false
 disableMutation: false
 disableValidatingWebhook: false
 validatingWebhookName: gatekeeper-validating-webhook-configuration
@@ -13,6 +14,7 @@ validatingWebhookFailurePolicy: Ignore
 validatingWebhookAnnotations: {}
 validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookObjectSelector: {}
+validatingWebhookMatchConditions: []
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 validatingWebhookURL: null
@@ -27,6 +29,7 @@ mutatingWebhookReinvocationPolicy: Never
 mutatingWebhookAnnotations: {}
 mutatingWebhookExemptNamespacesLabels: {}
 mutatingWebhookObjectSelector: {}
+mutatingWebhookMatchConditions: []
 mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
 mutatingWebhookURL: null
@@ -41,23 +44,25 @@ admissionEventsInvolvedNamespace: false
 auditEventsInvolvedNamespace: false
 resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
+enableK8sNativeValidation: false
+vapEnforcement: GATEKEEPER_DEFAULT
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.15.0-beta.0
+  release: v3.16.0-beta.2
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.15.0-beta.0
+      tag: v3.16.0-beta.2
 postUpgrade:
   labelNamespace:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.15.0-beta.0
+      tag: v3.16.0-beta.2
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -88,7 +93,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.15.0-beta.0
+      tag: v3.16.0-beta.2
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -129,7 +134,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.15.0-beta.0
+      tag: v3.16.0-beta.2
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""

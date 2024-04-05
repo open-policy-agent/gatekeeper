@@ -10,14 +10,20 @@ type AugmentedReview struct {
 	AdmissionRequest *admissionv1.AdmissionRequest
 	Namespace        *corev1.Namespace
 	Source           types.SourceType
+	IsAdmission      bool
 }
 
 type gkReview struct {
 	admissionv1.AdmissionRequest
-	namespace *corev1.Namespace
-	source    types.SourceType
+	namespace   *corev1.Namespace
+	source      types.SourceType
+	isAdmission bool
 }
 
 func (g *gkReview) GetAdmissionRequest() *admissionv1.AdmissionRequest {
 	return &g.AdmissionRequest
+}
+
+func (g *gkReview) IsAdmissionRequest() bool {
+	return g.isAdmission
 }

@@ -1,5 +1,5 @@
 ---
-id: gator 
+id: gator
 title: The gator CLI
 ---
 
@@ -17,13 +17,17 @@ you can also install `gator` using [Homebrew](https://brew.sh).
 
 To build from source:
 
+```shell
+go install github.com/open-policy-agent/gatekeeper/v3/cmd/gator@master
 ```
-go get github.com/open-policy-agent/gatekeeper/cmd/gator
-```
+
+:::note
+`go install` of `gator` requires Gatekeeper `master` branch or `v3.16.0` and later.
+:::
 
 Install with Homebrew:
 
-```
+```shell
 brew install gator
 ```
 
@@ -53,13 +57,13 @@ than the aforementioned three will be skipped.
 
 For example, to test a manifest (piped via stdin) against a folder of policies:
 
-```
+```shell
 cat my-manifest.yaml | gator test --filename=template-and-constraints/
 ```
 
 Or you can specify both as flags:
 
-```
+```shell
 gator test -f=my-manifest.yaml -f=templates-and-constraints/
 ```
 
@@ -77,9 +81,9 @@ section.
 For example, to test a manifest (piped via stdin) against an OCI Artifact
 containing policies:
 
-```
+```shell
 cat my-manifest.yaml | gator test --image=localhost:5000/gator/template-library:v1 \
-  --image=localhost:5000/gator/constraints:v1 
+  --image=localhost:5000/gator/constraints:v1
 ```
 
 #### Exit Codes
@@ -113,7 +117,7 @@ stdout.
 
 The allowed values are `yaml` and `json`, specified like:
 
-```
+```shell
 gator test --filename=manifests-and-policies/ --output=json
 ```
 
@@ -249,22 +253,22 @@ gator verify suite.yaml
 
 To run all suites in the current directory and all child directories recursively
 
-```
+```shell
 gator verify ./...
 ```
 
 To only run tests whose full names contain a match for a regular expression, use
 the `run` flag:
 
-```
+```shell
 gator verify path/to/suites/... --run "disallowed"
 ```
 
 ### Validating Metadata-Based Constraint Templates
 
-`gator verify` may be used with an [`AdmissionReview`](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/admission#AdmissionReview) 
-object to test your constraints. This can be helpful to simulate a certain operation (`CREATE`, `UPDATE`, `DELETE`, etc.) 
-or [`UserInfo`](https://pkg.go.dev/k8s.io/kubernetes@v1.25.3/pkg/apis/authentication#UserInfo) metadata. 
+`gator verify` may be used with an [`AdmissionReview`](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/admission#AdmissionReview)
+object to test your constraints. This can be helpful to simulate a certain operation (`CREATE`, `UPDATE`, `DELETE`, etc.)
+or [`UserInfo`](https://pkg.go.dev/k8s.io/kubernetes@v1.25.3/pkg/apis/authentication#UserInfo) metadata.
 Recall that the `input.review.user` can be accessed in the Rego code (see [Input Review](howto.md#input-review) for more guidance). The `AdmissionReview` object can be specified where you would specify the object under test above:
 
 ```yaml
@@ -366,26 +370,26 @@ supplied, the command will exit 1. See the [non default namespace example](#non-
 Similar to `gator test`, `gator expand` expects a `--filename` or `--image`
 flag. The flags can be used individually, in combination, and/or repeated.
 
-```
-gator expand --filename="manifest.yaml" –filename="expansion-policy/" 
+```shell
+gator expand --filename="manifest.yaml" –filename="expansion-policy/"
 ```
 
 Or, using an OCI Artifact for the expansion configuration:
 
-```
+```shell
 gator expand --filename="my-deployment.yaml" --image=localhost:5000/gator/expansion-policy:v1
 ```
 
 By default, `gator expand` will output to stdout, but a `–outputfile` flag can be
 specified to write the results to a file.
 
-```
+```shell
 gator expand --filename="manifest.yaml" –outputfile="results.yaml"
 ```
 
 `gator expand` can output in `yaml` or `json` (default is `yaml`).
 
-```
+```shell
 gator expand --filename="manifest.yaml" –format="json"
 ```
 
@@ -605,7 +609,7 @@ We recommend using the [Oras CLI](https://oras.land/cli/) to create OCI
 artifacts. For example, to push a bundle containing the 2 local directories
 `constraints` and `template_library`:
 
-```
+```shell
 oras push localhost:5000/gator/policy-bundle:v1 ./constraints/:application/vnd.oci.image.layer.v1.tar+gzip \
   ./template_library/:application/vnd.oci.image.layer.v1.tar+gzip
 ```
