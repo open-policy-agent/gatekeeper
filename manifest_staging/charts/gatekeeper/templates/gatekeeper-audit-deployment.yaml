@@ -90,6 +90,21 @@ spec:
         command:
         - /manager
         env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: openai-api-key
+              name: gatekeeper-openai-secret
+        - name: OPENAI_DEPLOYMENT_NAME
+          valueFrom:
+            secretKeyRef:
+              key: openai-deployment-name
+              name: gatekeeper-openai-secret
+        - name: OPENAI_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              key: openai-endpoint
+              name: gatekeeper-openai-secret
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

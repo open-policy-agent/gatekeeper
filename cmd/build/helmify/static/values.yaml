@@ -45,6 +45,7 @@ auditEventsInvolvedNamespace: false
 resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
 enableK8sNativeValidation: false
+enableLLMEngine: false
 vapEnforcement: GATEKEEPER_DEFAULT
 image:
   repository: openpolicyagent/gatekeeper

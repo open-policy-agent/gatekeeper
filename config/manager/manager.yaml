@@ -67,6 +67,21 @@ spec:
               name: healthz
               protocol: TCP
           env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: openai-api-key
+            - name: OPENAI_DEPLOYMENT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: openai-deployment-name
+            - name: OPENAI_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: openai-endpoint
             # used by Gatekeeper
             - name: POD_NAMESPACE
               valueFrom:
@@ -152,6 +167,21 @@ spec:
             - /manager
           image: openpolicyagent/gatekeeper:v3.16.0-beta.2
           env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: openai-api-key
+            - name: OPENAI_DEPLOYMENT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: openai-deployment-name
+            - name: OPENAI_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: openai-endpoint
             # used by Gatekeeper
             - name: POD_NAMESPACE
               valueFrom:
@@ -234,3 +264,13 @@ spec:
       scopeName: PriorityClass
       values:
       - system-cluster-critical
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openai-secret
+  namespace: system
+data:
+  openai-api-key: ""
+  openai-deployment-name: ""
+  openai-endpoint: ""

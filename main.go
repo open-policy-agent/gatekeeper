@@ -33,6 +33,7 @@ import (
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/llm"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	api "github.com/open-policy-agent/gatekeeper/v3/apis"
@@ -116,8 +117,9 @@ var (
 	enableTLSHealthcheck                 = flag.Bool("enable-tls-healthcheck", false, "enable probing webhook API with certificate stored in certDir")
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "Alpha: enable the validating admission policy driver")
+	enableLLM                            = flag.Bool("experimental-enable-llm-engine", false, "[Experimental] enable the LLM engine driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
-	deferAdmissionToVAP                           = flag.Bool("defer-admission-to-vap", false, "When set to false, Gatekeeper webhook can act as a fallback in case K8s' Validating Admission Policy fails.  When set to true, Gatekeeper validating webhook will not evaluate a policy for an admission request it expects vap to enforce. May improve resource usage at the cost of race conditions detecting whether VAP enforcement is in effect. This does not impact audit results. Defaults to false.")
+	deferAdmissionToVAP                  = flag.Bool("defer-admission-to-vap", false, "When set to false, Gatekeeper webhook can act as a fallback in case K8s' Validating Admission Policy fails.  When set to true, Gatekeeper validating webhook will not evaluate a policy for an admission request it expects vap to enforce. May improve resource usage at the cost of race conditions detecting whether VAP enforcement is in effect. This does not impact audit results. Defaults to false.")
 )
 
 func init() {
@@ -430,6 +432,15 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 			return err
 		}
 		cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
+	}
+
+	if *enableLLM {
+		llmDriver, err := llm.New()
+		if err != nil {
+			setupLog.Error(err, "unable to set up LLM driver")
+			return err
+		}
+		cfArgs = append(cfArgs, constraintclient.Driver(llmDriver))
 	}
 
 	driver, err := rego.New(args...)

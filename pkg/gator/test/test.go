@@ -8,6 +8,7 @@ import (
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/llm"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/expand"
@@ -34,6 +35,7 @@ type Opts struct {
 	IncludeTrace bool
 	GatherStats  bool
 	UseK8sCEL    bool
+	UseLLM       bool
 }
 
 func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error) {
@@ -44,11 +46,17 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 	}
 	args = append(args, constraintclient.Driver(k8sDriver))
 
-	driver, err := makeRegoDriver(tOpts)
+	regoDriver, err := makeRegoDriver(tOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating Rego driver: %w", err)
 	}
-	args = append(args, constraintclient.Driver(driver))
+	args = append(args, constraintclient.Driver(regoDriver))
+
+	llmDriver, err := llm.New()
+	if err != nil {
+		return nil, fmt.Errorf("creating LLM driver: %w", err)
+	}
+	args = append(args, constraintclient.Driver(llmDriver))
 
 	client, err := constraintclient.NewClient(args...)
 	if err != nil {

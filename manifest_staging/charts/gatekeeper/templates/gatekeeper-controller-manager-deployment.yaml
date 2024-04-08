@@ -73,6 +73,7 @@ spec:
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+        - --experimental-enable-llm-engine={{ .Values.enableLLMEngine }}
         - --vap-enforcement={{ .Values.vapEnforcement }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
@@ -104,6 +105,21 @@ spec:
         command:
         - /manager
         env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: openai-api-key
+              name: gatekeeper-openai-secret
+        - name: OPENAI_DEPLOYMENT_NAME
+          valueFrom:
+            secretKeyRef:
+              key: openai-deployment-name
+              name: gatekeeper-openai-secret
+        - name: OPENAI_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              key: openai-endpoint
+              name: gatekeeper-openai-secret
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

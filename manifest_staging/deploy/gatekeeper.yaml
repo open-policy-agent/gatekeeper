@@ -4783,6 +4783,18 @@ subjects:
   namespace: gatekeeper-system
 ---
 apiVersion: v1
+data:
+  openai-api-key: ""
+  openai-deployment-name: ""
+  openai-endpoint: ""
+kind: Secret
+metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-openai-secret
+  namespace: gatekeeper-system
+---
+apiVersion: v1
 kind: Secret
 metadata:
   labels:
@@ -4842,6 +4854,21 @@ spec:
         command:
         - /manager
         env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: openai-api-key
+              name: gatekeeper-openai-secret
+        - name: OPENAI_DEPLOYMENT_NAME
+          valueFrom:
+            secretKeyRef:
+              key: openai-deployment-name
+              name: gatekeeper-openai-secret
+        - name: OPENAI_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              key: openai-endpoint
+              name: gatekeeper-openai-secret
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -4961,6 +4988,21 @@ spec:
         command:
         - /manager
         env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: openai-api-key
+              name: gatekeeper-openai-secret
+        - name: OPENAI_DEPLOYMENT_NAME
+          valueFrom:
+            secretKeyRef:
+              key: openai-deployment-name
+              name: gatekeeper-openai-secret
+        - name: OPENAI_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              key: openai-endpoint
+              name: gatekeeper-openai-secret
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
