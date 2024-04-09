@@ -144,6 +144,8 @@ var replacements = map[string]string{
       path: /v1/mutate
     {{- end }}`,
 
+	"HELMSUBST_VALIDATING_WEBHOOK_MATCH_CONDITIONS": `{{ toYaml .Values.validatingWebhookMatchConditions | nindent 4 }}`,
+
 	"HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT": `{{ .Values.validatingWebhookTimeoutSeconds }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.validatingWebhookFailurePolicy }}`,
@@ -214,6 +216,8 @@ var replacements = map[string]string{
     # For constraints that mitigate CVE-2020-8554
     - 'services/status'
   {{- end }}`,
+
+	"HELMSUBST_MUTATING_WEBHOOK_MATCH_CONDITIONS": `{{ toYaml .Values.mutatingWebhookMatchConditions | nindent 4 }}`,
 
 	"HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE": `{{ .Values.pdb.controllerManager.minAvailable }}`,
 
