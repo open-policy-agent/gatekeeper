@@ -19,6 +19,11 @@ jobs:
       matrix:
         DAPR_VERSION: ["1.12"]
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+      with:
+        egress-policy: audit
+
     - name: Check out code into the Go module directory
       uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
 
@@ -55,7 +60,7 @@ jobs:
         kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-publish.json
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
       if: ${{ always() }}
       with:
         name: pubsub-logs
