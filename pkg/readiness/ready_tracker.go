@@ -45,7 +45,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var crashOnFailedFetchingExpectations = flag.Bool("--crash-on-failure-fetching-expectations", false, "When set (defaults to false), gatekeeper will ignore errors that occur when gathering expectations. This prevents bootstrapping errors from crashing Gatekeeper at the cost of increasing the risk Gatekeeper will under-enforce policy by serving before it has loaded in all policies. Enabling this will help prevent under-enforcement at the risk of crashing during startup for issues like network errors.")
+var crashOnFailureFetchingExpectations = flag.Bool("crash-on-failure-fetching-expectations", false, "When set (defaults to false), gatekeeper will ignore errors that occur when gathering expectations. This prevents bootstrapping errors from crashing Gatekeeper at the cost of increasing the risk Gatekeeper will under-enforce policy by serving before it has loaded in all policies. Enabling this will help prevent under-enforcement at the risk of crashing during startup for issues like network errors.")
 
 var log = logf.Log.WithName("readiness-tracker")
 
@@ -325,7 +325,7 @@ func (t *Tracker) Run(ctx context.Context) error {
 	var grp *errgroup.Group
 	grp = &errgroup.Group{}
 	gctx := ctx
-	if *crashOnFailedFetchingExpectations {
+	if *crashOnFailureFetchingExpectations {
 		grp, gctx = errgroup.WithContext(ctx)
 	}
 	t.constraintTrackers = syncutil.RunnerWithContext(gctx)
@@ -398,15 +398,15 @@ func (t *Tracker) Run(ctx context.Context) error {
 		}
 	})
 
-	if err := grp.Wait(); err != nil && *crashOnFailedFetchingExpectations {
+	if err := grp.Wait(); err != nil && *crashOnFailureFetchingExpectations {
 		return err
 	}
 
-	if err := t.constraintTrackers.Wait(); err != nil && *crashOnFailedFetchingExpectations {
+	if err := t.constraintTrackers.Wait(); err != nil && *crashOnFailureFetchingExpectations {
 		return err
 	}
 
-	if err := t.dataTrackers.Wait(); err != nil && *crashOnFailedFetchingExpectations {
+	if err := t.dataTrackers.Wait(); err != nil && *crashOnFailureFetchingExpectations {
 		return err
 	}
 
@@ -563,7 +563,7 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !*crashOnFailedFetchingExpectations || !hadError {
+		if !*crashOnFailureFetchingExpectations || !hadError {
 			t.assignMetadata.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("AssignMetadata expectations populated")
 		}
@@ -593,7 +593,7 @@ func (t *Tracker) trackAssign(ctx context.Context) error {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !*crashOnFailedFetchingExpectations || !hadError {
+		if !*crashOnFailureFetchingExpectations || !hadError {
 			t.assign.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("Assign expectations populated")
 		}
@@ -623,7 +623,7 @@ func (t *Tracker) trackModifySet(ctx context.Context) error {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !*crashOnFailedFetchingExpectations || !hadError {
+		if !*crashOnFailureFetchingExpectations || !hadError {
 			t.modifySet.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("ModifySet expectations populated")
 		}
@@ -653,7 +653,7 @@ func (t *Tracker) trackAssignImage(ctx context.Context) error {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !*crashOnFailedFetchingExpectations || !hadError {
+		if !*crashOnFailureFetchingExpectations || !hadError {
 			t.assignImage.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("AssignImage expectations populated")
 		}
@@ -683,7 +683,7 @@ func (t *Tracker) trackExpansionTemplates(ctx context.Context) error {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !*crashOnFailedFetchingExpectations || !hadError {
+		if !*crashOnFailureFetchingExpectations || !hadError {
 			t.expansions.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("ExpansionTemplate expectations populated")
 		}
@@ -713,7 +713,7 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !*crashOnFailedFetchingExpectations || !hadError {
+		if !*crashOnFailureFetchingExpectations || !hadError {
 			t.externalDataProvider.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("Provider expectations populated")
 		}
@@ -743,7 +743,7 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !*crashOnFailedFetchingExpectations || !hadError {
+		if !*crashOnFailureFetchingExpectations || !hadError {
 			t.templates.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("template expectations populated")
 		}
@@ -784,7 +784,7 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 			err := t.trackConstraints(ctx, gvk, ot)
 			if err != nil {
 				log.Error(err, "aborted trackConstraints", "gvk", gvk)
-				if *crashOnFailedFetchingExpectations {
+				if *crashOnFailureFetchingExpectations {
 					return err
 				}
 			}
@@ -801,7 +801,7 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context) error {
 	var retErr error
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !*crashOnFailedFetchingExpectations || retErr == nil {
+		if !*crashOnFailureFetchingExpectations || retErr == nil {
 			t.config.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("config expectations populated")
 
@@ -815,7 +815,7 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context) error {
 	if err != nil {
 		log.Error(err, "fetching config resource")
 		retErr = fmt.Errorf("fetching config resource: %w", err)
-		if *crashOnFailedFetchingExpectations {
+		if *crashOnFailureFetchingExpectations {
 			return retErr
 		}
 	} else {
@@ -845,7 +845,7 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context) error {
 	if err := lister.List(ctx, syncsets); err != nil {
 		log.Error(err, "fetching syncset resources")
 		retErr = fmt.Errorf("fetching syncset resources: %w", err)
-		if *crashOnFailedFetchingExpectations {
+		if *crashOnFailureFetchingExpectations {
 			return retErr
 		}
 	} else {
@@ -878,7 +878,7 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context) error {
 			err := t.trackData(ctx, gvkCpy, dt)
 			if err != nil {
 				log.Error(err, "aborted trackData", "gvk", gvkCpy)
-				if *crashOnFailedFetchingExpectations {
+				if *crashOnFailureFetchingExpectations {
 					return err
 				}
 			}
@@ -922,7 +922,7 @@ func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !*crashOnFailedFetchingExpectations || !hadError {
+		if !*crashOnFailureFetchingExpectations || !hadError {
 			dt.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("data expectations populated", "gvk", gvk)
 		}
@@ -958,7 +958,7 @@ func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionK
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !*crashOnFailedFetchingExpectations || !hadError {
+		if !*crashOnFailureFetchingExpectations || !hadError {
 			constraints.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("constraint expectations populated", "gvk", gvk)
 		}
