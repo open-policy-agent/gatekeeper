@@ -80,6 +80,8 @@ In the excerpt above, notice `templateRunTimeNS` and `constraintCount`. The form
 The additional log volume from enabling the stats logging can be quite high.
 ## Metrics
 
+> If you are using a Prometheus client library, for counter metrics, the _total suffix is recommended and sometimes automatically appended by client libraries to indicate that the metric represents a cumulative total.
+
 Below are the list of metrics provided by Gatekeeper:
 
 ### Constraint
