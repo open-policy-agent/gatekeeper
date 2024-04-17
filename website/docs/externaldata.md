@@ -54,6 +54,7 @@ The following external data providers are samples and are not supported/maintain
 - [trivy-provider](https://github.com/sozercan/trivy-provider)
 - [tag-to-digest-provider](https://github.com/sozercan/tagToDigest-provider)
 - [aad-provider](https://github.com/sozercan/aad-provider)
+- [kubernetes-api-provider](https://github.com/nilekhc/k8s-gatekeeper-external-data-provider)
 
 ### API (v1beta1)
 
