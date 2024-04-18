@@ -110,7 +110,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
-- Name: `gatekeeper_constraint_template_ingestion_count_total`
+- Name: `gatekeeper_constraint_template_ingestion_count`
 
     Description: `Total number of constraint template ingestion actions`
 
@@ -144,7 +144,7 @@ Below are the list of metrics provided by Gatekeeper:
 
 ### Webhook
 
-- Name: `gatekeeper_validation_request_count_total`
+- Name: `gatekeeper_validation_request_count`
 
     Description: `The number of requests that are routed to validation webhook`
 
@@ -166,7 +166,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Distribution`
 
-- Name: `gatekeeper_mutation_request_count_total `
+- Name: `gatekeeper_mutation_request_count `
 
     Description: `The number of requests that are routed to mutation webhook`
 
@@ -218,7 +218,7 @@ Below are the list of metrics provided by Gatekeeper:
 
 ### Mutation
 
-- Name: `gatekeeper_mutator_ingestion_count_total`
+- Name: `gatekeeper_mutator_ingestion_count`
 
     Description: `Total number of Mutator ingestion actions`
 
@@ -248,7 +248,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Count`
 
-- Name: `gatekeeper_mutator_conflicting_count_total`
+- Name: `gatekeeper_mutator_conflicting_count`
 
     Description: `The current number of conflicting Mutator objects`
 
