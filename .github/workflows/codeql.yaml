@@ -22,15 +22,15 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repository
-        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+        uses: actions/checkout@1d96c772d19495a3b5c517cd2bc0cb401ea0529f
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@3ab4101902695724f9365a384f86c1074d94e18c
+        uses: github/codeql-action/init@c7f9125735019aa87cfc361530512d50ea439c71
         with:
           languages: go
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@3ab4101902695724f9365a384f86c1074d94e18c
+        uses: github/codeql-action/autobuild@c7f9125735019aa87cfc361530512d50ea439c71
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@3ab4101902695724f9365a384f86c1074d94e18c
+        uses: github/codeql-action/analyze@c7f9125735019aa87cfc361530512d50ea439c71

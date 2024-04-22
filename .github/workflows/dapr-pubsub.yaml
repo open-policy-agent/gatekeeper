@@ -25,7 +25,7 @@ jobs:
         egress-policy: audit
 
     - name: Check out code into the Go module directory
-      uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+      uses: actions/checkout@1d96c772d19495a3b5c517cd2bc0cb401ea0529f
 
     - name: Bootstrap e2e
       run: |
@@ -60,7 +60,7 @@ jobs:
         kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-publish.json
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+      uses: actions/upload-artifact@1746f4ab65b179e0ea60a494b83293b640dd5bba # v4.3.2
       if: ${{ always() }}
       with:
         name: pubsub-logs
