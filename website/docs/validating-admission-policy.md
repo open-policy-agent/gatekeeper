@@ -28,13 +28,13 @@ Together with Gatekeeper and [gator CLI](gator.md), you can get admission, audit
 
 To summary, these are potential options when running Gatekeeper:
 
-| Policy Language    | Enforcement Point  |
+| Policy Language(s)    | Enforcement Point  |
 | ------------------ | ------------------ |
-| CEL, Rego          | Gatekeeper webhook |
+| CEL, Rego          | Gatekeeper validating webhook |
 | CEL, Rego          | Gatekeeper Audit   |
 | CEL, Rego          | Gator CLI          |
 | CEL                | K8s built-in Validating Admission Controller (aka ValidatingAdmissionPolicy) |
-| Rego               | Gatekeeper webhook (referential policies) |
+| Rego               | Gatekeeper validating webhook (referential policies, external data) |
 | Rego               | Gatekeeper Audit (referential policies) |
 
 ## Pre-requisites
@@ -55,13 +55,16 @@ To summary, these are potential options when running Gatekeeper:
 
 ## Get started
 
-### Install with Helm
-Update the following parameters in values.yaml:
+### Option 1: Install with Helm
+Update the `enableK8sNativeValidation` parameter in values.yaml or set during deployment
 - Enable the K8s Native Validating driver to allow users to create CEL-based rules in addition to the OPA driver and rego rules (alpha feature). Default is `false`
-    > enableK8sNativeValidation=true
+```shell
+helm install gatekeeper/gatekeeper --name-template=gatekeeper --namespace gatekeeper-system --create-namespace \
+    --set enableK8sNativeValidation=true
+```
 
-### [optional] Install with Gatekeeper deployment
-Update the following commandline flags:
+### Option 2: Install with Gatekeeper deployment
+Edit the applicable deployments (`controller-manager` and `audit`), and update the following commandline flags:
 - Set `--experimental-enable-k8s-native-validation=true`
 
 ## Policy updates to add CEL
