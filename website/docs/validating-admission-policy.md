@@ -35,7 +35,8 @@ To summary, these are potential options when running Gatekeeper:
 | CEL, Rego          | Gator CLI          |
 | CEL                | K8s built-in Validating Admission Controller (aka ValidatingAdmissionPolicy) |
 | Rego               | Gatekeeper validating webhook (referential policies, external data) |
-| Rego               | Gatekeeper Audit (referential policies) |
+| Rego               | Gatekeeper Audit (referential policies, external data) |
+| Rego               | Gator CLI (referential policies) |
 
 ## Pre-requisites
 
