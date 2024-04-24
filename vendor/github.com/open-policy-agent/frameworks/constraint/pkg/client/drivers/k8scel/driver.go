@@ -81,11 +81,12 @@ func (d *Driver) AddTemplate(_ context.Context, ct *templates.ConstraintTemplate
 	// can keep the user from accessing the full constraint schema.
 	celVarsWithParameters := cel.OptionalVariableDeclarations{HasParams: true}
 
-	vapVars, err := source.GetVariables()
+	vapVars := transform.AllVariablesCEL()
+	vapVarsSuffix, err := source.GetVariables()
 	if err != nil {
 		return err
 	}
-	vapVars = append(vapVars, transform.AllVariablesCEL()...)
+	vapVars = append(vapVars, vapVarsSuffix...)
 	filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
 	if err != nil {
 		return err
