@@ -8,6 +8,9 @@ Generally, design docs are on Google docs:
 * [Sync Resource](https://docs.google.com/document/d/1ZbXaEh7v_HcgrRu7N-kEucU2pXyq1Rt7cSmmFOBN2q8/edit)
 * [External Data Response Cache](https://docs.google.com/document/d/1nl6iWMmh9CRT0A6cr-Nkfofv9wp210Bkf6ilLq9LLBo/edit)
 * [Gator SyncSet Support](https://docs.google.com/document/d/1mBvy6Y7TDyZswdYlFBHB3Mi2irLVqga_7ZoZvfPIU0A/edit)
+* [Scoping enforecment actions](https://docs.google.com/document/d/1qEzDVcmwPysb3ejvTYKPkHJm3Db3Yr7zShwmgFOsR_k/edit#heading=h.6ewsycnqnfl)
+* [Configuring VAP as enforcement point](https://docs.google.com/document/d/1u55cMZ4smRAuEZf4BYsSyZOCoOy33Lsgp3xuwDm0l6I/edit#heading=h.9oaxevykg8w6)
+* [CRD for pub sub controller](https://docs.google.com/document/d/12P3LCaOAQO9Uts4cVljHXkRgukEyWqyLketDP0rFq8A/edit#heading=h.9oaxevykg8w6)
 
 ## Implemented
 * [Gatekeeper V3 Accepted Design](https://docs.google.com/document/d/1qsfeCx-Rx61Xm6JqJK-i67Gk_y__lNebdakmnhCdM7w/edit)
