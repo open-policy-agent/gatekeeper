@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: no-dupes
   labels:
-          "gatekeeper": "not_duplicated"
+    "gatekeeper": "not_duplicated"
