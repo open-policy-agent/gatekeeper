@@ -2,8 +2,6 @@ apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredLabels
 metadata:
   name: all-must-have-owner
-  labels:
-    "gatekeeper.sh/use-vap": "yes"
 spec:
   match:
     kinds:
