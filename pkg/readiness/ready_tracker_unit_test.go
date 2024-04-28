@@ -697,10 +697,8 @@ func Test_ReadyTracker_TrackConfigAndSyncSets(t *testing.T) {
 				if rt.config.Populated() != expectPopulated || rt.syncsets.Populated() != expectPopulated {
 					t.Fatalf("config & syncset object trackers' populated fields are marked as config: %v & syncset: %v, but both should be %v", rt.config.Populated(), rt.syncsets.Populated(), expectPopulated)
 				}
-			} else {
-				if !rt.config.Populated() || !rt.syncsets.Populated() {
-					t.Fatalf("config & syncset object trackers' populated fields are marked as config: %v & syncset: %v, but both should be true", rt.config.Populated(), rt.syncsets.Populated())
-				}
+			} else if !rt.config.Populated() || !rt.syncsets.Populated() {
+				t.Fatalf("config & syncset object trackers' populated fields are marked as config: %v & syncset: %v, but both should be true", rt.config.Populated(), rt.syncsets.Populated())
 			}
 		})
 	}
@@ -823,11 +821,16 @@ func Test_ReadyTracker_Run_GRP_Wait(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			var m sync.Mutex
 			funcs := &interceptor.Funcs{}
 			funcs.List = func(ctx context.Context, client client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
 				if _, ok := list.(*v1beta1.ConstraintTemplateList); ok {
 					return fmt.Errorf("Force Test ConstraintTemplateList Failure")
 				}
+
+				// Adding a mutex lock here avoids the race condition within fake client's List method
+				m.Lock()
+				defer m.Unlock()
 				return client.List(ctx, list, opts...)
 			}
 
@@ -872,11 +875,14 @@ func Test_ReadyTracker_Run_ConstraintTrackers_Wait(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			var m sync.Mutex
 			funcs := &interceptor.Funcs{}
 			funcs.List = func(ctx context.Context, client client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
 				if v, ok := list.(*unstructured.UnstructuredList); ok && v.GroupVersionKind().Kind == "test-constraint" {
 					return fmt.Errorf("Force Test constraint list Failure")
 				}
+				m.Lock()
+				defer m.Unlock()
 				return client.List(ctx, list, opts...)
 			}
 
@@ -921,11 +927,14 @@ func Test_ReadyTracker_Run_DataTrackers_Wait(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			var m sync.Mutex
 			funcs := &interceptor.Funcs{}
 			funcs.List = func(ctx context.Context, client client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
 				if v, ok := list.(*unstructured.UnstructuredList); ok && v.GroupVersionKind().Kind == "PodList" {
 					return fmt.Errorf("Force Test pod list Failure")
 				}
+				m.Lock()
+				defer m.Unlock()
 				return client.List(ctx, list, opts...)
 			}
 

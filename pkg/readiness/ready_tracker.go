@@ -45,7 +45,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var crashOnFailureFetchingExpectations = flag.Bool("crash-on-failure-fetching-expectations", false, "When set (defaults to false), gatekeeper will ignore errors that occur when gathering expectations. This prevents bootstrapping errors from crashing Gatekeeper at the cost of increasing the risk Gatekeeper will under-enforce policy by serving before it has loaded in all policies. Enabling this will help prevent under-enforcement at the risk of crashing during startup for issues like network errors. Note that enabling this flag currently does not achieve the aforementioned effect since fetching expectations are set to retry until success so failures during fetching expectations currently do not occurr.")
+var crashOnFailureFetchingExpectations = flag.Bool("crash-on-failure-fetching-expectations", false, "Unless set (defaults to false), gatekeeper will ignore errors that occur when gathering expectations. This prevents bootstrapping errors from crashing Gatekeeper at the cost of increasing the risk Gatekeeper will under-enforce policy by serving before it has loaded in all policies. Enabling this will help prevent under-enforcement at the risk of crashing during startup for issues like network errors. Note that enabling this flag currently does not achieve the aforementioned effect since fetching expectations are set to retry until success so failures during fetching expectations currently do not occurr.")
 
 var log = logf.Log.WithName("readiness-tracker")
 
@@ -373,13 +373,13 @@ func (t *Tracker) Run(ctx context.Context) error {
 
 	// start deleted object polling. Periodically collects
 	// objects that are expected by the Tracker, but are deleted
-	go func() error {
+	go func() {
 		// wait before proceeding, hoping
 		// that the tracker will be satisfied by then
 		timer := time.NewTimer(2000 * time.Millisecond)
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case <-timer.C:
 		}
 
@@ -387,12 +387,12 @@ func (t *Tracker) Run(ctx context.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
-				return nil
+				return
 			case <-ticker.C:
 				if t.Satisfied() {
 					log.Info("readiness satisfied, no further collection")
 					ticker.Stop()
-					return nil
+					return
 				}
 				t.collectInvalidExpectations(ctx)
 			}
