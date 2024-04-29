@@ -12,7 +12,7 @@ title: Validating Workload Resources using ExpansionTemplate
 
 A workload resource is a resource that creates other resources, such as a
 [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) or [Job](https://kubernetes.io/docs/concepts/workloads/controllers/job/). Gatekeeper can be configured to reject workload resources
-that create a resource that violates a constraint. 
+that create a resource that violates a constraint.
 
 ## `ExpansionTemplate` explained
 
@@ -164,6 +164,21 @@ Similarly, `Constraints` can be configured to only target fake resources by
 setting the `Constraint`'s `spec.match.source` field to `Generated`. This can
 also be used to define different enforcement actions for expanded resources and
 original resources.
+
+For example, suppose a cluster has a policy that blocks all [standalone pods](https://kubernetes.io/docs/concepts/configuration/overview/#naked-pods-vs-replicasets-deployments-and-jobs), but allows them to be created as part of a workload resource, such as `Deployment`. A user could create a `Constraint` that only targets original resources, like so:
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: block-standalone-pods
+metadata:
+  name: block-standalone-pods
+spec:
+  match:
+    source: Original
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+```
 
 ## Mutating Example
 

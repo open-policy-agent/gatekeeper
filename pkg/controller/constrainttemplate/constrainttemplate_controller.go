@@ -17,12 +17,14 @@ package constrainttemplate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
@@ -35,13 +37,17 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	errorpkg "github.com/pkg/errors"
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -56,7 +62,10 @@ const (
 	ctrlName = "constrainttemplate-controller"
 )
 
-var logger = log.Log.WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
+var (
+	logger       = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
+	discoveryErr *apiutil.ErrResourceDiscoveryFailed
+)
 
 var gvkConstraintTemplate = schema.GroupVersionKind{
 	Group:   v1beta1.SchemeGroupVersion.Group,
@@ -112,7 +121,8 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
 func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
-	// constraintsCache contains total number of constraints and shared mutex
+	constraint.VapEnforcement.SetDefaultIfEmpty()
+	// constraintsCache contains total number of constraints and shared mutex and vap label
 	constraintsCache := constraint.NewConstraintsCache()
 
 	w, err := wm.NewRegistrar(ctrlName, regEvents)
@@ -125,6 +135,7 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 	}
 
 	// via the registrar below.
+
 	constraintAdder := constraint.Adder{
 		CFClient:         cfClient,
 		ConstraintsCache: constraintsCache,
@@ -176,6 +187,7 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 		metrics:       r,
 		tracker:       tracker,
 		getPod:        getPod,
+		cstrEvents:    regEvents,
 	}
 
 	if getPod == nil {
@@ -237,8 +249,10 @@ type ReconcileConstraintTemplate struct {
 	metrics       *reporter
 	tracker       *readiness.Tracker
 	getPod        func(context.Context) (*corev1.Pod, error)
+	cstrEvents    chan<- event.GenericEvent
 }
 
+// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingadmissionpolicies;validatingadmissionpolicybindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
 // TODO(acpana): remove in 3.16 as per https://github.com/open-policy-agent/gatekeeper/issues/3084
@@ -266,11 +280,12 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	ct := &v1beta1.ConstraintTemplate{}
 	err := r.Get(ctx, request.NamespacedName, ct)
 	if err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
 		deleted = true
 	}
+
 	deleted = deleted || !ct.GetDeletionTimestamp().IsZero()
 
 	if deleted {
@@ -290,7 +305,8 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 				logError(request.NamespacedName.Name)
 				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 				return reconcile.Result{}, err
-			} else if !result.Requeue {
+			}
+			if !result.Requeue {
 				logAction(ct, deletedAction)
 				r.metrics.registry.remove(request.NamespacedName)
 			}
@@ -326,7 +342,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		status.Status.Errors = append(status.Status.Errors, createErr)
 
 		if updateErr := r.Update(ctx, status); updateErr != nil {
-			logger.Error(updateErr, "update error")
+			logger.Error(updateErr, "update status error")
 			return reconcile.Result{Requeue: true}, nil
 		}
 		logError(request.NamespacedName.Name)
@@ -353,7 +369,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	case err == nil:
 		break
 
-	case errors.IsNotFound(err):
+	case apierrors.IsNotFound(err):
 		action = createdAction
 		currentCRD = nil
 
@@ -364,12 +380,36 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status)
+	generateVap := false
+	labels := ct.GetLabels()
+	logger.Info("constraint template resource", "labels", labels)
+	useVap, ok := labels[constraint.VapGenerationLabel]
+	if !ok {
+		logger.Info("constraint template resource does not have a label for use-vap; will default to flag behavior", "VapEnforcement", constraint.VapEnforcement)
+		generateVap = constraint.ShouldGenerateVap("")
+	} else {
+		logger.Info("constraint template resource", "useVap", useVap)
+		generateVap = constraint.ShouldGenerateVap(useVap)
+		if useVap != constraint.No && useVap != constraint.Yes {
+			labelErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: fmt.Sprintf("constraint template resource has an invalid value for %s, allowed values are yes and no", constraint.VapGenerationLabel)}
+			status.Status.Errors = append(status.Status.Errors, labelErr)
+
+			if updateErr := r.Update(ctx, status); updateErr != nil {
+				logger.Error(updateErr, "update status error")
+				return reconcile.Result{Requeue: true}, nil
+			}
+		}
+	}
+	logger.Info("generateVap", "r.generateVap", generateVap)
+
+	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status, generateVap)
 	if err != nil {
-		logger.Error(err, "update error")
+		logger.Error(err, "handle update error")
 		logError(request.NamespacedName.Name)
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
-	} else if !result.Requeue {
+		return result, err
+	}
+	if !result.Requeue {
 		logAction(ct, action)
 		r.metrics.registry.add(request.NamespacedName, metrics.ActiveStatus)
 	}
@@ -395,15 +435,16 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	unversionedCT *templates.ConstraintTemplate,
 	proposedCRD, currentCRD *apiextensionsv1.CustomResourceDefinition,
 	status *statusv1beta1.ConstraintTemplatePodStatus,
+	generateVap bool,
 ) (reconcile.Result, error) {
 	name := proposedCRD.GetName()
 	logger := logger.WithValues("name", ct.GetName(), "crdName", name)
 
-	logger.Info("loading code into OPA")
+	logger.Info("loading code into rule engine")
 	beginCompile := time.Now()
 
 	// It's important that cfClient.AddTemplate() is called first. That way we can
-	// rely on a template's existence in OPA to know whether a watch needs
+	// rely on a template's existence in rule engine to know whether a watch needs
 	// to be removed
 	if _, err := r.cfClient.AddTemplate(ctx, unversionedCT); err != nil {
 		if err := r.metrics.reportIngestDuration(ctx, metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
@@ -453,8 +494,89 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
+	// generating vap resources
+	if generateVap && constraint.IsVapAPIEnabled() {
+		currentVap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
+		logger.Info("check if vap exists", "vapName", vapName)
+		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
+			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
+				return reconcile.Result{}, err
+			}
+			currentVap = nil
+		}
+		logger.Info("get vap", "vapName", vapName, "currentVap", currentVap)
+		newVap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
+		if err != nil {
+			logger.Info("transform to vap error", "vapName", vapName, "error", err)
+			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
+			status.Status.Errors = append(status.Status.Errors, createErr)
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to vap object", status, err)
+			return reconcile.Result{}, err
+		}
+		if currentVap == nil {
+			newVap = transformedVap.DeepCopy()
+		} else {
+			newVap = currentVap.DeepCopy()
+			newVap.Spec = transformedVap.Spec
+		}
+
+		if err := controllerutil.SetControllerReference(ct, newVap, r.scheme); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		if currentVap == nil {
+			logger.Info("creating vap", "vapName", vapName)
+			if err := r.Create(ctx, newVap); err != nil {
+				logger.Info("creating vap error", "vapName", vapName, "error", err)
+				createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
+				status.Status.Errors = append(status.Status.Errors, createErr)
+				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create vap object", status, err)
+				return reconcile.Result{}, err
+			}
+			// after vap is created, trigger update event for all constraints
+			if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
+				return reconcile.Result{}, err
+			}
+		} else if !reflect.DeepEqual(currentVap, newVap) {
+			logger.Info("updating vap")
+			if err := r.Update(ctx, newVap); err != nil {
+				updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
+				status.Status.Errors = append(status.Status.Errors, updateErr)
+				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update vap object", status, err)
+				return reconcile.Result{}, err
+			}
+		}
+	}
+	// do not generate vap resources
+	// remove if exists
+	if !generateVap && constraint.IsVapAPIEnabled() {
+		currentVap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
+		logger.Info("check if vap exists", "vapName", vapName)
+		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
+			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
+				return reconcile.Result{}, err
+			}
+			currentVap = nil
+		}
+		if currentVap != nil {
+			logger.Info("deleting vap")
+			if err := r.Delete(ctx, currentVap); err != nil {
+				updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
+				status.Status.Errors = append(status.Status.Errors, updateErr)
+				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete vap object", status, err)
+				return reconcile.Result{}, err
+			}
+			// after vap is deleted, trigger update event for all constraints
+			if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
 	if err := r.Update(ctx, status); err != nil {
-		logger.Error(err, "update error")
+		logger.Error(err, "update ct pod status error")
 		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{}, nil
@@ -495,7 +617,7 @@ func (r *ReconcileConstraintTemplate) deleteAllStatus(ctx context.Context, ctNam
 	statusObj.SetName(sName)
 	statusObj.SetNamespace(util.GetNamespace())
 	if err := r.Delete(ctx, statusObj); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return err
 		}
 	}
@@ -509,7 +631,7 @@ func (r *ReconcileConstraintTemplate) deleteAllStatus(ctx context.Context, ctNam
 	}
 	for index := range cstrStatusObjs.Items {
 		if err := r.Delete(ctx, &cstrStatusObjs.Items[index]); err != nil {
-			if !errors.IsNotFound(err) {
+			if !apierrors.IsNotFound(err) {
 				return err
 			}
 		}
@@ -526,7 +648,7 @@ func (r *ReconcileConstraintTemplate) getOrCreatePodStatus(ctx context.Context, 
 	}
 	key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
 	if err := r.Get(ctx, key, statusObj); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, err
 		}
 	} else {
@@ -558,6 +680,41 @@ func (r *ReconcileConstraintTemplate) removeWatch(ctx context.Context, kind sche
 		return err
 	}
 	return r.statusWatcher.RemoveWatch(ctx, kind)
+}
+
+func (r *ReconcileConstraintTemplate) listObjects(ctx context.Context, gvk schema.GroupVersionKind) ([]unstructured.Unstructured, error) {
+	list := &unstructured.UnstructuredList{
+		Object: map[string]interface{}{},
+		Items:  []unstructured.Unstructured{},
+	}
+	gvk.Kind += "List"
+	list.SetGroupVersionKind(gvk)
+	err := r.List(ctx, list)
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
+}
+
+func (r *ReconcileConstraintTemplate) triggerConstraintEvents(ctx context.Context, ct *v1beta1.ConstraintTemplate, status *statusv1beta1.ConstraintTemplatePodStatus) error {
+	gvk := makeGvk(ct.Spec.CRD.Spec.Names.Kind)
+	logger.Info("list gvk objects", "gvk", gvk)
+	cstrObjs, err := r.listObjects(ctx, gvk)
+	if err != nil {
+		logger.Error(err, "get all constraints listObjects")
+		updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
+		status.Status.Errors = append(status.Status.Errors, updateErr)
+		err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not list all constraint objects", status, err)
+		return err
+	}
+	logger.Info("list gvk objects", "cstrObjs", cstrObjs)
+	for _, cstr := range cstrObjs {
+		c := cstr
+		logger.Info("triggering cstrEvent")
+		r.cstrEvents <- event.GenericEvent{Object: &c}
+	}
+
+	return nil
 }
 
 type action string

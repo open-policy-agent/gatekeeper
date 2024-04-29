@@ -147,6 +147,18 @@ type Reporter struct {
 	now        func() float64
 }
 
+func init() {
+	view.Register(
+		sdkmetric.NewView(
+			sdkmetric.Instrument{Name: syncDurationMetricName},
+			sdkmetric.Stream{
+				Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
+					Boundaries: []float64{0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.001, 0.002, 0.003, 0.004, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05},
+				},
+			},
+		))
+}
+
 // NewStatsReporter creates a reporter for sync metrics.
 func NewStatsReporter() (*Reporter, error) {
 	if r == nil {
@@ -166,16 +178,6 @@ func NewStatsReporter() (*Reporter, error) {
 		if err != nil {
 			return nil, err
 		}
-
-		view.Register(
-			sdkmetric.NewView(
-				sdkmetric.Instrument{Name: syncDurationMetricName},
-				sdkmetric.Stream{
-					Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
-						Boundaries: []float64{0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.001, 0.002, 0.003, 0.004, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05},
-					},
-				},
-			))
 	}
 	return r, nil
 }

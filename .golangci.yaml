@@ -1,6 +1,8 @@
 run:
   timeout: 5m
-  skip-files:
+
+issues:
+  exclude-files:
     - pkg/target/matchcrd_constant.go
 
 linters-settings:
@@ -22,7 +24,7 @@ linters-settings:
     locale: US
   staticcheck:
     # Select the Go version to target. The default is '1.13'.
-    go: "1.21"
+    go: "1.22"
 
 linters:
   disable-all: true

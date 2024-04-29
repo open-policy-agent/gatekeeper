@@ -42,7 +42,7 @@ func NewProviderResponseCache(ctx context.Context, ttl time.Duration) *ProviderR
 		TTL:   ttl,
 	}
 
-	go wait.UntilWithContext(ctx, func(ctx context.Context) {
+	go wait.UntilWithContext(ctx, func(_ context.Context) {
 		providerResponseCache.invalidateProviderResponseCache(providerResponseCache.TTL)
 	}, ttl)
 

@@ -48,6 +48,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -63,9 +64,11 @@ func setupManager(t *testing.T) manager.Manager {
 
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
-		MetricsBindAddress: "0",
-		MapperProvider:     apiutil.NewDynamicRESTMapper,
-		Logger:             testutils.NewLogger(t),
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
+		MapperProvider: apiutil.NewDynamicRESTMapper,
+		Logger:         testutils.NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -142,7 +145,7 @@ func TestReconcile(t *testing.T) {
 	}
 	events := make(chan event.GenericEvent, 1024)
 
-	rec := newReconciler(mgr, mSys, tracker, func(ctx context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events)
+	rec := newReconciler(mgr, mSys, tracker, func(_ context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events)
 	adder := Adder{EventsSource: &source.Channel{Source: events}}
 
 	err = adder.add(mgr, rec)
@@ -166,7 +169,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("Mutator is reported as enforced", func(t *testing.T) {
+	t.Run("Mutator is reported as enforced", func(_ *testing.T) {
 		g.Eventually(func() error {
 			v := &mutationsv1.Assign{}
 			v.SetName("assign-test-obj")

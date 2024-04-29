@@ -76,7 +76,7 @@ func newReconciler(
 // PodStatusToConstraintTemplateMapper correlates a ConstraintTemplatePodStatus with its corresponding constraint template
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
 func PodStatusToConstraintTemplateMapper(selfOnly bool) handler.MapFunc {
-	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+	return func(_ context.Context, obj client.Object) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConstraintTemplateNameLabel]
 		if !ok {

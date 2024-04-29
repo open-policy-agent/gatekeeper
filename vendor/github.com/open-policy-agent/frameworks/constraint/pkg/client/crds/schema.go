@@ -9,9 +9,10 @@ import (
 // CreateSchema combines the schema of the match target and the ConstraintTemplate parameters
 // to form the schema of the actual constraint resource.
 func CreateSchema(templ *templates.ConstraintTemplate, target MatchSchemaProvider) *apiextensions.JSONSchemaProps {
+	defaultEnforcementAction := apiextensions.JSON("deny")
 	props := map[string]apiextensions.JSONSchemaProps{
 		"match":             target.MatchSchema(),
-		"enforcementAction": {Type: "string"},
+		"enforcementAction": {Type: "string", Default: &defaultEnforcementAction},
 	}
 
 	if templ.Spec.CRD.Spec.Validation != nil && templ.Spec.CRD.Spec.Validation.OpenAPIV3Schema != nil {

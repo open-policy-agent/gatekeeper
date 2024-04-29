@@ -46,7 +46,7 @@ type ConstraintPodStatusStatus struct {
 	ObservedGeneration int64     `json:"observedGeneration,omitempty"`
 }
 
-// Error represents a single error caught while adding a constraint to OPA.
+// Error represents a single error caught while adding a constraint to engine.
 type Error struct {
 	Code     string `json:"code"`
 	Message  string `json:"message"`

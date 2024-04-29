@@ -7,7 +7,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	admissionv1 "k8s.io/api/admissionregistration/v1"
-	admissionv1alpha1 "k8s.io/api/admissionregistration/v1alpha1"
+	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
 	"k8s.io/apiserver/pkg/admission/plugin/validatingadmissionpolicy"
@@ -99,14 +99,14 @@ func (in *Source) GetMatchConditions() ([]cel.ExpressionAccessor, error) {
 	return matchConditions, nil
 }
 
-func (in *Source) GetV1Alpha1MatchConditions() ([]admissionv1alpha1.MatchCondition, error) {
+func (in *Source) GetV1Beta1MatchConditions() ([]admissionv1beta1.MatchCondition, error) {
 	if err := in.validateMatchConditions(); err != nil {
 		return nil, err
 	}
 
-	var matchConditions []admissionv1alpha1.MatchCondition
+	var matchConditions []admissionv1beta1.MatchCondition
 	for _, mc := range in.MatchConditions {
-		matchConditions = append(matchConditions, admissionv1alpha1.MatchCondition{
+		matchConditions = append(matchConditions, admissionv1beta1.MatchCondition{
 			Name:       mc.Name,
 			Expression: mc.Expression,
 		})
@@ -142,14 +142,14 @@ func (in *Source) GetVariables() ([]cel.NamedExpressionAccessor, error) {
 	return vars, nil
 }
 
-func (in *Source) GetV1Alpha1Variables() ([]admissionv1alpha1.Variable, error) {
+func (in *Source) GetV1Beta1Variables() ([]admissionv1beta1.Variable, error) {
 	if err := in.validateVariables(); err != nil {
 		return nil, err
 	}
 
-	var variables []admissionv1alpha1.Variable
+	var variables []admissionv1beta1.Variable
 	for _, v := range in.Variables {
-		variables = append(variables, admissionv1alpha1.Variable{
+		variables = append(variables, admissionv1beta1.Variable{
 			Name:       v.Name,
 			Expression: v.Expression,
 		})
@@ -169,10 +169,10 @@ func (in *Source) GetValidations() ([]cel.ExpressionAccessor, error) {
 	return validations, nil
 }
 
-func (in *Source) GetV1Alpha1Validatons() ([]admissionv1alpha1.Validation, error) {
-	var validations []admissionv1alpha1.Validation
+func (in *Source) GetV1Beta1Validatons() ([]admissionv1beta1.Validation, error) {
+	var validations []admissionv1beta1.Validation
 	for _, v := range in.Validations {
-		validations = append(validations, admissionv1alpha1.Validation{
+		validations = append(validations, admissionv1beta1.Validation{
 			Expression:        v.Expression,
 			Message:           v.Message,
 			MessageExpression: v.MessageExpression,
@@ -213,18 +213,19 @@ func (in *Source) GetFailurePolicy() (*admissionv1.FailurePolicyType, error) {
 	return &out, nil
 }
 
-func (in *Source) GetV1alpha1FailurePolicy() (*admissionv1alpha1.FailurePolicyType, error) {
+func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType, error) {
+	var out admissionv1beta1.FailurePolicyType
+	/// TODO(ritazh): default for now until the feature is safe to fail close
 	if in.FailurePolicy == nil {
-		return nil, nil
+		out = admissionv1beta1.Ignore
+		return &out, nil
 	}
-
-	var out admissionv1alpha1.FailurePolicyType
 
 	switch *in.FailurePolicy {
 	case string(admissionv1.Fail):
-		out = admissionv1alpha1.Fail
+		out = admissionv1beta1.Fail
 	case string(admissionv1.Ignore):
-		out = admissionv1alpha1.Ignore
+		out = admissionv1beta1.Ignore
 	default:
 		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *in.FailurePolicy)
 	}

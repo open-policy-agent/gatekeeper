@@ -61,6 +61,23 @@ var (
 	CertCNName                         = flag.String("client-cn-name", "kube-apiserver", "expected CN name on the client certificate attached by apiserver in requests to the webhook")
 )
 
+func ParseTLSVersion(v string) (uint16, error) {
+	switch v {
+	case "":
+		return tls.VersionTLS10, nil
+	case "1.0":
+		return tls.VersionTLS10, nil
+	case "1.1":
+		return tls.VersionTLS11, nil
+	case "1.2":
+		return tls.VersionTLS12, nil
+	case "1.3":
+		return tls.VersionTLS13, nil
+	default:
+		return 0, errors.New("invalid TLS version. Must be one of: 1.0, 1.1, 1.2, or 1.3")
+	}
+}
+
 func init() {
 	_ = apis.AddToScheme(runtimeScheme)
 }

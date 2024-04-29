@@ -94,12 +94,14 @@ func (h *K8sValidationTarget) handleReview(obj interface{}) (bool, *gkReview, er
 			AdmissionRequest: *data.AdmissionRequest,
 			namespace:        data.Namespace,
 			source:           data.Source,
+			isAdmission:      data.IsAdmission,
 		}
 	case *AugmentedReview:
 		review = &gkReview{
 			AdmissionRequest: *data.AdmissionRequest,
 			namespace:        data.Namespace,
 			source:           data.Source,
+			isAdmission:      data.IsAdmission,
 		}
 	case AugmentedUnstructured:
 		review, err = augmentedUnstructuredToAdmissionRequest(data)

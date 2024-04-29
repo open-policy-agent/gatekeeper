@@ -2,11 +2,11 @@ package wildcard
 
 import "strings"
 
-// +kubebuilder:validation:Pattern=`^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$`
+// +kubebuilder:validation:Pattern=`^\*?[-:a-z0-9]*\*?$`
 
-// A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or
-// "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is
-// required for wildcard matching.
+// A string that supports globbing at its front and end. Ex: "kube-*" will match "kube-system" or
+// "kube-public", "*-system" will match "kube-system" or "gatekeeper-system", "*system*" will
+// match "system-kube" or "kube-system".  The asterisk is required for wildcard matching.
 //
 //nolint:revive
 type Wildcard string

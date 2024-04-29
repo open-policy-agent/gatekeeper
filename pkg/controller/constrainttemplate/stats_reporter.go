@@ -28,6 +28,17 @@ var (
 	ingestDurationM metric.Float64Histogram
 )
 
+func init() {
+	view.Register(sdkmetric.NewView(
+		sdkmetric.Instrument{Name: ingestDuration},
+		sdkmetric.Stream{
+			Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
+				Boundaries: []float64{0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 1, 2, 3, 4, 5},
+			},
+		},
+	))
+}
+
 func (r *reporter) reportIngestDuration(ctx context.Context, status metrics.Status, d time.Duration) error {
 	ingestDurationM.Record(ctx, d.Seconds(), metric.WithAttributes(attribute.String(statusKey, string(status))))
 	ingestCountM.Add(ctx, 1, metric.WithAttributes(attribute.String(statusKey, string(status))))
@@ -45,7 +56,6 @@ func newStatsReporter() *reporter {
 		metric.WithDescription(ctDesc),
 		metric.WithInt64Callback(r.observeCTM),
 	)
-
 	if err != nil {
 		panic(err)
 	}
@@ -65,14 +75,6 @@ func newStatsReporter() *reporter {
 	if err != nil {
 		panic(err)
 	}
-	view.Register(sdkmetric.NewView(
-		sdkmetric.Instrument{Name: ingestDuration},
-		sdkmetric.Stream{
-			Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
-				Boundaries: []float64{0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 1, 2, 3, 4, 5},
-			},
-		},
-	))
 	return r
 }
 

@@ -1,6 +1,6 @@
 # Gatekeeper
 
-![Static Badge](https://img.shields.io/badge/OPA%20Version-v0.54.0-blue)
+![Static Badge](https://img.shields.io/badge/OPA%20Version-v0.60.0-blue)
 
 ## How is Gatekeeper different from OPA?
 

@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 const (
@@ -40,9 +41,11 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
 	mgr, err := manager.New(cfg, manager.Options{
-		MetricsBindAddress: "0",
-		MapperProvider:     apiutil.NewDynamicRESTMapper,
-		Logger:             testutils.NewLogger(t),
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
+		MapperProvider: apiutil.NewDynamicRESTMapper,
+		Logger:         testutils.NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)

@@ -477,7 +477,7 @@ func ParseModuleWithOpts(filename, input string, popts ParserOptions) (*Module, 
 	if err != nil {
 		return nil, err
 	}
-	return parseModule(filename, stmts, comments, popts.EffectiveRegoVersion())
+	return parseModule(filename, stmts, comments, popts.RegoVersion)
 }
 
 // ParseBody returns exactly one body.
@@ -626,7 +626,7 @@ func ParseStatementsWithOpts(filename, input string, popts ParserOptions) ([]Sta
 		WithCapabilities(popts.Capabilities).
 		WithSkipRules(popts.SkipRules).
 		WithJSONOptions(popts.JSONOptions).
-		WithRegoVersion(popts.EffectiveRegoVersion()).
+		WithRegoVersion(popts.RegoVersion).
 		withUnreleasedKeywords(popts.unreleasedKeywords)
 
 	stmts, comments, errs := parser.Parse()
@@ -698,22 +698,7 @@ func parseModule(filename string, stmts []Statement, comments []*Comment, regoCo
 	if mod.regoVersion == RegoV0CompatV1 || mod.regoVersion == RegoV1 {
 		for _, rule := range mod.Rules {
 			for r := rule; r != nil; r = r.Else {
-				var t string
-				if r.isFunction() {
-					t = "function"
-				} else {
-					t = "rule"
-				}
-
-				if r.generatedBody && r.Head.generatedValue {
-					errs = append(errs, NewError(ParseErr, r.Location, "%s must have value assignment and/or body declaration", t))
-				}
-				if r.Body != nil && !r.generatedBody && !ruleDeclarationHasKeyword(r, tokens.If) && !r.Default {
-					errs = append(errs, NewError(ParseErr, r.Location, "`if` keyword is required before %s body", t))
-				}
-				if r.Head.RuleKind() == MultiValue && !ruleDeclarationHasKeyword(r, tokens.Contains) {
-					errs = append(errs, NewError(ParseErr, r.Location, "`contains` keyword is required for partial set rules"))
-				}
+				errs = append(errs, CheckRegoV1(r)...)
 			}
 		}
 	}

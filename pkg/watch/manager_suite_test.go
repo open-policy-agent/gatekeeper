@@ -30,6 +30,11 @@ var cfg *rest.Config
 
 func TestMain(m *testing.M) {
 	t := &envtest.Environment{}
+	///TODO(ritazh): remove when vap is GAed in k/k
+	args := t.ControlPlane.GetAPIServer().Configure()
+	args.Append("runtime-config", "api/all=true")
+	args.Append("feature-gates", "ValidatingAdmissionPolicy=true")
+
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		stdlog.Fatal(err)
 	}

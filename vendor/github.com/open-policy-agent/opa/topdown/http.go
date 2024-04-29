@@ -114,14 +114,24 @@ const (
 )
 
 func builtinHTTPSend(bctx BuiltinContext, operands []*ast.Term, iter func(*ast.Term) error) error {
-	req, err := validateHTTPRequestOperand(operands[0], 1)
+
+	obj, err := builtins.ObjectOperand(operands[0].Value, 1)
 	if err != nil {
 		return handleBuiltinErr(ast.HTTPSend.Name, bctx.Location, err)
 	}
 
-	raiseError, err := getRaiseErrorValue(req)
+	raiseError, err := getRaiseErrorValue(obj)
 	if err != nil {
 		return handleBuiltinErr(ast.HTTPSend.Name, bctx.Location, err)
+	}
+
+	req, err := validateHTTPRequestOperand(operands[0], 1)
+	if err != nil {
+		if raiseError {
+			return handleHTTPSendErr(bctx, err)
+		}
+
+		return iter(generateRaiseErrorResult(handleBuiltinErr(ast.HTTPSend.Name, bctx.Location, err)))
 	}
 
 	result, err := getHTTPResponse(bctx, req)
@@ -130,24 +140,28 @@ func builtinHTTPSend(bctx BuiltinContext, operands []*ast.Term, iter func(*ast.T
 			return handleHTTPSendErr(bctx, err)
 		}
 
-		obj := ast.NewObject()
-		obj.Insert(ast.StringTerm("status_code"), ast.IntNumberTerm(0))
-
-		errObj := ast.NewObject()
-
-		switch err.(type) {
-		case *url.Error:
-			errObj.Insert(ast.StringTerm("code"), ast.StringTerm(HTTPSendNetworkErr))
-		default:
-			errObj.Insert(ast.StringTerm("code"), ast.StringTerm(HTTPSendInternalErr))
-		}
-
-		errObj.Insert(ast.StringTerm("message"), ast.StringTerm(err.Error()))
-		obj.Insert(ast.StringTerm("error"), ast.NewTerm(errObj))
-
-		result = ast.NewTerm(obj)
+		result = generateRaiseErrorResult(err)
 	}
 	return iter(result)
+}
+
+func generateRaiseErrorResult(err error) *ast.Term {
+	obj := ast.NewObject()
+	obj.Insert(ast.StringTerm("status_code"), ast.IntNumberTerm(0))
+
+	errObj := ast.NewObject()
+
+	switch err.(type) {
+	case *url.Error:
+		errObj.Insert(ast.StringTerm("code"), ast.StringTerm(HTTPSendNetworkErr))
+	default:
+		errObj.Insert(ast.StringTerm("code"), ast.StringTerm(HTTPSendInternalErr))
+	}
+
+	errObj.Insert(ast.StringTerm("message"), ast.StringTerm(err.Error()))
+	obj.Insert(ast.StringTerm("error"), ast.NewTerm(errObj))
+
+	return ast.NewTerm(obj)
 }
 
 func getHTTPResponse(bctx BuiltinContext, req ast.Object) (*ast.Term, error) {
@@ -888,7 +902,7 @@ func (c *interQueryCache) checkHTTPSendInterQueryCache() (ast.Value, error) {
 			pcv = cachedRespData
 		}
 
-		c.bctx.InterQueryBuiltinCache.Insert(c.key, pcv)
+		c.bctx.InterQueryBuiltinCache.InsertWithExpiry(c.key, pcv, cachedRespData.ExpiresAt)
 
 		return cachedRespData.formatToAST(c.forceJSONDecode, c.forceYAMLDecode)
 	}
@@ -924,18 +938,19 @@ func insertIntoHTTPSendInterQueryCache(bctx BuiltinContext, key ast.Value, resp 
 	}
 
 	var pcv cache.InterQueryCacheValue
-
+	var pcvData *interQueryCacheData
 	if cachingMode == defaultCachingMode {
-		pcv, err = newInterQueryCacheValue(bctx, resp, respBody, cacheParams)
+		pcv, pcvData, err = newInterQueryCacheValue(bctx, resp, respBody, cacheParams)
 	} else {
-		pcv, err = newInterQueryCacheData(bctx, resp, respBody, cacheParams)
+		pcvData, err = newInterQueryCacheData(bctx, resp, respBody, cacheParams)
+		pcv = pcvData
 	}
 
 	if err != nil {
 		return err
 	}
 
-	requestCache.Insert(key, pcv)
+	requestCache.InsertWithExpiry(key, pcv, pcvData.ExpiresAt)
 	return nil
 }
 
@@ -1030,17 +1045,17 @@ type interQueryCacheValue struct {
 	Data []byte
 }
 
-func newInterQueryCacheValue(bctx BuiltinContext, resp *http.Response, respBody []byte, cacheParams *forceCacheParams) (*interQueryCacheValue, error) {
+func newInterQueryCacheValue(bctx BuiltinContext, resp *http.Response, respBody []byte, cacheParams *forceCacheParams) (*interQueryCacheValue, *interQueryCacheData, error) {
 	data, err := newInterQueryCacheData(bctx, resp, respBody, cacheParams)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	b, err := json.Marshal(data)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &interQueryCacheValue{Data: b}, nil
+	return &interQueryCacheValue{Data: b}, data, nil
 }
 
 func (cb interQueryCacheValue) Clone() (cache.InterQueryCacheValue, error) {

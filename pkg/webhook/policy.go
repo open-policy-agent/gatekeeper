@@ -30,7 +30,6 @@ import (
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -69,10 +68,7 @@ import (
 // https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#response
 const httpStatusWarning = 299
 
-var (
-	ValidateTemplateRego = flag.Bool("validate-template-rego", true, "validate Rego code for constraint templates. Defaults to true. This flag will be removed in Gatekeeper v3.16 and cannot be used if `experimental-enable-k8s-native-validation` flag is set. Use Gator to validate in shift left manner to avoid impact with this behavior change.). Use Gator to validate in shift left manner to avoid impact with this behavior change.")
-	maxServingThreads    = flag.Int("max-serving-threads", -1, "cap the number of threads handling non-trivial requests, -1 caps the number of threads to GOMAXPROCS. Defaults to -1.")
-)
+var maxServingThreads = flag.Int("max-serving-threads", -1, "cap the number of threads handling non-trivial requests, -1 caps the number of threads to GOMAXPROCS. Defaults to -1.")
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
@@ -398,21 +394,6 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 		return true, err
 	}
 
-	// TODO: This is a temporary check for rego to give enough time to users to migrate to gator for validation. To be removed before 3.16.
-	if *ValidateTemplateRego {
-		// Create a temporary Driver and attempt to add the Template to it. This
-		// ensures the Rego code both parses and compiles.
-		d, err := rego.New()
-		if err != nil {
-			return false, fmt.Errorf("unable to create Driver: %w", err)
-		}
-
-		err = d.AddTemplate(ctx, unversioned)
-		if err != nil {
-			return true, err
-		}
-	}
-
 	return false, nil
 }
 
@@ -644,6 +625,7 @@ func (h *validationHandler) createReviewForRequest(ctx context.Context, req *adm
 	review := &target.AugmentedReview{
 		AdmissionRequest: &req.AdmissionRequest,
 		Source:           mutationtypes.SourceTypeOriginal,
+		IsAdmission:      true,
 	}
 	if req.AdmissionRequest.Namespace != "" {
 		ns := &corev1.Namespace{}

@@ -64,7 +64,7 @@ type AddFunction func(manager.Manager) error
 type RemovableCache interface {
 	GetInformer(_ context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error)
 	List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
-	Remove(obj client.Object) error
+	RemoveInformer(_ context.Context, obj client.Object) error
 }
 
 func New(c RemovableCache) (*Manager, error) {
@@ -177,7 +177,7 @@ func (wm *Manager) doAddWatch(ctx context.Context, r *Registrar, gvk schema.Grou
 	default:
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(gvk)
-		informer, err := wm.cache.GetInformer(ctx, u, cache.InformerGetOption(cache.BlockUntilSynced(false)))
+		informer, err := wm.cache.GetInformer(ctx, u, cache.BlockUntilSynced(false))
 		if err != nil || informer == nil {
 			// This is expected to fail if a CRD is unregistered.
 			return fmt.Errorf("getting informer for kind: %+v %w", gvk, err)
@@ -207,7 +207,7 @@ func (wm *Manager) removeWatch(ctx context.Context, r *Registrar, gvk schema.Gro
 	return wm.doRemoveWatch(ctx, r, gvk)
 }
 
-func (wm *Manager) doRemoveWatch(_ context.Context, r *Registrar, gvk schema.GroupVersionKind) error {
+func (wm *Manager) doRemoveWatch(ctx context.Context, r *Registrar, gvk schema.GroupVersionKind) error {
 	// lock acquired by caller
 
 	v, ok := wm.watchedKinds[gvk]
@@ -238,7 +238,7 @@ func (wm *Manager) doRemoveWatch(_ context.Context, r *Registrar, gvk schema.Gro
 
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(gvk)
-	if err := wm.cache.Remove(u); err != nil {
+	if err := wm.cache.RemoveInformer(ctx, u); err != nil {
 		return fmt.Errorf("removing %+v: %w", gvk, err)
 	}
 	delete(wm.watchedKinds, gvk)

@@ -60,6 +60,39 @@ teardown_file() {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration"
 }
 
+@test "vap test" {
+  minor_version=$(echo "$KUBERNETES_VERSION" | cut -d'.' -f2)
+  if [ "$minor_version" -lt 28 ] || [ -z $ENABLE_VAP_TESTS ]; then
+    skip "skipping vap tests"
+  fi
+  local api="$(kubectl api-resources | grep validatingadmission)"
+  if [[ -z "$api" ]]; then
+    echo "vap is not enabled for the cluster. skip vap test"
+  else
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
+
+    # check status resource on expansion template
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsvap -ojson | jq -r -e '.status.byPod[0]'"
+
+    kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsvap -oyaml
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicy gatekeeper-k8srequiredlabelsvap"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml"
+    
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+    
+    run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+    assert_match 'denied' "${output}"
+    assert_failure
+    kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+    kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+    kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
+  fi
+}
+
 @test "gatekeeper mutation test" {
   kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sownerlabel_assignmetadata.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignMetadata k8sownerlabel"

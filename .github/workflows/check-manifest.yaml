@@ -1,0 +1,53 @@
+name: check-manifest
+on:
+  push:
+    paths-ignore:
+      - ".github/workflows/website.yaml"
+      - "docs/**"
+      - "library/**"
+      - "demo/**"
+      - "deprecated/**"
+      - "example/**"
+      - "website/**"
+      - "**.md"
+      - "!cmd/build/helmify/static/README.md"
+  pull_request:
+    paths-ignore:
+      - ".github/workflows/website.yaml"
+      - "docs/**"
+      - "library/**"
+      - "demo/**"
+      - "deprecated/**"
+      - "example/**"
+      - "website/**"
+      - "**.md"
+      - "!cmd/build/helmify/static/README.md"
+
+permissions: read-all
+
+jobs:
+  check_manifest:
+    name: "Check codegen and manifest"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          egress-policy: audit
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Set up Go
+        uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+        with:
+          go-version: "1.22"
+          check-latest: true
+      - name: Check go.mod and manifests
+        run: |
+          # there should be no additional manifest or go.mod changes
+          go mod tidy
+          git diff --exit-code
+          make generate manifests
+          git diff --exit-code

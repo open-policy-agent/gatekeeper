@@ -16,25 +16,27 @@
 
 # Usage: `hack/verify-licenses.sh`.
 
-
 set -o errexit
 set -o nounset
 set -o pipefail
 
+ARTIFACTS="${ARTIFACTS:-${PWD}/.tmp/licenses}"
+mkdir -p "$ARTIFACTS/logs/"
+
 KUBE_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t kubernetes.XXXXXX)
 
-
-# Creating a new repository tree 
+# Creating a new repository tree
 # Deleting vendor directory to make go-licenses fetch license URLs from go-packages source repository
 git worktree add -f "${KUBE_TEMP}"/tmp_test_licenses/gatekeeper HEAD >/dev/null 2>&1 || true
 cd "${KUBE_TEMP}"/tmp_test_licenses/gatekeeper && rm -rf vendor
 
-
 # Explicitly opt into go modules, even though we're inside a GOPATH directory
 export GO111MODULE=on
 
+function http_code() {
+    curl -I -s -o /dev/null -w "%{http_code}" "$1"
+}
 
-allowed_licenses=()
 packages_flagged=()
 packages_url_missing=()
 exit_code=0
@@ -45,117 +47,83 @@ go install github.com/google/go-licenses@latest
 
 # Fetching CNCF Approved List Of Licenses
 # Refer: https://github.com/cncf/foundation/blob/main/allowed-third-party-license-policy.md
-curl -s 'https://spdx.org/licenses/licenses.json' -o "${KUBE_TEMP}"/licenses.json
-
-number_of_licenses=$(jq '.licenses | length' "${KUBE_TEMP}"/licenses.json)
-loop_index_length=$(( number_of_licenses - 1 ))
-
+curl -s 'https://spdx.org/licenses/licenses.json' -o "${ARTIFACTS}"/licenses.json
 
 echo '[INFO] Fetching current list of CNCF approved licenses...'
-for index in $(seq 0 $loop_index_length);
-do
-	licenseID=$(jq ".licenses[$index] .licenseId" "${KUBE_TEMP}"/licenses.json)
-	if [[ $(jq ".licenses[$index] .isDeprecatedLicenseId" "${KUBE_TEMP}"/licenses.json) == false ]]
-	then
-		allowed_licenses+=("${licenseID}")
-        fi	
-done
-
+jq -r '.licenses[] | select(.isDeprecatedLicenseId==false) .licenseId' "${ARTIFACTS}"/licenses.json | sort | uniq >"${ARTIFACTS}"/licenses.txt
 
 # Scanning go-packages under the project & verifying against the CNCF approved list of licenses
 echo '[INFO] Starting license scan on go-packages...'
-go-licenses report ./... --include_tests >> "${KUBE_TEMP}"/licenses.csv
+go-licenses report ./... >>"${ARTIFACTS}"/licenses.csv 2>"${ARTIFACTS}"/logs/go-licenses.log
 
-echo -e 'PACKAGE_NAME  LICENSE_NAME  LICENSE_URL\n' >> "${KUBE_TEMP}"/approved_licenses.dump
-while IFS=, read -r GO_PACKAGE LICENSE_URL LICENSE_NAME
-do
-	FORMATTED_LICENSE_URL=
-	if [[ " ${allowed_licenses[*]} " == *"${LICENSE_NAME}"* ]];
-	then
-		if [[ "${LICENSE_URL}" == 'Unknown' ]];
-		then
-			if  [[ "${GO_PACKAGE}" != k8s.io/* ]];
-			then
-				echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses_with_missing_urls.dump
-				packages_url_missing+=("${GO_PACKAGE}")
-			else
-				LICENSE_URL='https://github.com/kubernetes/kubernetes/blob/master/LICENSE'
-				echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses.dump
-			fi
-		elif curl -Is "${LICENSE_URL}" | head -1 | grep -q 404;
-		then
-            # For gatekeeper, the script won't find the constraint frameworks's license atm.
-            if [[ "${GO_PACKAGE}" == github.com/open-policy-agent/frameworks/* ]];
-            then
-                LICENSE_URL='https://github.com/open-policy-agent/frameworks/blob/master/LICENSE'
-				echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses.dump
-                continue
-            fi
+echo -e 'PACKAGE_NAME  LICENSE_NAME  LICENSE_URL\n' >>"${ARTIFACTS}"/approved_licenses.dump
+while IFS=, read -r GO_PACKAGE LICENSE_URL LICENSE_NAME; do
+    if [[ "${GO_PACKAGE}" == "github.com/rcrowley/go-metrics" ]] && [[ "${LICENSE_NAME}" == "BSD-2-Clause-FreeBSD" ]]; then
+        # as per https://github.com/cncf/foundation/blob/86cab8e303153005492c07d2304e8c8808d896be/license-exceptions/cncf-exceptions-2019-11-01.spdx#L1594-L1603
+        echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >>"${ARTIFACTS}"/approved_licenses.dump
+        continue
+    fi
 
-			# Check whether the License URL is incorrectly formed
-			# TODO: Remove this workaround check once PR https://github.com/google/go-licenses/pull/110 is merged
-			IFS='/' read -r -a split_license_url <<< ${LICENSE_URL}
-			for part_of_url in "${split_license_url[@]}"
-			do
-				if  [[ ${part_of_url} == '' ]]
-				then
-					continue
-				elif	[[ ${part_of_url} == 'https:' ]]
-				then
-					FORMATTED_LICENSE_URL+='https://'
-				else
-					if [[ ${part_of_url} =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]
-					then
-						FORMATTED_LICENSE_URL+="${part_of_url}/${split_license_url[-1]}"
-						break
-					else
-						FORMATTED_LICENSE_URL+="${part_of_url}/"
-					fi
-				fi
-			done
-			if curl -Is "${FORMATTED_LICENSE_URL}" | head -1 | grep -q 404;
-			then
-				packages_url_missing+=("${GO_PACKAGE}")
-				echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses_with_missing_urls.dump
-			else
-				echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${FORMATTED_LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses.dump
-			fi
-		else
-			echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses.dump
-		fi
-	else
-        # Not all packages at this point should go to the not approved dump.
-        # there are a few exceptions approved by CNCF as per: https://github.com/cncf/foundation/tree/main/license-exceptions
-        # Currently gatekeeper uses just one of those so we are not going to do a general solution.
+    if ! grep -q "^${LICENSE_NAME}$" "${ARTIFACTS}"/licenses.txt; then
+        echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >>"${ARTIFACTS}"/notapproved_licenses.dump
+        packages_flagged+=("${GO_PACKAGE}")
+        continue
+    fi
 
-        if [[ "${GO_PACKAGE}" == "github.com/rcrowley/go-metrics" ]] && [[ "${LICENSE_NAME}" == "BSD-2-Clause-FreeBSD" ]];
-        then
-            # as per https://github.com/cncf/foundation/blob/main/license-exceptions/cncf-exceptions-2019-11-01.json#L723-L726
-            echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses.dump
+    if [[ "${LICENSE_URL}" == 'Unknown' ]]; then
+        if [[ "${GO_PACKAGE}" != k8s.io/* ]]; then
+            echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >>"${ARTIFACTS}"/approved_licenses_with_missing_urls.dump
+            packages_url_missing+=("${GO_PACKAGE}")
         else
-		    echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/notapproved_licenses.dump
-		    packages_flagged+=("${GO_PACKAGE}")
+            LICENSE_URL='https://github.com/kubernetes/kubernetes/blob/master/LICENSE'
+            echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >>"${ARTIFACTS}"/approved_licenses.dump
         fi
-	fi
-done < "${KUBE_TEMP}"/licenses.csv
-awk '{ printf "%-100s : %-20s : %s\n", $1, $2, $3 }' "${KUBE_TEMP}"/approved_licenses.dump
+        continue
+    fi
 
+    if [[ "$(http_code "${LICENSE_URL}")" != 404 ]]; then
+        echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >>"${ARTIFACTS}"/approved_licenses.dump
+        continue
+    fi
+
+    # The URL 404'ed.  Try parent-paths.
+
+    #echo -e "DBG: err 404 ${LICENSE_URL}"
+    dir="$(dirname "${LICENSE_URL}")"
+    file="$(basename "${LICENSE_URL}")"
+
+    while [[ "${dir}" != "." ]]; do
+        dir="$(dirname "${dir}")"
+        #echo "DBG:     try ${dir}/${file}"
+        if [[ "$(http_code "${dir}/${file}")" != 404 ]]; then
+            #echo "DBG:         it worked"
+            echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${dir}/${file}" >>"${ARTIFACTS}"/approved_licenses.dump
+            break
+        fi
+        #echo "DBG:         still 404"
+    done
+    if [[ "${dir}" == "." ]]; then
+        #echo "DBG:     failed to find a license"
+        packages_url_missing+=("${GO_PACKAGE}")
+        echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >>"${ARTIFACTS}"/approved_licenses_with_missing_urls.dump
+    fi
+done <"${ARTIFACTS}"/licenses.csv
+awk '{ printf "%-100s : %-20s : %s\n", $1, $2, $3 }' "${ARTIFACTS}"/approved_licenses.dump
 
 if [[ ${#packages_url_missing[@]} -gt 0 ]]; then
-	echo -e '\n[ERROR] The following go-packages in the project have unknown or unreachable license URL:'
-	awk '{ printf "%-100s :  %-20s : %s\n", $1, $2, $3 }' "${KUBE_TEMP}"/approved_licenses_with_missing_urls.dump
-	exit_code=1
+    echo -e '\n[ERROR] The following go-packages in the project have unknown or unreachable license URL:'
+    awk '{ printf "%-100s :  %-20s : %s\n", $1, $2, $3 }' "${ARTIFACTS}"/approved_licenses_with_missing_urls.dump
+    exit_code=1
 fi
 
-
 if [[ ${#packages_flagged[@]} -gt 0 ]]; then
-	echo "[ERROR] The following go-packages in the project are using non-CNCF approved licenses. Please refer to the CNCF's approved licence list for further information: https://github.com/cncf/foundation/blob/main/allowed-third-party-license-policy.md"
-	awk '{ printf "%-100s :  %-20s : %s\n", $1, $2, $3 }' "${KUBE_TEMP}"/notapproved_licenses.dump
-	exit_code=1
+    echo -e "\n[ERROR] The following go-packages in the project are using non-CNCF approved licenses. Please refer to the CNCF's approved licence list for further information: https://github.com/cncf/foundation/blob/main/allowed-third-party-license-policy.md"
+    awk '{ printf "%-100s :  %-20s : %s\n", $1, $2, $3 }' "${ARTIFACTS}"/notapproved_licenses.dump
+    exit_code=1
 elif [[ "${exit_code}" -eq 1 ]]; then
-	echo "[ERROR] Project is using go-packages with unknown or unreachable license URLs. Please refer to the CNCF's approved licence list for further information: https://github.com/cncf/foundation/blob/main/allowed-third-party-license-policy.md"
+    echo -e "\n[ERROR] Project is using go-packages with unknown or unreachable license URLs. Please refer to the CNCF's approved licence list for further information: https://github.com/cncf/foundation/blob/main/allowed-third-party-license-policy.md"
 else
-	echo "[SUCCESS] Scan complete! All go-packages under the project are using current CNCF approved licenses!"
+    echo -e "\n[SUCCESS] Scan complete! All go-packages under the project are using current CNCF approved licenses!"
 fi
 
 exit "${exit_code}"

@@ -76,7 +76,7 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 	// Watch for changes to MutatorPodStatuses.
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &statusv1beta1.MutatorPodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, func(ctx context.Context, obj client.Object) []reconcile.Request {
+		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, func(_ context.Context, obj client.Object) []reconcile.Request {
 			return []reconcile.Request{{
 				NamespacedName: apitypes.NamespacedName{
 					Namespace: obj.GetNamespace(),
@@ -93,7 +93,7 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 		// Watch for enqueued events.
 		err = c.Watch(
 			a.EventsSource,
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
 				if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
 					return nil
 				}

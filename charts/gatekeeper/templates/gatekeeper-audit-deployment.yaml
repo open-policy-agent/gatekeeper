@@ -1,3 +1,4 @@
+{{- if not .Values.disableAudit }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,7 +34,8 @@ spec:
         {{- toYaml .Values.auditPodAnnotations | trim | nindent 8 }}
         {{- end }}
       labels:
-{{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "gatekeeper.commonLabels" . | nindent 8 }}
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
         control-plane: audit-controller
@@ -166,3 +168,4 @@ spec:
       - emptyDir: {}
       {{- end }}
         name: tmp-volume
+{{- end }}

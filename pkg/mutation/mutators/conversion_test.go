@@ -139,7 +139,7 @@ func TestAssignHasDiff(t *testing.T) {
 	}{
 		{
 			"same",
-			func(a *mutationsunversioned.Assign) {},
+			func(_ *mutationsunversioned.Assign) {},
 			false,
 		},
 		{
@@ -221,7 +221,7 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 	}{
 		{
 			"same",
-			func(a *mutationsunversioned.AssignMetadata) {},
+			func(_ *mutationsunversioned.AssignMetadata) {},
 			false,
 		},
 		{

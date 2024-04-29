@@ -1207,7 +1207,7 @@ func TestRunner_Run_ClientError(t *testing.T) {
 		TestResults: []TestResult{{Error: gator.ErrCreatingClient}},
 	}
 
-	runner, err := NewRunner(fstest.MapFS{}, func(includeTrace bool, useK8sCEL bool) (gator.Client, error) {
+	runner, err := NewRunner(fstest.MapFS{}, func(_ bool, _ bool) (gator.Client, error) {
 		return nil, errors.New("error")
 	})
 	if err != nil {

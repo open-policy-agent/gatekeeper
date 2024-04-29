@@ -25,7 +25,6 @@ func newRegistry() *etRegistry {
 		etMetricName,
 		metric.WithDescription(etDesc),
 		metric.WithInt64Callback(r.observeETM))
-
 	if err != nil {
 		panic(err)
 	}

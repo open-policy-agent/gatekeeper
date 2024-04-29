@@ -23,6 +23,17 @@ const (
 
 var auditDurationM metric.Float64Histogram
 
+func init() {
+	view.Register(sdkmetric.NewView(
+		sdkmetric.Instrument{Name: auditDurationMetricName},
+		sdkmetric.Stream{
+			Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
+				Boundaries: []float64{1 * 60, 3 * 60, 5 * 60, 10 * 60, 15 * 60, 20 * 60, 40 * 60, 80 * 60, 160 * 60, 320 * 60},
+			},
+		},
+	))
+}
+
 func (r *reporter) observeTotalViolations(_ context.Context, o metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -86,7 +97,6 @@ func newStatsReporter() (*reporter, error) {
 		metric.WithDescription("Total number of audited violations"),
 		metric.WithInt64Callback(r.observeTotalViolations),
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -116,14 +126,6 @@ func newStatsReporter() (*reporter, error) {
 		return nil, err
 	}
 
-	view.Register(sdkmetric.NewView(
-		sdkmetric.Instrument{Name: auditDurationMetricName},
-		sdkmetric.Stream{
-			Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
-				Boundaries: []float64{1 * 60, 3 * 60, 5 * 60, 10 * 60, 15 * 60, 20 * 60, 40 * 60, 80 * 60, 160 * 60, 320 * 60},
-			},
-		},
-	))
 	return r, nil
 }
 
