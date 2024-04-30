@@ -100,8 +100,8 @@ github.com/cespare/xxhash/v2
 # github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
 ## explicit
 github.com/common-nighthawk/go-figure
-# github.com/containerd/containerd v1.7.13
-## explicit; go 1.19
+# github.com/containerd/containerd v1.7.14
+## explicit; go 1.21
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/content
 github.com/containerd/containerd/content/local
@@ -247,7 +247,7 @@ github.com/gobwas/glob/util/strings
 ## explicit; go 1.15
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/sortkeys
-# github.com/golang/glog v1.2.0
+# github.com/golang/glog v1.2.1
 ## explicit; go 1.19
 github.com/golang/glog
 github.com/golang/glog/internal/logsink
@@ -407,7 +407,7 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.10.1
 ## explicit; go 1.20
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20240320172527-359cf1b785c9
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20240411024313-c2efb00269a8
 ## explicit; go 1.18
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis
@@ -435,7 +435,7 @@ github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation
 github.com/open-policy-agent/frameworks/constraint/pkg/regorewriter
 github.com/open-policy-agent/frameworks/constraint/pkg/schema
 github.com/open-policy-agent/frameworks/constraint/pkg/types
-# github.com/open-policy-agent/opa v0.62.1
+# github.com/open-policy-agent/opa v0.63.0
 ## explicit; go 1.20
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -716,7 +716,7 @@ go.uber.org/zap/internal/exit
 go.uber.org/zap/internal/pool
 go.uber.org/zap/internal/stacktrace
 go.uber.org/zap/zapcore
-# golang.org/x/crypto v0.21.0
+# golang.org/x/crypto v0.22.0
 ## explicit; go 1.18
 golang.org/x/crypto/chacha20
 golang.org/x/crypto/chacha20poly1305
@@ -730,7 +730,7 @@ golang.org/x/crypto/internal/poly1305
 golang.org/x/exp/constraints
 golang.org/x/exp/maps
 golang.org/x/exp/slices
-# golang.org/x/net v0.23.0
+# golang.org/x/net v0.24.0
 ## explicit; go 1.18
 golang.org/x/net/context
 golang.org/x/net/html
@@ -758,7 +758,7 @@ golang.org/x/oauth2/jwt
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.18.0
+# golang.org/x/sys v0.19.0
 ## explicit; go 1.18
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
@@ -766,7 +766,7 @@ golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.18.0
+# golang.org/x/term v0.19.0
 ## explicit; go 1.18
 golang.org/x/term
 # golang.org/x/text v0.14.0
@@ -971,7 +971,7 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# k8s.io/api v0.29.3
+# k8s.io/api v0.29.4
 ## explicit; go 1.21
 k8s.io/api/admission/v1
 k8s.io/api/admission/v1beta1
@@ -1027,7 +1027,7 @@ k8s.io/api/scheduling/v1beta1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apiextensions-apiserver v0.29.3
+# k8s.io/apiextensions-apiserver v0.29.4
 ## explicit; go 1.21
 k8s.io/apiextensions-apiserver/pkg/apihelpers
 k8s.io/apiextensions-apiserver/pkg/apis/apiextensions
@@ -1048,7 +1048,7 @@ k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1
 k8s.io/apiextensions-apiserver/pkg/features
-# k8s.io/apimachinery v0.29.3
+# k8s.io/apimachinery v0.29.4
 ## explicit; go 1.21
 k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/api/errors
@@ -1102,7 +1102,7 @@ k8s.io/apimachinery/pkg/version
 k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/json
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/apiserver v0.29.3
+# k8s.io/apiserver v0.29.4
 ## explicit; go 1.21
 k8s.io/apiserver/pkg/admission
 k8s.io/apiserver/pkg/admission/cel
@@ -1146,7 +1146,7 @@ k8s.io/apiserver/pkg/util/feature
 k8s.io/apiserver/pkg/util/webhook
 k8s.io/apiserver/pkg/util/x509metrics
 k8s.io/apiserver/pkg/warning
-# k8s.io/client-go v0.29.3
+# k8s.io/client-go v0.29.4
 ## explicit; go 1.21
 k8s.io/client-go/applyconfigurations/admissionregistration/v1
 k8s.io/client-go/applyconfigurations/admissionregistration/v1alpha1
@@ -1402,7 +1402,7 @@ k8s.io/client-go/util/homedir
 k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/retry
 k8s.io/client-go/util/workqueue
-# k8s.io/component-base v0.29.3
+# k8s.io/component-base v0.29.4
 ## explicit; go 1.21
 k8s.io/component-base/config
 k8s.io/component-base/config/v1alpha1
@@ -1468,7 +1468,7 @@ sigs.k8s.io/apiserver-network-proxy/konnectivity-client/pkg/client
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client/pkg/client/metrics
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client/pkg/common/metrics
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client/proto/client
-# sigs.k8s.io/controller-runtime v0.17.2
+# sigs.k8s.io/controller-runtime v0.17.3
 ## explicit; go 1.21
 sigs.k8s.io/controller-runtime
 sigs.k8s.io/controller-runtime/pkg/builder
