@@ -2,8 +2,6 @@ apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
   name: k8srequiredlabels
-  labels:
-    "gatekeeper.sh/use-vap": "yes"
 spec:
   crd:
     spec:
