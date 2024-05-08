@@ -9,7 +9,6 @@ Generally, design docs are on Google docs:
 * [External Data Response Cache](https://docs.google.com/document/d/1nl6iWMmh9CRT0A6cr-Nkfofv9wp210Bkf6ilLq9LLBo/edit)
 * [Gator SyncSet Support](https://docs.google.com/document/d/1mBvy6Y7TDyZswdYlFBHB3Mi2irLVqga_7ZoZvfPIU0A/edit)
 * [Gatekeeper Enforcement Actions](https://docs.google.com/document/d/1qEzDVcmwPysb3ejvTYKPkHJm3Db3Yr7zShwmgFOsR_k/edit#heading=h.6ewsycnqnfl)
-* [Configuring VAP with Scoped EA](https://docs.google.com/document/d/1u55cMZ4smRAuEZf4BYsSyZOCoOy33Lsgp3xuwDm0l6I/edit#heading=h.9oaxevykg8w6)
 * [Connection config CRD and controller for Pubsub](https://docs.google.com/document/d/12P3LCaOAQO9Uts4cVljHXkRgukEyWqyLketDP0rFq8A/edit#heading=h.9oaxevykg8w6)
 * [Gatekeeper-to-VAP User Flow](https://docs.google.com/document/d/1UELB0dmt10K5jBwETUnSKKQN7qeivOjvi-AvzFTOsHw/edit#heading=h.557kq3533dz3)
 
