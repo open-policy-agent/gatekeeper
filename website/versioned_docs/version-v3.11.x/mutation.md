@@ -158,7 +158,7 @@ parameters:
   pathTests:
   - subPath: "spec.containers[name: foo]"
     condition: MustExist
-  - subPath: spec.containers[name: foo].securityContext.capabilities
+  - subPath: "spec.containers[name: foo].securityContext.capabilities"
     condition: MustNotExist
 ```
 
