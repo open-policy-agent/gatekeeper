@@ -25,11 +25,11 @@ jobs:
         working-directory: website
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        uses: step-security/harden-runner@a4aa98b93cab29d9b1101a6143fb8bce00e2eac4 # v2.7.1
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29
 
       - name: Setup Node
         uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
@@ -41,7 +41,7 @@ jobs:
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
 
       - name: Cache dependencies
-        uses: actions/cache@ab5e6d0c87105b4c9c2047343972218f562e4319 # v4.0.1
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
         with:
           path: ${{ steps.yarn-cache.outputs.dir }}
           key: ${{ runner.os }}-website-${{ hashFiles('**/yarn.lock') }}
@@ -54,7 +54,7 @@ jobs:
       # deploy only after PR is merged to master
       - name: Deploy
         if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
-        uses: peaceiris/actions-gh-pages@373f7f263a76c20808c831209c920827a82a2847 # v3.9.3
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./website/build
