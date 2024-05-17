@@ -3,7 +3,7 @@ module github.com/open-policy-agent/gatekeeper/v3
 go 1.21
 
 require (
-	cloud.google.com/go/trace v1.10.6
+	cloud.google.com/go/trace v1.10.7
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.44.0
 	github.com/dapr/go-sdk v1.8.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
@@ -19,23 +19,23 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.19.1
 	github.com/spf13/cobra v1.8.0
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	go.opentelemetry.io/contrib/detectors/aws/ec2 v1.21.1
 	go.opentelemetry.io/contrib/detectors/gcp v1.21.1
 	go.opentelemetry.io/otel v1.24.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v0.42.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.40.0
 	go.opentelemetry.io/otel/metric v1.24.0
-	go.opentelemetry.io/otel/sdk v1.21.0
+	go.opentelemetry.io/otel/sdk v1.22.0
 	go.opentelemetry.io/otel/sdk/metric v1.19.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/zap v1.26.0
 	golang.org/x/net v0.24.0
-	golang.org/x/oauth2 v0.17.0
-	golang.org/x/sync v0.6.0
+	golang.org/x/oauth2 v0.19.0
+	golang.org/x/sync v0.7.0
 	golang.org/x/time v0.5.0
-	google.golang.org/grpc v1.62.2
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/grpc v1.63.2
+	google.golang.org/protobuf v1.34.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.29.5
@@ -51,9 +51,10 @@ require (
 )
 
 require (
-	cloud.google.com/go/compute v1.24.0 // indirect
-	cloud.google.com/go/compute/metadata v0.2.3 // indirect
-	cloud.google.com/go/monitoring v1.18.0 // indirect
+	cloud.google.com/go/auth v0.3.0 // indirect
+	cloud.google.com/go/auth/oauth2adapt v0.2.2 // indirect
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
+	cloud.google.com/go/monitoring v1.18.1 // indirect
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.20.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.44.0 // indirect
@@ -97,7 +98,7 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
-	github.com/googleapis/gax-go/v2 v2.12.2 // indirect
+	github.com/googleapis/gax-go/v2 v2.12.3 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
@@ -142,11 +143,10 @@ require (
 	golang.org/x/term v0.19.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
-	google.golang.org/api v0.169.0 // indirect
-	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/genproto v0.0.0-20240213162025-012b6fc9bca9 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240311132316-a219d84964c2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240311132316-a219d84964c2 // indirect
+	google.golang.org/api v0.177.0 // indirect
+	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240429193739-8cf5692501f6 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240429193739-8cf5692501f6 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/apiserver v0.29.5 // indirect
 	k8s.io/component-base v0.29.5 // indirect
