@@ -132,8 +132,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to MutatorStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &v1beta1.MutatorPodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(PodStatusToMutatorMapper(false, "", util.EventPackerMapFunc())),
+		source.Kind[client.Object](mgr.GetCache(), &v1beta1.MutatorPodStatus{},
+			handler.EnqueueRequestsFromMapFunc(PodStatusToMutatorMapper(false, "", util.EventPackerMapFunc()))),
 	)
 	if err != nil {
 		return err
@@ -141,29 +141,29 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to mutators
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &mutationsv1.Assign{}),
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "Assign"})),
+		source.Kind[client.Object](mgr.GetCache(), &mutationsv1.Assign{},
+			handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "Assign"}))),
 	)
 	if err != nil {
 		return err
 	}
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &mutationsv1.AssignMetadata{}),
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "AssignMetadata"})),
+		source.Kind[client.Object](mgr.GetCache(), &mutationsv1.AssignMetadata{},
+			handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "AssignMetadata"}))),
 	)
 	if err != nil {
 		return err
 	}
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &mutationsv1alpha1.AssignImage{}),
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: "AssignImage"})),
+		source.Kind[client.Object](mgr.GetCache(), &mutationsv1alpha1.AssignImage{},
+			handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: "AssignImage"}))),
 	)
 	if err != nil {
 		return err
 	}
 	return c.Watch(
-		source.Kind(mgr.GetCache(), &mutationsv1.ModifySet{}),
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "ModifySet"})),
+		source.Kind[client.Object](mgr.GetCache(), &mutationsv1.ModifySet{},
+			handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "ModifySet"}))),
 	)
 }
 

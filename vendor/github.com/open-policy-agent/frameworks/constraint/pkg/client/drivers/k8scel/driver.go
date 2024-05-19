@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
-	"k8s.io/apiserver/pkg/admission/plugin/validatingadmissionpolicy"
+	"k8s.io/apiserver/pkg/admission/plugin/policy/validating"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
 	celAPI "k8s.io/apiserver/pkg/apis/cel"
 	"k8s.io/apiserver/pkg/cel/environment"
@@ -60,7 +60,7 @@ type Driver struct {
 
 type validatorWrapper struct {
 	assumeVAPEnforcement bool
-	validator            validatingadmissionpolicy.Validator
+	validator            validating.Validator
 }
 
 func (d *Driver) Name() string {
@@ -114,7 +114,7 @@ func (d *Driver) AddTemplate(_ context.Context, ct *templates.ConstraintTemplate
 		return err
 	}
 
-	validator := validatingadmissionpolicy.NewValidator(
+	validator := validating.NewValidator(
 		filterCompiler.Compile(validationAccessors, celVars, environment.StoredExpressions),
 		matcher,
 		filterCompiler.Compile(nil, celVars, environment.StoredExpressions),
@@ -219,7 +219,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 			enforcementAction = apiconstraints.EnforcementActionDeny
 		}
 		for _, decision := range response.Decisions {
-			if decision.Action == validatingadmissionpolicy.ActionDeny {
+			if decision.Action == validating.ActionDeny {
 				results = append(results, &types.Result{
 					Target:            target,
 					Msg:               decision.Message,

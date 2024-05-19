@@ -203,11 +203,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 	// Watch for changes to the provided constraint
 	err = c.Watch(
-		&source.Channel{
-			Source:         events,
-			DestBufferSize: 1024,
-		},
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
+		source.Channel[client.Object](
+			events,
+			handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
+			source.WithBufferSize[client.Object](1024),
+		),
 	)
 	if err != nil {
 		return err
@@ -215,8 +215,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 	// Watch for changes to ConstraintStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &constraintstatusv1beta1.ConstraintPodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(constraintstatus.PodStatusToConstraintMapper(true, util.EventPackerMapFunc())),
+		source.Kind[client.Object](mgr.GetCache(), &constraintstatusv1beta1.ConstraintPodStatus{},
+			handler.EnqueueRequestsFromMapFunc(constraintstatus.PodStatusToConstraintMapper(true, util.EventPackerMapFunc()))),
 	)
 	if err != nil {
 		return err

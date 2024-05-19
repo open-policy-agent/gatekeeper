@@ -2,7 +2,6 @@ package instances
 
 import (
 	"context"
-
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1alpha1"
@@ -15,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -33,7 +33,12 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	// events is shared across all mutators that can affect the implied schema
 	// of kinds to be mutated, since these mutators can set each other into conflict
 	events := make(chan event.GenericEvent, eventQueueSize)
-	eventsSource := &source.Channel{Source: events, DestBufferSize: 1024}
+	createEventSource := func(handler handler.EventHandler) source.Source {
+		return source.Channel[client.Object](
+			events,
+			handler,
+			source.WithBufferSize[client.Object](1024))
+	}
 	scheme := mgr.GetScheme()
 
 	assign := core.Adder{
@@ -53,8 +58,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssign(unversioned)
 		},
-		Events:       events,
-		EventsSource: eventsSource,
+		Events:             events,
+		CreateEventsSource: createEventSource,
 	}
 	if err := assign.Add(mgr); err != nil {
 		return err
@@ -77,8 +82,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForModifySet(unversioned)
 		},
-		Events:       events,
-		EventsSource: eventsSource,
+		Events:             events,
+		CreateEventsSource: createEventSource,
 	}
 	if err := modifySet.Add(mgr); err != nil {
 		return err
@@ -101,8 +106,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssignImage(unversioned)
 		},
-		Events:       events,
-		EventsSource: eventsSource,
+		Events:             events,
+		CreateEventsSource: createEventSource,
 	}
 	if err := assignImage.Add(mgr); err != nil {
 		return err
