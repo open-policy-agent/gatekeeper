@@ -49,20 +49,20 @@ vapEnforcement: GATEKEEPER_DEFAULT
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.16.0
+  release: v3.16.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.16.0
+      tag: v3.16.1
 postUpgrade:
   labelNamespace:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.16.0
+      tag: v3.16.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -93,7 +93,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.16.0
+      tag: v3.16.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -134,7 +134,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.16.0
+      tag: v3.16.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""

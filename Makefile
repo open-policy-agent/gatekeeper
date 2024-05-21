@@ -14,7 +14,7 @@ AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
 
-VERSION := v3.16.0
+VERSION := v3.16.1
 
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
