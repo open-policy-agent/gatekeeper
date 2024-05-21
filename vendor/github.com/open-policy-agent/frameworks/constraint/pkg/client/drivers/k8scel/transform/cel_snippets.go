@@ -169,6 +169,23 @@ func BindParamsCEL() []cel.NamedExpressionAccessor {
 	}
 }
 
+func BindObjectV1Beta1() admissionregistrationv1beta1.Variable {
+	return admissionregistrationv1beta1.Variable{
+		Name:       schema.ObjectName,
+		Expression: `has(request.operation) && request.operation == "DELETE" && object == null ? oldObject : object`,
+	}
+}
+
+func BindObjectCEL() []cel.NamedExpressionAccessor {
+	v := BindObjectV1Beta1()
+	return []cel.NamedExpressionAccessor{
+		&validatingadmissionpolicy.Variable{
+			Name:       v.Name,
+			Expression: v.Expression,
+		},
+	}
+}
+
 func AllMatchersV1Beta1() []admissionregistrationv1beta1.MatchCondition {
 	return []admissionregistrationv1beta1.MatchCondition{
 		MatchExcludedNamespacesGlobV1Beta1(),
@@ -184,6 +201,7 @@ func AllVariablesCEL() []cel.NamedExpressionAccessor {
 
 func AllVariablesV1Beta1() []admissionregistrationv1beta1.Variable {
 	return []admissionregistrationv1beta1.Variable{
+		BindObjectV1Beta1(),
 		BindParamsV1Beta1(),
 	}
 }
