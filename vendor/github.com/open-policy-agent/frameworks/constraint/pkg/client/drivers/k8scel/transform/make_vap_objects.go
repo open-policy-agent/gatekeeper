@@ -32,11 +32,13 @@ func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admiss
 		return nil, err
 	}
 
-	variables, err := source.GetV1Beta1Variables()
+	variables := AllVariablesV1Beta1()
+
+	userVariables, err := source.GetV1Beta1Variables()
 	if err != nil {
 		return nil, err
 	}
-	variables = append(variables, AllVariablesV1Beta1()...)
+	variables = append(variables, userVariables...)
 
 	failurePolicy, err := source.GetV1Beta1FailurePolicy()
 	if err != nil {
