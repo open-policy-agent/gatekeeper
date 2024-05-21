@@ -109,15 +109,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to ExpansionTemplateStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &v1beta1.ExpansionTemplatePodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(PodStatusToExpansionTemplateMapper(false)),
+		source.Kind[client.Object](mgr.GetCache(), &v1beta1.ExpansionTemplatePodStatus{},
+			handler.EnqueueRequestsFromMapFunc(PodStatusToExpansionTemplateMapper(false))),
 	)
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to ExpansionTemplate
-	err = c.Watch(source.Kind(mgr.GetCache(), &expansionv1beta1.ExpansionTemplate{}), &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind[client.Object](mgr.GetCache(), &expansionv1beta1.ExpansionTemplate{}, &handler.EnqueueRequestForObject{}))
 	if err != nil {
 		return err
 	}

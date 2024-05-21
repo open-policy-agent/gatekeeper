@@ -205,15 +205,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to ConstraintTemplate
-	err = c.Watch(source.Kind(mgr.GetCache(), &v1beta1.ConstraintTemplate{}), &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind[client.Object](mgr.GetCache(), &v1beta1.ConstraintTemplate{}, &handler.EnqueueRequestForObject{}))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &statusv1beta1.ConstraintTemplatePodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper(true)),
+		source.Kind[client.Object](mgr.GetCache(), &statusv1beta1.ConstraintTemplatePodStatus{},
+			handler.EnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper(true))),
 	)
 	if err != nil {
 		return err
@@ -221,13 +221,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to Constraint CRDs
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &apiextensionsv1.CustomResourceDefinition{}),
-		handler.EnqueueRequestForOwner(
-			mgr.GetScheme(),
-			mgr.GetRESTMapper(),
-			&v1beta1.ConstraintTemplate{},
-			handler.OnlyControllerOwner(),
-		),
+		source.Kind[client.Object](mgr.GetCache(), &apiextensionsv1.CustomResourceDefinition{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&v1beta1.ConstraintTemplate{},
+				handler.OnlyControllerOwner(),
+			)),
 	)
 	if err != nil {
 		return err

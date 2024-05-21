@@ -40,10 +40,10 @@ type Adder struct {
 	MutatorFor func(client.Object) (types.Mutator, error)
 	// Events enables queueing other Mutators for updates.
 	Events chan event.GenericEvent
-	// EventsSource watches for events broadcast to Events.
-	// If multiple controllers listen to EventsSource, then
+	// CreateEventsSource creates a source that watches for events broadcast to Events.
+	// If multiple controllers listen to CreateEventsSource, then
 	// each controller gets a copy of each event.
-	EventsSource source.Source
+	CreateEventsSource func(handler handler.EventHandler) source.Source
 }
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -67,43 +67,43 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 
 	// Watch for changes to Mutators.
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), r.newMutationObj()),
-		&handler.EnqueueRequestForObject{})
+		source.Kind[client.Object](mgr.GetCache(), r.newMutationObj(),
+			&handler.EnqueueRequestForObject{}))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to MutatorPodStatuses.
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &statusv1beta1.MutatorPodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, func(_ context.Context, obj client.Object) []reconcile.Request {
-			return []reconcile.Request{{
-				NamespacedName: apitypes.NamespacedName{
-					Namespace: obj.GetNamespace(),
-					Name:      obj.GetName(),
-				},
-			}}
-		})),
-	)
-	if err != nil {
-		return err
-	}
-
-	if a.EventsSource != nil {
-		// Watch for enqueued events.
-		err = c.Watch(
-			a.EventsSource,
-			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
-				if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
-					return nil
-				}
+		source.Kind[client.Object](mgr.GetCache(), &statusv1beta1.MutatorPodStatus{},
+			handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, func(_ context.Context, obj client.Object) []reconcile.Request {
 				return []reconcile.Request{{
 					NamespacedName: apitypes.NamespacedName{
 						Namespace: obj.GetNamespace(),
 						Name:      obj.GetName(),
 					},
 				}}
-			}))
+			}))),
+	)
+	if err != nil {
+		return err
+	}
+
+	if a.CreateEventsSource != nil {
+		// Watch for enqueued events.
+		err = c.Watch(
+			a.CreateEventsSource(
+				handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+					if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
+						return nil
+					}
+					return []reconcile.Request{{
+						NamespacedName: apitypes.NamespacedName{
+							Namespace: obj.GetNamespace(),
+							Name:      obj.GetName(),
+						},
+					}}
+				})))
 	}
 
 	return err

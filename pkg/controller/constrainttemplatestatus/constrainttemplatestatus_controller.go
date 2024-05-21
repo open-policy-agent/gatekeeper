@@ -107,8 +107,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &v1beta1.ConstraintTemplatePodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(PodStatusToConstraintTemplateMapper(false)),
+		source.Kind[client.Object](mgr.GetCache(), &v1beta1.ConstraintTemplatePodStatus{},
+			handler.EnqueueRequestsFromMapFunc(PodStatusToConstraintTemplateMapper(false))),
 	)
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to the provided constraint
 	// Watch for changes to ConstraintTemplate
-	err = c.Watch(source.Kind(mgr.GetCache(), &constrainttemplatev1beta1.ConstraintTemplate{}), &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind[client.Object](mgr.GetCache(), &constrainttemplatev1beta1.ConstraintTemplate{}, &handler.EnqueueRequestForObject{}))
 	if err != nil {
 		return err
 	}

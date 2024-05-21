@@ -146,7 +146,7 @@ func TestReconcile(t *testing.T) {
 	events := make(chan event.GenericEvent, 1024)
 
 	rec := newReconciler(mgr, mSys, tracker, func(_ context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events)
-	adder := Adder{EventsSource: &source.Channel{Source: events}}
+	adder := Adder{CreateEventsSource: &source.Channel{Source: events}}
 
 	err = adder.add(mgr, rec)
 	if err != nil {
