@@ -43,6 +43,20 @@ const (
 	RegoV1
 )
 
+func (v RegoVersion) Int() int {
+	if v == RegoV1 {
+		return 1
+	}
+	return 0
+}
+
+func RegoVersionFromInt(i int) RegoVersion {
+	if i == 1 {
+		return RegoV1
+	}
+	return RegoV0
+}
+
 // Note: This state is kept isolated from the parser so that we
 // can do efficient shallow copies of these values when doing a
 // save() and restore().
@@ -2556,6 +2570,11 @@ var futureKeywords = map[string]tokens.Token{
 	"if":       tokens.If,
 }
 
+func IsFutureKeyword(s string) bool {
+	_, ok := futureKeywords[s]
+	return ok
+}
+
 func (p *Parser) futureImport(imp *Import, allowedFutureKeywords map[string]tokens.Token) {
 	path := imp.Path.Value.(Ref)
 
@@ -2616,7 +2635,7 @@ func (p *Parser) regoV1Import(imp *Import) {
 	path := imp.Path.Value.(Ref)
 
 	if len(path) == 1 || !path[1].Equal(RegoV1CompatibleRef[1]) || len(path) > 2 {
-		p.errorf(imp.Path.Location, "invalid import, must be `%s`", RegoV1CompatibleRef)
+		p.errorf(imp.Path.Location, "invalid import `%s`, must be `%s`", path, RegoV1CompatibleRef)
 		return
 	}
 
