@@ -1761,14 +1761,15 @@ func (r *Rego) prepare(ctx context.Context, qType queryType, extras []extraStage
 		return err
 	}
 
-	futureImports := []*ast.Import{}
+	queryImports := []*ast.Import{}
 	for _, imp := range imports {
-		if imp.Path.Value.(ast.Ref).HasPrefix(ast.Ref([]*ast.Term{ast.FutureRootDocument})) {
-			futureImports = append(futureImports, imp)
+		path := imp.Path.Value.(ast.Ref)
+		if path.HasPrefix([]*ast.Term{ast.FutureRootDocument}) || path.HasPrefix([]*ast.Term{ast.RegoRootDocument}) {
+			queryImports = append(queryImports, imp)
 		}
 	}
 
-	r.parsedQuery, err = r.parseQuery(futureImports, r.metrics)
+	r.parsedQuery, err = r.parseQuery(queryImports, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -1921,7 +1922,7 @@ func (r *Rego) parseRawInput(rawInput *interface{}, m metrics.Metrics) (ast.Valu
 	return ast.InterfaceToValue(*rawPtr)
 }
 
-func (r *Rego) parseQuery(futureImports []*ast.Import, m metrics.Metrics) (ast.Body, error) {
+func (r *Rego) parseQuery(queryImports []*ast.Import, m metrics.Metrics) (ast.Body, error) {
 	if r.parsedQuery != nil {
 		return r.parsedQuery, nil
 	}
@@ -1929,12 +1930,27 @@ func (r *Rego) parseQuery(futureImports []*ast.Import, m metrics.Metrics) (ast.B
 	m.Timer(metrics.RegoQueryParse).Start()
 	defer m.Timer(metrics.RegoQueryParse).Stop()
 
-	popts, err := future.ParserOptionsFromFutureImports(futureImports)
+	popts, err := future.ParserOptionsFromFutureImports(queryImports)
+	if err != nil {
+		return nil, err
+	}
+	popts, err = parserOptionsFromRegoVersionImport(queryImports, popts)
 	if err != nil {
 		return nil, err
 	}
 	popts.SkipRules = true
 	return ast.ParseBodyWithOpts(r.query, popts)
+}
+
+func parserOptionsFromRegoVersionImport(imports []*ast.Import, popts ast.ParserOptions) (ast.ParserOptions, error) {
+	for _, imp := range imports {
+		path := imp.Path.Value.(ast.Ref)
+		if ast.Compare(path, ast.RegoV1CompatibleRef) == 0 {
+			popts.RegoVersion = ast.RegoV1
+			return popts, nil
+		}
+	}
+	return popts, nil
 }
 
 func (r *Rego) compileModules(ctx context.Context, txn storage.Transaction, m metrics.Metrics) error {
@@ -2403,6 +2419,53 @@ func (r *Rego) partial(ctx context.Context, ectx *EvalContext) (*PartialQueries,
 	queries, support, err := q.PartialRun(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	if r.regoVersion == ast.RegoV0 && (r.capabilities == nil || r.capabilities.ContainsFeature(ast.FeatureRegoV1Import)) {
+		// If the target rego-version in v0, and the rego.v1 import is available, then we attempt to apply it to support modules.
+
+		for i, mod := range support {
+			if mod.RegoVersion() != ast.RegoV0 {
+				continue
+			}
+
+			// We can't apply the RegoV0CompatV1 version to the support module if it contains rules or vars that
+			// conflict with future keywords.
+			applyRegoVersion := true
+
+			ast.WalkRules(mod, func(r *ast.Rule) bool {
+				name := r.Head.Name
+				if name == "" && len(r.Head.Reference) > 0 {
+					name = r.Head.Reference[0].Value.(ast.Var)
+				}
+				if ast.IsFutureKeyword(name.String()) {
+					applyRegoVersion = false
+					return true
+				}
+				return false
+			})
+
+			if applyRegoVersion {
+				ast.WalkVars(mod, func(v ast.Var) bool {
+					if ast.IsFutureKeyword(v.String()) {
+						applyRegoVersion = false
+						return true
+					}
+					return false
+				})
+			}
+
+			if applyRegoVersion {
+				support[i].SetRegoVersion(ast.RegoV0CompatV1)
+			} else {
+				support[i].SetRegoVersion(r.regoVersion)
+			}
+		}
+	} else {
+		// If the target rego-version is not v0, then we apply the target rego-version to the support modules.
+		for i := range support {
+			support[i].SetRegoVersion(r.regoVersion)
+		}
 	}
 
 	pq := &PartialQueries{
