@@ -135,10 +135,10 @@ postInstall:
     runAsNonRoot: true
     runAsUser: 1000
 preUninstall:
-  serviceAccount:
-    name: gatekeeper-delete-webhook-configs
-    create: true
   deleteWebhookConfigurations:
+    serviceAccount:
+      name: gatekeeper-delete-webhook-configs
+      create: true
     extraRules: []
     enabled: false
     image:
