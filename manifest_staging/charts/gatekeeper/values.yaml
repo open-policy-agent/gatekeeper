@@ -59,6 +59,9 @@ preInstall:
       tag: v3.17.0-beta.0
 postUpgrade:
   labelNamespace:
+    serviceAccount:
+      name: gatekeeper-update-namespace-label-post-upgrade
+      create: true
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
@@ -89,6 +92,9 @@ postUpgrade:
     runAsUser: 1000
 postInstall:
   labelNamespace:
+    serviceAccount:
+      name: gatekeeper-update-namespace-label
+      create: true
     enabled: true
     extraRules: []
     image:
@@ -129,6 +135,9 @@ postInstall:
     runAsNonRoot: true
     runAsUser: 1000
 preUninstall:
+  serviceAccount:
+    name: gatekeeper-delete-webhook-configs
+    create: true
   deleteWebhookConfigurations:
     extraRules: []
     enabled: false
@@ -158,6 +167,8 @@ podCountLimit: "100"
 secretAnnotations: {}
 enableRuntimeDefaultSeccompProfile: true
 controllerManager:
+  serviceAccount:
+    name: gatekeeper-admin
   exemptNamespaces: []
   exemptNamespacePrefixes: []
   hostNetwork: false
@@ -214,6 +225,8 @@ controllerManager:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
 audit:
+  serviceAccount:
+    name: gatekeeper-admin
   enablePubsub: false
   connection: audit-connection
   channel: audit-channel
@@ -271,6 +284,9 @@ disabledBuiltins: ["{http.send}"]
 psp:
   enabled: false
 upgradeCRDs:
+  serviceAccount:
+    create: true
+    name: gatekeeper-admin-upgrade-crds
   enabled: true
   extraRules: []
   priorityClassName: ""
@@ -279,3 +295,6 @@ rbac:
 externalCertInjection:
   enabled: false
   secretName: gatekeeper-webhook-server-cert
+serviceAccount:
+  gatekeeperAdmin:
+    create: true
