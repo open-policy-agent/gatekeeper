@@ -36,7 +36,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,9 +44,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var crashOnFailureFetchingExpectations = flag.Bool("crash-on-failure-fetching-expectations", false, "Unless set (defaults to false), gatekeeper will ignore errors that occur when gathering expectations. This prevents bootstrapping errors from crashing Gatekeeper at the cost of increasing the risk Gatekeeper will under-enforce policy by serving before it has loaded in all policies. Enabling this will help prevent under-enforcement at the risk of crashing during startup for issues like network errors. Note that enabling this flag currently does not achieve the aforementioned effect since fetching expectations are set to retry until success so failures during fetching expectations currently do not occurr.")
-
 var log = logf.Log.WithName("readiness-tracker")
+
+var crashOnFailureFetchingExpectations = flag.Bool("crash-on-failure-fetching-expectations", false, "Unless set (defaults to false), gatekeeper will ignore errors that occur when gathering expectations. This prevents bootstrapping errors from crashing Gatekeeper at the cost of increasing the risk Gatekeeper will under-enforce policy by serving before it has loaded in all policies. Enabling this will help prevent under-enforcement at the risk of crashing during startup for issues like network errors. Note that enabling this flag currently does not achieve the aforementioned effect since fetching expectations are set to retry until success so failures during fetching expectations currently do not occur.")
 
 const (
 	constraintGroup = "constraints.gatekeeper.sh"
@@ -326,48 +325,60 @@ func (t *Tracker) Run(ctx context.Context) error {
 	// Any failure in the errgroup will cancel goroutines in the group using gctx.
 	// The odd one out is the statsPrinter which is meant to outlive the tracking
 	// routines.
-	var grp *errgroup.Group
-	grp = &errgroup.Group{}
-	gctx := ctx
-	if t.crashOnFailure {
-		grp, gctx = errgroup.WithContext(ctx)
-	}
-	t.constraintTrackers = syncutil.RunnerWithContext(gctx)
-	t.dataTrackers = syncutil.RunnerWithContext(gctx)
-	close(t.ready) // The constraintTrackers SingleRunner is ready.
+	errChan := make(chan error)
+	wg := &sync.WaitGroup{}
+	t.constraintTrackers = syncutil.NewSingleRunner(errChan)
+	t.dataTrackers = syncutil.NewSingleRunner(errChan)
+	close(t.ready) // The constraintTrackers and dataTrackers SingleRunners are ready.
 
 	if t.mutationEnabled {
-		grp.Go(func() error {
-			return t.trackAssignMetadata(gctx)
-		})
-		grp.Go(func() error {
-			return t.trackAssign(gctx)
-		})
-		grp.Go(func() error {
-			return t.trackModifySet(gctx)
-		})
-		grp.Go(func() error {
-			return t.trackAssignImage(gctx)
-		})
+		wg.Add(4)
+		go func() {
+			defer wg.Done()
+			t.trackAssignMetadata(ctx, errChan)
+		}()
+		go func() {
+			defer wg.Done()
+			t.trackAssign(ctx, errChan)
+		}()
+		go func() {
+			defer wg.Done()
+			t.trackModifySet(ctx, errChan)
+		}()
+		go func() {
+			defer wg.Done()
+			t.trackAssignImage(ctx, errChan)
+		}()
 	}
+
 	if t.externalDataEnabled {
-		grp.Go(func() error {
-			return t.trackExternalDataProvider(gctx)
-		})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			t.trackExternalDataProvider(ctx, errChan)
+		}()
 	}
+
 	if t.expansionEnabled {
-		grp.Go(func() error {
-			return t.trackExpansionTemplates(gctx)
-		})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			t.trackExpansionTemplates(ctx, errChan)
+		}()
 	}
 	if operations.HasValidationOperations() {
-		grp.Go(func() error {
-			return t.trackConstraintTemplates(gctx)
-		})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			t.trackConstraintTemplates(ctx, errChan)
+		}()
 	}
-	grp.Go(func() error {
-		return t.trackConfigAndSyncSets(gctx)
-	})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t.trackConfigAndSyncSets(ctx, errChan)
+	}()
 
 	go t.statsPrinter(ctx)
 
@@ -399,20 +410,26 @@ func (t *Tracker) Run(ctx context.Context) error {
 		}
 	}()
 
-	if err := grp.Wait(); err != nil && t.crashOnFailure {
-		return err
-	}
+	go func() {
+		wg.Wait()
+		t.constraintTrackers.Wait()
+		t.dataTrackers.Wait()
+		close(errChan)
+	}()
 
-	// constraintTrackers & dataTrackers Wait() must appear after grp.Wait() - allows trackConstraintTemplates() & trackConfigAndSyncSets() time to schedule their sub-tasks.
-	if err := t.constraintTrackers.Wait(); err != nil && t.crashOnFailure {
-		return err
-	}
+	for {
+		err, ok := <-errChan
+		if !ok {
+			return nil
+		}
 
-	if err := t.dataTrackers.Wait(); err != nil && t.crashOnFailure {
-		return err
-	}
+		if t.crashOnFailure {
+			return err
+		} else {
+			log.Error(err, "listing expectations")
+		}
 
-	return nil
+	}
 }
 
 func (t *Tracker) Populated() bool {
@@ -561,7 +578,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 	}
 }
 
-func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
+func (t *Tracker) trackAssignMetadata(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
@@ -572,7 +589,7 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
 	}()
 
 	if !t.mutationEnabled {
-		return nil
+		return
 	}
 
 	assignMetadataList := &mutationv1.AssignMetadataList{}
@@ -583,8 +600,8 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
 	lister := retryLister(t.lister, retryPred)
 	if err := lister.List(ctx, assignMetadataList); err != nil {
 		hadError = true
-		log.Error(err, "listing AssignMetadata")
-		return fmt.Errorf("listing AssignMetadata: %w", err)
+		errChan <- fmt.Errorf("listing AssignMetadata: %w", err)
+		return
 	}
 	log.V(logging.DebugLevel).Info("setting expectations for AssignMetadata", "AssignMetadata Count", len(assignMetadataList.Items))
 
@@ -592,10 +609,9 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
 		log.V(logging.DebugLevel).Info("expecting AssignMetadata", "name", assignMetadataList.Items[index].GetName())
 		t.assignMetadata.Expect(&assignMetadataList.Items[index])
 	}
-	return nil
 }
 
-func (t *Tracker) trackAssign(ctx context.Context) error {
+func (t *Tracker) trackAssign(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
@@ -606,7 +622,7 @@ func (t *Tracker) trackAssign(ctx context.Context) error {
 	}()
 
 	if !t.mutationEnabled {
-		return nil
+		return
 	}
 
 	assignList := &mutationv1.AssignList{}
@@ -617,8 +633,8 @@ func (t *Tracker) trackAssign(ctx context.Context) error {
 	lister := retryLister(t.lister, retryPred)
 	if err := lister.List(ctx, assignList); err != nil {
 		hadError = true
-		log.Error(err, "listing Assign")
-		return fmt.Errorf("listing Assign: %w", err)
+		errChan <- fmt.Errorf("listing Assign: %w", err)
+		return
 	}
 	log.V(logging.DebugLevel).Info("setting expectations for Assign", "Assign Count", len(assignList.Items))
 
@@ -626,10 +642,9 @@ func (t *Tracker) trackAssign(ctx context.Context) error {
 		log.V(logging.DebugLevel).Info("expecting Assign", "name", assignList.Items[index].GetName())
 		t.assign.Expect(&assignList.Items[index])
 	}
-	return nil
 }
 
-func (t *Tracker) trackModifySet(ctx context.Context) error {
+func (t *Tracker) trackModifySet(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
@@ -640,7 +655,7 @@ func (t *Tracker) trackModifySet(ctx context.Context) error {
 	}()
 
 	if !t.mutationEnabled {
-		return nil
+		return
 	}
 
 	modifySetList := &mutationv1.ModifySetList{}
@@ -651,8 +666,8 @@ func (t *Tracker) trackModifySet(ctx context.Context) error {
 	lister := retryLister(t.lister, retryPred)
 	if err := lister.List(ctx, modifySetList); err != nil {
 		hadError = true
-		log.Error(err, "listing ModifySet")
-		return fmt.Errorf("listing ModifySet: %w", err)
+		errChan <- fmt.Errorf("listing ModifySet: %w", err)
+		return
 	}
 	log.V(logging.DebugLevel).Info("setting expectations for ModifySet", "ModifySet Count", len(modifySetList.Items))
 
@@ -660,10 +675,9 @@ func (t *Tracker) trackModifySet(ctx context.Context) error {
 		log.V(logging.DebugLevel).Info("expecting ModifySet", "name", modifySetList.Items[index].GetName())
 		t.modifySet.Expect(&modifySetList.Items[index])
 	}
-	return nil
 }
 
-func (t *Tracker) trackAssignImage(ctx context.Context) error {
+func (t *Tracker) trackAssignImage(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
@@ -674,7 +688,7 @@ func (t *Tracker) trackAssignImage(ctx context.Context) error {
 	}()
 
 	if !t.mutationEnabled {
-		return nil
+		return
 	}
 
 	assignImageList := &mutationsv1alpha1.AssignImageList{}
@@ -685,8 +699,8 @@ func (t *Tracker) trackAssignImage(ctx context.Context) error {
 	lister := retryLister(t.lister, retryPred)
 	if err := lister.List(ctx, assignImageList); err != nil {
 		hadError = true
-		log.Error(err, "listing AssignImage")
-		return fmt.Errorf("listing AssignImage: %w", err)
+		errChan <- fmt.Errorf("listing AssignImage: %w", err)
+		return
 	}
 	log.V(logging.DebugLevel).Info("setting expectations for AssignImage", "AssignImage Count", len(assignImageList.Items))
 
@@ -694,10 +708,9 @@ func (t *Tracker) trackAssignImage(ctx context.Context) error {
 		log.V(logging.DebugLevel).Info("expecting AssignImage", "name", assignImageList.Items[index].GetName())
 		t.assignImage.Expect(&assignImageList.Items[index])
 	}
-	return nil
 }
 
-func (t *Tracker) trackExpansionTemplates(ctx context.Context) error {
+func (t *Tracker) trackExpansionTemplates(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
@@ -708,7 +721,7 @@ func (t *Tracker) trackExpansionTemplates(ctx context.Context) error {
 	}()
 
 	if !t.expansionEnabled {
-		return nil
+		return
 	}
 
 	expansionList := &expansionv1alpha1.ExpansionTemplateList{}
@@ -719,8 +732,8 @@ func (t *Tracker) trackExpansionTemplates(ctx context.Context) error {
 	lister := retryLister(t.lister, retryPred)
 	if err := lister.List(ctx, expansionList); err != nil {
 		hadError = true
-		log.Error(err, "listing ExpansionTemplate")
-		return fmt.Errorf("listing ExpansionTemplate: %w", err)
+		errChan <- fmt.Errorf("listing ExpansionTemplates: %w", err)
+		return
 	}
 	log.V(logging.DebugLevel).Info("setting expectations for ExpansionTemplate", "ExpansionTemplate Count", len(expansionList.Items))
 
@@ -728,10 +741,9 @@ func (t *Tracker) trackExpansionTemplates(ctx context.Context) error {
 		log.V(logging.DebugLevel).Info("expecting ExpansionTemplate", "name", expansionList.Items[index].GetName())
 		t.expansions.Expect(&expansionList.Items[index])
 	}
-	return nil
 }
 
-func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
+func (t *Tracker) trackExternalDataProvider(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
@@ -742,7 +754,7 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 	}()
 
 	if !t.externalDataEnabled {
-		return nil
+		return
 	}
 
 	providerList := &externaldatav1beta1.ProviderList{}
@@ -753,8 +765,8 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 	lister := retryLister(t.lister, retryPred)
 	if err := lister.List(ctx, providerList); err != nil {
 		hadError = true
-		log.Error(err, "listing Provider")
-		return fmt.Errorf("listing Provider: %w", err)
+		errChan <- fmt.Errorf("listing Provider: %w", err)
+		return
 	}
 	log.V(logging.DebugLevel).Info("setting expectations for Provider", "Provider Count", len(providerList.Items))
 
@@ -762,10 +774,9 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 		log.V(logging.DebugLevel).Info("expecting Provider", "name", providerList.Items[index].GetName())
 		t.externalDataProvider.Expect(&providerList.Items[index])
 	}
-	return nil
 }
 
-func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
+func (t *Tracker) trackConstraintTemplates(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
@@ -783,8 +794,8 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 	lister := retryLister(t.lister, retryPred)
 	if err := lister.List(ctx, templates); err != nil {
 		hadError = true
-		log.Error(err, "listing templates")
-		return fmt.Errorf("listing templates: %w", err)
+		errChan <- fmt.Errorf("listing templates: %w", err)
+		return
 	}
 
 	log.V(logging.DebugLevel).Info("setting expectations for templates", "templateCount", len(templates.Items))
@@ -810,28 +821,18 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 		handled[gvk] = true
 		// Set an expectation for this constraint type
 		ot := t.constraints.Get(gvk)
-		t.constraintTrackers.Go(ctx, gvk.String(), func(ctx context.Context) error {
-			err := t.trackConstraints(ctx, gvk, ot)
-			if err != nil {
-				log.Error(err, "aborted trackConstraints", "gvk", gvk)
-				if t.crashOnFailure {
-					return err
-				}
-			}
-			return nil
-		})
+		t.constraintTrackers.Go(ctx, gvk.String(), t.makeConstraintTrackerFor(gvk, ot))
 	}
-	return nil
 }
 
 // trackConfigAndSyncSets sets expectations for cached data as specified by the singleton Config resource.
 // and any SyncSet resources present on the cluster.
 // Works best effort and fails-open if a resource cannot be fetched or does not exist.
-func (t *Tracker) trackConfigAndSyncSets(ctx context.Context) error {
-	var retErr error
+func (t *Tracker) trackConfigAndSyncSets(ctx context.Context, errChan chan<- error) {
+	hadErr := false
 	defer func() {
 		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !t.crashOnFailure || retErr == nil {
+		if !t.crashOnFailure || !hadErr {
 			t.config.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("config expectations populated")
 
@@ -841,13 +842,11 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context) error {
 	}()
 
 	dataGVKs := make(map[schema.GroupVersionKind]struct{})
+
 	cfg, err := t.getConfigResource(ctx)
 	if err != nil {
-		log.Error(err, "fetching config resources")
-		retErr = fmt.Errorf("fetching config resources: %w", err)
-		if t.crashOnFailure {
-			return retErr
-		}
+		hadErr = true
+		errChan <- err
 	} else {
 		if cfg == nil {
 			log.Info("config resource not found - skipping for readiness")
@@ -867,7 +866,7 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context) error {
 
 	// Without validation operations, there is no reason to wait for referential data when deciding readiness.
 	if !operations.HasValidationOperations() {
-		return retErr
+		return
 	}
 
 	syncsets := &syncsetv1alpha1.SyncSetList{}
@@ -877,11 +876,8 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context) error {
 	}
 	lister := retryLister(t.lister, retryPred)
 	if err := lister.List(ctx, syncsets); err != nil {
-		log.Error(err, "fetching syncset resources")
-		retErr = fmt.Errorf("fetching syncset resources: %w", err)
-		if t.crashOnFailure {
-			return retErr
-		}
+		hadErr = true
+		errChan <- fmt.Errorf("listing syncsets: %w", err)
 	} else {
 		log.V(logging.DebugLevel).Info("setting expectations for syncsets", "syncsetCount", len(syncsets.Items))
 		for i := range syncsets.Items {
@@ -908,19 +904,8 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context) error {
 
 		// Set expectations for individual cached resources
 		dt := t.ForData(gvkCpy)
-		t.dataTrackers.Go(ctx, gvk.String(), func(ctx context.Context) error {
-			err := t.trackData(ctx, gvkCpy, dt)
-			if err != nil {
-				log.Error(err, "aborted trackData", "gvk", gvkCpy)
-				if t.crashOnFailure {
-					return err
-				}
-			}
-			return nil
-		})
+		t.dataTrackers.Go(ctx, gvk.String(), t.makeDataTrackerFor(gvkCpy, dt))
 	}
-
-	return retErr
 }
 
 // getConfigResource returns the Config singleton if present.
@@ -933,8 +918,7 @@ func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config
 	}
 	lister := retryLister(t.lister, retryPred)
 	if err := lister.List(ctx, lst); err != nil {
-		log.Error(err, "listing config")
-		return nil, fmt.Errorf("listing config: %w", err)
+		return nil, fmt.Errorf("listing configs: %w", err)
 	}
 
 	for i := range lst.Items {
@@ -950,79 +934,82 @@ func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config
 	return nil, nil
 }
 
-// trackData sets expectations for all cached data expected by Gatekeeper.
+// makeDataTrackerFor returns a function that sets expectations for all cached data expected by Gatekeeper.
 // If the provided gvk is registered, blocks until data can be listed or context is canceled.
 // Invalid GVKs (not registered to the RESTMapper) will fail-open.
-func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt Expectations) error {
-	hadError := false
-	defer func() {
-		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !t.crashOnFailure || !hadError {
-			dt.ExpectationsDone()
-			log.V(logging.DebugLevel).Info("data expectations populated", "gvk", gvk)
+func (t *Tracker) makeDataTrackerFor(gvk schema.GroupVersionKind, dt Expectations) func(context.Context, chan<- error) {
+	return func(ctx context.Context, errChan chan<- error) {
+		hadError := false
+		defer func() {
+			// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+			if !t.crashOnFailure || !hadError {
+				dt.ExpectationsDone()
+				log.V(logging.DebugLevel).Info("data expectations populated", "gvk", gvk)
+			}
+		}()
+
+		// List individual resources and expect observations of each in the sync controller.
+		u := &unstructured.UnstructuredList{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   gvk.Group,
+			Version: gvk.Version,
+			Kind:    gvk.Kind + "List",
+		})
+		// NoKindMatchError is non-recoverable, otherwise we'll retry.
+		retryPred := retryUnlessUnregistered
+		if t.trackListerPredicateOverride != nil {
+			retryPred = t.trackListerPredicateOverride
 		}
-	}()
+		lister := retryLister(t.lister, retryPred)
+		err := lister.List(ctx, u)
+		if err != nil {
+			hadError = true
+			log.Error(err, "aborted trackData", "gvk", gvk)
+			errChan <- fmt.Errorf("listing data: %w", err)
+			return
+		}
 
-	// List individual resources and expect observations of each in the sync controller.
-	u := &unstructured.UnstructuredList{}
-	u.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   gvk.Group,
-		Version: gvk.Version,
-		Kind:    gvk.Kind + "List",
-	})
-	// NoKindMatchError is non-recoverable, otherwise we'll retry.
-	retryPred := retryUnlessUnregistered
-	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		for i := range u.Items {
+			item := &u.Items[i]
+			dt.Expect(item)
+			log.V(logging.DebugLevel).Info("expecting data", "gvk", item.GroupVersionKind(), "namespace", item.GetNamespace(), "name", item.GetName())
+		}
 	}
-	lister := retryLister(t.lister, retryPred)
-	err := lister.List(ctx, u)
-	if err != nil {
-		hadError = true
-		log.Error(err, "listing data", "gvk", gvk)
-		return fmt.Errorf("listing data: %w", err)
-	}
-
-	for i := range u.Items {
-		item := &u.Items[i]
-		dt.Expect(item)
-		log.V(logging.DebugLevel).Info("expecting data", "gvk", item.GroupVersionKind(), "namespace", item.GetNamespace(), "name", item.GetName())
-	}
-	return nil
 }
 
-// trackConstraints sets expectations for all constraints managed by a template.
+// makeConstraintTrackerFor sets expectations for all constraints managed by a template.
 // Blocks until constraints can be listed or context is canceled.
-func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionKind, constraints Expectations) error {
-	hadError := false
-	defer func() {
-		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
-		if !t.crashOnFailure || !hadError {
-			constraints.ExpectationsDone()
-			log.V(logging.DebugLevel).Info("constraint expectations populated", "gvk", gvk)
+func (t *Tracker) makeConstraintTrackerFor(gvk schema.GroupVersionKind, constraints Expectations) func(context.Context, chan<- error) {
+	return func(ctx context.Context, errChan chan<- error) {
+		hadError := false
+		defer func() {
+			// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+			if !t.crashOnFailure || !hadError {
+				constraints.ExpectationsDone()
+				log.V(logging.DebugLevel).Info("constraint expectations populated", "gvk", gvk)
+			}
+		}()
+
+		u := unstructured.UnstructuredList{}
+		u.SetGroupVersionKind(gvk)
+		retryPred := retryAll
+		if t.trackListerPredicateOverride != nil {
+			retryPred = t.trackListerPredicateOverride
 		}
-	}()
+		lister := retryLister(t.lister, retryPred)
+		if err := lister.List(ctx, &u); err != nil {
+			hadError = true
+			log.Error(err, "aborted trackConstraints", "gvk", gvk)
+			errChan <- fmt.Errorf("listing constraints: %w", err)
+			return
+		}
 
-	u := unstructured.UnstructuredList{}
-	u.SetGroupVersionKind(gvk)
-	retryPred := retryAll
-	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		for i := range u.Items {
+			o := u.Items[i]
+			constraints.Expect(&o)
+			log.V(logging.DebugLevel).Info("expecting Constraint", "gvk", gvk, "name", objectName(&o))
+		}
 	}
-	lister := retryLister(t.lister, retryPred)
-	if err := lister.List(ctx, &u); err != nil {
-		hadError = true
-		log.Error(err, "listing constraints")
-		return fmt.Errorf("listing constraints: %w", err)
-	}
-
-	for i := range u.Items {
-		o := u.Items[i]
-		constraints.Expect(&o)
-		log.V(logging.DebugLevel).Info("expecting Constraint", "gvk", gvk, "name", objectName(&o))
-	}
-
-	return nil
 }
 
 // EnableStats enables the verbose logging routine for the readiness tracker.
