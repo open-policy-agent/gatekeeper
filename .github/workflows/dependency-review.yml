@@ -17,11 +17,11 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
         with:
           egress-policy: audit
 
       - name: 'Checkout Repository'
-        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v3.5.2
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v3.5.2
       - name: 'Dependency Review'
-        uses: actions/dependency-review-action@9129d7d40b8c12c1ed0f60400d00c92d437adcce # v4.1.3
+        uses: actions/dependency-review-action@0c155c5e8556a497adf53f2c18edabf945ed8e70 # v4.3.2
