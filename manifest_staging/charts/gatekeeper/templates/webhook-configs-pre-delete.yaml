@@ -133,7 +133,7 @@ roleRef:
   name: gatekeeper-delete-webhook-configs
 subjects:
   - kind: ServiceAccount
-    name: {{ .Values.preUninstall.serviceAccount.name }}
+    name: {{ .Values.preUninstall.deleteWebhookConfigurations.name }}
     namespace: {{ .Release.Namespace | quote }}
 {{- end }}
 {{- end }}
