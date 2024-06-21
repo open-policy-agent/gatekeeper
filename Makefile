@@ -112,6 +112,7 @@ all: lint test manager
 
 # Run tests
 native-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
 	go test -mod vendor ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
 
