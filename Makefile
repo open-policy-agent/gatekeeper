@@ -110,21 +110,9 @@ endif
 
 all: lint test manager
 
-## Location to install custom assets
-CUSTOMENVTEST = $(LOCALBIN)/k8s/1.28.7-linux-amd64
-$(CUSTOMENVTEST):
-	if [ ! -d "$(CUSTOMENVTEST)" ]; then \
-		mkdir -p $(LOCALBIN)/k8s/1.28.7-linux-amd64; \
-		curl -L https://sertaccdnvs.azureedge.net/kube-vap-fix/etcd --output $(LOCALBIN)/k8s/1.28.7-linux-amd64/etcd && chmod +x $(LOCALBIN)/k8s/1.28.7-linux-amd64/etcd; \
-		curl -L https://sertaccdnvs.azureedge.net/kube-vap-fix/kube-apiserver --output $(LOCALBIN)/k8s/1.28.7-linux-amd64/kube-apiserver && chmod +x $(LOCALBIN)/k8s/1.28.7-linux-amd64/kube-apiserver; \
-		curl -L https://sertaccdnvs.azureedge.net/kube-vap-fix/kubectl --output $(LOCALBIN)/k8s/1.28.7-linux-amd64/kubectl && chmod +x $(LOCALBIN)/k8s/1.28.7-linux-amd64/kubectl; \
-	fi
 # Run tests
-# TODO(ritazh): replace custom asset when new release is available in kubebuilder
-# NOTE: custom asset is built from https://github.com/kubernetes/kubernetes/pull/123477 on top of 1.28.
-# "$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)"
-native-test: $(CUSTOMENVTEST) envtest
-	KUBEBUILDER_ASSETS="$(CUSTOMENVTEST)" \
+native-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
 	go test -mod vendor ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
 
