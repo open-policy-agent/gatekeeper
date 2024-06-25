@@ -187,7 +187,7 @@ func TestOverrideEnforcementAction(t *testing.T) {
 							{
 								Target:            "targetA",
 								Msg:               "violationA",
-								EnforcementAction: "deny",
+								EnforcementAction: []string{"deny"},
 							},
 						},
 					},
@@ -201,7 +201,7 @@ func TestOverrideEnforcementAction(t *testing.T) {
 							{
 								Target:            "targetA",
 								Msg:               "violationA",
-								EnforcementAction: "deny",
+								EnforcementAction: []string{"deny"},
 							},
 						},
 					},
@@ -219,7 +219,7 @@ func TestOverrideEnforcementAction(t *testing.T) {
 							{
 								Target:            "targetA",
 								Msg:               "violationA",
-								EnforcementAction: "warn",
+								EnforcementAction: []string{"warn"},
 							},
 						},
 					},
@@ -229,12 +229,12 @@ func TestOverrideEnforcementAction(t *testing.T) {
 							{
 								Target:            "targetB",
 								Msg:               "violationB",
-								EnforcementAction: "warn",
+								EnforcementAction: []string{"warn"},
 							},
 							{
 								Target:            "targetB",
 								Msg:               "violationC",
-								EnforcementAction: "warn",
+								EnforcementAction: []string{"warn"},
 							},
 						},
 					},
@@ -248,7 +248,7 @@ func TestOverrideEnforcementAction(t *testing.T) {
 							{
 								Target:            "targetA",
 								Msg:               "violationA",
-								EnforcementAction: "deny",
+								EnforcementAction: []string{"deny"},
 							},
 						},
 					},
@@ -258,12 +258,12 @@ func TestOverrideEnforcementAction(t *testing.T) {
 							{
 								Target:            "targetB",
 								Msg:               "violationB",
-								EnforcementAction: "deny",
+								EnforcementAction: []string{"deny"},
 							},
 							{
 								Target:            "targetB",
 								Msg:               "violationC",
-								EnforcementAction: "deny",
+								EnforcementAction: []string{"deny"},
 							},
 						},
 					},

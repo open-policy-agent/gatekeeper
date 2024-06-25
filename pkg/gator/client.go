@@ -3,7 +3,7 @@ package gator
 import (
 	"context"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -29,5 +29,5 @@ type Client interface {
 	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
 
 	// Review runs all Constraints against obj.
-	Review(ctx context.Context, obj interface{}, opts ...drivers.QueryOpt) (*types.Responses, error)
+	Review(ctx context.Context, obj interface{}, opts ...reviews.ReviewOpt) (*types.Responses, error)
 }

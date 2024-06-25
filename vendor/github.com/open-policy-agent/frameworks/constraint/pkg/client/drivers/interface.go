@@ -3,6 +3,7 @@ package drivers
 import (
 	"context"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/opa/storage"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -43,7 +44,7 @@ type Driver interface {
 	// Query runs the passed target's Constraints against review.
 	// Returns a QueryResponse type.
 	// Returns an error if there was a problem executing the Query.
-	Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...QueryOpt) (*QueryResponse, error)
+	Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...reviews.ReviewOpt) (*QueryResponse, error)
 
 	// Dump outputs the entire state of compiled Templates, added Constraints, and
 	// cached data used for referential Constraints.

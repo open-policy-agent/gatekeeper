@@ -162,7 +162,7 @@ func (r *RegoRewriter) addPathFromFs(path string, slice *[]*Module) error {
 		}
 
 		walkFn := func(path string, info os.FileInfo, _ error) error {
-			if info.IsDir() || !strings.HasSuffix(path, ".rego") {
+			if info == nil || (info.IsDir() || !strings.HasSuffix(path, ".rego")) {
 				return nil
 			}
 			return r.addFileFromFs(path, slice)

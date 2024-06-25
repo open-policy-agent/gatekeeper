@@ -27,7 +27,7 @@ type Result struct {
 	Constraint *unstructured.Unstructured `json:"constraint,omitempty"`
 
 	// The enforcement action of the constraint
-	EnforcementAction string `json:"enforcementAction,omitempty"`
+	EnforcementAction []string `json:"enforcementAction,omitempty"`
 }
 
 // Response is a collection of Constraint violations for a particular Target.
@@ -38,8 +38,8 @@ type Response struct {
 	Results []*Result
 }
 
-func (r *Response) AddResult(results *Result) {
-	r.Results = append(r.Results, results)
+func (r *Response) AddResult(results ...*Result) {
+	r.Results = append(r.Results, results...)
 }
 
 // Sort sorts the Results in Response lexicographically first by the Constraint
@@ -112,17 +112,6 @@ func (r *Responses) Results() []*Result {
 			res = append(res, rr)
 		}
 	}
-
-	// Make results more (but not completely) deterministic.
-	// After we shard Rego compilation environments, we will be able to tie
-	// responses to individual constraints. This is a stopgap to make tests easier
-	// to write until then.
-	sort.Slice(res, func(i, j int) bool {
-		if res[i].EnforcementAction != res[j].EnforcementAction {
-			return res[i].EnforcementAction < res[j].EnforcementAction
-		}
-		return res[i].Msg < res[j].Msg
-	})
 
 	return res
 }

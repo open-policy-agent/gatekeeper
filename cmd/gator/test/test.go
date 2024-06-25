@@ -206,8 +206,10 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 
 func enforceableFailure(results []*test.GatorResult) bool {
 	for _, result := range results {
-		if result.EnforcementAction == string(util.Deny) {
-			return true
+		for _, action := range result.EnforcementAction {
+			if action == string(util.Deny) {
+				return true
+			}
 		}
 	}
 

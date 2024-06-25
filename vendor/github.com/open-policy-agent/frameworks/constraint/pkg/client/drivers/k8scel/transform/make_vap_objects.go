@@ -15,6 +15,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+const VAPEnforcementPoint = "vap.k8s.io"
+
 func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	source, err := schema.GetSourceFromTemplate(template)
 	if err != nil {
@@ -75,22 +77,7 @@ func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admiss
 	return policy, nil
 }
 
-func ConstraintToBinding(constraint *unstructured.Unstructured) (*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, error) {
-	enforcementActionStr, err := apiconstraints.GetEnforcementAction(constraint)
-	if err != nil {
-		return nil, err
-	}
-
-	var enforcementAction admissionregistrationv1beta1.ValidationAction
-	switch enforcementActionStr {
-	case apiconstraints.EnforcementActionDeny:
-		enforcementAction = admissionregistrationv1beta1.Deny
-	case "warn":
-		enforcementAction = admissionregistrationv1beta1.Warn
-	default:
-		return nil, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn` or `deny`", ErrBadEnforcementAction, enforcementActionStr)
-	}
-
+func ConstraintToBinding(constraint *unstructured.Unstructured, enforcementActions []admissionregistrationv1beta1.ValidationAction) (*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, error) {
 	binding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("gatekeeper-%s", constraint.GetName()),
@@ -102,7 +89,7 @@ func ConstraintToBinding(constraint *unstructured.Unstructured) (*admissionregis
 				ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
 			},
 			MatchResources:    &admissionregistrationv1beta1.MatchResources{},
-			ValidationActions: []admissionregistrationv1beta1.ValidationAction{enforcementAction},
+			ValidationActions: enforcementActions,
 		},
 	}
 	objectSelectorMap, found, err := unstructured.NestedMap(constraint.Object, "spec", "match", "labelSelector")
@@ -131,4 +118,65 @@ func ConstraintToBinding(constraint *unstructured.Unstructured) (*admissionregis
 		binding.Spec.MatchResources.NamespaceSelector = namespaceSelector
 	}
 	return binding, nil
+}
+
+func AssumeVAPEnforcement(ct *templates.ConstraintTemplate, generateVAPDefault bool) (bool, error) {
+	source, err := schema.GetSourceFromTemplate(ct)
+	if err != nil {
+		return false, err
+	}
+	if source.GenerateVAP == nil {
+		return generateVAPDefault, nil
+	}
+	return *source.GenerateVAP, nil
+}
+
+func ShouldGenerateVAPB(constraint *unstructured.Unstructured) (bool, []admissionregistrationv1beta1.ValidationAction ,error) {
+	enforcementActionStr, err := apiconstraints.GetEnforcementAction(constraint)
+	var enforcementActions []admissionregistrationv1beta1.ValidationAction
+	if err != nil {
+		return false, enforcementActions, err
+	}
+
+	actions := []string{}
+	if apiconstraints.IsEnforcementActionScoped(enforcementActionStr) {
+		actionsForEP, err := apiconstraints.GetEnforcementActionsForEP(constraint, []string{VAPEnforcementPoint})
+		if err != nil {
+			return false, enforcementActions, err
+		}
+		if len(actionsForEP[VAPEnforcementPoint]) == 0 {
+			return false, enforcementActions, nil
+		}
+		for action := range actionsForEP[VAPEnforcementPoint] {
+			actions = append(actions, action)
+		}
+	}
+
+
+	for _, action := range actions {
+		switch action {
+		case apiconstraints.EnforcementActionDeny:
+			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Deny)
+		case "warn":
+			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Warn)
+		default:
+			return false, enforcementActions, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn` or `deny`", ErrBadEnforcementAction, action)
+		}
+	}
+
+	// TO-DO, in beta when we turn on VAP, VAPB generation by default, this will throw an error for contraints that have enforcementAction: dryrun
+	// as dryrun is not a valid enforcement action for VAPB. We need to handle this case.
+	// Option 1: Throw an error for constraints on status that have enforcementAction: dryrun, and still create the constraint. Skip on creating VAPB.
+	// Option 2: Define a default enforcement action for VAPB, and use that for constraints that have enforcementAction: `unrecognized`.
+	if len(enforcementActions) == 0 {
+		switch enforcementActionStr {
+		case apiconstraints.EnforcementActionDeny:
+			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Deny)
+		case "warn":
+			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Warn)
+		default:
+			return false, enforcementActions, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn` or `deny`", ErrBadEnforcementAction, enforcementActionStr)
+		}
+	}
+	return true, enforcementActions, nil
 }

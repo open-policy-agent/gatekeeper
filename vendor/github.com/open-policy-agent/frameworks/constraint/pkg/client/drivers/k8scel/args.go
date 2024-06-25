@@ -1,13 +1,5 @@
 package k8scel
 
-type vapDefault string
-
-const (
-	VAPGenerationLabel = "gatekeeper.sh/use-vap"
-	VAPDefaultYes      = vapDefault("yes")
-	VAPDefaultNo       = vapDefault("no")
-)
-
 type Arg func(*Driver) error
 
 // GatherStats starts collecting various stats around the
@@ -21,16 +13,15 @@ func GatherStats() Arg {
 }
 
 // VAPGenerationDefault sets the expected default
-// value of the `gatekeeper.sh/use-vap` label.
+// value for the generateVAP field.
 // If no value is provided, VAP generation
 // is presumed to be disabled and the engine will
 // validate ALL policies. Otherwise, the engine
 // will only validate policies not expected to be
 // enforced via VAP.
-func VAPGenerationDefault(d vapDefault) Arg {
+func VAPGenerationDefault(d bool) Arg {
 	return func(driver *Driver) error {
-		driver.generateVAPDefault = &d
-
+		driver.generateVAPDefault = d
 		return nil
 	}
 }

@@ -72,3 +72,10 @@ func IgnoreNoReferentialDriverWarning(ignore bool) Opt {
 		return nil
 	}
 }
+
+func EnforcementPoints(eps ...string) Opt {
+	return func(client *Client) error {
+		client.enforcementPoints = eps
+		return nil
+	}
+}

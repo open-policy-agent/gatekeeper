@@ -13,7 +13,7 @@ func TestResult_ToResult(t *testing.T) {
 		aResult := types.Result{
 			Target:            "targetA",
 			Msg:               "violationA",
-			EnforcementAction: "deny",
+			EnforcementAction: []string{"deny"},
 		}
 
 		responses := types.Responses{

@@ -89,6 +89,21 @@ teardown_file() {
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/good_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
 
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml"
+    
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml"
+    
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+
+    run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+    assert_match 'denied' "${output}"
+    assert_failure
+    kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+    kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+    kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
   fi
 }
