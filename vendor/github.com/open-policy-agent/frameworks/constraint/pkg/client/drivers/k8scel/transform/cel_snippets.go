@@ -159,13 +159,26 @@ func BindParamsV1Beta1() admissionregistrationv1beta1.Variable {
 	}
 }
 
-func BindParamsCEL() []cel.NamedExpressionAccessor {
+func BindParamsCEL() cel.NamedExpressionAccessor {
 	v := BindParamsV1Beta1()
-	return []cel.NamedExpressionAccessor{
-		&validatingadmissionpolicy.Variable{
-			Name:       v.Name,
-			Expression: v.Expression,
-		},
+	return &validatingadmissionpolicy.Variable{
+		Name:       v.Name,
+		Expression: v.Expression,
+	}
+}
+
+func BindObjectV1Beta1() admissionregistrationv1beta1.Variable {
+	return admissionregistrationv1beta1.Variable{
+		Name:       schema.ObjectName,
+		Expression: `has(request.operation) && request.operation == "DELETE" && object == null ? oldObject : object`,
+	}
+}
+
+func BindObjectCEL() cel.NamedExpressionAccessor {
+	v := BindObjectV1Beta1()
+	return &validatingadmissionpolicy.Variable{
+		Name:       v.Name,
+		Expression: v.Expression,
 	}
 }
 
@@ -179,11 +192,20 @@ func AllMatchersV1Beta1() []admissionregistrationv1beta1.MatchCondition {
 }
 
 func AllVariablesCEL() []cel.NamedExpressionAccessor {
-	return BindParamsCEL()
+	vars := AllVariablesV1Beta1()
+	xform := make([]cel.NamedExpressionAccessor, len(vars))
+	for i := range vars {
+		xform[i] = &validatingadmissionpolicy.Variable{
+			Name:       vars[i].Name,
+			Expression: vars[i].Expression,
+		}
+	}
+	return xform
 }
 
 func AllVariablesV1Beta1() []admissionregistrationv1beta1.Variable {
 	return []admissionregistrationv1beta1.Variable{
+		BindObjectV1Beta1(),
 		BindParamsV1Beta1(),
 	}
 }
