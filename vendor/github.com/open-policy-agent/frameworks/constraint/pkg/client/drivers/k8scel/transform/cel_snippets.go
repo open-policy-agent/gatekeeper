@@ -2,7 +2,7 @@ package transform
 
 import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
-	admissionregistrationv1alpha1 "k8s.io/api/admissionregistration/v1alpha1"
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
 	"k8s.io/apiserver/pkg/admission/plugin/validatingadmissionpolicy"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
@@ -28,23 +28,10 @@ const (
 	!has(params.spec) ? true: (
 		!has(params.spec.match) ? true: (
 			!has(params.spec.match.name) ? true : (
-				(has(object.metadata.generateName) && object.metadata.generateName != "" && params.spec.match.name.endsWith("*") && string(object.metadata.generateName).matches("^" + string(params.spec.match.name).replace("*", ".*") + "$")) ||
-				(has(object.metadata.name) && string(object.metadata.name).matches("^" + string(params.spec.match.name).replace("*", ".*") + "$"))
-			)
-		)
-	)
-	`
-
-	// Note that switching the glob to a regex is valid because of how Gatekeeper validates the wildcard matcher
-	// (with this regex: "+kubebuilder:validation:Pattern=`^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$`").
-	matchNamespacesGlob = `
-	!has(params.spec) ? true: (
-		!has(params.spec.match) ? true: (
-			!has(params.spec.match.namespaces) ? true : (
-				// cluster-scoped objects always match
-				!has(object.metadata.namespace) || object.metadata.namespace == "" ? true : (
-					params.spec.match.namespaces.exists(nsMatcher,
-						(string(object.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+				[object, oldObject].exists(obj,
+					obj != null && (
+						(has(obj.metadata.generateName) && obj.metadata.generateName != "" && params.spec.match.name.endsWith("*") && string(obj.metadata.generateName).matches("^" + string(params.spec.match.name).replace("*", ".*") + "$")) ||
+						(has(obj.metadata.name) && string(obj.metadata.name).matches("^" + string(params.spec.match.name).replace("*", ".*") + "$"))
 					)
 				)
 			)
@@ -54,31 +41,58 @@ const (
 
 	// Note that switching the glob to a regex is valid because of how Gatekeeper validates the wildcard matcher
 	// (with this regex: "+kubebuilder:validation:Pattern=`^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$`").
+	// TODO: consider using the `namespaceObject` field provided by ValidatingAdmissionPolicy.
+	matchNamespacesGlob = `
+	!has(params.spec) ? true: (
+		!has(params.spec.match) ? true: (
+			!has(params.spec.match.namespaces) ? true : (
+				[object, oldObject].exists(obj,
+					obj != null && (
+						// cluster-scoped objects always match
+						!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
+							params.spec.match.namespaces.exists(nsMatcher,
+								(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+							)
+						)
+					)
+				)
+			)
+		)
+	)
+	`
+
+	// Note that switching the glob to a regex is valid because of how Gatekeeper validates the wildcard matcher
+	// (with this regex: "+kubebuilder:validation:Pattern=`^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$`").
+	// TODO: consider using the `namespaceObject` field provided by ValidatingAdmissionPolicy.
 	matchExcludedNamespacesGlob = `
 	!has(params.spec) ? true: (
 		!has(params.spec.match) ? true: (
 			!has(params.spec.match.excludedNamespaces) ? true : (
-					// cluster-scoped objects always match
-					!has(object.metadata.namespace) || object.metadata.namespace == "" ? true : (
-						!params.spec.match.excludedNamespaces.exists(nsMatcher,
-							(string(object.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+				[object, oldObject].exists(obj,
+					obj != null && (
+						// cluster-scoped objects always match
+						!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
+							!params.spec.match.excludedNamespaces.exists(nsMatcher,
+								(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+							)
 						)
 					)
+				)
 			)
 		)
 	)
 	`
 )
 
-func MatchExcludedNamespacesGlobV1Alpha1() admissionregistrationv1alpha1.MatchCondition {
-	return admissionregistrationv1alpha1.MatchCondition{
+func MatchExcludedNamespacesGlobV1Beta1() admissionregistrationv1beta1.MatchCondition {
+	return admissionregistrationv1beta1.MatchCondition{
 		Name:       "gatekeeper_internal_match_excluded_namespaces",
 		Expression: matchExcludedNamespacesGlob,
 	}
 }
 
 func MatchExcludedNamespacesGlobCEL() []cel.ExpressionAccessor {
-	mc := MatchExcludedNamespacesGlobV1Alpha1()
+	mc := MatchExcludedNamespacesGlobV1Beta1()
 	return []cel.ExpressionAccessor{
 		&matchconditions.MatchCondition{
 			Name:       mc.Name,
@@ -87,15 +101,15 @@ func MatchExcludedNamespacesGlobCEL() []cel.ExpressionAccessor {
 	}
 }
 
-func MatchNamespacesGlobV1Alpha1() admissionregistrationv1alpha1.MatchCondition {
-	return admissionregistrationv1alpha1.MatchCondition{
+func MatchNamespacesGlobV1Beta1() admissionregistrationv1beta1.MatchCondition {
+	return admissionregistrationv1beta1.MatchCondition{
 		Name:       "gatekeeper_internal_match_namespaces",
 		Expression: matchNamespacesGlob,
 	}
 }
 
 func MatchNamespacesGlobCEL() []cel.ExpressionAccessor {
-	mc := MatchNamespacesGlobV1Alpha1()
+	mc := MatchNamespacesGlobV1Beta1()
 	return []cel.ExpressionAccessor{
 		&matchconditions.MatchCondition{
 			Name:       mc.Name,
@@ -104,15 +118,15 @@ func MatchNamespacesGlobCEL() []cel.ExpressionAccessor {
 	}
 }
 
-func MatchNameGlobV1Alpha1() admissionregistrationv1alpha1.MatchCondition {
-	return admissionregistrationv1alpha1.MatchCondition{
+func MatchNameGlobV1Beta1() admissionregistrationv1beta1.MatchCondition {
+	return admissionregistrationv1beta1.MatchCondition{
 		Name:       "gatekeeper_internal_match_name",
 		Expression: matchNameGlob,
 	}
 }
 
 func MatchNameGlobCEL() []cel.ExpressionAccessor {
-	mc := MatchNameGlobV1Alpha1()
+	mc := MatchNameGlobV1Beta1()
 	return []cel.ExpressionAccessor{
 		&matchconditions.MatchCondition{
 			Name:       mc.Name,
@@ -121,15 +135,15 @@ func MatchNameGlobCEL() []cel.ExpressionAccessor {
 	}
 }
 
-func MatchKindsV1Alpha1() admissionregistrationv1alpha1.MatchCondition {
-	return admissionregistrationv1alpha1.MatchCondition{
+func MatchKindsV1Beta1() admissionregistrationv1beta1.MatchCondition {
+	return admissionregistrationv1beta1.MatchCondition{
 		Name:       "gatekeeper_internal_match_kinds",
 		Expression: matchKinds,
 	}
 }
 
 func MatchKindsCEL() []cel.ExpressionAccessor {
-	mc := MatchKindsV1Alpha1()
+	mc := MatchKindsV1Beta1()
 	return []cel.ExpressionAccessor{
 		&matchconditions.MatchCondition{
 			Name:       mc.Name,
@@ -138,38 +152,60 @@ func MatchKindsCEL() []cel.ExpressionAccessor {
 	}
 }
 
-func BindParamsV1Alpha1() admissionregistrationv1alpha1.Variable {
-	return admissionregistrationv1alpha1.Variable{
+func BindParamsV1Beta1() admissionregistrationv1beta1.Variable {
+	return admissionregistrationv1beta1.Variable{
 		Name:       schema.ParamsName,
-		Expression: "params.spec.parameters",
+		Expression: "!has(params.spec) ? null : !has(params.spec.parameters) ? null: params.spec.parameters",
 	}
 }
 
-func BindParamsCEL() []cel.NamedExpressionAccessor {
-	v := BindParamsV1Alpha1()
-	return []cel.NamedExpressionAccessor{
-		&validatingadmissionpolicy.Variable{
-			Name:       v.Name,
-			Expression: v.Expression,
-		},
+func BindParamsCEL() cel.NamedExpressionAccessor {
+	v := BindParamsV1Beta1()
+	return &validatingadmissionpolicy.Variable{
+		Name:       v.Name,
+		Expression: v.Expression,
 	}
 }
 
-func AllMatchersV1Alpha1() []admissionregistrationv1alpha1.MatchCondition {
-	return []admissionregistrationv1alpha1.MatchCondition{
-		MatchExcludedNamespacesGlobV1Alpha1(),
-		MatchNamespacesGlobV1Alpha1(),
-		MatchNameGlobV1Alpha1(),
-		MatchKindsV1Alpha1(),
+func BindObjectV1Beta1() admissionregistrationv1beta1.Variable {
+	return admissionregistrationv1beta1.Variable{
+		Name:       schema.ObjectName,
+		Expression: `has(request.operation) && request.operation == "DELETE" && object == null ? oldObject : object`,
+	}
+}
+
+func BindObjectCEL() cel.NamedExpressionAccessor {
+	v := BindObjectV1Beta1()
+	return &validatingadmissionpolicy.Variable{
+		Name:       v.Name,
+		Expression: v.Expression,
+	}
+}
+
+func AllMatchersV1Beta1() []admissionregistrationv1beta1.MatchCondition {
+	return []admissionregistrationv1beta1.MatchCondition{
+		MatchExcludedNamespacesGlobV1Beta1(),
+		MatchNamespacesGlobV1Beta1(),
+		MatchNameGlobV1Beta1(),
+		MatchKindsV1Beta1(),
 	}
 }
 
 func AllVariablesCEL() []cel.NamedExpressionAccessor {
-	return BindParamsCEL()
+	vars := AllVariablesV1Beta1()
+	xform := make([]cel.NamedExpressionAccessor, len(vars))
+	for i := range vars {
+		xform[i] = &validatingadmissionpolicy.Variable{
+			Name:       vars[i].Name,
+			Expression: vars[i].Expression,
+		}
+	}
+	return xform
 }
 
-func AllVariablesV1Alpha1() []admissionregistrationv1alpha1.Variable {
-	return []admissionregistrationv1alpha1.Variable{
-		BindParamsV1Alpha1(),
+func AllVariablesV1Beta1() []admissionregistrationv1beta1.Variable {
+	return []admissionregistrationv1beta1.Variable{
+		BindObjectV1Beta1(),
+		BindParamsV1Beta1(),
 	}
 }

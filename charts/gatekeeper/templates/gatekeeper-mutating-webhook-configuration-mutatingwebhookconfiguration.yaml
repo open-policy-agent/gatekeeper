@@ -24,6 +24,9 @@ webhooks:
       path: /v1/mutate
     {{- end }}
   failurePolicy: {{ .Values.mutatingWebhookFailurePolicy }}
+  {{- if ge (int .Capabilities.KubeVersion.Minor) 28 }}
+  matchConditions: {{ toYaml .Values.mutatingWebhookMatchConditions | nindent 4 }}
+  {{- end }}
   matchPolicy: Exact
   name: mutation.gatekeeper.sh
   namespaceSelector:

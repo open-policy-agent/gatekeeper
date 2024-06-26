@@ -18,14 +18,14 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
         with:
           egress-policy: audit
 
       - name: Set up Go
-        uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+        uses: actions/setup-go@cdcb36043654635271a94b9a6d1392de5bb323a7 # v5.0.1
         with:
-          go-version: "1.21"
+          go-version: "1.22"
           check-latest: true
 
       - name: Set release version and target branch for vNext
@@ -41,6 +41,7 @@ jobs:
           echo "NEWVERSION=v${MAJOR_VERSION}.$((MINOR_VERSION+1)).0-beta.0" >> ${GITHUB_ENV}
           # pre-release is always being merged to the master branch
           echo "TARGET_BRANCH=master" >> ${GITHUB_ENV}
+          echo "TAG=${TAG}" >> ${GITHUB_ENV}
 
       - name: Set release version and target branch from input
         if: github.event_name == 'workflow_dispatch'
@@ -49,6 +50,7 @@ jobs:
           echo "${NEWVERSION}" | grep -E '^v[0-9]+\.[0-9]+\.[0-9](-(beta|rc)\.[0-9]+)?$' || (echo "release_version should be in the format vX.Y.Z, vX.Y.Z-beta.A, or vX.Y.Z-rc.B" && exit 1)
 
           echo "NEWVERSION=${NEWVERSION}" >> ${GITHUB_ENV}
+          echo "TAG=${NEWVERSION}" >> ${GITHUB_ENV}
           MAJOR_VERSION="$(echo "${NEWVERSION}" | cut -d '.' -f1 | tr -d 'v')"
           MINOR_VERSION="$(echo "${NEWVERSION}" | cut -d '.' -f2)"
 
@@ -60,7 +62,7 @@ jobs:
             echo "TARGET_BRANCH=master" >> ${GITHUB_ENV}
           fi
 
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
         with:
           fetch-depth: 0
 
@@ -75,10 +77,10 @@ jobs:
       - run: make release-manifest promote-staging-manifest
 
       - if: github.event_name == 'push'
-        run: make version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x
+        run: make version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x TAG=v${TAG}
 
       - name: Create release pull request
-        uses: peter-evans/create-pull-request@153407881ec5c347639a548ade7d8ad1d6740e38 # v5.0.2
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0
         with:
           commit-message: "chore: Prepare ${{ env.NEWVERSION }} release"
           title: "chore: Prepare ${{ env.NEWVERSION }} release"

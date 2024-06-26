@@ -43,7 +43,7 @@ func TestTLSConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "success!")
 	}))
 	ts.TLS = serverTLSConf

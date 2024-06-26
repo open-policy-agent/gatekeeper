@@ -54,10 +54,16 @@ func TestMatches(t *testing.T) {
 			matches:   false,
 		},
 		{
-			name:      "wildcard suffix and prefix match",
+			name:      "wildcard suffix and prefix, match",
 			w:         Wildcard("*-kube-*"),
 			candidate: "test-kube-test",
 			matches:   true,
+		},
+		{
+			name:      "wildcard suffix and prefix, no match",
+			w:         Wildcard("*-kube-*"),
+			candidate: "my-kub-controller",
+			matches:   false,
 		},
 		{
 			name:      "no wildcard, only hypens at suffix and prefix",
@@ -66,22 +72,16 @@ func TestMatches(t *testing.T) {
 			matches:   false,
 		},
 		{
-			name:      "wild card at suffix and prefix, multiple hyphens",
-			w:         Wildcard("*-kube-*"),
-			candidate: "test-dev-kube-dev-test",
+			name:      "wildcard with consecutive hyphens",
+			w:         Wildcard("*--*"),
+			candidate: "my--namespace",
 			matches:   true,
 		},
 		{
-			name:      "wild card at suffid and end, multiple hypens, no match",
-			w:         Wildcard("*-kube-*"),
-			candidate: "my-kub-controller",
-			matches:   false,
-		},
-		{
-			name:      "wild card at suffix and prefix, multiple hyphens, no match",
-			w:         Wildcard("*-kube-*"),
-			candidate: "my-controller-manager",
-			matches:   false,
+			name:      "double wildcard",
+			w:         Wildcard("**"),
+			candidate: "my:namespace",
+			matches:   true,
 		},
 	}
 

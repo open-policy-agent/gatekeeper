@@ -308,7 +308,7 @@ func newFakeReconciler(t *testing.T, c client.Client, events chan event.GenericE
 			return fake.mutator, nil
 		},
 		system: mutation.NewSystem(mutation.SystemOpts{}),
-		getPod: func(ctx context.Context) (*corev1.Pod, error) {
+		getPod: func(_ context.Context) (*corev1.Pod, error) {
 			return fakes.Pod(
 				fakes.WithNamespace("gatekeeper-system"),
 				fakes.WithName(podName),
@@ -1041,7 +1041,7 @@ func TestReconcile_ReconcileUpsert_GetPodError(t *testing.T) {
 
 	ctx := context.Background()
 
-	r.getPod = func(ctx context.Context) (*corev1.Pod, error) {
+	r.getPod = func(_ context.Context) (*corev1.Pod, error) {
 		return nil, newErrSome(1)
 	}
 
@@ -1071,7 +1071,7 @@ func TestReconcile_ReconcileDeleted_GetPodError(t *testing.T) {
 
 	ctx := context.Background()
 
-	r.getPod = func(ctx context.Context) (*corev1.Pod, error) {
+	r.getPod = func(_ context.Context) (*corev1.Pod, error) {
 		return nil, newErrSome(1)
 	}
 

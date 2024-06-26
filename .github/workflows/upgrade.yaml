@@ -21,16 +21,17 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        HELM_VERSION: ["3.7.2"]
+        HELM_VERSION: ["3.14.1"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
         with:
           egress-policy: audit
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
 
       - name: Bootstrap e2e
         run: |
@@ -42,7 +43,7 @@ jobs:
 
       - name: Deploy Helm release
         run: |
-          make e2e-helm-upgrade-init HELM_VERSION=${{ matrix.HELM_VERSION }} BASE_RELEASE=${{ env.BASE_RELEASE }}
+          make e2e-helm-upgrade-init HELM_VERSION=${{ matrix.HELM_VERSION }} BASE_RELEASE=${{ env.BASE_RELEASE }} LOG_LEVEL=DEBUG
 
       - name: Run e2e after install
         run: |
@@ -85,7 +86,8 @@ jobs:
             HELM_VERSION=${{ matrix.HELM_VERSION }} \
             HELM_REPO=gatekeeper-e2e \
             HELM_CRD_REPO=gatekeeper-crds \
-            HELM_RELEASE=latest
+            HELM_RELEASE=latest \
+            LOG_LEVEL=DEBUG
 
       - name: Run e2e after upgrade
         run: |
@@ -99,7 +101,7 @@ jobs:
           kubectl logs -n gatekeeper-system -l run=dummy-provider --tail=-1 > logs-${{ matrix.HELM_VERSION }}-dummy-provider-post-upgrade.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         if: ${{ always() }}
         with:
           name: logs

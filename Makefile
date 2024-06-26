@@ -12,8 +12,9 @@ ENABLE_GENERATOR_EXPANSION ?= false
 ENABLE_PUBSUB ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
+LOG_LEVEL ?= "INFO"
 
-VERSION := v3.15.0-beta.0
+VERSION := v3.17.0-beta.0
 
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -22,6 +23,7 @@ KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.8.2
 ORAS_VERSION ?= 0.16.0
 BATS_TESTS_FILE ?= test/bats/test.bats
+KIND_CLUSTER_FILE ?= test/bats/tests/kindcluster.yml
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
 YQ_VERSION ?= 4.30.6
@@ -31,7 +33,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v1.51.2
+GOLANGCI_LINT_VERSION := v1.57.1
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -69,6 +71,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --disable-opa-builtin=http.send\
 \n        - --log-mutations\
 \n        - --mutation-annotations\
+\n        - --vap-enforcement=GATEKEEPER_DEFAULT\
+\n        - --experimental-enable-k8s-native-validation\
 \n---\
 \napiVersion: apps/v1\
 \nkind: Deployment\
@@ -88,7 +92,10 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=status\
 \n        - --operation=mutation-status\
 \n        - --audit-chunk-size=500\
-\n        - --logtostderr"
+\n        - --logtostderr\
+\n        - --vap-enforcement=GATEKEEPER_DEFAULT\
+\n        - --experimental-enable-k8s-native-validation\
+\n"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -159,8 +166,10 @@ KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
 e2e-bootstrap: e2e-dependencies
 	# Check for existing kind cluster
 	if [ $$(${GITHUB_WORKSPACE}/bin/kind get clusters) ]; then ${GITHUB_WORKSPACE}/bin/kind delete cluster; fi
+
 	# Create a new kind cluster
-	TERM=dumb ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m
+	# TODO(ritazh): remove KIND_CLUSTER_FILE when vap feature is GA
+	if [ $$(echo $(KUBERNETES_VERSION) | cut -d'.' -f2) -lt 28 ]; then ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m; else ${GITHUB_WORKSPACE}/bin/kind create cluster --config $(KIND_CLUSTER_FILE) --image $(KIND_NODE_VERSION) --wait 5m; fi
 
 e2e-build-load-image: docker-buildx e2e-build-load-externaldata-image
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
@@ -186,7 +195,6 @@ e2e-helm-install:
 
 e2e-helm-deploy: e2e-helm-install
 ifeq ($(ENABLE_PUBSUB),true)
-	@echo 'auditPodAnnotations: {dapr.io/enabled: "true", dapr.io/app-id: "audit", dapr.io/metrics-port: "9999"}' > .tmp/annotations.yaml
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
@@ -206,7 +214,10 @@ ifeq ($(ENABLE_PUBSUB),true)
 		--set audit.enablePubsub=${ENABLE_PUBSUB} \
 		--set audit.connection=${AUDIT_CONNECTION} \
 		--set audit.channel=${AUDIT_CHANNEL} \
-		--values .tmp/annotations.yaml \
+		--set-string auditPodAnnotations.dapr\\.io/enabled=true \
+		--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
+		--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
+		--set logLevel=${LOG_LEVEL} \
 		--set mutationAnnotations=true;
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
@@ -225,6 +236,9 @@ else
 		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
+		--set logLevel=${LOG_LEVEL} \
+		--set enableK8sNativeValidation=true \
+		--set vapEnforcement=GATEKEEPER_DEFAULT \
 		--set mutationAnnotations=true
 endif
 
@@ -242,6 +256,7 @@ e2e-helm-upgrade-init: e2e-helm-install
 		--set disabledBuiltins={http.send} \
 		--set enableExternalData=true \
 		--set logMutations=true \
+		--set logLevel=${LOG_LEVEL} \
 		--set mutationAnnotations=true;\
 
 e2e-helm-upgrade:
@@ -262,6 +277,9 @@ e2e-helm-upgrade:
 		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
+		--set logLevel=${LOG_LEVEL} \
+		--set enableK8sNativeValidation=true \
+		--set vapEnforcement=GATEKEEPER_DEFAULT \
 		--set mutationAnnotations=true;\
 
 e2e-subscriber-build-load-image:
@@ -318,7 +336,7 @@ manifests: __controller-gen
 		output:crd:artifacts:config=config/crd/bases
 	./build/update-match-schema.sh
 	rm -rf manifest_staging
-	mkdir -p manifest_staging/deploy/experimental
+	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
 	docker run --rm -v $(shell pwd):/gatekeeper \
 		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
@@ -331,10 +349,10 @@ manifests: __controller-gen
 # across systems.
 # Source: https://golangci-lint.run/usage/install/#docker
 lint:
-	docker run --rm -v $(shell pwd):/app \
+	docker run -t --rm -v $(shell pwd):/app \
 		-v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
-		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION}-alpine \
-		golangci-lint run -v
+		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} \
+		golangci-lint run -v --fix
 
 # Generate code
 generate: __conversion-gen __controller-gen
@@ -461,7 +479,6 @@ release-manifest:
 	@sed -i "s/tag: $(VERSION)/tag: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
 	@sed -i 's/Current release version: `$(VERSION)`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
 	@sed -i -e 's/^VERSION := $(VERSION)/VERSION := ${NEWVERSION}/' ./Makefile
-	@sed -i 's/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/master\/deploy\/gatekeeper\.yaml.*/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${NEWVERSION}\/deploy\/gatekeeper\.yaml/' ./website/docs/install.md
 	export
 	$(MAKE) manifests
 
@@ -474,6 +491,11 @@ version-docs:
 		-u $(shell id -u):$(shell id -g) \
 		node:${NODE_VERSION} \
 		sh -c "yarn install --frozen-lockfile && yarn run docusaurus docs:version ${NEWVERSION}"
+	@sed -i 's/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/master\/deploy\/gatekeeper\.yaml.*/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${TAG}\/deploy\/gatekeeper\.yaml/' ./website/versioned_docs/version-${NEWVERSION}/install.md
+
+.PHONY: patch-version-docs
+patch-version-docs:
+	@sed -i 's/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${OLDVERSION}\/deploy\/gatekeeper\.yaml.*/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${TAG}\/deploy\/gatekeeper\.yaml/' ./website/versioned_docs/version-${NEWVERSION}/install.md
 
 promote-staging-manifest:
 	@rm -rf deploy

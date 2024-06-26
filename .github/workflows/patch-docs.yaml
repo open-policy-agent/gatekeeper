@@ -1,0 +1,54 @@
+name: patch_docs
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[1-9]+' # run this workflow when a new patch version is published
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  patch-docs:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        with:
+          egress-policy: audit
+
+      - name: Set release version and target branch for vNext
+        if: github.event_name == 'push'
+        run: |
+          TAG="$(echo "${{ github.ref }}" | tr -d 'refs/tags/v')"
+          MAJOR_VERSION="$(echo "${TAG}" | cut -d '.' -f1)"
+          echo "MAJOR_VERSION=${MAJOR_VERSION}" >> ${GITHUB_ENV}
+          MINOR_VERSION="$(echo "${TAG}" | cut -d '.' -f2)"
+          echo "MINOR_VERSION=${MINOR_VERSION}" >> ${GITHUB_ENV}
+          PATCH_VERSION="$(echo "${TAG}" | cut -d '.' -f3)"
+          echo "PATCH_VERSION=${PATCH_VERSION}" >> ${GITHUB_ENV}
+          echo "TAG=${TAG}" >> ${GITHUB_ENV}
+      
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        with:
+          fetch-depth: 0
+
+      - name: Create release branch if needed # patched docs are always being merged to the master branch
+        run: |
+          git checkout master 
+      
+      - name: Create patch version docs
+        run: make patch-version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x TAG=v${TAG} OLDVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.$((PATCH_VERSION-1))
+      
+      - name: Create release pull request
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0
+        with:
+          commit-message: "chore: Patch docs for ${{ env.TAG }} release"
+          title: "chore: Patch docs for ${{ env.TAG }} release"
+          branch: "patch-docs-${{ env.TAG }}"
+          base: "master"
+          signoff: true
+          labels: |
+            release-pr
+            ${{ github.event.inputs.release_version }}
+      
