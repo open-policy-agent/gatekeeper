@@ -260,6 +260,9 @@ spec:
   parameters:
     assign:
       value: false
+    pathTests:
+    - subPath: "spec.containers[name:foo]"
+      condition: MustExist
 ```
 
 #### Setting imagePullPolicy of all containers to Always in all namespaces except namespace `system`
