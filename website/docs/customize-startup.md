@@ -23,22 +23,25 @@ The `--disable-opa-builtin` flag disables specific [OPA built-ins functions](htt
 
 ## [Alpha] Emit admission and audit events
 
-The `--emit-admission-events` flag enables the emission of all admission violations as Kubernetes events. This flag is in alpha stage and it is set to `false` by default.
+The `--emit-allow-admission-events` flag enables the emission of all allowed admission requests as Kubernetes events. This flag is in alpha stage and it is set to `false` by default.
 
 The `--emit-audit-events` flag enables the emission of all audit violation as Kubernetes events. This flag is in alpha stage and it is set to `false` by default.
+
+The `--emit-deny-admission-events` flag enables the emission of all admission violations as Kubernetes events. This flag is in alpha stage and it is set to `false` by default.
 
 The `--admission-events-involved-namespace` flag controls which namespace admission events will be created in. When set to `true`, admission events will be created in the namespace of the object violating the constraint. If the object has no namespace (ie. cluster scoped resources), they will be created in the namespace Gatekeeper is installed in. Setting to `false` will cause all admission events to be created in the Gatekeeper namespace.
 
 The `--audit-events-involved-namespace` flag controls which namespace audit events will be created in. When set to `true`, audit events will be created in the namespace of the object violating the constraint. If the object has no namespace (ie. cluster scoped resources), they will be created in the namespace Gatekeeper is installed in. Setting to `false` will cause all audit events to be created in the Gatekeeper namespace.
 
-There are four types of events that are emitted by Gatekeeper when the emit event flags are enabled:
+There are five types of events that are emitted by Gatekeeper when the emit event flags are enabled:
 
-| Event              | Description                                                             |
-| ------------------ | ----------------------------------------------------------------------- |
-| `FailedAdmission`  | The Gatekeeper webhook denied the admission request (default behavior). |
-| `WarningAdmission` | When `enforcementAction: warn` is specified in the constraint.          |
-| `DryrunViolation`  | When `enforcementAction: dryrun` is specified in the constraint.        |
-| `AuditViolation`   | A violation is detected during an audit.                                |
+| Flag                        | Event              | Description                                                                     |
+| -------------------------   | ------------------ | ------------------------------------------------------------------------------- |
+| emit-allow-admission-events | `AllowedAdmission` | The Gatekeeper webhook allowed the admission of the request (default behavior). |
+| emit-deny-admission-events  | `FailedAdmission`  | The Gatekeeper webhook denied the admission request (default behavior).         |
+| emit-deny-admission-events  | `WarningAdmission` | When `enforcementAction: warn` is specified in the constraint.                  |
+| emit-deny-admission-events  | `DryrunViolation`  | When `enforcementAction: dryrun` is specified in the constraint.                |
+| emit-audit-events           | `AuditViolation`   | A violation is detected during an audit.                                        |
 
 > ❗ Warning: if the same constraint and violating resource tuple was emitted for [more than 10 times in a 10-minute rolling interval](https://github.com/kubernetes/kubernetes/blob/v1.23.3/staging/src/k8s.io/client-go/tools/record/events_cache.go#L429-L438), the Kubernetes event recorder will aggregate the events, e.g.
 > ```
