@@ -22,7 +22,7 @@ const (
 	ReservedPrefix = "gatekeeper_internal_"
 	// ParamsName is the VAP variable constraint parameters will be bound to.
 	ParamsName = "params"
-	// ObjectName is the VAP variable that describes either an object or (on DELETE requests) oldObject
+	// ObjectName is the VAP variable that describes either an object or (on DELETE requests) oldObject.
 	ObjectName = "anyObject"
 )
 
@@ -61,6 +61,9 @@ type Source struct {
 
 	// Variables maps to ValidatingAdmissionPolicy's `spec.variables`.
 	Variables []Variable `json:"variables,omitempty"`
+
+	// GenerateVAP enables/disables VAP generation and enforcement for policy.
+	GenerateVAP *bool `json:"generateVAP,omitempty"`
 }
 
 func (in *Source) Validate() error {
