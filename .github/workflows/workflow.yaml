@@ -81,7 +81,7 @@ jobs:
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         if: ${{ always() }}
         with:
-          name: logs
+          name: logs-${{ matrix.KUBERNETES_VERSION }}
           path: |
             logs-*.json
 
@@ -150,7 +150,7 @@ jobs:
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         if: ${{ always() }}
         with:
-          name: helm-logs
+          name: helm-logs-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}
           path: |
             logs-*.json
 
