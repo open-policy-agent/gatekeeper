@@ -26,6 +26,7 @@ import (
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
 	mutationv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1"
@@ -36,6 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -158,9 +160,17 @@ func getTestConstraint() *unstructured.Unstructured {
 	return u
 }
 
+func mustInitializeScheme(scheme *runtime.Scheme) *runtime.Scheme {
+	if err := apis.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
+
+	return scheme
+}
+
 // Verify that TryCancelTemplate functions the same as regular CancelTemplate if readinessRetries is set to 0.
 func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
-	lister := fake.NewClientBuilder().WithRuntimeObjects(convertedTemplate.DeepCopyObject()).Build()
+	lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(convertedTemplate.DeepCopyObject()).Build()
 	rt := newTracker(lister, false, false, false, false, nil, func() objData {
 		return objData{retries: 0}
 	})
@@ -200,7 +210,7 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 
 // Verify that TryCancelTemplate must be called enough times to remove all retries before canceling a template.
 func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
-	lister := fake.NewClientBuilder().WithRuntimeObjects(convertedTemplate.DeepCopyObject()).Build()
+	lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(convertedTemplate.DeepCopyObject()).Build()
 	rt := newTracker(lister, false, false, false, false, nil, func() objData {
 		return objData{retries: 2}
 	})
@@ -251,7 +261,7 @@ func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 }
 
 func Test_Tracker_TryCancelData(t *testing.T) {
-	lister := fake.NewClientBuilder().WithRuntimeObjects(
+	lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(
 		&testSyncSet, fakes.UnstructuredFor(podGVK, "", "pod1-name"),
 	).Build()
 	tcs := []struct {
@@ -337,7 +347,7 @@ func Test_ReadyTracker_TrackAssignMetadata(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(&testAssignMetadata).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(&testAssignMetadata).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, true, false, false, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -406,7 +416,7 @@ func Test_ReadyTracker_TrackAssign(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(&testAssign).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(&testAssign).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, true, false, false, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -475,7 +485,7 @@ func Test_ReadyTracker_TrackModifySet(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(&testModifySet).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(&testModifySet).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, true, false, false, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -545,7 +555,7 @@ func Test_ReadyTracker_TrackAssignImage(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(&testAssignImage).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(&testAssignImage).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, true, false, false, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -614,7 +624,7 @@ func Test_ReadyTracker_TrackExternalDataProvider(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(&testExternalDataProvider).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(&testExternalDataProvider).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, false, true, false, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -683,7 +693,7 @@ func Test_ReadyTracker_TrackExpansionTemplates(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(&testExpansionTemplate).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(&testExpansionTemplate).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, false, false, true, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -752,7 +762,7 @@ func Test_ReadyTracker_TrackConstraintTemplates(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(convertedTemplate.DeepCopyObject()).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(convertedTemplate.DeepCopyObject()).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, false, false, false, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -855,7 +865,7 @@ func Test_ReadyTracker_TrackConfigAndSyncSets(t *testing.T) {
 
 				return client.List(ctx, list, opts...)
 			}
-			lister := fake.NewClientBuilder().WithRuntimeObjects(&testSyncSet, &testConfig).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(&testSyncSet, &testConfig).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, false, false, false, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -943,7 +953,7 @@ func Test_ReadyTracker_TrackConstraint(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(getTestConstraint()).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(getTestConstraint()).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, false, false, false, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -1019,7 +1029,7 @@ func Test_ReadyTracker_TrackData(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(fakes.UnstructuredFor(podGVK, "", "pod1-name")).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(fakes.UnstructuredFor(podGVK, "", "pod1-name")).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, false, false, false, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -1094,7 +1104,7 @@ func Test_ReadyTracker_Run_GRP_Wait(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(&testExpansionTemplate, convertedTemplate.DeepCopyObject(), getTestConstraint(), &testSyncSet, fakes.UnstructuredFor(podGVK, "", "pod1-name")).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(&testExpansionTemplate, convertedTemplate.DeepCopyObject(), getTestConstraint(), &testSyncSet, fakes.UnstructuredFor(podGVK, "", "pod1-name")).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, false, false, true, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -1138,7 +1148,8 @@ func Test_ReadyTracker_Run_ConstraintTrackers_Wait(t *testing.T) {
 			var m sync.Mutex
 			funcs := &interceptor.Funcs{}
 			funcs.List = func(ctx context.Context, client client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
-				if v, ok := list.(*unstructured.UnstructuredList); ok && v.GroupVersionKind().Kind == "test-constraint" {
+				if v, ok := list.(*unstructured.UnstructuredList); ok && v.GroupVersionKind().Group == "constraints.gatekeeper.sh" {
+					t.Log(v.GroupVersionKind())
 					return fmt.Errorf("Force Test constraint list Failure")
 				}
 				m.Lock()
@@ -1146,7 +1157,7 @@ func Test_ReadyTracker_Run_ConstraintTrackers_Wait(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(&testExpansionTemplate, convertedTemplate.DeepCopyObject(), getTestConstraint(), &testSyncSet, fakes.UnstructuredFor(podGVK, "", "pod1-name")).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(&testExpansionTemplate, convertedTemplate.DeepCopyObject(), getTestConstraint(), &testSyncSet, fakes.UnstructuredFor(podGVK, "", "pod1-name")).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, false, false, true, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
@@ -1157,6 +1168,7 @@ func Test_ReadyTracker_Run_ConstraintTrackers_Wait(t *testing.T) {
 			cancel()
 			expectError := tc.failClose
 			gotError := (err != nil)
+			t.Logf("WOWZA: %v", err)
 			if gotError != expectError || gotError && !strings.Contains(err.Error(), tc.errMessage) {
 				t.Fatalf("Run should have returned an error with %v, but got %v", tc.errMessage, err)
 			}
@@ -1198,7 +1210,7 @@ func Test_ReadyTracker_Run_DataTrackers_Wait(t *testing.T) {
 				return client.List(ctx, list, opts...)
 			}
 
-			lister := fake.NewClientBuilder().WithRuntimeObjects(&testExpansionTemplate, convertedTemplate.DeepCopyObject(), getTestConstraint(), &testSyncSet, fakes.UnstructuredFor(podGVK, "", "pod1-name")).WithInterceptorFuncs(*funcs).Build()
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(&testExpansionTemplate, convertedTemplate.DeepCopyObject(), getTestConstraint(), &testSyncSet, fakes.UnstructuredFor(podGVK, "", "pod1-name")).WithInterceptorFuncs(*funcs).Build()
 			rt := newTracker(lister, false, false, true, tc.failClose, retryNone, func() objData {
 				return objData{retries: 0}
 			})
