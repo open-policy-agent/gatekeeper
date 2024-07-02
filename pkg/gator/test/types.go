@@ -1,8 +1,6 @@
 package test
 
 import (
-	"sort"
-
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -65,12 +63,12 @@ func (r *GatorResponses) Results() []*GatorResult {
 	// After we shard Rego compilation environments, we will be able to tie
 	// responses to individual constraints. This is a stopgap to make tests easier
 	// to write until then.
-	sort.Slice(res, func(i, j int) bool {
-		if res[i].EnforcementAction != res[j].EnforcementAction {
-			return res[i].EnforcementAction < res[j].EnforcementAction
-		}
-		return res[i].Msg < res[j].Msg
-	})
+	// sort.Slice(res, func(i, j int) bool {
+	// 	if res[i].EnforcementAction != res[j].EnforcementAction {
+	// 		return res[i].EnforcementAction < res[j].EnforcementAction
+	// 	}
+	// 	return res[i].Msg < res[j].Msg
+	// })
 
 	return res
 }

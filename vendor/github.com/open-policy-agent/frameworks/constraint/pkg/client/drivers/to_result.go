@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/opa/rego"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -74,20 +73,10 @@ func ToResult(constraints map[ConstraintKey]*unstructured.Unstructured, r rego.R
 		Kind: keyMap["kind"],
 		Name: keyMap["name"],
 	}
-
 	constraint := constraints[key]
+
 	// DeepCopy the result so we don't leak internal state.
 	result.Constraint = constraint.DeepCopy()
-
-	enforcementAction, found, err := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		enforcementAction = apiconstraints.EnforcementActionDeny
-	}
-
-	result.EnforcementAction = enforcementAction
 
 	return result, nil
 }

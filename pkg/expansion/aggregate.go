@@ -51,7 +51,7 @@ func OverrideEnforcementAction(action string, resps *types.Responses) {
 
 	for _, resp := range resps.ByTarget {
 		for _, res := range resp.Results {
-			res.EnforcementAction = action
+			res.EnforcementAction = []string{action}
 		}
 	}
 }

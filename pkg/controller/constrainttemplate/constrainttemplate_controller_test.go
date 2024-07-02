@@ -28,9 +28,9 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -52,6 +52,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
@@ -94,7 +95,7 @@ violation[{"msg": "denied!"}] {
 	}
 }
 
-func makeReconcileConstraintTemplateForVap(suffix string, labels map[string]string) *v1beta1.ConstraintTemplate {
+func makeReconcileConstraintTemplateForVap(suffix string, generateVAP *bool) *v1beta1.ConstraintTemplate {
 	source := &celSchema.Source{
 		// FailurePolicy: ptr.To[string]("Fail"),
 		// TODO(ritazh): enable fail when VAP reduces 30s discovery of CRDs
@@ -118,6 +119,7 @@ func makeReconcileConstraintTemplateForVap(suffix string, labels map[string]stri
 				MessageExpression: `"some CEL string"`,
 			},
 		},
+		GenerateVAP: generateVAP,
 	}
 	return &v1beta1.ConstraintTemplate{
 		TypeMeta: metav1.TypeMeta{
@@ -125,8 +127,7 @@ func makeReconcileConstraintTemplateForVap(suffix string, labels map[string]stri
 			APIVersion: templatesv1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   denyall + strings.ToLower(suffix),
-			Labels: labels,
+			Name: denyall + strings.ToLower(suffix),
 		},
 		Spec: v1beta1.ConstraintTemplateSpec{
 			CRD: v1beta1.CRD{
@@ -189,12 +190,12 @@ func TestReconcile(t *testing.T) {
 		t.Fatalf("unable to set up Driver: %v", err)
 	}
 	// initialize K8sValidation
-	k8sDriver, err := k8scel.New()
+	k8sDriver, err := k8scel.New(k8scel.VAPGenerationDefault(false))
 	if err != nil {
 		t.Fatalf("unable to set up K8s native driver: %v", err)
 	}
 
-	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.Driver(k8sDriver))
+	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.Driver(k8sDriver), constraintclient.EnforcementPoints(util.AuditEnforcementPoint))
 	if err != nil {
 		t.Fatalf("unable to set up constraint framework client: %s", err)
 	}
@@ -263,10 +264,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreated"
 
 		logger.Info("Running test: Vap should be created")
-		labels := map[string]string{
-			constraint.VapGenerationLabel: constraint.Yes,
-		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, labels)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -290,10 +288,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldNotBeCreated"
 
 		logger.Info("Running test: Vap should not be created")
-		labels := map[string]string{
-			constraint.VapGenerationLabel: constraint.No,
-		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, labels)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -316,12 +311,11 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("Vap should not be created without label", func(t *testing.T) {
-		suffix := "VapShouldNotBeCreatedWithoutLabel"
+	t.Run("Vap should not be created without GenerateVAP: true", func(t *testing.T) {
+		suffix := "VapShouldNotBeCreatedWithoutGenerateVAP"
 
-		logger.Info("Running test: Vap should not be created without label")
-		labels := map[string]string{}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, labels)
+		logger.Info("Running test: Vap should not be created without generateVAP")
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -347,11 +341,8 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapBindingShouldBeCreated"
 
 		logger.Info("Running test: VapBinding should be created")
-		labels := map[string]string{
-			constraint.VapGenerationLabel: constraint.Yes,
-		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, labels)
-		cstr := newDenyAllCstrWithLabel(suffix, labels)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		cstr := newDenyAllCstrWithLabel(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -383,14 +374,8 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreated"
 
 		logger.Info("Running test: VapBinding should not be created")
-		labels := map[string]string{
-			constraint.VapGenerationLabel: constraint.Yes,
-		}
-		constraintLabels := map[string]string{
-			constraint.VapGenerationLabel: constraint.No,
-		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, labels)
-		cstr := newDenyAllCstrWithLabel(suffix, constraintLabels)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
+		cstr := newDenyAllCstrWithLabel(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -461,7 +446,7 @@ func TestReconcile(t *testing.T) {
 			Name:      "FooNamespace",
 			Object:    runtime.RawExtension{Object: ns},
 		}
-		resp, err := cfClient.Review(ctx, req)
+		resp, err := cfClient.Review(ctx, req, reviews.SourceEP(util.AuditEnforcementPoint))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -655,7 +640,7 @@ func TestReconcile(t *testing.T) {
 			Name:      "FooNamespace",
 			Object:    runtime.RawExtension{Object: ns},
 		}
-		resp, err := cfClient.Review(ctx, req)
+		resp, err := cfClient.Review(ctx, req, reviews.SourceEP(util.AuditEnforcementPoint))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -676,7 +661,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-			resp, err := cfClient.Review(ctx, req)
+			resp, err := cfClient.Review(ctx, req, reviews.SourceEP(util.AuditEnforcementPoint))
 			if err != nil {
 				return err
 			}
@@ -883,7 +868,7 @@ func newDenyAllCstr(suffix string) *unstructured.Unstructured {
 	return cstr
 }
 
-func newDenyAllCstrWithLabel(suffix string, labels map[string]string) *unstructured.Unstructured {
+func newDenyAllCstrWithLabel(suffix string) *unstructured.Unstructured {
 	cstr := &unstructured.Unstructured{}
 	cstr.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
@@ -891,7 +876,6 @@ func newDenyAllCstrWithLabel(suffix string, labels map[string]string) *unstructu
 		Kind:    DenyAll + suffix,
 	})
 	cstr.SetName(denyall + strings.ToLower(suffix))
-	cstr.SetLabels(labels)
 	return cstr
 }
 

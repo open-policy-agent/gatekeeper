@@ -121,7 +121,6 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
 func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
-	constraint.VapEnforcement.SetDefaultIfEmpty()
 	// constraintsCache contains total number of constraints and shared mutex and vap label
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -380,27 +379,11 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	generateVap := false
-	labels := ct.GetLabels()
-	logger.Info("constraint template resource", "labels", labels)
-	useVap, ok := labels[constraint.VapGenerationLabel]
-	if !ok {
-		logger.Info("constraint template resource does not have a label for use-vap; will default to flag behavior", "VapEnforcement", constraint.VapEnforcement)
-		generateVap = constraint.ShouldGenerateVap("")
-	} else {
-		logger.Info("constraint template resource", "useVap", useVap)
-		generateVap = constraint.ShouldGenerateVap(useVap)
-		if useVap != constraint.No && useVap != constraint.Yes {
-			labelErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: fmt.Sprintf("constraint template resource has an invalid value for %s, allowed values are yes and no", constraint.VapGenerationLabel)}
-			status.Status.Errors = append(status.Status.Errors, labelErr)
-
-			if updateErr := r.Update(ctx, status); updateErr != nil {
-				logger.Error(updateErr, "update status error")
-				return reconcile.Result{Requeue: true}, nil
-			}
-		}
-	}
+	generateVap, err := transform.AssumeVAPEnforcement(unversionedCT, constraint.ShouldGenerateVap())
 	logger.Info("generateVap", "r.generateVap", generateVap)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
 	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status, generateVap)
 	if err != nil {

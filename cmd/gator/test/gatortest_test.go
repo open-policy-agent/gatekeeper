@@ -59,7 +59,7 @@ func Test_formatOutput(t *testing.T) {
     constraint:
         object:
             kind: kind
-    enforcementaction: ""
+    enforcementaction: []
   violatingObject:
     bar: xyz
   trace: xyz

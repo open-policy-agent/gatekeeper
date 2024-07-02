@@ -8,18 +8,16 @@ import (
 	"sync"
 	"time"
 
-	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	pSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/opa/storage"
 	admissionv1 "k8s.io/api/admission/v1"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
 	"k8s.io/apiserver/pkg/admission/plugin/validatingadmissionpolicy"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
@@ -54,7 +52,7 @@ var _ drivers.Driver = &Driver{}
 type Driver struct {
 	mux                sync.RWMutex
 	validators         map[string]*validatorWrapper
-	generateVAPDefault *vapDefault
+	generateVAPDefault bool
 	gatherStats        bool
 }
 
@@ -122,7 +120,10 @@ func (d *Driver) AddTemplate(_ context.Context, ct *templates.ConstraintTemplate
 		failurePolicy,
 	)
 
-	assumeVAPEnforcement := d.assumeVAPEnforcement(ct)
+	assumeVAPEnforcement, err := transform.AssumeVAPEnforcement(ct, d.generateVAPDefault)
+	if err != nil {
+		return err
+	}
 
 	d.mux.Lock()
 	defer d.mux.Unlock()
@@ -156,8 +157,8 @@ func (d *Driver) RemoveData(_ context.Context, _ string, _ storage.Path) error {
 	return nil
 }
 
-func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...drivers.QueryOpt) (*drivers.QueryResponse, error) {
-	cfg := &drivers.QueryCfg{}
+func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...reviews.ReviewOpt) (*drivers.QueryResponse, error) {
+	cfg := &reviews.ReviewCfg{}
 	for _, opt := range opts {
 		opt(cfg)
 	}
@@ -193,11 +194,9 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 			return nil, fmt.Errorf("unknown constraint template validator: %s", constraint.GetKind())
 		}
 
-		assumeVAPEnforcementNotDisabled := assumeVAPEnforcementWithDefault(constraint, VAPDefaultYes)
-
-		// if we assume VAP enforcement for a given constraint/template combo, Gatekeeper
+		// if we assume VAP enforcement for a given template, Gatekeeper
 		// should not be evaluating that constraint/template in an admission context.
-		if isAdmission && assumeVAPEnforcementNotDisabled && wrappedValidator.assumeVAPEnforcement {
+		if isAdmission && wrappedValidator.assumeVAPEnforcement {
 			continue
 		}
 
@@ -211,20 +210,12 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		// TODO: should namespace be made available, if possible? Generally that context should be present
 		response := validator.Validate(ctx, versionedAttr.GetResource(), versionedAttr, constraint, nil, celAPI.PerCallLimit, nil)
 
-		enforcementAction, found, err := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
-		if err != nil {
-			return nil, err
-		}
-		if !found {
-			enforcementAction = apiconstraints.EnforcementActionDeny
-		}
 		for _, decision := range response.Decisions {
 			if decision.Action == validatingadmissionpolicy.ActionDeny {
 				results = append(results, &types.Result{
-					Target:            target,
-					Msg:               decision.Message,
-					Constraint:        constraint,
-					EnforcementAction: enforcementAction,
+					Target:     target,
+					Msg:        decision.Message,
+					Constraint: constraint,
 				})
 			}
 		}
@@ -260,38 +251,6 @@ func (d *Driver) GetDescriptionForStat(statName string) (string, error) {
 		return runTimeNSDescription, nil
 	default:
 		return "", fmt.Errorf("unknown stat name for K8sNativeValidation: %s", statName)
-	}
-}
-
-func (d *Driver) assumeVAPEnforcement(obj runtime.Object) bool {
-	if d.generateVAPDefault == nil {
-		return false
-	}
-
-	return assumeVAPEnforcementWithDefault(obj, *d.generateVAPDefault)
-}
-
-func assumeVAPEnforcementWithDefault(obj runtime.Object, vapDef vapDefault) bool {
-	meta, err := apimeta.Accessor(obj)
-	if err != nil {
-		return false
-	}
-	labels := meta.GetLabels()
-	if labels == nil {
-		labels = map[string]string{}
-	}
-	shouldGen, ok := labels[VAPGenerationLabel]
-	if !ok {
-		shouldGen = string(vapDef)
-	}
-	switch vapDefault(shouldGen) {
-	case VAPDefaultYes:
-		return true
-	case VAPDefaultNo:
-		return false
-	// on unrecognized value, use the default
-	default:
-		return vapDef == VAPDefaultYes
 	}
 }
 

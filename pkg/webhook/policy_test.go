@@ -19,6 +19,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclients "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/stretchr/testify/require"
@@ -204,7 +205,7 @@ func makeOpaClient() (*constraintclient.Client, error) {
 		return nil, err
 	}
 
-	c, err := constraintclient.NewClient(constraintclient.Targets(t), constraintclient.Driver(driver))
+	c, err := constraintclient.NewClient(constraintclient.Targets(t), constraintclient.Driver(driver), constraintclient.EnforcementPoints(util.WebhookEnforcementPoint))
 	if err != nil {
 		return nil, err
 	}
@@ -708,22 +709,22 @@ func TestGetValidationMessages(t *testing.T) {
 	resDryRun := &rtypes.Result{
 		Msg:               "test",
 		Constraint:        newConstraint("Foo", "ph", "dryrun", t),
-		EnforcementAction: "dryrun",
+		EnforcementAction: []string{"dryrun"},
 	}
 	resDeny := &rtypes.Result{
 		Msg:               "test",
 		Constraint:        newConstraint("Foo", "ph", "deny", t),
-		EnforcementAction: "deny",
+		EnforcementAction: []string{"deny"},
 	}
 	resWarn := &rtypes.Result{
 		Msg:               "test",
 		Constraint:        newConstraint("Foo", "ph", "warn", t),
-		EnforcementAction: "warn",
+		EnforcementAction: []string{"warn"},
 	}
 	resRandom := &rtypes.Result{
 		Msg:               "test",
 		Constraint:        newConstraint("Foo", "ph", "random", t),
-		EnforcementAction: "random",
+		EnforcementAction: []string{"random"},
 	}
 
 	tc := []struct {

@@ -95,10 +95,28 @@ func (e *templateClient) Update(templ *templates.ConstraintTemplate, crd *apiext
 // Returns true and no error if the Constraint was changed successfully.
 // Returns false and no error if the Constraint was not updated due to being
 // identical to the stored version.
-func (e *templateClient) AddConstraint(constraint *unstructured.Unstructured) (bool, error) {
+func (e *templateClient) AddConstraint(constraint *unstructured.Unstructured, enforcementPoints []string) (bool, error) {
+	enforcementActionsForEP := make(map[string][]string)
 	enforcementAction, err := apiconstraints.GetEnforcementAction(constraint)
 	if err != nil {
 		return false, err
+	}
+
+	if apiconstraints.IsEnforcementActionScoped(enforcementAction) {
+		enforcementActionsForEPMap, err := apiconstraints.GetEnforcementActionsForEP(constraint, enforcementPoints)
+		if err != nil {
+			return false, err
+		}
+		for ep, actions := range enforcementActionsForEPMap {
+			enforcementActionsForEP[ep] = make([]string, 0, len(actions))
+			for action := range actions {
+				enforcementActionsForEP[ep] = append(enforcementActionsForEP[ep], action)
+			}
+		}
+	} else {
+		for _, ep := range enforcementPoints {
+			enforcementActionsForEP[ep] = append(enforcementActionsForEP[ep], enforcementAction)
+		}
 	}
 
 	// Compare with the already-existing Constraint.
@@ -117,9 +135,9 @@ func (e *templateClient) AddConstraint(constraint *unstructured.Unstructured) (b
 	delete(cpy.Object, statusField)
 
 	e.constraints[constraint.GetName()] = &constraintClient{
-		constraint:        cpy,
-		matchers:          matchers,
-		enforcementAction: enforcementAction,
+		constraint:              cpy,
+		matchers:                matchers,
+		enforcementActionsForEP: enforcementActionsForEP,
 	}
 
 	return true, nil
@@ -144,11 +162,11 @@ func (e *templateClient) RemoveConstraint(name string) {
 // against the passed review.
 //
 // ignoredTargets specifies the targets whose matchers to not run.
-func (e *templateClient) Matches(target string, review interface{}) map[string]constraintMatchResult {
+func (e *templateClient) Matches(target string, review interface{}, sourceEPs []string) map[string]constraintMatchResult {
 	result := make(map[string]constraintMatchResult)
 
 	for name, constraint := range e.constraints {
-		cResult := constraint.matches(target, review)
+		cResult := constraint.matches(target, review, sourceEPs...)
 		if cResult != nil {
 			result[name] = *cResult
 		}
