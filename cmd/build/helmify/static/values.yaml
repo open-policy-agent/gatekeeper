@@ -38,8 +38,9 @@ auditChunkSize: 500
 logLevel: INFO
 logDenies: false
 logMutations: false
-emitAdmissionEvents: false
+emitAllowAdmissionEvents: false
 emitAuditEvents: false
+emitDenyAdmissionEvents: false
 admissionEventsInvolvedNamespace: false
 auditEventsInvolvedNamespace: false
 resourceQuota: true

@@ -78,7 +78,8 @@ spec:
             - --prometheus-port=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_METRICS_PORT
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
-            - --emit-admission-events={{ .Values.emitAdmissionEvents }}
+            - --emit-allow-admission-events={{ .Values.emitAllowAdmissionEvents }}
+            - --emit-deny-admission-events={{ .Values.emitDenyAdmissionEvents }}
             - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
             - --exempt-namespace={{ .Release.Namespace }}

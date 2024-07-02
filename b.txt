@@ -1,0 +1,581 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T10:42:41Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deadf1d5e8f7ef",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deadf1d5e8f7ef/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T10:42:41Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deadf1d5e8f7ef\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T10:42:41Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"23395\", \"uid\": \"d774f731-2ed8-498a-ba48-34ebdffaac65\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T10:42:41Z\", \"message\": \"Stopping container privileged-container\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T10:42:41Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T10:42:41Z\"}], \"name\": \"not-privileged-pod3.17deadf1d5e8f7ef\", \"namespace\": \"default\", \"uid\": \"2a0cbc2f-56ee-47aa-8d1c-84d7f51375b3\"}, \"reason\": \"Killing\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"8fce9ae5-5e0c-4413-a918-100769624c34\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deadf1d5e8f7ef",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T10:42:41Z",
+                "name": "not-privileged-pod3.17deadf1d5e8f7ef.17deadf1d61ce17c",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "23494",
+                "uid": "81e63231-5e04-456c-9308-7efae244ef71"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T10:44:23Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deae0984465ec6",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deae0984465ec6/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T10:44:23Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deae0984465ec6\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T10:44:23Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"23633\", \"uid\": \"4a6ecb3c-d3b6-45f1-99b7-37337c10e294\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T10:44:23Z\", \"message\": \"Successfully assigned default/not-privileged-pod3 to dortest-rep-control-plane\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T10:44:23Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:source\": {\"f:component\": {}}, \"f:type\": {}}, \"manager\": \"kube-scheduler\", \"operation\": \"Update\", \"time\": \"2024-07-03T10:44:23Z\"}], \"name\": \"not-privileged-pod3.17deae0984465ec6\", \"namespace\": \"default\", \"uid\": \"c2faecc0-559f-411e-aac1-9b40ba0d9ce0\"}, \"reason\": \"Scheduled\", \"reportingComponent\": \"default-scheduler\", \"reportingInstance\": \"\", \"source\": {\"component\": \"default-scheduler\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"21665364-d12b-43da-bee2-64733588a80c\", \"userInfo\": {\"groups\": [\"system:authenticated\"], \"username\": \"system:kube-scheduler\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:kube-scheduler",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deae0984465ec6",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T10:44:23Z",
+                "name": "not-privileged-pod3.17deae0984465ec6.17deae0984702096",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "23638",
+                "uid": "a3b05b2e-f1f6-43f0-8c27-b9abc5b45571"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T10:44:24Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deae099dfa34cf",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deae099dfa34cf/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T10:44:24Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deae099dfa34cf\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T10:44:24Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"23634\", \"uid\": \"4a6ecb3c-d3b6-45f1-99b7-37337c10e294\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T10:44:24Z\", \"message\": \"Pulling image \\\"busybox\\\"\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T10:44:24Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T10:44:24Z\"}], \"name\": \"not-privileged-pod3.17deae099dfa34cf\", \"namespace\": \"default\", \"uid\": \"3f3930a8-0b9f-4ba6-94e7-fb2e55f648c5\"}, \"reason\": \"Pulling\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"591798e4-1148-47ea-8b80-f1d3149696a3\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deae099dfa34cf",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T10:44:24Z",
+                "name": "not-privileged-pod3.17deae099dfa34cf.17deae099e264b7b",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "23639",
+                "uid": "d23b4281-cd4a-42f7-aa79-e1a9d359afd4"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T10:44:25Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deae09ebc3acf4",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deae09ebc3acf4/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T10:44:25Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deae09ebc3acf4\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T10:44:25Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"23634\", \"uid\": \"4a6ecb3c-d3b6-45f1-99b7-37337c10e294\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T10:44:25Z\", \"message\": \"Successfully pulled image \\\"busybox\\\" in 1.305s (1.305s including waiting). Image size: 2160406 bytes.\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T10:44:25Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T10:44:25Z\"}], \"name\": \"not-privileged-pod3.17deae09ebc3acf4\", \"namespace\": \"default\", \"uid\": \"1bac2dd5-81d0-42e5-811a-4656bcda309a\"}, \"reason\": \"Pulled\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"d99a377e-56d8-4ecc-87e3-e9abf5fa6de9\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deae09ebc3acf4",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T10:44:25Z",
+                "name": "not-privileged-pod3.17deae09ebc3acf4.17deae09ebf0ed9f",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "23641",
+                "uid": "b61e5f76-2ba2-4b27-b426-84fbab5835c3"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T10:44:25Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deae09eec250ae",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deae09eec250ae/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T10:44:25Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deae09eec250ae\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T10:44:25Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"23634\", \"uid\": \"4a6ecb3c-d3b6-45f1-99b7-37337c10e294\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T10:44:25Z\", \"message\": \"Created container privileged-container\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T10:44:25Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T10:44:25Z\"}], \"name\": \"not-privileged-pod3.17deae09eec250ae\", \"namespace\": \"default\", \"uid\": \"7d70353d-c662-4599-9590-cc1289cb855d\"}, \"reason\": \"Created\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"c4854bac-fe3e-4150-966f-edc5589c5337\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deae09eec250ae",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T10:44:25Z",
+                "name": "not-privileged-pod3.17deae09eec250ae.17deae09ef0093ca",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "23643",
+                "uid": "32e01af8-baa5-47cc-b46b-63c90f803f41"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T10:44:25Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deae09f2d161dd",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deae09f2d161dd/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T10:44:25Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deae09f2d161dd\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T10:44:25Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"23634\", \"uid\": \"4a6ecb3c-d3b6-45f1-99b7-37337c10e294\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T10:44:25Z\", \"message\": \"Started container privileged-container\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T10:44:25Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T10:44:25Z\"}], \"name\": \"not-privileged-pod3.17deae09f2d161dd\", \"namespace\": \"default\", \"uid\": \"e1f116c5-c05d-4b62-b49b-d2e28aef0fe4\"}, \"reason\": \"Started\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"2812366c-d1d3-4cc8-bedb-1be26e31ebd8\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deae09f2d161dd",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T10:44:25Z",
+                "name": "not-privileged-pod3.17deae09f2d161dd.17deae09f2fbd979",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "23644",
+                "uid": "87459391-edb5-473e-8170-e73183b5b2fd"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T11:15:16Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deafb8db124a8d",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deafb8db124a8d/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T11:15:16Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deafb8db124a8d\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T11:15:16Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"23634\", \"uid\": \"4a6ecb3c-d3b6-45f1-99b7-37337c10e294\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T11:15:16Z\", \"message\": \"Stopping container privileged-container\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T11:15:16Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T11:15:16Z\"}], \"name\": \"not-privileged-pod3.17deafb8db124a8d\", \"namespace\": \"default\", \"uid\": \"6d56db53-2f01-4709-a85b-7c2227d37ebf\"}, \"reason\": \"Killing\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"bbcc6e7b-eae0-4ac6-a1a8-498b16b018ba\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deafb8db124a8d",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T11:15:16Z",
+                "name": "not-privileged-pod3.17deafb8db124a8d.17deafb8db7221a0",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "26167",
+                "uid": "98049040-4fb3-4013-a18e-2ecbecb36946"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T11:15:47Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deafc0132bafc2",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deafc0132bafc2/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T11:15:47Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deafc0132bafc2\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T11:15:47Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"26217\", \"uid\": \"634b9963-2a4d-48d6-bbee-d9cfecb7f791\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T11:15:47Z\", \"message\": \"Successfully assigned default/not-privileged-pod3 to dortest-rep-control-plane\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T11:15:47Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:source\": {\"f:component\": {}}, \"f:type\": {}}, \"manager\": \"kube-scheduler\", \"operation\": \"Update\", \"time\": \"2024-07-03T11:15:47Z\"}], \"name\": \"not-privileged-pod3.17deafc0132bafc2\", \"namespace\": \"default\", \"uid\": \"a70af4c8-7e3a-400c-9b86-beb4e9e53d1f\"}, \"reason\": \"Scheduled\", \"reportingComponent\": \"default-scheduler\", \"reportingInstance\": \"\", \"source\": {\"component\": \"default-scheduler\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"211a3af5-1474-4cbe-929a-b9ddf88c6a39\", \"userInfo\": {\"groups\": [\"system:authenticated\"], \"username\": \"system:kube-scheduler\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:kube-scheduler",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deafc0132bafc2",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T11:15:47Z",
+                "name": "not-privileged-pod3.17deafc0132bafc2.17deafc01358084b",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "26221",
+                "uid": "26f66f63-8608-49cc-a93d-555d0f63cdb3"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T11:15:47Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deafc02beb4387",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deafc02beb4387/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T11:15:47Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deafc02beb4387\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T11:15:47Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"26219\", \"uid\": \"634b9963-2a4d-48d6-bbee-d9cfecb7f791\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T11:15:47Z\", \"message\": \"Pulling image \\\"busybox\\\"\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T11:15:47Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T11:15:47Z\"}], \"name\": \"not-privileged-pod3.17deafc02beb4387\", \"namespace\": \"default\", \"uid\": \"aefeebbf-ffa0-460e-95fc-84568465bdb9\"}, \"reason\": \"Pulling\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"782b8847-2de0-400b-87ea-3e3c6d175e3e\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deafc02beb4387",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T11:15:47Z",
+                "name": "not-privileged-pod3.17deafc02beb4387.17deafc02c165663",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "26223",
+                "uid": "4922e3f2-1bda-4563-8ed5-a24740220f94"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T11:15:48Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deafc07742a36b",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deafc07742a36b/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T11:15:48Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deafc07742a36b\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T11:15:48Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"26219\", \"uid\": \"634b9963-2a4d-48d6-bbee-d9cfecb7f791\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T11:15:48Z\", \"message\": \"Successfully pulled image \\\"busybox\\\" in 1.263s (1.263s including waiting). Image size: 2160406 bytes.\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T11:15:48Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T11:15:48Z\"}], \"name\": \"not-privileged-pod3.17deafc07742a36b\", \"namespace\": \"default\", \"uid\": \"c1a89fa9-dc60-43e9-822e-dadea4ea642f\"}, \"reason\": \"Pulled\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"6a6cbbb0-849c-4ffc-9151-92d136c2867c\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deafc07742a36b",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T11:15:48Z",
+                "name": "not-privileged-pod3.17deafc07742a36b.17deafc0776dda9f",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "26225",
+                "uid": "7ac79cc6-a441-4a23-8ae1-f114beabb7d7"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T11:15:48Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deafc079d8c1c2",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deafc079d8c1c2/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T11:15:48Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deafc079d8c1c2\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T11:15:48Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"26219\", \"uid\": \"634b9963-2a4d-48d6-bbee-d9cfecb7f791\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T11:15:48Z\", \"message\": \"Created container privileged-container\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T11:15:48Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T11:15:48Z\"}], \"name\": \"not-privileged-pod3.17deafc079d8c1c2\", \"namespace\": \"default\", \"uid\": \"27557439-4b86-46a1-9f55-7cc2f8d35a8b\"}, \"reason\": \"Created\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"9a4890b0-20c7-49c0-a84f-8aeb799de071\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deafc079d8c1c2",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T11:15:48Z",
+                "name": "not-privileged-pod3.17deafc079d8c1c2.17deafc07a0df82f",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "26226",
+                "uid": "bd1cbf9e-cc68-4286-b8fe-2dbe40670582"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T11:15:48Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deafc07db81a98",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deafc07db81a98/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T11:15:48Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deafc07db81a98\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T11:15:48Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"26219\", \"uid\": \"634b9963-2a4d-48d6-bbee-d9cfecb7f791\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T11:15:48Z\", \"message\": \"Started container privileged-container\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T11:15:48Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T11:15:48Z\"}], \"name\": \"not-privileged-pod3.17deafc07db81a98\", \"namespace\": \"default\", \"uid\": \"1f7d254e-6c6f-41f6-ae29-48daf786a1c8\"}, \"reason\": \"Started\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"114b953b-3128-4328-a443-dab6631e53d7\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deafc07db81a98",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T11:15:48Z",
+                "name": "not-privileged-pod3.17deafc07db81a98.17deafc07de20a18",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "26227",
+                "uid": "1ae96e15-a90e-4a86-9cda-b09e09a50fba"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2024-07-03T11:16:06Z",
+            "involvedObject": {
+                "kind": "Event",
+                "name": "not-privileged-pod3.17deafc4a739471c",
+                "namespace": "gatekeeper-system",
+                "uid": "Event/default/not-privileged-pod3.17deafc4a739471c/DenyGatekeeperEvents/deny-gatekeeper-webhook-events/"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2024-07-03T11:16:06Z",
+            "message": "Admission webhook \"validation.gatekeeper.sh\" denied request, Resource Namespace: default, Constraint: deny-gatekeeper-webhook-events, Message: Denied event created by gatekeeper-webhook: {\"dryRun\": false, \"kind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"name\": \"not-privileged-pod3.17deafc4a739471c\", \"namespace\": \"default\", \"object\": {\"apiVersion\": \"v1\", \"count\": 1, \"eventTime\": null, \"firstTimestamp\": \"2024-07-03T11:16:06Z\", \"involvedObject\": {\"apiVersion\": \"v1\", \"fieldPath\": \"spec.containers{privileged-container}\", \"kind\": \"Pod\", \"name\": \"not-privileged-pod3\", \"namespace\": \"default\", \"resourceVersion\": \"26219\", \"uid\": \"634b9963-2a4d-48d6-bbee-d9cfecb7f791\"}, \"kind\": \"Event\", \"lastTimestamp\": \"2024-07-03T11:16:06Z\", \"message\": \"Stopping container privileged-container\", \"metadata\": {\"creationTimestamp\": \"2024-07-03T11:16:06Z\", \"managedFields\": [{\"apiVersion\": \"v1\", \"fieldsType\": \"FieldsV1\", \"fieldsV1\": {\"f:count\": {}, \"f:firstTimestamp\": {}, \"f:involvedObject\": {}, \"f:lastTimestamp\": {}, \"f:message\": {}, \"f:reason\": {}, \"f:reportingComponent\": {}, \"f:reportingInstance\": {}, \"f:source\": {\"f:component\": {}, \"f:host\": {}}, \"f:type\": {}}, \"manager\": \"kubelet\", \"operation\": \"Update\", \"time\": \"2024-07-03T11:16:06Z\"}], \"name\": \"not-privileged-pod3.17deafc4a739471c\", \"namespace\": \"default\", \"uid\": \"988439e3-ed6f-4872-addb-c1660c389a14\"}, \"reason\": \"Killing\", \"reportingComponent\": \"kubelet\", \"reportingInstance\": \"dortest-rep-control-plane\", \"source\": {\"component\": \"kubelet\", \"host\": \"dortest-rep-control-plane\"}, \"type\": \"Normal\"}, \"oldObject\": null, \"operation\": \"CREATE\", \"options\": {\"apiVersion\": \"meta.k8s.io/v1\", \"kind\": \"CreateOptions\"}, \"requestKind\": {\"group\": \"\", \"kind\": \"Event\", \"version\": \"v1\"}, \"requestResource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"resource\": {\"group\": \"\", \"resource\": \"events\", \"version\": \"v1\"}, \"uid\": \"ae966713-61b2-4b33-82ca-bfacce1b1350\", \"userInfo\": {\"groups\": [\"system:nodes\", \"system:authenticated\"], \"username\": \"system:node:dortest-rep-control-plane\"}}",
+            "metadata": {
+                "annotations": {
+                    "constraint_action": "deny",
+                    "constraint_api_version": "v1beta1",
+                    "constraint_group": "constraints.gatekeeper.sh",
+                    "constraint_kind": "DenyGatekeeperEvents",
+                    "constraint_name": "deny-gatekeeper-webhook-events",
+                    "event_type": "violation",
+                    "process": "admission",
+                    "request_username": "system:node:dortest-rep-control-plane",
+                    "resource_api_version": "v1",
+                    "resource_group": "",
+                    "resource_kind": "Event",
+                    "resource_name": "not-privileged-pod3.17deafc4a739471c",
+                    "resource_namespace": "default"
+                },
+                "creationTimestamp": "2024-07-03T11:16:06Z",
+                "name": "not-privileged-pod3.17deafc4a739471c.17deafc4a76a693b",
+                "namespace": "gatekeeper-system",
+                "resourceVersion": "26252",
+                "uid": "40c1ef03-6e59-4505-b803-2cccd7097254"
+            },
+            "reason": "FailedAdmission",
+            "reportingComponent": "gatekeeper-webhook",
+            "reportingInstance": "",
+            "source": {
+                "component": "gatekeeper-webhook"
+            },
+            "type": "Warning"
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}

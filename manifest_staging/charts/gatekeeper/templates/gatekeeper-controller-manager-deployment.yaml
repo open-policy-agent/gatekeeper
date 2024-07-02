@@ -57,7 +57,8 @@ spec:
         - --prometheus-port={{ .Values.controllerManager.metricsPort }}
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
-        - --emit-admission-events={{ .Values.emitAdmissionEvents }}
+        - --emit-allow-admission-events={{ .Values.emitAllowAdmissionEvents }}
+        - --emit-deny-admission-events={{ .Values.emitDenyAdmissionEvents }}
         - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
         - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
         - --exempt-namespace={{ .Release.Namespace }}
