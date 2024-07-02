@@ -236,7 +236,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_MUTATING_WEBHOOK_MATCH_CONDITIONS": `{{ toYaml .Values.mutatingWebhookMatchConditions | nindent 4 }}`,
 
-	"HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE": `{{ .Values.pdb.controllerManager.minAvailable }}`,
+	"HELMSUBST_PDB_CONTROLLER_MANAGER": `{{ .Values.pdb.controllerManager | toYaml | nindent 2 }}`,
 
 	`HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""`: `{{- if .Values.image.release }}
         image: {{ .Values.image.repository }}:{{ .Values.image.release }}
