@@ -24,5 +24,6 @@ data:
   provider: "dapr"
   config: |
     {
-      "component": "pubsub"
+      "component": "pubsub",
+      "topic": "audit-channel"
     }

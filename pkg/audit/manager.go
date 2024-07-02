@@ -67,8 +67,6 @@ var (
 	auditEventsInvolvedNamespace = flag.Bool("audit-events-involved-namespace", false, "emit audit events for each violation in the involved objects namespace, the default (false) generates events in the namespace Gatekeeper is installed in. Audit events from cluster-scoped resources will still follow the default behavior")
 	auditMatchKindOnly           = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	apiCacheDir                  = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
-	auditConnection              = flag.String("audit-connection", defaultConnection, "Connection name for publishing audit violation messages. Defaults to audit-connection")
-	auditChannel                 = flag.String("audit-channel", defaultChannel, "Channel name for publishing audit violation messages. Defaults to audit-channel")
 	emptyAuditResults            = newLimitQueue(0)
 	logStatsAudit                = flag.Bool("log-stats-audit", false, "(alpha) log stats metrics for the audit run")
 )
@@ -901,7 +899,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		labels := r.obj.GetLabels()
 		logViolation(am.log, constraint, ea, gvk, namespace, name, msg, details, labels)
 		if *pubsubController.PubsubEnabled {
-			err := am.pubsubSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, gvk, namespace, name, msg, details, labels, timestamp))
+			err := am.pubsubSystem.Publish(context.Background(), violationMsg(constraint, ea, gvk, namespace, name, msg, details, labels, timestamp))
 			if err != nil {
 				am.log.Error(err, "pubsub audit Publishing")
 			}

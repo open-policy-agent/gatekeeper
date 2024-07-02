@@ -328,6 +328,7 @@ func FakeConnection() (connection.Connection, func()) {
 	return &Dapr{
 		client:          c,
 		pubSubComponent: "test",
+		topic:           "test",
 	}, f
 }
 
@@ -338,11 +339,14 @@ type FakeDapr struct {
 	// Name of the pubsub component
 	pubSubComponent string
 
+	// Name of the topic
+	topic string
+
 	// closing function
 	f func()
 }
 
-func (r *FakeDapr) Publish(_ context.Context, _ interface{}, _ string) error {
+func (r *FakeDapr) Publish(_ context.Context, _ interface{}) error {
 	return nil
 }
 
@@ -376,6 +380,10 @@ func FakeNewConnection(ctx context.Context, config interface{}) (connection.Conn
 	if !ok {
 		return nil, fmt.Errorf("failed to get value of component")
 	}
+	cfg.Topic, ok = m["topic"].(string)
+	if !ok {
+		return nil, fmt.Errorf("failed to get value of topic")
+	}
 
 	c, f := getTestClient(ctx)
 
@@ -383,5 +391,6 @@ func FakeNewConnection(ctx context.Context, config interface{}) (connection.Conn
 		client:          c,
 		pubSubComponent: cfg.Component,
 		f:               f,
+		topic:           cfg.Topic,
 	}, nil
 }

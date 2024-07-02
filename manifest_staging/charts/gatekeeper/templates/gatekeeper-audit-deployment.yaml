@@ -68,8 +68,6 @@ spec:
         - --operation=status
         {{ if .Values.audit.enablePubsub}}
         - --enable-pub-sub={{ .Values.audit.enablePubsub }}
-        - --audit-connection={{ .Values.audit.connection }}
-        - --audit-channel={{ .Values.audit.channel }}
         {{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}
         - --logtostderr
