@@ -41,6 +41,25 @@ Adds additional pod labels to the common ones
 {{- end -}}
 
 {{/*
+Adds additional controller-manager pod labels to the common ones
+*/}}
+{{- define "controllerManager.podLabels" -}}
+{{- if .Values.controllerManager.podLabels }}
+{{- toYaml .Values.controllerManager.podLabels }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Adds additional audit pod labels to the common ones
+*/}}
+{{- define "audit.podLabels" -}}
+{{- if .Values.audit.podLabels }}
+{{- toYaml .Values.audit.podLabels }}
+{{- end }}
+{{- end -}}
+
+
+{{/*
 Mandatory labels
 */}}
 {{- define "gatekeeper.mandatoryLabels" -}}
