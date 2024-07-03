@@ -18,12 +18,14 @@ package constrainttemplate
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"reflect"
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	pSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
@@ -63,8 +65,9 @@ const (
 )
 
 var (
-	logger       = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
-	discoveryErr *apiutil.ErrResourceDiscoveryFailed
+	logger         = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
+	discoveryErr   *apiutil.ErrResourceDiscoveryFailed
+	vapEnforcement = flag.Bool("vap-enforcement", false, "control VAP resource generation. Allowed values are false: do not generate unless enforceVAP: true is added to policy explicitly, true: generate unless enforceVAP: false is added to policy explicitly.")
 )
 
 var gvkConstraintTemplate = schema.GroupVersionKind{
@@ -121,7 +124,6 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
 func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
-	constraint.VapEnforcement.SetDefaultIfEmpty()
 	// constraintsCache contains total number of constraints and shared mutex and vap label
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -380,27 +382,11 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	generateVap := false
-	labels := ct.GetLabels()
-	logger.Info("constraint template resource", "labels", labels)
-	useVap, ok := labels[constraint.VapGenerationLabel]
-	if !ok {
-		logger.Info("constraint template resource does not have a label for use-vap; will default to flag behavior", "VapEnforcement", constraint.VapEnforcement)
-		generateVap = constraint.ShouldGenerateVap("")
-	} else {
-		logger.Info("constraint template resource", "useVap", useVap)
-		generateVap = constraint.ShouldGenerateVap(useVap)
-		if useVap != constraint.No && useVap != constraint.Yes {
-			labelErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: fmt.Sprintf("constraint template resource has an invalid value for %s, allowed values are yes and no", constraint.VapGenerationLabel)}
-			status.Status.Errors = append(status.Status.Errors, labelErr)
-
-			if updateErr := r.Update(ctx, status); updateErr != nil {
-				logger.Error(updateErr, "update status error")
-				return reconcile.Result{Requeue: true}, nil
-			}
-		}
-	}
+	generateVap, err := shouldGenerateVAP(unversionedCT, *vapEnforcement)
 	logger.Info("generateVap", "r.generateVap", generateVap)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
 	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status, generateVap)
 	if err != nil {
@@ -751,4 +737,18 @@ func makeGvk(kind string) schema.GroupVersionKind {
 		Version: "v1beta1",
 		Kind:    kind,
 	}
+}
+
+func shouldGenerateVAP(ct *templates.ConstraintTemplate, generateVAPDefault bool) (bool, error) {
+	source, err := pSchema.GetSourceFromTemplate(ct)
+	if errors.Is(err, pSchema.ErrCodeNotDefined) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if source.GenerateVAP == nil {
+		return generateVAPDefault, nil
+	}
+	return *source.GenerateVAP, nil
 }
