@@ -242,10 +242,12 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 
 func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *admission.Request) ([]string, []string) {
 	var denyMsgs, warnMsgs []string
+	var eventMsg, reason string
 	var resourceName string
 	obj := &unstructured.Unstructured{}
 
-	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
+	if len(res) > 0 && (*logDenies || *emitDenyAdmissionEvents) ||
+		len(res) == 0 && *emitAllowAdmissionEvents {
 		resourceName = req.AdmissionRequest.Name
 		if req.AdmissionRequest.Object.Raw != nil {
 			if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err == nil {
@@ -255,6 +257,28 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 					resourceName = obj.GetName()
 				}
 			}
+		}
+	}
+	if len(res) == 0 && *emitAllowAdmissionEvents {
+		annotations := map[string]string{
+			logging.Process:            "admission",
+			logging.EventType:          "passed",
+			logging.ResourceGroup:      req.AdmissionRequest.Kind.Group,
+			logging.ResourceAPIVersion: req.AdmissionRequest.Kind.Version,
+			logging.ResourceKind:       req.AdmissionRequest.Kind.Kind,
+			logging.ResourceNamespace:  req.AdmissionRequest.Namespace,
+			logging.ResourceName:       resourceName,
+			logging.RequestUsername:    req.AdmissionRequest.UserInfo.Username,
+		}
+		eventMsg = "Admission webhook \"validation.gatekeeper.sh\" allowed request"
+		reason = "AllowedAdmission"
+
+		ref := getAdmissionRef(nil, h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, obj.GetNamespace(), obj.GetResourceVersion(), obj.GetUID(), *admissionEventsInvolvedNamespace)
+
+		if *admissionEventsInvolvedNamespace {
+			h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeNormal, reason, "%s", eventMsg)
+		} else {
+			h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeNormal, reason, "%s, Resource Namespace: %s", eventMsg, req.AdmissionRequest.Namespace)
 		}
 	}
 	for _, r := range res {
@@ -280,7 +304,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 			).Info(
 				fmt.Sprintf("denied admission: %s", r.Msg))
 		}
-		if *emitAdmissionEvents {
+		if *emitDenyAdmissionEvents {
 			annotations := map[string]string{
 				logging.Process:              "admission",
 				logging.EventType:            "violation",
@@ -296,7 +320,6 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				logging.ResourceName:         resourceName,
 				logging.RequestUsername:      req.AdmissionRequest.UserInfo.Username,
 			}
-			var eventMsg, reason string
 			switch r.EnforcementAction {
 			case string(util.Dryrun):
 				eventMsg = "Dryrun violation"
@@ -309,7 +332,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				reason = "FailedAdmission"
 			}
 
-			ref := getViolationRef(h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, obj.GetNamespace(), obj.GetResourceVersion(), obj.GetUID(), r.Constraint.GetKind(), r.Constraint.GetName(), r.Constraint.GetNamespace(), *admissionEventsInvolvedNamespace)
+			ref := getAdmissionRef(r.Constraint, h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, obj.GetNamespace(), obj.GetResourceVersion(), obj.GetUID(), *admissionEventsInvolvedNamespace)
 
 			if *admissionEventsInvolvedNamespace {
 				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Constraint: %s, Message: %s", eventMsg, r.Constraint.GetName(), r.Msg)
@@ -653,7 +676,7 @@ func createReviewForResultant(obj *unstructured.Unstructured, ns *corev1.Namespa
 	}
 }
 
-func getViolationRef(gkNamespace, rkind, rname, rnamespace, rrv string, ruid types.UID, ckind, cname, cnamespace string, emitInvolvedNamespace bool) *corev1.ObjectReference {
+func getAdmissionRef(constraint *unstructured.Unstructured, gkNamespace, rkind, rname, rnamespace, rrv string, ruid types.UID, emitInvolvedNamespace bool) *corev1.ObjectReference {
 	enamespace := gkNamespace
 	if emitInvolvedNamespace && len(rnamespace) > 0 {
 		enamespace = rnamespace
@@ -667,7 +690,11 @@ func getViolationRef(gkNamespace, rkind, rname, rnamespace, rrv string, ruid typ
 		ref.UID = ruid
 		ref.ResourceVersion = rrv
 	} else if !emitInvolvedNamespace {
-		ref.UID = types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname)
+		if constraint != nil {
+			ref.UID = types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + constraint.GetKind() + "/" + constraint.GetName() + "/" + constraint.GetNamespace())
+		} else {
+			ref.UID = types.UID(rkind + "/" + rnamespace + "/" + rname)
+		}
 	}
 	return ref
 }

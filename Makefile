@@ -63,7 +63,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        args:\
 \n        - --port=8443\
 \n        - --logtostderr\
-\n        - --emit-admission-events\
+\n        - --emit-allow-admission-events\
+\n        - --emit-deny-admission-events\
 \n        - --admission-events-involved-namespace\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
@@ -205,8 +206,9 @@ ifeq ($(ENABLE_PUBSUB),true)
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.enabled=true \
 		--set postInstall.probeWebhook.enabled=true \
-		--set emitAdmissionEvents=true \
+		--set emitAllowAdmissionEvents=true \
 		--set emitAuditEvents=true \
+		--set emitDenyAdmissionEvents=true \
 		--set admissionEventsInvolvedNamespace=true \
 		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \
@@ -230,8 +232,9 @@ else
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.enabled=true \
 		--set postInstall.probeWebhook.enabled=true \
-		--set emitAdmissionEvents=true \
+		--set emitAllowAdmissionEvents=true \
 		--set emitAuditEvents=true \
+		--set emitDenyAdmissionEvents=true \
 		--set admissionEventsInvolvedNamespace=true \
 		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \
@@ -242,13 +245,16 @@ else
 		--set mutationAnnotations=true
 endif
 
+# TODO(#3440): After next release (3.16.4), we can remove --set emitAdmissionEvents=true
 e2e-helm-upgrade-init: e2e-helm-install
 	./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
 	./.staging/helm/linux-amd64/helm install gatekeeper gatekeeper/gatekeeper --version ${BASE_RELEASE} \
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
 		--debug --wait \
 		--set emitAdmissionEvents=true \
+		--set emitAllowAdmissionEvents=true \
 		--set emitAuditEvents=true \
+		--set emitDenyAdmissionEvents=true \
 		--set admissionEventsInvolvedNamespace=true \
 		--set auditEventsInvolvedNamespace=true \
 		--set postInstall.labelNamespace.enabled=true \
@@ -271,8 +277,9 @@ e2e-helm-upgrade:
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.enabled=true \
 		--set postInstall.probeWebhook.enabled=true \
-		--set emitAdmissionEvents=true \
+		--set emitAllowAdmissionEvents=true \
 		--set emitAuditEvents=true \
+		--set emitDenyAdmissionEvents=true \
 		--set admissionEventsInvolvedNamespace=true \
 		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \

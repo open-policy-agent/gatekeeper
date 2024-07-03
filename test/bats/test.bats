@@ -261,7 +261,14 @@ __required_labels_audit_test() {
 
 @test "emit events test" {
   # list events for easy debugging
-  kubectl get events -n gatekeeper-test-playground
+  kubectl get events -n gatekeeper-test-playground --field-selector reason=AllowedAdmission -o wide
+  kubectl get events -n gatekeeper-test-playground --field-selector reason=FailedAdmission -o wide
+  kubectl get events -n gatekeeper-test-playground --field-selector reason=DryrunViolation -o wide
+  kubectl get events -n gatekeeper-test-playground --field-selector reason=AuditViolation -o wide
+
+  events=$(kubectl get events -n gatekeeper-test-playground --field-selector reason=AllowedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.process=="admission" )' | jq -s '. | length')
+  [[ "$events" -ge 1 ]]
+
   events=$(kubectl get events -n gatekeeper-test-playground --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
   [[ "$events" -ge 1 ]]
 
