@@ -67,7 +67,9 @@ jobs:
 
           make deploy \
             IMG=gatekeeper-e2e:latest \
-            USE_LOCAL_IMG=true
+            USE_LOCAL_IMG=true \
+            VAP_ENFORCEMENT=true \
+            GENERATE_VAPBINDING=true
 
           make test-e2e KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} ENABLE_VAP_TESTS=1
 
@@ -110,7 +112,6 @@ jobs:
           make e2e-bootstrap
 
       - name: Run e2e
-        # TODO(ritazh): add helm chart values for vap feature before alpha release
         run: |
           make docker-buildx \
             IMG=gatekeeper-e2e:latest \
@@ -133,6 +134,8 @@ jobs:
             HELM_RELEASE=latest \
             HELM_VERSION=${{ matrix.HELM_VERSION }} \
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
+            VAP_ENFORCEMENT=true \
+            GENERATE_VAPBINDING=true \
             LOG_LEVEL=DEBUG
 
           make test-e2e \

@@ -67,7 +67,7 @@ const (
 var (
 	logger         = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
 	discoveryErr   *apiutil.ErrResourceDiscoveryFailed
-	vapEnforcement = flag.Bool("vap-enforcement", false, "control VAP resource generation. Allowed values are false: do not generate unless enforceVAP: true is added to policy explicitly, true: generate unless enforceVAP: false is added to policy explicitly.")
+	vapEnforcement = flag.Bool("vap-enforcement", false, "control VAP resource generation. Allowed values are false: do not generate unless generateVAP: true is added to policy explicitly, true: generate unless generateVAP: false is added to policy explicitly.")
 )
 
 var gvkConstraintTemplate = schema.GroupVersionKind{

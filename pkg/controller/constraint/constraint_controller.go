@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
@@ -280,6 +281,14 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}()
 
+	ct := &v1beta1.ConstraintTemplate{}
+	err = r.reader.Get(ctx, types.NamespacedName{Name: strings.ToLower(instance.GetKind())}, ct)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	generateVAPB := *DefaultGenerateVAPB && !isRegoOnlyCT(ct)
+
 	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
 		status, err := r.getOrCreatePodStatus(ctx, instance)
@@ -293,7 +302,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 
 		if c, err := r.cfClient.GetConstraint(instance); err != nil || !reflect.DeepEqual(instance, c) {
 			// generate vapbinding resources
-			if *DefaultGenerateVAPB && IsVapAPIEnabled() {
+			if generateVAPB && IsVapAPIEnabled() {
 				currentVapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
@@ -345,7 +354,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			}
 			// do not generate vapbinding resources
 			// remove if exists
-			if !*DefaultGenerateVAPB && IsVapAPIEnabled() {
+			if !generateVAPB && IsVapAPIEnabled() {
 				currentVapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
@@ -456,6 +465,16 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 		return nil, err
 	}
 	return statusObj, nil
+}
+
+func isRegoOnlyCT(ct *v1beta1.ConstraintTemplate) bool {
+	if len(ct.Spec.Targets[0].Code) == 0 {
+		return true
+	}
+	if len(ct.Spec.Targets[0].Code) == 1 && ct.Spec.Targets[0].Code[0].Engine == "Rego" {
+		return true
+	}
+	return false
 }
 
 func logAddition(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction util.EnforcementAction) {

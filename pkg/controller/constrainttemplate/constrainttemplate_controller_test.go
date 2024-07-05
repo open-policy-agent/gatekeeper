@@ -268,9 +268,29 @@ func TestReconcile(t *testing.T) {
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
+		clientset := kubernetes.NewForConfigOrDie(cfg)
+
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
+			crd := &apiextensionsv1.CustomResourceDefinition{}
+			if err := c.Get(ctx, crdKey(suffix), crd); err != nil {
+				return err
+			}
+			rs, err := clientset.Discovery().ServerResourcesForGroupVersion("constraints.gatekeeper.sh/v1beta1")
+			if err != nil {
+				return err
+			}
+			found := false
+			for _, r := range rs.APIResources {
+				if r.Kind == DenyAll+suffix {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return errors.New("DenyAll not found")
+			}
 			// check if vap resource exists now
 			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))

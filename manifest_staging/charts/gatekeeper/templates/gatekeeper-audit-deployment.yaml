@@ -89,6 +89,7 @@ spec:
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
         - --vap-enforcement={{ .Values.vapEnforcement }}
+        - --generate-vapbinding={{ .Values.generateVAPBinding }}
         command:
         - /manager
         env:

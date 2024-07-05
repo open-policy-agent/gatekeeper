@@ -95,6 +95,7 @@ spec:
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
             - --vap-enforcement={{ .Values.vapEnforcement }}
+            - --generate-vapbinding={{ .Values.generateVAPBinding }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
@@ -186,6 +187,7 @@ spec:
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
             - --vap-enforcement={{ .Values.vapEnforcement }}
+            - --generate-vapbinding={{ .Values.generateVAPBinding }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
