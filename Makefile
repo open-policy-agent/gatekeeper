@@ -243,8 +243,8 @@ else
 		--set logLevel=${LOG_LEVEL} \
 		--set enableK8sNativeValidation=true \
 		--set vapEnforcement=${VAP_ENFORCEMENT} \
-		--set generateVAPBinding: ${GENERATE_VAPBINDING} \
-		--set mutationAnnotations=true
+		--set generateVAPBinding=${GENERATE_VAPBINDING} \
+		--set mutationAnnotations=true;
 endif
 
 e2e-helm-upgrade-init: e2e-helm-install
