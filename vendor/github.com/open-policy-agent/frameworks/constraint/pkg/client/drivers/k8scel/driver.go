@@ -18,6 +18,7 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
 	"k8s.io/apiserver/pkg/admission/plugin/validatingadmissionpolicy"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
@@ -165,6 +166,15 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		return nil, errors.New("cannot convert review to ARGetter")
 	}
 	aRequest := arGetter.GetAdmissionRequest()
+	// Gatekeeper sets Object to oldObject on DELETE requests
+	// however, Kubernetes does not do this for ValidatingAdmissionPolicy.
+	// in order for evaluation in both environments to behave identically,
+	// we must be sure that Object is unset on DELETE. Users who need
+	// the "if DELETE Object == OldObject" behavior should use the
+	// `variables.anyObject` variable instead.
+	if aRequest.Operation == admissionv1.Delete {
+		aRequest.Object = runtime.RawExtension{}
+	}
 	versionedAttr, err := transform.RequestToVersionedAttributes(aRequest)
 	if err != nil {
 		return nil, err

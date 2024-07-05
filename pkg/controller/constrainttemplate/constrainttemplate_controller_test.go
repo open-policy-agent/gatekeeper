@@ -990,7 +990,7 @@ func newDenyAllCstr(suffix string) *unstructured.Unstructured {
 		Version: "v1beta1",
 		Kind:    DenyAll + suffix,
 	})
-	cstr.SetName(denyall + strings.ToLower(suffix))
+	cstr.SetName("denyallconstraint")
 	return cstr
 }
 
