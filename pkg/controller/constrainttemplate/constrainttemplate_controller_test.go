@@ -228,6 +228,8 @@ func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
+	constraint.VapAPIEnabled = ptr.To[bool](true)
+
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
 
@@ -268,29 +270,9 @@ func TestReconcile(t *testing.T) {
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
-		clientset := kubernetes.NewForConfigOrDie(cfg)
-
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-			crd := &apiextensionsv1.CustomResourceDefinition{}
-			if err := c.Get(ctx, crdKey(suffix), crd); err != nil {
-				return err
-			}
-			rs, err := clientset.Discovery().ServerResourcesForGroupVersion("constraints.gatekeeper.sh/v1beta1")
-			if err != nil {
-				return err
-			}
-			found := false
-			for _, r := range rs.APIResources {
-				if r.Kind == DenyAll+suffix {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return errors.New("DenyAll not found")
-			}
 			// check if vap resource exists now
 			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
@@ -309,6 +291,33 @@ func TestReconcile(t *testing.T) {
 
 		logger.Info("Running test: Vap should not be created")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vap resource exists now
+			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return err
+				}
+				return nil
+			}
+			return fmt.Errorf("should result in error, vap not found")
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Vap should not be created for rego only template", func(t *testing.T) {
+		suffix := "VapShouldNotBeCreatedForRegoOnlyTemplate"
+
+		logger.Info("Running test: Vap should not be created")
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -388,6 +397,36 @@ func TestReconcile(t *testing.T) {
 		logger.Info("Running test: VapBinding should not be created")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](false)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+		// check if vapbinding resource exists now
+		vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+		vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+		if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if !apierrors.IsNotFound(err) {
+				t.Fatal(err)
+			}
+		} else {
+			t.Fatal("should result in error, vapbinding not found")
+		}
+	})
+
+	t.Run("VapBinding should not be created", func(t *testing.T) {
+		suffix := "VapBindingShouldNotBeCreated"
+		logger.Info("Running test: VapBinding should not be created")
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
