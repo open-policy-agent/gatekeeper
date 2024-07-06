@@ -472,7 +472,7 @@ func TestReconcile(t *testing.T) {
 		}
 		// check if vapbinding resource exists now
 		vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-		vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+		vapBindingName := "gatekeeper-denyallconstraint"
 		if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
 			t.Fatal(err)
 		}

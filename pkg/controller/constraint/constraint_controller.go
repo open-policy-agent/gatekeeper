@@ -288,6 +288,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	generateVAPB := *DefaultGenerateVAPB && !isRegoOnlyCT(ct)
+	r.log.Info("constraint controller", "generateVAPB", generateVAPB)
 
 	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
