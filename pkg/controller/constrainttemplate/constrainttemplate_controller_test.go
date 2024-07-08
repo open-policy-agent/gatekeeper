@@ -470,10 +470,18 @@ func TestReconcile(t *testing.T) {
 			logger.Error(err, "create cstr")
 			t.Fatal(err)
 		}
-		// check if vapbinding resource exists now
-		vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-		vapBindingName := "gatekeeper-denyallconstraint"
-		if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vapbinding resource exists now
+			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapBindingName := "gatekeeper-denyallconstraint"
+			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
 			t.Fatal(err)
 		}
 	})
