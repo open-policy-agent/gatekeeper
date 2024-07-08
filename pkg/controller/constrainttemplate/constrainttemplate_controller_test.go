@@ -95,6 +95,46 @@ violation[{"msg": "denied!"}] {
 	}
 }
 
+func makeReconcileConstraintTemplateWithRegoEngine(suffix string) *v1beta1.ConstraintTemplate {
+	return &v1beta1.ConstraintTemplate{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConstraintTemplate",
+			APIVersion: templatesv1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: denyall + strings.ToLower(suffix),
+		},
+		Spec: v1beta1.ConstraintTemplateSpec{
+			CRD: v1beta1.CRD{
+				Spec: v1beta1.CRDSpec{
+					Names: v1beta1.Names{
+						Kind: DenyAll + suffix,
+					},
+				},
+			},
+			Targets: []v1beta1.Target{
+				{
+					Target: target.Name,
+					Code: []v1beta1.Code{
+						{
+							Engine: "Rego",
+							Source: &templates.Anything{
+								Value: `
+package foo
+
+violation[{"msg": "denied!"}] {
+	1 == 1
+}
+`,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func makeReconcileConstraintTemplateForVap(suffix string, generateVAP *bool) *v1beta1.ConstraintTemplate {
 	source := &celSchema.Source{
 		// FailurePolicy: ptr.To[string]("Fail"),
@@ -318,6 +358,33 @@ func TestReconcile(t *testing.T) {
 
 		logger.Info("Running test: Vap should not be created")
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vap resource exists now
+			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return err
+				}
+				return nil
+			}
+			return fmt.Errorf("should result in error, vap not found")
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Vap should not be created for only rego engine", func(t *testing.T) {
+		suffix := "VapShouldNotBeCreatedForOnlyRegoEngine"
+
+		logger.Info("Running test: Vap should not be created")
+		constraintTemplate := makeReconcileConstraintTemplateWithRegoEngine(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 

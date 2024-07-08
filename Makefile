@@ -199,7 +199,7 @@ e2e-helm-install:
 
 e2e-helm-deploy: e2e-helm-install
 ifeq ($(ENABLE_PUBSUB),true)
-	./.staging/helm/linux-amd64/helm upgrade --install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
+	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
 		--set image.repository=${HELM_REPO} \
