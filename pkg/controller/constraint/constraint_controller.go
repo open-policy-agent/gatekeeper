@@ -27,6 +27,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	pSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
+	pSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
@@ -287,7 +289,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	generateVAPB := *DefaultGenerateVAPB && !isRegoOnlyCT(ct)
+	generateVAPB := *DefaultGenerateVAPB && hasVAPCel(ct)
 	r.log.Info("constraint controller", "generateVAPB", generateVAPB)
 
 	if !deleted {
@@ -468,12 +470,14 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 	return statusObj, nil
 }
 
-func isRegoOnlyCT(ct *v1beta1.ConstraintTemplate) bool {
+func hasVAPCel(ct *v1beta1.ConstraintTemplate) bool {
 	if len(ct.Spec.Targets[0].Code) == 0 {
-		return true
+		return false
 	}
-	if len(ct.Spec.Targets[0].Code) == 1 && ct.Spec.Targets[0].Code[0].Engine == "Rego" {
-		return true
+	for _, code := range ct.Spec.Targets[0].Code {
+		if code.Engine == pSchema.Name {
+			return true
+		}
 	}
 	return false
 }

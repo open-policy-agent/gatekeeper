@@ -29,7 +29,7 @@ func TestTotalConstraintsCache(t *testing.T) {
 	}
 }
 
-func TestIsRegoOnlyCT(t *testing.T) {
+func TestHasVAPCel(t *testing.T) {
 	ct := &v1beta1.ConstraintTemplate{}
 
 	// Test when the code is empty
@@ -38,9 +38,9 @@ func TestIsRegoOnlyCT(t *testing.T) {
 			Code: []v1beta1.Code{},
 		},
 	}
-	expected := true
-	if result := isRegoOnlyCT(ct); result != expected {
-		t.Errorf("isRegoOnlyCT() = %v, expected %v", result, expected)
+	expected := false
+	if result := hasVAPCel(ct); result != expected {
+		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
 	}
 
 	// Test when the code has only one Rego engine
@@ -53,9 +53,9 @@ func TestIsRegoOnlyCT(t *testing.T) {
 			},
 		},
 	}
-	expected = true
-	if result := isRegoOnlyCT(ct); result != expected {
-		t.Errorf("isRegoOnlyCT() = %v, expected %v", result, expected)
+	expected = false
+	if result := hasVAPCel(ct); result != expected {
+		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
 	}
 
 	// Test when the code has multiple engines including Rego
@@ -71,9 +71,9 @@ func TestIsRegoOnlyCT(t *testing.T) {
 			},
 		},
 	}
-	expected = false
-	if result := isRegoOnlyCT(ct); result != expected {
-		t.Errorf("isRegoOnlyCT() = %v, expected %v", result, expected)
+	expected = true
+	if result := hasVAPCel(ct); result != expected {
+		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
 	}
 
 	// Test when the code has only K8sNativeValidation engine
@@ -86,8 +86,8 @@ func TestIsRegoOnlyCT(t *testing.T) {
 			},
 		},
 	}
-	expected = false
-	if result := isRegoOnlyCT(ct); result != expected {
-		t.Errorf("isRegoOnlyCT() = %v, expected %v", result, expected)
+	expected = true
+	if result := hasVAPCel(ct); result != expected {
+		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
 	}
 }
