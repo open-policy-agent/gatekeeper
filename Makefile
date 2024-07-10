@@ -13,7 +13,7 @@ ENABLE_PUBSUB ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
-VAP_ENFORCEMENT ?= false
+GENERATE_VAP ?= false
 GENERATE_VAPBINDING ?= false
 
 VERSION := v3.17.0-beta.0
@@ -73,8 +73,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --disable-opa-builtin=http.send\
 \n        - --log-mutations\
 \n        - --mutation-annotations\
-\n        - --vap-enforcement=${VAP_ENFORCEMENT}\
-\n        - --generate-vapbinding=${GENERATE_VAPBINDING}\
+\n        - --default-create-vap-for-templates=${GENERATE_VAP}\
+\n        - --create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
 \n        - --experimental-enable-k8s-native-validation\
 \n---\
 \napiVersion: apps/v1\
@@ -96,8 +96,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=mutation-status\
 \n        - --audit-chunk-size=500\
 \n        - --logtostderr\
-\n        - --vap-enforcement=${VAP_ENFORCEMENT}\
-\n        - --generate-vapbinding=${GENERATE_VAPBINDING}\
+\n        - --default-create-vap-for-templates=${GENERATE_VAP}\
+\n        - --create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
 \n        - --experimental-enable-k8s-native-validation\
 \n"
 
@@ -242,8 +242,8 @@ else
 		--set logMutations=true \
 		--set logLevel=${LOG_LEVEL} \
 		--set enableK8sNativeValidation=true \
-		--set vapEnforcement=${VAP_ENFORCEMENT} \
-		--set generateVAPBinding=${GENERATE_VAPBINDING} \
+		--set createVAPForTemplates=${GENERATE_VAP} \
+		--set createVAPBindingForConstraints=${GENERATE_VAPBINDING} \
 		--set mutationAnnotations=true;
 endif
 
@@ -284,8 +284,8 @@ e2e-helm-upgrade:
 		--set logMutations=true \
 		--set logLevel=${LOG_LEVEL} \
 		--set enableK8sNativeValidation=true \
-		--set vapEnforcement=${VAP_ENFORCEMENT} \
-		--set generateVAPBinding=${GENERATE_VAPBINDING} \
+		--set createVAPForTemplates=${GENERATE_VAP} \
+		--set createVAPBindingForConstraints=${GENERATE_VAPBINDING} \
 		--set mutationAnnotations=true;\
 
 e2e-subscriber-build-load-image:

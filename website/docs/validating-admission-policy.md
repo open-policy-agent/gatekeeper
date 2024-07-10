@@ -116,7 +116,7 @@ With this new engine and source added to the constraint template, now Gatekeeper
 
 ## Policy updates to generate Validating Admission Policy resources
 
-For some policies, you may want admission requests to be handled by the K8s Validating Admission Controller instead of the Gatekeeper admission webhook. By default, Gatekeeper is configured to generate K8s Validating Admission Policy resources if the `generateVAP: true` is set on `ConstraintTemplate`. In the event K8s Validating Admission Controller fails open, then Gatekeeper admission webhook can act as a backup. Default value for this feature flag is `--vap-enforcement=false`.
+For some policies, you may want admission requests to be handled by the K8s Validating Admission Controller instead of the Gatekeeper admission webhook. By default, Gatekeeper is configured to generate K8s Validating Admission Policy resources if `generateVAP: true` is set on `ConstraintTemplate`. In the event K8s Validating Admission Controller fails open, then Gatekeeper admission webhook can act as a backup. Default value for this feature flag is `--default-create-vap-for-templates=false`.
 
 Other allowed values are:
 
@@ -134,4 +134,4 @@ spec:
             generateVAP: true
             ...
 ```
-Constraints will follow the behavior defined by `--generate-binding` flag to generate K8s Validating Admission Policy Binding. By default, `--generate-binding` is set to `false`.
+Constraints will follow the behavior defined by `--create-vap-binding-for-constraints` flag to generate K8s Validating Admission Policy Binding. By default, `--create-vap-binding-for-constraints` is set to `false`.

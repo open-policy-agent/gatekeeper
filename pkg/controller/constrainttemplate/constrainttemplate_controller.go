@@ -65,9 +65,9 @@ const (
 )
 
 var (
-	logger         = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
-	discoveryErr   *apiutil.ErrResourceDiscoveryFailed
-	vapEnforcement = flag.Bool("vap-enforcement", false, "control VAP resource generation. Allowed values are false: do not generate unless generateVAP: true is added to constraint template explicitly, true: generate unless generateVAP: false is added to constraint template explicitly.")
+	logger             = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
+	discoveryErr       *apiutil.ErrResourceDiscoveryFailed
+	defaultGenerateVAP = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admissoin Policy unless generateVAP: false is set on constraint template explicitly.")
 )
 
 var gvkConstraintTemplate = schema.GroupVersionKind{
@@ -381,12 +381,16 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return reconcile.Result{}, err
 	}
-
-	generateVap, err := shouldGenerateVAP(unversionedCT, *vapEnforcement)
-	logger.Info("generateVap", "r.generateVap", generateVap)
+	err = nil
+	generateVap := false
+	if constraint.HasVAPCel(ct) {
+		generateVap, err = shouldGenerateVAP(unversionedCT, *defaultGenerateVAP)
+	}
 	if err != nil {
+		logger.Info("returning error", "r.generateVap", err)
 		return reconcile.Result{}, err
 	}
+	logger.Info("generateVap", "r.generateVap", generateVap)
 
 	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status, generateVap)
 	if err != nil {
@@ -741,9 +745,6 @@ func makeGvk(kind string) schema.GroupVersionKind {
 
 func shouldGenerateVAP(ct *templates.ConstraintTemplate, generateVAPDefault bool) (bool, error) {
 	source, err := pSchema.GetSourceFromTemplate(ct)
-	if errors.Is(err, pSchema.ErrCodeNotDefined) {
-		return false, nil
-	}
 	if err != nil {
 		return false, err
 	}

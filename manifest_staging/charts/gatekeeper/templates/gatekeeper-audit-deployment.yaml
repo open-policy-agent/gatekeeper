@@ -88,8 +88,8 @@ spec:
         - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
-        - --vap-enforcement={{ .Values.vapEnforcement }}
-        - --generate-vapbinding={{ .Values.generateVAPBinding }}
+        - --default-create-vap-for-templates={{ .Values.createVAPForTemplates }}
+        - --create-vap-binding-for-constraints={{ .Values.createVAPBindingForConstraints }}
         command:
         - /manager
         env:

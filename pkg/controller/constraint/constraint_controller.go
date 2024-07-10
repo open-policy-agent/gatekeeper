@@ -63,7 +63,7 @@ import (
 var (
 	log                 = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
 	discoveryErr        *apiutil.ErrResourceDiscoveryFailed
-	DefaultGenerateVAPB = flag.Bool("generate-vapbinding", false, "control VAPBinding resource generation. Allowed values are false: do not generate VAPBinding for constraint by default, true: generate VAPBinding for constraint by default.")
+	DefaultGenerateVAPB = flag.Bool("create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admissoin Policy Binding.")
 )
 
 var vapMux sync.RWMutex
@@ -288,7 +288,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	generateVAPB := *DefaultGenerateVAPB && hasVAPCel(ct)
+	generateVAPB := *DefaultGenerateVAPB && HasVAPCel(ct)
 	r.log.Info("constraint controller", "generateVAPB", generateVAPB)
 
 	if !deleted {
@@ -469,7 +469,7 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 	return statusObj, nil
 }
 
-func hasVAPCel(ct *v1beta1.ConstraintTemplate) bool {
+func HasVAPCel(ct *v1beta1.ConstraintTemplate) bool {
 	if len(ct.Spec.Targets[0].Code) == 0 {
 		return false
 	}

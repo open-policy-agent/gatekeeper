@@ -39,7 +39,7 @@ func TestHasVAPCel(t *testing.T) {
 		},
 	}
 	expected := false
-	if result := hasVAPCel(ct); result != expected {
+	if result := HasVAPCel(ct); result != expected {
 		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
 	}
 
@@ -54,7 +54,7 @@ func TestHasVAPCel(t *testing.T) {
 		},
 	}
 	expected = false
-	if result := hasVAPCel(ct); result != expected {
+	if result := HasVAPCel(ct); result != expected {
 		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
 	}
 
@@ -72,7 +72,7 @@ func TestHasVAPCel(t *testing.T) {
 		},
 	}
 	expected = true
-	if result := hasVAPCel(ct); result != expected {
+	if result := HasVAPCel(ct); result != expected {
 		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
 	}
 
@@ -87,7 +87,7 @@ func TestHasVAPCel(t *testing.T) {
 		},
 	}
 	expected = true
-	if result := hasVAPCel(ct); result != expected {
+	if result := HasVAPCel(ct); result != expected {
 		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
 	}
 }

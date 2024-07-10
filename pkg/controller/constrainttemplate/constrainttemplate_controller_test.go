@@ -438,7 +438,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreatedWithoutGenerateVAP"
 		// TODO: set generate VAP flag to true
 		logger.Info("Running test: Vap should be created")
-		vapEnforcement = ptr.To[bool](true)
+		defaultGenerateVAP = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
