@@ -63,7 +63,7 @@ import (
 var (
 	log                 = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
 	discoveryErr        *apiutil.ErrResourceDiscoveryFailed
-	DefaultGenerateVAPB = flag.Bool("create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admissoin Policy Binding.")
+	DefaultGenerateVAPB = flag.Bool("create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
 )
 
 var vapMux sync.RWMutex
