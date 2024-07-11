@@ -134,7 +134,7 @@ spec:
             ...
 ```
 
-Constraints will follow the behavior defined by `--create-vap-binding-for-constraints` flag to generate K8s Validating Admission Policy Binding. By default, `--create-vap-binding-for-constraints` is set to `false`.
+Constraints will follow the behavior defined by `--default-create-vap-binding-for-constraints` flag to generate K8s Validating Admission Policy Binding. By default, `--default-create-vap-binding-for-constraints` is set to `false`.
 
 > [!TIP]
 > In the event K8s Validating Admission Controller fails open, Gatekeeper admission webhook can act as a backup.
