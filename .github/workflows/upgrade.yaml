@@ -68,15 +68,12 @@ jobs:
       - name: Upgrade Helm version
         run: |
           make docker-buildx \
-            IMG=gatekeeper-e2e:latest \
-            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+            IMG=gatekeeper-e2e:latest
 
           make docker-buildx-crds \
-            CRD_IMG=gatekeeper-crds:latest \
-            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+            CRD_IMG=gatekeeper-crds:latest 
 
-          make e2e-build-load-externaldata-image \
-            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+          make e2e-build-load-externaldata-image
 
           kind load docker-image --name kind \
             gatekeeper-e2e:latest \
