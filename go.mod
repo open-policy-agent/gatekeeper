@@ -8,7 +8,7 @@ require (
 	github.com/dapr/go-sdk v1.8.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/dominikbraun/graph v0.16.2
-	github.com/go-logr/logr v1.4.1
+	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
 	github.com/golang/protobuf v1.5.4
 	github.com/google/go-cmp v0.6.0
@@ -18,7 +18,7 @@ require (
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20240524210416-5368a3b697f2
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.19.1
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.9.0
 	go.opentelemetry.io/contrib/detectors/aws/ec2 v1.21.1
 	go.opentelemetry.io/contrib/detectors/gcp v1.21.1
@@ -35,7 +35,7 @@ require (
 	golang.org/x/sync v0.7.0
 	golang.org/x/time v0.5.0
 	google.golang.org/grpc v1.63.2
-	google.golang.org/protobuf v1.34.0
+	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.29.5
