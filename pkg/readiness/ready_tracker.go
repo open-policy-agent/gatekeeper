@@ -77,7 +77,7 @@ type Tracker struct {
 	constraints          *trackerMap
 	data                 *trackerMap
 
-	ready                        chan struct{}
+	initialized                  chan struct{}
 	constraintTrackers           *syncutil.SingleRunner
 	dataTrackers                 *syncutil.SingleRunner
 	statsEnabled                 syncutil.SyncBool
@@ -101,7 +101,7 @@ func newTracker(lister Lister, mutationEnabled, externalDataEnabled, expansionEn
 		syncsets:           newObjTracker(syncsetv1alpha1.GroupVersion.WithKind("SyncSet"), fn),
 		constraints:        newTrackerMap(fn),
 		data:               newTrackerMap(fn),
-		ready:              make(chan struct{}),
+		initialized:        make(chan struct{}),
 		constraintTrackers: &syncutil.SingleRunner{},
 		dataTrackers:       &syncutil.SingleRunner{},
 
@@ -209,7 +209,7 @@ func (t *Tracker) DataGVKs() []schema.GroupVersionKind {
 func (t *Tracker) templateCleanup(ct *templates.ConstraintTemplate) {
 	gvk := constraintGVK(ct)
 	t.constraints.Remove(gvk)
-	<-t.ready // constraintTrackers are setup in Run()
+	<-t.initialized // constraintTrackers are setup in Run()
 	t.constraintTrackers.Cancel(gvk.String())
 }
 
@@ -234,14 +234,14 @@ func (t *Tracker) TryCancelTemplate(ct *templates.ConstraintTemplate) {
 func (t *Tracker) CancelData(gvk schema.GroupVersionKind) {
 	log.V(logging.DebugLevel).Info("cancel tracking for data", "gvk", gvk)
 	t.data.Remove(gvk)
-	<-t.ready
+	<-t.initialized
 	t.dataTrackers.Cancel(gvk.String())
 }
 
 func (t *Tracker) TryCancelData(gvk schema.GroupVersionKind) {
 	log.V(logging.DebugLevel).Info("try to cancel tracking for data", "gvk", gvk)
 	if t.data.TryCancel(gvk) {
-		<-t.ready
+		<-t.initialized
 		t.dataTrackers.Cancel(gvk.String())
 	}
 }
@@ -329,22 +329,25 @@ func (t *Tracker) Run(ctx context.Context) error {
 	wg := &sync.WaitGroup{}
 	t.constraintTrackers = syncutil.NewSingleRunner(errChan)
 	t.dataTrackers = syncutil.NewSingleRunner(errChan)
-	close(t.ready) // The constraintTrackers and dataTrackers SingleRunners are ready.
+	close(t.initialized) // The constraintTrackers and dataTrackers SingleRunners are ready.
 
 	if t.mutationEnabled {
-		wg.Add(4)
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			t.trackAssignMetadata(ctx, errChan)
 		}()
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			t.trackAssign(ctx, errChan)
 		}()
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			t.trackModifySet(ctx, errChan)
 		}()
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			t.trackAssignImage(ctx, errChan)
@@ -366,6 +369,7 @@ func (t *Tracker) Run(ctx context.Context) error {
 			t.trackExpansionTemplates(ctx, errChan)
 		}()
 	}
+
 	if operations.HasValidationOperations() {
 		wg.Add(1)
 		go func() {
@@ -425,10 +429,9 @@ func (t *Tracker) Run(ctx context.Context) error {
 
 		if t.crashOnFailure {
 			return err
-		} else {
-			log.Error(err, "listing expectations")
 		}
 
+		log.Error(err, "listing expectations")
 	}
 }
 
@@ -593,11 +596,11 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context, errChan chan<- error)
 	}
 
 	assignMetadataList := &mutationv1.AssignMetadataList{}
-	retryPred := retryAll
+	listerRetryPredicate := retryAll
 	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		listerRetryPredicate = t.trackListerPredicateOverride
 	}
-	lister := retryLister(t.lister, retryPred)
+	lister := retryLister(t.lister, listerRetryPredicate)
 	if err := lister.List(ctx, assignMetadataList); err != nil {
 		hadError = true
 		errChan <- fmt.Errorf("listing AssignMetadata: %w", err)
@@ -626,11 +629,11 @@ func (t *Tracker) trackAssign(ctx context.Context, errChan chan<- error) {
 	}
 
 	assignList := &mutationv1.AssignList{}
-	retryPred := retryAll
+	listerRetryPredicate := retryAll
 	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		listerRetryPredicate = t.trackListerPredicateOverride
 	}
-	lister := retryLister(t.lister, retryPred)
+	lister := retryLister(t.lister, listerRetryPredicate)
 	if err := lister.List(ctx, assignList); err != nil {
 		hadError = true
 		errChan <- fmt.Errorf("listing Assign: %w", err)
@@ -659,11 +662,11 @@ func (t *Tracker) trackModifySet(ctx context.Context, errChan chan<- error) {
 	}
 
 	modifySetList := &mutationv1.ModifySetList{}
-	retryPred := retryAll
+	listerRetryPredicate := retryAll
 	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		listerRetryPredicate = t.trackListerPredicateOverride
 	}
-	lister := retryLister(t.lister, retryPred)
+	lister := retryLister(t.lister, listerRetryPredicate)
 	if err := lister.List(ctx, modifySetList); err != nil {
 		hadError = true
 		errChan <- fmt.Errorf("listing ModifySet: %w", err)
@@ -692,11 +695,11 @@ func (t *Tracker) trackAssignImage(ctx context.Context, errChan chan<- error) {
 	}
 
 	assignImageList := &mutationsv1alpha1.AssignImageList{}
-	retryPred := retryAll
+	listerRetryPredicate := retryAll
 	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		listerRetryPredicate = t.trackListerPredicateOverride
 	}
-	lister := retryLister(t.lister, retryPred)
+	lister := retryLister(t.lister, listerRetryPredicate)
 	if err := lister.List(ctx, assignImageList); err != nil {
 		hadError = true
 		errChan <- fmt.Errorf("listing AssignImage: %w", err)
@@ -725,11 +728,11 @@ func (t *Tracker) trackExpansionTemplates(ctx context.Context, errChan chan<- er
 	}
 
 	expansionList := &expansionv1alpha1.ExpansionTemplateList{}
-	retryPred := retryAll
+	listerRetryPredicate := retryAll
 	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		listerRetryPredicate = t.trackListerPredicateOverride
 	}
-	lister := retryLister(t.lister, retryPred)
+	lister := retryLister(t.lister, listerRetryPredicate)
 	if err := lister.List(ctx, expansionList); err != nil {
 		hadError = true
 		errChan <- fmt.Errorf("listing ExpansionTemplates: %w", err)
@@ -758,11 +761,11 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context, errChan chan<- 
 	}
 
 	providerList := &externaldatav1beta1.ProviderList{}
-	retryPred := retryAll
+	listerRetryPredicate := retryAll
 	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		listerRetryPredicate = t.trackListerPredicateOverride
 	}
-	lister := retryLister(t.lister, retryPred)
+	lister := retryLister(t.lister, listerRetryPredicate)
 	if err := lister.List(ctx, providerList); err != nil {
 		hadError = true
 		errChan <- fmt.Errorf("listing Provider: %w", err)
@@ -787,11 +790,11 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context, errChan chan<- e
 	}()
 
 	templates := &v1beta1.ConstraintTemplateList{}
-	retryPred := retryAll
+	listerRetryPredicate := retryAll
 	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		listerRetryPredicate = t.trackListerPredicateOverride
 	}
-	lister := retryLister(t.lister, retryPred)
+	lister := retryLister(t.lister, listerRetryPredicate)
 	if err := lister.List(ctx, templates); err != nil {
 		hadError = true
 		errChan <- fmt.Errorf("listing templates: %w", err)
@@ -870,11 +873,11 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context, errChan chan<- err
 	}
 
 	syncsets := &syncsetv1alpha1.SyncSetList{}
-	retryPred := retryAll
+	listerRetryPredicate := retryAll
 	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		listerRetryPredicate = t.trackListerPredicateOverride
 	}
-	lister := retryLister(t.lister, retryPred)
+	lister := retryLister(t.lister, listerRetryPredicate)
 	if err := lister.List(ctx, syncsets); err != nil {
 		hadErr = true
 		errChan <- fmt.Errorf("listing syncsets: %w", err)
@@ -912,11 +915,11 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context, errChan chan<- err
 // Returns a nil reference if it is not found.
 func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config, error) {
 	lst := &configv1alpha1.ConfigList{}
-	retryPred := retryAll
+	listerRetryPredicate := retryAll
 	if t.trackListerPredicateOverride != nil {
-		retryPred = t.trackListerPredicateOverride
+		listerRetryPredicate = t.trackListerPredicateOverride
 	}
-	lister := retryLister(t.lister, retryPred)
+	lister := retryLister(t.lister, listerRetryPredicate)
 	if err := lister.List(ctx, lst); err != nil {
 		return nil, fmt.Errorf("listing configs: %w", err)
 	}
@@ -956,11 +959,11 @@ func (t *Tracker) makeDataTrackerFor(gvk schema.GroupVersionKind, dt Expectation
 			Kind:    gvk.Kind + "List",
 		})
 		// NoKindMatchError is non-recoverable, otherwise we'll retry.
-		retryPred := retryUnlessUnregistered
+		listerRetryPredicate := retryUnlessUnregistered
 		if t.trackListerPredicateOverride != nil {
-			retryPred = t.trackListerPredicateOverride
+			listerRetryPredicate = t.trackListerPredicateOverride
 		}
-		lister := retryLister(t.lister, retryPred)
+		lister := retryLister(t.lister, listerRetryPredicate)
 		err := lister.List(ctx, u)
 		if err != nil {
 			hadError = true
@@ -992,11 +995,11 @@ func (t *Tracker) makeConstraintTrackerFor(gvk schema.GroupVersionKind, constrai
 
 		u := unstructured.UnstructuredList{}
 		u.SetGroupVersionKind(gvk)
-		retryPred := retryAll
+		listerRetryPredicate := retryAll
 		if t.trackListerPredicateOverride != nil {
-			retryPred = t.trackListerPredicateOverride
+			listerRetryPredicate = t.trackListerPredicateOverride
 		}
-		lister := retryLister(t.lister, retryPred)
+		lister := retryLister(t.lister, listerRetryPredicate)
 		if err := lister.List(ctx, &u); err != nil {
 			hadError = true
 			log.Error(err, "aborted trackConstraints", "gvk", gvk)
