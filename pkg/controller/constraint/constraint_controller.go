@@ -27,7 +27,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	pSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
+	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
@@ -63,7 +63,7 @@ import (
 var (
 	log                 = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
 	discoveryErr        *apiutil.ErrResourceDiscoveryFailed
-	DefaultGenerateVAPB = flag.Bool("default-create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
+	DefaultGenerateVAPB = flag.Bool("default-create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
 )
 
 var vapMux sync.RWMutex
@@ -474,7 +474,7 @@ func HasVAPCel(ct *v1beta1.ConstraintTemplate) bool {
 		return false
 	}
 	for _, code := range ct.Spec.Targets[0].Code {
-		if code.Engine == pSchema.Name {
+		if code.Engine == celSchema.Name {
 			return true
 		}
 	}

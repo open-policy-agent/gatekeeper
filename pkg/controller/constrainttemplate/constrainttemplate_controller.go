@@ -67,7 +67,7 @@ const (
 var (
 	logger             = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
 	discoveryErr       *apiutil.ErrResourceDiscoveryFailed
-	defaultGenerateVAP = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
+	defaultGenerateVAP = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
 )
 
 var gvkConstraintTemplate = schema.GroupVersionKind{
