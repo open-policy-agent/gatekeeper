@@ -9,27 +9,8 @@ import (
 
 	"github.com/dapr/go-sdk/service/common"
 	daprd "github.com/dapr/go-sdk/service/http"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/audit"
 )
-
-type PubsubMsg struct {
-	ID                    string            `json:"id,omitempty"`
-	Details               interface{}       `json:"details,omitempty"`
-	EventType             string            `json:"eventType,omitempty"`
-	Group                 string            `json:"group,omitempty"`
-	Version               string            `json:"version,omitempty"`
-	Kind                  string            `json:"kind,omitempty"`
-	Name                  string            `json:"name,omitempty"`
-	Namespace             string            `json:"namespace,omitempty"`
-	Message               string            `json:"message,omitempty"`
-	EnforcementAction     string            `json:"enforcementAction,omitempty"`
-	ConstraintAnnotations map[string]string `json:"constraintAnnotations,omitempty"`
-	ResourceGroup         string            `json:"resourceGroup,omitempty"`
-	ResourceAPIVersion    string            `json:"resourceAPIVersion,omitempty"`
-	ResourceKind          string            `json:"resourceKind,omitempty"`
-	ResourceNamespace     string            `json:"resourceNamespace,omitempty"`
-	ResourceName          string            `json:"resourceName,omitempty"`
-	ResourceLabels        map[string]string `json:"resourceLabels,omitempty"`
-}
 
 func main() {
 	auditChannel := os.Getenv("AUDIT_CHANNEL")
@@ -52,7 +33,7 @@ func main() {
 }
 
 func eventHandler(_ context.Context, e *common.TopicEvent) (retry bool, err error) {
-	var msg PubsubMsg
+	var msg audit.PubsubMsg
 	jsonInput, err := strconv.Unquote(string(e.RawData))
 	if err != nil {
 		log.Fatalf("error unquoting %v", err)

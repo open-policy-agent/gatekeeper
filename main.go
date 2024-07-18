@@ -117,7 +117,7 @@ var (
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "Alpha: enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
-	deferAdmissionToVAP                           = flag.Bool("defer-admission-to-vap", false, "When set to false, Gatekeeper webhook can act as a fallback in case K8s' Validating Admission Policy fails.  When set to true, Gatekeeper validating webhook will not evaluate a policy for an admission request it expects vap to enforce. May improve resource usage at the cost of race conditions detecting whether VAP enforcement is in effect. This does not impact audit results. Defaults to false.")
+	deferAdmissionToVAP                  = flag.Bool("defer-admission-to-vap", false, "When set to false, Gatekeeper webhook can act as a fallback in case K8s' Validating Admission Policy fails.  When set to true, Gatekeeper validating webhook will not evaluate a policy for an admission request it expects vap to enforce. May improve resource usage at the cost of race conditions detecting whether VAP enforcement is in effect. This does not impact audit results. Defaults to false.")
 )
 
 func init() {
