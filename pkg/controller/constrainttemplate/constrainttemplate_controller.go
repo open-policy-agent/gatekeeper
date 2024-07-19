@@ -381,11 +381,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return reconcile.Result{}, err
 	}
-	err = nil
-	generateVap := false
-	if constraint.HasVAPCel(ct) {
-		generateVap, err = shouldGenerateVAP(unversionedCT, *defaultGenerateVAP)
-	}
+	generateVap, err := shouldGenerateVAP(unversionedCT, *defaultGenerateVAP)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

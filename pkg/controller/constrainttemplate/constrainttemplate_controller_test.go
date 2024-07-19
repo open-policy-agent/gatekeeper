@@ -1084,6 +1084,18 @@ func TestShouldGenerateVAP(t *testing.T) {
 			vapDefault: false,
 			expected:   false,
 		},
+		{
+			name:       "missing, default 'yes'",
+			template:   makeTemplate(nil),
+			vapDefault: true,
+			expected:   true,
+		},
+		{
+			name:       "missing, default 'no'",
+			template:   makeTemplate(nil),
+			vapDefault: false,
+			expected:   false,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
