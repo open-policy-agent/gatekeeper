@@ -1024,6 +1024,7 @@ func TestShouldGenerateVAP(t *testing.T) {
 		template   *templates.ConstraintTemplate
 		vapDefault bool
 		expected   bool
+		wantErr    bool
 	}{
 		{
 			name: "missing K8sNative driver",
@@ -1059,49 +1060,59 @@ func TestShouldGenerateVAP(t *testing.T) {
 			},
 			vapDefault: true,
 			expected:   false,
+			wantErr:    false,
 		},
 		{
 			name:       "Enabled, default 'no'",
 			template:   makeTemplate(ptr.To[bool](true)),
 			vapDefault: false,
 			expected:   true,
+			wantErr:    false,
 		},
 		{
 			name:       "Enabled, default 'yes'",
 			template:   makeTemplate(ptr.To[bool](true)),
 			vapDefault: true,
 			expected:   true,
+			wantErr:    false,
 		},
 		{
 			name:       "Disabled, default 'yes'",
 			template:   makeTemplate(ptr.To[bool](false)),
 			vapDefault: true,
 			expected:   false,
+			wantErr:    false,
 		},
 		{
 			name:       "Disabled, default 'no'",
 			template:   makeTemplate(ptr.To[bool](false)),
 			vapDefault: false,
 			expected:   false,
+			wantErr:    false,
 		},
 		{
 			name:       "missing, default 'yes'",
 			template:   makeTemplate(nil),
 			vapDefault: true,
 			expected:   true,
+			wantErr:    false,
 		},
 		{
 			name:       "missing, default 'no'",
 			template:   makeTemplate(nil),
 			vapDefault: false,
 			expected:   false,
+			wantErr:    false,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			generateVAP, _ := shouldGenerateVAP(test.template, test.vapDefault)
+			generateVAP, err := shouldGenerateVAP(test.template, test.vapDefault)
 			if generateVAP != test.expected {
 				t.Errorf("wanted assumeVAP to be %v; got %v", test.expected, generateVAP)
+			}
+			if test.wantErr != (err != nil) {
+				t.Errorf("wanted error %v; got %v", test.wantErr, err)
 			}
 		})
 	}

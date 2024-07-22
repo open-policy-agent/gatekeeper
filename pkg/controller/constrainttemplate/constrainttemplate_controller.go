@@ -383,7 +383,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	}
 	generateVap, err := shouldGenerateVAP(unversionedCT, *defaultGenerateVAP)
 	if err != nil {
-		return reconcile.Result{}, err
+		logger.Error(err, "generateVap error")
 	}
 	logger.Info("generateVap", "r.generateVap", generateVap)
 
@@ -740,6 +740,9 @@ func makeGvk(kind string) schema.GroupVersionKind {
 
 func shouldGenerateVAP(ct *templates.ConstraintTemplate, generateVAPDefault bool) (bool, error) {
 	source, err := pSchema.GetSourceFromTemplate(ct)
+	if errors.Is(err, pSchema.ErrCodeNotDefined) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
