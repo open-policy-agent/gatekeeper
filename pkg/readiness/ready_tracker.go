@@ -17,7 +17,6 @@ package readiness
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net/http"
 	"sync"
@@ -46,7 +45,9 @@ import (
 
 var log = logf.Log.WithName("readiness-tracker")
 
-var crashOnFailureFetchingExpectations = flag.Bool("crash-on-failure-fetching-expectations", false, "Unless set (defaults to false), gatekeeper will ignore errors when gathering expectations. This prevents bootstrapping errors from crashing Gatekeeper at the cost of increasing the risk Gatekeeper will under-enforce policy. Enabling this will help prevent under-enforcement at the risk of crashing during startup. Note that enabling this flag currently does not achieve the aforementioned effect since fetching expectations will retry until success.")
+// Commenting out the flag and replacing with a false boolean constant because the value of the flag is currently moot without a retry limit
+// var crashOnFailureFetchingExpectations = flag.Bool("crash-on-failure-fetching-expectations", false, "Unless set (defaults to false), gatekeeper will ignore errors when gathering expectations. This prevents bootstrapping errors from crashing Gatekeeper at the cost of increasing the risk Gatekeeper will under-enforce policy. Enabling this will help prevent under-enforcement at the risk of crashing during startup. Note that enabling this flag currently does not achieve the aforementioned effect since fetching expectations will retry until success.")
+const crashOnFailureFetchingExpectations = false
 
 const (
 	constraintGroup = "constraints.gatekeeper.sh"
@@ -90,7 +91,8 @@ type Tracker struct {
 
 // NewTracker creates a new Tracker and initializes the internal trackers.
 func NewTracker(lister Lister, mutationEnabled, externalDataEnabled, expansionEnabled bool) *Tracker {
-	return newTracker(lister, mutationEnabled, externalDataEnabled, expansionEnabled, *crashOnFailureFetchingExpectations, nil, nil)
+	// Dereference crashOnFailureFetchingExpectations when we change crashOnFailureFetchingExpectations back to a flag
+	return newTracker(lister, mutationEnabled, externalDataEnabled, expansionEnabled, crashOnFailureFetchingExpectations, nil, nil)
 }
 
 func newTracker(lister Lister, mutationEnabled, externalDataEnabled, expansionEnabled bool, crashOnFailure bool, trackListerPredicateOverride retryPredicate, fn objDataFactory) *Tracker {
