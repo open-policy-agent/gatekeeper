@@ -1,7 +1,6 @@
 package schema
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -22,13 +21,8 @@ const (
 	ReservedPrefix = "gatekeeper_internal_"
 	// ParamsName is the VAP variable constraint parameters will be bound to.
 	ParamsName = "params"
-	// ObjectName is the VAP variable that describes either an object or (on DELETE requests) oldObject
+	// ObjectName is the VAP variable that describes either an object or (on DELETE requests) oldObject.
 	ObjectName = "anyObject"
-)
-
-var (
-	ErrBadType      = errors.New("Could not recognize the type")
-	ErrMissingField = errors.New("K8sNativeValidation source missing required field")
 )
 
 type Validation struct {
@@ -61,6 +55,9 @@ type Source struct {
 
 	// Variables maps to ValidatingAdmissionPolicy's `spec.variables`.
 	Variables []Variable `json:"variables,omitempty"`
+
+	// GenerateVAP enables/disables VAP generation and enforcement for policy.
+	GenerateVAP *bool `json:"generateVAP,omitempty"`
 }
 
 func (in *Source) Validate() error {
@@ -275,7 +272,7 @@ func GetSource(code templates.Code) (*Source, error) {
 
 func GetSourceFromTemplate(ct *templates.ConstraintTemplate) (*Source, error) {
 	if len(ct.Spec.Targets) != 1 {
-		return nil, errors.New("wrong number of targets defined, only 1 target allowed")
+		return nil, ErrOneTargetAllowed
 	}
 
 	var source *Source
@@ -291,7 +288,7 @@ func GetSourceFromTemplate(ct *templates.ConstraintTemplate) (*Source, error) {
 		break
 	}
 	if source == nil {
-		return nil, errors.New("K8sNativeValidation code not defined")
+		return nil, ErrCodeNotDefined
 	}
 	return source, nil
 }
