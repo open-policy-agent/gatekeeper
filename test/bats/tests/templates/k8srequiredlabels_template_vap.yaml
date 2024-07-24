@@ -2,8 +2,6 @@ apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
   name: k8srequiredlabelsvap
-  labels:
-    "gatekeeper.sh/use-vap": "yes"
 spec:
   crd:
     spec:
@@ -30,6 +28,7 @@ spec:
       code:
         - engine: K8sNativeValidation
           source:
+            generateVAP: true
             validations:
             - expression: '[object, oldObject].exists(obj, obj != null && has(obj.metadata) && variables.params.labels.all(entry, has(obj.metadata.labels) && entry.key in obj.metadata.labels))'
               messageExpression: '"missing required label, requires all of: " + variables.params.labels.map(entry, entry.key).join(", ")'
