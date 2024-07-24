@@ -18,7 +18,7 @@ VERSION := v3.17.0-beta.0
 
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.30.3
+KUBERNETES_VERSION ?= 1.30.0
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.8.2
 ORAS_VERSION ?= 0.16.0
