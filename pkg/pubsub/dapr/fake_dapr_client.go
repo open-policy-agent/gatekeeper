@@ -32,7 +32,7 @@ const (
 
 var logger = log.New(os.Stdout, "", 0)
 
-func getTestClient(ctx context.Context) (client daprClient.Client, closer func()) {
+func getTestClient(_ context.Context) (client daprClient.Client, closer func()) {
 	s := grpc.NewServer()
 	pb.RegisterDaprServer(s, &testDaprServer{
 		state:                       make(map[string][]byte),
@@ -46,11 +46,15 @@ func getTestClient(ctx context.Context) (client daprClient.Client, closer func()
 		}
 	}()
 
+	const serviceAddress = "localhost:50051"
+
 	d := grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 		return l.Dial()
 	})
 
-	c, err := grpc.DialContext(ctx, "", d, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	opts := []grpc.DialOption{d, grpc.WithTransportCredentials(insecure.NewCredentials())}
+	// Replace "" with `serviceAddress` to specify the service to connect to
+	c, err := grpc.NewClient(serviceAddress, opts...)
 	if err != nil {
 		logger.Fatalf("failed to dial test context: %v", err)
 	}
