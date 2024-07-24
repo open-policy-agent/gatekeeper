@@ -17,7 +17,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/opa/storage"
 	admissionv1 "k8s.io/api/admission/v1"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
@@ -52,15 +51,13 @@ const (
 var _ drivers.Driver = &Driver{}
 
 type Driver struct {
-	mux                sync.RWMutex
-	validators         map[string]*validatorWrapper
-	generateVAPDefault *vapDefault
-	gatherStats        bool
+	mux         sync.RWMutex
+	validators  map[string]*validatorWrapper
+	gatherStats bool
 }
 
 type validatorWrapper struct {
-	assumeVAPEnforcement bool
-	validator            validatingadmissionpolicy.Validator
+	validator validatingadmissionpolicy.Validator
 }
 
 func (d *Driver) Name() string {
@@ -122,13 +119,10 @@ func (d *Driver) AddTemplate(_ context.Context, ct *templates.ConstraintTemplate
 		failurePolicy,
 	)
 
-	assumeVAPEnforcement := d.assumeVAPEnforcement(ct)
-
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	d.validators[ct.GetName()] = &validatorWrapper{
-		validator:            validator,
-		assumeVAPEnforcement: assumeVAPEnforcement,
+		validator: validator,
 	}
 	return nil
 }
@@ -167,17 +161,20 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 
 	var statsEntries []*instrumentation.StatsEntry
 
-	isAdmission := false
-	isAdmissionGetter, ok := review.(IsAdmissionGetter)
-	if ok {
-		isAdmission = isAdmissionGetter.IsAdmissionRequest()
-	}
-
 	arGetter, ok := review.(ARGetter)
 	if !ok {
 		return nil, errors.New("cannot convert review to ARGetter")
 	}
 	aRequest := arGetter.GetAdmissionRequest()
+	// Gatekeeper sets Object to oldObject on DELETE requests
+	// however, Kubernetes does not do this for ValidatingAdmissionPolicy.
+	// in order for evaluation in both environments to behave identically,
+	// we must be sure that Object is unset on DELETE. Users who need
+	// the "if DELETE Object == OldObject" behavior should use the
+	// `variables.anyObject` variable instead.
+	if aRequest.Operation == admissionv1.Delete {
+		aRequest.Object = runtime.RawExtension{}
+	}
 	versionedAttr, err := transform.RequestToVersionedAttributes(aRequest)
 	if err != nil {
 		return nil, err
@@ -191,14 +188,6 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		wrappedValidator := d.validators[strings.ToLower(constraint.GetKind())]
 		if wrappedValidator == nil {
 			return nil, fmt.Errorf("unknown constraint template validator: %s", constraint.GetKind())
-		}
-
-		assumeVAPEnforcementNotDisabled := assumeVAPEnforcementWithDefault(constraint, VAPDefaultYes)
-
-		// if we assume VAP enforcement for a given constraint/template combo, Gatekeeper
-		// should not be evaluating that constraint/template in an admission context.
-		if isAdmission && assumeVAPEnforcementNotDisabled && wrappedValidator.assumeVAPEnforcement {
-			continue
 		}
 
 		validator := wrappedValidator.validator
@@ -260,38 +249,6 @@ func (d *Driver) GetDescriptionForStat(statName string) (string, error) {
 		return runTimeNSDescription, nil
 	default:
 		return "", fmt.Errorf("unknown stat name for K8sNativeValidation: %s", statName)
-	}
-}
-
-func (d *Driver) assumeVAPEnforcement(obj runtime.Object) bool {
-	if d.generateVAPDefault == nil {
-		return false
-	}
-
-	return assumeVAPEnforcementWithDefault(obj, *d.generateVAPDefault)
-}
-
-func assumeVAPEnforcementWithDefault(obj runtime.Object, vapDef vapDefault) bool {
-	meta, err := apimeta.Accessor(obj)
-	if err != nil {
-		return false
-	}
-	labels := meta.GetLabels()
-	if labels == nil {
-		labels = map[string]string{}
-	}
-	shouldGen, ok := labels[VAPGenerationLabel]
-	if !ok {
-		shouldGen = string(vapDef)
-	}
-	switch vapDefault(shouldGen) {
-	case VAPDefaultYes:
-		return true
-	case VAPDefaultNo:
-		return false
-	// on unrecognized value, use the default
-	default:
-		return vapDef == VAPDefaultYes
 	}
 }
 
