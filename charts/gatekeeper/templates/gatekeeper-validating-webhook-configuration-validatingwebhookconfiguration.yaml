@@ -37,7 +37,7 @@ webhooks:
       operator: NotIn
       values:
       - {{ .Release.Namespace }}
-    
+
     {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
       operator: NotIn
@@ -60,6 +60,9 @@ webhooks:
     - UPDATE
     {{- if .Values.enableDeleteOperations }}
     - DELETE
+    {{- end }}
+    {{- if .Values.enableConnectOperations }}
+    - CONNECT
     {{- end }}
     resources:
     - '*'
