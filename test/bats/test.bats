@@ -354,7 +354,7 @@ __required_labels_audit_test() {
     return 3
   fi
 
-  local scopedEnforcementActions=$(echo "${cstr}" | jq -r '.status.violations[].enforcementActions')
+  local scopedEnforcementActions=$(echo "${cstr}" | jq -r '.status.violations[].enforcementActions[]')
   local match=true
 
   for scopedEnforcementAction in $scopedEnforcementActions; do
