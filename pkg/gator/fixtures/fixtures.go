@@ -225,9 +225,6 @@ spec:
   - enforcementPoints:
     - name: gator.gatekeeper.sh
     action: deny
-  - enforcementPoints:
-    - name: gator.gatekeeper.sh
-    action: warn
 `
 
 	ConstraintAuditValidate = `

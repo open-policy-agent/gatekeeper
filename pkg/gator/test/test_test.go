@@ -200,7 +200,7 @@ func TestTest(t *testing.T) {
 						Msg:                      "never validate",
 						Constraint:               constraintGatorValidate,
 						EnforcementAction:        "scoped",
-						ScopedEnforcementActions: []string{"deny", "warn"},
+						ScopedEnforcementActions: []string{"deny"},
 					},
 				},
 				{
@@ -209,7 +209,7 @@ func TestTest(t *testing.T) {
 						Msg:                      "never validate",
 						Constraint:               constraintGatorValidate,
 						EnforcementAction:        "scoped",
-						ScopedEnforcementActions: []string{"deny", "warn"},
+						ScopedEnforcementActions: []string{"deny"},
 					},
 				},
 				{
@@ -218,7 +218,7 @@ func TestTest(t *testing.T) {
 						Msg:                      "never validate",
 						Constraint:               constraintGatorValidate,
 						EnforcementAction:        "scoped",
-						ScopedEnforcementActions: []string{"deny", "warn"},
+						ScopedEnforcementActions: []string{"deny"},
 					},
 				},
 			},

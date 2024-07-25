@@ -309,18 +309,19 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				}
 				return reconcile.Result{}, err
 			}
-			isVAPBGenerationEnabled := generateVAPB && IsVapAPIEnabled() && HasVAPCel(ct)
-			if generateVAPB != isVAPBGenerationEnabled {
+			if generateVAPB {
 				if !IsVapAPIEnabled() {
 					r.log.V(1).Info("Warning: VAP API is not enabled, cannot create VAPBinding")
+					generateVAPB = false
 				}
 				if !HasVAPCel(ct) {
 					r.log.V(1).Info("Warning: ConstraintTemplate does not contain VAP-style CEL source, cannot create VAPBinding")
+					generateVAPB = false
 				}
 			}
-			r.log.Info("constraint controller", "generateVAPB", isVAPBGenerationEnabled)
+			r.log.Info("constraint controller", "generateVAPB", generateVAPB)
 			// generate vapbinding resources
-			if isVAPBGenerationEnabled {
+			if generateVAPB {
 				currentVapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
