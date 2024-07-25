@@ -292,12 +292,26 @@ __required_labels_audit_test() {
     return 3
   fi
 
-  local violations=$(echo "${cstr}" | jq -r '.status.violations[].enforcementAction')
+  local enforcementActions=$(echo "${cstr}" | jq -r '.status.violations[].enforcementAction')
   local match=true
 
-  for violation in $violations; do
-    if [[ "${violation}" != "deny" ]]; then
-      echo "Mismatch found: Enforcement action is ${violation}, expected deny"
+  for enforcementAction in $enforcementActions; do
+    if [[ "${enforcementAction}" != "scoped" ]]; then
+      echo "Mismatch found: Enforcement action is ${enforcementAction}, expected scoped"
+      match=false
+    fi
+  done
+
+  if [[ "${match}" == "false" ]]; then
+    return 3
+  fi
+
+  local scopedEnforcementActions=$(echo "${cstr}" | jq -r '.status.violations[].enforcementActions[]')
+  local match=true
+
+  for scopedEnforcementAction in $scopedEnforcementActions; do
+    if [[ "${scopedEnforcementAction}" != "deny" ]]; then
+      echo "Mismatch found: Enforcement action is ${scopedEnforcementAction}, expected deny"
       match=false
     fi
   done
@@ -326,12 +340,26 @@ __required_labels_audit_test() {
     return 3
   fi
 
-  local violations=$(echo "${cstr}" | jq -r '.status.violations[].enforcementAction')
+  local enforcementActions=$(echo "${cstr}" | jq -r '.status.violations[].enforcementAction')
   local match=true
 
-  for violation in $violations; do
-    if [[ "${violation}" != "warn" ]]; then
-      echo "Mismatch found: Enforcement action is ${violation}, expected warn"
+  for enforcementAction in $enforcementActions; do
+    if [[ "${enforcementAction}" != "scoped" ]]; then
+      echo "Mismatch found: Enforcement action is ${enforcementAction}, expected scoped"
+      match=false
+    fi
+  done
+
+  if [[ "${match}" == "false" ]]; then
+    return 3
+  fi
+
+  local scopedEnforcementActions=$(echo "${cstr}" | jq -r '.status.violations[].enforcementActions')
+  local match=true
+
+  for scopedEnforcementAction in $scopedEnforcementActions; do
+    if [[ "${scopedEnforcementAction}" != "warn" ]]; then
+      echo "Mismatch found: Enforcement action is ${scopedEnforcementAction}, expected warn"
       match=false
     fi
   done
