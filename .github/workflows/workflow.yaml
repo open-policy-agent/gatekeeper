@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        KUBERNETES_VERSION: ["1.26.15", "1.27.13", "1.28.9", "1.29.4", "1.30.0"]
+        KUBERNETES_VERSION: ["1.27.13", "1.28.9", "1.29.4", "1.30.0"]
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@0d381219ddf674d61a7572ddd19d7941e271515c # v2.9.0
