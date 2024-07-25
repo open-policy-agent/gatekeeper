@@ -5,6 +5,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 )
 
 func NewOPAClient(includeTrace bool, k8sCEL bool) (Client, error) {
@@ -23,7 +24,7 @@ func NewOPAClient(includeTrace bool, k8sCEL bool) (Client, error) {
 		return nil, err
 	}
 
-	args = append(args, constraintclient.Driver(driver))
+	args = append(args, constraintclient.Driver(driver), constraintclient.EnforcementPoints([]string{util.GatorEnforcementPoint}...))
 
 	c, err := constraintclient.NewClient(args...)
 	if err != nil {

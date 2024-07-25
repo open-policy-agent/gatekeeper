@@ -28,6 +28,9 @@ type Result struct {
 
 	// The enforcement action of the constraint
 	EnforcementAction string `json:"enforcementAction,omitempty"`
+
+	// The scoped actions of the constraint
+	ScopedEnforcementActions []string `json:"scopedActions,omitempty"`
 }
 
 // Response is a collection of Constraint violations for a particular Target.

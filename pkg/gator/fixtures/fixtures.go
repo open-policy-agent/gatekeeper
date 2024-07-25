@@ -214,6 +214,35 @@ metadata:
   name: always-fail
 `
 
+	ConstraintGatorValidate = `
+kind: NeverValidate
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: always-fail-gator
+spec:
+  enforcementAction: scoped
+  scopedEnforcementActions:
+  - enforcementPoints:
+    - name: gator.gatekeeper.sh
+    action: deny
+  - enforcementPoints:
+    - name: gator.gatekeeper.sh
+    action: warn
+`
+
+	ConstraintAuditValidate = `
+kind: NeverValidate
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: always-pass-gator
+spec:
+  enforcementAction: scoped
+  scopedEnforcementActions:
+  - enforcementPoints:
+    - name: audit.gatekeeper.sh
+    action: deny
+`
+
 	ConstraintNeverValidateTwice = `
 kind: NeverValidateTwice
 apiVersion: constraints.gatekeeper.sh/v1beta1

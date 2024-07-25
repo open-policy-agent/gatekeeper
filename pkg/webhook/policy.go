@@ -29,7 +29,7 @@ import (
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -258,72 +258,78 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 		}
 	}
 	for _, r := range res {
-		if err := util.ValidateEnforcementAction(util.EnforcementAction(r.EnforcementAction)); err != nil {
-			continue
+		actions := r.ScopedEnforcementActions
+		if len(actions) == 0 {
+			actions = []string{r.EnforcementAction}
 		}
-		if *logDenies {
-			h.log.WithValues(
-				logging.Process, "admission",
-				logging.Details, r.Metadata["details"],
-				logging.EventType, "violation",
-				logging.ConstraintName, r.Constraint.GetName(),
-				logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
-				logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
-				logging.ConstraintKind, r.Constraint.GetKind(),
-				logging.ConstraintAction, r.EnforcementAction,
-				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
-				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
-				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
-				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
-				logging.ResourceName, resourceName,
-				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
-			).Info(
-				fmt.Sprintf("denied admission: %s", r.Msg))
-		}
-		if *emitAdmissionEvents {
-			annotations := map[string]string{
-				logging.Process:              "admission",
-				logging.EventType:            "violation",
-				logging.ConstraintName:       r.Constraint.GetName(),
-				logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
-				logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
-				logging.ConstraintKind:       r.Constraint.GetKind(),
-				logging.ConstraintAction:     r.EnforcementAction,
-				logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
-				logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
-				logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
-				logging.ResourceNamespace:    req.AdmissionRequest.Namespace,
-				logging.ResourceName:         resourceName,
-				logging.RequestUsername:      req.AdmissionRequest.UserInfo.Username,
+		for _, action := range actions {
+			if err := util.ValidateEnforcementAction(util.EnforcementAction(action), r.Constraint.Object); err != nil {
+				continue
 			}
-			var eventMsg, reason string
-			switch r.EnforcementAction {
-			case string(util.Dryrun):
-				eventMsg = "Dryrun violation"
-				reason = "DryrunViolation"
-			case string(util.Warn):
-				eventMsg = "Admission webhook \"validation.gatekeeper.sh\" raised a warning for this request"
-				reason = "WarningAdmission"
-			default:
-				eventMsg = "Admission webhook \"validation.gatekeeper.sh\" denied request"
-				reason = "FailedAdmission"
+			if *logDenies {
+				h.log.WithValues(
+					logging.Process, "admission",
+					logging.Details, r.Metadata["details"],
+					logging.EventType, "violation",
+					logging.ConstraintName, r.Constraint.GetName(),
+					logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
+					logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
+					logging.ConstraintKind, r.Constraint.GetKind(),
+					logging.ConstraintAction, r.EnforcementAction,
+					logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
+					logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
+					logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
+					logging.ResourceNamespace, req.AdmissionRequest.Namespace,
+					logging.ResourceName, resourceName,
+					logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
+				).Info(
+					fmt.Sprintf("denied admission: %s", r.Msg))
+			}
+			if *emitAdmissionEvents {
+				annotations := map[string]string{
+					logging.Process:              "admission",
+					logging.EventType:            "violation",
+					logging.ConstraintName:       r.Constraint.GetName(),
+					logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
+					logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
+					logging.ConstraintKind:       r.Constraint.GetKind(),
+					logging.ConstraintAction:     action,
+					logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
+					logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
+					logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
+					logging.ResourceNamespace:    req.AdmissionRequest.Namespace,
+					logging.ResourceName:         resourceName,
+					logging.RequestUsername:      req.AdmissionRequest.UserInfo.Username,
+				}
+				var eventMsg, reason string
+				switch action {
+				case string(util.Dryrun):
+					eventMsg = "Dryrun violation"
+					reason = "DryrunViolation"
+				case string(util.Warn):
+					eventMsg = "Admission webhook \"validation.gatekeeper.sh\" raised a warning for this request"
+					reason = "WarningAdmission"
+				default:
+					eventMsg = "Admission webhook \"validation.gatekeeper.sh\" denied request"
+					reason = "FailedAdmission"
+				}
+
+				ref := getViolationRef(h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, obj.GetNamespace(), obj.GetResourceVersion(), obj.GetUID(), r.Constraint.GetKind(), r.Constraint.GetName(), r.Constraint.GetNamespace(), *admissionEventsInvolvedNamespace)
+
+				if *admissionEventsInvolvedNamespace {
+					h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Constraint: %s, Message: %s", eventMsg, r.Constraint.GetName(), r.Msg)
+				} else {
+					h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint: %s, Message: %s", eventMsg, req.AdmissionRequest.Namespace, r.Constraint.GetName(), r.Msg)
+				}
 			}
 
-			ref := getViolationRef(h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, obj.GetNamespace(), obj.GetResourceVersion(), obj.GetUID(), r.Constraint.GetKind(), r.Constraint.GetName(), r.Constraint.GetNamespace(), *admissionEventsInvolvedNamespace)
-
-			if *admissionEventsInvolvedNamespace {
-				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Constraint: %s, Message: %s", eventMsg, r.Constraint.GetName(), r.Msg)
-			} else {
-				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint: %s, Message: %s", eventMsg, req.AdmissionRequest.Namespace, r.Constraint.GetName(), r.Msg)
+			if action == string(util.Deny) {
+				denyMsgs = append(denyMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
 			}
-		}
 
-		if r.EnforcementAction == string(util.Deny) {
-			denyMsgs = append(denyMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
-		}
-
-		if r.EnforcementAction == string(util.Warn) {
-			warnMsgs = append(warnMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
+			if action == string(util.Warn) {
+				warnMsgs = append(warnMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
+			}
 		}
 	}
 	return denyMsgs, warnMsgs
@@ -413,7 +419,7 @@ func (h *validationHandler) validateConstraint(req *admission.Request) (bool, er
 	enforcementAction := util.EnforcementAction(enforcementActionString)
 	if found && enforcementAction != "" {
 		if !*disableEnforcementActionValidation {
-			err = util.ValidateEnforcementAction(enforcementAction)
+			err = util.ValidateEnforcementAction(enforcementAction, obj.Object)
 			if err != nil {
 				return false, err
 			}
@@ -599,7 +605,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 }
 
 func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {
-	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace), drivers.Stats(*logStatsAdmission))
+	resp, err := h.opa.Review(ctx, review, reviews.SourceEP(util.WebhookEnforcementPoint), reviews.Tracing(trace), reviews.Stats(*logStatsAdmission), reviews.SourceEP(util.WebhookEnforcementPoint))
 	if resp != nil && trace {
 		h.log.Info(resp.TraceDump())
 	}

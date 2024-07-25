@@ -943,12 +943,10 @@ func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 			p.illegal("expected rule value term (e.g., %s[%s] = <VALUE> { ... })", name, head.Key)
 		}
 	case tokens.Assign:
-		s := p.save()
 		p.scan()
 		head.Assign = true
 		head.Value = p.parseTermInfixCall()
 		if head.Value == nil {
-			p.restore(s)
 			switch {
 			case len(head.Args) > 0:
 				p.illegal("expected function value term (e.g., %s(...) := <VALUE> { ... })", name)
@@ -2132,6 +2130,7 @@ func (p *Parser) doScan(skipws bool) {
 		p.s.loc.Col = pos.Col
 		p.s.loc.Offset = pos.Offset
 		p.s.loc.Text = p.s.Text(pos.Offset, pos.End)
+		p.s.loc.Tabs = pos.Tabs
 
 		for _, err := range errs {
 			p.error(p.s.Loc(), err.Message)
@@ -2308,6 +2307,11 @@ func (b *metadataParser) Parse() (*Annotations, error) {
 				b.loc = comment.Location
 			}
 		}
+
+		if match == nil && len(b.comments) > 0 {
+			b.loc = b.comments[0].Location
+		}
+
 		return nil, augmentYamlError(err, b.comments)
 	}
 
@@ -2375,6 +2379,21 @@ func (b *metadataParser) Parse() (*Annotations, error) {
 	}
 
 	result.Location = b.loc
+
+	// recreate original text of entire metadata block for location text attribute
+	sb := strings.Builder{}
+	sb.WriteString("# METADATA\n")
+
+	lines := bytes.Split(b.buf.Bytes(), []byte{'\n'})
+
+	for _, line := range lines[:len(lines)-1] {
+		sb.WriteString("# ")
+		sb.Write(line)
+		sb.WriteByte('\n')
+	}
+
+	result.Location.Text = []byte(strings.TrimSuffix(sb.String(), "\n"))
+
 	return &result, nil
 }
 
@@ -2412,10 +2431,11 @@ func augmentYamlError(err error, comments []*Comment) error {
 	return err
 }
 
-func unwrapPair(pair map[string]interface{}) (k string, v interface{}) {
-	for k, v = range pair {
+func unwrapPair(pair map[string]interface{}) (string, interface{}) {
+	for k, v := range pair {
+		return k, v
 	}
-	return
+	return "", nil
 }
 
 var errInvalidSchemaRef = fmt.Errorf("invalid schema reference")

@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	pSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -150,8 +150,8 @@ func (d *Driver) RemoveData(_ context.Context, _ string, _ storage.Path) error {
 	return nil
 }
 
-func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...drivers.QueryOpt) (*drivers.QueryResponse, error) {
-	cfg := &drivers.QueryCfg{}
+func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...reviews.ReviewOpt) (*drivers.QueryResponse, error) {
+	cfg := &reviews.ReviewCfg{}
 	for _, opt := range opts {
 		opt(cfg)
 	}
@@ -200,20 +200,12 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		// TODO: should namespace be made available, if possible? Generally that context should be present
 		response := validator.Validate(ctx, versionedAttr.GetResource(), versionedAttr, constraint, nil, celAPI.PerCallLimit, nil)
 
-		enforcementAction, found, err := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
-		if err != nil {
-			return nil, err
-		}
-		if !found {
-			enforcementAction = apiconstraints.EnforcementActionDeny
-		}
 		for _, decision := range response.Decisions {
 			if decision.Action == validatingadmissionpolicy.ActionDeny {
 				results = append(results, &types.Result{
-					Target:            target,
-					Msg:               decision.Message,
-					Constraint:        constraint,
-					EnforcementAction: enforcementAction,
+					Target:     target,
+					Msg:        decision.Message,
+					Constraint: constraint,
 				})
 			}
 		}

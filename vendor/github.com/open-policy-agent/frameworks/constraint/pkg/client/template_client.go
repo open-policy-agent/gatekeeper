@@ -95,10 +95,46 @@ func (e *templateClient) Update(templ *templates.ConstraintTemplate, crd *apiext
 // Returns true and no error if the Constraint was changed successfully.
 // Returns false and no error if the Constraint was not updated due to being
 // identical to the stored version.
-func (e *templateClient) AddConstraint(constraint *unstructured.Unstructured) (bool, error) {
+func (e *templateClient) AddConstraint(constraint *unstructured.Unstructured, enforcementPoints []string) (bool, error) {
+	// Initialize a map to hold enforcement actions for each enforcement point (EP)
+	enforcementActionsForEP := make(map[string][]string)
+	// Retrieve the enforcement action for the given constraint
 	enforcementAction, err := apiconstraints.GetEnforcementAction(constraint)
 	if err != nil {
-		return false, err
+		return false, err // Return an error if unable to get the enforcement action
+	}
+
+	// Check if the enforcement action is scoped to specific enforcement points
+	if apiconstraints.IsEnforcementActionScoped(enforcementAction) {
+		// Retrieve a map of enforcement actions for each EP based on the constraint
+		enforcementActionsForEPMap, err := apiconstraints.GetEnforcementActionsForEP(constraint, enforcementPoints)
+		if err != nil {
+			return false, err // Return an error if unable to get the enforcement actions for EPs
+		}
+		// Iterate over the map to populate enforcementActionsForEP
+		for ep, actions := range enforcementActionsForEPMap {
+			if len(actions) == 0 {
+				continue // Skip if there are no actions for the current EP
+			}
+			// Initialize a slice to hold actions for the current EP, with capacity equal to the number of actions
+			enforcementActionsForEP[ep] = make([]string, 0, len(actions))
+			// Add each action to the slice for the current EP
+			for action := range actions {
+				enforcementActionsForEP[ep] = append(enforcementActionsForEP[ep], action)
+			}
+		}
+	} else {
+		// If the enforcement action is not scoped, or if client does not specify EPs, apply the action to all EPs
+		if len(enforcementPoints) == 0 {
+			enforcementPoints = []string{"*"} // Use "*" to represent all EPs
+		}
+		// Iterate over the enforcement points to set the enforcement action for each
+		for _, ep := range enforcementPoints {
+			// Initialize a slice with capacity 1 for the enforcement action
+			enforcementActionsForEP[ep] = make([]string, 0, 1)
+			// Add the enforcement action to the slice for the current EP
+			enforcementActionsForEP[ep] = append(enforcementActionsForEP[ep], enforcementAction)
+		}
 	}
 
 	// Compare with the already-existing Constraint.
@@ -117,9 +153,10 @@ func (e *templateClient) AddConstraint(constraint *unstructured.Unstructured) (b
 	delete(cpy.Object, statusField)
 
 	e.constraints[constraint.GetName()] = &constraintClient{
-		constraint:        cpy,
-		matchers:          matchers,
-		enforcementAction: enforcementAction,
+		constraint:              cpy,
+		matchers:                matchers,
+		enforcementAction:       enforcementAction,
+		enforcementActionsForEP: enforcementActionsForEP,
 	}
 
 	return true, nil
@@ -144,11 +181,11 @@ func (e *templateClient) RemoveConstraint(name string) {
 // against the passed review.
 //
 // ignoredTargets specifies the targets whose matchers to not run.
-func (e *templateClient) Matches(target string, review interface{}) map[string]constraintMatchResult {
+func (e *templateClient) Matches(target string, review interface{}, sourceEPs []string) map[string]constraintMatchResult {
 	result := make(map[string]constraintMatchResult)
 
 	for name, constraint := range e.constraints {
-		cResult := constraint.matches(target, review)
+		cResult := constraint.matches(target, review, sourceEPs...)
 		if cResult != nil {
 			result[name] = *cResult
 		}

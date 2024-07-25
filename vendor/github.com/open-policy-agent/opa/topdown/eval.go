@@ -237,6 +237,10 @@ func (e *eval) traceWasm(x ast.Node, target *ast.Ref) {
 	e.traceEvent(WasmOp, x, "", target)
 }
 
+func (e *eval) traceUnify(a, b *ast.Term) {
+	e.traceEvent(UnifyOp, ast.Equality.Expr(a, b), "", nil)
+}
+
 func (e *eval) traceEvent(op Op, x ast.Node, msg string, target *ast.Ref) {
 
 	if !e.traceEnabled {
@@ -275,6 +279,7 @@ func (e *eval) traceEvent(op Op, x ast.Node, msg string, target *ast.Ref) {
 
 		evt.Locals = ast.NewValueMap()
 		evt.LocalMetadata = map[ast.Var]VarMetadata{}
+		evt.localVirtualCacheSnapshot = ast.NewValueMap()
 
 		_ = e.bindings.Iter(nil, func(k, v *ast.Term) error {
 			original := k.Value.(ast.Var)
@@ -290,14 +295,20 @@ func (e *eval) traceEvent(op Op, x ast.Node, msg string, target *ast.Ref) {
 		}) // cannot return error
 
 		ast.WalkTerms(x, func(term *ast.Term) bool {
-			if v, ok := term.Value.(ast.Var); ok {
-				if _, ok := evt.LocalMetadata[v]; !ok {
-					if rewritten, ok := e.rewrittenVar(v); ok {
-						evt.LocalMetadata[v] = VarMetadata{
+			switch x := term.Value.(type) {
+			case ast.Var:
+				if _, ok := evt.LocalMetadata[x]; !ok {
+					if rewritten, ok := e.rewrittenVar(x); ok {
+						evt.LocalMetadata[x] = VarMetadata{
 							Name:     rewritten,
 							Location: term.Loc(),
 						}
 					}
+				}
+			case ast.Ref:
+				groundRef := x.GroundPrefix()
+				if v, _ := e.virtualCache.Get(groundRef); v != nil {
+					evt.localVirtualCacheSnapshot.Put(groundRef, v.Value)
 				}
 			}
 			return false
@@ -407,15 +418,9 @@ func (e *eval) evalStep(iter evalIterator) error {
 		})
 	case *ast.Every:
 		eval := evalEvery{
-			e:    e,
-			expr: expr,
-			generator: ast.NewBody(
-				ast.Equality.Expr(
-					ast.RefTerm(terms.Domain, terms.Key).SetLocation(terms.Domain.Location),
-					terms.Value,
-				).SetLocation(terms.Domain.Location),
-			),
-			body: terms.Body,
+			Every: terms,
+			e:     e,
+			expr:  expr,
 		}
 		err = eval.eval(func() error {
 			defined = true
@@ -864,7 +869,7 @@ func (e *eval) biunify(a, b *ast.Term, b1, b2 *bindings, iter unifyIterator) err
 	a, b1 = b1.apply(a)
 	b, b2 = b2.apply(b)
 	if e.traceEnabled {
-		e.traceEvent(UnifyOp, ast.Equality.Expr(a, b), "", nil)
+		e.traceUnify(a, b)
 	}
 	switch vA := a.Value.(type) {
 	case ast.Var, ast.Ref, *ast.ArrayComprehension, *ast.SetComprehension, *ast.ObjectComprehension:
@@ -1102,9 +1107,9 @@ func (e *eval) biunifyComprehension(a, b *ast.Term, b1, b2 *bindings, swap bool,
 		return err
 	} else if value != nil {
 		return e.biunify(value, b, b1, b2, iter)
-	} else {
-		e.instr.counterIncr(evalOpComprehensionCacheMiss)
 	}
+
+	e.instr.counterIncr(evalOpComprehensionCacheMiss)
 
 	switch a := a.Value.(type) {
 	case *ast.ArrayComprehension:
@@ -2566,7 +2571,7 @@ func (e evalVirtualPartial) evalOneRulePreUnify(iter unifyIterator, rule *ast.Ru
 	}
 
 	// Walk the dynamic portion of rule ref and key to unify vars
-	err := child.biunifyRuleHead(e.pos+1, e.ref, rule, e.bindings, child.bindings, func(pos int) error {
+	err := child.biunifyRuleHead(e.pos+1, e.ref, rule, e.bindings, child.bindings, func(_ int) error {
 		defined = true
 		return child.eval(func(child *eval) error {
 
@@ -2654,7 +2659,7 @@ func (e evalVirtualPartial) evalOneRulePostUnify(iter unifyIterator, rule *ast.R
 
 	err := child.eval(func(child *eval) error {
 		defined = true
-		return e.e.biunifyRuleHead(e.pos+1, e.ref, rule, e.bindings, child.bindings, func(pos int) error {
+		return e.e.biunifyRuleHead(e.pos+1, e.ref, rule, e.bindings, child.bindings, func(_ int) error {
 			return e.evalOneRuleContinue(iter, rule, child)
 		})
 	})
@@ -2730,7 +2735,7 @@ func (e evalVirtualPartial) partialEvalSupport(iter unifyIterator) error {
 	return e.e.saveUnify(term, e.rterm, e.bindings, e.rbindings, iter)
 }
 
-func (e evalVirtualPartial) partialEvalSupportRule(rule *ast.Rule, path ast.Ref) (bool, error) {
+func (e evalVirtualPartial) partialEvalSupportRule(rule *ast.Rule, _ ast.Ref) (bool, error) {
 
 	child := e.e.child(rule.Body)
 	child.traceEnter(rule)
@@ -3390,19 +3395,32 @@ func (e evalTerm) save(iter unifyIterator) error {
 }
 
 type evalEvery struct {
-	e         *eval
-	expr      *ast.Expr
-	generator ast.Body
-	body      ast.Body
+	*ast.Every
+	e    *eval
+	expr *ast.Expr
 }
 
 func (e evalEvery) eval(iter unifyIterator) error {
 	// unknowns in domain or body: save the expression, PE its body
-	if e.e.unknown(e.generator, e.e.bindings) || e.e.unknown(e.body, e.e.bindings) {
+	if e.e.unknown(e.Domain, e.e.bindings) || e.e.unknown(e.Body, e.e.bindings) {
 		return e.save(iter)
 	}
 
-	domain := e.e.closure(e.generator)
+	if pd := e.e.bindings.Plug(e.Domain); pd != nil {
+		if !isIterableValue(pd.Value) {
+			e.e.traceFail(e.expr)
+			return nil
+		}
+	}
+
+	generator := ast.NewBody(
+		ast.Equality.Expr(
+			ast.RefTerm(e.Domain, e.Key).SetLocation(e.Domain.Location),
+			e.Value,
+		).SetLocation(e.Domain.Location),
+	)
+
+	domain := e.e.closure(generator)
 	all := true // all generator evaluations yield one successful body evaluation
 
 	domain.traceEnter(e.expr)
@@ -3413,14 +3431,14 @@ func (e evalEvery) eval(iter unifyIterator) error {
 			// This would do extra work, like iterating needlessly if domain was a large array.
 			return nil
 		}
-		body := child.closure(e.body)
+		body := child.closure(e.Body)
 		body.findOne = true
-		body.traceEnter(e.body)
+		body.traceEnter(e.Body)
 		done := false
 		err := body.eval(func(*eval) error {
-			body.traceExit(e.body)
+			body.traceExit(e.Body)
 			done = true
-			body.traceRedo(e.body)
+			body.traceRedo(e.Body)
 			return nil
 		})
 		if !done {
@@ -3444,6 +3462,15 @@ func (e evalEvery) eval(iter unifyIterator) error {
 	}
 	domain.traceFail(e.expr)
 	return nil
+}
+
+// isIterableValue returns true if the AST value is an iterable type.
+func isIterableValue(x ast.Value) bool {
+	switch x.(type) {
+	case *ast.Array, ast.Object, ast.Set:
+		return true
+	}
+	return false
 }
 
 func (e *evalEvery) save(iter unifyIterator) error {

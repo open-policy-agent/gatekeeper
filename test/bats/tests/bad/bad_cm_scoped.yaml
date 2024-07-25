@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: gatekeeper-test-playground-scoped
+  name: bad-cm-scoped
+  labels:
+    test.gatekeeper.sh/audit: "yes"

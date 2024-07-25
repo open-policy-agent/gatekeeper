@@ -14,6 +14,7 @@ import (
 	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
@@ -59,6 +60,9 @@ type Client struct {
 
 	// templates is a map from a Template's name to its entry.
 	templates map[string]*templateClient
+
+	// enforcementPoints is array of enforcement points for which this client may be used.
+	enforcementPoints []string
 }
 
 // driverForTemplate returns the driver to be used for a template according
@@ -363,7 +367,7 @@ func (c *Client) AddConstraint(ctx context.Context, constraint *unstructured.Uns
 		return resp, err
 	}
 
-	changed, err := cached.AddConstraint(constraintWithDefaults)
+	changed, err := cached.AddConstraint(constraintWithDefaults, c.enforcementPoints)
 	if err != nil {
 		return resp, err
 	}
@@ -619,10 +623,55 @@ func (c *Client) RemoveData(ctx context.Context, data interface{}) (*types.Respo
 	return resp, &errMap
 }
 
-// Review makes sure the provided object satisfies all stored constraints.
+// Review makes sure the provided object satisfies constraints applicable for specific enforcement points.
 // On error, the responses return value will still be populated so that
 // partial results can be analyzed.
-func (c *Client) Review(ctx context.Context, obj interface{}, opts ...drivers.QueryOpt) (*types.Responses, error) {
+func (c *Client) Review(ctx context.Context, obj interface{}, opts ...reviews.ReviewOpt) (*types.Responses, error) {
+	// Initialize an empty slice for enforcement points
+	var eps []string
+	// Create a new ReviewCfg instance
+	cfg := &reviews.ReviewCfg{}
+	// Apply each option to the ReviewCfg instance
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	// Check if a source enforcement point is specified in the configuration
+	if cfg.SourceEP != "" {
+		// Initialize enforceAll as false. It will be used to determine if all enforcement points should be enforced
+		enforceAll := false
+		// Iterate through the client's enforcement points
+		for _, ep := range c.enforcementPoints {
+			// Check if the current enforcement point indicates all enforcement points should be enforced
+			if ep == apiconstraints.AllEnforcementPoints {
+				enforceAll = true
+			}
+			// If the specified source enforcement point matches the current enforcement point, add it to the list
+			if cfg.SourceEP == ep {
+				eps = append(eps, ep)
+				break // Exit the loop since the matching enforcement point is found
+			}
+		}
+		// If enforceAll is true, add the source enforcement point to the list of enforcement points
+		if enforceAll {
+			eps = append(eps, cfg.SourceEP)
+		}
+		// If no enforcement points match the source enforcement point, return nil indicating no review should be run
+		if eps == nil {
+			return nil, nil
+		}
+	}
+
+	// If no specific enforcement points are specified, use the client's enforcement points
+	if eps == nil {
+		eps = c.enforcementPoints
+	}
+
+	// If there are no enforcement points specified, default to using all enforcement points
+	if eps == nil {
+		eps = []string{apiconstraints.AllEnforcementPoints}
+	}
+
 	responses := types.NewResponses()
 	errMap := make(clienterrors.ErrorMap)
 
@@ -647,6 +696,8 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...drivers.Qu
 
 	constraintsByTarget := make(map[string][]*unstructured.Unstructured)
 	autorejections := make(map[string][]constraintMatchResult)
+	scopedEnforcementActionsByTarget := make(map[string]map[string][]string)
+	enforcementActionByTarget := make(map[string]map[string]string)
 
 	var templateList []*templateClient
 
@@ -659,18 +710,23 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...drivers.Qu
 
 	for target, review := range reviews {
 		var targetConstraints []*unstructured.Unstructured
-
+		targetScopedEnforcementActions := make(map[string][]string)
+		targetEnforcementAction := make(map[string]string)
 		for _, template := range templateList {
-			matchingConstraints := template.Matches(target, review)
+			matchingConstraints := template.Matches(target, review, eps)
 			for _, matchResult := range matchingConstraints {
 				if matchResult.error == nil {
 					targetConstraints = append(targetConstraints, matchResult.constraint)
+					targetScopedEnforcementActions[matchResult.constraint.GetName()] = matchResult.scopedEnforcementActions
+					targetEnforcementAction[matchResult.constraint.GetName()] = matchResult.enforcementAction
 				} else {
 					autorejections[target] = append(autorejections[target], matchResult)
 				}
 			}
 		}
 		constraintsByTarget[target] = targetConstraints
+		scopedEnforcementActionsByTarget[target] = targetScopedEnforcementActions
+		enforcementActionByTarget[target] = targetEnforcementAction
 	}
 
 	for target, review := range reviews {
@@ -680,6 +736,15 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...drivers.Qu
 		if err != nil {
 			errMap.Add(target, err)
 			continue
+		}
+
+		for i := range resp.Results {
+			if val, ok := scopedEnforcementActionsByTarget[target][resp.Results[i].Constraint.GetName()]; ok {
+				resp.Results[i].ScopedEnforcementActions = val
+			}
+			if val, ok := enforcementActionByTarget[target][resp.Results[i].Constraint.GetName()]; ok {
+				resp.Results[i].EnforcementAction = val
+			}
 		}
 
 		for _, autorejection := range autorejections[target] {
@@ -711,7 +776,7 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...drivers.Qu
 	return responses, &errMap
 }
 
-func (c *Client) review(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...drivers.QueryOpt) (*types.Response, []*instrumentation.StatsEntry, error) {
+func (c *Client) review(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...reviews.ReviewOpt) (*types.Response, []*instrumentation.StatsEntry, error) {
 	var results []*types.Result
 	var stats []*instrumentation.StatsEntry
 	var tracesBuilder strings.Builder

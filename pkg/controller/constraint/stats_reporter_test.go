@@ -50,6 +50,8 @@ func TestReportConstraints(t *testing.T) {
 						{Attributes: attribute.NewSet(attribute.String(enforcementActionKey, string(util.Warn)), attribute.String(statusKey, string(metrics.ErrorStatus))), Value: 0},
 						{Attributes: attribute.NewSet(attribute.String(enforcementActionKey, string(util.Deny)), attribute.String(statusKey, string(metrics.ActiveStatus))), Value: 0},
 						{Attributes: attribute.NewSet(attribute.String(enforcementActionKey, string(util.Dryrun)), attribute.String(statusKey, string(metrics.ActiveStatus))), Value: 0},
+						{Attributes: attribute.NewSet(attribute.String(enforcementActionKey, string(util.Scoped)), attribute.String(statusKey, string(metrics.ActiveStatus))), Value: 0},
+						{Attributes: attribute.NewSet(attribute.String(enforcementActionKey, string(util.Scoped)), attribute.String(statusKey, string(metrics.ErrorStatus))), Value: 0},
 						{Attributes: attribute.NewSet(attribute.String(enforcementActionKey, string(util.Unrecognized)), attribute.String(statusKey, string(metrics.ActiveStatus))), Value: 0},
 						{Attributes: attribute.NewSet(attribute.String(enforcementActionKey, string(util.Unrecognized)), attribute.String(statusKey, string(metrics.ErrorStatus))), Value: 0},
 					},
