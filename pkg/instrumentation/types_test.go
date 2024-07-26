@@ -15,7 +15,7 @@ func Test_ToStatsEntriesWithDesc(t *testing.T) {
 	driver, err := rego.New()
 	assert.NoError(t, err)
 
-	actualClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	actualClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.EnforcementPoints("test"))
 	assert.NoError(t, err)
 
 	testCases := []struct {
