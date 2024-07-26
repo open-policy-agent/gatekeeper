@@ -31,7 +31,7 @@ func TestFrameworkInjection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = constraintclient.NewClient(constraintclient.Targets(target), constraintclient.Driver(driver))
+	_, err = constraintclient.NewClient(constraintclient.Targets(target), constraintclient.Driver(driver), constraintclient.EnforcementPoints("test"))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}

@@ -86,9 +86,9 @@ func ConstraintToBinding(constraint *unstructured.Unstructured, actions []string
 
 	for _, action := range actions {
 		switch action {
-		case apiconstraints.EnforcementActionDeny:
+		case string(apiconstraints.Deny):
 			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Deny)
-		case "warn":
+		case string(apiconstraints.Warn):
 			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Warn)
 		default:
 			return nil, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn` or `deny`", ErrBadEnforcementAction, action)

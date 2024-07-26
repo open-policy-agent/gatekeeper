@@ -28,6 +28,7 @@ func Stats(enabled bool) ReviewOpt {
 	}
 }
 
+// EnforcementPoint specifies the enforcement point to use for the query.
 func EnforcementPoint(ep string) ReviewOpt {
 	return func(cfg *ReviewCfg) {
 		cfg.EnforcementPoint = strings.ToLower(ep)

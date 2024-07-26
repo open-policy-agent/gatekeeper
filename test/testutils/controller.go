@@ -186,7 +186,7 @@ func SetupDataClient(t *testing.T) *constraintclient.Client {
 		t.Fatalf("setting up Driver: %v", err)
 	}
 
-	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.EnforcementPoints("test"))
 	if err != nil {
 		t.Fatalf("setting up constraint framework client: %v", err)
 	}

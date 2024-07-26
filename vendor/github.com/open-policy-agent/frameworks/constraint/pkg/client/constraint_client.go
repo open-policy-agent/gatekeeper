@@ -22,6 +22,7 @@ type constraintClient struct {
 
 	// enforcementAction is what should be done if the Constraint is violated or
 	// fails to run on a review.
+	// passed to constraintMatchResult.enforcementAction.
 	enforcementAction string
 
 	// enforcementActionsForEP stores precompiled enforcement actions for each enforcement point.
@@ -38,34 +39,32 @@ func (c *constraintClient) matches(target string, review interface{}, enforcemen
 		return nil
 	}
 
-	// Initialize a map to track unique enforcement actions
 	enforcementActions := make(map[string]bool)
 	if apiconstraints.IsEnforcementActionScoped(c.enforcementAction) {
-		// Iterate over the provided source enforcement points (EPs)
 		for _, ep := range enforcementPoints {
 			var actions []string
 			if ep == apiconstraints.AllEnforcementPoints {
-				// If the EP is "*", aggregate actions from all EPs
 				for _, acts := range c.enforcementActionsForEP {
 					actions = append(actions, acts...)
 				}
 			}
-			// Check if there are predefined actions for the current EP
 			if acts, found := c.enforcementActionsForEP[ep]; found {
-				actions = append(actions, acts...) // Use the predefined actions if found
+				actions = append(actions, acts...)
 			}
-			// Mark each action as true in the map to ensure uniqueness
 			for _, act := range actions {
 				enforcementActions[act] = true
 			}
 		}
 	}
+
 	// If enforcement action is scoped, constraint does not include enforcement point that needs to be enforced then there is no action to be taken.
-	// If no enforcement actions are found, return nil
 	if len(enforcementActions) == 0 && apiconstraints.IsEnforcementActionScoped(c.enforcementAction) {
 		return nil
 	}
 
+	// If enforcement action is not scoped or constraint needs to be enforced for matching enforcement point,
+	// Then we need to match the constraint with review. Compute enforcement actions for the enforcement point.
+	// Pass the enforcement actions and c.enforcementAction to constraintMatchResult.
 	var actions []string
 	for action := range enforcementActions {
 		actions = append(actions, action)
@@ -105,10 +104,8 @@ type constraintMatchResult struct {
 	// constraint is a pointer to the Constraint. Not safe for modification.
 	constraint *unstructured.Unstructured
 	// enforcementAction, if specified, is the immediate action to take.
-	// Only filled in if error is non-nil.
 	enforcementAction string
 	// scopedEnforcementActions are action to take for specific enforcement point.
-	// Only filled in if error is non-nil.
 	scopedEnforcementActions []string
 	// error is a problem encountered while attempting to run the Constraint's
 	// Matcher.

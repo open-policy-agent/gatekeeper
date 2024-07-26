@@ -14,6 +14,8 @@ type ScopedEnforcementAction struct {
 	EnforcementPoints []EnforcementPoint `json:"enforcementPoints"`
 }
 
+type EnforcementAction string
+
 type EnforcementPoint struct {
 	Name string `json:"name"`
 }
@@ -22,17 +24,20 @@ const (
 	// Group is the API Group of Constraints.
 	Group = "constraints.gatekeeper.sh"
 
-	// EnforcementActionDeny indicates that if a review fails validation for a
+	// AllEnforcementPoints is a wildcard to indicate all enforcement points.
+	AllEnforcementPoints = "*"
+)
+
+const (
+	// Deny indicates that if a review fails validation for a
 	// Constraint, that it should be rejected. Errors encountered running
 	// validation are treated as failing validation.
 	//
 	// This is the default EnforcementAction.
-	EnforcementActionDeny = "deny"
-
-	EnforcementActionScoped = "scoped"
-
-	// AllEnforcementPoints is a wildcard to indicate all enforcement points.
-	AllEnforcementPoints = "*"
+	Deny   EnforcementAction = "deny"
+	Warn   EnforcementAction = "warn"
+	Dryrun EnforcementAction = "dryrun"
+	Scoped EnforcementAction = "scoped"
 )
 
 var (
@@ -61,14 +66,14 @@ func GetEnforcementAction(constraint *unstructured.Unstructured) (string, error)
 	}
 
 	if !found {
-		return EnforcementActionDeny, nil
+		return string(Deny), nil
 	}
 
 	return action, nil
 }
 
 func IsEnforcementActionScoped(action string) bool {
-	return strings.EqualFold(action, EnforcementActionScoped)
+	return action == string(Scoped)
 }
 
 // GetEnforcementActionsForEP returns a map of enforcement actions for enforcement points passed in.
@@ -93,15 +98,21 @@ func GetEnforcementActionsForEP(constraint *unstructured.Unstructured, eps []str
 	for _, scopedEA := range scopedEnforcementActions {
 		for _, enforcementPoint := range scopedEA.EnforcementPoints {
 			epName := strings.ToLower(enforcementPoint.Name)
-			ea := strings.ToLower(scopedEA.Action)
+			var action string
+			switch scopedEA.Action {
+			case string(Warn), string(Dryrun):
+				action = scopedEA.Action
+			default:
+				action = string(Deny)
+			}
 			if epName == AllEnforcementPoints {
 				for _, ep := range eps {
-					enforcementPointsToActionsMap[ep][ea] = true
+					enforcementPointsToActionsMap[ep][action] = true
 				}
 				break
 			}
 			if _, ok := enforcementPointsToActionsMap[epName]; ok {
-				enforcementPointsToActionsMap[epName][ea] = true
+				enforcementPointsToActionsMap[epName][action] = true
 			}
 		}
 	}
