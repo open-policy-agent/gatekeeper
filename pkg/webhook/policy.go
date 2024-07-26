@@ -605,7 +605,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 }
 
 func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {
-	resp, err := h.opa.Review(ctx, review, reviews.SourceEP(util.WebhookEnforcementPoint), reviews.Tracing(trace), reviews.Stats(*logStatsAdmission))
+	resp, err := h.opa.Review(ctx, review, reviews.EnforcementPoint(util.WebhookEnforcementPoint), reviews.Tracing(trace), reviews.Stats(*logStatsAdmission))
 	if resp != nil && trace {
 		h.log.Info(resp.TraceDump())
 	}

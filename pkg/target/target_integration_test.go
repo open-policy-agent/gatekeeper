@@ -469,7 +469,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			}
 
 			fullReq := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req}
-			res, err := c.Review(ctx, fullReq, reviews.SourceEP(util.AuditEnforcementPoint), reviews.Tracing(true))
+			res, err := c.Review(ctx, fullReq, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing request: %s", err)
 			}
@@ -498,7 +498,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			}
 
 			fullReq2 := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req2}
-			res2, err := c.Review(ctx, fullReq2, reviews.SourceEP(util.AuditEnforcementPoint), reviews.Tracing(true))
+			res2, err := c.Review(ctx, fullReq2, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing OldObject request: %s", err)
 			}
@@ -511,7 +511,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			}
 
 			fullReq3 := &AugmentedUnstructured{Namespace: tc.ns, Object: *tc.obj}
-			res3, err := c.Review(ctx, fullReq3, reviews.SourceEP(util.AuditEnforcementPoint), reviews.Tracing(true))
+			res3, err := c.Review(ctx, fullReq3, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing AugmentedUnstructured request: %s", err)
 			}

@@ -3,9 +3,9 @@ package reviews
 import "strings"
 
 type ReviewCfg struct {
-	TracingEnabled bool
-	StatsEnabled   bool
-	SourceEP       string
+	TracingEnabled   bool
+	StatsEnabled     bool
+	EnforcementPoint string
 }
 
 // ReviewOpt specifies optional arguments for Query driver calls.
@@ -28,8 +28,8 @@ func Stats(enabled bool) ReviewOpt {
 	}
 }
 
-func SourceEP(ep string) ReviewOpt {
+func EnforcementPoint(ep string) ReviewOpt {
 	return func(cfg *ReviewCfg) {
-		cfg.SourceEP = strings.ToLower(ep)
+		cfg.EnforcementPoint = strings.ToLower(ep)
 	}
 }

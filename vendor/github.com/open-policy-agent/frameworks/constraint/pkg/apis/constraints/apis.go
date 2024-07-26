@@ -70,17 +70,17 @@ func IsEnforcementActionScoped(action string) bool {
 }
 
 // GetEnforcementActionsForEP returns a map of enforcement actions for enforcement points passed in.
-func GetEnforcementActionsForEP(constraint *unstructured.Unstructured, eps []string) (map[string]map[string]bool, error) {
+func GetEnforcementActionsForEP(constraint *unstructured.Unstructured, eps []string) (map[string][]string, error) {
 	if len(eps) == 0 {
 		return nil, fmt.Errorf("enforcement points must be provided to get enforcement actions")
 	}
 
 	scopedActions, found, err := getNestedFieldAsArray(constraint.Object, "spec", "scopedEnforcementActions")
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid spec.enforcementActionPerEP", ErrInvalidConstraint)
+		return nil, fmt.Errorf("%w: invalid spec.scopedEnforcementActions", ErrInvalidConstraint)
 	}
 	if !found {
-		return nil, fmt.Errorf("%w: spec.scopedEnforcementAction must be defined", ErrMissingRequiredField)
+		return nil, fmt.Errorf("%w: spec.scopedEnforcementActions must be defined", ErrMissingRequiredField)
 	}
 
 	scopedEnforcementActions, err := convertToSliceScopedEnforcementAction(scopedActions)
@@ -88,44 +88,38 @@ func GetEnforcementActionsForEP(constraint *unstructured.Unstructured, eps []str
 		return nil, fmt.Errorf("%w: %w", ErrInvalidConstraint, err)
 	}
 
-	// Flag to indicate if all enforcement points should be enforced
-	enforceAll := false
-	// Initialize a map to hold enforcement actions for each enforcement point
-	actionsForEPs := make(map[string]map[string]bool)
-	// Populate the actionsForEPs map with enforcement points from eps, initializing their action maps
-	for _, enforcementPoint := range eps {
-		if enforcementPoint == AllEnforcementPoints {
-			enforceAll = true // Set enforceAll to true if the special identifier for all enforcement points is found
-		}
-		actionsForEPs[enforcementPoint] = make(map[string]bool) // Initialize the action map for the enforcement point
+	enforcementPointsToActionsMap := make(map[string]map[string]bool)
+	for _, ep := range eps {
+		enforcementPointsToActionsMap[ep] = make(map[string]bool)
 	}
-
-	// Iterate over the scoped enforcement actions to populate actions for each enforcement point
 	for _, scopedEA := range scopedEnforcementActions {
 		for _, enforcementPoint := range scopedEA.EnforcementPoints {
 			epName := strings.ToLower(enforcementPoint.Name)
 			ea := strings.ToLower(scopedEA.Action)
-			// If enforceAll is true, or the enforcement point is explicitly listed, initialize its action map
-			if _, ok := actionsForEPs[epName]; !ok && enforceAll {
-				actionsForEPs[epName] = make(map[string]bool)
-			}
-			// Skip adding actions for enforcement points not in the list unless enforceAll is true
-			if _, ok := actionsForEPs[epName]; !ok && epName != AllEnforcementPoints {
-				continue
-			}
-			// If the enforcement point is the special identifier for all, apply the action to all enforcement points
-			switch epName {
-			case AllEnforcementPoints:
-				for ep := range actionsForEPs {
-					actionsForEPs[ep][ea] = true
+			if epName == AllEnforcementPoints {
+				for _, ep := range eps {
+					enforcementPointsToActionsMap[ep][ea] = true
 				}
-			default:
-				actionsForEPs[epName][ea] = true
+				break
+			}
+			if _, ok := enforcementPointsToActionsMap[epName]; ok {
+				enforcementPointsToActionsMap[epName][ea] = true
 			}
 		}
 	}
+	enforcementActionsForEPs := make(map[string][]string)
+	for ep, actions := range enforcementPointsToActionsMap {
+		if len(actions) == 0 {
+			continue
+		}
+		enforcementActionsForEPs[ep] = make([]string, 0, len(actions))
+		for action := range actions {
+			enforcementActionsForEPs[ep] = append(enforcementActionsForEPs[ep], action)
+		}
+	}
 
-	return actionsForEPs, nil
+	return enforcementActionsForEPs, nil
+
 }
 
 // Helper function to access nested fields as an array.

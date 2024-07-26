@@ -44,7 +44,7 @@ func (c *constraintClient) matches(target string, review interface{}, enforcemen
 		// Iterate over the provided source enforcement points (EPs)
 		for _, ep := range enforcementPoints {
 			var actions []string
-			if ep == "*" {
+			if ep == apiconstraints.AllEnforcementPoints {
 				// If the EP is "*", aggregate actions from all EPs
 				for _, acts := range c.enforcementActionsForEP {
 					actions = append(actions, acts...)

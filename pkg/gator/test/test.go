@@ -115,7 +115,7 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 			Source:    mutationtypes.SourceTypeOriginal,
 		}
 
-		review, err := client.Review(ctx, au, reviews.SourceEP(util.GatorEnforcementPoint))
+		review, err := client.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
 		if err != nil {
 			return nil, fmt.Errorf("reviewing %v %s/%s: %w",
 				obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
@@ -132,7 +132,7 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 				Namespace: ns,
 				Source:    mutationtypes.SourceTypeGenerated,
 			}
-			resultantReview, err := client.Review(ctx, au, reviews.SourceEP(util.GatorEnforcementPoint))
+			resultantReview, err := client.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
 			if err != nil {
 				return nil, fmt.Errorf("reviewing expanded resource %v %s/%s: %w",
 					resultant.Obj.GroupVersionKind(), resultant.Obj.GetNamespace(), resultant.Obj.GetName(), err)

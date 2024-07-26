@@ -627,33 +627,21 @@ func (c *Client) RemoveData(ctx context.Context, data interface{}) (*types.Respo
 // On error, the responses return value will still be populated so that
 // partial results can be analyzed.
 func (c *Client) Review(ctx context.Context, obj interface{}, opts ...reviews.ReviewOpt) (*types.Responses, error) {
-	// Initialize an empty slice for enforcement points
 	var eps []string
-	// Create a new ReviewCfg instance
 	cfg := &reviews.ReviewCfg{}
-	// Apply each option to the ReviewCfg instance
 	for _, opt := range opts {
 		opt(cfg)
 	}
-
-	// Check if a source enforcement point is specified in the configuration
-	if cfg.SourceEP != "" {
-		// Iterate through the client's enforcement points
-		for _, ep := range c.enforcementPoints {
-			if ep == apiconstraints.AllEnforcementPoints || cfg.SourceEP == ep {
-				eps = append(eps, ep)
-				break
-			}
-		}
-		// If no enforcement points match the source enforcement point, return nil indicating no review should be run
-		if eps == nil {
-			return nil, nil
+	if cfg.EnforcementPoint == "" {
+		cfg.EnforcementPoint = apiconstraints.AllEnforcementPoints
+	}
+	for _, ep := range c.enforcementPoints {
+		if cfg.EnforcementPoint == apiconstraints.AllEnforcementPoints || cfg.EnforcementPoint == ep {
+			eps = append(eps, ep)
 		}
 	}
-
-	// If no specific enforcement points are specified, use the client's enforcement points
 	if eps == nil {
-		eps = c.enforcementPoints
+		return nil, fmt.Errorf("%w, supported enforcement points: %v", ErrUnsupportedEnforcementPoints, c.enforcementPoints)
 	}
 
 	responses := types.NewResponses()
