@@ -32,34 +32,35 @@ func (c *constraintClient) getConstraint() *unstructured.Unstructured {
 	return c.constraint.DeepCopy()
 }
 
-func (c *constraintClient) matches(target string, review interface{}, sourceEPs ...string) *constraintMatchResult {
+func (c *constraintClient) matches(target string, review interface{}, enforcementPoints ...string) *constraintMatchResult {
 	matcher, found := c.matchers[target]
 	if !found {
 		return nil
 	}
 
+	// Initialize a map to track unique enforcement actions
 	enforcementActions := make(map[string]bool)
 	if apiconstraints.IsEnforcementActionScoped(c.enforcementAction) {
-		// Initialize a map to track unique enforcement actions
 		// Iterate over the provided source enforcement points (EPs)
-		for _, ep := range sourceEPs {
+		for _, ep := range enforcementPoints {
 			var actions []string
-			// Check if there are predefined actions for the current EP
-			if acts, found := c.enforcementActionsForEP[ep]; found {
-				actions = acts // Use the predefined actions if found
-			} else if ep == "*" {
+			if ep == "*" {
 				// If the EP is "*", aggregate actions from all EPs
 				for _, acts := range c.enforcementActionsForEP {
 					actions = append(actions, acts...)
 				}
+			}
+			// Check if there are predefined actions for the current EP
+			if acts, found := c.enforcementActionsForEP[ep]; found {
+				actions = append(actions, acts...) // Use the predefined actions if found
 			}
 			// Mark each action as true in the map to ensure uniqueness
 			for _, act := range actions {
 				enforcementActions[act] = true
 			}
 		}
-
 	}
+	// If enforcement action is scoped, constraint does not include enforcement point that needs to be enforced then there is no action to be taken.
 	// If no enforcement actions are found, return nil
 	if len(enforcementActions) == 0 && apiconstraints.IsEnforcementActionScoped(c.enforcementAction) {
 		return nil

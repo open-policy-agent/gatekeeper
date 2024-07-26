@@ -181,11 +181,11 @@ func (e *templateClient) RemoveConstraint(name string) {
 // against the passed review.
 //
 // ignoredTargets specifies the targets whose matchers to not run.
-func (e *templateClient) Matches(target string, review interface{}, sourceEPs []string) map[string]constraintMatchResult {
+func (e *templateClient) Matches(target string, review interface{}, enforcementPoints []string) map[string]constraintMatchResult {
 	result := make(map[string]constraintMatchResult)
 
 	for name, constraint := range e.constraints {
-		cResult := constraint.matches(target, review, sourceEPs...)
+		cResult := constraint.matches(target, review, enforcementPoints...)
 		if cResult != nil {
 			result[name] = *cResult
 		}

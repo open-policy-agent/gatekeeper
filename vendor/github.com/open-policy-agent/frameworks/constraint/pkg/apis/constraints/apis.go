@@ -146,19 +146,20 @@ func getNestedFieldAsArray(obj map[string]interface{}, fields ...string) ([]inte
 // Helper function to convert a value to a []ScopedEnforcementAction.
 func convertToSliceScopedEnforcementAction(value interface{}) ([]ScopedEnforcementAction, error) {
 	var result []ScopedEnforcementAction
-	if arr, ok := value.([]interface{}); ok {
-		for _, v := range arr {
-			if m, ok := v.(map[string]interface{}); ok {
-				scopedEA := &ScopedEnforcementAction{}
-				if err := runtime.DefaultUnstructuredConverter.FromUnstructured(m, scopedEA); err != nil {
-					return nil, err
-				}
-				result = append(result, *scopedEA)
-			} else {
-				return nil, fmt.Errorf("scopedEnforcementActions value must be a []scopedEnforcementAction{action: string, enforcementPoints: []EnforcementPoint{name: string}}")
-			}
-		}
-		return result, nil
+	arr, ok := value.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("scopedEnforcementActions value must be a []scopedEnforcementAction{action: string, enforcementPoints: []EnforcementPoint{name: string}}")
 	}
-	return nil, fmt.Errorf("scopedEnforcementActions value must be a []scopedEnforcementAction{action: string, enforcementPoints: []EnforcementPoint{name: string}}")
+	for _, v := range arr {
+		m, ok := v.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("scopedEnforcementActions value must be a []scopedEnforcementAction{action: string, enforcementPoints: []EnforcementPoint{name: string}}")
+		}
+		scopedEA := &ScopedEnforcementAction{}
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(m, scopedEA); err != nil {
+			return nil, err
+		}
+		result = append(result, *scopedEA)
+	}
+	return result, nil
 }

@@ -63,6 +63,7 @@ func Driver(d drivers.Driver) Opt {
 		}
 		client.drivers[d.Name()] = d
 		client.driverPriority[d.Name()] = len(client.drivers)
+		client.enforcementPoints = []string{"*"}
 		return nil
 	}
 }

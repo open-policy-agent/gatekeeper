@@ -638,23 +638,12 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...reviews.Re
 
 	// Check if a source enforcement point is specified in the configuration
 	if cfg.SourceEP != "" {
-		// Initialize enforceAll as false. It will be used to determine if all enforcement points should be enforced
-		enforceAll := false
 		// Iterate through the client's enforcement points
 		for _, ep := range c.enforcementPoints {
-			// Check if the current enforcement point indicates all enforcement points should be enforced
-			if ep == apiconstraints.AllEnforcementPoints {
-				enforceAll = true
-			}
-			// If the specified source enforcement point matches the current enforcement point, add it to the list
-			if cfg.SourceEP == ep {
+			if ep == apiconstraints.AllEnforcementPoints || cfg.SourceEP == ep {
 				eps = append(eps, ep)
-				break // Exit the loop since the matching enforcement point is found
+				break
 			}
-		}
-		// If enforceAll is true, add the source enforcement point to the list of enforcement points
-		if enforceAll {
-			eps = append(eps, cfg.SourceEP)
 		}
 		// If no enforcement points match the source enforcement point, return nil indicating no review should be run
 		if eps == nil {
@@ -665,11 +654,6 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...reviews.Re
 	// If no specific enforcement points are specified, use the client's enforcement points
 	if eps == nil {
 		eps = c.enforcementPoints
-	}
-
-	// If there are no enforcement points specified, default to using all enforcement points
-	if eps == nil {
-		eps = []string{apiconstraints.AllEnforcementPoints}
 	}
 
 	responses := types.NewResponses()
