@@ -1,3 +1,4 @@
+---
 {{- if not .Values.disableAudit }}
 apiVersion: apps/v1
 kind: Deployment

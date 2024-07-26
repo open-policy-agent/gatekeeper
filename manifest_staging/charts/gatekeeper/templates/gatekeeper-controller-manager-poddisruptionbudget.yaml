@@ -1,3 +1,4 @@
+---
 {{- $v1 := .Capabilities.APIVersions.Has "policy/v1/PodDisruptionBudget" -}}
 {{- $v1beta1 := .Capabilities.APIVersions.Has "policy/v1beta1/PodDisruptionBudget" -}}
 apiVersion: policy/v1{{- if and (not $v1) $v1beta1 -}}beta1{{- end }}
