@@ -45,6 +45,8 @@ var (
 
 	// ErrMissingRequiredField is a specific error that a field is missing from a Constraint.
 	ErrMissingRequiredField = errors.New("missing required field")
+
+	ErrInvalidSpecEnforcementAction = errors.New("scopedEnforcementActions value must be a [{action: string, enforcementPoints: [{name: string}]}]")
 )
 
 // GetEnforcementAction returns a Constraint's enforcementAction, which indicates
@@ -71,13 +73,9 @@ func IsEnforcementActionScoped(action string) bool {
 
 // GetEnforcementActionsForEP returns a map of enforcement actions for enforcement points passed in.
 func GetEnforcementActionsForEP(constraint *unstructured.Unstructured, eps []string) (map[string][]string, error) {
-	if len(eps) == 0 {
-		return nil, fmt.Errorf("enforcement points must be provided to get enforcement actions")
-	}
-
 	scopedActions, found, err := getNestedFieldAsArray(constraint.Object, "spec", "scopedEnforcementActions")
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid spec.scopedEnforcementActions", ErrInvalidConstraint)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidSpecEnforcementAction, err)
 	}
 	if !found {
 		return nil, fmt.Errorf("%w: spec.scopedEnforcementActions must be defined", ErrMissingRequiredField)
@@ -119,7 +117,6 @@ func GetEnforcementActionsForEP(constraint *unstructured.Unstructured, eps []str
 	}
 
 	return enforcementActionsForEPs, nil
-
 }
 
 // Helper function to access nested fields as an array.
@@ -142,12 +139,12 @@ func convertToSliceScopedEnforcementAction(value interface{}) ([]ScopedEnforceme
 	var result []ScopedEnforcementAction
 	arr, ok := value.([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("scopedEnforcementActions value must be a []scopedEnforcementAction{action: string, enforcementPoints: []EnforcementPoint{name: string}}")
+		return nil, ErrInvalidSpecEnforcementAction
 	}
 	for _, v := range arr {
 		m, ok := v.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("scopedEnforcementActions value must be a []scopedEnforcementAction{action: string, enforcementPoints: []EnforcementPoint{name: string}}")
+			return nil, ErrInvalidSpecEnforcementAction
 		}
 		scopedEA := &ScopedEnforcementAction{}
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(m, scopedEA); err != nil {

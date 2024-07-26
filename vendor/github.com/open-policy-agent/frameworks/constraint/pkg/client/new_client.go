@@ -9,10 +9,9 @@ import (
 // NewClient creates a new client.
 func NewClient(opts ...Opt) (*Client, error) {
 	c := &Client{
-		templates:         make(map[string]*templateClient),
-		drivers:           make(map[string]drivers.Driver),
-		driverPriority:    make(map[string]int),
-		enforcementPoints: []string{"*"},
+		templates:      make(map[string]*templateClient),
+		drivers:        make(map[string]drivers.Driver),
+		driverPriority: make(map[string]int),
 	}
 
 	for _, opt := range opts {
@@ -23,6 +22,11 @@ func NewClient(opts ...Opt) (*Client, error) {
 
 	if len(c.targets) == 0 {
 		return nil, fmt.Errorf("%w: must specify at least one target with client.Targets",
+			ErrCreatingClient)
+	}
+
+	if len(c.enforcementPoints) == 0 {
+		return nil, fmt.Errorf("%w: must specify at least one enforcement point with client.EnforcementPoints",
 			ErrCreatingClient)
 	}
 
