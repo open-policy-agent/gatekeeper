@@ -7,10 +7,10 @@ title: Enforcement points in Gatekeeper
 
 An enforcement point defines the location where enforcement happens. Below are the different enforcement points available in Gatekeeper:
 
-- `validation.gatekeeper.sh` indicates that enforcement should be carried out by Gatekeeper's validating webhook for a constraint.
-- `gator.gatekeeper.sh` indicates that enforcement should be carried out in shift-left via [gator-cli](gator.md) for a constraint.
-- `audit.gatekeeper.sh` indicates that on-cluster resources should be audited and violations should be reported for the resources that are in violation of constraint.
-- `vap.k8s.io` indicates that enforcement should be carried out by Validating Admission Policy for a constraint.
+- `validation.gatekeeper.sh` indicates that enforcement should be carried out by Gatekeeper's validating webhook for a constraint. Supports templates with CEL and Rego.
+- `gator.gatekeeper.sh` indicates that enforcement should be carried out in shift-left via [gator-cli](gator.md) for a constraint. Supports templates with CEL and Rego.
+- `audit.gatekeeper.sh` indicates that on-cluster resources should be audited and violations should be reported for the resources that are in violation of constraint. Supports templates with CEL and Rego.
+- `vap.k8s.io` indicates that enforcement should be carried out by Validating Admission Policy for a constraint. Supports templates with CEL.
 
 ### How to use different enforcement points in constraint
 
