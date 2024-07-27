@@ -670,6 +670,144 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
+	t.Run("Constraint with scoped enforcement actions is marked as enforced", func(t *testing.T) {
+		suffix := "ScopedMarkedEnforced"
+
+		logger.Info("Running test: Constraint is marked as enforced")
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.AuditEnforcementPoint)
+
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = constraintEnforced(ctx, c, suffix)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testns",
+			},
+		}
+		req := admissionv1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Namespace",
+			},
+			Operation: "Create",
+			Name:      "FooNamespace",
+			Object:    runtime.RawExtension{Object: ns},
+		}
+		resp, err := cfClient.Review(ctx, req, reviews.EnforcementPoint(util.AuditEnforcementPoint))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gotResults := resp.Results()
+		if len(gotResults) != 1 {
+			t.Log(resp.TraceDump())
+			t.Log(cfClient.Dump(ctx))
+			t.Fatalf("want 1 result, got %v", gotResults)
+		}
+	})
+
+	t.Run("Constraint with enforcement point not supported by client is not marked as enforced", func(t *testing.T) {
+		suffix := "NotMarkedEnforced"
+
+		logger.Info("Running test: Constraint is marked as enforced")
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.WebhookEnforcementPoint)
+
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = constraintEnforced(ctx, c, suffix)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testns",
+			},
+		}
+		req := admissionv1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Namespace",
+			},
+			Operation: "Create",
+			Name:      "FooNamespace",
+			Object:    runtime.RawExtension{Object: ns},
+		}
+		resp, err := cfClient.Review(ctx, req, reviews.EnforcementPoint(util.AuditEnforcementPoint))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gotResults := resp.Results()
+		if len(gotResults) >= 1 {
+			t.Log(resp.TraceDump())
+			t.Log(cfClient.Dump(ctx))
+			t.Fatalf("want 0 result, got %v", gotResults)
+		}
+	})
+
+	t.Run("Revew request initiated from an enforcement point not supported by client should result in error", func(t *testing.T) {
+		suffix := "NotMarkedEnforced"
+
+		logger.Info("Running test: Constraint is marked as enforced")
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.WebhookEnforcementPoint)
+
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testns",
+			},
+		}
+		req := admissionv1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Namespace",
+			},
+			Operation: "Create",
+			Name:      "FooNamespace",
+			Object:    runtime.RawExtension{Object: ns},
+		}
+		_, err := cfClient.Review(ctx, req, reviews.EnforcementPoint(util.WebhookEnforcementPoint))
+		if err == nil {
+			t.Fatal("want error, got nil")
+		}
+	})
+
 	t.Run("Deleted constraint CRDs are recreated", func(t *testing.T) {
 		suffix := "CRDRecreated"
 
@@ -1227,18 +1365,19 @@ func newDenyAllCstr(suffix string) *unstructured.Unstructured {
 	return cstr
 }
 
-func newDenyAllCstrWithScopedEA(suffix string, ep string) *unstructured.Unstructured {
+func newDenyAllCstrWithScopedEA(suffix string, ep ...string) *unstructured.Unstructured {
+	pts := make([]interface{}, 0, len(ep))
+	for _, e := range ep {
+		pts = append(pts, map[string]interface{}{"name": e})
+	}
 	cstr := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
 				"scopedEnforcementActions": []interface{}{
 					map[string]interface{}{
-						"enforcementPoints": []interface{}{
-							map[string]interface{}{
-								"name": ep,
-							},
-						},
-						"action": "deny",
+						"enforcementPoints": pts,
+						"action":            "deny",
 					},
 				},
 			},

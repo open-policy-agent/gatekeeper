@@ -96,6 +96,7 @@ The audit pod emits JSON-formatted audit logs to stdout. The following is an exa
   "constraint_name": "container-must-have-limits",
   "constraint_namespace": "",
   "constraint_action": "deny",
+  "constraint_enforcement_actions": [],
   "constraint_annotations": {
     "test-annotation-1": "annotation_1"
   },
@@ -182,6 +183,32 @@ spec:
 ```
 
 If any of the [constraints](howto.md#constraints) do not specify `kinds`, it will be equivalent to not setting `--audit-match-kind-only` flag (`false` by default), and will fall back to auditing all resources in the cluster.
+
+### Opt-out of Audit in constraints
+
+By default, all constraints are opted-in audit. To opt-out of the audit process at constraint, you can use `enforcementAction: scoped` and define `scopedEnforcementActions` without including audit enforcement point.
+
+For example, defining this constraint will opt-out of audit
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: prod-repo-is-openpolicyagent
+spec:
+...
+  enforcementAction: scoped
+  scopedEnforcementActions:
+  - action: warn
+    enforcementPoints:
+    - name: "validation.gatekeeper.sh"
+  - action: deny
+    enforcementPoints:
+    - name: "gator.gatekeeper.sh"
+...
+```
+
+Find out more about different [enforcement points](enforcement-points.md) in Gatekeeper.
 
 ## Audit UserInfo
 

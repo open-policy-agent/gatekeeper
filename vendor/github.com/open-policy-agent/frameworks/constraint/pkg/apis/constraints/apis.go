@@ -36,7 +36,6 @@ const (
 	// This is the default EnforcementAction.
 	Deny   EnforcementAction = "deny"
 	Warn   EnforcementAction = "warn"
-	Dryrun EnforcementAction = "dryrun"
 	Scoped EnforcementAction = "scoped"
 )
 
@@ -98,21 +97,14 @@ func GetEnforcementActionsForEP(constraint *unstructured.Unstructured, eps []str
 	for _, scopedEA := range scopedEnforcementActions {
 		for _, enforcementPoint := range scopedEA.EnforcementPoints {
 			epName := strings.ToLower(enforcementPoint.Name)
-			var action string
-			switch scopedEA.Action {
-			case string(Warn), string(Dryrun):
-				action = scopedEA.Action
-			default:
-				action = string(Deny)
-			}
 			if epName == AllEnforcementPoints {
 				for _, ep := range eps {
-					enforcementPointsToActionsMap[ep][action] = true
+					enforcementPointsToActionsMap[ep][scopedEA.Action] = true
 				}
 				break
 			}
 			if _, ok := enforcementPointsToActionsMap[epName]; ok {
-				enforcementPointsToActionsMap[epName][action] = true
+				enforcementPointsToActionsMap[epName][scopedEA.Action] = true
 			}
 		}
 	}

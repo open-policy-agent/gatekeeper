@@ -35,7 +35,8 @@ module.exports = {
         'gator',
         'workload-resources',
         'pubsub',
-        'validating-admission-policy'
+        'validating-admission-policy',
+        'enforcement-points'
       ],
     },
     {

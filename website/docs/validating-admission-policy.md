@@ -134,7 +134,46 @@ spec:
             ...
 ```
 
-Constraints will follow the behavior defined by `--default-create-vap-binding-for-constraints` flag to generate K8s Validating Admission Policy Binding. By default, `--default-create-vap-binding-for-constraints` is set to `false`.
+Constraints will follow the behavior defined in `spec.scopedEnforcementActions`. When `spec.scopedEnforcementAction` is not defined, constraints will follow behavior defined by the flag `--default-create-vap-binding-for-constraints`. By default, `--default-create-vap-binding-for-constraints` is set to `false`.
 
-> [!TIP]
-> In the event K8s Validating Admission Controller fails open, Gatekeeper admission webhook can act as a backup.
+The overall opt-in/opt-out behavior for constraint to generate Validating Admission Policy Binding (VAPB) is as below:
+
+Constraint with `enforcementAction: scoped`:
+
+| `vap.k8s.io` in constraint with `spec.scopedEnforcementActions` | generate VAPB |
+|----------|----------|
+| Not included | Do not generate VAPB |
+| Included | Generate VAPB |
+
+Constraint with `enforcementAction != scoped`:
+
+| `--default-create-vap-binding-for-constraints` | generate VAPB |
+|----------|----------|
+| false | Do not generate VAPB |
+| true | Generate VAPB |
+
+> 🗒️Note: VAPB will not get generated for constraints that belong to templates without CEL engine.
+
+> 💡TIP: In the event K8s Validating Admission Controller fails open, Gatekeeper admission webhook can act as a backup when included in constraint.
+
+Validating Admission Policy Binding for the below constraint will always be generated , assuming the constraint belongs to a template with CEL engine.
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: prod-repo-is-openpolicyagent
+spec:
+...
+  enforcementAction: scoped
+  scopedEnforcementActions:
+  - action: warn
+    enforcementPoints:
+    - name: "validation.gatekeeper.sh"
+  - action: deny
+    enforcementPoints:
+    - name: "vap.k8s.io"
+...
+```
+
+Find out more about different [enforcement points](enforcement-points.md)

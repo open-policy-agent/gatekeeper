@@ -96,9 +96,7 @@ func (e *templateClient) Update(templ *templates.ConstraintTemplate, crd *apiext
 // Returns false and no error if the Constraint was not updated due to being
 // identical to the stored version.
 func (e *templateClient) AddConstraint(constraint *unstructured.Unstructured, enforcementPoints []string) (bool, error) {
-	// Initialize a map to hold enforcement actions for each enforcement point (EP)
 	enforcementActionsForEPs := make(map[string][]string)
-	// Retrieve the enforcement action for the given constraint
 	enforcementAction, err := apiconstraints.GetEnforcementAction(constraint)
 	if err != nil {
 		return false, err

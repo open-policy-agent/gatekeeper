@@ -42,17 +42,10 @@ func (c *constraintClient) matches(target string, review interface{}, enforcemen
 	enforcementActions := make(map[string]bool)
 	if apiconstraints.IsEnforcementActionScoped(c.enforcementAction) {
 		for _, ep := range enforcementPoints {
-			var actions []string
-			if ep == apiconstraints.AllEnforcementPoints {
-				for _, acts := range c.enforcementActionsForEP {
-					actions = append(actions, acts...)
-				}
-			}
 			if acts, found := c.enforcementActionsForEP[ep]; found {
-				actions = append(actions, acts...)
-			}
-			for _, act := range actions {
-				enforcementActions[act] = true
+				for _, act := range acts {
+					enforcementActions[act] = true
+				}
 			}
 		}
 	}
