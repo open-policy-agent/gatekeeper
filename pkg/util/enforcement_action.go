@@ -49,6 +49,8 @@ var ErrEnforcementAction = errors.New("unrecognized enforcementAction")
 // spec.enforcementAction field as it was not a string.
 var ErrInvalidSpecEnforcementAction = errors.New("spec.enforcementAction must be a string")
 
+var ErrEmptyEnforcementPoint = errors.New("enforcement point cannot be empty")
+
 var ErrInvalidSpecScopedEnforcementAction = errors.New("spec.scopedEnforcementAction must be in the format of []{action: string, enforcementPoints: []{name: string}}")
 
 func ValidateEnforcementAction(input EnforcementAction, item map[string]interface{}) error {
@@ -84,7 +86,7 @@ func ValidateScopedEnforcementAction(item map[string]interface{}) error {
 		}
 		for _, enforcementPoint := range scopedEnforcementAction.EnforcementPoints {
 			if enforcementPoint.Name == "" {
-				return ErrInvalidSpecEnforcementAction
+				return ErrEmptyEnforcementPoint
 			}
 		}
 	}

@@ -42,7 +42,7 @@ func TestValidateEnforcementAction(t *testing.T) {
 							Action: "deny",
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "audit",
+									Name: AuditEnforcementPoint,
 								},
 							},
 						},
@@ -50,7 +50,7 @@ func TestValidateEnforcementAction(t *testing.T) {
 							Action: "test",
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "audit",
+									Name: AuditEnforcementPoint,
 								},
 							},
 						},
@@ -67,13 +67,32 @@ func TestValidateEnforcementAction(t *testing.T) {
 							Action: "deny",
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "audit",
+									Name: AuditEnforcementPoint,
 								},
 							},
 						},
 					},
 				},
 			},
+		},
+		{
+			name:   "Empty enforcement point",
+			action: Scoped,
+			constraint: map[string]interface{}{
+				"spec": map[string]interface{}{
+					"scopedEnforcementActions": []apiconstraints.ScopedEnforcementAction{
+						{
+							Action: "deny",
+							EnforcementPoints: []apiconstraints.EnforcementPoint{
+								{
+									Name: "",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: ErrEmptyEnforcementPoint,
 		},
 	}
 
