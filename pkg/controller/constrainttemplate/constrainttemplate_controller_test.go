@@ -673,7 +673,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("Constraint with scoped enforcement actions is marked as enforced", func(t *testing.T) {
 		suffix := "ScopedMarkedEnforced"
 
-		logger.Info("Running test: Constraint is marked as enforced")
+		logger.Info("Running test: Scoped Constraint is marked as enforced")
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.AuditEnforcementPoint)
 
@@ -726,7 +726,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("Constraint with enforcement point not supported by client is not marked as enforced", func(t *testing.T) {
 		suffix := "NotMarkedEnforced"
 
-		logger.Info("Running test: Constraint is marked as enforced")
+		logger.Info("Running test: Constraint is not marked as enforced")
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.WebhookEnforcementPoint)
 
@@ -744,8 +744,8 @@ func TestReconcile(t *testing.T) {
 		}
 
 		err = constraintEnforced(ctx, c, suffix)
-		if err != nil {
-			t.Fatal(err)
+		if err == nil {
+			t.Fatal("want error constraint not enforced, got", err)
 		}
 
 		ns := &corev1.Namespace{
@@ -777,9 +777,9 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("Revew request initiated from an enforcement point not supported by client should result in error", func(t *testing.T) {
-		suffix := "NotMarkedEnforced"
+		suffix := "ReviewResultsInError"
 
-		logger.Info("Running test: Constraint is marked as enforced")
+		logger.Info("Running test: Review request initiated from an enforcement point not supported by client should result in error")
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.WebhookEnforcementPoint)
 
