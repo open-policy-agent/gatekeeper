@@ -300,6 +300,13 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		status.Status.Errors = nil
 
 		if c, err := r.cfClient.GetConstraint(instance); err != nil || !reflect.DeepEqual(instance, c) {
+			err := util.ValidateEnforcementAction(enforcementAction, instance.Object)
+			if err != nil {
+				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+				if err2 := r.writer.Update(ctx, status); err2 != nil {
+					log.Error(err2, "could not report error for validation of enforcement action")
+				}
+			}
 			generateVAPB, VAPEnforcementActions, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
 			if err != nil {
 				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
@@ -373,7 +380,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			}
 			// do not generate vapbinding resources
 			// remove if exists
-			if (!generateVAPB || !HasVAPCel(ct)) && IsVapAPIEnabled() {
+			if !generateVAPB {
 				currentVapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)

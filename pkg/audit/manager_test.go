@@ -123,12 +123,12 @@ func Test_auditFromCache(t *testing.T) {
 		{
 			name:            "audit excluded from constraint",
 			processExcluder: processExcluderFor([]string{}),
-			constraint:      fakes.WebhookDenyAllConstraint(),
+			constraint:      fakes.ScopedConstraintFor(util.WebhookEnforcementPoint),
 		},
 		{
 			name:            "audit included in constraints",
 			processExcluder: processExcluderFor([]string{}),
-			constraint:      fakes.AuditDenyAllConstraint(),
+			constraint:      fakes.ScopedConstraintFor(util.AuditEnforcementPoint),
 			wantViolation:   true,
 		},
 	}

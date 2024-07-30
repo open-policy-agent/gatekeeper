@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -33,7 +34,12 @@ const (
 
 	// VAP enforcement point for ValidatingAdmissionPolicy.
 	VAPEnforcementPoint = "vap.k8s.io"
+
+	// AllEnforcementPoints indicates all enforcement points.
+	AllEnforcementPoints = "*"
 )
+
+var supportedEnforcementPoints = []string{WebhookEnforcementPoint, AuditEnforcementPoint, GatorEnforcementPoint, VAPEnforcementPoint}
 
 var supportedEnforcementActions = []EnforcementAction{Deny, Dryrun, Warn, Scoped}
 
@@ -49,7 +55,7 @@ var ErrEnforcementAction = errors.New("unrecognized enforcementAction")
 // spec.enforcementAction field as it was not a string.
 var ErrInvalidSpecEnforcementAction = errors.New("spec.enforcementAction must be a string")
 
-var ErrEmptyEnforcementPoint = errors.New("enforcement point cannot be empty")
+var ErrUnrecognizedEnforcementPoint = errors.New("unrecognized enforcement points")
 
 var ErrInvalidSpecScopedEnforcementAction = errors.New("spec.scopedEnforcementAction must be in the format of []{action: string, enforcementPoints: []{name: string}}")
 
@@ -71,6 +77,8 @@ func ValidateScopedEnforcementAction(item map[string]interface{}) error {
 		return fmt.Errorf("error fetching scopedEnforcementActions: %w", err)
 	}
 
+	var unrecognizedEnforcementPoints []string
+
 	// validating scopedEnforcementActions
 	for _, scopedEnforcementAction := range *obj {
 		if scopedEnforcementAction.Action == "" {
@@ -85,10 +93,16 @@ func ValidateScopedEnforcementAction(item map[string]interface{}) error {
 			return ErrInvalidSpecEnforcementAction
 		}
 		for _, enforcementPoint := range scopedEnforcementAction.EnforcementPoints {
-			if enforcementPoint.Name == "" {
-				return ErrEmptyEnforcementPoint
+			switch strings.ToLower(enforcementPoint.Name) {
+			case WebhookEnforcementPoint, AuditEnforcementPoint, GatorEnforcementPoint, VAPEnforcementPoint, AllEnforcementPoints:
+				continue
+			default:
+				unrecognizedEnforcementPoints = append(unrecognizedEnforcementPoints, enforcementPoint.Name)
 			}
 		}
+	}
+	if len(unrecognizedEnforcementPoints) > 0 {
+		return fmt.Errorf("%w: constraint will not be enforced for enforcement points %v, supported enforcement points are %v", ErrUnrecognizedEnforcementPoint, unrecognizedEnforcementPoints, supportedEnforcementPoints)
 	}
 	return nil
 }
@@ -153,7 +167,7 @@ func ScopedActionForEP(enforcementPoint string, u *unstructured.Unstructured) ([
 
 func enforcementPointEnabled(scopedEnforcementAction apiconstraints.ScopedEnforcementAction, enforcementPoint string) bool {
 	for _, ep := range scopedEnforcementAction.EnforcementPoints {
-		if ep.Name == enforcementPoint || ep.Name == "*" {
+		if strings.EqualFold(ep.Name, enforcementPoint) || ep.Name == AllEnforcementPoints {
 			return true
 		}
 	}

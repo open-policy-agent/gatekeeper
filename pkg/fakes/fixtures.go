@@ -50,14 +50,6 @@ func DenyAllConstraint() *unstructured.Unstructured {
 	return ConstraintFor("denyall")
 }
 
-func AuditDenyAllConstraint() *unstructured.Unstructured {
-	return ScopedConstraintFor(util.AuditEnforcementPoint)
-}
-
-func WebhookDenyAllConstraint() *unstructured.Unstructured {
-	return ScopedConstraintFor(util.WebhookEnforcementPoint)
-}
-
 func ScopedConstraintFor(ep string) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -70,7 +62,7 @@ func ScopedConstraintFor(ep string) *unstructured.Unstructured {
 								"name": ep,
 							},
 						},
-						"action": "deny",
+						"action": util.Deny,
 					},
 					map[string]interface{}{
 						"enforcementPoints": []interface{}{
@@ -78,7 +70,7 @@ func ScopedConstraintFor(ep string) *unstructured.Unstructured {
 								"name": ep,
 							},
 						},
-						"action": "warn",
+						"action": util.Warn,
 					},
 				},
 			},

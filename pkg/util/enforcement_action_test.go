@@ -39,7 +39,7 @@ func TestValidateEnforcementAction(t *testing.T) {
 				"spec": map[string]interface{}{
 					"scopedEnforcementActions": []apiconstraints.ScopedEnforcementAction{
 						{
-							Action: "deny",
+							Action: string(Deny),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
 									Name: AuditEnforcementPoint,
@@ -64,7 +64,7 @@ func TestValidateEnforcementAction(t *testing.T) {
 				"spec": map[string]interface{}{
 					"scopedEnforcementActions": []apiconstraints.ScopedEnforcementAction{
 						{
-							Action: "deny",
+							Action: string(Deny),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
 									Name: AuditEnforcementPoint,
@@ -82,7 +82,7 @@ func TestValidateEnforcementAction(t *testing.T) {
 				"spec": map[string]interface{}{
 					"scopedEnforcementActions": []apiconstraints.ScopedEnforcementAction{
 						{
-							Action: "deny",
+							Action: string(Deny),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
 									Name: "",
@@ -92,7 +92,7 @@ func TestValidateEnforcementAction(t *testing.T) {
 					},
 				},
 			},
-			wantErr: ErrEmptyEnforcementPoint,
+			wantErr: ErrUnrecognizedEnforcementPoint,
 		},
 	}
 
@@ -177,10 +177,10 @@ func TestGetScopedEnforcementAction(t *testing.T) {
 				"spec": map[string]interface{}{
 					"scopedEnforcementActions": []apiconstraints.ScopedEnforcementAction{
 						{
-							Action: "deny",
+							Action: string(Deny),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "audit",
+									Name: AuditEnforcementPoint,
 								},
 							},
 						},
@@ -190,10 +190,10 @@ func TestGetScopedEnforcementAction(t *testing.T) {
 			expectedError: nil,
 			expectedObj: &[]apiconstraints.ScopedEnforcementAction{
 				{
-					Action: "deny",
+					Action: string(Deny),
 					EnforcementPoints: []apiconstraints.EnforcementPoint{
 						{
-							Name: "audit",
+							Name: AuditEnforcementPoint,
 						},
 					},
 				},
@@ -242,82 +242,82 @@ func TestScopedActionForEP(t *testing.T) {
 	}{
 		{
 			name:             "valid enforcement point",
-			enforcementPoint: "audit",
+			enforcementPoint: AuditEnforcementPoint,
 			item: map[string]interface{}{
 				"spec": map[string]interface{}{
 					"scopedEnforcementActions": []apiconstraints.ScopedEnforcementAction{
 						{
-							Action: "deny",
+							Action: string(Deny),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "audit",
+									Name: AuditEnforcementPoint,
 								},
 							},
 						},
 						{
-							Action: "warn",
+							Action: string(Warn),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "webhook",
+									Name: WebhookEnforcementPoint,
 								},
 							},
 						},
 					},
 				},
 			},
-			expectedActions: []string{"deny"},
+			expectedActions: []string{string(Deny)},
 			expectedError:   nil,
 		},
 		{
 			name:             "multiple enforcement points",
-			enforcementPoint: "webhook",
+			enforcementPoint: WebhookEnforcementPoint,
 			item: map[string]interface{}{
 				"spec": map[string]interface{}{
 					"scopedEnforcementActions": []apiconstraints.ScopedEnforcementAction{
 						{
-							Action: "deny",
+							Action: string(Deny),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "audit",
+									Name: AuditEnforcementPoint,
 								},
 								{
-									Name: "webhook",
+									Name: WebhookEnforcementPoint,
 								},
 							},
 						},
 						{
-							Action: "warn",
+							Action: string(Warn),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "webhook",
+									Name: WebhookEnforcementPoint,
 								},
 							},
 						},
 					},
 				},
 			},
-			expectedActions: []string{"deny", "warn"},
+			expectedActions: []string{string(Deny), string(Warn)},
 			expectedError:   nil,
 		},
 		{
 			name:             "no matching enforcement point",
-			enforcementPoint: "audit",
+			enforcementPoint: AuditEnforcementPoint,
 			item: map[string]interface{}{
 				"spec": map[string]interface{}{
 					"scopedEnforcementActions": []apiconstraints.ScopedEnforcementAction{
 						{
-							Action: "deny",
+							Action: string(Deny),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "webhook",
+									Name: WebhookEnforcementPoint,
 								},
 							},
 						},
 						{
-							Action: "warn",
+							Action: string(Warn),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "webhook",
+									Name: WebhookEnforcementPoint,
 								},
 							},
 						},
@@ -329,35 +329,35 @@ func TestScopedActionForEP(t *testing.T) {
 		},
 		{
 			name:             "wildcard enforcement point",
-			enforcementPoint: "audit",
+			enforcementPoint: AuditEnforcementPoint,
 			item: map[string]interface{}{
 				"spec": map[string]interface{}{
 					"scopedEnforcementActions": []apiconstraints.ScopedEnforcementAction{
 						{
-							Action: "deny",
+							Action: string(Deny),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "*",
+									Name: AllEnforcementPoints,
 								},
 							},
 						},
 						{
-							Action: "warn",
+							Action: string(Warn),
 							EnforcementPoints: []apiconstraints.EnforcementPoint{
 								{
-									Name: "webhook",
+									Name: WebhookEnforcementPoint,
 								},
 							},
 						},
 					},
 				},
 			},
-			expectedActions: []string{"deny"},
+			expectedActions: []string{string(Deny)},
 			expectedError:   nil,
 		},
 		{
 			name:             "missing scopedEnforcementActions",
-			enforcementPoint: "audit",
+			enforcementPoint: AuditEnforcementPoint,
 			item: map[string]interface{}{
 				"spec": map[string]interface{}{},
 			},
@@ -366,7 +366,7 @@ func TestScopedActionForEP(t *testing.T) {
 		},
 		{
 			name:             "invalid scopedEnforcementActions",
-			enforcementPoint: "audit",
+			enforcementPoint: AuditEnforcementPoint,
 			item: map[string]interface{}{
 				"spec": map[string]interface{}{
 					"scopedEnforcementActions": "invalid",

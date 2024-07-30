@@ -134,7 +134,7 @@ func TestShouldGenerateVAPB(t *testing.T) {
 								Action: "deny",
 								EnforcementPoints: []apiconstraints.EnforcementPoint{
 									{
-										Name: "webhook",
+										Name: util.WebhookEnforcementPoint,
 									},
 								},
 							},
@@ -142,7 +142,7 @@ func TestShouldGenerateVAPB(t *testing.T) {
 								Action: "warn",
 								EnforcementPoints: []apiconstraints.EnforcementPoint{
 									{
-										Name: "webhook",
+										Name: util.WebhookEnforcementPoint,
 									},
 								},
 							},
@@ -166,7 +166,7 @@ func TestShouldGenerateVAPB(t *testing.T) {
 								Action: "deny",
 								EnforcementPoints: []apiconstraints.EnforcementPoint{
 									{
-										Name: "audit",
+										Name: util.AuditEnforcementPoint,
 									},
 								},
 							},
@@ -174,7 +174,7 @@ func TestShouldGenerateVAPB(t *testing.T) {
 								Action: "warn",
 								EnforcementPoints: []apiconstraints.EnforcementPoint{
 									{
-										Name: "audit",
+										Name: util.AuditEnforcementPoint,
 									},
 								},
 							},
@@ -198,7 +198,7 @@ func TestShouldGenerateVAPB(t *testing.T) {
 								Action: "deny",
 								EnforcementPoints: []apiconstraints.EnforcementPoint{
 									{
-										Name: "webhook",
+										Name: util.WebhookEnforcementPoint,
 									},
 									{
 										Name: util.VAPEnforcementPoint,
@@ -209,7 +209,7 @@ func TestShouldGenerateVAPB(t *testing.T) {
 								Action: "warn",
 								EnforcementPoints: []apiconstraints.EnforcementPoint{
 									{
-										Name: "webhook",
+										Name: util.WebhookEnforcementPoint,
 									},
 								},
 							},
@@ -233,7 +233,7 @@ func TestShouldGenerateVAPB(t *testing.T) {
 								Action: "deny",
 								EnforcementPoints: []apiconstraints.EnforcementPoint{
 									{
-										Name: "audit",
+										Name: util.AuditEnforcementPoint,
 									},
 									{
 										Name: util.VAPEnforcementPoint,
@@ -244,7 +244,7 @@ func TestShouldGenerateVAPB(t *testing.T) {
 								Action: "warn",
 								EnforcementPoints: []apiconstraints.EnforcementPoint{
 									{
-										Name: "audit",
+										Name: util.AuditEnforcementPoint,
 									},
 									{
 										Name: util.VAPEnforcementPoint,
@@ -279,7 +279,7 @@ func TestShouldGenerateVAPB(t *testing.T) {
 								Action: "warn",
 								EnforcementPoints: []apiconstraints.EnforcementPoint{
 									{
-										Name: "audit",
+										Name: util.AuditEnforcementPoint,
 									},
 								},
 							},
@@ -311,7 +311,7 @@ func TestShouldGenerateVAPB(t *testing.T) {
 								Action: "warn",
 								EnforcementPoints: []apiconstraints.EnforcementPoint{
 									{
-										Name: "audit",
+										Name: util.AuditEnforcementPoint,
 									},
 								},
 							},
