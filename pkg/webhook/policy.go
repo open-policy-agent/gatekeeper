@@ -276,6 +276,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 					logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
 					logging.ConstraintKind, r.Constraint.GetKind(),
 					logging.ConstraintAction, r.EnforcementAction,
+					logging.ConstraintEnforcementActions, action,
 					logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
 					logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
 					logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
@@ -287,19 +288,20 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 			}
 			if *emitAdmissionEvents {
 				annotations := map[string]string{
-					logging.Process:              "admission",
-					logging.EventType:            "violation",
-					logging.ConstraintName:       r.Constraint.GetName(),
-					logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
-					logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
-					logging.ConstraintKind:       r.Constraint.GetKind(),
-					logging.ConstraintAction:     action,
-					logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
-					logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
-					logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
-					logging.ResourceNamespace:    req.AdmissionRequest.Namespace,
-					logging.ResourceName:         resourceName,
-					logging.RequestUsername:      req.AdmissionRequest.UserInfo.Username,
+					logging.Process:                      "admission",
+					logging.EventType:                    "violation",
+					logging.ConstraintName:               r.Constraint.GetName(),
+					logging.ConstraintGroup:              r.Constraint.GroupVersionKind().Group,
+					logging.ConstraintAPIVersion:         r.Constraint.GroupVersionKind().Version,
+					logging.ConstraintKind:               r.Constraint.GetKind(),
+					logging.ConstraintAction:             r.EnforcementAction,
+					logging.ConstraintEnforcementActions: action,
+					logging.ResourceGroup:                req.AdmissionRequest.Kind.Group,
+					logging.ResourceAPIVersion:           req.AdmissionRequest.Kind.Version,
+					logging.ResourceKind:                 req.AdmissionRequest.Kind.Kind,
+					logging.ResourceNamespace:            req.AdmissionRequest.Namespace,
+					logging.ResourceName:                 resourceName,
+					logging.RequestUsername:              req.AdmissionRequest.UserInfo.Username,
 				}
 				var eventMsg, reason string
 				switch action {
