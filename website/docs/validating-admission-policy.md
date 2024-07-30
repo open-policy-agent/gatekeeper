@@ -154,9 +154,13 @@ Constraint with `enforcementAction != scoped`:
 | false | Do not generate VAPB |
 | true | Generate VAPB |
 
-> ⚠️Warning : VAP will only get generated for templates with CEL Engine. VAPB will only get generated for constraints that belong to templates with CEL engine.
+:::note
+VAP will only get generated for templates with CEL Engine. VAPB will only get generated for constraints that belong to templates with CEL engine.
+:::
 
-> 💡TIP: In the event K8s Validating Admission Controller fails open, Gatekeeper admission webhook can act as a backup when included in constraint.
+:::tip
+In the event K8s Validating Admission Controller fails open, Gatekeeper admission webhook can act as a backup when included in constraint.
+:::
 
 Validating Admission Policy Binding for the below constraint will always get generated, assuming the constraint belongs to a template with CEL engine.
 

@@ -16,7 +16,9 @@ An enforcement point defines the location where enforcement happens. Below are t
 
 By default, a constraint will be enforced at all enforcement points with common enforcement action defined in `spec.enforcementAction`. However, you can chose to enforce a constraint at specific enforcement points different actions using `spec.scopedEnforcementActions`. Below are the different examples and use cases that utilizes different enforcement actions for different enforcement points.
 
-> 🗒️ Note: `spec.enforcementAction: scoped` is needed to customize specific enforcement point/enforcement action behavior. If `spec.enforcementAction: scoped` is not provided, `spec.scopedEnforcementActions` is ignored and defined `enforcementAction` will be enforced at all enforcement points.
+:::note
+`spec.enforcementAction: scoped` is needed to customize specific enforcement point/enforcement action behavior. If `spec.enforcementAction: scoped` is not provided, `spec.scopedEnforcementActions` is ignored and defined `enforcementAction` will be enforced at all enforcement points.
+:::
 
 ###### Deny in shift-left and warn at admission
 
