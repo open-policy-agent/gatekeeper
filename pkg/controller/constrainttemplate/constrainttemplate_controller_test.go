@@ -723,10 +723,10 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("Constraint with enforcement point not supported by client is not marked as enforced", func(t *testing.T) {
-		suffix := "NotMarkedEnforced"
+	t.Run("Constraint with different ep than client and review should not be part of the review", func(t *testing.T) {
+		suffix := "ShouldNotBePartOfReview"
 
-		logger.Info("Running test: Constraint is not marked as enforced")
+		logger.Info("Running test: Constraint with different ep than client and review should not be part of the review")
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.WebhookEnforcementPoint)
 
@@ -744,8 +744,8 @@ func TestReconcile(t *testing.T) {
 		}
 
 		err = constraintEnforced(ctx, c, suffix)
-		if err == nil {
-			t.Fatal("want error constraint not enforced, got", err)
+		if err != nil {
+			t.Fatal(err)
 		}
 
 		ns := &corev1.Namespace{

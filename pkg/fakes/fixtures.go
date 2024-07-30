@@ -62,7 +62,7 @@ func ScopedConstraintFor(ep string) *unstructured.Unstructured {
 								"name": ep,
 							},
 						},
-						"action": util.Deny,
+						"action": string(util.Deny),
 					},
 					map[string]interface{}{
 						"enforcementPoints": []interface{}{
@@ -70,7 +70,7 @@ func ScopedConstraintFor(ep string) *unstructured.Unstructured {
 								"name": ep,
 							},
 						},
-						"action": util.Warn,
+						"action": string(util.Warn),
 					},
 				},
 			},
