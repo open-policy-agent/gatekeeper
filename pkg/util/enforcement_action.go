@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -90,10 +89,10 @@ func ValidateScopedEnforcementAction(item map[string]interface{}) error {
 			return fmt.Errorf("%w: %q is not within the supported list %v", ErrEnforcementAction, scopedEnforcementAction.Action, supportedScopedActions)
 		}
 		if len(scopedEnforcementAction.EnforcementPoints) == 0 {
-			return ErrInvalidSpecEnforcementAction
+			return fmt.Errorf("%w: no enforcement points are provided", ErrUnrecognizedEnforcementPoint)
 		}
 		for _, enforcementPoint := range scopedEnforcementAction.EnforcementPoints {
-			switch strings.ToLower(enforcementPoint.Name) {
+			switch enforcementPoint.Name {
 			case WebhookEnforcementPoint, AuditEnforcementPoint, GatorEnforcementPoint, VAPEnforcementPoint, AllEnforcementPoints:
 				continue
 			default:
@@ -167,7 +166,7 @@ func ScopedActionForEP(enforcementPoint string, u *unstructured.Unstructured) ([
 
 func enforcementPointEnabled(scopedEnforcementAction apiconstraints.ScopedEnforcementAction, enforcementPoint string) bool {
 	for _, ep := range scopedEnforcementAction.EnforcementPoints {
-		if strings.EqualFold(ep.Name, enforcementPoint) || ep.Name == AllEnforcementPoints {
+		if ep.Name == enforcementPoint || ep.Name == AllEnforcementPoints {
 			return true
 		}
 	}

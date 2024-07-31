@@ -3,7 +3,6 @@ package constraints
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -96,7 +95,7 @@ func GetEnforcementActionsForEP(constraint *unstructured.Unstructured, eps []str
 	}
 	for _, scopedEA := range scopedEnforcementActions {
 		for _, enforcementPoint := range scopedEA.EnforcementPoints {
-			epName := strings.ToLower(enforcementPoint.Name)
+			epName := enforcementPoint.Name
 			if epName == AllEnforcementPoints {
 				for _, ep := range eps {
 					enforcementPointsToActionsMap[ep][scopedEA.Action] = true
