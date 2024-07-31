@@ -221,6 +221,9 @@ var replacements = map[string]string{
     {{- if .Values.enableDeleteOperations }}
     - DELETE
     {{- end }}
+    {{- if .Values.enableConnectOperations }}
+    - CONNECT
+    {{- end }}
     resources:
     - '*'
     # Explicitly list all known subresources except "status" (to avoid destabilizing the cluster and increasing load on gatekeeper).
