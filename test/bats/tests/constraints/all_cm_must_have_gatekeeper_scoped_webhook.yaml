@@ -1,0 +1,22 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: cm-must-have-gk-scoped-webhook
+  labels:
+    gatekeeper.sh/tests: "yes"
+spec:
+  enforcementAction: scoped
+  scopedEnforcementActions:
+    - action: deny
+      enforcementPoints:
+        - name: validation.gatekeeper.sh
+  match:
+    namespaces: ["gatekeeper-test-playground-scoped"]
+    labelSelector:
+      matchLabels:
+        test.gatekeeper.sh/audit: "yes"
+    kinds:
+      - apiGroups: [""]
+        kinds: ["ConfigMap"]
+  parameters:
+    labels: ["gatekeeper"]

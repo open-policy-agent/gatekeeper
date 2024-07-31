@@ -426,6 +426,16 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	}
 	cfArgs = append(cfArgs, constraintclient.Driver(driver))
 
+	eps := []string{}
+	if operations.IsAssigned(operations.Audit) {
+		eps = append(eps, util.AuditEnforcementPoint)
+	}
+	if operations.IsAssigned(operations.Webhook) {
+		eps = append(eps, util.WebhookEnforcementPoint)
+	}
+
+	cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
+
 	client, err := constraintclient.NewClient(cfArgs...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")

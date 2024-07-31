@@ -1,0 +1,19 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sFooIs
+metadata:
+  name: foo-is-bar
+spec:
+  enforcementAction: scoped
+  scopedEnforcementActions:
+  - action: deny
+    enforcementPoints:
+    - name: gator.gatekeeper.sh
+  - action: warn
+    enforcementPoints:
+    - name: validation.gatekeeper.sh
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["FooIsBar"]
+  parameters:
+    foo: "bar"

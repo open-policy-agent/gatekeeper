@@ -75,20 +75,24 @@ func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admiss
 	return policy, nil
 }
 
-func ConstraintToBinding(constraint *unstructured.Unstructured) (*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, error) {
-	enforcementActionStr, err := apiconstraints.GetEnforcementAction(constraint)
-	if err != nil {
-		return nil, err
+// ConstraintToBinding converts a Constraint to a ValidatingAdmissionPolicyBinding.
+// Accepts a list of enforcement actions to apply to the binding.
+// If the enforcement action is not recognized, returns an error.
+func ConstraintToBinding(constraint *unstructured.Unstructured, actions []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, error) {
+	if len(actions) == 0 {
+		return nil, fmt.Errorf("%w: enforcement actions must be provided", ErrBadEnforcementAction)
 	}
+	var enforcementActions []admissionregistrationv1beta1.ValidationAction
 
-	var enforcementAction admissionregistrationv1beta1.ValidationAction
-	switch enforcementActionStr {
-	case apiconstraints.EnforcementActionDeny:
-		enforcementAction = admissionregistrationv1beta1.Deny
-	case "warn":
-		enforcementAction = admissionregistrationv1beta1.Warn
-	default:
-		return nil, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn` or `deny`", ErrBadEnforcementAction, enforcementActionStr)
+	for _, action := range actions {
+		switch action {
+		case string(apiconstraints.Deny):
+			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Deny)
+		case string(apiconstraints.Warn):
+			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Warn)
+		default:
+			return nil, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn` or `deny`", ErrBadEnforcementAction, action)
+		}
 	}
 
 	binding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
@@ -102,7 +106,7 @@ func ConstraintToBinding(constraint *unstructured.Unstructured) (*admissionregis
 				ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
 			},
 			MatchResources:    &admissionregistrationv1beta1.MatchResources{},
-			ValidationActions: []admissionregistrationv1beta1.ValidationAction{enforcementAction},
+			ValidationActions: enforcementActions,
 		},
 	}
 	objectSelectorMap, found, err := unstructured.NestedMap(constraint.Object, "spec", "match", "labelSelector")

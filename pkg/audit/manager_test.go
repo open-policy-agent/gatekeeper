@@ -13,6 +13,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -96,32 +97,47 @@ func Test_auditFromCache(t *testing.T) {
 
 	driver, err := rego.New()
 	require.NoError(t, err)
-	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.EnforcementPoints([]string{util.AuditEnforcementPoint}...))
 	require.NoError(t, err)
 
 	_, err = client.AddTemplate(context.Background(), fakes.DenyAllRegoTemplate())
 	require.NoError(t, err, "adding denyall constraint template")
-	_, err = client.AddConstraint(context.Background(), fakes.DenyAllConstraint())
-	require.NoError(t, err, "adding denyall constraint")
 
 	tests := []struct {
 		name            string
 		processExcluder *process.Excluder
+		constraint      *unstructured.Unstructured
 		wantViolation   bool
 	}{
 		{
 			name:            "obj excluded from audit",
 			processExcluder: processExcluderFor([]string{"test-namespace-1"}),
+			constraint:      fakes.DenyAllConstraint(),
 		},
 		{
 			name:            "obj not excluded from audit",
 			processExcluder: processExcluderFor([]string{}),
+			constraint:      fakes.DenyAllConstraint(),
+			wantViolation:   true,
+		},
+		{
+			name:            "audit excluded from constraint",
+			processExcluder: processExcluderFor([]string{}),
+			constraint:      fakes.ScopedConstraintFor(util.WebhookEnforcementPoint),
+		},
+		{
+			name:            "audit included in constraints",
+			processExcluder: processExcluderFor([]string{}),
+			constraint:      fakes.ScopedConstraintFor(util.AuditEnforcementPoint),
 			wantViolation:   true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			_, err = client.AddConstraint(context.Background(), tc.constraint)
+			require.NoError(t, err, "adding denyall constraint")
+
 			am := &Manager{
 				processExcluder: tc.processExcluder,
 				auditCache:      testAuditCache,
@@ -135,6 +151,10 @@ func Test_auditFromCache(t *testing.T) {
 				require.Len(t, results, 1)
 			} else {
 				require.Len(t, results, 0)
+			}
+
+			if _, err := client.RemoveConstraint(context.Background(), tc.constraint); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

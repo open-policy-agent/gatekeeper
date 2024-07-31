@@ -60,6 +60,7 @@ func Test_formatOutput(t *testing.T) {
         object:
             kind: kind
     enforcementaction: ""
+    scopedenforcementactions: []
   violatingObject:
     bar: xyz
   trace: xyz

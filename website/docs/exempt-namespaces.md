@@ -31,6 +31,7 @@ spec:
 ```
 
 Available processes:
+
 - `audit` process exclusion will exclude resources from specified namespace(s) in audit results.
 - `webhook` process exclusion will exclude resources from specified namespace(s) from the admission webhook.
 - `sync` process exclusion will exclude resources from specified namespace(s) from being synced into OPA.
@@ -52,6 +53,7 @@ If it becomes necessary to exempt a namespace from Gatekeeper webhook entirely (
             - key: admission.gatekeeper.sh/ignore
               operator: DoesNotExist
         ```
+
       the default Gatekeeper manifest should already have added this. The default name for the
       webhook configuration is `gatekeeper-validating-webhook-configuration` and the default
       name for the webhook that needs the namespace selector is `validation.gatekeeper.sh`
