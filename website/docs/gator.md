@@ -499,6 +499,100 @@ However, not including the `namespace` definition in the call to `gator expand` 
 error expanding resources: error expanding resource nginx-deployment: failed to mutate resultant resource nginx-deployment-pod: matching for mutator Assign.mutations.gatekeeper.sh /always-pull-image failed for  Pod my-ns nginx-deployment-pod: failed to run Match criteria: namespace selector for namespace-scoped object but missing Namespace
 ```
 
+## The `gator sync test` subcommand
+
+Certain templates require [replicating data](sync.md) into OPA to enable correct evaluation. These templates can use the annotation `metadata.gatekeeper.sh/requires-sync-data` to indicate which resources need to be synced. The annotation contains a json object representing a list of requirements, each of which contains a list of one or more GVK clauses forming an equivalence set of interchangeable GVKs. Each of these clauses has `groups`, `versions`, and `kinds` fields; any group-version-kind combination within a clause within a requirement should be considered sufficient to satisfy that requirement. For example (comments added for clarity):
+```
+[
+  [ // Requirement 1
+    { // Clause 1
+      "groups": ["group1", group2"]
+      "versions": ["version1", "version2", "version3"]
+      "kinds": ["kind1", "kind2"]
+    },
+    { // Clause 2
+      "groups": ["group3", group4"]
+      "versions": ["version3", "version4"]
+      "kinds": ["kind3", "kind4"]
+    }
+  ],
+  [ // Requirement 2
+    { // Clause 1
+      "groups": ["group5"]
+      "versions": ["version5"]
+      "kinds": ["kind5"]
+    }
+  ]
+]
+```
+This annotation contains two requirements. Requirement 1 contains two clauses. Syncing resources of group1, version3, kind1 (drawn from clause 1) would be sufficient to fulfill Requirement 1. So, too, would syncing resources of group3, version3, kind4 (drawn from clause 2). Syncing resources of group1, version1, and kind3 would not be, however.
+
+Requirement 2 is simpler: it denotes that group5, version5, kind5 must be synced for the policy to work properly. 
+
+This template annotation is descriptive, not prescriptive. The prescription of which resources to sync is done in `SyncSet` resources and/or the Gatekeeper `Config` resource. The management of these various requirements can get challenging as the number of templates requiring replicated data increases. 
+
+`gator sync test` aims to mitigate this challenge by enabling the user to check that their sync configuration is correct. The user passes in a set of Constraint Templates, GVK Manifest listing GVKs supported by the cluster, SyncSets, and/or a Gatekeeper Config, and the command will determine which requirements enumerated by the Constraint Templates are unfulfilled by the cluster and SyncSet(s)/Config.
+
+### Usage
+
+#### Specifying Inputs
+
+`gator sync test` expects a `--filename` or `--image` flag, or input fron stdin. The flags can be used individually, in combination, and/or repeated.
+
+```
+gator sync test --filename="template.yaml" –-filename="syncsets/" --filename="manifest.yaml"
+```
+
+Or, using an OCI Artifact containing templates as described previously:
+
+```
+gator sync test --filename="config.yaml" --image=localhost:5000/gator/template-library:v1
+```
+
+The manifest of GVKs supported by the cluster should be passed as a GVKManifest resource (CRD visible under the apis directory in the repo):
+```
+apiVersion: gvkmanifest.gatekeeper.sh/v1alpha1
+kind: GVKManifest
+metadata:
+  name: gvkmanifest
+spec:
+  groups:
+  - name: "group1"
+    versions:
+    - name: "v1"
+      kinds: ["Kind1", "Kind2"]
+    - name: "v2"
+      kinds: ["Kind1", "Kind3"]
+  - name: "group2"
+    versions:
+      - name: "v1beta1"
+        kinds: ["Kind4", "Kind5"]
+```
+
+Optionally, the `--omit-gvk-manifest` flag can be used to skip the requirement of providing a manifest of supported GVKs for the cluster. If this is provided, all GVKs will be assumed to be supported by the cluster. If this assumption is not true, then the given config and templates may cause caching errors or incorrect evaluation on the cluster despite passing this command. 
+
+#### Exit Codes
+
+`gator sync test` will return a `0` exit status when the Templates, SyncSets, and
+Config are successfully ingested and all requirements are fulfilled.
+
+An error during evaluation, for example a failure to read a file, will result in
+a `1` exit status with an error message printed to stderr.
+
+Unfulfilled requirements will generate a `1` exit status as well, and the unfulfilled requirements per template will be printed to stderr, like so:
+```
+the following requirements were not met:
+templatename1:
+- extensions/v1beta1:Ingress
+- networking.k8s.io/v1beta1:Ingress OR networking.k8s.io/v1:Ingress
+templatename2:
+- apps/v1:Deployment
+templatename3:
+- /v1:Service
+```
+
+
+
 ## Bundling Policy into OCI Artifacts
 
 It may be useful to bundle policy files into OCI Artifacts for ingestion during
