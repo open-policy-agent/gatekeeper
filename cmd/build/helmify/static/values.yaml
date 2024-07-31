@@ -19,6 +19,7 @@ validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 validatingWebhookURL: null
 enableDeleteOperations: false
+enableConnectOperations: false
 enableExternalData: true
 enableGeneratorResourceExpansion: true
 enableTLSHealthcheck: false
