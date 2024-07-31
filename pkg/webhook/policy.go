@@ -263,6 +263,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 		case string(util.Scoped):
 			for _, action := range r.ScopedEnforcementActions {
 				if err := util.ValidateEnforcementAction(util.EnforcementAction(action), r.Constraint.Object); err != nil {
+					h.log.Error(err, "error validating enforcement action", "skipping enforcement action", action, "constraint", r.Constraint.GetName())
 					continue
 				}
 				actions = append(actions, action)
@@ -272,6 +273,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 			}
 		default:
 			if err := util.ValidateEnforcementAction(util.EnforcementAction(r.EnforcementAction), r.Constraint.Object); err != nil {
+				h.log.Error(err, "error validating enforcement action", "skipping enforcement action", r.EnforcementAction, "constraint", r.Constraint.GetName())
 				continue
 			}
 		}

@@ -804,7 +804,55 @@ func TestReconcile(t *testing.T) {
 		}
 		_, err := cfClient.Review(ctx, req, reviews.EnforcementPoint(util.WebhookEnforcementPoint))
 		if err == nil {
-			t.Fatal("want error, got nil")
+			t.Fatal("want error enforcement point is not supported by client, got nil")
+		}
+	})
+
+	t.Run("Constraint With invalid enforcement point should get error in status", func(t *testing.T) {
+		suffix := "InvalidEnforcementPoint"
+
+		logger.Info("Running test: Constraint With invalid enforcement point should get error in status")
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstrWithScopedEA(suffix, "invalid")
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
+			return true
+		}, func() error {
+			err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
+			if err != nil {
+				return err
+			}
+			status, err := getCByPodStatus(cstr)
+			if err != nil {
+				return err
+			}
+
+			errorReported := false
+			for _, e := range status.Errors {
+				if strings.Contains(e.Message, "unrecognized enforcement points") {
+					errorReported = true
+					break
+				}
+			}
+			if !errorReported {
+				return fmt.Errorf("want error in constraint status, got %+v", status)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 	})
 
@@ -1347,7 +1395,6 @@ func constraintEnforced(ctx context.Context, c client.Client, suffix string) err
 		}
 		if !status.Enforced {
 			obj, _ := json.MarshalIndent(cstr.Object, "", "  ")
-			// return errors.New("constraint not enforced)
 			return fmt.Errorf("constraint not enforced: \n%s", obj)
 		}
 		return nil

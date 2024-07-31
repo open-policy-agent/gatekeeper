@@ -77,33 +77,33 @@ func ValidateScopedEnforcementAction(item map[string]interface{}) error {
 	}
 
 	var unrecognizedEnforcementPoints []string
-
+	var unrecognizedEnforcementActions []string
+	var errs []error
 	// validating scopedEnforcementActions
 	for _, scopedEnforcementAction := range *obj {
-		if scopedEnforcementAction.Action == "" {
-			return ErrInvalidSpecEnforcementAction
-		}
 		switch EnforcementAction(scopedEnforcementAction.Action) {
 		case Dryrun, Deny, Warn:
 		default:
-			return fmt.Errorf("%w: %q is not within the supported list %v", ErrEnforcementAction, scopedEnforcementAction.Action, supportedScopedActions)
+			unrecognizedEnforcementActions = append(unrecognizedEnforcementActions, scopedEnforcementAction.Action)
 		}
 		if len(scopedEnforcementAction.EnforcementPoints) == 0 {
-			return fmt.Errorf("%w: no enforcement points are provided", ErrUnrecognizedEnforcementPoint)
+			unrecognizedEnforcementPoints = append(unrecognizedEnforcementPoints, "")
 		}
 		for _, enforcementPoint := range scopedEnforcementAction.EnforcementPoints {
 			switch enforcementPoint.Name {
 			case WebhookEnforcementPoint, AuditEnforcementPoint, GatorEnforcementPoint, VAPEnforcementPoint, AllEnforcementPoints:
-				continue
 			default:
 				unrecognizedEnforcementPoints = append(unrecognizedEnforcementPoints, enforcementPoint.Name)
 			}
 		}
 	}
 	if len(unrecognizedEnforcementPoints) > 0 {
-		return fmt.Errorf("%w: constraint will not be enforced for enforcement points %v, supported enforcement points are %v", ErrUnrecognizedEnforcementPoint, unrecognizedEnforcementPoints, supportedEnforcementPoints)
+		errs = append(errs, fmt.Errorf("%w: constraint will not be enforced for enforcement points %v, supported enforcement points are %v", ErrUnrecognizedEnforcementPoint, unrecognizedEnforcementPoints, supportedEnforcementPoints))
 	}
-	return nil
+	if len(unrecognizedEnforcementActions) > 0 {
+		errs = append(errs, fmt.Errorf("%w: %v is not within the supported list %v", ErrEnforcementAction, unrecognizedEnforcementActions, supportedScopedActions))
+	}
+	return errors.Join(errs...)
 }
 
 func GetScopedEnforcementAction(item map[string]interface{}) (*[]apiconstraints.ScopedEnforcementAction, error) {
