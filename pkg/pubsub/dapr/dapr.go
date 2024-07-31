@@ -12,6 +12,9 @@ import (
 type ClientConfig struct {
 	// Name of the component to be used for pub sub messaging
 	Component string `json:"component"`
+
+	// Topic where the messages would be published for the connection
+	Topic string `json:"topic"`
 }
 
 // Dapr represents driver for interacting with pub sub using dapr.
@@ -21,19 +24,22 @@ type Dapr struct {
 
 	// Name of the pubsub component
 	pubSubComponent string
+
+	// Topic where the messages would be published for the connection
+	topic string
 }
 
 const (
 	Name = "dapr"
 )
 
-func (r *Dapr) Publish(_ context.Context, data interface{}, topic string) error {
+func (r *Dapr) Publish(_ context.Context, data interface{}) error {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("error marshaling data: %w", err)
 	}
 
-	err = r.client.PublishEvent(context.Background(), r.pubSubComponent, topic, jsonData)
+	err = r.client.PublishEvent(context.Background(), r.pubSubComponent, r.topic, jsonData)
 	if err != nil {
 		return fmt.Errorf("error publishing message to dapr: %w", err)
 	}
@@ -56,6 +62,11 @@ func (r *Dapr) UpdateConnection(_ context.Context, config interface{}) error {
 		return fmt.Errorf("failed to get value of component")
 	}
 	r.pubSubComponent = cfg.Component
+	cfg.Topic, ok = m["topic"].(string)
+	if !ok {
+		return fmt.Errorf("failed to get value of topic")
+	}
+	r.topic = cfg.Topic
 	return nil
 }
 
@@ -70,6 +81,10 @@ func NewConnection(_ context.Context, config interface{}) (connection.Connection
 	if !ok {
 		return nil, fmt.Errorf("failed to get value of component")
 	}
+	cfg.Topic, ok = m["topic"].(string)
+	if !ok {
+		return nil, fmt.Errorf("failed to get value of topic")
+	}
 
 	tmp, err := daprClient.NewClient()
 	if err != nil {
@@ -79,5 +94,6 @@ func NewConnection(_ context.Context, config interface{}) (connection.Connection
 	return &Dapr{
 		client:          tmp,
 		pubSubComponent: cfg.Component,
+		topic:           cfg.Topic,
 	}, nil
 }

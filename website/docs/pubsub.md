@@ -19,7 +19,7 @@ Install prerequisites such as a pubsub tool, a message broker etc.
 
 ### Setting up audit with pubsub enabled
 
-In the audit deployment, set the `--enable-pub-sub` flag to `true` to publish audit violations. Additionally, use `--audit-connection` (defaults to `audit-connection`) and `--audit-channel`(defaults to `audit-channel`) flags to allow audit to publish violations using desired connection onto desired channel. `--audit-connection` must be set to the name of the connection config, and `--audit-channel` must be set to name of the channel where violations should get published.
+In the audit deployment, set the `--enable-pub-sub` flag to `true` to publish audit violations.
 
 A ConfigMap that contains `provider` and `config` fields in `data` is required to establish connection for sending violations over the channel. Following is an example ConfigMap to establish a connection that uses Dapr to publish messages:
 
@@ -33,7 +33,8 @@ data:
   provider: "dapr"
   config: |
     {
-      "component": "pubsub"
+      "component": "pubsub",
+      "topic": "audit-channel"
     }
 ```
 
@@ -125,6 +126,9 @@ Dapr: https://dapr.io/
           - name: go-sub
             image: fake-subscriber:latest
             imagePullPolicy: Never
+            env:
+            - name: AUDIT_CHANNEL
+              value: "audit-channel"
     ```
 
     > [!IMPORTANT]
@@ -156,15 +160,13 @@ Dapr: https://dapr.io/
     EOF
     ```
 
-2. To upgrade or install Gatekeeper with `--enable-pub-sub` set to `true`, `--audit-connection` set to `audit-connection`, `--audit-channel` set to `audit-channel` on audit pod.
+2. To upgrade or install Gatekeeper with `--enable-pub-sub` set to `true` on audit pod.
 
     ```shell
     # auditPodAnnotations is used to add annotations required by Dapr to inject sidecar to audit pod
     echo 'auditPodAnnotations: {dapr.io/enabled: "true", dapr.io/app-id: "audit", dapr.io/metrics-port: "9999", dapr.io/sidecar-seccomp-profile-type: "RuntimeDefault"}' > /tmp/annotations.yaml
     helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
     --set audit.enablePubsub=true \
-    --set audit.connection=audit-connection \
-    --set audit.channel=audit-channel \
     --values /tmp/annotations.yaml
     ```
 
@@ -183,12 +185,11 @@ Dapr: https://dapr.io/
       provider: "dapr"
       config: |
         {
-          "component": "pubsub"
+          "component": "pubsub",
+          "topic": "audit-channel"
         }
     EOF
     ```
-
-    **Note:** Name of the connection configMap must match the value of `--audit-connection` for it to be used by audit to publish violation. At the moment, only one connection config can exists for audit.
 
 4. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
 

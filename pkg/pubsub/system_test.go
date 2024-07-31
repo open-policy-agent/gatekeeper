@@ -24,6 +24,7 @@ func TestMain(m *testing.M) {
 	cfg := map[string]interface{}{
 		dapr.Name: map[string]interface{}{
 			"component": "pubsub",
+			"topic":     "audit",
 		},
 	}
 	for name, fakeConn := range tmp {
@@ -90,6 +91,7 @@ func TestSystem_UpsertConnection(t *testing.T) {
 				ctx: context.Background(),
 				config: map[string]interface{}{
 					"component": "pubsub",
+					"topic":     "test",
 				},
 				name:     "dapr",
 				provider: "dapr",
@@ -111,6 +113,7 @@ func TestSystem_UpsertConnection(t *testing.T) {
 				ctx: context.Background(),
 				config: map[string]interface{}{
 					"component": "pubsub",
+					"topic":     "test",
 				},
 				name:     "audit",
 				provider: "test",
@@ -133,6 +136,7 @@ func TestSystem_UpsertConnection(t *testing.T) {
 				ctx: context.Background(),
 				config: map[string]interface{}{
 					"component": "test",
+					"topic":     "audit",
 				},
 				name:     "audit",
 				provider: "dapr",
@@ -223,15 +227,6 @@ func TestSystem_Publish(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "Publishing to a connection that does not exist",
-			fields: fields{
-				connections: map[string]connection.Connection{"audit": &dapr.Dapr{}},
-				providers:   map[string]string{"audit": "dapr"},
-			},
-			args:    args{ctx: context.Background(), connection: "test", topic: "test", msg: nil},
-			wantErr: true,
-		},
-		{
 			name: "Publishing to a connection that does exist",
 			fields: fields{
 				connections: testSystem.connections,
@@ -248,7 +243,7 @@ func TestSystem_Publish(t *testing.T) {
 				connections: tt.fields.connections,
 				providers:   tt.fields.providers,
 			}
-			if err := s.Publish(tt.args.ctx, tt.args.connection, tt.args.topic, tt.args.msg); (err != nil) != tt.wantErr {
+			if err := s.Publish(tt.args.ctx, tt.args.msg); (err != nil) != tt.wantErr {
 				t.Errorf("System.Publish() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
