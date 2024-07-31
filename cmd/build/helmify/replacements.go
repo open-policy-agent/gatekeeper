@@ -61,6 +61,11 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_TYPE": `{{ .Values.controllerManager.strategyType }}`,
 
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_ROLLINGUPDATE: ""`: `{{- if .Values.controllerManager.strategyRollingUpdate }}
+    rollingUpdate:
+    {{- toYaml .Values.controllerManager.strategyRollingUpdate | nindent 6 }}
+    {{- end }}`,
+
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""`: `{{- if .Values.enableRuntimeDefaultSeccompProfile }}
           seccompProfile:
             type: RuntimeDefault
