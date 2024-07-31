@@ -22,8 +22,9 @@ var kindRegex = regexp.MustCompile(`(?m)^kind:[\s]+([\S]+)[\s]*$`)
 var nameRegex = regexp.MustCompile(`(?m)^  name:[\s]+([\S]+)[\s]*$`)
 
 const (
-	DeploymentKind = "Deployment"
-	end            = "{{- end }}"
+	DeploymentKind     = "Deployment"
+	ServiceAccountKind = "ServiceAccount"
+	end                = "{{- end }}"
 )
 
 func isRbacKind(str string) bool {
@@ -151,6 +152,10 @@ func (ks *kindSet) Write() error {
 
 			if isRbacKind(kind) {
 				obj = "{{- if .Values.rbac.create }}\n" + obj + end + "\n"
+			}
+
+			if name == "gatekeeper-admin" && kind == ServiceAccountKind {
+				obj = "{{- if .Values.serviceAccount.gatekeeperAdmin.create }}\n" + obj + end + "\n"
 			}
 
 			if name == "gatekeeper-controller-manager" && kind == "PodDisruptionBudget" {
