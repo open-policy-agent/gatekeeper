@@ -258,51 +258,65 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 		}
 	}
 	for _, r := range res {
-		actions := r.ScopedEnforcementActions
-		if len(actions) == 0 {
-			actions = []string{r.EnforcementAction}
-		}
-		for _, action := range actions {
-			if err := util.ValidateEnforcementAction(util.EnforcementAction(action), r.Constraint.Object); err != nil {
+		var actions []string
+		switch r.EnforcementAction {
+		case string(util.Scoped):
+			for _, action := range r.ScopedEnforcementActions {
+				if err := util.ValidateEnforcementAction(util.EnforcementAction(action), r.Constraint.Object); err != nil {
+					continue
+				}
+				actions = append(actions, action)
+			}
+			if len(actions) == 0 {
 				continue
 			}
-			if *logDenies {
-				h.log.WithValues(
-					logging.Process, "admission",
-					logging.Details, r.Metadata["details"],
-					logging.EventType, "violation",
-					logging.ConstraintName, r.Constraint.GetName(),
-					logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
-					logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
-					logging.ConstraintKind, r.Constraint.GetKind(),
-					logging.ConstraintAction, r.EnforcementAction,
-					logging.ConstraintEnforcementActions, action,
-					logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
-					logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
-					logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
-					logging.ResourceNamespace, req.AdmissionRequest.Namespace,
-					logging.ResourceName, resourceName,
-					logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
-				).Info(
-					fmt.Sprintf("denied admission: %s", r.Msg))
+		default:
+			if err := util.ValidateEnforcementAction(util.EnforcementAction(r.EnforcementAction), r.Constraint.Object); err != nil {
+				continue
 			}
-			if *emitAdmissionEvents {
-				annotations := map[string]string{
-					logging.Process:                      "admission",
-					logging.EventType:                    "violation",
-					logging.ConstraintName:               r.Constraint.GetName(),
-					logging.ConstraintGroup:              r.Constraint.GroupVersionKind().Group,
-					logging.ConstraintAPIVersion:         r.Constraint.GroupVersionKind().Version,
-					logging.ConstraintKind:               r.Constraint.GetKind(),
-					logging.ConstraintAction:             r.EnforcementAction,
-					logging.ConstraintEnforcementActions: action,
-					logging.ResourceGroup:                req.AdmissionRequest.Kind.Group,
-					logging.ResourceAPIVersion:           req.AdmissionRequest.Kind.Version,
-					logging.ResourceKind:                 req.AdmissionRequest.Kind.Kind,
-					logging.ResourceNamespace:            req.AdmissionRequest.Namespace,
-					logging.ResourceName:                 resourceName,
-					logging.RequestUsername:              req.AdmissionRequest.UserInfo.Username,
-				}
+		}
+		if *logDenies {
+			h.log.WithValues(
+				logging.Process, "admission",
+				logging.Details, r.Metadata["details"],
+				logging.EventType, "violation",
+				logging.ConstraintName, r.Constraint.GetName(),
+				logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
+				logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
+				logging.ConstraintKind, r.Constraint.GetKind(),
+				logging.ConstraintAction, r.EnforcementAction,
+				logging.ConstraintEnforcementActions, actions,
+				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
+				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
+				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
+				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
+				logging.ResourceName, resourceName,
+				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
+			).Info(
+				fmt.Sprintf("denied admission: %s", r.Msg))
+		}
+		if *emitAdmissionEvents {
+			annotations := map[string]string{
+				logging.Process:                      "admission",
+				logging.EventType:                    "violation",
+				logging.ConstraintName:               r.Constraint.GetName(),
+				logging.ConstraintGroup:              r.Constraint.GroupVersionKind().Group,
+				logging.ConstraintAPIVersion:         r.Constraint.GroupVersionKind().Version,
+				logging.ConstraintKind:               r.Constraint.GetKind(),
+				logging.ConstraintAction:             r.EnforcementAction,
+				logging.ConstraintEnforcementActions: strings.Join(actions, ","),
+				logging.ResourceGroup:                req.AdmissionRequest.Kind.Group,
+				logging.ResourceAPIVersion:           req.AdmissionRequest.Kind.Version,
+				logging.ResourceKind:                 req.AdmissionRequest.Kind.Kind,
+				logging.ResourceNamespace:            req.AdmissionRequest.Namespace,
+				logging.ResourceName:                 resourceName,
+				logging.RequestUsername:              req.AdmissionRequest.UserInfo.Username,
+			}
+
+			if len(actions) == 0 {
+				actions = append(actions, r.EnforcementAction)
+			}
+			for _, action := range actions {
 				var eventMsg, reason string
 				switch action {
 				case string(util.Dryrun):
@@ -324,7 +338,11 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 					h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint: %s, Message: %s", eventMsg, req.AdmissionRequest.Namespace, r.Constraint.GetName(), r.Msg)
 				}
 			}
-
+		}
+		if len(actions) == 0 {
+			actions = append(actions, r.EnforcementAction)
+		}
+		for _, action := range actions {
 			if action == string(util.Deny) {
 				denyMsgs = append(denyMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
 			}
