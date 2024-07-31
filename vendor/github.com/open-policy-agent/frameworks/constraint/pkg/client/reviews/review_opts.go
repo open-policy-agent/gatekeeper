@@ -1,7 +1,5 @@
 package reviews
 
-import "strings"
-
 type ReviewCfg struct {
 	TracingEnabled   bool
 	StatsEnabled     bool
@@ -31,6 +29,6 @@ func Stats(enabled bool) ReviewOpt {
 // EnforcementPoint specifies the enforcement point to use for the query.
 func EnforcementPoint(ep string) ReviewOpt {
 	return func(cfg *ReviewCfg) {
-		cfg.EnforcementPoint = strings.ToLower(ep)
+		cfg.EnforcementPoint = ep
 	}
 }
