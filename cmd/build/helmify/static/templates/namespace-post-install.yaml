@@ -32,7 +32,7 @@ spec:
       imagePullSecrets:
       {{- .Values.postInstall.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
-      serviceAccount: gatekeeper-update-namespace-label
+      serviceAccount: {{ .Values.postInstall.labelNamespace.serviceAccount.name }}
       {{- if .Values.postInstall.probeWebhook.enabled }}
       volumes:
       {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}
@@ -90,10 +90,11 @@ spec:
         {{- toYaml .tolerations | nindent 8 }}
       {{- end }}
 ---
+{{- if .Values.postInstall.labelNamespace.serviceAccount.create }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: gatekeeper-update-namespace-label
+  name: {{ .Values.postInstall.labelNamespace.serviceAccount.name }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
     {{- include "gatekeeper.commonLabels" . | nindent 4 }}
@@ -103,6 +104,7 @@ metadata:
     "helm.sh/hook": post-install
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+{{- end }}
 ---
 {{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
@@ -155,7 +157,7 @@ roleRef:
   name: gatekeeper-update-namespace-label
 subjects:
   - kind: ServiceAccount
-    name: gatekeeper-update-namespace-label
+    name: {{ .Values.postInstall.labelNamespace.serviceAccount.name }}
     namespace: {{ .Release.Namespace | quote }}
 {{- end }}
 {{- end }}
