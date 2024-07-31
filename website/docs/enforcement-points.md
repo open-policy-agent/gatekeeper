@@ -14,15 +14,15 @@ An enforcement point defines the location where enforcement happens. Below are t
 
 ### How to use different enforcement points in constraint
 
-By default, a constraint will be enforced at all enforcement points with common enforcement action defined in `spec.enforcementAction`. However, you can chose to enforce a constraint at specific enforcement points different actions using `spec.scopedEnforcementActions`. Below are the different examples and use cases that utilizes different enforcement actions for different enforcement points.
+By default, a constraint will be enforced at all enforcement points with common enforcement action defined in `spec.enforcementAction`. However, you can choose to enforce a constraint at specific enforcement points with different actions using `enforcementAction: scoped` and `spec.scopedEnforcementActions`. Below are examples and use cases that utilize different enforcement actions for different enforcement points.
 
 :::note
-`spec.enforcementAction: scoped` is needed to customize specific enforcement point/enforcement action behavior. If `spec.enforcementAction: scoped` is not provided, `spec.scopedEnforcementActions` is ignored and defined `enforcementAction` will be enforced at all enforcement points.
+`spec.enforcementAction: scoped` is needed to customize specific enforcement point/enforcement action behavior. If `spec.enforcementAction: scoped` is not provided, `spec.scopedEnforcementActions` is ignored and the provided `enforcementAction` will be applied across all enforcement points.
 :::
 
 ###### Deny in shift-left and warn at admission
 
-You are trying out a new constraint template, and you want deny violating resources in shift-left testing, but do not want to block any resources when admitted to cluster to avoid faulty rejects. You may want to use `deny` action for `gator.gatekeeper.sh` enforcement point and `warn` for `validation.gatekeepet.sh`. The below constraint satisfies this use case.
+You are trying out a new constraint template, and you want to deny violating resources in shift-left testing, but do not want to block any resources admitted to clusters to reduce impact for faulty rejections. You may want to use `deny` action for the `gator.gatekeeper.sh` shift-left enforcement point and `warn` for `the validation.gatekeepet.sh` admission webhook enforcement point. The below constraint satisfies this use case.
 
 ```yaml
 apiVersion: constraints.gatekeeper.sh/v1beta1
@@ -41,6 +41,8 @@ spec:
     - name: "gator.gatekeeper.sh"
 ...
 ```
+
+> **Note**: The audit enforcement point is not included unless explicitly added to scopedEnforcementActions.enforcementPoints or if scopedEnforcementActions.enforcementPoints is set to "*".
 
 ###### Only audit
 

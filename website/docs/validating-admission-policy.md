@@ -26,7 +26,7 @@ The [Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/
 
 Together with Gatekeeper and [gator CLI](gator.md), you can get admission, audit, and shift left validations for policies written in both CEL and Rego policy languages, even for clusters that do not support Validating Admission Policy feature yet. For simple policies, you may want admission requests to be handled by the K8s built-in Validating Admission Controller (only supports CEL) instead of the Gatekeeper admission webhook.
 
-To summarize, these are potential options when running Gatekeeper:
+In summary, these are potential options when running Gatekeeper:
 
 | Policy Language(s)    | Enforcement Point  |
 | ------------------ | ------------------ |
@@ -136,7 +136,7 @@ spec:
             ...
 ```
 
-Constraints will follow the behavior defined in `spec.scopedEnforcementActions`. When `spec.scopedEnforcementAction` is not defined, constraints will follow behavior defined by the flag `--default-create-vap-binding-for-constraints`. By default, `--default-create-vap-binding-for-constraints` is set to `false`.
+Gatekeeper determines the intended enforcement actions for a given enforcement point by evaluating what is provided in `spec.scopedEnforcementActions` and `spec.enforcementAction: scoped` in the constraint. If these values are not provided in the constraint, then Gatekeeper will follow behavior defined by the flag `--default-create-vap-binding-for-constraints`. By default, `--default-create-vap-binding-for-constraints` is set to `false`.
 
 The overall opt-in/opt-out behavior for constraint to generate Validating Admission Policy Binding (VAPB) is as below:
 
