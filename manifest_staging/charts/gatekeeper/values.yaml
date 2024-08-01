@@ -186,6 +186,7 @@ controllerManager:
   clientCertName: ""
   strategyType: RollingUpdate
   strategyRollingUpdate: {}
+  podLabels: {}
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -241,6 +242,7 @@ audit:
   livenessTimeout: 1
   priorityClassName: system-cluster-critical
   disableCertRotation: false
+  podLabels: {}
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
