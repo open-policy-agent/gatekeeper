@@ -1,16 +1,5 @@
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
 // Package metricdatatest provides testing functionality for use with the
 // metricdata package.
@@ -46,7 +35,10 @@ type Datatypes interface {
 		metricdata.ExponentialHistogram[int64] |
 		metricdata.ExponentialHistogramDataPoint[float64] |
 		metricdata.ExponentialHistogramDataPoint[int64] |
-		metricdata.ExponentialBucket
+		metricdata.ExponentialBucket |
+		metricdata.Summary |
+		metricdata.SummaryDataPoint |
+		metricdata.QuantileValue
 
 	// Interface types are not allowed in union types, therefore the
 	// Aggregation and Value type from metricdata are not included here.
@@ -177,6 +169,12 @@ func AssertEqual[T Datatypes](t TestingT, expected, actual T, opts ...Option) bo
 		r = equalExponentialHistogramDataPoints(e, aIface.(metricdata.ExponentialHistogramDataPoint[int64]), cfg)
 	case metricdata.ExponentialBucket:
 		r = equalExponentialBuckets(e, aIface.(metricdata.ExponentialBucket), cfg)
+	case metricdata.Summary:
+		r = equalSummary(e, aIface.(metricdata.Summary), cfg)
+	case metricdata.SummaryDataPoint:
+		r = equalSummaryDataPoint(e, aIface.(metricdata.SummaryDataPoint), cfg)
+	case metricdata.QuantileValue:
+		r = equalQuantileValue(e, aIface.(metricdata.QuantileValue), cfg)
 	default:
 		// We control all types passed to this, panic to signal developers
 		// early they changed things in an incompatible way.
@@ -250,6 +248,12 @@ func AssertHasAttributes[T Datatypes](t TestingT, actual T, attrs ...attribute.K
 	case metricdata.ExponentialHistogramDataPoint[float64]:
 		reasons = hasAttributesExponentialHistogramDataPoints(e, attrs...)
 	case metricdata.ExponentialBucket:
+		// Nothing to check.
+	case metricdata.Summary:
+		reasons = hasAttributesSummary(e, attrs...)
+	case metricdata.SummaryDataPoint:
+		reasons = hasAttributesSummaryDataPoint(e, attrs...)
+	case metricdata.QuantileValue:
 		// Nothing to check.
 	default:
 		// We control all types passed to this, panic to signal developers
