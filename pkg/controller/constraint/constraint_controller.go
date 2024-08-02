@@ -638,7 +638,6 @@ func IsVapAPIEnabled() (bool, schema.GroupVersion) {
 	if VapAPIEnabled != nil {
 		return *VapAPIEnabled, GroupVersion
 	}
-	groupVersion := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Info("IsVapAPIEnabled InClusterConfig", "error", err)
@@ -653,21 +652,34 @@ func IsVapAPIEnabled() (bool, schema.GroupVersion) {
 		return false, GroupVersion
 	}
 
-	_, err = clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
-	if err != nil {
-		log.Info("IsVapAPIEnabled ServerResourcesForGroupVersion", "error", err)
-		groupVersion = schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1beta1"}
-		_, err = clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
-		if err != nil {
-			log.Info("IsVapAPIEnabled ServerResourcesForGroupVersion", "error", err)
-			VapAPIEnabled = new(bool)
-			*VapAPIEnabled = false
-			return false, GroupVersion
+	groupVersion := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	resList, err := clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
+	if err == nil {
+		for i:=0; i < len(resList.APIResources); i++ {
+			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
+				VapAPIEnabled = new(bool)
+				*VapAPIEnabled = true
+				GroupVersion = groupVersion
+				return true, GroupVersion
+			}
 		}
 	}
 
+	groupVersion = schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1beta1"}
+	resList, err = clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
+	if err == nil {
+		for i:=0; i < len(resList.APIResources); i++ {
+			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
+				VapAPIEnabled = new(bool)
+				*VapAPIEnabled = true
+				GroupVersion = groupVersion
+				return true, GroupVersion
+			}
+		}
+	}
+
+	log.Info("IsVapAPIEnabled", "error", err)
 	VapAPIEnabled = new(bool)
-	*VapAPIEnabled = true
-	GroupVersion = groupVersion
-	return true, GroupVersion
+	*VapAPIEnabled = false
+	return false, GroupVersion
 }

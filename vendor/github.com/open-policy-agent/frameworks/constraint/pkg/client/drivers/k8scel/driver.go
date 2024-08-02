@@ -84,7 +84,8 @@ func (d *Driver) AddTemplate(_ context.Context, ct *templates.ConstraintTemplate
 		return err
 	}
 	vapVars = append(vapVars, vapVarsSuffix...)
-	filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), false))
+	// Defaulting to true in MustBaseEnvSet to enforce strict cost calculation for CEL, following k8s.
+	filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), transform.StrictCost))
 	if err != nil {
 		return err
 	}
