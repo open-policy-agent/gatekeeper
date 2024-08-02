@@ -84,6 +84,8 @@ const (
 	`
 )
 
+const StrictCost = true
+
 func MatchExcludedNamespacesGlobV1Beta1() admissionregistrationv1beta1.MatchCondition {
 	return admissionregistrationv1beta1.MatchCondition{
 		Name:       "gatekeeper_internal_match_excluded_namespaces",
