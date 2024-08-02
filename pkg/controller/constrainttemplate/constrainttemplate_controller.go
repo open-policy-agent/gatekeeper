@@ -39,7 +39,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	errorpkg "github.com/pkg/errors"
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -207,30 +206,28 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to ConstraintTemplate
-	err = c.Watch(source.Kind(mgr.GetCache(), &v1beta1.ConstraintTemplate{}), &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &v1beta1.ConstraintTemplate{}, &handler.TypedEnqueueRequestForObject[*v1beta1.ConstraintTemplate]{}))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &statusv1beta1.ConstraintTemplatePodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper(true)),
-	)
+		source.Kind(mgr.GetCache(), &statusv1beta1.ConstraintTemplatePodStatus{},
+		handler.TypedEnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper(true))))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to Constraint CRDs
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &apiextensionsv1.CustomResourceDefinition{}),
-		handler.EnqueueRequestForOwner(
+		source.Kind(mgr.GetCache(), &apiextensionsv1.CustomResourceDefinition{},
+		handler.TypedEnqueueRequestForOwner[*apiextensionsv1.CustomResourceDefinition](
 			mgr.GetScheme(),
 			mgr.GetRESTMapper(),
 			&v1beta1.ConstraintTemplate{},
 			handler.OnlyControllerOwner(),
-		),
-	)
+		)))
 	if err != nil {
 		return err
 	}
@@ -479,9 +476,13 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
+	isVAPapiEnabled, groupVersion := constraint.IsVapAPIEnabled()
+	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
+	logger.Info("groupVersion", "groupVersion", groupVersion)
 	// generating vap resources
-	if generateVap && constraint.IsVapAPIEnabled() {
-		currentVap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+	if generateVap && isVAPapiEnabled {
+		currentVap := &unstructured.Unstructured{}
+		currentVap.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicy"})
 		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
 		logger.Info("check if vap exists", "vapName", vapName)
 		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
@@ -491,20 +492,35 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			currentVap = nil
 		}
 		logger.Info("get vap", "vapName", vapName, "currentVap", currentVap)
-		newVap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+		newVap := &unstructured.Unstructured{}
+		newVap.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicy"})
 		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
 		if err != nil {
-			logger.Info("transform to vap error", "vapName", vapName, "error", err)
+			logger.Error(err, "transform to vap error", "vapName", vapName)
 			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
 			status.Status.Errors = append(status.Status.Errors, createErr)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to vap object", status, err)
 			return reconcile.Result{}, err
 		}
 		if currentVap == nil {
-			newVap = transformedVap.DeepCopy()
+			err = r.scheme.Convert(transformedVap, newVap, nil)
+			if err != nil {
+				logger.Error(err, "convert to vap error", "vapName", vapName)
+				return reconcile.Result{}, err
+			}
+			newVap.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicy"})
 		} else {
 			newVap = currentVap.DeepCopy()
-			newVap.Spec = transformedVap.Spec
+			unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&transformedVap.Spec)
+			if err != nil {
+				logger.Error(err, "Error converting to unstructured", "vapName", vapName)
+				return reconcile.Result{}, err
+			}
+			err = unstructured.SetNestedField(newVap.Object, unstructuredObj, "spec")
+			if err != nil {
+				logger.Error(err, "Error constructing current VAP", "vapName", vapName)
+				return reconcile.Result{}, err
+			}
 		}
 
 		if err := controllerutil.SetControllerReference(ct, newVap, r.scheme); err != nil {
@@ -536,8 +552,9 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 	// do not generate vap resources
 	// remove if exists
-	if !generateVap && constraint.IsVapAPIEnabled() {
-		currentVap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+	if !generateVap && isVAPapiEnabled {
+		currentVap := &unstructured.Unstructured{}
+		currentVap.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicy"})
 		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
 		logger.Info("check if vap exists", "vapName", vapName)
 		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {

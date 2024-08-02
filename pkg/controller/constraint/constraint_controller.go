@@ -38,7 +38,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -69,6 +68,8 @@ var (
 var vapMux sync.RWMutex
 
 var VapAPIEnabled *bool
+
+var GroupVersion schema.GroupVersion
 
 type Adder struct {
 	CFClient         *constraintclient.Client
@@ -173,21 +174,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 	// Watch for changes to the provided constraint
 	err = c.Watch(
-		&source.Channel{
-			Source:         events,
-			DestBufferSize: 1024,
-		},
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
-	)
+		source.Channel(
+			events,
+			handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc())))
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to ConstraintStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &constraintstatusv1beta1.ConstraintPodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(constraintstatus.PodStatusToConstraintMapper(true, util.EventPackerMapFunc())),
-	)
+		source.Kind(mgr.GetCache(), &constraintstatusv1beta1.ConstraintPodStatus{}, handler.TypedEnqueueRequestsFromMapFunc(constraintstatus.PodStatusToConstraintMapper(true, util.EventPackerMapFunc()))))
 	if err != nil {
 		return err
 	}
@@ -316,8 +311,9 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				}
 				return reconcile.Result{}, err
 			}
+			isApiEnabled, groupVersion := IsVapAPIEnabled()
 			if generateVAPB {
-				if !IsVapAPIEnabled() {
+				if !isApiEnabled {
 					r.log.V(1).Info("Warning: VAP API is not enabled, cannot create VAPBinding")
 					generateVAPB = false
 				}
@@ -329,7 +325,8 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			r.log.Info("constraint controller", "generateVAPB", generateVAPB)
 			// generate vapbinding resources
 			if generateVAPB {
-				currentVapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+				currentVapBinding := &unstructured.Unstructured{}
+				currentVapBinding.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicyBinding"})
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 				if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
@@ -338,20 +335,44 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					}
 					currentVapBinding = nil
 				}
-				newVapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+				newVapBinding := &unstructured.Unstructured{}
+				newVapBinding.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicyBinding"})
 				transformedVapBinding, err := transform.ConstraintToBinding(instance, VAPEnforcementActions)
 				if err != nil {
 					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not report transform vapbinding error status")
+						log.Error(err2, "could not report transform vapbinding error", "vapName", vapBindingName)
 					}
 					return reconcile.Result{}, err
 				}
 				if currentVapBinding == nil {
-					newVapBinding = transformedVapBinding.DeepCopy()
+					err = r.scheme.Convert(transformedVapBinding, newVapBinding, nil)
+					if err != nil {
+						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+						if err2 := r.writer.Update(ctx, status); err2 != nil {
+							log.Error(err2, "could not report convert vapbinding error", "vapName", vapBindingName)
+						}
+						return reconcile.Result{}, err
+					}
+					newVapBinding.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicyBinding"})
 				} else {
 					newVapBinding = currentVapBinding.DeepCopy()
-					newVapBinding.Spec = transformedVapBinding.Spec
+					unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&transformedVapBinding.Spec)
+					if err != nil {
+						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+						if err2 := r.writer.Update(ctx, status); err2 != nil {
+							log.Error(err2, "could not report convert vapbinding error", "vapName", vapBindingName)
+						}
+						return reconcile.Result{}, err
+					}
+					err = unstructured.SetNestedField(newVapBinding.Object, unstructuredObj, "spec")
+					if err != nil {
+						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+						if err2 := r.writer.Update(ctx, status); err2 != nil {
+							log.Error(err2, "could not report convert vapbinding error", "vapName", vapBindingName)
+						}
+						return reconcile.Result{}, err
+					}
 				}
 
 				if err := controllerutil.SetControllerReference(instance, newVapBinding, r.scheme); err != nil {
@@ -381,7 +402,8 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			// do not generate vapbinding resources
 			// remove if exists
 			if !generateVAPB {
-				currentVapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+				currentVapBinding := &unstructured.Unstructured{}
+				currentVapBinding.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicyBinding"})
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 				if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
@@ -609,35 +631,43 @@ func (c *ConstraintsCache) reportTotalConstraints(ctx context.Context, reporter 
 	}
 }
 
-func IsVapAPIEnabled() bool {
+func IsVapAPIEnabled() (bool, schema.GroupVersion) {
 	vapMux.Lock()
 	defer vapMux.Unlock()
 
 	if VapAPIEnabled != nil {
-		return *VapAPIEnabled
+		return *VapAPIEnabled, GroupVersion
 	}
-	groupVersion := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1beta1"}
+	groupVersion := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Info("IsVapAPIEnabled InClusterConfig", "error", err)
 		VapAPIEnabled = new(bool)
 		*VapAPIEnabled = false
-		return false
+		return false, GroupVersion
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		log.Info("IsVapAPIEnabled NewForConfig", "error", err)
 		*VapAPIEnabled = false
-		return false
+		return false, GroupVersion
 	}
-	if _, err := clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String()); err != nil {
+
+	_, err = clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
+	if err != nil {
 		log.Info("IsVapAPIEnabled ServerResourcesForGroupVersion", "error", err)
-		VapAPIEnabled = new(bool)
-		*VapAPIEnabled = false
-		return false
+		groupVersion = schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1beta1"}
+		_, err = clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
+		if err != nil {
+			log.Info("IsVapAPIEnabled ServerResourcesForGroupVersion", "error", err)
+			VapAPIEnabled = new(bool)
+			*VapAPIEnabled = false
+			return false, GroupVersion
+		}
 	}
-	log.Info("IsVapAPIEnabled true")
+
 	VapAPIEnabled = new(bool)
 	*VapAPIEnabled = true
-	return true
+	GroupVersion = groupVersion
+	return true, GroupVersion
 }
