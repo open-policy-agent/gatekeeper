@@ -168,7 +168,8 @@ func (ks *kindSet) Write() error {
 
 			fmt.Printf("Writing %s\n", destFile)
 
-			if err := os.WriteFile(destFile, []byte(obj), 0o600); err != nil {
+			addSeparator := "---\n" + obj
+			if err := os.WriteFile(destFile, []byte(addSeparator), 0o600); err != nil {
 				return err
 			}
 		}
