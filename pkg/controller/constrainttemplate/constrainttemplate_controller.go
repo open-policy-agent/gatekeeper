@@ -214,7 +214,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &statusv1beta1.ConstraintTemplatePodStatus{},
-		handler.TypedEnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper(true))))
+			handler.TypedEnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper(true))))
 	if err != nil {
 		return err
 	}
@@ -222,12 +222,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to Constraint CRDs
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &apiextensionsv1.CustomResourceDefinition{},
-		handler.TypedEnqueueRequestForOwner[*apiextensionsv1.CustomResourceDefinition](
-			mgr.GetScheme(),
-			mgr.GetRESTMapper(),
-			&v1beta1.ConstraintTemplate{},
-			handler.OnlyControllerOwner(),
-		)))
+			handler.TypedEnqueueRequestForOwner[*apiextensionsv1.CustomResourceDefinition](
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&v1beta1.ConstraintTemplate{},
+				handler.OnlyControllerOwner(),
+			)))
 	if err != nil {
 		return err
 	}

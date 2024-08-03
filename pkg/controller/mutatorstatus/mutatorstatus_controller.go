@@ -84,7 +84,7 @@ func newReconciler(
 type PackerMap func(obj client.Object) []reconcile.Request
 
 // PodStatusToMutatorMapper correlates a MutatorPodStatus with its corresponding mutator.
-func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler.MapFunc)  handler.TypedMapFunc[*v1beta1.MutatorPodStatus] {
+func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.MutatorPodStatus] {
 	return func(ctx context.Context, obj *v1beta1.MutatorPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.MutatorNameLabel]
@@ -177,8 +177,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to MutatorStatus
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &v1beta1.MutatorPodStatus{},
-		handler.TypedEnqueueRequestsFromMapFunc(PodStatusToMutatorMapper(false, "", util.EventPackerMapFunc())),
-	))
+			handler.TypedEnqueueRequestsFromMapFunc(PodStatusToMutatorMapper(false, "", util.EventPackerMapFunc())),
+		))
 	if err != nil {
 		return err
 	}
@@ -186,28 +186,28 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to mutators
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &mutationsv1.Assign{},
-		handler.TypedEnqueueRequestsFromMapFunc(eventPackerMapFuncHardcodeGVKForAssign(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "Assign"}))))
+			handler.TypedEnqueueRequestsFromMapFunc(eventPackerMapFuncHardcodeGVKForAssign(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "Assign"}))))
 	if err != nil {
 		return err
 	}
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &mutationsv1.AssignMetadata{},
-		handler.TypedEnqueueRequestsFromMapFunc(eventPackerMapFuncHardcodeGVKForAssignMetadata(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "AssignMetadata"})),
-	))
+			handler.TypedEnqueueRequestsFromMapFunc(eventPackerMapFuncHardcodeGVKForAssignMetadata(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "AssignMetadata"})),
+		))
 	if err != nil {
 		return err
 	}
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &mutationsv1alpha1.AssignImage{},
-		handler.TypedEnqueueRequestsFromMapFunc(eventPackerMapFuncHardcodeGVKForAssignImage(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: "AssignImage"})),
-	))
+			handler.TypedEnqueueRequestsFromMapFunc(eventPackerMapFuncHardcodeGVKForAssignImage(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: "AssignImage"})),
+		))
 	if err != nil {
 		return err
 	}
 	return c.Watch(
 		source.Kind(mgr.GetCache(), &mutationsv1.ModifySet{},
-		handler.TypedEnqueueRequestsFromMapFunc(eventPackerMapFuncHardcodeGVKForModifySet(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "ModifySet"})),
-	))
+			handler.TypedEnqueueRequestsFromMapFunc(eventPackerMapFuncHardcodeGVKForModifySet(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "ModifySet"})),
+		))
 }
 
 var _ reconcile.Reconciler = &ReconcileMutatorStatus{}

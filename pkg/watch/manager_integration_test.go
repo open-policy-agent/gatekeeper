@@ -175,7 +175,7 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 	}
 	err = c.Watch(
 		source.Channel(events,
-		&handler.EnqueueRequestForObject{}),
+			&handler.EnqueueRequestForObject{}),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -351,8 +351,8 @@ func Test_Registrar_Replay(t *testing.T) {
 		}
 		err = c.Watch(
 			source.Channel(
-			events,
-			&handler.EnqueueRequestForObject{}))
+				events,
+				&handler.EnqueueRequestForObject{}))
 		if err != nil {
 			t.Fatal(err)
 		}

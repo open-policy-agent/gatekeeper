@@ -51,7 +51,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssign(unversioned)
 		},
-		Events:       events,
+		Events: events,
 	}
 	if err := assign.Add(mgr); err != nil {
 		return err
@@ -74,7 +74,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForModifySet(unversioned)
 		},
-		Events:       events,
+		Events: events,
 	}
 	if err := modifySet.Add(mgr); err != nil {
 		return err
@@ -97,7 +97,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssignImage(unversioned)
 		},
-		Events:       events,
+		Events: events,
 	}
 	if err := assignImage.Add(mgr); err != nil {
 		return err

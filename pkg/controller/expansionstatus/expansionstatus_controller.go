@@ -110,8 +110,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to ExpansionTemplateStatus
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &v1beta1.ExpansionTemplatePodStatus{},
-		handler.TypedEnqueueRequestsFromMapFunc(PodStatusToExpansionTemplateMapper(false)),
-	))
+			handler.TypedEnqueueRequestsFromMapFunc(PodStatusToExpansionTemplateMapper(false)),
+		))
 	if err != nil {
 		return err
 	}

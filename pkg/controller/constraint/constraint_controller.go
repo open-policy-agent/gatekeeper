@@ -311,9 +311,9 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				}
 				return reconcile.Result{}, err
 			}
-			isApiEnabled, groupVersion := IsVapAPIEnabled()
+			isAPIEnabled, groupVersion := IsVapAPIEnabled()
 			if generateVAPB {
-				if !isApiEnabled {
+				if !isAPIEnabled {
 					r.log.V(1).Info("Warning: VAP API is not enabled, cannot create VAPBinding")
 					generateVAPB = false
 				}
@@ -655,7 +655,7 @@ func IsVapAPIEnabled() (bool, schema.GroupVersion) {
 	groupVersion := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
 	resList, err := clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
 	if err == nil {
-		for i:=0; i < len(resList.APIResources); i++ {
+		for i := 0; i < len(resList.APIResources); i++ {
 			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
 				VapAPIEnabled = new(bool)
 				*VapAPIEnabled = true
@@ -668,7 +668,7 @@ func IsVapAPIEnabled() (bool, schema.GroupVersion) {
 	groupVersion = schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1beta1"}
 	resList, err = clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
 	if err == nil {
-		for i:=0; i < len(resList.APIResources); i++ {
+		for i := 0; i < len(resList.APIResources); i++ {
 			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
 				VapAPIEnabled = new(bool)
 				*VapAPIEnabled = true
