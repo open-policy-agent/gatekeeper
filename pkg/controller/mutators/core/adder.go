@@ -68,7 +68,7 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 	// Watch for changes to Mutators.
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), r.newMutationObj(),
-		&handler.EnqueueRequestForObject{}))
+			&handler.EnqueueRequestForObject{}))
 	if err != nil {
 		return err
 	}
@@ -76,15 +76,15 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 	// Watch for changes to MutatorPodStatuses.
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &statusv1beta1.MutatorPodStatus{},
-		handler.TypedEnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, func(_ context.Context, obj client.Object) []reconcile.Request {
-			return []reconcile.Request{{
-				NamespacedName: apitypes.NamespacedName{
-					Namespace: obj.GetNamespace(),
-					Name:      obj.GetName(),
-				},
-			}}
-		})),
-	))
+			handler.TypedEnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, func(_ context.Context, obj client.Object) []reconcile.Request {
+				return []reconcile.Request{{
+					NamespacedName: apitypes.NamespacedName{
+						Namespace: obj.GetNamespace(),
+						Name:      obj.GetName(),
+					},
+				}}
+			})),
+		))
 	if err != nil {
 		return err
 	}
@@ -93,17 +93,17 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 		// Watch for enqueued events.
 		err = c.Watch(
 			source.Channel(a.Events,
-			handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
-				if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
-					return nil
-				}
-				return []reconcile.Request{{
-					NamespacedName: apitypes.NamespacedName{
-						Namespace: obj.GetNamespace(),
-						Name:      obj.GetName(),
-					},
-				}}
-			})))
+				handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+					if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
+						return nil
+					}
+					return []reconcile.Request{{
+						NamespacedName: apitypes.NamespacedName{
+							Namespace: obj.GetNamespace(),
+							Name:      obj.GetName(),
+						},
+					}}
+				})))
 	}
 
 	return err

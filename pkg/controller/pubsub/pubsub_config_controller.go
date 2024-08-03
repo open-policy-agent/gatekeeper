@@ -72,22 +72,22 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	return c.Watch(
 		source.Kind(mgr.GetCache(), &corev1.ConfigMap{},
-		&handler.TypedEnqueueRequestForObject[*corev1.ConfigMap]{},
-		predicate.TypedFuncs[*corev1.ConfigMap]{
-			CreateFunc: func(e event.TypedCreateEvent[*corev1.ConfigMap]) bool {
-				return e.Object.GetNamespace() == util.GetNamespace()
+			&handler.TypedEnqueueRequestForObject[*corev1.ConfigMap]{},
+			predicate.TypedFuncs[*corev1.ConfigMap]{
+				CreateFunc: func(e event.TypedCreateEvent[*corev1.ConfigMap]) bool {
+					return e.Object.GetNamespace() == util.GetNamespace()
+				},
+				UpdateFunc: func(e event.TypedUpdateEvent[*corev1.ConfigMap]) bool {
+					return e.ObjectNew.GetNamespace() == util.GetNamespace()
+				},
+				DeleteFunc: func(e event.TypedDeleteEvent[*corev1.ConfigMap]) bool {
+					return e.Object.GetNamespace() == util.GetNamespace()
+				},
+				GenericFunc: func(e event.TypedGenericEvent[*corev1.ConfigMap]) bool {
+					return e.Object.GetNamespace() == util.GetNamespace()
+				},
 			},
-			UpdateFunc: func(e event.TypedUpdateEvent[*corev1.ConfigMap]) bool {
-				return e.ObjectNew.GetNamespace() == util.GetNamespace()
-			},
-			DeleteFunc: func(e event.TypedDeleteEvent[*corev1.ConfigMap]) bool {
-				return e.Object.GetNamespace() == util.GetNamespace()
-			},
-			GenericFunc: func(e event.TypedGenericEvent[*corev1.ConfigMap]) bool {
-				return e.Object.GetNamespace() == util.GetNamespace()
-			},
-		},
-	))
+		))
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {

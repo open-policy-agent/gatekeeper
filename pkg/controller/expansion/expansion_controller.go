@@ -112,7 +112,7 @@ func add(mgr manager.Manager, r *Reconciler) error {
 	// Watch for changes to ExpansionTemplates
 	return c.Watch(
 		source.Kind(mgr.GetCache(), &expansionv1beta1.ExpansionTemplate{},
-		&handler.TypedEnqueueRequestForObject[*expansionv1beta1.ExpansionTemplate]{}))
+			&handler.TypedEnqueueRequestForObject[*expansionv1beta1.ExpansionTemplate]{}))
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
