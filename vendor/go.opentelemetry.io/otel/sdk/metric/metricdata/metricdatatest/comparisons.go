@@ -1,16 +1,5 @@
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
 package metricdatatest // import "go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 
@@ -18,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"slices"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -153,6 +143,12 @@ func equalAggregations(a, b metricdata.Aggregation, cfg config) (reasons []strin
 		r := equalExponentialHistograms(v, b.(metricdata.ExponentialHistogram[float64]), cfg)
 		if len(r) > 0 {
 			reasons = append(reasons, "ExponentialHistogram not equal:")
+			reasons = append(reasons, r...)
+		}
+	case metricdata.Summary:
+		r := equalSummary(v, b.(metricdata.Summary), cfg)
+		if len(r) > 0 {
+			reasons = append(reasons, "Summary not equal:")
 			reasons = append(reasons, r...)
 		}
 	default:
@@ -296,10 +292,10 @@ func equalHistogramDataPoints[N int64 | float64](a, b metricdata.HistogramDataPo
 		if a.Count != b.Count {
 			reasons = append(reasons, notEqualStr("Count", a.Count, b.Count))
 		}
-		if !equalSlices(a.Bounds, b.Bounds) {
+		if !slices.Equal(a.Bounds, b.Bounds) {
 			reasons = append(reasons, notEqualStr("Bounds", a.Bounds, b.Bounds))
 		}
-		if !equalSlices(a.BucketCounts, b.BucketCounts) {
+		if !slices.Equal(a.BucketCounts, b.BucketCounts) {
 			reasons = append(reasons, notEqualStr("BucketCounts", a.BucketCounts, b.BucketCounts))
 		}
 		if !eqExtrema(a.Min, b.Min) {
@@ -420,26 +416,77 @@ func equalExponentialBuckets(a, b metricdata.ExponentialBucket, _ config) (reaso
 	if a.Offset != b.Offset {
 		reasons = append(reasons, notEqualStr("Offset", a.Offset, b.Offset))
 	}
-	if !equalSlices(a.Counts, b.Counts) {
+	if !slices.Equal(a.Counts, b.Counts) {
 		reasons = append(reasons, notEqualStr("Counts", a.Counts, b.Counts))
+	}
+	return reasons
+}
+
+func equalSummary(a, b metricdata.Summary, cfg config) (reasons []string) {
+	r := compareDiff(diffSlices(
+		a.DataPoints,
+		b.DataPoints,
+		func(a, b metricdata.SummaryDataPoint) bool {
+			r := equalSummaryDataPoint(a, b, cfg)
+			return len(r) == 0
+		},
+	))
+	if r != "" {
+		reasons = append(reasons, fmt.Sprintf("Summary DataPoints not equal:\n%s", r))
+	}
+	return reasons
+}
+
+func equalSummaryDataPoint(a, b metricdata.SummaryDataPoint, cfg config) (reasons []string) {
+	if !a.Attributes.Equals(&b.Attributes) {
+		reasons = append(reasons, notEqualStr(
+			"Attributes",
+			a.Attributes.Encoded(attribute.DefaultEncoder()),
+			b.Attributes.Encoded(attribute.DefaultEncoder()),
+		))
+	}
+	if !cfg.ignoreTimestamp {
+		if !a.StartTime.Equal(b.StartTime) {
+			reasons = append(reasons, notEqualStr("StartTime", a.StartTime.UnixNano(), b.StartTime.UnixNano()))
+		}
+		if !a.Time.Equal(b.Time) {
+			reasons = append(reasons, notEqualStr("Time", a.Time.UnixNano(), b.Time.UnixNano()))
+		}
+	}
+	if !cfg.ignoreValue {
+		if a.Count != b.Count {
+			reasons = append(reasons, notEqualStr("Count", a.Count, b.Count))
+		}
+		if a.Sum != b.Sum {
+			reasons = append(reasons, notEqualStr("Sum", a.Sum, b.Sum))
+		}
+		r := compareDiff(diffSlices(
+			a.QuantileValues,
+			b.QuantileValues,
+			func(a, b metricdata.QuantileValue) bool {
+				r := equalQuantileValue(a, b, cfg)
+				return len(r) == 0
+			},
+		))
+		if r != "" {
+			reasons = append(reasons, r)
+		}
+	}
+	return reasons
+}
+
+func equalQuantileValue(a, b metricdata.QuantileValue, _ config) (reasons []string) {
+	if a.Quantile != b.Quantile {
+		reasons = append(reasons, notEqualStr("Quantile", a.Quantile, b.Quantile))
+	}
+	if a.Value != b.Value {
+		reasons = append(reasons, notEqualStr("Value", a.Value, b.Value))
 	}
 	return reasons
 }
 
 func notEqualStr(prefix string, expected, actual interface{}) string {
 	return fmt.Sprintf("%s not equal:\nexpected: %v\nactual: %v", prefix, expected, actual)
-}
-
-func equalSlices[T comparable](a, b []T) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, v := range a {
-		if v != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func equalExtrema[N int64 | float64](a, b metricdata.Extrema[N], _ config) (reasons []string) {
@@ -459,63 +506,56 @@ func eqExtrema[N int64 | float64](a, b metricdata.Extrema[N]) bool {
 	return aV == bV
 }
 
-func equalKeyValue(a, b []attribute.KeyValue) bool {
-	// Comparison of []attribute.KeyValue as a comparable requires Go >= 1.20.
-	// To support Go < 1.20 use this function instead.
-	if len(a) != len(b) {
+func equalKeyValue(a, b attribute.KeyValue) bool {
+	if a.Key != b.Key {
 		return false
 	}
-	for i, v := range a {
-		if v.Key != b[i].Key {
+	if a.Value.Type() != b.Value.Type() {
+		return false
+	}
+	switch a.Value.Type() {
+	case attribute.BOOL:
+		if a.Value.AsBool() != b.Value.AsBool() {
 			return false
 		}
-		if v.Value.Type() != b[i].Value.Type() {
+	case attribute.INT64:
+		if a.Value.AsInt64() != b.Value.AsInt64() {
 			return false
 		}
-		switch v.Value.Type() {
-		case attribute.BOOL:
-			if v.Value.AsBool() != b[i].Value.AsBool() {
-				return false
-			}
-		case attribute.INT64:
-			if v.Value.AsInt64() != b[i].Value.AsInt64() {
-				return false
-			}
-		case attribute.FLOAT64:
-			if v.Value.AsFloat64() != b[i].Value.AsFloat64() {
-				return false
-			}
-		case attribute.STRING:
-			if v.Value.AsString() != b[i].Value.AsString() {
-				return false
-			}
-		case attribute.BOOLSLICE:
-			if ok := equalSlices(v.Value.AsBoolSlice(), b[i].Value.AsBoolSlice()); !ok {
-				return false
-			}
-		case attribute.INT64SLICE:
-			if ok := equalSlices(v.Value.AsInt64Slice(), b[i].Value.AsInt64Slice()); !ok {
-				return false
-			}
-		case attribute.FLOAT64SLICE:
-			if ok := equalSlices(v.Value.AsFloat64Slice(), b[i].Value.AsFloat64Slice()); !ok {
-				return false
-			}
-		case attribute.STRINGSLICE:
-			if ok := equalSlices(v.Value.AsStringSlice(), b[i].Value.AsStringSlice()); !ok {
-				return false
-			}
-		default:
-			// We control all types passed to this, panic to signal developers
-			// early they changed things in an incompatible way.
-			panic(fmt.Sprintf("unknown attribute value type: %s", v.Value.Type()))
+	case attribute.FLOAT64:
+		if a.Value.AsFloat64() != b.Value.AsFloat64() {
+			return false
 		}
+	case attribute.STRING:
+		if a.Value.AsString() != b.Value.AsString() {
+			return false
+		}
+	case attribute.BOOLSLICE:
+		if ok := slices.Equal(a.Value.AsBoolSlice(), b.Value.AsBoolSlice()); !ok {
+			return false
+		}
+	case attribute.INT64SLICE:
+		if ok := slices.Equal(a.Value.AsInt64Slice(), b.Value.AsInt64Slice()); !ok {
+			return false
+		}
+	case attribute.FLOAT64SLICE:
+		if ok := slices.Equal(a.Value.AsFloat64Slice(), b.Value.AsFloat64Slice()); !ok {
+			return false
+		}
+	case attribute.STRINGSLICE:
+		if ok := slices.Equal(a.Value.AsStringSlice(), b.Value.AsStringSlice()); !ok {
+			return false
+		}
+	default:
+		// We control all types passed to this, panic to signal developers
+		// early they changed things in an incompatible way.
+		panic(fmt.Sprintf("unknown attribute value type: %s", a.Value.Type()))
 	}
 	return true
 }
 
 func equalExemplars[N int64 | float64](a, b metricdata.Exemplar[N], cfg config) (reasons []string) {
-	if !equalKeyValue(a.FilteredAttributes, b.FilteredAttributes) {
+	if !slices.EqualFunc(a.FilteredAttributes, b.FilteredAttributes, equalKeyValue) {
 		reasons = append(reasons, notEqualStr("FilteredAttributes", a.FilteredAttributes, b.FilteredAttributes))
 	}
 	if !cfg.ignoreTimestamp {
@@ -528,10 +568,10 @@ func equalExemplars[N int64 | float64](a, b metricdata.Exemplar[N], cfg config) 
 			reasons = append(reasons, notEqualStr("Value", a.Value, b.Value))
 		}
 	}
-	if !equalSlices(a.SpanID, b.SpanID) {
+	if !slices.Equal(a.SpanID, b.SpanID) {
 		reasons = append(reasons, notEqualStr("SpanID", a.SpanID, b.SpanID))
 	}
-	if !equalSlices(a.TraceID, b.TraceID) {
+	if !slices.Equal(a.TraceID, b.TraceID) {
 		reasons = append(reasons, notEqualStr("TraceID", a.TraceID, b.TraceID))
 	}
 	return reasons
@@ -716,6 +756,8 @@ func hasAttributesAggregation(agg metricdata.Aggregation, attrs ...attribute.Key
 		reasons = hasAttributesExponentialHistogram(agg, attrs...)
 	case metricdata.ExponentialHistogram[float64]:
 		reasons = hasAttributesExponentialHistogram(agg, attrs...)
+	case metricdata.Summary:
+		reasons = hasAttributesSummary(agg, attrs...)
 	default:
 		reasons = []string{fmt.Sprintf("unknown aggregation %T", agg)}
 	}
@@ -741,12 +783,38 @@ func hasAttributesScopeMetrics(sm metricdata.ScopeMetrics, attrs ...attribute.Ke
 	}
 	return reasons
 }
+
 func hasAttributesResourceMetrics(rm metricdata.ResourceMetrics, attrs ...attribute.KeyValue) (reasons []string) {
 	for n, sm := range rm.ScopeMetrics {
 		reas := hasAttributesScopeMetrics(sm, attrs...)
 		if len(reas) > 0 {
 			reasons = append(reasons, fmt.Sprintf("ResourceMetrics ScopeMetrics %d:\n", n))
 			reasons = append(reasons, reas...)
+		}
+	}
+	return reasons
+}
+
+func hasAttributesSummary(summary metricdata.Summary, attrs ...attribute.KeyValue) (reasons []string) {
+	for n, dp := range summary.DataPoints {
+		reas := hasAttributesSummaryDataPoint(dp, attrs...)
+		if len(reas) > 0 {
+			reasons = append(reasons, fmt.Sprintf("summary datapoint %d attributes:\n", n))
+			reasons = append(reasons, reas...)
+		}
+	}
+	return reasons
+}
+
+func hasAttributesSummaryDataPoint(dp metricdata.SummaryDataPoint, attrs ...attribute.KeyValue) (reasons []string) {
+	for _, attr := range attrs {
+		val, ok := dp.Attributes.Value(attr.Key)
+		if !ok {
+			reasons = append(reasons, missingAttrStr(string(attr.Key)))
+			continue
+		}
+		if val != attr.Value {
+			reasons = append(reasons, notEqualStr(string(attr.Key), attr.Value.Emit(), val.Emit()))
 		}
 	}
 	return reasons
