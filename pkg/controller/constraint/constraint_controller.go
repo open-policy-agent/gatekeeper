@@ -49,6 +49,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	rest "k8s.io/client-go/rest"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -691,16 +692,7 @@ func vapBindingForVersion(gvk schema.GroupVersion) (client.Object, error) {
 func (r *ReconcileConstraint) getRunTimeVAPBinding(gvk *schema.GroupVersion, transformedVapBinding *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, currentVapBinding client.Object) (client.Object, error) {
 	if currentVapBinding == nil {
 		if gvk.Version == "v1" {
-			uVAPBinding, err := runtime.DefaultUnstructuredConverter.ToUnstructured(transformedVapBinding)
-			if err != nil {
-				return nil, err
-			}
-			v1VAP := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-			err = runtime.DefaultUnstructuredConverter.FromUnstructured(uVAPBinding, v1VAP)
-			if err != nil {
-				return nil, err
-			}
-			return v1VAP.DeepCopy(), nil
+			return v1beta1ToV1(transformedVapBinding)
 		}
 		return transformedVapBinding.DeepCopy(), nil
 	}
@@ -710,12 +702,7 @@ func (r *ReconcileConstraint) getRunTimeVAPBinding(gvk *schema.GroupVersion, tra
 			return nil, errors.New("Unable to convert to v1 VAP")
 		}
 		v1CurrentVAPBinding = v1CurrentVAPBinding.DeepCopy()
-		uVAPBinding, err := runtime.DefaultUnstructuredConverter.ToUnstructured(transformedVapBinding)
-		if err != nil {
-			return nil, err
-		}
-		tempVAPBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-		err = runtime.DefaultUnstructuredConverter.FromUnstructured(uVAPBinding, tempVAPBinding)
+		tempVAPBinding, err := v1beta1ToV1(transformedVapBinding)
 		if err != nil {
 			return nil, err
 		}
@@ -728,4 +715,38 @@ func (r *ReconcileConstraint) getRunTimeVAPBinding(gvk *schema.GroupVersion, tra
 	}
 	v1beta1VAPBinding.Spec = transformedVapBinding.Spec
 	return v1beta1VAPBinding.DeepCopy(), nil
+}
+
+func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding) (*admissionregistrationv1.ValidatingAdmissionPolicyBinding, error) {
+	obj := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+	obj.SetName(v1beta1Obj.GetName())
+	obj.Spec.PolicyName = v1beta1Obj.Spec.PolicyName
+	obj.Spec.ParamRef = &admissionregistrationv1.ParamRef{
+		Name:                    v1beta1Obj.Spec.ParamRef.Name,
+		ParameterNotFoundAction: ptr.To[admissionregistrationv1.ParameterNotFoundActionType](admissionregistrationv1.AllowAction),
+	}
+	actions := []admissionregistrationv1.ValidationAction{}
+
+	for _, action := range v1beta1Obj.Spec.ValidationActions {
+		switch action {
+		case admissionregistrationv1beta1.Deny:
+			actions = append(actions, admissionregistrationv1.Deny)
+		case admissionregistrationv1beta1.Warn:
+			actions = append(actions, admissionregistrationv1.Warn)
+		default:
+			return nil, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn` or `deny`", transform.ErrBadEnforcementAction, action)
+		}
+	}
+
+	obj.Spec.ValidationActions = actions
+	if v1beta1Obj.Spec.MatchResources != nil {
+		if v1beta1Obj.Spec.MatchResources.ObjectSelector != nil {
+			obj.Spec.MatchResources.ObjectSelector = v1beta1Obj.Spec.MatchResources.ObjectSelector
+		}
+		if v1beta1Obj.Spec.MatchResources.NamespaceSelector != nil {
+			obj.Spec.MatchResources.NamespaceSelector = v1beta1Obj.Spec.MatchResources.NamespaceSelector
+		}
+	}
+
+	return obj, nil
 }

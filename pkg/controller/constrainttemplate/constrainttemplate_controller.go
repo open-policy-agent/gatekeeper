@@ -481,9 +481,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	isVAPapiEnabled, groupVersion := constraint.IsVapAPIEnabled()
 	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
 	logger.Info("groupVersion", "groupVersion", groupVersion)
-	isVAPapiEnabled, groupVersion := constraint.IsVapAPIEnabled()
-	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
-	logger.Info("groupVersion", "groupVersion", groupVersion)
 	// generating vap resources
 	if generateVap && isVAPapiEnabled && groupVersion != nil {
 		currentVap, err := vapForVersion(groupVersion)
@@ -788,18 +785,7 @@ func vapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
 func (r *ReconcileConstraintTemplate) getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy, currentVap client.Object) (client.Object, error) {
 	if currentVap == nil {
 		if gvk.Version == "v1" {
-			uVAP := &unstructured.Unstructured{}
-			err := r.scheme.Convert(transformedVap, uVAP, nil)
-			if err != nil {
-				return nil, err
-			}
-			uVAP.SetGroupVersionKind(schema.GroupVersionKind{Group: gvk.Group, Version: gvk.Version, Kind: "ValidatingAdmissionPolicy"})
-			v1VAP := &admissionregistrationv1.ValidatingAdmissionPolicy{}
-			err = r.scheme.Convert(uVAP, v1VAP, nil)
-			if err != nil {
-				return nil, err
-			}
-			return v1VAP.DeepCopy(), nil
+			return v1beta1ToV1(transformedVap)
 		}
 		return transformedVap.DeepCopy(), nil
 	}
@@ -810,19 +796,12 @@ func (r *ReconcileConstraintTemplate) getRunTimeVAP(gvk *schema.GroupVersion, tr
 			return nil, errors.New("Unable to convert to v1 VAP")
 		}
 		v1CurrentVAP = v1CurrentVAP.DeepCopy()
-		uVAP := &unstructured.Unstructured{}
-		err := r.scheme.Convert(transformedVap, uVAP, nil)
-		if err != nil {
-			return nil, err
-		}
-		tempVAP := &admissionregistrationv1.ValidatingAdmissionPolicy{}
-		uVAP.SetGroupVersionKind(schema.GroupVersionKind{Group: gvk.Group, Version: gvk.Version, Kind: "ValidatingAdmissionPolicy"})
-		err = r.scheme.Convert(uVAP, tempVAP, nil)
+		tempVAP, err := v1beta1ToV1(transformedVap)
 		if err != nil {
 			return nil, err
 		}
 		v1CurrentVAP.Spec = tempVAP.Spec
-		return v1CurrentVAP.DeepCopy(), nil
+		return v1CurrentVAP, nil
 	}
 
 	v1beta1VAP, ok := currentVap.(*admissionregistrationv1beta1.ValidatingAdmissionPolicy)
@@ -831,4 +810,64 @@ func (r *ReconcileConstraintTemplate) getRunTimeVAP(gvk *schema.GroupVersion, tr
 	}
 	v1beta1VAP.Spec = transformedVap.Spec
 	return v1beta1VAP.DeepCopy(), nil
+}
+
+func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPolicy) (*admissionregistrationv1.ValidatingAdmissionPolicy, error) {
+	obj := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+	obj.SetName(v1beta1Obj.GetName())
+	obj.Spec.ParamKind = &admissionregistrationv1.ParamKind{
+		APIVersion: v1beta1Obj.Spec.ParamKind.APIVersion,
+		Kind:       v1beta1Obj.Spec.ParamKind.Kind,
+	}
+	obj.Spec.MatchConstraints = &admissionregistrationv1.MatchResources{
+		ResourceRules: []admissionregistrationv1.NamedRuleWithOperations{
+			{
+				RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
+					/// TODO(jgabani): default for now until we can safely expose these to users
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
+					Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
+				},
+			},
+		},
+	}
+
+	obj.Spec.MatchConditions = []admissionregistrationv1.MatchCondition{}
+
+	for _, matchCondition := range v1beta1Obj.Spec.MatchConditions {
+		obj.Spec.MatchConditions = append(obj.Spec.MatchConditions, admissionregistrationv1.MatchCondition{
+			Name:    matchCondition.Name,
+			Expression: matchCondition.Expression,
+		})
+	}
+
+	obj.Spec.Validations = []admissionregistrationv1.Validation{}
+
+	for _, v := range v1beta1Obj.Spec.Validations {
+		obj.Spec.Validations = append(obj.Spec.Validations, admissionregistrationv1.Validation{
+			Expression:        v.Expression,
+			Message:           v.Message,
+			MessageExpression: v.MessageExpression,
+		})
+	}
+
+	var failurePolicy admissionregistrationv1.FailurePolicyType
+	switch *v1beta1Obj.Spec.FailurePolicy {
+		case admissionregistrationv1beta1.Ignore:
+			failurePolicy = admissionregistrationv1.Ignore
+		case admissionregistrationv1beta1.Fail:
+			failurePolicy = admissionregistrationv1.Fail
+		default:
+			return nil, fmt.Errorf("%w: unrecognized failure policy: %s", pSchema.ErrBadFailurePolicy, *v1beta1Obj.Spec.FailurePolicy)
+	}
+	obj.Spec.FailurePolicy = &failurePolicy
+	obj.Spec.AuditAnnotations = nil
+	
+	for _, v := range v1beta1Obj.Spec.Variables {
+		obj.Spec.Variables = append(obj.Spec.Variables, admissionregistrationv1.Variable{
+			Name: v.Name,
+			Expression: v.Expression,
+		})
+	}
+
+	return obj, nil
 }
