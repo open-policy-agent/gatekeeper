@@ -348,6 +348,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 					if err2 := r.writer.Update(ctx, status); err2 != nil {
 						log.Error(err2, "could not report transform vapbinding error", "vapName", vapBindingName)
+						log.Error(err2, "could not report transform vapbinding error", "vapName", vapBindingName)
 					}
 					return reconcile.Result{}, err
 				}

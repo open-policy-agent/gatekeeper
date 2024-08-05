@@ -481,6 +481,9 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	isVAPapiEnabled, groupVersion := constraint.IsVapAPIEnabled()
 	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
 	logger.Info("groupVersion", "groupVersion", groupVersion)
+	isVAPapiEnabled, groupVersion := constraint.IsVapAPIEnabled()
+	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
+	logger.Info("groupVersion", "groupVersion", groupVersion)
 	// generating vap resources
 	if generateVap && isVAPapiEnabled && groupVersion != nil {
 		currentVap, err := vapForVersion(groupVersion)
@@ -502,6 +505,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Info("get vap", "vapName", vapName, "currentVap", currentVap)
 		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
 		if err != nil {
+			logger.Error(err, "transform to vap error", "vapName", vapName)
 			logger.Error(err, "transform to vap error", "vapName", vapName)
 			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
 			status.Status.Errors = append(status.Status.Errors, createErr)
