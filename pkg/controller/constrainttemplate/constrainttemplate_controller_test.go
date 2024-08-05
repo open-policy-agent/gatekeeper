@@ -272,7 +272,7 @@ func TestReconcile(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	constraint.VapAPIEnabled = ptr.To[bool](true)
-	constraint.GroupVersion = schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1beta1"}
+	constraint.GroupVersion = &schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1beta1"}
 
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
@@ -622,7 +622,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreatedV1"
 
 		logger.Info("Running test: Vap should be created with v1")
-		constraint.GroupVersion = schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+		constraint.GroupVersion = &schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -647,7 +647,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedV1"
 		logger.Info("Running test: VapBinding should be created with v1")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
-		constraint.GroupVersion = schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+		constraint.GroupVersion = &schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))

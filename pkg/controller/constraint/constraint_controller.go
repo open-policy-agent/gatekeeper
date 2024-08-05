@@ -38,6 +38,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -69,7 +71,7 @@ var vapMux sync.RWMutex
 
 var VapAPIEnabled *bool
 
-var GroupVersion schema.GroupVersion
+var GroupVersion *schema.GroupVersion
 
 type Adder struct {
 	CFClient         *constraintclient.Client
@@ -324,9 +326,15 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			}
 			r.log.Info("constraint controller", "generateVAPB", generateVAPB)
 			// generate vapbinding resources
-			if generateVAPB {
-				currentVapBinding := &unstructured.Unstructured{}
-				currentVapBinding.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicyBinding"})
+			if generateVAPB && groupVersion != nil {
+				currentVapBinding, err := vapBindingForVersion(*groupVersion)
+				if err != nil {
+					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+					if err2 := r.writer.Update(ctx, status); err2 != nil {
+						log.Error(err2, "could not get vapbinding version")
+					}
+					return reconcile.Result{}, err
+				}
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 				if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
@@ -335,8 +343,6 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					}
 					currentVapBinding = nil
 				}
-				newVapBinding := &unstructured.Unstructured{}
-				newVapBinding.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicyBinding"})
 				transformedVapBinding, err := transform.ConstraintToBinding(instance, VAPEnforcementActions)
 				if err != nil {
 					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
@@ -345,34 +351,14 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					}
 					return reconcile.Result{}, err
 				}
-				if currentVapBinding == nil {
-					err = r.scheme.Convert(transformedVapBinding, newVapBinding, nil)
-					if err != nil {
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not report convert vapbinding error", "vapName", vapBindingName)
-						}
-						return reconcile.Result{}, err
+
+				newVapBinding, err := r.getRunTimeVAPBinding(groupVersion, transformedVapBinding, currentVapBinding)
+				if err != nil {
+					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+					if err2 := r.writer.Update(ctx, status); err2 != nil {
+						log.Error(err2, "could not get VAP object with runtime group version", "vapName", vapBindingName)
 					}
-					newVapBinding.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicyBinding"})
-				} else {
-					newVapBinding = currentVapBinding.DeepCopy()
-					unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&transformedVapBinding.Spec)
-					if err != nil {
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not report convert vapbinding error", "vapName", vapBindingName)
-						}
-						return reconcile.Result{}, err
-					}
-					err = unstructured.SetNestedField(newVapBinding.Object, unstructuredObj, "spec")
-					if err != nil {
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not report convert vapbinding error", "vapName", vapBindingName)
-						}
-						return reconcile.Result{}, err
-					}
+					return reconcile.Result{}, err
 				}
 
 				if err := controllerutil.SetControllerReference(instance, newVapBinding, r.scheme); err != nil {
@@ -401,9 +387,15 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			}
 			// do not generate vapbinding resources
 			// remove if exists
-			if !generateVAPB {
-				currentVapBinding := &unstructured.Unstructured{}
-				currentVapBinding.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicyBinding"})
+			if !generateVAPB && groupVersion != nil {
+				currentVapBinding, err := vapBindingForVersion(*groupVersion)
+				if err != nil {
+					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+					if err2 := r.writer.Update(ctx, status); err2 != nil {
+						log.Error(err2, "could not get vapbinding version")
+					}
+					return reconcile.Result{}, err
+				}
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 				if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
@@ -631,7 +623,7 @@ func (c *ConstraintsCache) reportTotalConstraints(ctx context.Context, reporter 
 	}
 }
 
-func IsVapAPIEnabled() (bool, schema.GroupVersion) {
+func IsVapAPIEnabled() (bool, *schema.GroupVersion) {
 	vapMux.Lock()
 	defer vapMux.Unlock()
 
@@ -643,13 +635,13 @@ func IsVapAPIEnabled() (bool, schema.GroupVersion) {
 		log.Info("IsVapAPIEnabled InClusterConfig", "error", err)
 		VapAPIEnabled = new(bool)
 		*VapAPIEnabled = false
-		return false, GroupVersion
+		return false, nil
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		log.Info("IsVapAPIEnabled NewForConfig", "error", err)
 		*VapAPIEnabled = false
-		return false, GroupVersion
+		return false, nil
 	}
 
 	groupVersion := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
@@ -659,7 +651,7 @@ func IsVapAPIEnabled() (bool, schema.GroupVersion) {
 			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
 				VapAPIEnabled = new(bool)
 				*VapAPIEnabled = true
-				GroupVersion = groupVersion
+				GroupVersion = &groupVersion
 				return true, GroupVersion
 			}
 		}
@@ -672,7 +664,7 @@ func IsVapAPIEnabled() (bool, schema.GroupVersion) {
 			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
 				VapAPIEnabled = new(bool)
 				*VapAPIEnabled = true
-				GroupVersion = groupVersion
+				GroupVersion = &groupVersion
 				return true, GroupVersion
 			}
 		}
@@ -681,5 +673,58 @@ func IsVapAPIEnabled() (bool, schema.GroupVersion) {
 	log.Info("IsVapAPIEnabled", "error", err)
 	VapAPIEnabled = new(bool)
 	*VapAPIEnabled = false
-	return false, GroupVersion
+	return false, nil
+}
+
+func vapBindingForVersion(gvk schema.GroupVersion) (client.Object, error) {
+	switch gvk.Version {
+	case "v1":
+		return &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, nil
+	case "v1beta1":
+		return &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}, nil
+	default:
+		return nil, errors.New("unrecognized version")
+	}
+}
+
+func (r *ReconcileConstraint) getRunTimeVAPBinding(gvk *schema.GroupVersion, transformedVapBinding *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, currentVapBinding client.Object) (client.Object, error) {
+	if currentVapBinding == nil {
+		if gvk.Version == "v1" {
+			uVAPBinding, err := runtime.DefaultUnstructuredConverter.ToUnstructured(transformedVapBinding)
+			if err != nil {
+				return nil, err
+			}
+			v1VAP := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+			err = runtime.DefaultUnstructuredConverter.FromUnstructured(uVAPBinding, v1VAP)
+			if err != nil {
+				return nil, err
+			}
+			return v1VAP.DeepCopy(), nil
+		}
+		return transformedVapBinding.DeepCopy(), nil
+	}
+	if gvk.Version == "v1" {
+		v1CurrentVAPBinding, ok := currentVapBinding.(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
+		if !ok {
+			return nil, errors.New("Unable to convert to v1 VAP")
+		}
+		v1CurrentVAPBinding = v1CurrentVAPBinding.DeepCopy()
+		uVAPBinding, err := runtime.DefaultUnstructuredConverter.ToUnstructured(transformedVapBinding)
+		if err != nil {
+			return nil, err
+		}
+		tempVAPBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+		err = runtime.DefaultUnstructuredConverter.FromUnstructured(uVAPBinding, tempVAPBinding)
+		if err != nil {
+			return nil, err
+		}
+		v1CurrentVAPBinding.Spec = tempVAPBinding.Spec
+		return v1CurrentVAPBinding, nil
+	}
+	v1beta1VAPBinding, ok := currentVapBinding.(*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding)
+	if !ok {
+		return nil, errors.New("Unable to convert to v1 VAP")
+	}
+	v1beta1VAPBinding.Spec = transformedVapBinding.Spec
+	return v1beta1VAPBinding.DeepCopy(), nil
 }

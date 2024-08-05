@@ -39,6 +39,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	errorpkg "github.com/pkg/errors"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -480,9 +482,15 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
 	logger.Info("groupVersion", "groupVersion", groupVersion)
 	// generating vap resources
-	if generateVap && isVAPapiEnabled {
-		currentVap := &unstructured.Unstructured{}
-		currentVap.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicy"})
+	if generateVap && isVAPapiEnabled && groupVersion != nil {
+		currentVap, err := vapForVersion(groupVersion)
+		if err != nil {
+			logger.Error(err, "error getting vap object with respective groupVersion")
+			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
+			status.Status.Errors = append(status.Status.Errors, createErr)
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
+			return reconcile.Result{}, err
+		}
 		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
 		logger.Info("check if vap exists", "vapName", vapName)
 		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
@@ -492,8 +500,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			currentVap = nil
 		}
 		logger.Info("get vap", "vapName", vapName, "currentVap", currentVap)
-		newVap := &unstructured.Unstructured{}
-		newVap.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicy"})
 		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
 		if err != nil {
 			logger.Error(err, "transform to vap error", "vapName", vapName)
@@ -502,25 +508,14 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to vap object", status, err)
 			return reconcile.Result{}, err
 		}
-		if currentVap == nil {
-			err = r.scheme.Convert(transformedVap, newVap, nil)
-			if err != nil {
-				logger.Error(err, "convert to vap error", "vapName", vapName)
-				return reconcile.Result{}, err
-			}
-			newVap.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicy"})
-		} else {
-			newVap = currentVap.DeepCopy()
-			unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&transformedVap.Spec)
-			if err != nil {
-				logger.Error(err, "Error converting to unstructured", "vapName", vapName)
-				return reconcile.Result{}, err
-			}
-			err = unstructured.SetNestedField(newVap.Object, unstructuredObj, "spec")
-			if err != nil {
-				logger.Error(err, "Error constructing current VAP", "vapName", vapName)
-				return reconcile.Result{}, err
-			}
+
+		newVap, err := r.getRunTimeVAP(groupVersion, transformedVap, currentVap)
+		if err != nil {
+			logger.Error(err, "getRunTimeVAP error", "vapName", vapName)
+			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
+			status.Status.Errors = append(status.Status.Errors, createErr)
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get runtime vap object", status, err)
+			return reconcile.Result{}, err
 		}
 
 		if err := controllerutil.SetControllerReference(ct, newVap, r.scheme); err != nil {
@@ -552,9 +547,15 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 	// do not generate vap resources
 	// remove if exists
-	if !generateVap && isVAPapiEnabled {
-		currentVap := &unstructured.Unstructured{}
-		currentVap.SetGroupVersionKind(schema.GroupVersionKind{Group: groupVersion.Group, Version: groupVersion.Version, Kind: "ValidatingAdmissionPolicy"})
+	if !generateVap && isVAPapiEnabled && groupVersion != nil {
+		currentVap, err := vapForVersion(groupVersion)
+		if err != nil {
+			logger.Error(err, "error getting vap object with respective groupVersion")
+			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
+			status.Status.Errors = append(status.Status.Errors, createErr)
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
+			return reconcile.Result{}, err
+		}
 		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
 		logger.Info("check if vap exists", "vapName", vapName)
 		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
@@ -767,4 +768,63 @@ func shouldGenerateVAP(ct *templates.ConstraintTemplate, generateVAPDefault bool
 		return generateVAPDefault, nil
 	}
 	return *source.GenerateVAP, nil
+}
+
+func vapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
+	switch gvk.Version {
+	case "v1":
+		return &admissionregistrationv1.ValidatingAdmissionPolicy{}, nil
+	case "v1beta1":
+		return &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}, nil
+	default:
+		return nil, errors.New("unrecognized version")
+	}
+}
+
+func (r *ReconcileConstraintTemplate) getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy, currentVap client.Object) (client.Object, error) {
+	if currentVap == nil {
+		if gvk.Version == "v1" {
+			uVAP := &unstructured.Unstructured{}
+			err := r.scheme.Convert(transformedVap, uVAP, nil)
+			if err != nil {
+				return nil, err
+			}
+			uVAP.SetGroupVersionKind(schema.GroupVersionKind{Group: gvk.Group, Version: gvk.Version, Kind: "ValidatingAdmissionPolicy"})
+			v1VAP := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+			err = r.scheme.Convert(uVAP, v1VAP, nil)
+			if err != nil {
+				return nil, err
+			}
+			return v1VAP.DeepCopy(), nil
+		}
+		return transformedVap.DeepCopy(), nil
+	}
+
+	if gvk.Version == "v1" {
+		v1CurrentVAP, ok := currentVap.(*admissionregistrationv1.ValidatingAdmissionPolicy)
+		if !ok {
+			return nil, errors.New("Unable to convert to v1 VAP")
+		}
+		v1CurrentVAP = v1CurrentVAP.DeepCopy()
+		uVAP := &unstructured.Unstructured{}
+		err := r.scheme.Convert(transformedVap, uVAP, nil)
+		if err != nil {
+			return nil, err
+		}
+		tempVAP := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+		uVAP.SetGroupVersionKind(schema.GroupVersionKind{Group: gvk.Group, Version: gvk.Version, Kind: "ValidatingAdmissionPolicy"})
+		err = r.scheme.Convert(uVAP, tempVAP, nil)
+		if err != nil {
+			return nil, err
+		}
+		v1CurrentVAP.Spec = tempVAP.Spec
+		return v1CurrentVAP.DeepCopy(), nil
+	}
+
+	v1beta1VAP, ok := currentVap.(*admissionregistrationv1beta1.ValidatingAdmissionPolicy)
+	if !ok {
+		return nil, errors.New("Unable to convert to v1 VAP")
+	}
+	v1beta1VAP.Spec = transformedVap.Spec
+	return v1beta1VAP.DeepCopy(), nil
 }
