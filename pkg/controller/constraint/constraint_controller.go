@@ -314,7 +314,11 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				}
 				return reconcile.Result{}, err
 			}
-			isAPIEnabled, groupVersion := IsVapAPIEnabled()
+			isAPIEnabled := false
+			var groupVersion *schema.GroupVersion
+			if generateVAPB {
+				isAPIEnabled, groupVersion = IsVapAPIEnabled()
+			}
 			if generateVAPB {
 				if !isAPIEnabled {
 					r.log.V(1).Info("Warning: VAP API is not enabled, cannot create VAPBinding")
@@ -348,7 +352,6 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				if err != nil {
 					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not report transform vapbinding error", "vapName", vapBindingName)
 						log.Error(err2, "could not report transform vapbinding error", "vapName", vapBindingName)
 					}
 					return reconcile.Result{}, err
@@ -711,7 +714,7 @@ func (r *ReconcileConstraint) getRunTimeVAPBinding(gvk *schema.GroupVersion, tra
 	}
 	v1beta1VAPBinding, ok := currentVapBinding.(*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding)
 	if !ok {
-		return nil, errors.New("Unable to convert to v1 VAP")
+		return nil, errors.New("Unable to convert to v1beta1 VAP")
 	}
 	v1beta1VAPBinding.Spec = transformedVapBinding.Spec
 	return v1beta1VAPBinding.DeepCopy(), nil

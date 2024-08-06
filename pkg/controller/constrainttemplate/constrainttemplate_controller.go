@@ -478,7 +478,11 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
-	isVAPapiEnabled, groupVersion := constraint.IsVapAPIEnabled()
+	isVAPapiEnabled := false
+	var groupVersion *schema.GroupVersion
+	if generateVap {
+		isVAPapiEnabled, groupVersion = constraint.IsVapAPIEnabled()
+	}
 	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
 	logger.Info("groupVersion", "groupVersion", groupVersion)
 	// generating vap resources
@@ -502,7 +506,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Info("get vap", "vapName", vapName, "currentVap", currentVap)
 		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
 		if err != nil {
-			logger.Error(err, "transform to vap error", "vapName", vapName)
 			logger.Error(err, "transform to vap error", "vapName", vapName)
 			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
 			status.Status.Errors = append(status.Status.Errors, createErr)
@@ -835,7 +838,7 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 
 	for _, matchCondition := range v1beta1Obj.Spec.MatchConditions {
 		obj.Spec.MatchConditions = append(obj.Spec.MatchConditions, admissionregistrationv1.MatchCondition{
-			Name:    matchCondition.Name,
+			Name:       matchCondition.Name,
 			Expression: matchCondition.Expression,
 		})
 	}
@@ -852,19 +855,19 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 
 	var failurePolicy admissionregistrationv1.FailurePolicyType
 	switch *v1beta1Obj.Spec.FailurePolicy {
-		case admissionregistrationv1beta1.Ignore:
-			failurePolicy = admissionregistrationv1.Ignore
-		case admissionregistrationv1beta1.Fail:
-			failurePolicy = admissionregistrationv1.Fail
-		default:
-			return nil, fmt.Errorf("%w: unrecognized failure policy: %s", pSchema.ErrBadFailurePolicy, *v1beta1Obj.Spec.FailurePolicy)
+	case admissionregistrationv1beta1.Ignore:
+		failurePolicy = admissionregistrationv1.Ignore
+	case admissionregistrationv1beta1.Fail:
+		failurePolicy = admissionregistrationv1.Fail
+	default:
+		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", pSchema.ErrBadFailurePolicy, *v1beta1Obj.Spec.FailurePolicy)
 	}
 	obj.Spec.FailurePolicy = &failurePolicy
 	obj.Spec.AuditAnnotations = nil
-	
+
 	for _, v := range v1beta1Obj.Spec.Variables {
 		obj.Spec.Variables = append(obj.Spec.Variables, admissionregistrationv1.Variable{
-			Name: v.Name,
+			Name:       v.Name,
 			Expression: v.Expression,
 		})
 	}
