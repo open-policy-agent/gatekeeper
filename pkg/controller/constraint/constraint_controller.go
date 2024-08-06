@@ -357,7 +357,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					return reconcile.Result{}, err
 				}
 
-				newVapBinding, err := r.getRunTimeVAPBinding(groupVersion, transformedVapBinding, currentVapBinding)
+				newVapBinding, err := getRunTimeVAPBinding(groupVersion, transformedVapBinding, currentVapBinding)
 				if err != nil {
 					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 					if err2 := r.writer.Update(ctx, status); err2 != nil {
@@ -692,7 +692,7 @@ func vapBindingForVersion(gvk schema.GroupVersion) (client.Object, error) {
 	}
 }
 
-func (r *ReconcileConstraint) getRunTimeVAPBinding(gvk *schema.GroupVersion, transformedVapBinding *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, currentVapBinding client.Object) (client.Object, error) {
+func getRunTimeVAPBinding(gvk *schema.GroupVersion, transformedVapBinding *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, currentVapBinding client.Object) (client.Object, error) {
 	if currentVapBinding == nil {
 		if gvk.Version == "v1" {
 			return v1beta1ToV1(transformedVapBinding)

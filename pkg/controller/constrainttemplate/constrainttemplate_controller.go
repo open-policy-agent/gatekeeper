@@ -513,7 +513,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			return reconcile.Result{}, err
 		}
 
-		newVap, err := r.getRunTimeVAP(groupVersion, transformedVap, currentVap)
+		newVap, err := getRunTimeVAP(groupVersion, transformedVap, currentVap)
 		if err != nil {
 			logger.Error(err, "getRunTimeVAP error", "vapName", vapName)
 			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
@@ -785,7 +785,7 @@ func vapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
 	}
 }
 
-func (r *ReconcileConstraintTemplate) getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy, currentVap client.Object) (client.Object, error) {
+func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy, currentVap client.Object) (client.Object, error) {
 	if currentVap == nil {
 		if gvk.Version == "v1" {
 			return v1beta1ToV1(transformedVap)
