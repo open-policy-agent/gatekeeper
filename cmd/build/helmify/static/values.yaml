@@ -19,6 +19,7 @@ validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 validatingWebhookURL: null
 enableDeleteOperations: false
+enableConnectOperations: false
 enableExternalData: true
 enableGeneratorResourceExpansion: true
 enableTLSHealthcheck: false
@@ -185,6 +186,7 @@ controllerManager:
   clientCertName: ""
   strategyType: RollingUpdate
   strategyRollingUpdate: {}
+  podLabels: {}
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -240,6 +242,7 @@ audit:
   livenessTimeout: 1
   priorityClassName: system-cluster-critical
   disableCertRotation: false
+  podLabels: {}
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}

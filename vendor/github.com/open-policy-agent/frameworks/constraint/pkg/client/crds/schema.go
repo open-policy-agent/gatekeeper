@@ -13,6 +13,29 @@ func CreateSchema(templ *templates.ConstraintTemplate, target MatchSchemaProvide
 	props := map[string]apiextensions.JSONSchemaProps{
 		"match":             target.MatchSchema(),
 		"enforcementAction": {Type: "string", Default: &defaultEnforcementAction},
+		"scopedEnforcementActions": {
+			Type:    "array",
+			Default: nil,
+			Items: &apiextensions.JSONSchemaPropsOrArray{
+				Schema: &apiextensions.JSONSchemaProps{
+					Type: "object",
+					Properties: map[string]apiextensions.JSONSchemaProps{
+						"action": {Type: "string"},
+						"enforcementPoints": {
+							Type: "array",
+							Items: &apiextensions.JSONSchemaPropsOrArray{
+								Schema: &apiextensions.JSONSchemaProps{
+									Type: "object",
+									Properties: map[string]apiextensions.JSONSchemaProps{
+										"name": {Type: "string"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	if templ.Spec.CRD.Spec.Validation != nil && templ.Spec.CRD.Spec.Validation.OpenAPIV3Schema != nil {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
@@ -326,7 +327,7 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (gator.Client, 
 		Object: *toReview,
 		Source: mutationtypes.SourceTypeOriginal,
 	}
-	return c.Review(ctx, au)
+	return c.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
 }
 
 func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c gator.Client, toReview *unstructured.Unstructured) (*types.Responses, error) {
@@ -369,7 +370,7 @@ func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c 
 		Source:           mutationtypes.SourceTypeOriginal,
 	}
 
-	return c.Review(ctx, arr)
+	return c.Review(ctx, arr, reviews.EnforcementPoint(util.GatorEnforcementPoint))
 }
 
 func (r *Runner) addInventory(ctx context.Context, c gator.Client, suiteDir, inventoryPath string) error {

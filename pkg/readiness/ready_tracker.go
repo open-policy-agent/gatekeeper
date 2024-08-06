@@ -46,7 +46,7 @@ import (
 var log = logf.Log.WithName("readiness-tracker")
 
 // TODO: Uncomment the flag and deleted the boolean constant when we support retry limits (currently the value of the flag is moot without a retry limit since failure won't happen due to unlimited retries)
-// var crashOnFailureFetchingExpectations = flag.Bool("crash-on-failure-fetching-expectations", false, "Unless set (defaults to false), gatekeeper will ignore errors when gathering expectations. This prevents bootstrapping errors from crashing Gatekeeper at the cost of increasing the risk Gatekeeper will under-enforce policy. Enabling this will help prevent under-enforcement at the risk of crashing during startup. Note that enabling this flag currently does not achieve the aforementioned effect since fetching expectations will retry until success.")
+// var crashOnFailureFetchingExpectations = flag.Bool("crash-on-failure-fetching-expectations", false, "Unless set (defaults to false), gatekeeper will ignore errors when gathering expectations. This prevents bootstrapping errors from crashing Gatekeeper at the cost of increasing the risk Gatekeeper will under-enforce policy. Enabling this will help prevent under-enforcement at the risk of crashing during startup. Note that enabling this flag currently does not achieve the aforementioned effect since fetching expectations will retry until success.").
 const crashOnFailureFetchingExpectations = false
 
 const (

@@ -24,9 +24,9 @@ To reduce policy fragmentation and simplify the user experience by standardizing
 
 The [Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/master/constraint) is the library that underlies Gatekeeper. It provides the execution flow Gatekeeper uses to render a decision to the API server. It also provides abstractions that allow us to define constraint templates and constraints: Engine, Enforcement Points, and Targets.
 
-Together with Gatekeeper and [gator CLI](gator.md), you can get admission, audit, and shift left validations for policies written in both CEL and Rego policy languages, even for clusters that do not support Validating Admission Policy feature yet. For simple policies, you may want admission requests to be handled by the K8s built-in Validating Admission Controller (only supports CEL) instead of the Gatekeeper admission webhook. 
+Together with Gatekeeper and [gator CLI](gator.md), you can get admission, audit, and shift left validations for policies written in both CEL and Rego policy languages, even for clusters that do not support Validating Admission Policy feature yet. For simple policies, you may want admission requests to be handled by the K8s built-in Validating Admission Controller (only supports CEL) instead of the Gatekeeper admission webhook.
 
-To summary, these are potential options when running Gatekeeper:
+In summary, these are potential options when running Gatekeeper:
 
 | Policy Language(s)    | Enforcement Point  |
 | ------------------ | ------------------ |
@@ -37,6 +37,8 @@ To summary, these are potential options when running Gatekeeper:
 | Rego               | Gatekeeper validating webhook (referential policies, external data) |
 | Rego               | Gatekeeper Audit (referential policies, external data) |
 | Rego               | Gator CLI (referential policies) |
+
+Find out more about different [enforcement points](enforcement-points.md)
 
 ## Pre-requisites
 
@@ -134,7 +136,46 @@ spec:
             ...
 ```
 
-Constraints will follow the behavior defined by `--default-create-vap-binding-for-constraints` flag to generate K8s Validating Admission Policy Binding. By default, `--default-create-vap-binding-for-constraints` is set to `false`.
+Gatekeeper determines the intended enforcement actions for a given enforcement point by evaluating what is provided in `spec.scopedEnforcementActions` and `spec.enforcementAction: scoped` in the constraint. If these values are not provided in the constraint, then Gatekeeper will follow behavior defined by the flag `--default-create-vap-binding-for-constraints`. By default, `--default-create-vap-binding-for-constraints` is set to `false`.
 
-> [!TIP]
-> In the event K8s Validating Admission Controller fails open, Gatekeeper admission webhook can act as a backup.
+The overall opt-in/opt-out behavior for constraint to generate Validating Admission Policy Binding (VAPB) is as below:
+
+Constraint with `enforcementAction: scoped`:
+
+| `vap.k8s.io` in constraint with `spec.scopedEnforcementActions` | generate VAPB |
+|----------|----------|
+| Not included | Do not generate VAPB |
+| Included | Generate VAPB |
+
+Constraint with `enforcementAction != scoped`:
+
+| `--default-create-vap-binding-for-constraints` | generate VAPB |
+|----------|----------|
+| false | Do not generate VAPB |
+| true | Generate VAPB |
+
+:::note
+VAP will only get generated for templates with CEL Engine. VAPB will only get generated for constraints that belong to templates with CEL engine.
+:::
+
+:::tip
+In the event K8s Validating Admission Controller fails open, Gatekeeper admission webhook can act as a backup when included in constraint.
+:::
+
+Validating Admission Policy Binding for the below constraint will always get generated, assuming the constraint belongs to a template with CEL engine.
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: prod-repo-is-openpolicyagent
+spec:
+...
+  enforcementAction: scoped
+  scopedEnforcementActions:
+  - action: deny
+    enforcementPoints:
+    - name: "vap.k8s.io"
+    - name: "validation.gatekeeper.sh"
+...
+```

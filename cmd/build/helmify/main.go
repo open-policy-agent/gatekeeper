@@ -133,17 +133,15 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-controller-manager" && kind == DeploymentKind {
+				obj = strings.Replace(obj, "      labels:", "      labels:\n        {{- include \"gatekeeper.podLabels\" . | nindent 8 }}\n        {{- include \"controllerManager.podLabels\" . | nindent 8 }}\n        {{- include \"gatekeeper.commonLabels\" . | nindent 8 }}", 1)
 				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.controllerManager.priorityClassName }}\n      priorityClassName:  {{ .Values.controllerManager.priorityClassName }}\n      {{- end }}", 1)
 			}
 
 			if name == "gatekeeper-audit" && kind == DeploymentKind {
 				obj = "{{- if not .Values.disableAudit }}\n" + obj + "{{- end }}\n"
+				obj = strings.Replace(obj, "      labels:", "      labels:\n        {{- include \"gatekeeper.podLabels\" . | nindent 8 }}\n        {{- include \"audit.podLabels\" . | nindent 8 }}\n        {{- include \"gatekeeper.commonLabels\" . | nindent 8 }}", 1)
 				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.audit.priorityClassName }}\n      priorityClassName:  {{ .Values.audit.priorityClassName }}\n      {{- end }}", 1)
 				obj = strings.Replace(obj, "      - emptyDir: {}", "      {{- if .Values.audit.writeToRAMDisk }}\n      - emptyDir:\n          medium: Memory\n      {{ else }}\n      - emptyDir: {}\n      {{- end }}", 1)
-			}
-
-			if kind == DeploymentKind {
-				obj = strings.Replace(obj, "      labels:", "      labels:\n        {{- include \"gatekeeper.podLabels\" . | nindent 8 }}\n        {{- include \"gatekeeper.commonLabels\" . | nindent 8 }}", 1)
 			}
 
 			if name == "gatekeeper-manager-role" && kind == "Role" {
@@ -170,7 +168,8 @@ func (ks *kindSet) Write() error {
 
 			fmt.Printf("Writing %s\n", destFile)
 
-			if err := os.WriteFile(destFile, []byte(obj), 0o600); err != nil {
+			addSeparator := "---\n" + obj
+			if err := os.WriteFile(destFile, []byte(addSeparator), 0o600); err != nil {
 				return err
 			}
 		}

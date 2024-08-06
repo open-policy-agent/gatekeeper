@@ -26,7 +26,7 @@ The [Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/
 
 Together with Gatekeeper and [gator CLI](gator.md), you can get admission, audit, and shift left validations for policies written in both CEL and Rego policy languages, even for clusters that do not support Validating Admission Policy feature yet. For simple policies, you may want admission requests to be handled by the K8s built-in Validating Admission Controller (only supports CEL) instead of the Gatekeeper admission webhook. 
 
-To summary, these are potential options when running Gatekeeper:
+In summary, these are potential options when running Gatekeeper:
 
 | Policy Language(s)    | Enforcement Point  |
 | ------------------ | ------------------ |

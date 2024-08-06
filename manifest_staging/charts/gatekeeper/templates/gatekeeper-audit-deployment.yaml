@@ -1,3 +1,4 @@
+---
 {{- if not .Values.disableAudit }}
 apiVersion: apps/v1
 kind: Deployment
@@ -35,6 +36,7 @@ spec:
         {{- end }}
       labels:
         {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "audit.podLabels" . | nindent 8 }}
         {{- include "gatekeeper.commonLabels" . | nindent 8 }}
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'

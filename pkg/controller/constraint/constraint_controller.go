@@ -288,9 +288,6 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	generateVAPB := *DefaultGenerateVAPB && HasVAPCel(ct)
-	r.log.Info("constraint controller", "generateVAPB", generateVAPB)
-
 	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
 		status, err := r.getOrCreatePodStatus(ctx, instance)
@@ -303,8 +300,35 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		status.Status.Errors = nil
 
 		if c, err := r.cfClient.GetConstraint(instance); err != nil || !reflect.DeepEqual(instance, c) {
+			err := util.ValidateEnforcementAction(enforcementAction, instance.Object)
+			if err != nil {
+				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+				if err2 := r.writer.Update(ctx, status); err2 != nil {
+					log.Error(err2, "could not report error for validation of enforcement action")
+				}
+			}
+			generateVAPB, VAPEnforcementActions, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
+			if err != nil {
+				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+				log.Error(err, "could not get enforcement actions for VAP")
+				if err2 := r.writer.Update(ctx, status); err2 != nil {
+					log.Error(err2, "could not report error for getting enforcement actions for VAP")
+				}
+				return reconcile.Result{}, err
+			}
+			if generateVAPB {
+				if !IsVapAPIEnabled() {
+					r.log.V(1).Info("Warning: VAP API is not enabled, cannot create VAPBinding")
+					generateVAPB = false
+				}
+				if !HasVAPCel(ct) {
+					r.log.V(1).Info("Warning: ConstraintTemplate does not contain VAP-style CEL source, cannot create VAPBinding")
+					generateVAPB = false
+				}
+			}
+			r.log.Info("constraint controller", "generateVAPB", generateVAPB)
 			// generate vapbinding resources
-			if generateVAPB && IsVapAPIEnabled() {
+			if generateVAPB {
 				currentVapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
@@ -315,7 +339,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					currentVapBinding = nil
 				}
 				newVapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-				transformedVapBinding, err := transform.ConstraintToBinding(instance)
+				transformedVapBinding, err := transform.ConstraintToBinding(instance, VAPEnforcementActions)
 				if err != nil {
 					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 					if err2 := r.writer.Update(ctx, status); err2 != nil {
@@ -356,7 +380,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			}
 			// do not generate vapbinding resources
 			// remove if exists
-			if !generateVAPB && IsVapAPIEnabled() {
+			if !generateVAPB {
 				currentVapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
@@ -433,6 +457,20 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 	return reconcile.Result{}, nil
+}
+
+func shouldGenerateVAPB(defaultGenerateVAPB bool, enforcementAction util.EnforcementAction, instance *unstructured.Unstructured) (bool, []string, error) {
+	var VAPEnforcementActions []string
+	var err error
+	switch enforcementAction {
+	case util.Scoped:
+		VAPEnforcementActions, err = util.ScopedActionForEP(util.VAPEnforcementPoint, instance)
+	default:
+		if defaultGenerateVAPB {
+			VAPEnforcementActions = []string{string(enforcementAction)}
+		}
+	}
+	return len(VAPEnforcementActions) != 0, VAPEnforcementActions, err
 }
 
 func (r *ReconcileConstraint) defaultGetPod(_ context.Context) (*corev1.Pod, error) {

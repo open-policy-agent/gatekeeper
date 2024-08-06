@@ -209,6 +209,11 @@ func enforceableFailure(results []*test.GatorResult) bool {
 		if result.EnforcementAction == string(util.Deny) {
 			return true
 		}
+		for _, action := range result.ScopedEnforcementActions {
+			if action == string(util.Deny) {
+				return true
+			}
+		}
 	}
 
 	return false
