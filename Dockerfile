@@ -4,7 +4,7 @@ ARG BUILDERIMAGE="golang:1.22-bookworm"
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 ARG BASEIMAGE="gcr.io/distroless/static-debian12:nonroot"
 
-FROM --platform=$BUILDPLATFORM $BUILDERIMAGE as builder
+FROM --platform=$BUILDPLATFORM $BUILDERIMAGE AS builder
 
 ARG TARGETPLATFORM
 ARG TARGETOS
