@@ -629,6 +629,13 @@ func (c *ConstraintsCache) reportTotalConstraints(ctx context.Context, reporter 
 }
 
 func IsVapAPIEnabled() (bool, *schema.GroupVersion) {
+	vapMux.RLock()
+	if VapAPIEnabled != nil {
+		vapMux.RUnlock()
+		return *VapAPIEnabled, GroupVersion
+	}
+
+	vapMux.RUnlock()
 	vapMux.Lock()
 	defer vapMux.Unlock()
 
