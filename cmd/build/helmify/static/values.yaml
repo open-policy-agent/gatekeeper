@@ -47,7 +47,7 @@ resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
 enableK8sNativeValidation: false
 defaultCreateVAPForTemplates: false
-defaultCreateVAPBindingForConstraints: false
+defaultCreateVAPBindingForConstraints: true
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds

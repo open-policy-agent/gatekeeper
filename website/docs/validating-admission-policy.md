@@ -136,7 +136,7 @@ spec:
             ...
 ```
 
-Gatekeeper determines the intended enforcement actions for a given enforcement point by evaluating what is provided in `spec.scopedEnforcementActions` and `spec.enforcementAction: scoped` in the constraint. If these values are not provided in the constraint, then Gatekeeper will follow behavior defined by the flag `--default-create-vap-binding-for-constraints`. By default, `--default-create-vap-binding-for-constraints` is set to `false`.
+Gatekeeper determines the intended enforcement actions for a given enforcement point by evaluating what is provided in `spec.scopedEnforcementActions` and `spec.enforcementAction: scoped` in the constraint. If these values are not provided in the constraint, then Gatekeeper will follow behavior defined by the flag `--default-create-vap-binding-for-constraints`. By default, `--default-create-vap-binding-for-constraints` is set to `true`.
 
 The overall opt-in/opt-out behavior for constraint to generate Validating Admission Policy Binding (VAPB) is as below:
 
