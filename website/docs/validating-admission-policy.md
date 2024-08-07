@@ -54,21 +54,8 @@ Find out more about different [enforcement points](enforcement-points.md)
     runtimeConfig:
       admissionregistration.k8s.io/v1beta1: true
     ```
-- Set `--experimental-enable-k8s-native-validation` in Gatekeeper deployments, or `enableK8sNativeValidation=true` if using Helm.
 
 ## Get started
-
-### Option 1: Install with Helm
-Update the `enableK8sNativeValidation` parameter in values.yaml or set during deployment
-- Enable the K8s Native Validating driver to allow users to create CEL-based rules in addition to the OPA driver and rego rules (alpha feature). Default is `false`
-```shell
-helm install gatekeeper/gatekeeper --name-template=gatekeeper --namespace gatekeeper-system --create-namespace \
-    --set enableK8sNativeValidation=true
-```
-
-### Option 2: Install with Gatekeeper deployment
-Edit the applicable deployments (`controller-manager` and `audit`), and update the following commandline flags:
-- Set `--experimental-enable-k8s-native-validation=true`
 
 ## Policy updates to add CEL
 To see how it works, check out this [demo](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/k8s-validating-admission-policy)
