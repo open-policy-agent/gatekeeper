@@ -241,7 +241,6 @@ else
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set logLevel=${LOG_LEVEL} \
-		--set enableK8sNativeValidation=true \
 		--set defaultCreateVAPForTemplates=${GENERATE_VAP} \
 		--set defaultCreateVAPBindingForConstraints=${GENERATE_VAPBINDING} \
 		--set mutationAnnotations=true;
@@ -283,7 +282,6 @@ e2e-helm-upgrade:
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set logLevel=${LOG_LEVEL} \
-		--set enableK8sNativeValidation=true \
 		--set defaultCreateVAPForTemplates=${GENERATE_VAP} \
 		--set defaultCreateVAPBindingForConstraints=${GENERATE_VAPBINDING} \
 		--set mutationAnnotations=true;\
