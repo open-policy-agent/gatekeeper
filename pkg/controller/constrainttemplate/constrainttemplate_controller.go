@@ -816,6 +816,7 @@ func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrati
 }
 
 func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPolicy) (*admissionregistrationv1.ValidatingAdmissionPolicy, error) {
+	// TODO(jgabani): Use r.scheme.Convert to convert from v1beta1 to v1 once the conversion bug is fixed - https://github.com/kubernetes/kubernetes/issues/126582
 	obj := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 	obj.SetName(v1beta1Obj.GetName())
 	obj.Spec.ParamKind = &admissionregistrationv1.ParamKind{
