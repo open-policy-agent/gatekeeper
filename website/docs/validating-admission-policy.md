@@ -40,6 +40,10 @@ In summary, these are potential options when running Gatekeeper:
 
 Find out more about different [enforcement points](enforcement-points.md)
 
+:::note
+CEL validation is in beta and `--experimental-enable-k8s-native-validation` is turned on by default.
+:::
+
 ## Pre-requisites
 
 - Requires minimum Gatekeeper v3.16.0
