@@ -352,7 +352,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				if err != nil {
 					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not report transform vapbinding error", "vapName", vapBindingName)
+						log.Error(err2, "could not report transform vapbinding error", "vapBindingName", vapBindingName)
 					}
 					return reconcile.Result{}, err
 				}
@@ -361,7 +361,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				if err != nil {
 					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not get VAP object with runtime group version", "vapName", vapBindingName)
+						log.Error(err2, "could not get VAP object with runtime group version", "vapBindingName", vapBindingName)
 					}
 					return reconcile.Result{}, err
 				}
@@ -657,7 +657,7 @@ func IsVapAPIEnabled() (bool, *schema.GroupVersion) {
 		return false, nil
 	}
 
-	groupVersion := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	groupVersion := admissionregistrationv1.SchemeGroupVersion
 	resList, err := clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
 	if err == nil {
 		for i := 0; i < len(resList.APIResources); i++ {
@@ -670,7 +670,7 @@ func IsVapAPIEnabled() (bool, *schema.GroupVersion) {
 		}
 	}
 
-	groupVersion = schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1beta1"}
+	groupVersion = admissionregistrationv1beta1.SchemeGroupVersion
 	resList, err = clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
 	if err == nil {
 		for i := 0; i < len(resList.APIResources); i++ {
@@ -683,7 +683,7 @@ func IsVapAPIEnabled() (bool, *schema.GroupVersion) {
 		}
 	}
 
-	log.Info("IsVapAPIEnabled", "error", err)
+	log.Error(err, "error checking VAP api availability", "IsVapAPIEnabled", "false")
 	VapAPIEnabled = new(bool)
 	*VapAPIEnabled = false
 	return false, nil
