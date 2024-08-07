@@ -13,7 +13,7 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: '{{ .Release.Namespace }}'
 spec:
-  minAvailable: {{ .Values.pdb.controllerManager.minAvailable }}
+  minAvailable: {{ .Values.pdb.controllerManager | toYaml | nindent 2 }}
   selector:
     matchLabels:
       app: '{{ template "gatekeeper.name" . }}'
