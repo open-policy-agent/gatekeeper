@@ -282,6 +282,12 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}()
 
+	ct := &v1beta1.ConstraintTemplate{}
+	err = r.reader.Get(ctx, types.NamespacedName{Name: strings.ToLower(instance.GetKind())}, ct)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
 		status, err := r.getOrCreatePodStatus(ctx, instance)
@@ -320,21 +326,11 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					r.log.V(1).Info("Warning: VAP API is not enabled, cannot create VAPBinding")
 					generateVAPB = false
 				} else {
-					ct := &v1beta1.ConstraintTemplate{}
-					err = r.reader.Get(ctx, types.NamespacedName{Name: strings.ToLower(instance.GetKind())}, ct)
-					if err != nil {
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not get ConstraintTemplate for constraint")
-						}
-						return reconcile.Result{}, err
-					}
-
 					unversionedCT := &templates.ConstraintTemplate{}
 					if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
 						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not convert ConstraintTemplate to unversioned")
+							log.Error(err2, "could not update constraint status error for converting convert ConstraintTemplate to unversioned")
 						}
 						return reconcile.Result{}, err
 					}
@@ -342,7 +338,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					if err != nil {
 						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not determine if VAP exists to generate VAPB")
+							log.Error(err2, "could not update constraint status error when determining if CT should generate VAP")
 						}
 						generateVAPB = false
 					}
