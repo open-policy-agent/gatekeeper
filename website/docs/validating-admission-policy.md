@@ -3,9 +3,13 @@ id: validating-admission-policy
 title: Integration with Kubernetes Validating Admission Policy
 ---
 
-`Feature State`: Gatekeeper version v3.16 (alpha)
+CEL validation in Gatekeeper:
+Feature State: Gatekeeper version v3.17 (beta)
+❗ This feature is beta, subject to change (feedback is welcome!). It is enabled by default. Set --experimental-enable-k8s-native-validation=false` to disable evaluating CEL in constraint templates.
 
-> ❗ This feature is alpha, subject to change (feedback is welcome!). It is disabled by default.
+VAP management through Gatekeeper:
+Feature State: Gatekeeper version v3.16 (alpha)
+❗ This feature is alpha, subject to change (feedback is welcome!). It is disabled by default unless explicitly enabled via feature flag and/or via constraint template.
 
 ## Description
 
@@ -39,10 +43,6 @@ In summary, these are potential options when running Gatekeeper:
 | Rego               | Gator CLI (referential policies) |
 
 Find out more about different [enforcement points](enforcement-points.md)
-
-:::note
-CEL validation in constraint templates through Gatekeeper is in beta and `--experimental-enable-k8s-native-validation` is turned on by default. Set --experimental-enable-k8s-native-validation=false` to disable evaluating CEL in constraint templates.
-:::
 
 ## Pre-requisites
 
