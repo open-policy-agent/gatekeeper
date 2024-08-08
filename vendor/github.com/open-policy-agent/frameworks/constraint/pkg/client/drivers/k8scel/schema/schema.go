@@ -9,7 +9,7 @@ import (
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
-	"k8s.io/apiserver/pkg/admission/plugin/validatingadmissionpolicy"
+	"k8s.io/apiserver/pkg/admission/plugin/policy/validating"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
 )
 
@@ -135,7 +135,7 @@ func (in *Source) GetVariables() ([]cel.NamedExpressionAccessor, error) {
 
 	vars := make([]cel.NamedExpressionAccessor, len(in.Variables))
 	for i, v := range in.Variables {
-		vars[i] = &validatingadmissionpolicy.Variable{
+		vars[i] = &validating.Variable{
 			Name:       v.Name,
 			Expression: v.Expression,
 		}
@@ -162,7 +162,7 @@ func (in *Source) GetV1Beta1Variables() ([]admissionv1beta1.Variable, error) {
 func (in *Source) GetValidations() ([]cel.ExpressionAccessor, error) {
 	validations := make([]cel.ExpressionAccessor, len(in.Validations))
 	for i, validation := range in.Validations {
-		celValidation := validatingadmissionpolicy.ValidationCondition{
+		celValidation := validating.ValidationCondition{
 			Expression: validation.Expression,
 			Message:    validation.Message,
 		}
@@ -187,7 +187,7 @@ func (in *Source) GetMessageExpressions() ([]cel.ExpressionAccessor, error) {
 	messageExpressions := make([]cel.ExpressionAccessor, len(in.Validations))
 	for i, validation := range in.Validations {
 		if validation.MessageExpression != "" {
-			condition := validatingadmissionpolicy.MessageExpressionCondition{
+			condition := validating.MessageExpressionCondition{
 				MessageExpression: validation.MessageExpression,
 			}
 			messageExpressions[i] = &condition

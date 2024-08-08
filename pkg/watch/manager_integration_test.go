@@ -93,11 +93,7 @@ func setupController(mgr manager.Manager, r reconcile.Reconciler, events chan ev
 
 	// Watch for changes to the provided constraint
 	return c.Watch(
-		&source.Channel{
-			Source:         events,
-			DestBufferSize: 1024,
-		},
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
+		source.Channel(events, handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc())),
 	)
 }
 
@@ -178,11 +174,8 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 		t.Fatalf("creating controller: %v", err)
 	}
 	err = c.Watch(
-		&source.Channel{
-			Source:         events,
-			DestBufferSize: 1024,
-		},
-		&handler.EnqueueRequestForObject{},
+		source.Channel(events,
+			&handler.EnqueueRequestForObject{}),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -195,9 +188,7 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 	// Setup another watch. Show that both the error resource (in a backoff-requeue loop)
 	// and other resources can reconcile in an interleaving fashion.
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &corev1.Namespace{}),
-		&handler.EnqueueRequestForObject{},
-	)
+		source.Kind(mgr.GetCache(), &corev1.Namespace{}, &handler.TypedEnqueueRequestForObject[*corev1.Namespace]{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,12 +350,9 @@ func Test_Registrar_Replay(t *testing.T) {
 			t.Fatalf("creating controller: %v", err)
 		}
 		err = c.Watch(
-			&source.Channel{
-				Source:         events,
-				DestBufferSize: 1024,
-			},
-			&handler.EnqueueRequestForObject{},
-		)
+			source.Channel(
+				events,
+				&handler.EnqueueRequestForObject{}))
 		if err != nil {
 			t.Fatal(err)
 		}
