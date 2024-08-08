@@ -10,6 +10,7 @@ import (
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
+	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -30,6 +31,16 @@ func makeTemplateWithRegoAndCEL(vapGenerationVal *bool) *templates.ConstraintTem
 		GenerateVAP: vapGenerationVal,
 	}
 
+	regoSource := &regoSchema.Source{
+		Rego: `
+			package foo
+			
+			violation[{"msg": "denied!"}] {
+				1 == 1
+			}
+			`,
+	}
+
 	return &templates.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "testkind",
@@ -38,18 +49,17 @@ func makeTemplateWithRegoAndCEL(vapGenerationVal *bool) *templates.ConstraintTem
 			Targets: []templates.Target{
 				{
 					Target: "admission.k8s.io",
-					Rego: `
-								package foo
-								
-								violation[{"msg": "denied!"}] {
-									1 == 1
-								}
-								`,
 					Code: []templates.Code{
 						{
 							Engine: celSchema.Name,
 							Source: &templates.Anything{
 								Value: source.MustToUnstructured(),
+							},
+						},
+						{
+							Engine: regoSchema.Name,
+							Source: &templates.Anything{
+								Value: regoSource.ToUnstructured(),
 							},
 						},
 					},
