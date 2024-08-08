@@ -536,9 +536,9 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VapBinding should not be created for constraint that has template with generateVAP: false", func(t *testing.T) {
-		suffix := "VapBindingShouldNotBeCreatedForGenerateVAPFalse"
-		logger.Info("Running test: VapBinding should not be created for constraint that has template with generateVAP: false")
+	t.Run("VapBinding should not be created without generateVap intent in CT", func(t *testing.T) {
+		suffix := "VapBindingShouldNotBeCreatedWithoutGenerateVapIntent"
+		logger.Info("Running test: VapBinding should not be created without generateVap intent in CT")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
 		cstr := newDenyAllCstr(suffix)

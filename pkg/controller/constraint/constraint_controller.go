@@ -330,7 +330,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
 						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not update constraint status error for converting convert ConstraintTemplate to unversioned")
+							log.Error(err2, "could not update constraint status error when converting ConstraintTemplate to unversioned")
 						}
 						return reconcile.Result{}, err
 					}
@@ -343,7 +343,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 						generateVAPB = false
 					}
 					if !hasVAP {
-						r.log.V(1).Info("Warning: ConstraintTemplate will not create ValidatingAdmissionPolicy, cannot create VAPBinding")
+						r.log.V(1).Info("Warning: Conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
 						generateVAPB = false
 					}
 				}
