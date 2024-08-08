@@ -644,7 +644,7 @@ func TestReconcile(t *testing.T) {
 		logger.Info("Running test: VapBinding should be created with v1")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraint.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
