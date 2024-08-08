@@ -38,6 +38,13 @@ func makeTemplateWithRegoAndCEL(vapGenerationVal *bool) *templates.ConstraintTem
 			Targets: []templates.Target{
 				{
 					Target: "admission.k8s.io",
+					Rego: `
+								package foo
+								
+								violation[{"msg": "denied!"}] {
+									1 == 1
+								}
+								`,
 					Code: []templates.Code{
 						{
 							Engine: celSchema.Name,
