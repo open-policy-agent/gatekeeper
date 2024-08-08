@@ -380,7 +380,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				if err != nil {
 					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not get VAP object with runtime group version", "vapBindingName", vapBindingName)
+						log.Error(err2, "could not get VAPBinding object with runtime group version", "vapBindingName", vapBindingName)
 					}
 					return reconcile.Result{}, err
 				}

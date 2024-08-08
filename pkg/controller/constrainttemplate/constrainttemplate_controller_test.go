@@ -501,7 +501,7 @@ func TestReconcile(t *testing.T) {
 
 	t.Run("VapBinding should not be created with missing CEL", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreatedMissingCEL"
-		logger.Info("Running test: VapBinding should not be created")
+		logger.Info("Running test: VapBinding should not be created with missing CEL")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstr(suffix)
@@ -536,9 +536,9 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VapBinding should not be created without VAP", func(t *testing.T) {
-		suffix := "VapBindingShouldNotBeCreatedWithoutVAP"
-		logger.Info("Running test: VapBinding should not be created without VAP")
+	t.Run("VapBinding should not be created for constraint that has template with generateVAP: false", func(t *testing.T) {
+		suffix := "VapBindingShouldNotBeCreatedForGenerateVAPFalse"
+		logger.Info("Running test: VapBinding should not be created for constraint that has template with generateVAP: false")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
 		cstr := newDenyAllCstr(suffix)
