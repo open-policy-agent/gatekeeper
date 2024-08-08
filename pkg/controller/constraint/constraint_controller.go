@@ -343,7 +343,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 						generateVAPB = false
 					}
 					if !hasVAP {
-						r.log.V(1).Info("Warning: ConstraintTemplate does not contain VAP-style CEL source, cannot create VAPBinding")
+						r.log.V(1).Info("Warning: ConstraintTemplate will not create ValidatingAdmissionPolicy, cannot create VAPBinding")
 						generateVAPB = false
 					}
 				}
