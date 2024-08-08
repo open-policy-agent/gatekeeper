@@ -41,7 +41,7 @@ In summary, these are potential options when running Gatekeeper:
 Find out more about different [enforcement points](enforcement-points.md)
 
 :::note
-CEL validation is in beta and `--experimental-enable-k8s-native-validation` is turned on by default.
+CEL validation in constraint templates through Gatekeeper is in beta and `--experimental-enable-k8s-native-validation` is turned on by default. Set --experimental-enable-k8s-native-validation=false` to disable evaluating CEL in constraint templates.
 :::
 
 ## Pre-requisites
