@@ -18,14 +18,13 @@ package constrainttemplate
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"reflect"
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	pSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
+	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
@@ -66,9 +65,8 @@ const (
 )
 
 var (
-	logger             = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
-	discoveryErr       *apiutil.ErrResourceDiscoveryFailed
-	defaultGenerateVAP = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
+	logger       = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
+	discoveryErr *apiutil.ErrResourceDiscoveryFailed
 )
 
 var gvkConstraintTemplate = schema.GroupVersionKind{
@@ -380,7 +378,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return reconcile.Result{}, err
 	}
-	generateVap, err := shouldGenerateVAP(unversionedCT, *defaultGenerateVAP)
+	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
 	if err != nil {
 		logger.Error(err, "generateVap error")
 	}
@@ -760,20 +758,6 @@ func makeGvk(kind string) schema.GroupVersionKind {
 	}
 }
 
-func shouldGenerateVAP(ct *templates.ConstraintTemplate, generateVAPDefault bool) (bool, error) {
-	source, err := pSchema.GetSourceFromTemplate(ct)
-	if errors.Is(err, pSchema.ErrCodeNotDefined) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if source.GenerateVAP == nil {
-		return generateVAPDefault, nil
-	}
-	return *source.GenerateVAP, nil
-}
-
 func vapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
 	switch gvk.Version {
 	case "v1":
@@ -861,7 +845,7 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 	case admissionregistrationv1beta1.Fail:
 		failurePolicy = admissionregistrationv1.Fail
 	default:
-		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", pSchema.ErrBadFailurePolicy, *v1beta1Obj.Spec.FailurePolicy)
+		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", celSchema.ErrBadFailurePolicy, *v1beta1Obj.Spec.FailurePolicy)
 	}
 	obj.Spec.FailurePolicy = &failurePolicy
 	obj.Spec.AuditAnnotations = nil

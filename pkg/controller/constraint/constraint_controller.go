@@ -29,6 +29,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraintstatus"
@@ -66,6 +67,7 @@ var (
 	log                 = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
 	discoveryErr        *apiutil.ErrResourceDiscoveryFailed
 	DefaultGenerateVAPB = flag.Bool("default-create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
+	DefaultGenerateVAP  = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
 )
 
 var vapMux sync.RWMutex
@@ -280,12 +282,6 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}()
 
-	ct := &v1beta1.ConstraintTemplate{}
-	err = r.reader.Get(ctx, types.NamespacedName{Name: strings.ToLower(instance.GetKind())}, ct)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
 	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
 		status, err := r.getOrCreatePodStatus(ctx, instance)
@@ -323,10 +319,37 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				if !isAPIEnabled {
 					r.log.V(1).Info("Warning: VAP API is not enabled, cannot create VAPBinding")
 					generateVAPB = false
-				}
-				if !HasVAPCel(ct) {
-					r.log.V(1).Info("Warning: ConstraintTemplate does not contain VAP-style CEL source, cannot create VAPBinding")
-					generateVAPB = false
+				} else {
+					ct := &v1beta1.ConstraintTemplate{}
+					err = r.reader.Get(ctx, types.NamespacedName{Name: strings.ToLower(instance.GetKind())}, ct)
+					if err != nil {
+						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+						if err2 := r.writer.Update(ctx, status); err2 != nil {
+							log.Error(err2, "could not get ConstraintTemplate for constraint")
+						}
+						return reconcile.Result{}, err
+					}
+
+					unversionedCT := &templates.ConstraintTemplate{}
+					if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
+						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+						if err2 := r.writer.Update(ctx, status); err2 != nil {
+							log.Error(err2, "could not convert ConstraintTemplate to unversioned")
+						}
+						return reconcile.Result{}, err
+					}
+					hasVAP, err := ShouldGenerateVAP(unversionedCT)
+					if err != nil {
+						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
+						if err2 := r.writer.Update(ctx, status); err2 != nil {
+							log.Error(err2, "could not determine if VAP exists to generate VAPB")
+						}
+						generateVAPB = false
+					}
+					if !hasVAP {
+						r.log.V(1).Info("Warning: ConstraintTemplate does not contain VAP-style CEL source, cannot create VAPBinding")
+						generateVAPB = false
+					}
 				}
 			}
 			r.log.Info("constraint controller", "generateVAPB", generateVAPB)
@@ -526,16 +549,18 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 	return statusObj, nil
 }
 
-func HasVAPCel(ct *v1beta1.ConstraintTemplate) bool {
-	if len(ct.Spec.Targets[0].Code) == 0 {
-		return false
+func ShouldGenerateVAP(ct *templates.ConstraintTemplate) (bool, error) {
+	source, err := celSchema.GetSourceFromTemplate(ct)
+	if errors.Is(err, celSchema.ErrCodeNotDefined) {
+		return false, nil
 	}
-	for _, code := range ct.Spec.Targets[0].Code {
-		if code.Engine == celSchema.Name {
-			return true
-		}
+	if err != nil {
+		return false, err
 	}
-	return false
+	if source.GenerateVAP == nil {
+		return *DefaultGenerateVAP, nil
+	}
+	return *source.GenerateVAP, nil
 }
 
 func logAddition(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction util.EnforcementAction) {
