@@ -440,7 +440,7 @@ func TestReconcile(t *testing.T) {
 
 	t.Run("Vap should be created without generateVAP field", func(t *testing.T) {
 		suffix := "VapShouldBeCreatedWithoutGenerateVAP"
-		logger.Info("Running test: Vap should be created")
+		logger.Info("Running test: Vap should be created without generateVAP field")
 		constraint.DefaultGenerateVAP = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -757,7 +757,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("Constraint with scoped enforcement actions is marked as enforced", func(t *testing.T) {
 		suffix := "ScopedMarkedEnforced"
 
-		logger.Info("Running test: Scoped Constraint is marked as enforced")
+		logger.Info("Running test: Constraint with scoped enforcement actions is marked as enforced")
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.AuditEnforcementPoint)
 
