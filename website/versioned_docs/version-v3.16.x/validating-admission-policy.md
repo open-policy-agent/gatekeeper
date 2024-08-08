@@ -138,5 +138,6 @@ labels:
   "gatekeeper.sh/use-vap": "no"
 ```
 
-> [!TIP]
-> In the event K8s Validating Admission Controller fails open, then Gatekeeper admission webhook can act as a backup.
+:::tip
+In the event K8s Validating Admission Controller fails open, then Gatekeeper admission webhook can act as a backup.
+:::

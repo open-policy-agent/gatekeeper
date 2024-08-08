@@ -45,7 +45,7 @@ admissionEventsInvolvedNamespace: false
 auditEventsInvolvedNamespace: false
 resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
-enableK8sNativeValidation: false
+enableK8sNativeValidation: true
 defaultCreateVAPForTemplates: false
 defaultCreateVAPBindingForConstraints: false
 image:
