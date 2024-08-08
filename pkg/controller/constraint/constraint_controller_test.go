@@ -20,7 +20,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func makeTemplateWithRegoAndCEL(vapGenerationVal *bool) *templates.ConstraintTemplate {
+func makeTemplateWithRegoAndCELEngine(vapGenerationVal *bool) *templates.ConstraintTemplate {
 	source := &celSchema.Source{
 		Validations: []celSchema.Validation{
 			{
@@ -69,7 +69,7 @@ func makeTemplateWithRegoAndCEL(vapGenerationVal *bool) *templates.ConstraintTem
 	}
 }
 
-func makeTemplateWithCELSource(vapGenerationVal *bool) *templates.ConstraintTemplate {
+func makeTemplateWithCELEngine(vapGenerationVal *bool) *templates.ConstraintTemplate {
 	source := &celSchema.Source{
 		Validations: []celSchema.Validation{
 			{
@@ -92,6 +92,39 @@ func makeTemplateWithCELSource(vapGenerationVal *bool) *templates.ConstraintTemp
 							Engine: celSchema.Name,
 							Source: &templates.Anything{
 								Value: source.MustToUnstructured(),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func makeTemplateWithRegoEngine() *templates.ConstraintTemplate {
+	regoSource := &regoSchema.Source{
+		Rego: `
+			package foo
+			
+			violation[{"msg": "denied!"}] {
+				1 == 1
+			}
+			`,
+	}
+
+	return &templates.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkind",
+		},
+		Spec: templates.ConstraintTemplateSpec{
+			Targets: []templates.Target{
+				{
+					Target: "admission.k8s.io",
+					Code: []templates.Code{
+						{
+							Engine: regoSchema.Name,
+							Source: &templates.Anything{
+								Value: regoSource.ToUnstructured(),
 							},
 						},
 					},
@@ -413,70 +446,77 @@ func TestShouldGenerateVAP(t *testing.T) {
 			wantErr:    false,
 		},
 		{
+			name:       "template with only Rego engine",
+			template:   makeTemplateWithRegoEngine(),
+			vapDefault: true,
+			expected:   false,
+			wantErr:    false,
+		},
+		{
 			name:       "Rego and CEL template with generateVAP set to true",
-			template:   makeTemplateWithRegoAndCEL(ptr.To[bool](true)),
+			template:   makeTemplateWithRegoAndCELEngine(ptr.To[bool](true)),
 			vapDefault: true,
 			expected:   true,
 			wantErr:    false,
 		},
 		{
 			name:       "Rego and CEL template with generateVAP set to false",
-			template:   makeTemplateWithRegoAndCEL(ptr.To[bool](false)),
+			template:   makeTemplateWithRegoAndCELEngine(ptr.To[bool](false)),
 			vapDefault: true,
 			expected:   false,
 			wantErr:    false,
 		},
 		{
 			name:       "Enabled, default 'no'",
-			template:   makeTemplateWithCELSource(ptr.To[bool](true)),
+			template:   makeTemplateWithCELEngine(ptr.To[bool](true)),
 			vapDefault: false,
 			expected:   true,
 			wantErr:    false,
 		},
 		{
 			name:       "Enabled, default 'yes'",
-			template:   makeTemplateWithCELSource(ptr.To[bool](true)),
+			template:   makeTemplateWithCELEngine(ptr.To[bool](true)),
 			vapDefault: true,
 			expected:   true,
 			wantErr:    false,
 		},
 		{
 			name:       "Disabled, default 'yes'",
-			template:   makeTemplateWithCELSource(ptr.To[bool](false)),
+			template:   makeTemplateWithCELEngine(ptr.To[bool](false)),
 			vapDefault: true,
 			expected:   false,
 			wantErr:    false,
 		},
 		{
 			name:       "Disabled, default 'no'",
-			template:   makeTemplateWithCELSource(ptr.To[bool](false)),
+			template:   makeTemplateWithCELEngine(ptr.To[bool](false)),
 			vapDefault: false,
 			expected:   false,
 			wantErr:    false,
 		},
 		{
 			name:       "missing, default 'yes'",
-			template:   makeTemplateWithCELSource(nil),
+			template:   makeTemplateWithCELEngine(nil),
 			vapDefault: true,
 			expected:   true,
 			wantErr:    false,
 		},
 		{
 			name:       "missing, default 'no'",
-			template:   makeTemplateWithCELSource(nil),
+			template:   makeTemplateWithCELEngine(nil),
 			vapDefault: false,
 			expected:   false,
 			wantErr:    false,
 		},
 		{
 			name:       "missing, default 'yes'",
-			template:   makeTemplateWithCELSource(nil),
+			template:   makeTemplateWithCELEngine(nil),
 			vapDefault: true,
 			expected:   true,
 		},
 		{
 			name:       "missing, default 'no'",
-			template:   makeTemplateWithCELSource(nil),
+			template:   makeTemplateWithCELEngine(nil),
 			vapDefault: false,
 			expected:   false,
 		},
