@@ -607,7 +607,7 @@ func TestReconcile(t *testing.T) {
 
 	t.Run("VapBinding should not be created without VAP enforcement Point", func(t *testing.T) {
 		suffix := "VapBShouldNotBeCreatedWithoutVAPEP"
-		logger.Info("Running test: VapBinding should not be created with VAP enforcement point")
+		logger.Info("Running test: VapBinding should not be created without VAP enforcement point")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.AuditEnforcementPoint)
