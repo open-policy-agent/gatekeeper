@@ -98,7 +98,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --logtostderr\
 \n        - --default-create-vap-for-templates=${GENERATE_VAP}\
 \n        - --default-create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
-\n        - --experimental-enable-k8s-native-validation\
 \n        - --log-level=${LOG_LEVEL}\
 \n"
 
