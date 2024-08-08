@@ -91,7 +91,7 @@ func newReconciler(mgr manager.Manager,
 		getPod:       getPod,
 		tracker:      tracker,
 		events:       ev,
-		eventSource:  &source.Channel{Source: ev, DestBufferSize: 1024},
+		eventSource:  source.Channel(ev, &handler.EnqueueRequestForObject{}),
 	}
 }
 
@@ -103,9 +103,7 @@ func add(mgr manager.Manager, r *Reconciler) error {
 
 	// Watch for enqueued events
 	if r.eventSource != nil {
-		err = c.Watch(
-			r.eventSource,
-			&handler.EnqueueRequestForObject{})
+		err = c.Watch(r.eventSource)
 		if err != nil {
 			return err
 		}
@@ -113,8 +111,8 @@ func add(mgr manager.Manager, r *Reconciler) error {
 
 	// Watch for changes to ExpansionTemplates
 	return c.Watch(
-		source.Kind(mgr.GetCache(), &expansionv1beta1.ExpansionTemplate{}),
-		&handler.EnqueueRequestForObject{})
+		source.Kind(mgr.GetCache(), &expansionv1beta1.ExpansionTemplate{},
+			&handler.TypedEnqueueRequestForObject[*expansionv1beta1.ExpansionTemplate]{}))
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {

@@ -41,6 +41,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"golang.org/x/net/context"
 	admissionv1 "k8s.io/api/admission/v1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
@@ -59,8 +60,9 @@ import (
 )
 
 const (
-	DenyAll = "DenyAll"
-	denyall = "denyall"
+	DenyAll        = "DenyAll"
+	denyall        = "denyall"
+	vapBindingName = "gatekeeper-denyallconstraint"
 )
 
 func makeReconcileConstraintTemplate(suffix string) *v1beta1.ConstraintTemplate {
@@ -270,6 +272,7 @@ func TestReconcile(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	constraint.VapAPIEnabled = ptr.To[bool](true)
+	constraint.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
 
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
@@ -303,10 +306,10 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("Vap should be created", func(t *testing.T) {
-		suffix := "VapShouldBeCreated"
+	t.Run("Vap should be created with v1beta1", func(t *testing.T) {
+		suffix := "VapShouldBeCreatedV1Beta1"
 
-		logger.Info("Running test: Vap should be created")
+		logger.Info("Running test: Vap should be created with v1beta1")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -519,9 +522,9 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VapBinding should be created", func(t *testing.T) {
-		suffix := "VapBindingShouldBeCreated"
-		logger.Info("Running test: VapBinding should be created")
+	t.Run("VapBinding should be created with v1beta1", func(t *testing.T) {
+		suffix := "VapBindingShouldBeCreatedV1Beta1"
+		logger.Info("Running test: VapBinding should be created with v1beta1")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
 		cstr := newDenyAllCstr(suffix)
@@ -542,7 +545,6 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			vapBindingName := "gatekeeper-denyallconstraint"
 			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
 				return err
 			}
@@ -576,7 +578,6 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			vapBindingName := "gatekeeper-denyallconstraint"
 			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
 				return err
 			}
@@ -614,6 +615,65 @@ func TestReconcile(t *testing.T) {
 			}
 		} else {
 			t.Fatal("should result in error, vapbinding not found")
+		}
+	})
+
+	t.Run("Vap should be created with v1", func(t *testing.T) {
+		suffix := "VapShouldBeCreatedV1"
+
+		logger.Info("Running test: Vap should be created with v1")
+		constraint.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vap resource exists now
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("VapBinding should be created with v1", func(t *testing.T) {
+		suffix := "VapBindingShouldBeCreatedV1"
+		logger.Info("Running test: VapBinding should be created with v1")
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		constraint.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vapbinding resource exists now
+			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 	})
 
