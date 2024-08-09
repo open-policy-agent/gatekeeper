@@ -75,7 +75,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --mutation-annotations\
 \n        - --default-create-vap-for-templates=${GENERATE_VAP}\
 \n        - --default-create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
-\n        - --experimental-enable-k8s-native-validation\
 \n        - --log-level=${LOG_LEVEL}\
 \n---\
 \napiVersion: apps/v1\
@@ -99,7 +98,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --logtostderr\
 \n        - --default-create-vap-for-templates=${GENERATE_VAP}\
 \n        - --default-create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
-\n        - --experimental-enable-k8s-native-validation\
 \n        - --log-level=${LOG_LEVEL}\
 \n"
 
@@ -243,7 +241,6 @@ else
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set logLevel=${LOG_LEVEL} \
-		--set enableK8sNativeValidation=true \
 		--set defaultCreateVAPForTemplates=${GENERATE_VAP} \
 		--set defaultCreateVAPBindingForConstraints=${GENERATE_VAPBINDING} \
 		--set mutationAnnotations=true;
@@ -285,7 +282,6 @@ e2e-helm-upgrade:
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set logLevel=${LOG_LEVEL} \
-		--set enableK8sNativeValidation=true \
 		--set defaultCreateVAPForTemplates=${GENERATE_VAP} \
 		--set defaultCreateVAPBindingForConstraints=${GENERATE_VAPBINDING} \
 		--set mutationAnnotations=true;\
