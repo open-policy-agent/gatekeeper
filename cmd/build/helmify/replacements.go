@@ -310,12 +310,12 @@ var replacements = map[string]string{
         - --log-file={{ .Values.audit.logFile }}
         {{- end }}`,
 
-  "- HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES": `
+	"- HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES": `
         {{- if hasKey .Values "defaultCreateVAPForTemplates"}}
         - --default-create-vap-for-templates={{ .Values.defaultCreateVAPForTemplates }}
         {{- end }}`,
 
-  "- HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS": `
+	"- HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS": `
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}`,
