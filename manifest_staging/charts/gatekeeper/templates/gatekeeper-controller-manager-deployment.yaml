@@ -79,8 +79,6 @@ spec:
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
-        - --default-create-vap-for-templates={{ .Values.defaultCreateVAPForTemplates }}
-        - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}
@@ -107,6 +105,14 @@ spec:
         
         {{- if .Values.controllerManager.logFile}}
         - --log-file={{ .Values.controllerManager.logFile }}
+        {{- end }}
+        
+        {{- if hasKey .Values "defaultCreateVAPForTemplates"}}
+        - --default-create-vap-for-templates={{ .Values.defaultCreateVAPForTemplates }}
+        {{- end }}
+        
+        {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
+        - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}
         command:
         - /manager
