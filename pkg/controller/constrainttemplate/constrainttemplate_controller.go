@@ -476,28 +476,24 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
-	isVAPapiEnabled := false
+	isVapAPIEnabled := false
 	var groupVersion *schema.GroupVersion
 	if generateVap {
-		isVAPapiEnabled, groupVersion = constraint.IsVapAPIEnabled()
+		isVapAPIEnabled, groupVersion = constraint.IsVapAPIEnabled()
 	}
-	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
+	logger.Info("isVapAPIEnabled", "isVapAPIEnabled", isVapAPIEnabled)
 	logger.Info("groupVersion", "groupVersion", groupVersion)
-	if generateVap && (!isVAPapiEnabled || groupVersion == nil) {
-		logger.V(1).Info("Warning: ValidatingAdmissionPolicy API is not enabled, ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
-		createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: "ValidatingAdmissionPolicy API is not enabled, ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate"}
-		status.Status.Errors = append(status.Status.Errors, createErr)
-		err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Warning: ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, errors.New("ValidatingAdmissionPolicy API is not enabled"))
+	if generateVap && (!isVapAPIEnabled || groupVersion == nil) {
+		logger.Error(constraint.ErrValidatingAdmissionPolicyAPIDisabled, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
+		err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, constraint.ErrValidatingAdmissionPolicyAPIDisabled)
 		return reconcile.Result{}, err
 	}
 	// generating vap resources
-	if generateVap && isVAPapiEnabled && groupVersion != nil {
+	if generateVap && isVapAPIEnabled && groupVersion != nil {
 		currentVap, err := vapForVersion(groupVersion)
 		if err != nil {
 			logger.Error(err, "error getting vap object with respective groupVersion")
-			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-			status.Status.Errors = append(status.Status.Errors, createErr)
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with runtime group version", status, err)
 			return reconcile.Result{}, err
 		}
 		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
@@ -512,8 +508,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
 		if err != nil {
 			logger.Error(err, "transform to vap error", "vapName", vapName)
-			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-			status.Status.Errors = append(status.Status.Errors, createErr)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to vap object", status, err)
 			return reconcile.Result{}, err
 		}
@@ -521,8 +515,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		newVap, err := getRunTimeVAP(groupVersion, transformedVap, currentVap)
 		if err != nil {
 			logger.Error(err, "getRunTimeVAP error", "vapName", vapName)
-			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-			status.Status.Errors = append(status.Status.Errors, createErr)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get runtime vap object", status, err)
 			return reconcile.Result{}, err
 		}
@@ -535,8 +527,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			logger.Info("creating vap", "vapName", vapName)
 			if err := r.Create(ctx, newVap); err != nil {
 				logger.Info("creating vap error", "vapName", vapName, "error", err)
-				createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-				status.Status.Errors = append(status.Status.Errors, createErr)
 				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create vap object", status, err)
 				return reconcile.Result{}, err
 			}
@@ -547,8 +537,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		} else if !reflect.DeepEqual(currentVap, newVap) {
 			logger.Info("updating vap")
 			if err := r.Update(ctx, newVap); err != nil {
-				updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
-				status.Status.Errors = append(status.Status.Errors, updateErr)
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update vap object", status, err)
 				return reconcile.Result{}, err
 			}
@@ -556,12 +544,10 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 	// do not generate vap resources
 	// remove if exists
-	if !generateVap && isVAPapiEnabled && groupVersion != nil {
+	if !generateVap && isVapAPIEnabled && groupVersion != nil {
 		currentVap, err := vapForVersion(groupVersion)
 		if err != nil {
 			logger.Error(err, "error getting vap object with respective groupVersion")
-			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-			status.Status.Errors = append(status.Status.Errors, createErr)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
 			return reconcile.Result{}, err
 		}
@@ -576,8 +562,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		if currentVap != nil {
 			logger.Info("deleting vap")
 			if err := r.Delete(ctx, currentVap); err != nil {
-				updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
-				status.Status.Errors = append(status.Status.Errors, updateErr)
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete vap object", status, err)
 				return reconcile.Result{}, err
 			}
@@ -714,8 +698,6 @@ func (r *ReconcileConstraintTemplate) triggerConstraintEvents(ctx context.Contex
 	cstrObjs, err := r.listObjects(ctx, gvk)
 	if err != nil {
 		logger.Error(err, "get all constraints listObjects")
-		updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
-		status.Status.Errors = append(status.Status.Errors, updateErr)
 		err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not list all constraint objects", status, err)
 		return err
 	}

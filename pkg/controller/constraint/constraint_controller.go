@@ -64,12 +64,16 @@ import (
 )
 
 var (
-	log                 = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
-	discoveryErr        *apiutil.ErrResourceDiscoveryFailed
-	DefaultGenerateVAPB = flag.Bool("default-create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
-	DefaultGenerateVAP  = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
+	log                                     = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
+	discoveryErr                            *apiutil.ErrResourceDiscoveryFailed
+	DefaultGenerateVAPB                     = flag.Bool("default-create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
+	DefaultGenerateVAP                      = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
 )
 
+var (
+	ErrValidatingAdmissionPolicyAPIDisabled = errors.New("ValidatingAdmissionPolicy API is not enabled")
+	ErrVAPConditionsNotSatisfied            = errors.New("Conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
+)
 var vapMux sync.RWMutex
 
 var VapAPIEnabled *bool
@@ -306,13 +310,14 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				if err2 := r.writer.Update(ctx, status); err2 != nil {
 					log.Error(err2, "could not report error for validation of enforcement action")
 				}
+				return reconcile.Result{}, err
 			}
 			generateVAPB, VAPEnforcementActions, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
 			if err != nil {
+				log.Error(err, "could not determine if VAPBinding should be generated")
 				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-				log.Error(err, "could not get enforcement actions for VAP")
 				if err2 := r.writer.Update(ctx, status); err2 != nil {
-					log.Error(err2, "could not report error for getting enforcement actions for VAP")
+					log.Error(err2, "could not report error when determining if VAPBinding should be generated")
 				}
 				return reconcile.Result{}, err
 			}
@@ -323,12 +328,12 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			}
 			if generateVAPB {
 				if !isAPIEnabled {
-					r.log.V(1).Info("Warning: ValidatingAdmissionPolicy API is not enabled, cannot create ValidatingAdmissionPolicyBinding")
-					generateVAPB = false
-					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: "Warning: ValidatingAdmissionPolicy API is not enabled, cannot create ValidatingAdmissionPolicyBinding"})
+					log.Error(ErrValidatingAdmissionPolicyAPIDisabled, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName())
+					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("%s, cannot generate ValidatingAdmissionPolicyBinding", ErrValidatingAdmissionPolicyAPIDisabled.Error())})
 					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not update constraint status error when VAP API is not enabled")
+						log.Error(err2, "could not update constraint status error when ValidatingAdmissionPolicy API is not enabled")
 					}
+					generateVAPB = false
 				} else {
 					unversionedCT := &templates.ConstraintTemplate{}
 					if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
@@ -340,19 +345,20 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					}
 					hasVAP, err := ShouldGenerateVAP(unversionedCT)
 					if err != nil {
+						log.Error(err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy", "constraint", instance.GetName(), "constraint_template", ct.GetName())
 						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not update constraint status error when determining if CT should generate VAP")
+							log.Error(err2, "could not update constraint status error when determining if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy")
 						}
 						generateVAPB = false
 					}
 					if !hasVAP {
-						r.log.V(1).Info("Warning: Conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
-						generateVAPB = false
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: "Warning: Conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding"})
+						log.Error(ErrVAPConditionsNotSatisfied, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName(), "constraint_template", ct.GetName())
+						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("%s, cannot generate ValidatingAdmissionPolicyBinding", ErrVAPConditionsNotSatisfied.Error())})
 						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not update constraint status error when conditions are not satisfied to generate VAP")
+							log.Error(err2, "could not update constraint status error when conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
 						}
+						generateVAPB = false
 					}
 				}
 			}
