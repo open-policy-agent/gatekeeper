@@ -323,8 +323,12 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			}
 			if generateVAPB {
 				if !isAPIEnabled {
-					r.log.V(1).Info("Warning: VAP API is not enabled, cannot create VAPBinding")
+					r.log.V(1).Info("Warning: ValidatingAdmissionPolicy API is not enabled, cannot create ValidatingAdmissionPolicyBinding")
 					generateVAPB = false
+					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: "Warning: ValidatingAdmissionPolicy API is not enabled, cannot create ValidatingAdmissionPolicyBinding"})
+					if err2 := r.writer.Update(ctx, status); err2 != nil {
+						log.Error(err2, "could not update constraint status error when VAP API is not enabled")
+					}
 				} else {
 					unversionedCT := &templates.ConstraintTemplate{}
 					if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
@@ -345,6 +349,10 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					if !hasVAP {
 						r.log.V(1).Info("Warning: Conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
 						generateVAPB = false
+						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: "Warning: Conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding"})
+						if err2 := r.writer.Update(ctx, status); err2 != nil {
+							log.Error(err2, "could not update constraint status error when conditions are not satisfied to generate VAP")
+						}
 					}
 				}
 			}
@@ -704,7 +712,7 @@ func IsVapAPIEnabled() (bool, *schema.GroupVersion) {
 		}
 	}
 
-	log.Error(err, "error checking VAP api availability", "IsVapAPIEnabled", "false")
+	log.Error(err, "error checking VAP API availability", "IsVapAPIEnabled", "false")
 	VapAPIEnabled = new(bool)
 	*VapAPIEnabled = false
 	return false, nil

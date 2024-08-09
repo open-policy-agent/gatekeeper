@@ -484,7 +484,11 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
 	logger.Info("groupVersion", "groupVersion", groupVersion)
 	if generateVap && (!isVAPapiEnabled || groupVersion == nil) {
-		logger.V(1).Info("Warning: VAP API is not enabled, VAP will not be generated for constraint template", "name", ct.GetName())
+		logger.V(1).Info("Warning: ValidatingAdmissionPolicy API is not enabled, ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
+		createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: "ValidatingAdmissionPolicy API is not enabled, ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate"}
+		status.Status.Errors = append(status.Status.Errors, createErr)
+		err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Warning: ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, errors.New("ValidatingAdmissionPolicy API is not enabled"))
+		return reconcile.Result{}, err
 	}
 	// generating vap resources
 	if generateVap && isVAPapiEnabled && groupVersion != nil {
