@@ -483,6 +483,9 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
 	logger.Info("groupVersion", "groupVersion", groupVersion)
+	if generateVap && (!isVAPapiEnabled || groupVersion == nil) {
+		logger.V(1).Info("Warning: VAP API is not enabled, VAP will not be generated for constraint template", "name", ct.GetName())
+	}
 	// generating vap resources
 	if generateVap && isVAPapiEnabled && groupVersion != nil {
 		currentVap, err := vapForVersion(groupVersion)
