@@ -47,7 +47,7 @@ func init() {
 		`print extended test output`)
 	Cmd.Flags().BoolVarP(&includeTrace, "trace", "t", false,
 		`include a trace for the underlying constraint framework evaluation`)
-	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "experimental-enable-k8s-native-validation", "", true,
+	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "enable-k8s-native-validation", "", true,
 		`Beta: enable the validating admission policy driver`)
 }
 
