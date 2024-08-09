@@ -18,14 +18,13 @@ package constrainttemplate
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"reflect"
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	pSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
+	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
@@ -66,9 +65,8 @@ const (
 )
 
 var (
-	logger             = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
-	discoveryErr       *apiutil.ErrResourceDiscoveryFailed
-	defaultGenerateVAP = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
+	logger       = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
+	discoveryErr *apiutil.ErrResourceDiscoveryFailed
 )
 
 var gvkConstraintTemplate = schema.GroupVersionKind{
@@ -380,7 +378,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return reconcile.Result{}, err
 	}
-	generateVap, err := shouldGenerateVAP(unversionedCT, *defaultGenerateVAP)
+	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
 	if err != nil {
 		logger.Error(err, "generateVap error")
 	}
@@ -478,21 +476,24 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
-	isVAPapiEnabled := false
+	isVapAPIEnabled := false
 	var groupVersion *schema.GroupVersion
 	if generateVap {
-		isVAPapiEnabled, groupVersion = constraint.IsVapAPIEnabled()
+		isVapAPIEnabled, groupVersion = constraint.IsVapAPIEnabled()
 	}
-	logger.Info("isVAPapiEnabled", "isVAPapiEnabled", isVAPapiEnabled)
+	logger.Info("isVapAPIEnabled", "isVapAPIEnabled", isVapAPIEnabled)
 	logger.Info("groupVersion", "groupVersion", groupVersion)
+	if generateVap && (!isVapAPIEnabled || groupVersion == nil) {
+		logger.Error(constraint.ErrValidatingAdmissionPolicyAPIDisabled, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
+		err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, constraint.ErrValidatingAdmissionPolicyAPIDisabled)
+		return reconcile.Result{}, err
+	}
 	// generating vap resources
-	if generateVap && isVAPapiEnabled && groupVersion != nil {
+	if generateVap && isVapAPIEnabled && groupVersion != nil {
 		currentVap, err := vapForVersion(groupVersion)
 		if err != nil {
 			logger.Error(err, "error getting vap object with respective groupVersion")
-			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-			status.Status.Errors = append(status.Status.Errors, createErr)
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with runtime group version", status, err)
 			return reconcile.Result{}, err
 		}
 		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
@@ -507,8 +508,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
 		if err != nil {
 			logger.Error(err, "transform to vap error", "vapName", vapName)
-			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-			status.Status.Errors = append(status.Status.Errors, createErr)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to vap object", status, err)
 			return reconcile.Result{}, err
 		}
@@ -516,8 +515,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		newVap, err := getRunTimeVAP(groupVersion, transformedVap, currentVap)
 		if err != nil {
 			logger.Error(err, "getRunTimeVAP error", "vapName", vapName)
-			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-			status.Status.Errors = append(status.Status.Errors, createErr)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get runtime vap object", status, err)
 			return reconcile.Result{}, err
 		}
@@ -530,8 +527,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			logger.Info("creating vap", "vapName", vapName)
 			if err := r.Create(ctx, newVap); err != nil {
 				logger.Info("creating vap error", "vapName", vapName, "error", err)
-				createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-				status.Status.Errors = append(status.Status.Errors, createErr)
 				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create vap object", status, err)
 				return reconcile.Result{}, err
 			}
@@ -542,8 +537,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		} else if !reflect.DeepEqual(currentVap, newVap) {
 			logger.Info("updating vap")
 			if err := r.Update(ctx, newVap); err != nil {
-				updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
-				status.Status.Errors = append(status.Status.Errors, updateErr)
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update vap object", status, err)
 				return reconcile.Result{}, err
 			}
@@ -551,12 +544,10 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 	// do not generate vap resources
 	// remove if exists
-	if !generateVap && isVAPapiEnabled && groupVersion != nil {
+	if !generateVap && isVapAPIEnabled && groupVersion != nil {
 		currentVap, err := vapForVersion(groupVersion)
 		if err != nil {
 			logger.Error(err, "error getting vap object with respective groupVersion")
-			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-			status.Status.Errors = append(status.Status.Errors, createErr)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
 			return reconcile.Result{}, err
 		}
@@ -571,8 +562,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		if currentVap != nil {
 			logger.Info("deleting vap")
 			if err := r.Delete(ctx, currentVap); err != nil {
-				updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
-				status.Status.Errors = append(status.Status.Errors, updateErr)
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete vap object", status, err)
 				return reconcile.Result{}, err
 			}
@@ -709,8 +698,6 @@ func (r *ReconcileConstraintTemplate) triggerConstraintEvents(ctx context.Contex
 	cstrObjs, err := r.listObjects(ctx, gvk)
 	if err != nil {
 		logger.Error(err, "get all constraints listObjects")
-		updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
-		status.Status.Errors = append(status.Status.Errors, updateErr)
 		err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not list all constraint objects", status, err)
 		return err
 	}
@@ -758,20 +745,6 @@ func makeGvk(kind string) schema.GroupVersionKind {
 		Version: "v1beta1",
 		Kind:    kind,
 	}
-}
-
-func shouldGenerateVAP(ct *templates.ConstraintTemplate, generateVAPDefault bool) (bool, error) {
-	source, err := pSchema.GetSourceFromTemplate(ct)
-	if errors.Is(err, pSchema.ErrCodeNotDefined) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if source.GenerateVAP == nil {
-		return generateVAPDefault, nil
-	}
-	return *source.GenerateVAP, nil
 }
 
 func vapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
@@ -861,7 +834,7 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 	case admissionregistrationv1beta1.Fail:
 		failurePolicy = admissionregistrationv1.Fail
 	default:
-		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", pSchema.ErrBadFailurePolicy, *v1beta1Obj.Spec.FailurePolicy)
+		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", celSchema.ErrBadFailurePolicy, *v1beta1Obj.Spec.FailurePolicy)
 	}
 	obj.Spec.FailurePolicy = &failurePolicy
 	obj.Spec.AuditAnnotations = nil
