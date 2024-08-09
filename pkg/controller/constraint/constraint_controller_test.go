@@ -3,15 +3,136 @@ package constraint
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
+	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
+	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
+	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/utils/ptr"
 )
+
+func makeTemplateWithRegoAndCELEngine(vapGenerationVal *bool) *templates.ConstraintTemplate {
+	source := &celSchema.Source{
+		Validations: []celSchema.Validation{
+			{
+				Expression: "1 == 1",
+				Message:    "Always true",
+			},
+		},
+		GenerateVAP: vapGenerationVal,
+	}
+
+	regoSource := &regoSchema.Source{
+		Rego: `
+			package foo
+			
+			violation[{"msg": "denied!"}] {
+				1 == 1
+			}
+			`,
+	}
+
+	return &templates.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkind",
+		},
+		Spec: templates.ConstraintTemplateSpec{
+			Targets: []templates.Target{
+				{
+					Target: "admission.k8s.io",
+					Code: []templates.Code{
+						{
+							Engine: celSchema.Name,
+							Source: &templates.Anything{
+								Value: source.MustToUnstructured(),
+							},
+						},
+						{
+							Engine: regoSchema.Name,
+							Source: &templates.Anything{
+								Value: regoSource.ToUnstructured(),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func makeTemplateWithCELEngine(vapGenerationVal *bool) *templates.ConstraintTemplate {
+	source := &celSchema.Source{
+		Validations: []celSchema.Validation{
+			{
+				Expression: "1 == 1",
+				Message:    "Always true",
+			},
+		},
+		GenerateVAP: vapGenerationVal,
+	}
+	return &templates.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkind",
+		},
+		Spec: templates.ConstraintTemplateSpec{
+			Targets: []templates.Target{
+				{
+					Target: "admission.k8s.io",
+					Code: []templates.Code{
+						{
+							Engine: celSchema.Name,
+							Source: &templates.Anything{
+								Value: source.MustToUnstructured(),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func makeTemplateWithRegoEngine() *templates.ConstraintTemplate {
+	regoSource := &regoSchema.Source{
+		Rego: `
+			package foo
+			
+			violation[{"msg": "denied!"}] {
+				1 == 1
+			}
+			`,
+	}
+
+	return &templates.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkind",
+		},
+		Spec: templates.ConstraintTemplateSpec{
+			Targets: []templates.Target{
+				{
+					Target: "admission.k8s.io",
+					Code: []templates.Code{
+						{
+							Engine: regoSchema.Name,
+							Source: &templates.Anything{
+								Value: regoSource.ToUnstructured(),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
 
 func TestTotalConstraintsCache(t *testing.T) {
 	constraintsCache := NewConstraintsCache()
@@ -30,69 +151,6 @@ func TestTotalConstraintsCache(t *testing.T) {
 	constraintsCache.deleteConstraintKey("test")
 	if len(constraintsCache.cache) != 0 {
 		t.Errorf("cache: %v, wanted empty cache", spew.Sdump(constraintsCache.cache))
-	}
-}
-
-func TestHasVAPCel(t *testing.T) {
-	ct := &v1beta1.ConstraintTemplate{}
-
-	// Test when the code is empty
-	ct.Spec.Targets = []v1beta1.Target{
-		{
-			Code: []v1beta1.Code{},
-		},
-	}
-	expected := false
-	if result := HasVAPCel(ct); result != expected {
-		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
-	}
-
-	// Test when the code has only one Rego engine
-	ct.Spec.Targets = []v1beta1.Target{
-		{
-			Code: []v1beta1.Code{
-				{
-					Engine: "Rego",
-				},
-			},
-		},
-	}
-	expected = false
-	if result := HasVAPCel(ct); result != expected {
-		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
-	}
-
-	// Test when the code has multiple engines including Rego
-	ct.Spec.Targets = []v1beta1.Target{
-		{
-			Code: []v1beta1.Code{
-				{
-					Engine: "Rego",
-				},
-				{
-					Engine: "K8sNativeValidation",
-				},
-			},
-		},
-	}
-	expected = true
-	if result := HasVAPCel(ct); result != expected {
-		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
-	}
-
-	// Test when the code has only K8sNativeValidation engine
-	ct.Spec.Targets = []v1beta1.Target{
-		{
-			Code: []v1beta1.Code{
-				{
-					Engine: "K8sNativeValidation",
-				},
-			},
-		},
-	}
-	expected = true
-	if result := HasVAPCel(ct); result != expected {
-		t.Errorf("hasVAPCel() = %v, expected %v", result, expected)
 	}
 }
 
@@ -338,6 +396,140 @@ func TestShouldGenerateVAPB(t *testing.T) {
 			}
 			if !reflect.DeepEqual(VAPEnforcementActions, tc.expectedVAPEnforcementActions) {
 				t.Errorf("shouldGenerateVAPB returned VAPEnforcementActions = %v, expected %v", VAPEnforcementActions, tc.expectedVAPEnforcementActions)
+			}
+		})
+	}
+}
+
+func TestShouldGenerateVAP(t *testing.T) {
+	tests := []struct {
+		name       string
+		template   *templates.ConstraintTemplate
+		vapDefault bool
+		expected   bool
+		wantErr    bool
+	}{
+		{
+			name: "missing K8sNative driver",
+			template: &templates.ConstraintTemplate{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConstraintTemplate",
+					APIVersion: templatesv1.SchemeGroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: strings.ToLower("ShouldNotGenerateVAP"),
+				},
+				Spec: templates.ConstraintTemplateSpec{
+					CRD: templates.CRD{
+						Spec: templates.CRDSpec{
+							Names: templates.Names{
+								Kind: "ShouldNotGenerateVAP",
+							},
+						},
+					},
+					Targets: []templates.Target{
+						{
+							Target: target.Name,
+							Rego: `
+								package foo
+								
+								violation[{"msg": "denied!"}] {
+									1 == 1
+								}
+								`,
+						},
+					},
+				},
+			},
+			vapDefault: true,
+			expected:   false,
+			wantErr:    false,
+		},
+		{
+			name:       "template with only Rego engine",
+			template:   makeTemplateWithRegoEngine(),
+			vapDefault: true,
+			expected:   false,
+			wantErr:    false,
+		},
+		{
+			name:       "Rego and CEL template with generateVAP set to true",
+			template:   makeTemplateWithRegoAndCELEngine(ptr.To[bool](true)),
+			vapDefault: true,
+			expected:   true,
+			wantErr:    false,
+		},
+		{
+			name:       "Rego and CEL template with generateVAP set to false",
+			template:   makeTemplateWithRegoAndCELEngine(ptr.To[bool](false)),
+			vapDefault: true,
+			expected:   false,
+			wantErr:    false,
+		},
+		{
+			name:       "Enabled, default 'no'",
+			template:   makeTemplateWithCELEngine(ptr.To[bool](true)),
+			vapDefault: false,
+			expected:   true,
+			wantErr:    false,
+		},
+		{
+			name:       "Enabled, default 'yes'",
+			template:   makeTemplateWithCELEngine(ptr.To[bool](true)),
+			vapDefault: true,
+			expected:   true,
+			wantErr:    false,
+		},
+		{
+			name:       "Disabled, default 'yes'",
+			template:   makeTemplateWithCELEngine(ptr.To[bool](false)),
+			vapDefault: true,
+			expected:   false,
+			wantErr:    false,
+		},
+		{
+			name:       "Disabled, default 'no'",
+			template:   makeTemplateWithCELEngine(ptr.To[bool](false)),
+			vapDefault: false,
+			expected:   false,
+			wantErr:    false,
+		},
+		{
+			name:       "missing, default 'yes'",
+			template:   makeTemplateWithCELEngine(nil),
+			vapDefault: true,
+			expected:   true,
+			wantErr:    false,
+		},
+		{
+			name:       "missing, default 'no'",
+			template:   makeTemplateWithCELEngine(nil),
+			vapDefault: false,
+			expected:   false,
+			wantErr:    false,
+		},
+		{
+			name:       "missing, default 'yes'",
+			template:   makeTemplateWithCELEngine(nil),
+			vapDefault: true,
+			expected:   true,
+		},
+		{
+			name:       "missing, default 'no'",
+			template:   makeTemplateWithCELEngine(nil),
+			vapDefault: false,
+			expected:   false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			DefaultGenerateVAP = ptr.To[bool](test.vapDefault)
+			generateVAP, err := ShouldGenerateVAP(test.template)
+			if generateVAP != test.expected {
+				t.Errorf("wanted assumeVAP to be %v; got %v", test.expected, generateVAP)
+			}
+			if test.wantErr != (err != nil) {
+				t.Errorf("wanted error %v; got %v", test.wantErr, err)
 			}
 		})
 	}
