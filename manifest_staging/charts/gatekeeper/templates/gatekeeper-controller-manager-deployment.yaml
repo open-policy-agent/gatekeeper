@@ -78,7 +78,7 @@ spec:
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
-        - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+        - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
         - --default-create-vap-for-templates={{ .Values.defaultCreateVAPForTemplates }}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
