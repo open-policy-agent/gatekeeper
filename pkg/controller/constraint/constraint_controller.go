@@ -39,6 +39,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	errorpkg "github.com/pkg/errors"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -64,10 +65,10 @@ import (
 )
 
 var (
-	log                                     = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
-	discoveryErr                            *apiutil.ErrResourceDiscoveryFailed
-	DefaultGenerateVAPB                     = flag.Bool("default-create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
-	DefaultGenerateVAP                      = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
+	log                 = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
+	discoveryErr        *apiutil.ErrResourceDiscoveryFailed
+	DefaultGenerateVAPB = flag.Bool("default-create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
+	DefaultGenerateVAP  = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
 )
 
 var (
@@ -306,20 +307,12 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		if c, err := r.cfClient.GetConstraint(instance); err != nil || !reflect.DeepEqual(instance, c) {
 			err := util.ValidateEnforcementAction(enforcementAction, instance.Object)
 			if err != nil {
-				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-				if err2 := r.writer.Update(ctx, status); err2 != nil {
-					log.Error(err2, "could not report error for validation of enforcement action")
-				}
-				return reconcile.Result{}, err
+				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not report error for validation of enforcement action")
 			}
 			generateVAPB, VAPEnforcementActions, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
 			if err != nil {
 				log.Error(err, "could not determine if VAPBinding should be generated")
-				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-				if err2 := r.writer.Update(ctx, status); err2 != nil {
-					log.Error(err2, "could not report error when determining if VAPBinding should be generated")
-				}
-				return reconcile.Result{}, err
+				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not report error when determining if VAPBinding should be generated")
 			}
 			isAPIEnabled := false
 			var groupVersion *schema.GroupVersion
@@ -329,35 +322,22 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			if generateVAPB {
 				if !isAPIEnabled {
 					log.Error(ErrValidatingAdmissionPolicyAPIDisabled, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName())
-					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("%s, cannot generate ValidatingAdmissionPolicyBinding", ErrValidatingAdmissionPolicyAPIDisabled.Error())})
-					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not update constraint status error when ValidatingAdmissionPolicy API is not enabled")
-					}
+					_ = r.reportErrorOnConstraintStatus(ctx, status, ErrValidatingAdmissionPolicyAPIDisabled, fmt.Sprintf("%s, cannot generate ValidatingAdmissionPolicyBinding", ErrValidatingAdmissionPolicyAPIDisabled.Error()), "could not report error when ValidatingAdmissionPolicy API is not enabled")
 					generateVAPB = false
 				} else {
 					unversionedCT := &templates.ConstraintTemplate{}
 					if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not update constraint status error when converting ConstraintTemplate to unversioned")
-						}
-						return reconcile.Result{}, err
+						return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not report error when converting ConstraintTemplate to unversioned")
 					}
 					hasVAP, err := ShouldGenerateVAP(unversionedCT)
 					if err != nil {
 						log.Error(err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy", "constraint", instance.GetName(), "constraint_template", ct.GetName())
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not update constraint status error when determining if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy")
-						}
+						_ = r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not report error when determining if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy")
 						generateVAPB = false
 					}
 					if !hasVAP {
 						log.Error(ErrVAPConditionsNotSatisfied, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName(), "constraint_template", ct.GetName())
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("%s, cannot generate ValidatingAdmissionPolicyBinding", ErrVAPConditionsNotSatisfied.Error())})
-						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not update constraint status error when conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
-						}
+						_ = r.reportErrorOnConstraintStatus(ctx, status, ErrVAPConditionsNotSatisfied, fmt.Sprintf("%s, cannot generate ValidatingAdmissionPolicyBinding", ErrVAPConditionsNotSatisfied.Error()), "could not report error when conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
 						generateVAPB = false
 					}
 				}
@@ -367,11 +347,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			if generateVAPB && groupVersion != nil {
 				currentVapBinding, err := vapBindingForVersion(*groupVersion)
 				if err != nil {
-					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not get vapbinding version")
-					}
-					return reconcile.Result{}, err
+					return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not get vapbinding version")
 				}
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
@@ -383,20 +359,12 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				}
 				transformedVapBinding, err := transform.ConstraintToBinding(instance, VAPEnforcementActions)
 				if err != nil {
-					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not report transform vapbinding error", "vapBindingName", vapBindingName)
-					}
-					return reconcile.Result{}, err
+					return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), fmt.Sprintf("could not report transform vapbinding error, vapBindingName: %s", vapBindingName))
 				}
 
 				newVapBinding, err := getRunTimeVAPBinding(groupVersion, transformedVapBinding, currentVapBinding)
 				if err != nil {
-					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not get VAPBinding object with runtime group version", "vapBindingName", vapBindingName)
-					}
-					return reconcile.Result{}, err
+					return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), fmt.Sprintf("could not get VAPBinding object with runtime group version, vapBindingName: %s", vapBindingName))
 				}
 
 				if err := controllerutil.SetControllerReference(instance, newVapBinding, r.scheme); err != nil {
@@ -406,20 +374,12 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				if currentVapBinding == nil {
 					log.Info("creating vapbinding")
 					if err := r.writer.Create(ctx, newVapBinding); err != nil {
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not report creating vapbinding error status")
-						}
-						return reconcile.Result{}, err
+						return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not report creating vapbinding error status")
 					}
 				} else if !reflect.DeepEqual(currentVapBinding, newVapBinding) {
 					log.Info("updating vapbinding")
 					if err := r.writer.Update(ctx, newVapBinding); err != nil {
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not report update vapbinding error status")
-						}
-						return reconcile.Result{}, err
+						return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not report update vapbinding error status")
 					}
 				}
 			}
@@ -428,11 +388,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			if !generateVAPB && groupVersion != nil {
 				currentVapBinding, err := vapBindingForVersion(*groupVersion)
 				if err != nil {
-					status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-					if err2 := r.writer.Update(ctx, status); err2 != nil {
-						log.Error(err2, "could not get vapbinding version")
-					}
-					return reconcile.Result{}, err
+					return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not get vapbinding version")
 				}
 				vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 				log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
@@ -445,11 +401,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				if currentVapBinding != nil {
 					log.Info("deleting vapbinding")
 					if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
-						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-						if err2 := r.writer.Update(ctx, status); err2 != nil {
-							log.Error(err2, "could not report delete vapbinding error status")
-						}
-						return reconcile.Result{}, err
+						return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not report delete vapbinding error status")
 					}
 				}
 			}
@@ -458,12 +410,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					enforcementAction: enforcementAction,
 					status:            metrics.ErrorStatus,
 				})
-				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-				if err2 := r.writer.Update(ctx, status); err2 != nil {
-					log.Error(err2, "could not report constraint error status")
-				}
-				reportMetrics = true
-				return reconcile.Result{}, err
+				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not report constraint error status")
 			}
 			logAddition(r.log, instance, enforcementAction)
 		}
@@ -615,6 +562,15 @@ func (r *ReconcileConstraint) cacheConstraint(ctx context.Context, instance *uns
 	t.Observe(instance)
 
 	return nil
+}
+
+func (r *ReconcileConstraint) reportErrorOnConstraintStatus(ctx context.Context, status *constraintstatusv1beta1.ConstraintPodStatus, err error, errMsg string, errLog string) error {
+	status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: errMsg})
+	if err2 := r.writer.Update(ctx, status); err2 != nil {
+		log.Error(err2, errLog)
+		return errorpkg.Wrapf(err, fmt.Sprintf("Could not report error on constraint status: %s", err2))
+	}
+	return err
 }
 
 func NewConstraintsCache() *ConstraintsCache {
