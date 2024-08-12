@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,6 +25,10 @@ spec:
       heritage: '{{ .Release.Service }}'
       release: '{{ .Release.Name }}'
   strategy:
+    {{- if .Values.controllerManager.strategyRollingUpdate }}
+    rollingUpdate:
+    {{- toYaml .Values.controllerManager.strategyRollingUpdate | nindent 6 }}
+    {{- end }}
     type: {{ .Values.controllerManager.strategyType }}
   template:
     metadata:
@@ -33,6 +38,7 @@ spec:
         {{- end }}
       labels:
         {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "controllerManager.podLabels" . | nindent 8 }}
         {{- include "gatekeeper.commonLabels" . | nindent 8 }}
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
@@ -72,8 +78,7 @@ spec:
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
-        - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
-        - --vap-enforcement={{ .Values.vapEnforcement }}
+        - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}
@@ -100,6 +105,14 @@ spec:
         
         {{- if .Values.controllerManager.logFile}}
         - --log-file={{ .Values.controllerManager.logFile }}
+        {{- end }}
+        
+        {{- if hasKey .Values "defaultCreateVAPForTemplates"}}
+        - --default-create-vap-for-templates={{ .Values.defaultCreateVAPForTemplates }}
+        {{- end }}
+        
+        {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
+        - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}
         command:
         - /manager
@@ -167,7 +180,7 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.controllerManager.podSecurityContext | nindent 8 }}
-      serviceAccountName: gatekeeper-admin
+      serviceAccountName: {{ .Values.controllerManager.serviceAccount.name }}
       terminationGracePeriodSeconds: 60
       tolerations:
         {{- toYaml .Values.controllerManager.tolerations | nindent 8 }}
