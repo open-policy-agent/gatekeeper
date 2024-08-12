@@ -1,8 +1,4 @@
-ARG BUILDPLATFORM="linux/amd64"
-ARG BUILDERIMAGE="golang:1.22-bookworm"
-ARG BASEIMAGE="gcr.io/distroless/static-debian12:nonroot"
-
-FROM --platform=$BUILDPLATFORM $BUILDERIMAGE as builder
+FROM --platform=$BUILDPLATFORM golang:1.22-bookworm@sha256:39b7e6ebaca464d51989858871f792f2e186dce8ce0cbdba7e88e4444b244407 as builder
 
 ARG TARGETPLATFORM
 ARG TARGETOS
@@ -24,7 +20,7 @@ RUN go mod init && go mod tidy
 
 RUN go build -o provider provider.go
 
-FROM $BASEIMAGE
+FROM gcr.io/distroless/static-debian12@sha256:8dd8d3ca2cf283383304fd45a5c9c74d5f2cd9da8d3b077d720e264880077c65
 
 WORKDIR /
 
