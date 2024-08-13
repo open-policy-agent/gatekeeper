@@ -64,10 +64,10 @@ import (
 )
 
 var (
-	log                                     = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
-	discoveryErr                            *apiutil.ErrResourceDiscoveryFailed
-	DefaultGenerateVAPB                     = flag.Bool("default-create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
-	DefaultGenerateVAP                      = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
+	log                 = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
+	discoveryErr        *apiutil.ErrResourceDiscoveryFailed
+	DefaultGenerateVAPB = flag.Bool("default-create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
+	DefaultGenerateVAP  = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
 )
 
 var (
@@ -344,21 +344,24 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 						return reconcile.Result{}, err
 					}
 					hasVAP, err := ShouldGenerateVAP(unversionedCT)
-					if err != nil {
+					switch {
+					case errors.Is(err, celSchema.ErrCodeNotDefined):
+						generateVAPB = false
+					case err != nil:
 						log.Error(err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy", "constraint", instance.GetName(), "constraint_template", ct.GetName())
 						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 						if err2 := r.writer.Update(ctx, status); err2 != nil {
 							log.Error(err2, "could not update constraint status error when determining if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy")
 						}
 						generateVAPB = false
-					}
-					if !hasVAP {
+					case !hasVAP:
 						log.Error(ErrVAPConditionsNotSatisfied, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName(), "constraint_template", ct.GetName())
 						status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("%s, cannot generate ValidatingAdmissionPolicyBinding", ErrVAPConditionsNotSatisfied.Error())})
 						if err2 := r.writer.Update(ctx, status); err2 != nil {
 							log.Error(err2, "could not update constraint status error when conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
 						}
 						generateVAPB = false
+					default:
 					}
 				}
 			}
@@ -561,9 +564,6 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 
 func ShouldGenerateVAP(ct *templates.ConstraintTemplate) (bool, error) {
 	source, err := celSchema.GetSourceFromTemplate(ct)
-	if errors.Is(err, celSchema.ErrCodeNotDefined) {
-		return false, nil
-	}
 	if err != nil {
 		return false, err
 	}
