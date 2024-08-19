@@ -128,7 +128,7 @@ spec:
             ...
 ```
 
-To override the `--default-create-vap-binding-for-constraints` flag's behavior for a constraint, Gatekeeper determines the intended enforcement actions for a given enforcement point by evaluating what is provided in `spec.scopedEnforcementActions` and `spec.enforcementAction: scoped` in the constraint.
+To override the `--default-create-vap-binding-for-constraints` flag's behavior for a constraint, `spec.scopedEnforcementAction` can be used. Gatekeeper determines the intended enforcement actions for a given enforcement point by evaluating what is provided in `spec.scopedEnforcementActions` and `spec.enforcementAction: scoped` in the constraint.
 
 The overall opt-in/opt-out behavior for constraint to generate Validating Admission Policy Binding (VAPB) is as below:
 
