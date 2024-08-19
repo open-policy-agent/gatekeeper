@@ -3,9 +3,9 @@ id: validating-admission-policy
 title: Integration with Kubernetes Validating Admission Policy
 ---
 
-CEL validation in Gatekeeper:
+Validating Admission Policy CEL validation in Gatekeeper:
 Feature State: Gatekeeper version v3.17 (beta)
-❗ This feature is beta, subject to change (feedback is welcome!). It is enabled by default. Set --enable-k8s-native-validation=false` to disable evaluating CEL in constraint templates.
+❗ This feature is beta, subject to change (feedback is welcome!). It is enabled by default. Set --enable-k8s-native-validation=false` to disable evaluating Validating Admission Policy CEL in constraint templates.
 
 VAP management through Gatekeeper:
 Feature State: Gatekeeper version v3.16 (alpha)
@@ -61,10 +61,10 @@ Find out more about different [enforcement points](enforcement-points.md)
 
 ## Get started
 
-## Policy updates to add CEL
+## Policy updates to add VAP CEL
 To see how it works, check out this [demo](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/k8s-validating-admission-policy)
 
-Example `K8sRequiredLabels` constraint template using the `K8sNativeValidation` engine and CEL expressions that requires resources to contain specified labels with values matching provided regular expressions. A similar policy written in Rego can be seen [here](https://open-policy-agent.github.io/gatekeeper-library/website/validation/requiredlabels)
+Example `K8sRequiredLabels` constraint template using the `K8sNativeValidation` engine and VAP CEL expressions that requires resources to contain specified labels with values matching provided regular expressions. A similar policy written in Rego can be seen [here](https://open-policy-agent.github.io/gatekeeper-library/website/validation/requiredlabels)
 
 ```yaml
 apiVersion: templates.gatekeeper.sh/v1
@@ -106,14 +106,14 @@ spec:
           ...
 ```
 
-With this new engine and source added to the constraint template, now Gatekeeper webhook, audit, and shift-left can validate resources with these new CEL-based rules.
+With this new engine and source added to the constraint template, now Gatekeeper webhook, audit, and shift-left can validate resources with these new VAP CEL-based rules.
 
 ## Policy updates to generate Validating Admission Policy and Binding resources
 
 For some policies, you may want admission requests to be handled by the K8s Validating Admission Controller instead of the Gatekeeper admission webhook.
 
 The K8s Validating Admission Controller requires both the Validating Admission Policy (VAP) and Validating Admission Policy Binding (VAPB) resources to exist to enforce a policy. Gatekeeper can be configured to generate both of these resources. To generate VAP Bindings for all Constraints, ensure the Gatekeeper 
-`--default-create-vap-binding-for-constraint` flag is set to `true`. To generate VAP as part of all Constraint Templates with cel engine, ensure the Gatekeeper `--default-create-vap-for-templates=true` flag is set to `true`. By default both flags are set to `false` while the feature is still in alpha.
+`--default-create-vap-binding-for-constraint` flag is set to `true`. To generate VAP as part of all Constraint Templates with the VAP CEL engine `K8sNativeValidation`, ensure the Gatekeeper `--default-create-vap-for-templates=true` flag is set to `true`. By default both flags are set to `false` while the feature is still in alpha.
 
 To override the `--default-create-vap-for-templates` flag's behavior for a constraint template, set `generateVAP` to `true` explicitly under the K8sNativeValidation engine's `source` in the constraint template. 
 
@@ -147,14 +147,14 @@ Constraint without `enforcementAction: scoped`:
 | true | Generate VAPB |
 
 :::note
-VAP will only get generated for templates with CEL Engine. VAPB will only get generated for constraints that belong to templates with CEL engine.
+VAP will only get generated for templates with VAP CEL Engine. VAPB will only get generated for constraints that belong to templates with VAP CEL engine.
 :::
 
 :::tip
 In the event K8s Validating Admission Controller fails open, Gatekeeper admission webhook can act as a backup when included in constraint.
 :::
 
-Validating Admission Policy Binding for the below constraint will always get generated, assuming the constraint belongs to a template with CEL engine.
+Validating Admission Policy Binding for the below constraint will always get generated, assuming the constraint belongs to a template with VAP CEL engine.
 
 ```yaml
 apiVersion: constraints.gatekeeper.sh/v1beta1
