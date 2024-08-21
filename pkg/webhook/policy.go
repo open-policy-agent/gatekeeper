@@ -149,6 +149,12 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		return vResp
 	}
 
+	if err := target.SetObjectOnDelete(&req); err != nil {
+		vResp := admission.Denied(err.Error())
+		vResp.Result.Code = http.StatusInternalServerError
+		return vResp
+	}
+
 	if userErr, err := h.validateGatekeeperResources(ctx, &req); err != nil {
 		var code int32
 		if userErr {

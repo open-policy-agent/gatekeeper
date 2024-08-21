@@ -3,6 +3,7 @@ package target
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -23,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 func TestFrameworkInjection(t *testing.T) {
@@ -1147,5 +1149,57 @@ func TestNamespaceCache(t *testing.T) {
 func newNsCache() *nsCache {
 	return &nsCache{
 		cache: make(map[string]*corev1.Namespace),
+	}
+}
+
+func TestSetObjectOnDelete(t *testing.T) {
+	testCases := []struct {
+		name    string
+		req     *admission.Request
+		wantErr error
+	}{
+		{
+			name: "request not on delete",
+			req: &admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+				Operation: "CREATE",
+			}},
+			wantErr: nil,
+		},
+		{
+			name: "err on request and nil oldObject",
+			req: &admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+				Operation: "DELETE",
+			}},
+			wantErr: ErrOldObjectIsNil,
+		},
+		{
+			name: "handle ok oldObject not nil",
+			req: &admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+				Operation: "DELETE",
+				OldObject: runtime.RawExtension{
+					Raw: []byte{'a', 'b', 'c'},
+				},
+			}},
+			wantErr: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := SetObjectOnDelete(tc.req)
+
+			if !errors.Is(tc.wantErr, err) {
+				t.Fatalf("error did not match what was expected\n want: %v \n got: %v \n", tc.wantErr, err)
+			}
+
+			// open box: make sure that the OldObject field has been copied into the Object field
+			if !reflect.DeepEqual(tc.req.AdmissionRequest.OldObject, tc.req.AdmissionRequest.Object) {
+				t.Fatal("oldObject and object need to match")
+			}
+		})
 	}
 }

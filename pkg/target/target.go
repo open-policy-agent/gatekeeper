@@ -16,10 +16,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // Name is the name of Gatekeeper's Kubernetes validation target.
 const Name = "admission.k8s.gatekeeper.sh"
+
+// nolint: revive // Moved error out of pkg/webhook/admission; needs capitalization for backwards compat.
+var ErrOldObjectIsNil = errors.New("oldObject cannot be nil for DELETE operations")
 
 type K8sValidationTarget struct {
 	cache nsCache
@@ -169,6 +173,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 }
 
 func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) error {
+
 	labelSelector, found, err := unstructured.NestedMap(u.Object, "spec", "match", "labelSelector")
 	if err != nil {
 		return err
@@ -248,4 +253,24 @@ func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constrain
 
 func (h *K8sValidationTarget) GetCache() handler.Cache {
 	return &h.cache
+}
+
+func SetObjectOnDelete(req *admission.Request) error {
+	if req.AdmissionRequest.Operation == admissionv1.Delete {
+		// oldObject is the existing object.
+		// It is null for DELETE operations in API servers prior to v1.15.0.
+		// https://github.com/kubernetes/website/pull/14671
+		if req.AdmissionRequest.OldObject.Raw == nil {
+			return ErrOldObjectIsNil
+		}
+
+		// For admission webhooks registered for DELETE operations on k8s built APIs or CRDs,
+		// the apiserver now sends the existing object as admissionRequest.Request.OldObject to the webhook
+		// object is the new object being admitted.
+		// It is null for DELETE operations.
+		// https://github.com/kubernetes/kubernetes/pull/76346
+		req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
+	}
+
+	return nil
 }
