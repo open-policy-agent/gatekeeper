@@ -4,8 +4,8 @@ name: gatekeeper
 icon: https://open-policy-agent.github.io/gatekeeper/website/img/logo.svg
 keywords:
   - open policy agent
-version: 3.17.0-beta.0
+version: 3.18.0-beta.0
 home: https://github.com/open-policy-agent/gatekeeper
 sources:
   - https://github.com/open-policy-agent/gatekeeper.git
-appVersion: v3.17.0-beta.0
+appVersion: v3.18.0-beta.0
