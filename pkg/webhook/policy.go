@@ -610,7 +610,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	if err != nil {
 		return nil, fmt.Errorf("error reviewing resource %s: %w", req.Name, err)
 	}
-	// resultants slice will be empty if expand is skipped.
+
 	for _, res := range resultants {
 		resultantResp, err := h.review(ctx, createReviewForResultant(res.Obj, review.Namespace), trace, dump)
 		if err != nil {
