@@ -172,6 +172,12 @@ const Services = [
     name: 'AWS Elastic Kubernetes Service',
     text: "AWS offers an 'EKS Blueprint' to make installing Gatekeeper easy.",
     website: 'https://aws-quickstart.github.io/cdk-eks-blueprints/addons/opa-gatekeeper/'
+  },
+  {
+    thumbnail: 'img/alibaba_cloud.png',
+    name: 'Alibaba Cloud Container Service for Kubernetes',
+    text: "Alibaba Cloud Container Service for Kubernetes policy governance is backed by Gatekeeper.",
+    website: 'https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/security-and-compliance/configure-and-enforce-ack-pod-security-policies'
   }
 ]
 
