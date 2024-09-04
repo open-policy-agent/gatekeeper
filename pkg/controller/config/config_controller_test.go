@@ -414,7 +414,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 			return nil, fmt.Errorf("unable to set up Driver: %w", err)
 		}
 
-		client, err = constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+		client, err = constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.EnforcementPoints("audit.gatekeeper.sh"))
 		if err != nil {
 			return nil, fmt.Errorf("unable to set up constraint framework data client: %w", err)
 		}

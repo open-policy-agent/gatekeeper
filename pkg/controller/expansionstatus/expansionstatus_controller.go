@@ -77,8 +77,8 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 
 // PodStatusToExpansionTemplateMapper correlates a ExpansionTemplatePodStatus with its corresponding expansion template.
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToExpansionTemplateMapper(selfOnly bool) handler.MapFunc {
-	return func(_ context.Context, obj client.Object) []reconcile.Request {
+func PodStatusToExpansionTemplateMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ExpansionTemplatePodStatus] {
+	return func(_ context.Context, obj *v1beta1.ExpansionTemplatePodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ExpansionTemplateNameLabel]
 		if !ok {
@@ -109,15 +109,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to ExpansionTemplateStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &v1beta1.ExpansionTemplatePodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(PodStatusToExpansionTemplateMapper(false)),
-	)
+		source.Kind(mgr.GetCache(), &v1beta1.ExpansionTemplatePodStatus{},
+			handler.TypedEnqueueRequestsFromMapFunc(PodStatusToExpansionTemplateMapper(false)),
+		))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to ExpansionTemplate
-	err = c.Watch(source.Kind(mgr.GetCache(), &expansionv1beta1.ExpansionTemplate{}), &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &expansionv1beta1.ExpansionTemplate{}, &handler.TypedEnqueueRequestForObject[*expansionv1beta1.ExpansionTemplate]{}))
 	if err != nil {
 		return err
 	}

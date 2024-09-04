@@ -19,6 +19,7 @@ validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 validatingWebhookURL: null
 enableDeleteOperations: false
+enableConnectOperations: false
 enableExternalData: true
 enableGeneratorResourceExpansion: true
 enableTLSHealthcheck: false
@@ -44,25 +45,27 @@ admissionEventsInvolvedNamespace: false
 auditEventsInvolvedNamespace: false
 resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
-enableK8sNativeValidation: false
-vapEnforcement: GATEKEEPER_DEFAULT
+enableK8sNativeValidation: true
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.17.0-beta.0
+  release: v3.18.0-beta.0
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.17.0-beta.0
+      tag: v3.18.0-beta.0
 postUpgrade:
   labelNamespace:
+    serviceAccount:
+      name: gatekeeper-update-namespace-label-post-upgrade
+      create: true
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.17.0-beta.0
+      tag: v3.18.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -89,11 +92,14 @@ postUpgrade:
     runAsUser: 1000
 postInstall:
   labelNamespace:
+    serviceAccount:
+      name: gatekeeper-update-namespace-label
+      create: true
     enabled: true
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.17.0-beta.0
+      tag: v3.18.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -130,11 +136,14 @@ postInstall:
     runAsUser: 1000
 preUninstall:
   deleteWebhookConfigurations:
+    serviceAccount:
+      name: gatekeeper-delete-webhook-configs
+      create: true
     extraRules: []
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.17.0-beta.0
+      tag: v3.18.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""
@@ -158,6 +167,8 @@ podCountLimit: "100"
 secretAnnotations: {}
 enableRuntimeDefaultSeccompProfile: true
 controllerManager:
+  serviceAccount:
+    name: gatekeeper-admin
   exemptNamespaces: []
   exemptNamespacePrefixes: []
   hostNetwork: false
@@ -172,6 +183,8 @@ controllerManager:
   tlsMinVersion: 1.3
   clientCertName: ""
   strategyType: RollingUpdate
+  strategyRollingUpdate: {}
+  podLabels: {}
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -214,6 +227,8 @@ controllerManager:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
 audit:
+  serviceAccount:
+    name: gatekeeper-admin
   enablePubsub: false
   connection: audit-connection
   channel: audit-channel
@@ -225,6 +240,7 @@ audit:
   livenessTimeout: 1
   priorityClassName: system-cluster-critical
   disableCertRotation: false
+  podLabels: {}
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -271,6 +287,9 @@ disabledBuiltins: ["{http.send}"]
 psp:
   enabled: false
 upgradeCRDs:
+  serviceAccount:
+    create: true
+    name: gatekeeper-admin-upgrade-crds
   enabled: true
   extraRules: []
   priorityClassName: ""
@@ -279,3 +298,6 @@ rbac:
 externalCertInjection:
   enabled: false
   secretName: gatekeeper-webhook-server-cert
+serviceAccount:
+  gatekeeperAdmin:
+    create: true

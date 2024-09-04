@@ -15,6 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,7 +32,7 @@ func TestFrameworkInjection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = constraintclient.NewClient(constraintclient.Targets(target), constraintclient.Driver(driver))
+	_, err = constraintclient.NewClient(constraintclient.Targets(target), constraintclient.Driver(driver), constraintclient.EnforcementPoints(util.AuditEnforcementPoint))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}

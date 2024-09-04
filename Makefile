@@ -13,17 +13,19 @@ ENABLE_PUBSUB ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
+GENERATE_VAP ?= false
+GENERATE_VAPBINDING ?= false
 
-VERSION := v3.17.0-beta.0
+VERSION := v3.18.0-beta.0
 
 KIND_VERSION ?= 0.17.0
+KIND_CLUSTER_FILE ?= test/bats/tests/kindcluster.yml
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.28.0
+KUBERNETES_VERSION ?= 1.30.0
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.8.2
 ORAS_VERSION ?= 0.16.0
 BATS_TESTS_FILE ?= test/bats/test.bats
-KIND_CLUSTER_FILE ?= test/bats/tests/kindcluster.yml
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
 YQ_VERSION ?= 4.30.6
@@ -71,8 +73,9 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --disable-opa-builtin=http.send\
 \n        - --log-mutations\
 \n        - --mutation-annotations\
-\n        - --vap-enforcement=GATEKEEPER_DEFAULT\
-\n        - --experimental-enable-k8s-native-validation\
+\n        - --default-create-vap-for-templates=${GENERATE_VAP}\
+\n        - --default-create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
+\n        - --log-level=${LOG_LEVEL}\
 \n---\
 \napiVersion: apps/v1\
 \nkind: Deployment\
@@ -93,8 +96,9 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=mutation-status\
 \n        - --audit-chunk-size=500\
 \n        - --logtostderr\
-\n        - --vap-enforcement=GATEKEEPER_DEFAULT\
-\n        - --experimental-enable-k8s-native-validation\
+\n        - --default-create-vap-for-templates=${GENERATE_VAP}\
+\n        - --default-create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
+\n        - --log-level=${LOG_LEVEL}\
 \n"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
@@ -168,8 +172,8 @@ e2e-bootstrap: e2e-dependencies
 	if [ $$(${GITHUB_WORKSPACE}/bin/kind get clusters) ]; then ${GITHUB_WORKSPACE}/bin/kind delete cluster; fi
 
 	# Create a new kind cluster
-	# TODO(ritazh): remove KIND_CLUSTER_FILE when vap feature is GA
-	if [ $$(echo $(KUBERNETES_VERSION) | cut -d'.' -f2) -lt 28 ]; then ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m; else ${GITHUB_WORKSPACE}/bin/kind create cluster --config $(KIND_CLUSTER_FILE) --image $(KIND_NODE_VERSION) --wait 5m; fi
+	# Only enabling VAP beta apis for 1.28, 1.29
+	if [ $$(echo $(KUBERNETES_VERSION) | cut -d'.' -f2) -lt 28 ] || [ $$(echo $(KUBERNETES_VERSION) | cut -d'.' -f2) -gt 29 ]; then ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m; else ${GITHUB_WORKSPACE}/bin/kind create cluster --config $(KIND_CLUSTER_FILE) --image $(KIND_NODE_VERSION) --wait 5m; fi
 
 e2e-build-load-image: docker-buildx e2e-build-load-externaldata-image
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
@@ -237,9 +241,9 @@ else
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set logLevel=${LOG_LEVEL} \
-		--set enableK8sNativeValidation=true \
-		--set vapEnforcement=GATEKEEPER_DEFAULT \
-		--set mutationAnnotations=true
+		--set defaultCreateVAPForTemplates=${GENERATE_VAP} \
+		--set defaultCreateVAPBindingForConstraints=${GENERATE_VAPBINDING} \
+		--set mutationAnnotations=true;
 endif
 
 e2e-helm-upgrade-init: e2e-helm-install
@@ -278,8 +282,8 @@ e2e-helm-upgrade:
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set logLevel=${LOG_LEVEL} \
-		--set enableK8sNativeValidation=true \
-		--set vapEnforcement=GATEKEEPER_DEFAULT \
+		--set defaultCreateVAPForTemplates=${GENERATE_VAP} \
+		--set defaultCreateVAPBindingForConstraints=${GENERATE_VAPBINDING} \
 		--set mutationAnnotations=true;\
 
 e2e-subscriber-build-load-image:

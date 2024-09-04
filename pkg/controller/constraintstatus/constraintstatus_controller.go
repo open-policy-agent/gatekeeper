@@ -83,8 +83,8 @@ type PackerMap func(obj client.Object) []reconcile.Request
 
 // PodStatusToConstraintMapper correlates a ConstraintPodStatus with its corresponding constraint
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToConstraintMapper(selfOnly bool, packerMap handler.MapFunc) handler.MapFunc {
-	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+func PodStatusToConstraintMapper(selfOnly bool, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.ConstraintPodStatus] {
+	return func(ctx context.Context, obj *v1beta1.ConstraintPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConstraintNameLabel]
 		if !ok {
@@ -123,21 +123,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 	// Watch for changes to ConstraintStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &v1beta1.ConstraintPodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(PodStatusToConstraintMapper(false, util.EventPackerMapFunc())),
-	)
+		source.Kind(mgr.GetCache(), &v1beta1.ConstraintPodStatus{}, handler.TypedEnqueueRequestsFromMapFunc(PodStatusToConstraintMapper(false, util.EventPackerMapFunc()))))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to the provided constraint
 	return c.Watch(
-		&source.Channel{
-			Source:         events,
-			DestBufferSize: 1024,
-		},
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
-	)
+		source.Channel(events, handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc())))
 }
 
 var _ reconcile.Reconciler = &ReconcileConstraintStatus{}

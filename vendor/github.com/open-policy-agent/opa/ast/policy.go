@@ -100,7 +100,9 @@ var Wildcard = &Term{Value: Var("_")}
 var WildcardPrefix = "$"
 
 // Keywords contains strings that map to language keywords.
-var Keywords = [...]string{
+var Keywords = KeywordsV0
+
+var KeywordsV0 = [...]string{
 	"not",
 	"package",
 	"import",
@@ -114,6 +116,24 @@ var Keywords = [...]string{
 	"some",
 }
 
+var KeywordsV1 = [...]string{
+	"not",
+	"package",
+	"import",
+	"as",
+	"default",
+	"else",
+	"with",
+	"null",
+	"true",
+	"false",
+	"some",
+	"if",
+	"contains",
+	"in",
+	"every",
+}
+
 // IsKeyword returns true if s is a language keyword.
 func IsKeyword(s string) bool {
 	for _, x := range Keywords {
@@ -121,6 +141,26 @@ func IsKeyword(s string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+// IsKeywordInRegoVersion returns true if s is a language keyword.
+func IsKeywordInRegoVersion(s string, regoVersion RegoVersion) bool {
+	switch regoVersion {
+	case RegoV0:
+		for _, x := range KeywordsV0 {
+			if x == s {
+				return true
+			}
+		}
+	case RegoV1, RegoV0CompatV1:
+		for _, x := range KeywordsV1 {
+			if x == s {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
@@ -185,11 +225,12 @@ type (
 	// Rule represents a rule as defined in the language. Rules define the
 	// content of documents that represent policy decisions.
 	Rule struct {
-		Default  bool      `json:"default,omitempty"`
-		Head     *Head     `json:"head"`
-		Body     Body      `json:"body"`
-		Else     *Rule     `json:"else,omitempty"`
-		Location *Location `json:"location,omitempty"`
+		Default     bool           `json:"default,omitempty"`
+		Head        *Head          `json:"head"`
+		Body        Body           `json:"body"`
+		Else        *Rule          `json:"else,omitempty"`
+		Location    *Location      `json:"location,omitempty"`
+		Annotations []*Annotations `json:"annotations,omitempty"`
 
 		// Module is a pointer to the module containing this rule. If the rule
 		// was NOT created while parsing/constructing a module, this should be
@@ -232,7 +273,9 @@ type (
 		Negated   bool        `json:"negated,omitempty"`
 		Location  *Location   `json:"location,omitempty"`
 
-		jsonOptions astJSON.Options
+		jsonOptions   astJSON.Options
+		generatedFrom *Expr
+		generates     []*Expr
 	}
 
 	// SomeDecl represents a variable declaration statement. The symbols are variables.
@@ -309,8 +352,8 @@ func (mod *Module) Copy() *Module {
 	nodes[mod.Package] = cpy.Package
 
 	cpy.Annotations = make([]*Annotations, len(mod.Annotations))
-	for i := range mod.Annotations {
-		cpy.Annotations[i] = mod.Annotations[i].Copy(nodes[mod.Annotations[i].node])
+	for i, a := range mod.Annotations {
+		cpy.Annotations[i] = a.Copy(nodes[a.node])
 	}
 
 	cpy.Comments = make([]*Comment, len(mod.Comments))
@@ -663,6 +706,11 @@ func (rule *Rule) Compare(other *Rule) int {
 	if cmp := rule.Body.Compare(other.Body); cmp != 0 {
 		return cmp
 	}
+
+	if cmp := annotationsCompare(rule.Annotations, other.Annotations); cmp != 0 {
+		return cmp
+	}
+
 	return rule.Else.Compare(other.Else)
 }
 
@@ -671,6 +719,12 @@ func (rule *Rule) Copy() *Rule {
 	cpy := *rule
 	cpy.Head = rule.Head.Copy()
 	cpy.Body = rule.Body.Copy()
+
+	cpy.Annotations = make([]*Annotations, len(rule.Annotations))
+	for i, a := range rule.Annotations {
+		cpy.Annotations[i] = a.Copy(&cpy)
+	}
+
 	if cpy.Else != nil {
 		cpy.Else = rule.Else.Copy()
 	}
@@ -761,6 +815,10 @@ func (rule *Rule) MarshalJSON() ([]byte, error) {
 		if rule.Location != nil {
 			data["location"] = rule.Location
 		}
+	}
+
+	if len(rule.Annotations) != 0 {
+		data["annotations"] = rule.Annotations
 	}
 
 	return json.Marshal(data)
@@ -1575,6 +1633,46 @@ func (expr *Expr) Vars(params VarVisitorParams) VarSet {
 // The builtin operator must be the first term.
 func NewBuiltinExpr(terms ...*Term) *Expr {
 	return &Expr{Terms: terms}
+}
+
+func (expr *Expr) CogeneratedExprs() []*Expr {
+	visited := map[*Expr]struct{}{}
+	visitCogeneratedExprs(expr, func(e *Expr) bool {
+		if expr.Equal(e) {
+			return true
+		}
+		if _, ok := visited[e]; ok {
+			return true
+		}
+		visited[e] = struct{}{}
+		return false
+	})
+
+	result := make([]*Expr, 0, len(visited))
+	for e := range visited {
+		result = append(result, e)
+	}
+	return result
+}
+
+func (expr *Expr) BaseCogeneratedExpr() *Expr {
+	if expr.generatedFrom == nil {
+		return expr
+	}
+	return expr.generatedFrom.BaseCogeneratedExpr()
+}
+
+func visitCogeneratedExprs(expr *Expr, f func(*Expr) bool) {
+	if parent := expr.generatedFrom; parent != nil {
+		if stop := f(parent); !stop {
+			visitCogeneratedExprs(parent, f)
+		}
+	}
+	for _, child := range expr.generates {
+		if stop := f(child); !stop {
+			visitCogeneratedExprs(child, f)
+		}
+	}
 }
 
 func (d *SomeDecl) String() string {

@@ -23,6 +23,10 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_DNS_POLICY": `{{ .Values.audit.dnsPolicy }}`,
 
+	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SERVICE_ACCOUNT_NAME": `{{ .Values.controllerManager.serviceAccount.name }}`,
+
+	"HELMSUBST_DEPLOYMENT_AUDIT_SERVICE_ACCOUNT_NAME": `{{ .Values.audit.serviceAccount.name }}`,
+
 	"HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT": `{{ .Values.audit.healthPort }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT": `{{ .Values.audit.metricsPort }}`,
@@ -56,6 +60,11 @@ var replacements = map[string]string{
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_AFFINITY: ""`: `{{- toYaml .Values.controllerManager.affinity | nindent 8 }}`,
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_TYPE": `{{ .Values.controllerManager.strategyType }}`,
+
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_ROLLINGUPDATE: ""`: `{{- if .Values.controllerManager.strategyRollingUpdate }}
+    rollingUpdate:
+    {{- toYaml .Values.controllerManager.strategyRollingUpdate | nindent 6 }}
+    {{- end }}`,
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""`: `{{- if .Values.enableRuntimeDefaultSeccompProfile }}
           seccompProfile:
@@ -135,6 +144,21 @@ var replacements = map[string]string{
     - UPDATE
     resources:
     - '*'
+    - pods/ephemeralcontainers
+    - pods/exec
+    - pods/log
+    - pods/eviction
+    - pods/portforward
+    - pods/proxy
+    - pods/attach
+    - pods/binding
+    - deployments/scale
+    - replicasets/scale
+    - statefulsets/scale
+    - replicationcontrollers/scale
+    - services/proxy
+    - nodes/proxy
+    - services/status
   {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.mutatingWebhookURL }}
@@ -196,6 +220,9 @@ var replacements = map[string]string{
     - UPDATE
     {{- if .Values.enableDeleteOperations }}
     - DELETE
+    {{- end }}
+    {{- if .Values.enableConnectOperations }}
+    - CONNECT
     {{- end }}
     resources:
     - '*'
@@ -281,5 +308,15 @@ var replacements = map[string]string{
 	"- HELMSUBST_DEPLOYMENT_AUDIT_LOGFILE": `
         {{- if .Values.audit.logFile}}
         - --log-file={{ .Values.audit.logFile }}
+        {{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES": `
+        {{- if hasKey .Values "defaultCreateVAPForTemplates"}}
+        - --default-create-vap-for-templates={{ .Values.defaultCreateVAPForTemplates }}
+        {{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS": `
+        {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
+        - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}`,
 }

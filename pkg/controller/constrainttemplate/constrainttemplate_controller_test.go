@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
@@ -40,6 +41,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"golang.org/x/net/context"
 	admissionv1 "k8s.io/api/admission/v1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
@@ -52,13 +54,15 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 const (
-	DenyAll = "DenyAll"
-	denyall = "denyall"
+	DenyAll        = "DenyAll"
+	denyall        = "denyall"
+	vapBindingName = "gatekeeper-denyallconstraint"
 )
 
 func makeReconcileConstraintTemplate(suffix string) *v1beta1.ConstraintTemplate {
@@ -94,7 +98,47 @@ violation[{"msg": "denied!"}] {
 	}
 }
 
-func makeReconcileConstraintTemplateForVap(suffix string, labels map[string]string) *v1beta1.ConstraintTemplate {
+func makeReconcileConstraintTemplateWithRegoEngine(suffix string) *v1beta1.ConstraintTemplate {
+	return &v1beta1.ConstraintTemplate{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConstraintTemplate",
+			APIVersion: templatesv1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: denyall + strings.ToLower(suffix),
+		},
+		Spec: v1beta1.ConstraintTemplateSpec{
+			CRD: v1beta1.CRD{
+				Spec: v1beta1.CRDSpec{
+					Names: v1beta1.Names{
+						Kind: DenyAll + suffix,
+					},
+				},
+			},
+			Targets: []v1beta1.Target{
+				{
+					Target: target.Name,
+					Code: []v1beta1.Code{
+						{
+							Engine: "Rego",
+							Source: &templates.Anything{
+								Value: `
+package foo
+
+violation[{"msg": "denied!"}] {
+	1 == 1
+}
+`,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func makeReconcileConstraintTemplateForVap(suffix string, generateVAP *bool) *v1beta1.ConstraintTemplate {
 	source := &celSchema.Source{
 		// FailurePolicy: ptr.To[string]("Fail"),
 		// TODO(ritazh): enable fail when VAP reduces 30s discovery of CRDs
@@ -118,6 +162,7 @@ func makeReconcileConstraintTemplateForVap(suffix string, labels map[string]stri
 				MessageExpression: `"some CEL string"`,
 			},
 		},
+		GenerateVAP: generateVAP,
 	}
 	return &v1beta1.ConstraintTemplate{
 		TypeMeta: metav1.TypeMeta{
@@ -125,8 +170,7 @@ func makeReconcileConstraintTemplateForVap(suffix string, labels map[string]stri
 			APIVersion: templatesv1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   denyall + strings.ToLower(suffix),
-			Labels: labels,
+			Name: denyall + strings.ToLower(suffix),
 		},
 		Spec: v1beta1.ConstraintTemplateSpec{
 			CRD: v1beta1.CRD{
@@ -194,7 +238,7 @@ func TestReconcile(t *testing.T) {
 		t.Fatalf("unable to set up K8s native driver: %v", err)
 	}
 
-	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.Driver(k8sDriver))
+	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.Driver(k8sDriver), constraintclient.EnforcementPoints(util.AuditEnforcementPoint))
 	if err != nil {
 		t.Fatalf("unable to set up constraint framework client: %s", err)
 	}
@@ -226,6 +270,9 @@ func TestReconcile(t *testing.T) {
 
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
+
+	constraint.VapAPIEnabled = ptr.To[bool](true)
+	constraint.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
 
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
@@ -259,14 +306,11 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("Vap should be created", func(t *testing.T) {
-		suffix := "VapShouldBeCreated"
+	t.Run("Vap should be created with v1beta1", func(t *testing.T) {
+		suffix := "VapShouldBeCreatedV1Beta1"
 
-		logger.Info("Running test: Vap should be created")
-		labels := map[string]string{
-			constraint.VapGenerationLabel: constraint.Yes,
-		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, labels)
+		logger.Info("Running test: Vap should be created with v1beta1")
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -290,10 +334,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldNotBeCreated"
 
 		logger.Info("Running test: Vap should not be created")
-		labels := map[string]string{
-			constraint.VapGenerationLabel: constraint.No,
-		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, labels)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -316,12 +357,11 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("Vap should not be created without label", func(t *testing.T) {
-		suffix := "VapShouldNotBeCreatedWithoutLabel"
+	t.Run("Vap should not be created for rego only template", func(t *testing.T) {
+		suffix := "VapShouldNotBeCreatedForRegoOnlyTemplate"
 
-		logger.Info("Running test: Vap should not be created without label")
-		labels := map[string]string{}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, labels)
+		logger.Info("Running test: Vap should not be created")
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -343,15 +383,66 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	t.Run("VapBinding should be created", func(t *testing.T) {
-		suffix := "VapBindingShouldBeCreated"
 
-		logger.Info("Running test: VapBinding should be created")
-		labels := map[string]string{
-			constraint.VapGenerationLabel: constraint.Yes,
+	t.Run("Vap should not be created for only rego engine", func(t *testing.T) {
+		suffix := "VapShouldNotBeCreatedForOnlyRegoEngine"
+
+		logger.Info("Running test: Vap should not be created")
+		constraintTemplate := makeReconcileConstraintTemplateWithRegoEngine(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vap resource exists now
+			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return err
+				}
+				return nil
+			}
+			return fmt.Errorf("should result in error, vap not found")
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, labels)
-		cstr := newDenyAllCstrWithLabel(suffix, labels)
+	})
+
+	t.Run("Vap should not be created without generateVAP", func(t *testing.T) {
+		suffix := "VapShouldNotBeCreatedWithoutGenerateVAP"
+
+		logger.Info("Running test: Vap should not be created without generateVAP")
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, nil)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vap resource exists now
+			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return err
+				}
+				return nil
+			}
+			return fmt.Errorf("should result in error, vap not found")
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Vap should be created without generateVAP field", func(t *testing.T) {
+		suffix := "VapShouldBeCreatedWithoutGenerateVAP"
+		logger.Info("Running test: Vap should be created without generateVAP field")
+		constraint.DefaultGenerateVAP = ptr.To[bool](true)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -364,33 +455,249 @@ func TestReconcile(t *testing.T) {
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				return err
 			}
-			return c.Create(ctx, cstr)
+			return nil
 		})
 		if err != nil {
-			logger.Error(err, "get vap and create cstr")
-			t.Fatal(err)
-		}
-		// check if vapbinding resource exists now
-		vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-		vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-		if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
-			logger.Error(err, "get vapBinding")
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("VapBinding should not be created", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreated"
-
 		logger.Info("Running test: VapBinding should not be created")
-		labels := map[string]string{
-			constraint.VapGenerationLabel: constraint.Yes,
+		constraint.DefaultGenerateVAPB = ptr.To[bool](false)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
 		}
-		constraintLabels := map[string]string{
-			constraint.VapGenerationLabel: constraint.No,
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vapbinding resource exists now
+			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return err
+				}
+				return nil
+			}
+			return fmt.Errorf("should result in error, vapbinding not found")
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, labels)
-		cstr := newDenyAllCstrWithLabel(suffix, constraintLabels)
+	})
+
+	t.Run("VapBinding should not be created with missing CEL", func(t *testing.T) {
+		suffix := "VapBindingShouldNotBeCreatedMissingCEL"
+		logger.Info("Running test: VapBinding should not be created with missing CEL")
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vapbinding resource exists now
+			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return err
+				}
+				return nil
+			}
+			return fmt.Errorf("should result in error, vapbinding not found")
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Error should be present on constraint when VAP generation is off and VAPB generation is on for CEL templates", func(t *testing.T) {
+		suffix := "ErrorShouldBePresentOnConstraint"
+		logger.Info("Running test: Error should be present on constraint when VAP generation is off and VAPB generation is on")
+		constraint.DefaultGenerateVAP = ptr.To[bool](false)
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, nil)
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+
+		err := isConstraintStatuErrorAsExpected(ctx, c, suffix, true, "Conditions are not satisfied")
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Error should not be present on constraint when VAP generation if off and VAPB generation is on for templates without CEL", func(t *testing.T) {
+		suffix := "ErrorShouldNotBePresentOnConstraint"
+		logger.Info("Running test: Error should not be present on constraint when VAP generation is off and VAPB generation is on for templates wihout CEL")
+		constraint.DefaultGenerateVAP = ptr.To[bool](false)
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+		err := isConstraintStatuErrorAsExpected(ctx, c, suffix, false, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("VapBinding should not be created without generateVap intent in CT", func(t *testing.T) {
+		suffix := "VapBindingShouldNotBeCreatedWithoutGenerateVapIntent"
+		logger.Info("Running test: VapBinding should not be created without generateVap intent in CT")
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return err
+				}
+				return nil
+			}
+			return fmt.Errorf("should result in error, vapbinding not found")
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("VapBinding should be created with VAP enforcement Point", func(t *testing.T) {
+		suffix := "VapBindingShouldBeCreatedWithVAPEnforcementPoint"
+		logger.Info("Running test: VapBinding should be created with VAP enforcement point")
+		constraint.DefaultGenerateVAPB = ptr.To[bool](false)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vapbinding resource exists now
+			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("VapBinding should not be created without VAP enforcement Point", func(t *testing.T) {
+		suffix := "VapBShouldNotBeCreatedWithoutVAPEP"
+		logger.Info("Running test: VapBinding should not be created without VAP enforcement point")
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.AuditEnforcementPoint)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vapbinding resource exists now
+			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return err
+				}
+				return nil
+			}
+			return fmt.Errorf("should result in error, vapbinding not found")
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Vap should be created with v1", func(t *testing.T) {
+		suffix := "VapShouldBeCreatedV1"
+
+		logger.Info("Running test: Vap should be created with v1")
+		constraint.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -398,26 +705,49 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// check if vap resource exists now
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				return err
 			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("VapBinding should be created with v1", func(t *testing.T) {
+		suffix := "VapBindingShouldBeCreatedV1"
+		logger.Info("Running test: VapBinding should be created with v1")
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		constraint.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
 			return c.Create(ctx, cstr)
 		})
 		if err != nil {
-			logger.Error(err, "get vap and create cstr")
+			logger.Error(err, "create cstr")
 			t.Fatal(err)
 		}
-		// check if vapbinding resource exists now
-		vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-		vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-		if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
-			if !apierrors.IsNotFound(err) {
-				t.Fatal(err)
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			// check if vapbinding resource exists now
+			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+				return err
 			}
-		} else {
-			t.Fatal("should result in error, vapbinding not found")
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 	})
 
@@ -461,7 +791,7 @@ func TestReconcile(t *testing.T) {
 			Name:      "FooNamespace",
 			Object:    runtime.RawExtension{Object: ns},
 		}
-		resp, err := cfClient.Review(ctx, req)
+		resp, err := cfClient.Review(ctx, req, reviews.EnforcementPoint(util.AuditEnforcementPoint))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -471,6 +801,192 @@ func TestReconcile(t *testing.T) {
 			t.Log(resp.TraceDump())
 			t.Log(cfClient.Dump(ctx))
 			t.Fatalf("want 1 result, got %v", gotResults)
+		}
+	})
+
+	t.Run("Constraint with scoped enforcement actions is marked as enforced", func(t *testing.T) {
+		suffix := "ScopedMarkedEnforced"
+
+		logger.Info("Running test: Constraint with scoped enforcement actions is marked as enforced")
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.AuditEnforcementPoint)
+
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = constraintEnforced(ctx, c, suffix)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testns",
+			},
+		}
+		req := admissionv1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Namespace",
+			},
+			Operation: "Create",
+			Name:      "FooNamespace",
+			Object:    runtime.RawExtension{Object: ns},
+		}
+		resp, err := cfClient.Review(ctx, req, reviews.EnforcementPoint(util.AuditEnforcementPoint))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gotResults := resp.Results()
+		if len(gotResults) != 1 {
+			t.Log(resp.TraceDump())
+			t.Log(cfClient.Dump(ctx))
+			t.Fatalf("want 1 result, got %v", gotResults)
+		}
+	})
+
+	t.Run("Constraint with different ep than client and review should not be part of the review", func(t *testing.T) {
+		suffix := "ShouldNotBePartOfReview"
+
+		logger.Info("Running test: Constraint with different ep than client and review should not be part of the review")
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.WebhookEnforcementPoint)
+
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = constraintEnforced(ctx, c, suffix)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testns",
+			},
+		}
+		req := admissionv1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Namespace",
+			},
+			Operation: "Create",
+			Name:      "FooNamespace",
+			Object:    runtime.RawExtension{Object: ns},
+		}
+		resp, err := cfClient.Review(ctx, req, reviews.EnforcementPoint(util.AuditEnforcementPoint))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gotResults := resp.Results()
+		if len(gotResults) >= 1 {
+			t.Log(resp.TraceDump())
+			t.Log(cfClient.Dump(ctx))
+			t.Fatalf("want 0 result, got %v", gotResults)
+		}
+	})
+
+	t.Run("Revew request initiated from an enforcement point not supported by client should result in error", func(t *testing.T) {
+		suffix := "ReviewResultsInError"
+
+		logger.Info("Running test: Review request initiated from an enforcement point not supported by client should result in error")
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.WebhookEnforcementPoint)
+
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testns",
+			},
+		}
+		req := admissionv1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Namespace",
+			},
+			Operation: "Create",
+			Name:      "FooNamespace",
+			Object:    runtime.RawExtension{Object: ns},
+		}
+		_, err := cfClient.Review(ctx, req, reviews.EnforcementPoint(util.WebhookEnforcementPoint))
+		if err == nil {
+			t.Fatal("want error enforcement point is not supported by client, got nil")
+		}
+	})
+
+	t.Run("Constraint With invalid enforcement point should get error in status", func(t *testing.T) {
+		suffix := "InvalidEnforcementPoint"
+
+		logger.Info("Running test: Constraint With invalid enforcement point should get error in status")
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstrWithScopedEA(suffix, "invalid")
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
+			return true
+		}, func() error {
+			err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
+			if err != nil {
+				return err
+			}
+			status, err := getCByPodStatus(cstr)
+			if err != nil {
+				return err
+			}
+
+			errorReported := false
+			for _, e := range status.Errors {
+				if strings.Contains(e.Message, "unrecognized enforcement points") {
+					errorReported = true
+					break
+				}
+			}
+			if !errorReported {
+				return fmt.Errorf("want error in constraint status, got %+v", status)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 	})
 
@@ -655,7 +1171,7 @@ func TestReconcile(t *testing.T) {
 			Name:      "FooNamespace",
 			Object:    runtime.RawExtension{Object: ns},
 		}
-		resp, err := cfClient.Review(ctx, req)
+		resp, err := cfClient.Review(ctx, req, reviews.EnforcementPoint(util.AuditEnforcementPoint))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -676,7 +1192,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-			resp, err := cfClient.Review(ctx, req)
+			resp, err := cfClient.Review(ctx, req, reviews.EnforcementPoint(util.AuditEnforcementPoint))
 			if err != nil {
 				return err
 			}
@@ -778,7 +1294,7 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unable to set up Driver: %v", err)
 	}
 
-	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
+	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.EnforcementPoints(util.AuditEnforcementPoint))
 	if err != nil {
 		t.Fatalf("unable to set up constraint framework client: %s", err)
 	}
@@ -865,8 +1381,38 @@ func constraintEnforced(ctx context.Context, c client.Client, suffix string) err
 		}
 		if !status.Enforced {
 			obj, _ := json.MarshalIndent(cstr.Object, "", "  ")
-			// return errors.New("constraint not enforced)
 			return fmt.Errorf("constraint not enforced: \n%s", obj)
+		}
+		return nil
+	})
+}
+
+func isConstraintStatuErrorAsExpected(ctx context.Context, c client.Client, suffix string, wantErr bool, errMsg string) error {
+	return retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		cstr := newDenyAllCstr(suffix)
+		err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
+		if err != nil {
+			return err
+		}
+		status, err := getCByPodStatus(cstr)
+		if err != nil {
+			return err
+		}
+
+		switch {
+		case wantErr && len(status.Errors) == 0:
+			return fmt.Errorf("expected error not found in status")
+		case !wantErr && len(status.Errors) > 0:
+			return fmt.Errorf("unexpected error found in status")
+		case wantErr:
+			for _, e := range status.Errors {
+				if strings.Contains(e.Message, errMsg) {
+					return nil
+				}
+			}
+			return fmt.Errorf("expected error not found in status")
 		}
 		return nil
 	})
@@ -883,15 +1429,30 @@ func newDenyAllCstr(suffix string) *unstructured.Unstructured {
 	return cstr
 }
 
-func newDenyAllCstrWithLabel(suffix string, labels map[string]string) *unstructured.Unstructured {
-	cstr := &unstructured.Unstructured{}
+func newDenyAllCstrWithScopedEA(suffix string, ep ...string) *unstructured.Unstructured {
+	pts := make([]interface{}, 0, len(ep))
+	for _, e := range ep {
+		pts = append(pts, map[string]interface{}{"name": e})
+	}
+	cstr := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"enforcementPoints": pts,
+						"action":            "deny",
+					},
+				},
+			},
+		},
+	}
 	cstr.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
 		Version: "v1beta1",
 		Kind:    DenyAll + suffix,
 	})
-	cstr.SetName(denyall + strings.ToLower(suffix))
-	cstr.SetLabels(labels)
+	cstr.SetName("denyallconstraint")
 	return cstr
 }
 

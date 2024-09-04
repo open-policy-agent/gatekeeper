@@ -33,10 +33,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        KUBERNETES_VERSION: ["1.26.3", "1.27.1", "1.28.0", "1.29.0"]
+        KUBERNETES_VERSION: ["1.27.13", "1.28.9", "1.29.4", "1.30.0"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde # v2.9.1
         with:
           egress-policy: audit
 
@@ -44,7 +44,7 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Set up Go
-        uses: actions/setup-go@cdcb36043654635271a94b9a6d1392de5bb323a7 # v5.0.1
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
           go-version: "1.22"
           check-latest: true
@@ -67,7 +67,9 @@ jobs:
 
           make deploy \
             IMG=gatekeeper-e2e:latest \
-            USE_LOCAL_IMG=true
+            USE_LOCAL_IMG=true \
+            GENERATE_VAP=true \
+            GENERATE_VAPBINDING=true
 
           make test-e2e KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} ENABLE_VAP_TESTS=1
 
@@ -78,10 +80,10 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a # v4.3.6
         if: ${{ always() }}
         with:
-          name: logs
+          name: logs-${{ matrix.KUBERNETES_VERSION }}
           path: |
             logs-*.json
 
@@ -96,7 +98,7 @@ jobs:
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde # v2.9.1
         with:
           egress-policy: audit
 
@@ -110,7 +112,6 @@ jobs:
           make e2e-bootstrap
 
       - name: Run e2e
-        # TODO(ritazh): add helm chart values for vap feature before alpha release
         run: |
           make docker-buildx \
             IMG=gatekeeper-e2e:latest \
@@ -133,6 +134,8 @@ jobs:
             HELM_RELEASE=latest \
             HELM_VERSION=${{ matrix.HELM_VERSION }} \
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
+            GENERATE_VAP=true \
+            GENERATE_VAPBINDING=true \
             LOG_LEVEL=DEBUG
 
           make test-e2e \
@@ -147,10 +150,10 @@ jobs:
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l run=dummy-provider --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-dummy-provider.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a # v4.3.6
         if: ${{ always() }}
         with:
-          name: helm-logs
+          name: helm-logs-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}
           path: |
             logs-*.json
 
@@ -161,7 +164,7 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+      uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde # v2.9.1
       with:
         egress-policy: audit
 
@@ -169,7 +172,7 @@ jobs:
       uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
     - name: Set up Go
-      uses: actions/setup-go@cdcb36043654635271a94b9a6d1392de5bb323a7 # v5.0.1
+      uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
       with:
         go-version: "1.22"
         check-latest: true
@@ -204,7 +207,7 @@ jobs:
         kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-generatorexpansion-audit.json
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+      uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a # v4.3.6
       if: ${{ always() }}
       with:
         name: generatorexpansion-logs

@@ -78,16 +78,23 @@ teardown_file() {
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicy gatekeeper-k8srequiredlabelsvap"
 
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml"
+
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml"
     
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
     
     run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+    assert_match 'Warning' "${output}"
     assert_match 'denied' "${output}"
     assert_failure
     kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/good_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+    kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml
+    kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
   fi
@@ -153,6 +160,9 @@ teardown_file() {
 
   kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper_audit.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper_scoped_audit.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper_scoped.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper_scoped_webhook.yaml"
 }
 
 @test "no ignore label unless namespace is exempt test" {
@@ -192,6 +202,15 @@ teardown_file() {
   kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
 
   kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
+
+  # deploying a violation to get rejected with scoped enforcement actions
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_cm_scoped.yaml
+
+  assert_match 'Warning' "${output}"
+  assert_match 'denied the request' "${output}"
+  assert_failure
+
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_cm_scoped.yaml
 }
 
 @test "container limits test" {
@@ -251,6 +270,116 @@ __required_labels_audit_test() {
   if [[ "${audit_entries}" -ne "${expected}" ]]; then
     echo "Audit entry count is ${audit_entries}, wanted ${expected}"
     return 3
+  fi
+
+  local cstr="$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh cm-must-have-gk-scoped -ojson)"
+  if [[ $? -ne 0 ]]; then
+    echo "error retrieving constraint"
+    return 1
+  fi
+
+  echo "${cstr}"
+
+  local total_violations=$(echo "${cstr}" | jq '.status.totalViolations')
+  if [[ "${total_violations}" -ne "${expected}" ]]; then
+    echo "totalViolations is ${total_violations}, wanted ${expected}"
+    return 2
+  fi
+
+  local audit_entries=$(echo "${cstr}" | jq '.status.violations | length')
+  if [[ "${audit_entries}" -ne "${expected}" ]]; then
+    echo "Audit entry count is ${audit_entries}, wanted ${expected}"
+    return 3
+  fi
+
+  local enforcementActions=$(echo "${cstr}" | jq -r '.status.violations[].enforcementAction')
+  local match=true
+
+  for enforcementAction in $enforcementActions; do
+    if [[ "${enforcementAction}" != "scoped" ]]; then
+      echo "Mismatch found: Enforcement action is ${enforcementAction}, expected scoped"
+      match=false
+    fi
+  done
+
+  if [[ "${match}" == "false" ]]; then
+    return 3
+  fi
+
+  local scopedEnforcementActions=$(echo "${cstr}" | jq -r '.status.violations[].enforcementActions[]')
+  local match=true
+
+  for scopedEnforcementAction in $scopedEnforcementActions; do
+    if [[ "${scopedEnforcementAction}" != "deny" ]]; then
+      echo "Mismatch found: Enforcement action is ${scopedEnforcementAction}, expected deny"
+      match=false
+    fi
+  done
+
+  if [[ "${match}" == "false" ]]; then
+    return 3
+  fi
+
+  local cstr="$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh cm-must-have-gk-scoped-audit -ojson)"
+  if [[ $? -ne 0 ]]; then
+    echo "error retrieving constraint"
+    return 1
+  fi
+
+  echo "${cstr}"
+
+  local total_violations=$(echo "${cstr}" | jq '.status.totalViolations')
+  if [[ "${total_violations}" -ne "${expected}" ]]; then
+    echo "totalViolations is ${total_violations}, wanted ${expected}"
+    return 2
+  fi
+
+  local audit_entries=$(echo "${cstr}" | jq '.status.violations | length')
+  if [[ "${audit_entries}" -ne "${expected}" ]]; then
+    echo "Audit entry count is ${audit_entries}, wanted ${expected}"
+    return 3
+  fi
+
+  local enforcementActions=$(echo "${cstr}" | jq -r '.status.violations[].enforcementAction')
+  local match=true
+
+  for enforcementAction in $enforcementActions; do
+    if [[ "${enforcementAction}" != "scoped" ]]; then
+      echo "Mismatch found: Enforcement action is ${enforcementAction}, expected scoped"
+      match=false
+    fi
+  done
+
+  if [[ "${match}" == "false" ]]; then
+    return 3
+  fi
+
+  local scopedEnforcementActions=$(echo "${cstr}" | jq -r '.status.violations[].enforcementActions[]')
+  local match=true
+
+  for scopedEnforcementAction in $scopedEnforcementActions; do
+    if [[ "${scopedEnforcementAction}" != "warn" ]]; then
+      echo "Mismatch found: Enforcement action is ${scopedEnforcementAction}, expected warn"
+      match=false
+    fi
+  done
+
+  if [[ "${match}" == "false" ]]; then
+    return 3
+  fi
+
+  local cstr="$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh cm-must-have-gk-scoped-webhook -ojson)"
+  if [[ $? -ne 0 ]]; then
+    echo "error retrieving constraint"
+    return 1
+  fi
+
+  echo "${cstr}"
+
+  local total_violations=$(echo "${cstr}" | jq '.status.totalViolations')
+  if [[ "${total_violations}" -ne "0" ]]; then
+    echo "totalViolations is ${total_violations}, wanted 0"
+    return 2
   fi
 }
 

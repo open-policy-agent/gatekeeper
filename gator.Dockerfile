@@ -4,7 +4,7 @@ ARG BUILDERIMAGE="golang:1.22-bookworm"
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 ARG BASEIMAGE="gcr.io/distroless/static-debian12:nonroot"
 
-FROM --platform=$BUILDPLATFORM $BUILDERIMAGE as builder
+FROM --platform=$BUILDPLATFORM $BUILDERIMAGE AS builder
 
 ARG TARGETPLATFORM
 ARG TARGETOS
@@ -23,7 +23,7 @@ WORKDIR /go/src/github.com/open-policy-agent/gatekeeper/cmd/gator
 
 RUN go build -mod vendor -a -ldflags "${LDFLAGS}" -o /gator
 
-FROM --platform=$BUILDPLATFORM $BASEIMAGE as build
+FROM --platform=$BUILDPLATFORM $BASEIMAGE AS build
 USER 65532:65532
 COPY --from=builder --chown=65532:65532 /gator /gator
 ENTRYPOINT ["/gator"]

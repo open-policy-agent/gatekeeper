@@ -26,7 +26,7 @@ The [Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/
 
 Together with Gatekeeper and [gator CLI](gator.md), you can get admission, audit, and shift left validations for policies written in both CEL and Rego policy languages, even for clusters that do not support Validating Admission Policy feature yet. For simple policies, you may want admission requests to be handled by the K8s built-in Validating Admission Controller (only supports CEL) instead of the Gatekeeper admission webhook. 
 
-To summary, these are potential options when running Gatekeeper:
+In summary, these are potential options when running Gatekeeper:
 
 | Policy Language(s)    | Enforcement Point  |
 | ------------------ | ------------------ |
@@ -116,20 +116,28 @@ With this new engine and source added to the constraint template, now Gatekeeper
 
 ## Policy updates to generate Validating Admission Policy resources
 
-For some policies, you may want admission requests to be handled by the K8s Validating Admission Controller instead of the Gatekeeper admission webhook. By default, Gatekeeper is configured to generate K8s Validating Admission Policy resources if the `gatekeeper.sh/use-vap` label is used. In the event K8s Validating Admission Controller fails open, then Gatekeeper admission webhook can act as a backup. Default value for this feature flag is `--vap-enforcement=GATEKEEPER_DEFAULT`. 
+For some policies, you may want admission requests to be handled by the K8s Validating Admission Controller instead of the Gatekeeper admission webhook. By default, Gatekeeper is configured to generate K8s Validating Admission Policy and Validating Admission Policy Binding respectively for constraint template & constraint if the `gatekeeper.sh/use-vap: yes` label is added on the resources. Default value for this feature flag is `--vap-enforcement=GATEKEEPER_DEFAULT`.
 
-Other allowed values are:
+Allowed values are:
+
 - `NONE`: do not generate
 - `GATEKEEPER_DEFAULT`: do not generate unless label `gatekeeper.sh/use-vap: yes` is added to policy explicitly
 - `VAP_DEFAULT`: generate unless label `gatekeeper.sh/use-vap: no` is added to policy explicitly
 
 To explicitly enable Gatekeeper to generate K8s Validating Admission Policy resources at the constraint template level, add the following label to the constraint template resource:
+
 ```yaml
 labels:
   "gatekeeper.sh/use-vap": "yes"
 ```
+
 By default, constraints will inherit the same behavior as the constraint template. However this behavior can be overriden by adding the following label to the constraint resource:
+
 ```yaml
 labels:
   "gatekeeper.sh/use-vap": "no"
 ```
+
+:::tip
+In the event K8s Validating Admission Controller fails open, then Gatekeeper admission webhook can act as a backup.
+:::

@@ -46,7 +46,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
@@ -115,9 +114,8 @@ var (
 	certServiceName                      = flag.String("cert-service-name", "gatekeeper-webhook-service", "The service name used to generate the TLS cert's hostname. Defaults to gatekeeper-webhook-service")
 	enableTLSHealthcheck                 = flag.Bool("enable-tls-healthcheck", false, "enable probing webhook API with certificate stored in certDir")
 	disabledBuiltins                     = util.NewFlagSet()
-	enableK8sCel                         = flag.Bool("experimental-enable-k8s-native-validation", false, "Alpha: enable the validating admission policy driver")
+	enableK8sCel                         = flag.Bool("enable-k8s-native-validation", true, "Beta: enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
-	deferAdmissionToVAP                           = flag.Bool("defer-admission-to-vap", false, "When set to false, Gatekeeper webhook can act as a fallback in case K8s' Validating Admission Policy fails.  When set to true, Gatekeeper validating webhook will not evaluate a policy for an admission request it expects vap to enforce. May improve resource usage at the cost of race conditions detecting whether VAP enforcement is in effect. This does not impact audit results. Defaults to false.")
 )
 
 func init() {
@@ -134,7 +132,6 @@ func init() {
 
 	// +kubebuilder:scaffold:scheme
 	flag.Var(disabledBuiltins, "disable-opa-builtin", "disable opa built-in function, this flag can be declared more than once.")
-	flag.Var(&constraint.VapEnforcement, "vap-enforcement", "control VAP resource generation. Allowed values are NONE: do not generate, GATEKEEPER_DEFAULT: do not generate unless label gatekeeper.sh/use-vap: yes is added to policy explicitly, VAP_DEFAULT: generate unless label gatekeeper.sh/use-vap: no is added to policy explicitly.")
 }
 
 func main() {
@@ -414,17 +411,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 
 	if *enableK8sCel {
-		// initialize K8sValidation
-		var k8scelArgs []k8scel.Arg
-		if *deferAdmissionToVAP && constraint.VapEnforcement != constraint.VapFlagNone {
-			switch constraint.VapEnforcement {
-			case constraint.VapFlagGatekeeperDefault:
-				k8scelArgs = append(k8scelArgs, k8scel.VAPGenerationDefault(k8scel.VAPDefaultNo))
-			case constraint.VapFlagVapDefault:
-				k8scelArgs = append(k8scelArgs, k8scel.VAPGenerationDefault(k8scel.VAPDefaultYes))
-			}
-		}
-		k8sDriver, err := k8scel.New(k8scelArgs...)
+		k8sDriver, err := k8scel.New()
 		if err != nil {
 			setupLog.Error(err, "unable to set up K8s native driver")
 			return err
@@ -438,6 +425,16 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 		return err
 	}
 	cfArgs = append(cfArgs, constraintclient.Driver(driver))
+
+	eps := []string{}
+	if operations.IsAssigned(operations.Audit) {
+		eps = append(eps, util.AuditEnforcementPoint)
+	}
+	if operations.IsAssigned(operations.Webhook) {
+		eps = append(eps, util.WebhookEnforcementPoint)
+	}
+
+	cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
 
 	client, err := constraintclient.NewClient(cfArgs...)
 	if err != nil {

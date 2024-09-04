@@ -37,3 +37,43 @@ metadata:
   namespace: gatekeeper-test-playground
   labels:
     test.gatekeeper.sh/audit: "yes"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bad-cm-audit
+  namespace: gatekeeper-test-playground-scoped
+  labels:
+    test.gatekeeper.sh/audit: "yes"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bad-cm-audit-2
+  namespace: gatekeeper-test-playground-scoped
+  labels:
+    test.gatekeeper.sh/audit: "yes"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bad-cm-audit-3
+  namespace: gatekeeper-test-playground-scoped
+  labels:
+    test.gatekeeper.sh/audit: "yes"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bad-cm-audit-4
+  namespace: gatekeeper-test-playground-scoped
+  labels:
+    test.gatekeeper.sh/audit: "yes"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bad-cm-audit-5
+  namespace: gatekeeper-test-playground-scoped
+  labels:
+    test.gatekeeper.sh/audit: "yes"

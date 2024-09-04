@@ -36,7 +36,7 @@ metadata:
     helm.sh/hook-weight: "1"
 subjects:
   - kind: ServiceAccount
-    name: gatekeeper-admin-upgrade-crds
+    name: {{ .Values.upgradeCRDs.serviceAccount.name }}
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
@@ -44,6 +44,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 {{- end }}
 ---
+{{- if .Values.upgradeCRDs.serviceAccount.create }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -51,12 +52,13 @@ metadata:
     {{- include "gatekeeper.commonLabels" . | nindent 4 }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
-  name: gatekeeper-admin-upgrade-crds
+  name: {{ .Values.upgradeCRDs.serviceAccount.name }}
   namespace: '{{ .Release.Namespace }}'
   annotations:
     helm.sh/hook: pre-install,pre-upgrade
     helm.sh/hook-delete-policy: "hook-succeeded,before-hook-creation"
     helm.sh/hook-weight: "1"
+{{- end }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -82,7 +84,7 @@ spec:
         {{- include "gatekeeper.mandatoryLabels" . | nindent 8 }}
         {{- include "gatekeeper.commonLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: gatekeeper-admin-upgrade-crds
+      serviceAccountName: {{ .Values.upgradeCRDs.serviceAccount.name }}
       restartPolicy: Never
       {{- if .Values.image.pullSecrets }}
       imagePullSecrets:

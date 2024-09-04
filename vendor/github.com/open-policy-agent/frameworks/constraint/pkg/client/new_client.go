@@ -25,5 +25,10 @@ func NewClient(opts ...Opt) (*Client, error) {
 			ErrCreatingClient)
 	}
 
+	if len(c.enforcementPoints) == 0 {
+		return nil, fmt.Errorf("%w: must specify at least one enforcement point with client.EnforcementPoints",
+			ErrCreatingClient)
+	}
+
 	return c, nil
 }
