@@ -1,3 +1,4 @@
+---
 {{- if not .Values.disableAudit }}
 apiVersion: apps/v1
 kind: Deployment
@@ -35,6 +36,7 @@ spec:
         {{- end }}
       labels:
         {{- include "gatekeeper.podLabels" . | nindent 8 }}
+        {{- include "audit.podLabels" . | nindent 8 }}
         {{- include "gatekeeper.commonLabels" . | nindent 8 }}
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
@@ -87,6 +89,15 @@ spec:
         {{- end }}
         - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
+        - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+        
+        {{- if hasKey .Values "defaultCreateVAPForTemplates"}}
+        - --default-create-vap-for-templates={{ .Values.defaultCreateVAPForTemplates }}
+        {{- end }}
+        
+        {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
+        - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
+        {{- end }}
         command:
         - /manager
         env:
@@ -152,7 +163,7 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.audit.podSecurityContext | nindent 8 }}
-      serviceAccountName: gatekeeper-admin
+      serviceAccountName: {{ .Values.audit.serviceAccount.name }}
       terminationGracePeriodSeconds: 60
       tolerations:
         {{- toYaml .Values.audit.tolerations | nindent 8 }}
