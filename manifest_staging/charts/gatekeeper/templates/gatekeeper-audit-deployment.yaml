@@ -65,6 +65,7 @@ spec:
         - --audit-chunk-size={{ .Values.auditChunkSize }}
         - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
         - --emit-audit-events={{ .Values.emitAuditEvents }}
+        - --log-stats-audit={{ .Values.logStatsAudit }}
         - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
         - --operation=audit
         - --operation=status
