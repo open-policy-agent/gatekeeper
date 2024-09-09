@@ -1,12 +1,12 @@
-name: check-manifest
+name: check-helm-lint
 on:
   push:
     paths:
-      - "cmd/**"
+      - "cmd/build/helmify/static/**"
       - "manifest_staging/**"
   pull_request:
     paths:
-      - "cmd/**"
+      - "cmd/build/helmify/static/**"
       - "manifest_staging/**"
 
 permissions: read-all
