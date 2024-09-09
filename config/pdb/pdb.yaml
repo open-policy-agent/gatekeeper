@@ -3,7 +3,6 @@ kind: PodDisruptionBudget
 metadata:
   name: controller-manager
 spec:
-  minAvailable: 1
   selector:
     matchLabels:
       control-plane: controller-manager

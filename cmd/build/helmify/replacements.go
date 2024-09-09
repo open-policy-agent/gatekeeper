@@ -277,7 +277,17 @@ var replacements = map[string]string{
 
 	"HELMSUBST_MUTATING_WEBHOOK_MATCH_CONDITIONS": `{{ toYaml .Values.mutatingWebhookMatchConditions | nindent 4 }}`,
 
-	"HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE": `{{ .Values.pdb.controllerManager.minAvailable }}`,
+	"HELMSUBST_PDB_CONTROLLER_MANAGER": `{{- if and .Values.maxAvailable .Values.maxUnavailable }}
+    {{ fail "Only one of 'maxAvailable' or 'maxUnavailable' can be set, but not both" }}
+    {{- else if not (or .Values.maxAvailable .Values.maxUnavailable) }}
+    {{ fail "One of 'maxAvailable' or 'maxUnavailable' must be set" }}
+    {{- else }}
+    {{ if .Values.maxAvailable }}
+    maxAvailable: {{ .Values.maxAvailable }}
+    {{ else if .Values.maxUnavailable }}
+    maxUnavailable: {{ .Values.maxUnavailable }}
+    {{ end }}
+  {{- end }}`,
 
 	`HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""`: `{{- if .Values.image.release }}
         image: {{ .Values.image.repository }}:{{ .Values.image.release }}
