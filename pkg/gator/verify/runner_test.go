@@ -10,8 +10,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 )
@@ -1155,7 +1157,7 @@ func TestRunner_Run(t *testing.T) {
 							{Name: "invalid admission review object", Error: gator.ErrInvalidK8sAdmissionReview},
 							{Name: "missing admission request object", Error: gator.ErrMissingK8sAdmissionRequest},
 							{Name: "no objects to review", Error: gator.ErrNoObjectForReview},
-							{Name: "no oldObject on delete", Error: gator.ErrInvalidK8sAdmissionReview},
+							{Name: "no oldObject on delete", Error: &clienterrors.ErrorMap{target.Name: constraintclient.ErrReview}},
 						},
 					},
 					{

@@ -56,7 +56,7 @@ spec:
             - "--operation=webhook"
             - "--operation=mutation-webhook"
             - "--disable-opa-builtin={http.send}"
-          image: openpolicyagent/gatekeeper:v3.17.0-beta.0
+          image: openpolicyagent/gatekeeper:v3.18.0-beta.0
           imagePullPolicy: Always
           name: manager
           ports:
@@ -150,7 +150,7 @@ spec:
             - --disable-cert-rotation
           command:
             - /manager
-          image: openpolicyagent/gatekeeper:v3.17.0-beta.0
+          image: openpolicyagent/gatekeeper:v3.18.0-beta.0
           env:
             # used by Gatekeeper
             - name: POD_NAMESPACE

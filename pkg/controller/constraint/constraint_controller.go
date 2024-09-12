@@ -330,15 +330,18 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 						return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not report error when converting ConstraintTemplate to unversioned")
 					}
 					hasVAP, err := ShouldGenerateVAP(unversionedCT)
-					if err != nil {
+					switch {
+					case errors.Is(err, celSchema.ErrCodeNotDefined):
+						generateVAPB = false
+					case err != nil:
 						log.Error(err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy", "constraint", instance.GetName(), "constraint_template", ct.GetName())
 						_ = r.reportErrorOnConstraintStatus(ctx, status, err, err.Error(), "could not report error when determining if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy")
 						generateVAPB = false
-					}
-					if !hasVAP {
+					case !hasVAP:
 						log.Error(ErrVAPConditionsNotSatisfied, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName(), "constraint_template", ct.GetName())
 						_ = r.reportErrorOnConstraintStatus(ctx, status, ErrVAPConditionsNotSatisfied, fmt.Sprintf("%s, cannot generate ValidatingAdmissionPolicyBinding", ErrVAPConditionsNotSatisfied.Error()), "could not report error when conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
 						generateVAPB = false
+					default:
 					}
 				}
 			}
@@ -508,9 +511,6 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 
 func ShouldGenerateVAP(ct *templates.ConstraintTemplate) (bool, error) {
 	source, err := celSchema.GetSourceFromTemplate(ct)
-	if errors.Is(err, celSchema.ErrCodeNotDefined) {
-		return false, nil
-	}
 	if err != nil {
 		return false, err
 	}

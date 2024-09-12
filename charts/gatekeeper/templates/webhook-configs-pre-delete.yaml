@@ -26,7 +26,7 @@ spec:
       imagePullSecrets:
       {{- .Values.preUninstall.deleteWebhookConfigurations.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
-      serviceAccount: gatekeeper-delete-webhook-configs
+      serviceAccount: {{ .Values.preUninstall.deleteWebhookConfigurations.serviceAccount.name }}
       {{- if .Values.preUninstall.deleteWebhookConfigurations.priorityClassName }}
       priorityClassName: {{ .Values.preUninstall.deleteWebhookConfigurations.priorityClassName }}
       {{- end }}
@@ -59,10 +59,11 @@ spec:
         {{- toYaml .tolerations | nindent 8 }}
       {{- end }}
 ---
+{{- if .Values.preUninstall.deleteWebhookConfigurations.serviceAccount.create }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: gatekeeper-delete-webhook-configs
+  name: {{ .Values.preUninstall.deleteWebhookConfigurations.serviceAccount.name }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
     {{- include "gatekeeper.commonLabels" . | nindent 4 }}
@@ -72,6 +73,7 @@ metadata:
     "helm.sh/hook": pre-delete
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+{{- end }}
 ---
 {{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
@@ -131,7 +133,7 @@ roleRef:
   name: gatekeeper-delete-webhook-configs
 subjects:
   - kind: ServiceAccount
-    name: gatekeeper-delete-webhook-configs
+    name: {{ .Values.preUninstall.deleteWebhookConfigurations.name }}
     namespace: {{ .Release.Namespace | quote }}
 {{- end }}
 {{- end }}
