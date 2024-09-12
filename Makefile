@@ -490,7 +490,6 @@ release-manifest:
 .PHONY: version-docs
 version-docs:
 	@sed -i '10,$$c ${OPA_VERSIONS}' ./website/docs/opa-versions.md
-	@sed -i '/^$$/d' ./website/docs/opa-versions.md
 	docker run \
 		-v $(shell pwd)/website:/website \
 		-w /website \
@@ -503,9 +502,7 @@ version-docs:
 patch-version-docs:
 	@sed -i 's/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${OLDVERSION}\/deploy\/gatekeeper\.yaml.*/https:\/\/raw\.githubusercontent\.com\/open-policy-agent\/gatekeeper\/${TAG}\/deploy\/gatekeeper\.yaml/' ./website/versioned_docs/version-${NEWVERSION}/install.md
 	@sed -i '10,$$c ${OPA_VERSIONS}' ./website/docs/opa-versions.md
-	@sed -i '/^$$/d' ./website/docs/opa-versions.md
 	@sed -i '10,$$c ${OPA_VERSIONS}' ./website/versioned_docs/version-${NEWVERSION}/opa-versions.md
-	@sed -i '/^$$/d' ./website/versioned_docs/version-${NEWVERSION}/opa-versions.md
 
 promote-staging-manifest:
 	@rm -rf deploy
