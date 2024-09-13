@@ -224,7 +224,7 @@ controllerManager:
   extraRules: []
   networkPolicy:
     enabled: false
-    ingress: { }
+    ingress: []
       # - from:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
