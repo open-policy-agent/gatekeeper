@@ -3,6 +3,7 @@ package target
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -1147,5 +1148,71 @@ func TestNamespaceCache(t *testing.T) {
 func newNsCache() *nsCache {
 	return &nsCache{
 		cache: make(map[string]*corev1.Namespace),
+	}
+}
+
+func TestHandleReviewForDelete(t *testing.T) {
+	testCases := []struct {
+		name          string
+		req           interface{}
+		checkEquality bool
+		wantErr       error
+	}{
+		{
+			name: "request not on delete",
+			req: admissionv1.AdmissionRequest{
+				Operation: "CREATE",
+				Object:    runtime.RawExtension{Raw: matchedRawData()},
+			},
+			checkEquality: false,
+			wantErr:       nil,
+		},
+		{
+			name: "err on request and nil object",
+			req: admissionv1.AdmissionRequest{
+				Operation: "DELETE",
+			},
+			wantErr: ErrOldObjectIsNil,
+		},
+		{
+			name: "handle ok oldObject not nil",
+			req: admissionv1.AdmissionRequest{
+				Operation: "DELETE",
+				OldObject: runtime.RawExtension{
+					Raw: []byte{'a', 'b', 'c'},
+				},
+			},
+			checkEquality: true,
+			wantErr:       nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			target := &K8sValidationTarget{}
+
+			_, review, err := target.HandleReview(tc.req)
+
+			if tc.wantErr != nil {
+				if !errors.Is(tc.wantErr, err) {
+					t.Fatalf("error did not match what was expected\n want: %v \n got: %v \n", tc.wantErr, err)
+				}
+			}
+
+			gkr, ok := review.(*gkReview)
+			if !ok {
+				t.Fatalf("test %v: HandleReview failed to return gkReview object", tc.name)
+			}
+
+			if tc.checkEquality {
+				// open box: make sure that the OldObject field has been copied into the Object field
+				if !reflect.DeepEqual(gkr.AdmissionRequest.OldObject, gkr.AdmissionRequest.Object) {
+					t.Fatal("oldObject and object need to match")
+				}
+			}
+		})
 	}
 }
