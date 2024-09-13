@@ -536,6 +536,56 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
+	t.Run("Error should be present on constraint when VAP generation is off and VAPB generation is on for CEL templates", func(t *testing.T) {
+		suffix := "ErrorShouldBePresentOnConstraint"
+		logger.Info("Running test: Error should be present on constraint when VAP generation is off and VAPB generation is on")
+		constraint.DefaultGenerateVAP = ptr.To[bool](false)
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, nil)
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+
+		err := isConstraintStatuErrorAsExpected(ctx, c, suffix, true, "Conditions are not satisfied")
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Error should not be present on constraint when VAP generation if off and VAPB generation is on for templates without CEL", func(t *testing.T) {
+		suffix := "ErrorShouldNotBePresentOnConstraint"
+		logger.Info("Running test: Error should not be present on constraint when VAP generation is off and VAPB generation is on for templates wihout CEL")
+		constraint.DefaultGenerateVAP = ptr.To[bool](false)
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		constraintTemplate := makeReconcileConstraintTemplate(suffix)
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+		err := isConstraintStatuErrorAsExpected(ctx, c, suffix, false, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("VapBinding should not be created without generateVap intent in CT", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreatedWithoutGenerateVapIntent"
 		logger.Info("Running test: VapBinding should not be created without generateVap intent in CT")
@@ -1332,6 +1382,37 @@ func constraintEnforced(ctx context.Context, c client.Client, suffix string) err
 		if !status.Enforced {
 			obj, _ := json.MarshalIndent(cstr.Object, "", "  ")
 			return fmt.Errorf("constraint not enforced: \n%s", obj)
+		}
+		return nil
+	})
+}
+
+func isConstraintStatuErrorAsExpected(ctx context.Context, c client.Client, suffix string, wantErr bool, errMsg string) error {
+	return retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		cstr := newDenyAllCstr(suffix)
+		err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
+		if err != nil {
+			return err
+		}
+		status, err := getCByPodStatus(cstr)
+		if err != nil {
+			return err
+		}
+
+		switch {
+		case wantErr && len(status.Errors) == 0:
+			return fmt.Errorf("expected error not found in status")
+		case !wantErr && len(status.Errors) > 0:
+			return fmt.Errorf("unexpected error found in status")
+		case wantErr:
+			for _, e := range status.Errors {
+				if strings.Contains(e.Message, errMsg) {
+					return nil
+				}
+			}
+			return fmt.Errorf("expected error not found in status")
 		}
 		return nil
 	})

@@ -379,7 +379,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
-	if err != nil {
+	if err != nil && !errors.Is(err, celSchema.ErrCodeNotDefined) {
 		logger.Error(err, "generateVap error")
 	}
 	logger.Info("generateVap", "r.generateVap", generateVap)
