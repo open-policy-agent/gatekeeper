@@ -2,6 +2,7 @@ package v1beta1
 
 // Label keys used for internal gatekeeper operations.
 const (
+	ConfigNameLabel             = "internal.gatekeeper.sh/config-name"
 	ExpansionTemplateNameLabel  = "internal.gatekeeper.sh/expansiontemplate-name"
 	ConstraintNameLabel         = "internal.gatekeeper.sh/constraint-name"
 	ConstraintKindLabel         = "internal.gatekeeper.sh/constraint-kind"
