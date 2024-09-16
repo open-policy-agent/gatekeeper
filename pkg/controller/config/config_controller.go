@@ -26,6 +26,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -51,12 +52,14 @@ type Adder struct {
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
 	CacheManager     *cm.CacheManager
+	// GetPod returns an instance of the currently running Gatekeeper pod
+	GetPod func(context.Context) (*corev1.Pod, error)
 }
 
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.CacheManager, a.ControllerSwitch, a.Tracker)
+	r, err := newReconciler(mgr, a.CacheManager, a.ControllerSwitch, a.Tracker, a.GetPod)
 	if err != nil {
 		return err
 	}
@@ -76,8 +79,12 @@ func (a *Adder) InjectCacheManager(cm *cm.CacheManager) {
 	a.CacheManager = cm
 }
 
+func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, error)) {
+	a.GetPod = getPod
+}
+
 // newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.ControllerSwitch, tracker *readiness.Tracker) (*ReconcileConfig, error) {
+func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConfig, error) {
 	if cm == nil {
 		return nil, fmt.Errorf("cacheManager must be non-nil")
 	}
@@ -90,6 +97,7 @@ func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.Controlle
 		cs:           cs,
 		cacheManager: cm,
 		tracker:      tracker,
+		getPod:       getPod,
 	}, nil
 }
 
@@ -123,6 +131,8 @@ type ReconcileConfig struct {
 	cs           *watch.ControllerSwitch
 
 	tracker *readiness.Tracker
+
+	getPod func(context.Context) (*corev1.Pod, error)
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
