@@ -15,7 +15,6 @@ import (
 // +kubebuilder:object:generate=true
 
 type ConfigPodStatusStatus struct {
-	// Important: Run "make" to regenerate code after modifying this file
 	ID                 string         `json:"id,omitempty"`
 	ConfigUID          types.UID      `json:"configUID,omitempty"`
 	Operations         []string       `json:"operations,omitempty"`

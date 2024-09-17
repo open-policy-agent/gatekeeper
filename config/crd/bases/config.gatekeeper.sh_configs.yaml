@@ -134,8 +134,6 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: 'Important: Run "make" to regenerate code after
-                        modifying this file'
                       type: string
                     observedGeneration:
                       format: int64
