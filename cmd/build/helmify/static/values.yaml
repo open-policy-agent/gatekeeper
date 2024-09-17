@@ -39,6 +39,8 @@ auditChunkSize: 500
 logLevel: INFO
 logDenies: false
 logMutations: false
+logStatsAdmission: false
+logStatsAudit: false
 emitAdmissionEvents: false
 emitAuditEvents: false
 admissionEventsInvolvedNamespace: false
@@ -222,7 +224,7 @@ controllerManager:
   extraRules: []
   networkPolicy:
     enabled: false
-    ingress: { }
+    ingress: []
       # - from:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
