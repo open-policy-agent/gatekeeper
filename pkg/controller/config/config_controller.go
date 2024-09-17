@@ -186,7 +186,9 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 	if deleted {
 		// Delete config pod status if config is deleted.
-		r.deleteStatus(ctx, instance.GetName())
+		if err := r.deleteStatus(ctx, instance.GetName()); err != nil {
+			return reconcile.Result{}, fmt.Errorf("config-controller: error deleting config pod status: %w", err)
+		}
 	} else {
 		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
@@ -195,7 +197,9 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 		newExcluder.Add(instance.Spec.Match)
 		statsEnabled = instance.Spec.Readiness.StatsEnabled
-		r.updateOrCreatePodStatus(ctx, instance)
+		if err := r.updateOrCreatePodStatus(ctx, instance); err != nil {
+			return reconcile.Result{}, fmt.Errorf("config-controller: error creating config pod status: %w", err)
+		}
 	}
 
 	// Enable verbose readiness stats if requested.
