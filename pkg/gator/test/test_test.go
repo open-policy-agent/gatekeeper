@@ -38,14 +38,13 @@ func init() {
 		panic(err)
 	}
 
-	constraintGatorValidate, err = reader.readUnstructured([]byte(fixtures.ConstraintGatorValidate))
+	constraintGatorValidate, err = reader.ReadUnstructured([]byte(fixtures.ConstraintGatorValidate))
 	if err != nil {
 		panic(err)
 	}
 
-	constraintReferential, err = reader.readUnstructured([]byte(fixtures.ConstraintReferential))
-
-  if err != nil {
+	constraintReferential, err = reader.ReadUnstructured([]byte(fixtures.ConstraintReferential))
+	if err != nil {
 		panic(err)
 	}
 
