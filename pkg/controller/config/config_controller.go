@@ -20,16 +20,19 @@ import (
 	"fmt"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -164,7 +167,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	err := r.reader.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		// if config is not found, we should remove cached data
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			exists = false
 		} else {
 			// Error reading the object - requeue the request.
@@ -177,7 +180,14 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	// If the config is being deleted the user is saying they don't want to
 	// sync anything
 	gvksToSync := []schema.GroupVersionKind{}
-	if exists && instance.GetDeletionTimestamp().IsZero() {
+
+	// deleted is true if the instance doesn't exist or has a deletion timestamp.
+	deleted := !exists || !instance.GetDeletionTimestamp().IsZero()
+
+	if deleted {
+		// Delete config pod status if config is deleted.
+		r.deleteStatus(ctx, instance.GetName())
+	} else {
 		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
 			gvksToSync = append(gvksToSync, gvk)
@@ -185,6 +195,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 		newExcluder.Add(instance.Spec.Match)
 		statsEnabled = instance.Spec.Readiness.StatsEnabled
+		r.updateOrCreatePodStatus(ctx, instance)
 	}
 
 	// Enable verbose readiness stats if requested.
@@ -206,4 +217,67 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 	r.tracker.For(configGVK).Observe(instance)
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileConfig) deleteStatus(ctx context.Context, cfgName string) error {
+	status := &statusv1beta1.ConfigPodStatus{}
+	pod, err := r.getPod(ctx)
+	if err != nil {
+		return fmt.Errorf("getting reconciler pod: %w", err)
+	}
+	sName, err := statusv1beta1.KeyForConfig(pod.Name, cfgName)
+	if err != nil {
+		return fmt.Errorf("getting key for config: %w", err)
+	}
+	status.SetName(sName)
+	status.SetNamespace(util.GetNamespace())
+	if err := r.writer.Delete(ctx, status); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+func (r *ReconcileConfig) updateOrCreatePodStatus(ctx context.Context, cfg *configv1alpha1.Config) error {
+	pod, err := r.getPod(ctx)
+	if err != nil {
+		return fmt.Errorf("getting reconciler pod: %w", err)
+	}
+
+	// Check if it exists already
+	sNS := pod.Namespace
+	sName, err := statusv1beta1.KeyForConfig(pod.Name, cfg.GetName())
+	if err != nil {
+		return fmt.Errorf("getting key for config: %w", err)
+	}
+	shouldCreate := true
+	status := &statusv1beta1.ConfigPodStatus{}
+
+	err = r.reader.Get(ctx, types.NamespacedName{Namespace: sNS, Name: sName}, status)
+	switch {
+	case err == nil:
+		shouldCreate = false
+	case apierrors.IsNotFound(err):
+		if status, err = r.newConfigStatus(pod, cfg); err != nil {
+			return fmt.Errorf("creating new config status: %w", err)
+		}
+	default:
+		return fmt.Errorf("getting config status in name %s, namespace %s: %w", cfg.GetName(), cfg.GetNamespace(), err)
+	}
+
+	status.Status.ObservedGeneration = cfg.GetGeneration()
+
+	if shouldCreate {
+		return r.writer.Create(ctx, status)
+	}
+	return r.writer.Update(ctx, status)
+}
+
+func (r *ReconcileConfig) newConfigStatus(pod *corev1.Pod, cfg *configv1alpha1.Config) (*statusv1beta1.ConfigPodStatus, error) {
+	status, err := statusv1beta1.NewConfigStatusForPod(pod, cfg.GetName(), r.scheme)
+	if err != nil {
+		return nil, fmt.Errorf("creating status for pod: %w", err)
+	}
+	status.Status.ConfigUID = cfg.GetUID()
+
+	return status, nil
 }
