@@ -413,6 +413,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 					enforcementAction: enforcementAction,
 					status:            metrics.ErrorStatus,
 				})
+				reportMetrics = true
 				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, "could not cache constraint")
 			}
 			logAddition(r.log, instance, enforcementAction)
