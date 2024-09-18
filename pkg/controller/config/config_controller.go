@@ -214,7 +214,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	r.tracker.For(configGVK).Observe(instance)
 
 	if deleted {
-		return reconcile.Result{}, r.deleteStatus(ctx, instance.GetName())
+		return reconcile.Result{}, r.deleteStatus(ctx, request.Name)
 	}
 	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance)
 }
