@@ -184,12 +184,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	// deleted is true if the instance doesn't exist or has a deletion timestamp.
 	deleted := !exists || !instance.GetDeletionTimestamp().IsZero()
 
-	if deleted {
-		// Delete config pod status if config is deleted.
-		if err := r.deleteStatus(ctx, instance.GetName()); err != nil {
-			return reconcile.Result{}, fmt.Errorf("config-controller: error deleting config pod status: %w", err)
-		}
-	} else {
+	if !deleted {
 		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
 			gvksToSync = append(gvksToSync, gvk)
@@ -197,9 +192,6 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 		newExcluder.Add(instance.Spec.Match)
 		statsEnabled = instance.Spec.Readiness.StatsEnabled
-		if err := r.updateOrCreatePodStatus(ctx, instance); err != nil {
-			return reconcile.Result{}, fmt.Errorf("config-controller: error creating config pod status: %w", err)
-		}
 	}
 
 	// Enable verbose readiness stats if requested.
@@ -220,7 +212,11 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	r.tracker.For(configGVK).Observe(instance)
-	return reconcile.Result{}, nil
+
+	if deleted {
+		return reconcile.Result{}, r.deleteStatus(ctx, instance.GetName())
+	}
+	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance)
 }
 
 func (r *ReconcileConfig) deleteStatus(ctx context.Context, cfgName string) error {
