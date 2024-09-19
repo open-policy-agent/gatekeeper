@@ -174,7 +174,7 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 	wrapLister := WrapFakeClientWithMutex{fakeLister: lister}
 
 	rt := newTracker(&wrapLister, false, false, false, false, nil, func() objData {
-		return objData{retries: 2}
+		return objData{retries: 0}
 	})
 
 	// Run kicks off all the tracking
