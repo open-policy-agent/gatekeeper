@@ -211,7 +211,9 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 // Verify that TryCancelTemplate must be called enough times to remove all retries before canceling a template.
 func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 	lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(convertedTemplate.DeepCopyObject()).Build()
-	rt := newTracker(lister, false, false, false, false, nil, func() objData {
+	wrapLister := WrapFakeClientWithMutex{fakeLister: lister}
+
+	rt := newTracker(&wrapLister, false, false, false, false, nil, func() objData {
 		return objData{retries: 2}
 	})
 

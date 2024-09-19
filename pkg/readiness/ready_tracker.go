@@ -89,6 +89,17 @@ type Tracker struct {
 	trackListerPredicateOverride retryPredicate
 }
 
+type WrapFakeClientWithMutex struct {
+	listMutex  sync.Mutex
+	fakeLister Lister
+}
+
+func (w *WrapFakeClientWithMutex) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	w.listMutex.Lock()
+	defer w.listMutex.Unlock()
+	return w.fakeLister.List(ctx, list, opts...)
+}
+
 // NewTracker creates a new Tracker and initializes the internal trackers.
 func NewTracker(lister Lister, mutationEnabled, externalDataEnabled, expansionEnabled bool) *Tracker {
 	// TODO: Dereference crashOnFailureFetchingExpectations when we change crashOnFailureFetchingExpectations to a flag
