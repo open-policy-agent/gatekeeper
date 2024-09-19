@@ -38,7 +38,18 @@ jobs:
           git checkout master 
       
       - name: Create patch version docs
-        run: make patch-version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x TAG=v${TAG} OLDVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.$((PATCH_VERSION-1))
+        run: |
+          tags=$(git tag -l --sort=-v:refname)
+          versions=''
+          for tag in $tags; do
+            if echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              opa=$(curl https://raw.githubusercontent.com/open-policy-agent/gatekeeper/$tag/go.mod | grep /opa | awk '{print $2}')
+              if [ $opa ]; then
+                versions+="| \`$tag\`          | \`$opa\`   |\n"
+              fi
+            fi
+          done
+          make patch-version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x TAG=v${TAG} OLDVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.$((PATCH_VERSION-1)) OPA_VERSIONS="${versions}"
       
       - name: Create release pull request
         uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0
