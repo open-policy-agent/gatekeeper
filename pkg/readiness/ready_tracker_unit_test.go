@@ -171,8 +171,10 @@ func mustInitializeScheme(scheme *runtime.Scheme) *runtime.Scheme {
 // Verify that TryCancelTemplate functions the same as regular CancelTemplate if readinessRetries is set to 0.
 func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 	lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(convertedTemplate.DeepCopyObject()).Build()
-	rt := newTracker(lister, false, false, false, false, nil, func() objData {
-		return objData{retries: 0}
+	wrapLister := WrapFakeClientWithMutex{fakeLister: lister}
+
+	rt := newTracker(&wrapLister, false, false, false, false, nil, func() objData {
+		return objData{retries: 2}
 	})
 
 	// Run kicks off all the tracking
