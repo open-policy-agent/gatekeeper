@@ -24,6 +24,7 @@ import (
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/configstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -114,6 +115,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to Config
 	err = c.Watch(source.Kind(mgr.GetCache(), &configv1alpha1.Config{}, &handler.TypedEnqueueRequestForObject[*configv1alpha1.Config]{}))
+	if err != nil {
+		return err
+	}
+
+	err = c.Watch(
+		source.Kind(mgr.GetCache(), &statusv1beta1.ConfigPodStatus{}, handler.TypedEnqueueRequestsFromMapFunc(configstatus.PodStatusToConfigMapper(true, util.EventPackerMapFunc()))))
 	if err != nil {
 		return err
 	}

@@ -69,10 +69,12 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	}
 }
 
+type PackerMap func(obj client.Object) []reconcile.Request
+
 // PodStatusToConfigMapper correlates a ConfigPodStatus with its corresponding Config.
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToConfigMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ConfigPodStatus] {
-	return func(_ context.Context, obj *v1beta1.ConfigPodStatus) []reconcile.Request {
+func PodStatusToConfigMapper(selfOnly bool, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.ConfigPodStatus] {
+	return func(ctx context.Context, obj *v1beta1.ConfigPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConfigNameLabel]
 		if !ok {
@@ -101,16 +103,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to ExpansionTemplateStatus
+	// Watch for changes to ConfigStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &v1beta1.ConfigPodStatus{},
-			handler.TypedEnqueueRequestsFromMapFunc(PodStatusToConfigMapper(false)),
-		))
+		source.Kind(mgr.GetCache(), &v1beta1.ConfigPodStatus{}, handler.TypedEnqueueRequestsFromMapFunc(PodStatusToConfigMapper(false, util.EventPackerMapFunc()))))
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to ExpansionTemplate
+	// Watch for changes to Config
 	err = c.Watch(source.Kind(mgr.GetCache(), &configv1alpha1.Config{}, &handler.TypedEnqueueRequestForObject[*configv1alpha1.Config]{}))
 	if err != nil {
 		return err
