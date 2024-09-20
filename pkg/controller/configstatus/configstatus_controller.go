@@ -73,11 +73,9 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	}
 }
 
-type PackerMap func(obj client.Object) []reconcile.Request
-
 // PodStatusToConfigMapper correlates a ConfigPodStatus with its corresponding Config.
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToConfigMapper(selfOnly bool, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.ConfigPodStatus] {
+func PodStatusToConfigMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ConfigPodStatus] {
 	return func(_ context.Context, obj *v1beta1.ConfigPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConfigNameLabel]
@@ -109,7 +107,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &v1beta1.ConfigPodStatus{}, handler.TypedEnqueueRequestsFromMapFunc(PodStatusToConfigMapper(false, util.EventPackerMapFunc()))))
+		source.Kind(mgr.GetCache(), &v1beta1.ConfigPodStatus{}, handler.TypedEnqueueRequestsFromMapFunc(PodStatusToConfigMapper(false))))
 	if err != nil {
 		return err
 	}
