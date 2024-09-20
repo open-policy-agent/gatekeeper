@@ -24,6 +24,7 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -52,6 +53,9 @@ func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 // Add creates a new config Status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
+	if !operations.IsAssigned(operations.Status) {
+		return nil
+	}
 	r := newReconciler(mgr)
 	return add(mgr, r)
 }
@@ -74,7 +78,7 @@ type PackerMap func(obj client.Object) []reconcile.Request
 // PodStatusToConfigMapper correlates a ConfigPodStatus with its corresponding Config.
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
 func PodStatusToConfigMapper(selfOnly bool, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.ConfigPodStatus] {
-	return func(ctx context.Context, obj *v1beta1.ConfigPodStatus) []reconcile.Request {
+	return func(_ context.Context, obj *v1beta1.ConfigPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConfigNameLabel]
 		if !ok {
@@ -95,7 +99,8 @@ func PodStatusToConfigMapper(selfOnly bool, packerMap handler.MapFunc) handler.T
 	}
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler.
+// Add creates a new config status Controller and adds it to the Manager. The Manager will set fields on the Controller
+// and Start it when the Manager is Started.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("config-status-controller", mgr, controller.Options{Reconciler: r})
@@ -103,14 +108,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to ConfigStatus
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &v1beta1.ConfigPodStatus{}, handler.TypedEnqueueRequestsFromMapFunc(PodStatusToConfigMapper(false, util.EventPackerMapFunc()))))
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to Config
 	err = c.Watch(source.Kind(mgr.GetCache(), &configv1alpha1.Config{}, &handler.TypedEnqueueRequestForObject[*configv1alpha1.Config]{}))
 	if err != nil {
 		return err
@@ -160,7 +163,6 @@ func (r *ReconcileConfigStatus) Reconcile(ctx context.Context, request reconcile
 	sort.Sort(statusObjs)
 
 	var s []v1beta1.ConfigPodStatusStatus
-	// created is true if at least one Pod hasn't reported any errors
 
 	for i := range statusObjs {
 		// Don't report status if it's not for the correct object. This can happen

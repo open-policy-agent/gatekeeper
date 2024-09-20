@@ -188,7 +188,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	// sync anything
 	gvksToSync := []schema.GroupVersionKind{}
 
-	// deleted is true if the instance doesn't exist or has a deletion timestamp.
+	// K8s API conventions consider an object to be deleted when either the object no longer exists or when a deletion timestamp has been set.
 	deleted := !exists || !instance.GetDeletionTimestamp().IsZero()
 
 	if !deleted {

@@ -49,6 +49,17 @@ const (
 	tick    = 1 * time.Second
 )
 
+type WrapFakeClientWithMutex struct {
+	listMutex  sync.Mutex
+	fakeLister Lister
+}
+
+func (w *WrapFakeClientWithMutex) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	w.listMutex.Lock()
+	defer w.listMutex.Unlock()
+	return w.fakeLister.List(ctx, list, opts...)
+}
+
 var (
 	testConstraintTemplate = templates.ConstraintTemplate{
 		ObjectMeta: v1.ObjectMeta{
