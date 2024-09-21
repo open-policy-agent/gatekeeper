@@ -14,9 +14,9 @@ import (
 )
 
 func TestNewConfigStatusForPod(t *testing.T) {
-	podName := "some-gk-pod"
-	podNS := "a-gk-namespace"
-	configName := "a-config"
+	const podName = "some-gk-pod"
+	const podNS = "a-gk-namespace"
+	const configName = "a-config"
 
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 

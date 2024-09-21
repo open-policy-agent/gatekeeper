@@ -215,7 +215,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
 		r.tracker.For(configGVK).TryCancelExpect(instance)
 
-		return reconcile.Result{Requeue: true}, fmt.Errorf("config-controller: error establishing watches for new syncOny: %w", err)
+		return reconcile.Result{Requeue: true}, r.updateOrCreatePodStatus(ctx, instance, err)
 	}
 
 	r.tracker.For(configGVK).Observe(instance)
@@ -223,7 +223,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	if deleted {
 		return reconcile.Result{}, r.deleteStatus(ctx, request.NamespacedName.Name)
 	}
-	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance)
+	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance, err)
 }
 
 func (r *ReconcileConfig) deleteStatus(ctx context.Context, cfgName string) error {
@@ -244,7 +244,7 @@ func (r *ReconcileConfig) deleteStatus(ctx context.Context, cfgName string) erro
 	return nil
 }
 
-func (r *ReconcileConfig) updateOrCreatePodStatus(ctx context.Context, cfg *configv1alpha1.Config) error {
+func (r *ReconcileConfig) updateOrCreatePodStatus(ctx context.Context, cfg *configv1alpha1.Config, upsertErr error) error {
 	pod, err := r.getPod(ctx)
 	if err != nil {
 		return fmt.Errorf("getting reconciler pod: %w", err)
@@ -271,6 +271,8 @@ func (r *ReconcileConfig) updateOrCreatePodStatus(ctx context.Context, cfg *conf
 		return fmt.Errorf("getting config status in name %s, namespace %s: %w", cfg.GetName(), cfg.GetNamespace(), err)
 	}
 
+	setStatusError(status, upsertErr)
+
 	status.Status.ObservedGeneration = cfg.GetGeneration()
 
 	if shouldCreate {
@@ -287,4 +289,13 @@ func (r *ReconcileConfig) newConfigStatus(pod *corev1.Pod, cfg *configv1alpha1.C
 	status.Status.ConfigUID = cfg.GetUID()
 
 	return status, nil
+}
+
+func setStatusError(status *statusv1beta1.ConfigPodStatus, etErr error) {
+	if etErr == nil {
+		status.Status.Errors = nil
+		return
+	}
+	e := &statusv1beta1.ConfigError{Message: etErr.Error()}
+	status.Status.Errors = []*statusv1beta1.ConfigError{e}
 }
