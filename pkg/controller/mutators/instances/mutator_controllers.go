@@ -16,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // eventQueueSize is how many events to queue before blocking.
@@ -33,7 +32,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	// events is shared across all mutators that can affect the implied schema
 	// of kinds to be mutated, since these mutators can set each other into conflict
 	events := make(chan event.GenericEvent, eventQueueSize)
-	eventsSource := &source.Channel{Source: events, DestBufferSize: 1024}
 	scheme := mgr.GetScheme()
 
 	assign := core.Adder{
@@ -53,8 +51,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssign(unversioned)
 		},
-		Events:       events,
-		EventsSource: eventsSource,
+		Events: events,
 	}
 	if err := assign.Add(mgr); err != nil {
 		return err
@@ -77,8 +74,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForModifySet(unversioned)
 		},
-		Events:       events,
-		EventsSource: eventsSource,
+		Events: events,
 	}
 	if err := modifySet.Add(mgr); err != nil {
 		return err
@@ -101,8 +97,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssignImage(unversioned)
 		},
-		Events:       events,
-		EventsSource: eventsSource,
+		Events: events,
 	}
 	if err := assignImage.Add(mgr); err != nil {
 		return err

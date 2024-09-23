@@ -9,11 +9,13 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -48,7 +50,7 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 	if err != nil {
 		return nil, fmt.Errorf("creating Rego driver: %w", err)
 	}
-	args = append(args, constraintclient.Driver(driver))
+	args = append(args, constraintclient.Driver(driver), constraintclient.EnforcementPoints(util.GatorEnforcementPoint))
 
 	client, err := constraintclient.NewClient(args...)
 	if err != nil {
@@ -113,7 +115,7 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 			Source:    mutationtypes.SourceTypeOriginal,
 		}
 
-		review, err := client.Review(ctx, au)
+		review, err := client.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
 		if err != nil {
 			return nil, fmt.Errorf("reviewing %v %s/%s: %w",
 				obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
@@ -130,7 +132,7 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 				Namespace: ns,
 				Source:    mutationtypes.SourceTypeGenerated,
 			}
-			resultantReview, err := client.Review(ctx, au)
+			resultantReview, err := client.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
 			if err != nil {
 				return nil, fmt.Errorf("reviewing expanded resource %v %s/%s: %w",
 					resultant.Obj.GroupVersionKind(), resultant.Obj.GetNamespace(), resultant.Obj.GetName(), err)

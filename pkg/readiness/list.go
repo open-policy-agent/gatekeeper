@@ -82,6 +82,11 @@ func retryAll(_ error) bool {
 	return true
 }
 
+// retryNone is a retryPredicate that will never retry an error.
+func retryNone(_ error) bool {
+	return false
+}
+
 // retryUnlessUnregistered is a retryPredicate that retries all errors except
 // *NoResourceMatchError, *NoKindMatchError, e.g. a resource was not registered to
 // the RESTMapper.

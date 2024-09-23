@@ -24,6 +24,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
@@ -37,6 +38,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	errorpkg "github.com/pkg/errors"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -121,7 +123,6 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
 func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
-	constraint.VapEnforcement.SetDefaultIfEmpty()
 	// constraintsCache contains total number of constraints and shared mutex and vap label
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -205,30 +206,28 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to ConstraintTemplate
-	err = c.Watch(source.Kind(mgr.GetCache(), &v1beta1.ConstraintTemplate{}), &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &v1beta1.ConstraintTemplate{}, &handler.TypedEnqueueRequestForObject[*v1beta1.ConstraintTemplate]{}))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &statusv1beta1.ConstraintTemplatePodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper(true)),
-	)
+		source.Kind(mgr.GetCache(), &statusv1beta1.ConstraintTemplatePodStatus{},
+			handler.TypedEnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper(true))))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to Constraint CRDs
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &apiextensionsv1.CustomResourceDefinition{}),
-		handler.EnqueueRequestForOwner(
-			mgr.GetScheme(),
-			mgr.GetRESTMapper(),
-			&v1beta1.ConstraintTemplate{},
-			handler.OnlyControllerOwner(),
-		),
-	)
+		source.Kind(mgr.GetCache(), &apiextensionsv1.CustomResourceDefinition{},
+			handler.TypedEnqueueRequestForOwner[*apiextensionsv1.CustomResourceDefinition](
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&v1beta1.ConstraintTemplate{},
+				handler.OnlyControllerOwner(),
+			)))
 	if err != nil {
 		return err
 	}
@@ -379,26 +378,9 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return reconcile.Result{}, err
 	}
-
-	generateVap := false
-	labels := ct.GetLabels()
-	logger.Info("constraint template resource", "labels", labels)
-	useVap, ok := labels[constraint.VapGenerationLabel]
-	if !ok {
-		logger.Info("constraint template resource does not have a label for use-vap; will default to flag behavior", "VapEnforcement", constraint.VapEnforcement)
-		generateVap = constraint.ShouldGenerateVap("")
-	} else {
-		logger.Info("constraint template resource", "useVap", useVap)
-		generateVap = constraint.ShouldGenerateVap(useVap)
-		if useVap != constraint.No && useVap != constraint.Yes {
-			labelErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: fmt.Sprintf("constraint template resource has an invalid value for %s, allowed values are yes and no", constraint.VapGenerationLabel)}
-			status.Status.Errors = append(status.Status.Errors, labelErr)
-
-			if updateErr := r.Update(ctx, status); updateErr != nil {
-				logger.Error(updateErr, "update status error")
-				return reconcile.Result{Requeue: true}, nil
-			}
-		}
+	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
+	if err != nil && !errors.Is(err, celSchema.ErrCodeNotDefined) {
+		logger.Error(err, "generateVap error")
 	}
 	logger.Info("generateVap", "r.generateVap", generateVap)
 
@@ -494,9 +476,26 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
+	isVapAPIEnabled := false
+	var groupVersion *schema.GroupVersion
+	if generateVap {
+		isVapAPIEnabled, groupVersion = constraint.IsVapAPIEnabled()
+	}
+	logger.Info("isVapAPIEnabled", "isVapAPIEnabled", isVapAPIEnabled)
+	logger.Info("groupVersion", "groupVersion", groupVersion)
+	if generateVap && (!isVapAPIEnabled || groupVersion == nil) {
+		logger.Error(constraint.ErrValidatingAdmissionPolicyAPIDisabled, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
+		err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, constraint.ErrValidatingAdmissionPolicyAPIDisabled)
+		return reconcile.Result{}, err
+	}
 	// generating vap resources
-	if generateVap && constraint.IsVapAPIEnabled() {
-		currentVap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+	if generateVap && isVapAPIEnabled && groupVersion != nil {
+		currentVap, err := vapForVersion(groupVersion)
+		if err != nil {
+			logger.Error(err, "error getting vap object with respective groupVersion")
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with runtime group version", status, err)
+			return reconcile.Result{}, err
+		}
 		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
 		logger.Info("check if vap exists", "vapName", vapName)
 		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
@@ -506,20 +505,18 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			currentVap = nil
 		}
 		logger.Info("get vap", "vapName", vapName, "currentVap", currentVap)
-		newVap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
 		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
 		if err != nil {
-			logger.Info("transform to vap error", "vapName", vapName, "error", err)
-			createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-			status.Status.Errors = append(status.Status.Errors, createErr)
+			logger.Error(err, "transform to vap error", "vapName", vapName)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to vap object", status, err)
 			return reconcile.Result{}, err
 		}
-		if currentVap == nil {
-			newVap = transformedVap.DeepCopy()
-		} else {
-			newVap = currentVap.DeepCopy()
-			newVap.Spec = transformedVap.Spec
+
+		newVap, err := getRunTimeVAP(groupVersion, transformedVap, currentVap)
+		if err != nil {
+			logger.Error(err, "getRunTimeVAP error", "vapName", vapName)
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get runtime vap object", status, err)
+			return reconcile.Result{}, err
 		}
 
 		if err := controllerutil.SetControllerReference(ct, newVap, r.scheme); err != nil {
@@ -530,8 +527,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			logger.Info("creating vap", "vapName", vapName)
 			if err := r.Create(ctx, newVap); err != nil {
 				logger.Info("creating vap error", "vapName", vapName, "error", err)
-				createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
-				status.Status.Errors = append(status.Status.Errors, createErr)
 				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create vap object", status, err)
 				return reconcile.Result{}, err
 			}
@@ -542,8 +537,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		} else if !reflect.DeepEqual(currentVap, newVap) {
 			logger.Info("updating vap")
 			if err := r.Update(ctx, newVap); err != nil {
-				updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
-				status.Status.Errors = append(status.Status.Errors, updateErr)
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update vap object", status, err)
 				return reconcile.Result{}, err
 			}
@@ -551,8 +544,13 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 	// do not generate vap resources
 	// remove if exists
-	if !generateVap && constraint.IsVapAPIEnabled() {
-		currentVap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+	if !generateVap && isVapAPIEnabled && groupVersion != nil {
+		currentVap, err := vapForVersion(groupVersion)
+		if err != nil {
+			logger.Error(err, "error getting vap object with respective groupVersion")
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
+			return reconcile.Result{}, err
+		}
 		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
 		logger.Info("check if vap exists", "vapName", vapName)
 		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
@@ -564,8 +562,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		if currentVap != nil {
 			logger.Info("deleting vap")
 			if err := r.Delete(ctx, currentVap); err != nil {
-				updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
-				status.Status.Errors = append(status.Status.Errors, updateErr)
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete vap object", status, err)
 				return reconcile.Result{}, err
 			}
@@ -702,8 +698,6 @@ func (r *ReconcileConstraintTemplate) triggerConstraintEvents(ctx context.Contex
 	cstrObjs, err := r.listObjects(ctx, gvk)
 	if err != nil {
 		logger.Error(err, "get all constraints listObjects")
-		updateErr := &v1beta1.CreateCRDError{Code: ErrUpdateCode, Message: err.Error()}
-		status.Status.Errors = append(status.Status.Errors, updateErr)
 		err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not list all constraint objects", status, err)
 		return err
 	}
@@ -751,4 +745,106 @@ func makeGvk(kind string) schema.GroupVersionKind {
 		Version: "v1beta1",
 		Kind:    kind,
 	}
+}
+
+func vapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
+	switch gvk.Version {
+	case "v1":
+		return &admissionregistrationv1.ValidatingAdmissionPolicy{}, nil
+	case "v1beta1":
+		return &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}, nil
+	default:
+		return nil, errors.New("unrecognized version")
+	}
+}
+
+func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy, currentVap client.Object) (client.Object, error) {
+	if currentVap == nil {
+		if gvk.Version == "v1" {
+			return v1beta1ToV1(transformedVap)
+		}
+		return transformedVap.DeepCopy(), nil
+	}
+
+	if gvk.Version == "v1" {
+		v1CurrentVAP, ok := currentVap.(*admissionregistrationv1.ValidatingAdmissionPolicy)
+		if !ok {
+			return nil, errors.New("Unable to convert to v1 VAP")
+		}
+		v1CurrentVAP = v1CurrentVAP.DeepCopy()
+		tempVAP, err := v1beta1ToV1(transformedVap)
+		if err != nil {
+			return nil, err
+		}
+		v1CurrentVAP.Spec = tempVAP.Spec
+		return v1CurrentVAP, nil
+	}
+
+	v1beta1VAP, ok := currentVap.(*admissionregistrationv1beta1.ValidatingAdmissionPolicy)
+	if !ok {
+		return nil, errors.New("Unable to convert to v1 VAP")
+	}
+	v1beta1VAP.Spec = transformedVap.Spec
+	return v1beta1VAP.DeepCopy(), nil
+}
+
+func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPolicy) (*admissionregistrationv1.ValidatingAdmissionPolicy, error) {
+	// TODO(jgabani): Use r.scheme.Convert to convert from v1beta1 to v1 once the conversion bug is fixed - https://github.com/kubernetes/kubernetes/issues/126582
+	obj := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+	obj.SetName(v1beta1Obj.GetName())
+	obj.Spec.ParamKind = &admissionregistrationv1.ParamKind{
+		APIVersion: v1beta1Obj.Spec.ParamKind.APIVersion,
+		Kind:       v1beta1Obj.Spec.ParamKind.Kind,
+	}
+	obj.Spec.MatchConstraints = &admissionregistrationv1.MatchResources{
+		ResourceRules: []admissionregistrationv1.NamedRuleWithOperations{
+			{
+				RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
+					/// TODO(jgabani): default for now until we can safely expose these to users
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
+					Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
+				},
+			},
+		},
+	}
+
+	obj.Spec.MatchConditions = []admissionregistrationv1.MatchCondition{}
+
+	for _, matchCondition := range v1beta1Obj.Spec.MatchConditions {
+		obj.Spec.MatchConditions = append(obj.Spec.MatchConditions, admissionregistrationv1.MatchCondition{
+			Name:       matchCondition.Name,
+			Expression: matchCondition.Expression,
+		})
+	}
+
+	obj.Spec.Validations = []admissionregistrationv1.Validation{}
+
+	for _, v := range v1beta1Obj.Spec.Validations {
+		obj.Spec.Validations = append(obj.Spec.Validations, admissionregistrationv1.Validation{
+			Expression:        v.Expression,
+			Message:           v.Message,
+			MessageExpression: v.MessageExpression,
+		})
+	}
+
+	var failurePolicy admissionregistrationv1.FailurePolicyType
+	switch *v1beta1Obj.Spec.FailurePolicy {
+	case admissionregistrationv1beta1.Ignore:
+		failurePolicy = admissionregistrationv1.Ignore
+	case admissionregistrationv1beta1.Fail:
+		failurePolicy = admissionregistrationv1.Fail
+	default:
+		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", celSchema.ErrBadFailurePolicy, *v1beta1Obj.Spec.FailurePolicy)
+	}
+	obj.Spec.FailurePolicy = &failurePolicy
+	obj.Spec.AuditAnnotations = nil
+
+	for _, v := range v1beta1Obj.Spec.Variables {
+		obj.Spec.Variables = append(obj.Spec.Variables, admissionregistrationv1.Variable{
+			Name:       v.Name,
+			Expression: v.Expression,
+		})
+	}
+
+	return obj, nil
 }

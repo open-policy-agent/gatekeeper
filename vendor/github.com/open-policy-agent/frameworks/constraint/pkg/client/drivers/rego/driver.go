@@ -15,6 +15,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
@@ -196,8 +197,8 @@ func (d *Driver) RemoveData(ctx context.Context, target string, path storage.Pat
 // input is the already-parsed Rego Value to use as input.
 // Returns the Rego results, the trace if requested, or an error if there was
 // a problem executing the query.
-func (d *Driver) eval(ctx context.Context, compiler *ast.Compiler, target string, path []string, input ast.Value, opts ...drivers.QueryOpt) (rego.ResultSet, *string, error) {
-	cfg := &drivers.QueryCfg{}
+func (d *Driver) eval(ctx context.Context, compiler *ast.Compiler, target string, path []string, input ast.Value, opts ...reviews.ReviewOpt) (rego.ResultSet, *string, error) {
+	cfg := &reviews.ReviewCfg{}
 	for _, opt := range opts {
 		opt(cfg)
 	}
@@ -241,7 +242,7 @@ func (d *Driver) eval(ctx context.Context, compiler *ast.Compiler, target string
 	return res, t, err
 }
 
-func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...drivers.QueryOpt) (*drivers.QueryResponse, error) {
+func (d *Driver) Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...reviews.ReviewOpt) (*drivers.QueryResponse, error) {
 	if len(constraints) == 0 {
 		return nil, nil
 	}
@@ -264,7 +265,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 	d.mtx.RLock()
 	defer d.mtx.RUnlock()
 
-	cfg := &drivers.QueryCfg{}
+	cfg := &reviews.ReviewCfg{}
 	for _, opt := range opts {
 		opt(cfg)
 	}

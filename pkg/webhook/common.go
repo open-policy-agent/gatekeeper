@@ -48,7 +48,7 @@ var (
 	runtimeScheme                      = k8sruntime.NewScheme()
 	codecs                             = serializer.NewCodecFactory(runtimeScheme)
 	deserializer                       = codecs.UniversalDeserializer()
-	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
+	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction and scopedEnforcementActions field of a constraint")
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
 	emitAdmissionEvents                = flag.Bool("emit-admission-events", false, "(alpha) emit Kubernetes events for each admission violation")
 	admissionEventsInvolvedNamespace   = flag.Bool("admission-events-involved-namespace", false, "emit admission events for each violation in the involved objects namespace, the default (false) generates events in the namespace Gatekeeper is installed in. Admission events from cluster-scoped resources will still follow the default behavior")

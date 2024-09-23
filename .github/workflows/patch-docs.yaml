@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde # v2.9.1
         with:
           egress-policy: audit
 
@@ -38,7 +38,18 @@ jobs:
           git checkout master 
       
       - name: Create patch version docs
-        run: make patch-version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x TAG=v${TAG} OLDVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.$((PATCH_VERSION-1))
+        run: |
+          tags=$(git tag -l --sort=-v:refname)
+          versions=''
+          for tag in $tags; do
+            if echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              opa=$(curl https://raw.githubusercontent.com/open-policy-agent/gatekeeper/$tag/go.mod | grep /opa | awk '{print $2}')
+              if [ $opa ]; then
+                versions+="| \`$tag\`          | \`$opa\`   |\n"
+              fi
+            fi
+          done
+          make patch-version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x TAG=v${TAG} OLDVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.$((PATCH_VERSION-1)) OPA_VERSIONS="${versions}"
       
       - name: Create release pull request
         uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0

@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	pubsubController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
@@ -96,13 +96,14 @@ type Manager struct {
 
 // StatusViolation represents each violation under status.
 type StatusViolation struct {
-	Group             string `json:"group"`
-	Version           string `json:"version"`
-	Kind              string `json:"kind"`
-	Name              string `json:"name"`
-	Namespace         string `json:"namespace,omitempty"`
-	Message           string `json:"message"`
-	EnforcementAction string `json:"enforcementAction"`
+	Group              string   `json:"group"`
+	Version            string   `json:"version"`
+	Kind               string   `json:"kind"`
+	Name               string   `json:"name"`
+	Namespace          string   `json:"namespace,omitempty"`
+	Message            string   `json:"message"`
+	EnforcementAction  string   `json:"enforcementAction"`
+	EnforcementActions []string `json:"enforcementActions,omitempty"`
 }
 
 // ConstraintMsg represents publish message for each constraint.
@@ -117,6 +118,7 @@ type PubsubMsg struct {
 	Namespace             string            `json:"namespace,omitempty"`
 	Message               string            `json:"message,omitempty"`
 	EnforcementAction     string            `json:"enforcementAction,omitempty"`
+	EnforcementActions    []string          `json:"enforcementActions,omitempty"`
 	ConstraintAnnotations map[string]string `json:"constraintAnnotations,omitempty"`
 	ResourceGroup         string            `json:"resourceGroup,omitempty"`
 	ResourceAPIVersion    string            `json:"resourceAPIVersion,omitempty"`
@@ -607,7 +609,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			Object:    obj,
 			Namespace: ns,
 		}
-		resp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
+		resp, err := am.opa.Review(ctx, au, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
 		if err != nil {
 			am.log.Error(err, fmt.Sprintf("Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
 			continue
@@ -697,7 +699,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				Source:    mutationtypes.SourceTypeOriginal,
 			}
 
-			resp, err := am.opa.Review(ctx, augmentedObj, drivers.Stats(*logStatsAudit))
+			resp, err := am.opa.Review(ctx, augmentedObj, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
 			if err != nil {
 				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
 				continue
@@ -721,7 +723,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					Namespace: ns,
 					Source:    mutationtypes.SourceTypeGenerated,
 				}
-				resultantResp, err := am.opa.Review(ctx, au, drivers.Stats(*logStatsAudit))
+				resultantResp, err := am.opa.Review(ctx, au, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
 				if err != nil {
 					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
 					continue
@@ -883,15 +885,15 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		if len(msg) > msgSize {
 			msg = truncateString(msg, msgSize)
 		}
-		action := string(ea)
 		violation := &StatusViolation{
-			Group:             gvk.Group,
-			Version:           gvk.Version,
-			Kind:              gvk.Kind,
-			Namespace:         namespace,
-			Name:              name,
-			Message:           msg,
-			EnforcementAction: action,
+			Group:              gvk.Group,
+			Version:            gvk.Version,
+			Kind:               gvk.Kind,
+			Namespace:          namespace,
+			Name:               name,
+			Message:            msg,
+			EnforcementAction:  r.EnforcementAction,
+			EnforcementActions: r.ScopedEnforcementActions,
 		}
 		// since keyQueue is a LimitQueue, it guarantees len <= limit after a push.
 		// the limit on size ensures Push() has O(1) time complexity.
@@ -899,9 +901,9 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 
 		details := r.Metadata["details"]
 		labels := r.obj.GetLabels()
-		logViolation(am.log, constraint, ea, gvk, namespace, name, msg, details, labels)
+		logViolation(am.log, constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels)
 		if *pubsubController.PubsubEnabled {
-			err := am.pubsubSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, gvk, namespace, name, msg, details, labels, timestamp))
+			err := am.pubsubSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
 			if err != nil {
 				am.log.Error(err, "pubsub audit Publishing")
 			}
@@ -909,7 +911,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		if *emitAuditEvents {
 			uid := r.obj.GetUID()
 			rv := r.obj.GetResourceVersion()
-			emitEvent(constraint, timestamp, ea, gvk, namespace, name, rv, msg, am.gkNamespace, uid, am.eventRecorder)
+			emitEvent(constraint, timestamp, ea, strings.Join(r.ScopedEnforcementActions, ","), gvk, namespace, name, rv, msg, am.gkNamespace, uid, am.eventRecorder)
 		}
 	}
 }
@@ -1155,7 +1157,7 @@ func logConstraint(l logr.Logger, gvknn *util.KindVersionName, enforcementAction
 	)
 }
 
-func violationMsg(constraint *unstructured.Unstructured, enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{}, rlabels map[string]string, timestamp string) interface{} {
+func violationMsg(constraint *unstructured.Unstructured, enforcementAction util.EnforcementAction, scopedEnforcementActions []string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{}, rlabels map[string]string, timestamp string) interface{} {
 	userConstraintAnnotations := constraint.GetAnnotations()
 	delete(userConstraintAnnotations, "kubectl.kubernetes.io/last-applied-configuration")
 
@@ -1170,6 +1172,7 @@ func violationMsg(constraint *unstructured.Unstructured, enforcementAction util.
 		Name:                  constraint.GetName(),
 		Namespace:             constraint.GetNamespace(),
 		EnforcementAction:     string(enforcementAction),
+		EnforcementActions:    scopedEnforcementActions,
 		ConstraintAnnotations: userConstraintAnnotations,
 		ResourceGroup:         resourceGroupVersionKind.Group,
 		ResourceAPIVersion:    resourceGroupVersionKind.Version,
@@ -1182,7 +1185,7 @@ func violationMsg(constraint *unstructured.Unstructured, enforcementAction util.
 
 func logViolation(l logr.Logger,
 	constraint *unstructured.Unstructured,
-	enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{}, rlabels map[string]string,
+	enforcementAction util.EnforcementAction, scopedEnforcementActions []string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{}, rlabels map[string]string,
 ) {
 	userConstraintAnnotations := constraint.GetAnnotations()
 	delete(userConstraintAnnotations, "kubectl.kubernetes.io/last-applied-configuration")
@@ -1197,6 +1200,7 @@ func logViolation(l logr.Logger,
 		logging.ConstraintName, constraint.GetName(),
 		logging.ConstraintNamespace, constraint.GetNamespace(),
 		logging.ConstraintAction, enforcementAction,
+		logging.ConstraintEnforcementActions, scopedEnforcementActions,
 		logging.ConstraintAnnotations, userConstraintAnnotations,
 		logging.ResourceGroup, resourceGroupVersionKind.Group,
 		logging.ResourceAPIVersion, resourceGroupVersionKind.Version,
@@ -1208,24 +1212,25 @@ func logViolation(l logr.Logger,
 }
 
 func emitEvent(constraint *unstructured.Unstructured,
-	timestamp string, enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, rrv, message, gkNamespace string, ruid types.UID,
+	timestamp string, enforcementAction util.EnforcementAction, scopedEnforcementActions string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, rrv, message, gkNamespace string, ruid types.UID,
 	eventRecorder record.EventRecorder,
 ) {
 	annotations := map[string]string{
-		"process":                    "audit",
-		"auditTimestamp":             timestamp,
-		logging.EventType:            "violation_audited",
-		logging.ConstraintGroup:      constraint.GroupVersionKind().Group,
-		logging.ConstraintAPIVersion: constraint.GroupVersionKind().Version,
-		logging.ConstraintKind:       constraint.GetKind(),
-		logging.ConstraintName:       constraint.GetName(),
-		logging.ConstraintNamespace:  constraint.GetNamespace(),
-		logging.ConstraintAction:     string(enforcementAction),
-		logging.ResourceGroup:        resourceGroupVersionKind.Group,
-		logging.ResourceAPIVersion:   resourceGroupVersionKind.Version,
-		logging.ResourceKind:         resourceGroupVersionKind.Kind,
-		logging.ResourceNamespace:    rnamespace,
-		logging.ResourceName:         rname,
+		"process":                            "audit",
+		"auditTimestamp":                     timestamp,
+		logging.EventType:                    "violation_audited",
+		logging.ConstraintGroup:              constraint.GroupVersionKind().Group,
+		logging.ConstraintAPIVersion:         constraint.GroupVersionKind().Version,
+		logging.ConstraintKind:               constraint.GetKind(),
+		logging.ConstraintName:               constraint.GetName(),
+		logging.ConstraintNamespace:          constraint.GetNamespace(),
+		logging.ConstraintAction:             string(enforcementAction),
+		logging.ConstraintEnforcementActions: scopedEnforcementActions,
+		logging.ResourceGroup:                resourceGroupVersionKind.Group,
+		logging.ResourceAPIVersion:           resourceGroupVersionKind.Version,
+		logging.ResourceKind:                 resourceGroupVersionKind.Kind,
+		logging.ResourceNamespace:            rnamespace,
+		logging.ResourceName:                 rname,
 	}
 
 	reason := "AuditViolation"

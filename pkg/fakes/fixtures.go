@@ -5,6 +5,7 @@ import (
 	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -47,6 +48,43 @@ violation[{"msg": msg}] {
 
 func DenyAllConstraint() *unstructured.Unstructured {
 	return ConstraintFor("denyall")
+}
+
+func ScopedConstraintFor(ep string) *unstructured.Unstructured {
+	u := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{
+								"name": ep,
+							},
+						},
+						"action": string(util.Deny),
+					},
+					map[string]interface{}{
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{
+								"name": ep,
+							},
+						},
+						"action": string(util.Warn),
+					},
+				},
+			},
+		},
+	}
+
+	u.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   constraints.Group,
+		Version: "v1beta1",
+		Kind:    "denyall",
+	})
+	u.SetName("constraint")
+
+	return u
 }
 
 func ConstraintFor(kind string) *unstructured.Unstructured {

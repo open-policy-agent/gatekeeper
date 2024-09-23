@@ -67,24 +67,24 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 
 	// Watch for changes to Mutators.
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), r.newMutationObj()),
-		&handler.EnqueueRequestForObject{})
+		source.Kind(mgr.GetCache(), r.newMutationObj(),
+			&handler.EnqueueRequestForObject{}))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to MutatorPodStatuses.
 	err = c.Watch(
-		source.Kind(mgr.GetCache(), &statusv1beta1.MutatorPodStatus{}),
-		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, func(_ context.Context, obj client.Object) []reconcile.Request {
-			return []reconcile.Request{{
-				NamespacedName: apitypes.NamespacedName{
-					Namespace: obj.GetNamespace(),
-					Name:      obj.GetName(),
-				},
-			}}
-		})),
-	)
+		source.Kind(mgr.GetCache(), &statusv1beta1.MutatorPodStatus{},
+			handler.TypedEnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, func(_ context.Context, obj client.Object) []reconcile.Request {
+				return []reconcile.Request{{
+					NamespacedName: apitypes.NamespacedName{
+						Namespace: obj.GetNamespace(),
+						Name:      obj.GetName(),
+					},
+				}}
+			})),
+		))
 	if err != nil {
 		return err
 	}
@@ -92,18 +92,18 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 	if a.EventsSource != nil {
 		// Watch for enqueued events.
 		err = c.Watch(
-			a.EventsSource,
-			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
-				if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
-					return nil
-				}
-				return []reconcile.Request{{
-					NamespacedName: apitypes.NamespacedName{
-						Namespace: obj.GetNamespace(),
-						Name:      obj.GetName(),
-					},
-				}}
-			}))
+			source.Channel(a.Events,
+				handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+					if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
+						return nil
+					}
+					return []reconcile.Request{{
+						NamespacedName: apitypes.NamespacedName{
+							Namespace: obj.GetNamespace(),
+							Name:      obj.GetName(),
+						},
+					}}
+				})))
 	}
 
 	return err

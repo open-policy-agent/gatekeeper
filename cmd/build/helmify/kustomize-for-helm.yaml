@@ -65,6 +65,7 @@ spec:
   revisionHistoryLimit: HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT
   strategy:
     type: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_TYPE
+    HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_STRATEGY_ROLLINGUPDATE: ""
   template:
     metadata:
       annotations:
@@ -79,6 +80,7 @@ spec:
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
             - --emit-admission-events={{ .Values.emitAdmissionEvents }}
+            - --log-stats-admission={{ .Values.logStatsAdmission }}
             - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
             - --exempt-namespace={{ .Release.Namespace }}
@@ -93,8 +95,7 @@ spec:
             - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
-            - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
-            - --vap-enforcement={{ .Values.vapEnforcement }}
+            - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
@@ -104,6 +105,8 @@ spec:
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_SUFFIXES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOGFILE
+            - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
+            - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -144,6 +147,7 @@ spec:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_IMAGE_PULL_SECRETS: ""
       hostNetwork: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HOST_NETWORK
       dnsPolicy: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DNS_POLICY
+      serviceAccountName: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SERVICE_ACCOUNT_NAME
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -170,6 +174,7 @@ spec:
             - --audit-chunk-size={{ .Values.auditChunkSize }}
             - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
             - --emit-audit-events={{ .Values.emitAuditEvents }}
+            - --log-stats-audit={{ .Values.logStatsAudit }}
             - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - --operation=audit
             - --operation=status
@@ -184,8 +189,9 @@ spec:
             - HELMSUBST_DEPLOYMENT_AUDIT_LOGFILE
             - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
-            - --experimental-enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
-            - --vap-enforcement={{ .Values.vapEnforcement }}
+            - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+            - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
+            - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -221,6 +227,7 @@ spec:
         HELMSUBST_DEPLOYMENT_AUDIT_IMAGE_PULL_SECRETS: ""
       hostNetwork: HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK
       dnsPolicy: HELMSUBST_DEPLOYMENT_AUDIT_DNS_POLICY
+      serviceAccountName: HELMSUBST_DEPLOYMENT_AUDIT_SERVICE_ACCOUNT_NAME
 ---
 apiVersion: v1
 kind: Secret

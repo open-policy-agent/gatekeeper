@@ -85,7 +85,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	err = c.Watch(source.Kind(mgr.GetCache(), &syncsetv1alpha1.SyncSet{}), &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &syncsetv1alpha1.SyncSet{}, &handler.TypedEnqueueRequestForObject[*syncsetv1alpha1.SyncSet]{}))
 	if err != nil {
 		return err
 	}

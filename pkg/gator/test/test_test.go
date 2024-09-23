@@ -19,6 +19,7 @@ import (
 var (
 	templateNeverValidate      *unstructured.Unstructured
 	constraintNeverValidate    *unstructured.Unstructured
+	constraintGatorValidate    *unstructured.Unstructured
 	constraintReferential      *unstructured.Unstructured
 	object                     *unstructured.Unstructured
 	objectReferentialInventory *unstructured.Unstructured
@@ -33,6 +34,11 @@ func init() {
 	}
 
 	constraintNeverValidate, err = readUnstructured([]byte(fixtures.ConstraintNeverValidate))
+	if err != nil {
+		panic(err)
+	}
+
+	constraintGatorValidate, err = readUnstructured([]byte(fixtures.ConstraintGatorValidate))
 	if err != nil {
 		panic(err)
 	}
@@ -179,6 +185,53 @@ func TestTest(t *testing.T) {
 				fixtures.ConstraintReferential,
 			},
 			err: constraintclient.ErrMissingConstraintTemplate,
+		},
+		{
+			name: "constraint with gator EP",
+			inputs: []string{
+				fixtures.TemplateNeverValidate,
+				fixtures.ConstraintGatorValidate,
+				fixtures.Object,
+			},
+			want: []*GatorResult{
+				{
+					Result: types.Result{
+						Target:                   target.Name,
+						Msg:                      "never validate",
+						Constraint:               constraintGatorValidate,
+						EnforcementAction:        "scoped",
+						ScopedEnforcementActions: []string{"deny"},
+					},
+				},
+				{
+					Result: types.Result{
+						Target:                   target.Name,
+						Msg:                      "never validate",
+						Constraint:               constraintGatorValidate,
+						EnforcementAction:        "scoped",
+						ScopedEnforcementActions: []string{"deny"},
+					},
+				},
+				{
+					Result: types.Result{
+						Target:                   target.Name,
+						Msg:                      "never validate",
+						Constraint:               constraintGatorValidate,
+						EnforcementAction:        "scoped",
+						ScopedEnforcementActions: []string{"deny"},
+					},
+				},
+			},
+			cmpOption: ignoreGatorResultFields(),
+		},
+		{
+			name: "constraint with audit EP",
+			inputs: []string{
+				fixtures.TemplateNeverValidate,
+				fixtures.ConstraintAuditValidate,
+				fixtures.Object,
+			},
+			cmpOption: ignoreGatorResultFields(),
 		},
 	}
 

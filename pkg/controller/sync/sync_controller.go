@@ -86,11 +86,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 	// Watch for changes to the provided resource
 	return c.Watch(
-		&source.Channel{
-			Source:         events,
-			DestBufferSize: 1024,
-		},
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
+		source.Channel(
+			events,
+			handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
+		),
 	)
 }
 

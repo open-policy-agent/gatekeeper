@@ -4,7 +4,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
-	"k8s.io/apiserver/pkg/admission/plugin/validatingadmissionpolicy"
+	"k8s.io/apiserver/pkg/admission/plugin/policy/validating"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
 )
 
@@ -84,6 +84,8 @@ const (
 	`
 )
 
+const StrictCost = true
+
 func MatchExcludedNamespacesGlobV1Beta1() admissionregistrationv1beta1.MatchCondition {
 	return admissionregistrationv1beta1.MatchCondition{
 		Name:       "gatekeeper_internal_match_excluded_namespaces",
@@ -161,7 +163,7 @@ func BindParamsV1Beta1() admissionregistrationv1beta1.Variable {
 
 func BindParamsCEL() cel.NamedExpressionAccessor {
 	v := BindParamsV1Beta1()
-	return &validatingadmissionpolicy.Variable{
+	return &validating.Variable{
 		Name:       v.Name,
 		Expression: v.Expression,
 	}
@@ -176,7 +178,7 @@ func BindObjectV1Beta1() admissionregistrationv1beta1.Variable {
 
 func BindObjectCEL() cel.NamedExpressionAccessor {
 	v := BindObjectV1Beta1()
-	return &validatingadmissionpolicy.Variable{
+	return &validating.Variable{
 		Name:       v.Name,
 		Expression: v.Expression,
 	}
@@ -195,7 +197,7 @@ func AllVariablesCEL() []cel.NamedExpressionAccessor {
 	vars := AllVariablesV1Beta1()
 	xform := make([]cel.NamedExpressionAccessor, len(vars))
 	for i := range vars {
-		xform[i] = &validatingadmissionpolicy.Variable{
+		xform[i] = &validating.Variable{
 			Name:       vars[i].Name,
 			Expression: vars[i].Expression,
 		}

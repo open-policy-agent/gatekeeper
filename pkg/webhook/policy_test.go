@@ -19,6 +19,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclients "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/stretchr/testify/require"
@@ -204,7 +205,7 @@ func makeOpaClient() (*constraintclient.Client, error) {
 		return nil, err
 	}
 
-	c, err := constraintclient.NewClient(constraintclient.Targets(t), constraintclient.Driver(driver))
+	c, err := constraintclient.NewClient(constraintclient.Targets(t), constraintclient.Driver(driver), constraintclient.EnforcementPoints(util.WebhookEnforcementPoint))
 	if err != nil {
 		return nil, err
 	}

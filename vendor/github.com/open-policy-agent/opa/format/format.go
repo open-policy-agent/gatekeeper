@@ -56,7 +56,12 @@ func SourceWithOpts(filename string, src []byte, opts Opts) ([]byte, error) {
 	}
 
 	if opts.RegoVersion == ast.RegoV0CompatV1 || opts.RegoVersion == ast.RegoV1 {
-		errors := ast.CheckRegoV1(module)
+		checkOpts := ast.NewRegoCheckOptions()
+		// The module is parsed as v0, so we need to disable checks that will be automatically amended by the AstWithOpts call anyways.
+		checkOpts.RequireIfKeyword = false
+		checkOpts.RequireContainsKeyword = false
+		checkOpts.RequireRuleBodyOrValue = false
+		errors := ast.CheckRegoV1WithOptions(module, checkOpts)
 		if len(errors) > 0 {
 			return nil, errors
 		}
@@ -1340,7 +1345,10 @@ func closingLoc(skipOpen, skipClose, open, close byte, loc *ast.Location) *ast.L
 		i, offset = skipPast(skipOpen, skipClose, loc)
 	}
 
-	for ; i < len(loc.Text) && loc.Text[i] != open; i++ {
+	for ; i < len(loc.Text); i++ {
+		if loc.Text[i] == open {
+			break
+		}
 	}
 
 	if i >= len(loc.Text) {
@@ -1369,7 +1377,10 @@ func closingLoc(skipOpen, skipClose, open, close byte, loc *ast.Location) *ast.L
 
 func skipPast(open, close byte, loc *ast.Location) (int, int) {
 	i := 0
-	for ; i < len(loc.Text) && loc.Text[i] != open; i++ {
+	for ; i < len(loc.Text); i++ {
+		if loc.Text[i] == open {
+			break
+		}
 	}
 
 	state := 1

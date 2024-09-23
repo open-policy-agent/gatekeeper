@@ -8,6 +8,12 @@ spec:
     kinds:
       - apiGroups: [""]
         kinds: ["ConfigMap"]
+    labelSelector:
+      matchExpressions:
+        - key: mutation/gatekeeper-test
+          operator: In
+          values:
+            - assign-metadata
   location: "metadata.labels.owner"
   parameters:
     assign:

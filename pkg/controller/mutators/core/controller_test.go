@@ -49,7 +49,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const timeout = time.Second * 15
@@ -146,7 +145,7 @@ func TestReconcile(t *testing.T) {
 	events := make(chan event.GenericEvent, 1024)
 
 	rec := newReconciler(mgr, mSys, tracker, func(_ context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events)
-	adder := Adder{EventsSource: &source.Channel{Source: events}}
+	adder := Adder{Events: events}
 
 	err = adder.add(mgr, rec)
 	if err != nil {

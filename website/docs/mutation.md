@@ -304,7 +304,7 @@ spec:
       condition: MustExist
 ```
 
-#### Setting imagePullPolicy of all containers to Always in all namespaces except namespace `system`
+### Setting imagePullPolicy of all containers to Always in all namespaces except namespace `system`
 
 ```yaml
 apiVersion: mutations.gatekeeper.sh/v1
