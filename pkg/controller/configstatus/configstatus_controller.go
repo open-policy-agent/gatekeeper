@@ -93,7 +93,11 @@ func PodStatusToConfigMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.Config
 				return nil
 			}
 		}
-		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: name}}}
+
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{
+			Name:      name,
+			Namespace: util.GetNamespace(),
+		}}}
 	}
 }
 
