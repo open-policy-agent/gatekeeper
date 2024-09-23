@@ -131,10 +131,10 @@ type ReconcileConfigStatus struct {
 	log    logr.Logger
 }
 
-// +kubebuilder:rbac:groups=expansion.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=status.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
+// Reconcile reads that state of the cluster for a config object and makes changes based on the state read
 // and what is in the constraint.Spec.
 func (r *ReconcileConfigStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	et := &configv1alpha1.Config{}
