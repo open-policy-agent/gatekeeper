@@ -141,8 +141,8 @@ type ReconcileConfigStatus struct {
 // Reconcile reads that state of the cluster for a config object and makes changes based on the state read
 // and what is in the constraint.Spec.
 func (r *ReconcileConfigStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	et := &configv1alpha1.Config{}
-	err := r.reader.Get(ctx, request.NamespacedName, et)
+	cfg := &configv1alpha1.Config{}
+	err := r.reader.Get(ctx, request.NamespacedName, cfg)
 	if err != nil {
 		// If the Config does not exist then we are done
 		if errors.IsNotFound(err) {
@@ -170,15 +170,15 @@ func (r *ReconcileConfigStatus) Reconcile(ctx context.Context, request reconcile
 		// Don't report status if it's not for the correct object. This can happen
 		// if a watch gets interrupted, causing the constraint status to be deleted
 		// out from underneath it
-		if statusObjs[i].Status.ConfigUID != et.GetUID() {
+		if statusObjs[i].Status.ConfigUID != cfg.GetUID() {
 			continue
 		}
 		s = append(s, statusObjs[i].Status)
 	}
 
-	et.Status.ByPod = s
+	cfg.Status.ByPod = s
 
-	if err := r.statusClient.Status().Update(ctx, et); err != nil {
+	if err := r.statusClient.Status().Update(ctx, cfg); err != nil {
 		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{}, nil
