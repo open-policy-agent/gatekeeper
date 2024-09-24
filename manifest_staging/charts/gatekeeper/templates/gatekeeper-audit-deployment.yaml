@@ -162,6 +162,7 @@ spec:
       {{- if .Values.audit.priorityClassName }}
       priorityClassName:  {{ .Values.audit.priorityClassName }}
       {{- end }}
+      schedulerName: {{ .Values.schedulerName }}
       securityContext:
         {{- toYaml .Values.audit.podSecurityContext | nindent 8 }}
       serviceAccountName: {{ .Values.audit.serviceAccount.name }}

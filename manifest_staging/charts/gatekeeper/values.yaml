@@ -303,3 +303,4 @@ externalCertInjection:
 serviceAccount:
   gatekeeperAdmin:
     create: true
+schedulerName: default-scheduler
