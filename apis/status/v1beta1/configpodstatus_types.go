@@ -57,9 +57,9 @@ func init() {
 // NewConfigStatusForPod returns an config status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the config status controller.
-func NewConfigStatusForPod(pod *corev1.Pod, configName string, scheme *runtime.Scheme) (*ConfigPodStatus, error) {
+func NewConfigStatusForPod(pod *corev1.Pod, configNamespace string, configName string, scheme *runtime.Scheme) (*ConfigPodStatus, error) {
 	obj := &ConfigPodStatus{}
-	name, err := KeyForConfig(pod.Name, configName)
+	name, err := KeyForConfig(pod.Name, configNamespace, configName)
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +81,6 @@ func NewConfigStatusForPod(pod *corev1.Pod, configName string, scheme *runtime.S
 
 // KeyForConfig returns a unique status object name given the Pod ID and
 // a config object.
-func KeyForConfig(id string, configName string) (string, error) {
-	return DashPacker(id, configName)
+func KeyForConfig(id string, configNamespace string, configName string) (string, error) {
+	return DashPacker(id, configNamespace, configName)
 }

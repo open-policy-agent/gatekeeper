@@ -221,18 +221,18 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	r.tracker.For(configGVK).Observe(instance)
 
 	if deleted {
-		return reconcile.Result{}, r.deleteStatus(ctx, request.NamespacedName.Name)
+		return reconcile.Result{}, r.deleteStatus(ctx, request.NamespacedName.Namespace, request.NamespacedName.Name)
 	}
 	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance, err)
 }
 
-func (r *ReconcileConfig) deleteStatus(ctx context.Context, cfgName string) error {
+func (r *ReconcileConfig) deleteStatus(ctx context.Context, cfgNamespace string, cfgName string) error {
 	status := &statusv1beta1.ConfigPodStatus{}
 	pod, err := r.getPod(ctx)
 	if err != nil {
 		return fmt.Errorf("getting reconciler pod: %w", err)
 	}
-	sName, err := statusv1beta1.KeyForConfig(pod.Name, cfgName)
+	sName, err := statusv1beta1.KeyForConfig(pod.Name, cfgNamespace, cfgName)
 	if err != nil {
 		return fmt.Errorf("getting key for config: %w", err)
 	}
@@ -252,7 +252,7 @@ func (r *ReconcileConfig) updateOrCreatePodStatus(ctx context.Context, cfg *conf
 
 	// Check if it exists already
 	sNS := pod.Namespace
-	sName, err := statusv1beta1.KeyForConfig(pod.Name, cfg.GetName())
+	sName, err := statusv1beta1.KeyForConfig(pod.Name, cfg.GetNamespace(), cfg.GetName())
 	if err != nil {
 		return fmt.Errorf("getting key for config: %w", err)
 	}
@@ -282,7 +282,7 @@ func (r *ReconcileConfig) updateOrCreatePodStatus(ctx context.Context, cfg *conf
 }
 
 func (r *ReconcileConfig) newConfigStatus(pod *corev1.Pod, cfg *configv1alpha1.Config) (*statusv1beta1.ConfigPodStatus, error) {
-	status, err := statusv1beta1.NewConfigStatusForPod(pod, cfg.GetName(), r.scheme)
+	status, err := statusv1beta1.NewConfigStatusForPod(pod, cfg.GetNamespace(), cfg.GetName(), r.scheme)
 	if err != nil {
 		return nil, fmt.Errorf("creating status for pod: %w", err)
 	}
