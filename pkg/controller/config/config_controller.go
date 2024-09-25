@@ -223,7 +223,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	if deleted {
 		return reconcile.Result{}, r.deleteStatus(ctx, request.NamespacedName.Namespace, request.NamespacedName.Name)
 	}
-	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance, err)
+	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance, nil)
 }
 
 func (r *ReconcileConfig) deleteStatus(ctx context.Context, cfgNamespace string, cfgName string) error {

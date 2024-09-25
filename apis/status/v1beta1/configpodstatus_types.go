@@ -81,6 +81,14 @@ func NewConfigStatusForPod(pod *corev1.Pod, configNamespace string, configName s
 
 // KeyForConfig returns a unique status object name given the Pod ID and
 // a config object.
+// The object name must satisfy RFC 1123 Label Names spec
+// (https://kubernetes.io/docs/concepts/overview/working-with-objects/names/)
+// and Kubernetes validation rules for object names.
+//
+// It's possible that dash packing/unpacking would result in a name
+// that exceeds the maximum length allowed, but for Config resources,
+// the configName should always be "config", and namespace would be "gatekeeper-system",
+// so this validation will hold.
 func KeyForConfig(id string, configNamespace string, configName string) (string, error) {
 	return DashPacker(id, configNamespace, configName)
 }

@@ -104,7 +104,6 @@ func PodStatusToConfigMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.Config
 // Add creates a new config status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
 	c, err := controller.New("config-status-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
@@ -125,7 +124,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 var _ reconcile.Reconciler = &ReconcileConfigStatus{}
 
-// ReconcileConfigStatus reconciles an arbitrary config object described by Kind.
+// ReconcileConfigStatus provides the dependencies required to reconcile
+// the status of a Config resource.
 type ReconcileConfigStatus struct {
 	reader       client.Reader
 	writer       client.Writer
