@@ -26,6 +26,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -56,6 +57,9 @@ func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
 	if !*expansion.ExpansionEnabled {
+		return nil
+	}
+	if !operations.IsAssigned(operations.Status) {
 		return nil
 	}
 	r := newReconciler(mgr)
