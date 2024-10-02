@@ -60,9 +60,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.IsAssigned(operations.MutationStatus) {
 		return nil
 	}
-	if !operations.IsAssigned(operations.Status) {
-		return nil
-	}
 	r := newReconciler(mgr, a.ControllerSwitch)
 	return add(mgr, r)
 }
