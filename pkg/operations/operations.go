@@ -21,6 +21,7 @@ const (
 	MutationWebhook    = Operation("mutation-webhook")
 	Status             = Operation("status")
 	Webhook            = Operation("webhook")
+	Generate           = Operation("generate")
 )
 
 var (
@@ -33,6 +34,7 @@ var (
 		MutationWebhook,
 		Status,
 		Webhook,
+		Generate,
 	}
 
 	operationsMtx sync.RWMutex
