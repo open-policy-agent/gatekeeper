@@ -29,12 +29,12 @@ var (
 	// a pod. It is NOT intended to be mutated.
 	allOperations = []Operation{
 		Audit,
+		Generate,
 		MutationController,
 		MutationStatus,
 		MutationWebhook,
 		Status,
 		Webhook,
-		Generate,
 	}
 
 	operationsMtx sync.RWMutex
