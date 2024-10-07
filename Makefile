@@ -70,6 +70,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
 \n        - --operation=mutation-webhook\
+\n        - --operation=generate\
 \n        - --disable-opa-builtin=http.send\
 \n        - --log-mutations\
 \n        - --mutation-annotations\
