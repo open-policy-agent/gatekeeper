@@ -68,7 +68,7 @@ import (
 var (
 	log                      = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
 	discoveryErr             *apiutil.ErrResourceDiscoveryFailed
-	defaultWaitForGeneration = flag.Int("default-wait-for-generation", 30, "Wait to generate ValidatingAdmissionPolicyBinding after the constraint is created. Defaults to 30 seconds.")
+	DefaultWaitForGeneration = flag.Int("default-wait-for-generation", 30, "Wait to generate ValidatingAdmissionPolicyBinding after the constraint is created. Defaults to 30 seconds.")
 	DefaultGenerateVAPB      = flag.Bool("default-create-vap-binding-for-constraints", false, "Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
 	DefaultGenerateVAP       = flag.Bool("default-create-vap-for-templates", false, "Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
 )
@@ -377,7 +377,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 						return reconcile.Result{}, err
 					}
 
-					if currentVapBinding == nil && instance.GetCreationTimestamp().Add(time.Duration(*defaultWaitForGeneration)).Before(time.Now()) {
+					if currentVapBinding == nil && instance.GetCreationTimestamp().Add(time.Duration(*DefaultWaitForGeneration)).Before(time.Now()) {
 						log.Info("creating vapbinding")
 						if err := r.writer.Create(ctx, newVapBinding); err != nil {
 							return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not create ValidatingAdmissionPolicyBinding: %s", vapBindingName))

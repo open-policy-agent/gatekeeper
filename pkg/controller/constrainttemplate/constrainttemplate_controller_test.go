@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -622,9 +623,9 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VapBinding should be created with VAP enforcement Point", func(t *testing.T) {
+	t.Run("VapBinding should be created with VAP enforcement Point after default wait", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedWithVAPEnforcementPoint"
-		logger.Info("Running test: VapBinding should be created with VAP enforcement point")
+		logger.Info("Running test: VapBinding should be created with VAP enforcement point after default wait")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](false)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
@@ -644,9 +645,15 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// check if vapbinding resource exists now
+			if err := c.Get(ctx, types.NamespacedName{Name: cstr.GetName()}, cstr); err != nil {
+				return err
+			}
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
 				return err
+			}
+			if time.Now().Before(cstr.GetCreationTimestamp().Add(time.Duration(*constraint.DefaultWaitForGeneration))) {
+				return fmt.Errorf("VAPBinding should not be created before default wait")
 			}
 			return nil
 		})
@@ -910,7 +917,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("Revew request initiated from an enforcement point not supported by client should result in error", func(t *testing.T) {
+	t.Run("Review request initiated from an enforcement point not supported by client should result in error", func(t *testing.T) {
 		suffix := "ReviewResultsInError"
 
 		logger.Info("Running test: Review request initiated from an enforcement point not supported by client should result in error")
