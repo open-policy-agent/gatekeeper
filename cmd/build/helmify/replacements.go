@@ -19,6 +19,10 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LIVENESS_TIMEOUT": `{{ .Values.controllerManager.livenessTimeout }}`,
 
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS": `{{ if hasKey Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION": `{{ if hasKey Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}`,
+
 	"HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK": `{{ .Values.audit.hostNetwork }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_DNS_POLICY": `{{ .Values.audit.dnsPolicy }}`,
@@ -92,6 +96,12 @@ var replacements = map[string]string{
         {{- toYaml .Values.auditPodAnnotations | trim | nindent 8 }}
         {{- end }}`,
 
+	"- HELMSUBST_DEPLOYMENT_AUDIT_CHUNK_SIZE": `{{ if hasKey .Values "auditChunkSize" }}- --audit-chunk-size={{ .Values.auditChunkSize }}{{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_AUDIT_EMIT_EVENTS": `{{ if hasKey .Values "emitAuditEvents" }}- --emit-audit-events={{ .Values.emitAuditEvents }}{{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION": `{{ if hasKey Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}`,
+
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG": `{{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}`,
@@ -102,9 +112,13 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_MUTATION_STATUS_ENABLED_ARG": `{{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}`,
 
-	"- HELMSUBST_PUBSUB_ARGS": `{{ if .Values.audit.enablePubsub}}
+	"- HELMSUBST_DEPLOYMENT_AUDIT_PUBSUB_ARGS": `{{ if hasKey .Values.audit "enablePubsub" }}
         - --enable-pub-sub={{ .Values.audit.enablePubsub }}
+        {{- end }}
+        {{ if hasKey .Values.audit "connection" }}
         - --audit-connection={{ .Values.audit.connection }}
+        {{- end }}
+        {{ if hasKey .Values.audit "channel" }}
         - --audit-channel={{ .Values.audit.channel }}
         {{- end }}`,
 
