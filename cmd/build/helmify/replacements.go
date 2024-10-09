@@ -19,9 +19,9 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LIVENESS_TIMEOUT": `{{ .Values.controllerManager.livenessTimeout }}`,
 
-	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS": `{{ if hasKey Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}`,
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS": `{{ if hasKey .Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}`,
 
-	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION": `{{ if hasKey Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}`,
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION": `{{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK": `{{ .Values.audit.hostNetwork }}`,
 
@@ -100,7 +100,7 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_DEPLOYMENT_AUDIT_EMIT_EVENTS": `{{ if hasKey .Values "emitAuditEvents" }}- --emit-audit-events={{ .Values.emitAuditEvents }}{{- end }}`,
 
-	"- HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION": `{{ if hasKey Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}`,
+	"- HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION": `{{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}`,
 
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
