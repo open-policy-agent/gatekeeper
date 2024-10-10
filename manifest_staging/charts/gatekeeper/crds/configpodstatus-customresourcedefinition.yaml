@@ -1,0 +1,72 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: configpodstatuses.status.gatekeeper.sh
+spec:
+  group: status.gatekeeper.sh
+  names:
+    kind: ConfigPodStatus
+    listKind: ConfigPodStatusList
+    plural: configpodstatuses
+    singular: configpodstatus
+  preserveUnknownFields: false
+  scope: Namespaced
+  versions:
+  - name: v1beta1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          status:
+            properties:
+              configUID:
+                description: |-
+                  UID is a type that holds unique ID values, including UUIDs.  Because we
+                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                  intent and helps make sure that UIDs and names do not get conflated.
+                type: string
+              errors:
+                items:
+                  properties:
+                    message:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - message
+                  type: object
+                type: array
+              id:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              operations:
+                items:
+                  type: string
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
