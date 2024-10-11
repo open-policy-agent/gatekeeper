@@ -243,6 +243,20 @@ func ReadConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	return u, nil
 }
 
+func ReadExpansion(f fs.FS, path string) (*unstructured.Unstructured, error) {
+	u, err := ReadObject(f, path)
+	if err != nil {
+		return nil, err
+	}
+
+	gvk := u.GroupVersionKind()
+	if gvk.Group != "expansion.gatekeeper.sh" {
+		return nil, gator.ErrNotAnExpansion
+	}
+
+	return u, nil
+}
+
 // ReadK8sResources reads JSON or YAML k8s resources from an io.Reader,
 // decoding them into Unstructured objects and returning those objects as a
 // slice.
