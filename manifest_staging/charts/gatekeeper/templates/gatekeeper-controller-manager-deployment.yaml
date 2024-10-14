@@ -179,6 +179,7 @@ spec:
       {{- if .Values.controllerManager.priorityClassName }}
       priorityClassName:  {{ .Values.controllerManager.priorityClassName }}
       {{- end }}
+      schedulerName: {{ .Values.schedulerName }}
       securityContext:
         {{- toYaml .Values.controllerManager.podSecurityContext | nindent 8 }}
       serviceAccountName: {{ .Values.controllerManager.serviceAccount.name }}
