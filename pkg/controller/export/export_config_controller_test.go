@@ -1,4 +1,4 @@
-package pubsub
+package export
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/dapr"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/dapr"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
