@@ -378,13 +378,8 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return reconcile.Result{}, err
 	}
-	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
-	if err != nil && !errors.Is(err, celSchema.ErrCodeNotDefined) {
-		logger.Error(err, "generateVap error")
-	}
-	logger.Info("generateVap", "r.generateVap", generateVap)
 
-	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status, generateVap)
+	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status)
 	if err != nil {
 		logger.Error(err, "handle update error")
 		logError(request.NamespacedName.Name)
@@ -417,7 +412,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	unversionedCT *templates.ConstraintTemplate,
 	proposedCRD, currentCRD *apiextensionsv1.CustomResourceDefinition,
 	status *statusv1beta1.ConstraintTemplatePodStatus,
-	generateVap bool,
 ) (reconcile.Result, error) {
 	name := proposedCRD.GetName()
 	logger := logger.WithValues("name", ct.GetName(), "crdName", name)
@@ -445,29 +439,31 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	t := r.tracker.For(gvkConstraintTemplate)
 	t.Observe(unversionedCT)
 
-	var newCRD *apiextensionsv1.CustomResourceDefinition
-	if currentCRD == nil {
-		newCRD = proposedCRD.DeepCopy()
-	} else {
-		newCRD = currentCRD.DeepCopy()
-		newCRD.Spec = proposedCRD.Spec
-	}
+	if operations.IsAssigned(operations.Generate) {
+		var newCRD *apiextensionsv1.CustomResourceDefinition
+		if currentCRD == nil {
+			newCRD = proposedCRD.DeepCopy()
+		} else {
+			newCRD = currentCRD.DeepCopy()
+			newCRD.Spec = proposedCRD.Spec
+		}
 
-	if err := controllerutil.SetControllerReference(ct, newCRD, r.scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	if currentCRD == nil {
-		logger.Info("creating crd")
-		if err := r.Create(ctx, newCRD); err != nil {
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create CRD", status, err)
+		if err := controllerutil.SetControllerReference(ct, newCRD, r.scheme); err != nil {
 			return reconcile.Result{}, err
 		}
-	} else if !reflect.DeepEqual(newCRD, currentCRD) {
-		logger.Info("updating crd")
-		if err := r.Update(ctx, newCRD); err != nil {
-			err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update CRD", status, err)
-			return reconcile.Result{}, err
+
+		if currentCRD == nil {
+			logger.Info("creating crd")
+			if err := r.Create(ctx, newCRD); err != nil {
+				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create CRD", status, err)
+				return reconcile.Result{}, err
+			}
+		} else if !reflect.DeepEqual(newCRD, currentCRD) {
+			logger.Info("updating crd")
+			if err := r.Update(ctx, newCRD); err != nil {
+				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update CRD", status, err)
+				return reconcile.Result{}, err
+			}
 		}
 	}
 	// This must go after CRD creation/update as otherwise AddWatch will always fail
@@ -476,98 +472,108 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
-	isVapAPIEnabled := false
-	var groupVersion *schema.GroupVersion
-	if generateVap {
-		isVapAPIEnabled, groupVersion = constraint.IsVapAPIEnabled()
-	}
-	logger.Info("isVapAPIEnabled", "isVapAPIEnabled", isVapAPIEnabled)
-	logger.Info("groupVersion", "groupVersion", groupVersion)
-	if generateVap && (!isVapAPIEnabled || groupVersion == nil) {
-		logger.Error(constraint.ErrValidatingAdmissionPolicyAPIDisabled, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
-		err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, constraint.ErrValidatingAdmissionPolicyAPIDisabled)
-		return reconcile.Result{}, err
-	}
-	// generating vap resources
-	if generateVap && isVapAPIEnabled && groupVersion != nil {
-		currentVap, err := vapForVersion(groupVersion)
-		if err != nil {
-			logger.Error(err, "error getting vap object with respective groupVersion")
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with runtime group version", status, err)
-			return reconcile.Result{}, err
-		}
-		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
-		logger.Info("check if vap exists", "vapName", vapName)
-		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
-			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
-				return reconcile.Result{}, err
-			}
-			currentVap = nil
-		}
-		logger.Info("get vap", "vapName", vapName, "currentVap", currentVap)
-		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
-		if err != nil {
-			logger.Error(err, "transform to vap error", "vapName", vapName)
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to vap object", status, err)
-			return reconcile.Result{}, err
-		}
 
-		newVap, err := getRunTimeVAP(groupVersion, transformedVap, currentVap)
-		if err != nil {
-			logger.Error(err, "getRunTimeVAP error", "vapName", vapName)
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get runtime vap object", status, err)
-			return reconcile.Result{}, err
+	if operations.IsAssigned(operations.Generate) {
+		isVapAPIEnabled := false
+		var groupVersion *schema.GroupVersion
+		generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
+		if err != nil && !errors.Is(err, celSchema.ErrCodeNotDefined) {
+			logger.Error(err, "generateVap error")
 		}
+		logger.Info("generateVap", "r.generateVap", generateVap)
 
-		if err := controllerutil.SetControllerReference(ct, newVap, r.scheme); err != nil {
-			return reconcile.Result{}, err
+		if generateVap {
+			isVapAPIEnabled, groupVersion = constraint.IsVapAPIEnabled()
 		}
+		logger.Info("isVapAPIEnabled", "isVapAPIEnabled", isVapAPIEnabled)
+		logger.Info("groupVersion", "groupVersion", groupVersion)
 
-		if currentVap == nil {
-			logger.Info("creating vap", "vapName", vapName)
-			if err := r.Create(ctx, newVap); err != nil {
-				logger.Info("creating vap error", "vapName", vapName, "error", err)
-				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create vap object", status, err)
-				return reconcile.Result{}, err
-			}
-			// after vap is created, trigger update event for all constraints
-			if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
-				return reconcile.Result{}, err
-			}
-		} else if !reflect.DeepEqual(currentVap, newVap) {
-			logger.Info("updating vap")
-			if err := r.Update(ctx, newVap); err != nil {
-				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update vap object", status, err)
-				return reconcile.Result{}, err
-			}
-		}
-	}
-	// do not generate vap resources
-	// remove if exists
-	if !generateVap && isVapAPIEnabled && groupVersion != nil {
-		currentVap, err := vapForVersion(groupVersion)
-		if err != nil {
-			logger.Error(err, "error getting vap object with respective groupVersion")
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
+		if generateVap && (!isVapAPIEnabled || groupVersion == nil) {
+			logger.Error(constraint.ErrValidatingAdmissionPolicyAPIDisabled, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, constraint.ErrValidatingAdmissionPolicyAPIDisabled)
 			return reconcile.Result{}, err
 		}
-		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
-		logger.Info("check if vap exists", "vapName", vapName)
-		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
-			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
+		// generating vap resources
+		if generateVap && isVapAPIEnabled && groupVersion != nil {
+			currentVap, err := vapForVersion(groupVersion)
+			if err != nil {
+				logger.Error(err, "error getting vap object with respective groupVersion")
+				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with runtime group version", status, err)
 				return reconcile.Result{}, err
 			}
-			currentVap = nil
+			vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
+			logger.Info("check if vap exists", "vapName", vapName)
+			if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
+				if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
+					return reconcile.Result{}, err
+				}
+				currentVap = nil
+			}
+			logger.Info("get vap", "vapName", vapName, "currentVap", currentVap)
+			transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
+			if err != nil {
+				logger.Error(err, "transform to vap error", "vapName", vapName)
+				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to vap object", status, err)
+				return reconcile.Result{}, err
+			}
+
+			newVap, err := getRunTimeVAP(groupVersion, transformedVap, currentVap)
+			if err != nil {
+				logger.Error(err, "getRunTimeVAP error", "vapName", vapName)
+				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get runtime vap object", status, err)
+				return reconcile.Result{}, err
+			}
+
+			if err := controllerutil.SetControllerReference(ct, newVap, r.scheme); err != nil {
+				return reconcile.Result{}, err
+			}
+
+			if currentVap == nil {
+				logger.Info("creating vap", "vapName", vapName)
+				if err := r.Create(ctx, newVap); err != nil {
+					logger.Info("creating vap error", "vapName", vapName, "error", err)
+					err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create vap object", status, err)
+					return reconcile.Result{}, err
+				}
+				// after vap is created, trigger update event for all constraints
+				if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
+					return reconcile.Result{}, err
+				}
+			} else if !reflect.DeepEqual(currentVap, newVap) {
+				logger.Info("updating vap")
+				if err := r.Update(ctx, newVap); err != nil {
+					err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update vap object", status, err)
+					return reconcile.Result{}, err
+				}
+			}
 		}
-		if currentVap != nil {
-			logger.Info("deleting vap")
-			if err := r.Delete(ctx, currentVap); err != nil {
-				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete vap object", status, err)
+		// do not generate vap resources
+		// remove if exists
+		if !generateVap && isVapAPIEnabled && groupVersion != nil {
+			currentVap, err := vapForVersion(groupVersion)
+			if err != nil {
+				logger.Error(err, "error getting vap object with respective groupVersion")
+				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
 				return reconcile.Result{}, err
 			}
-			// after vap is deleted, trigger update event for all constraints
-			if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
-				return reconcile.Result{}, err
+			vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
+			logger.Info("check if vap exists", "vapName", vapName)
+			if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
+				if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
+					return reconcile.Result{}, err
+				}
+				currentVap = nil
+			}
+			if currentVap != nil {
+				logger.Info("deleting vap")
+				if err := r.Delete(ctx, currentVap); err != nil {
+					err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete vap object", status, err)
+					return reconcile.Result{}, err
+				}
+				// after vap is deleted, trigger update event for all constraints
+				if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
+					return reconcile.Result{}, err
+				}
 			}
 		}
 	}
