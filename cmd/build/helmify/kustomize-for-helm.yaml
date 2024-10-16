@@ -79,8 +79,8 @@ spec:
             - --prometheus-port=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_METRICS_PORT
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
-            - --emit-admission-events={{ .Values.emitAdmissionEvents }}
-            - --log-stats-admission={{ .Values.logStatsAdmission }}
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION
             - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
             - --exempt-namespace={{ .Release.Namespace }}
@@ -171,14 +171,14 @@ spec:
             - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - --audit-from-cache={{ .Values.auditFromCache }}
-            - --audit-chunk-size={{ .Values.auditChunkSize }}
+            - HELMSUBST_DEPLOYMENT_AUDIT_CHUNK_SIZE
             - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
-            - --emit-audit-events={{ .Values.emitAuditEvents }}
-            - --log-stats-audit={{ .Values.logStatsAudit }}
+            - HELMSUBST_DEPLOYMENT_AUDIT_EMIT_EVENTS
+            - HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION
             - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - --operation=audit
             - --operation=status
-            - HELMSUBST_PUBSUB_ARGS
+            - HELMSUBST_DEPLOYMENT_AUDIT_PUBSUB_ARGS
             - HELMSUBST_MUTATION_STATUS_ENABLED_ARG
             - --logtostderr
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
