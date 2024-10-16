@@ -24,7 +24,9 @@ const (
 	Name = "dapr"
 )
 
-var Connections = &Dapr{}
+var Connections = &Dapr{
+	openConnections: make(map[string]Connection),
+}
 
 func (r *Dapr) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
 	jsonData, err := json.Marshal(data)

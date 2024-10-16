@@ -48,7 +48,7 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			wantErr:  true,
-			errorMsg: fmt.Sprintf("data missing in configmap %s, unable to configure respective pubsub", request.NamespacedName),
+			errorMsg: fmt.Sprintf("data missing in configmap %s, unable to configure respective driver", request.NamespacedName),
 		},
 	}
 	for _, tc := range testCases {
