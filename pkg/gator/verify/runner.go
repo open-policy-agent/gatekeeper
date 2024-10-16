@@ -125,9 +125,7 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 	start := time.Now()
 
 	err := r.tryAddConstraint(ctx, suiteDir, t)
-	err = r.tryAddExpansion(suiteDir, t)
 	var results []CaseResult
-	// What is this Invalid and where does it get set? I didn't see it get set in tryAddConstraints
 	if t.Invalid {
 		if errors.Is(err, constraints.ErrSchema) {
 			err = nil
@@ -195,6 +193,11 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 		}
 
 		return e, nil
+	}
+
+	_, err := newExpander()
+	if err != nil {
+		return nil, err
 	}
 
 	results := make([]CaseResult, len(t.Cases))
