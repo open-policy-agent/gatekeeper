@@ -9,6 +9,9 @@ var (
 	// ErrNotAConstraint indicates the user-indicated file does not contain a
 	// Constraint.
 	ErrNotAConstraint = errors.New("not a Constraint")
+	// ErrNotAnExpansion indicates the user-indicated file does not contain a
+	// Constraint.
+	ErrNotAnExpansion = errors.New("not an Expansion Template")
 	// ErrAddingTemplate indicates a problem instantiating a Suite's ConstraintTemplate.
 	ErrAddingTemplate = errors.New("adding template")
 	// ErrAddingConstraint indicates a problem instantiating a Suite's Constraint.
