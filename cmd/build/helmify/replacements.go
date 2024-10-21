@@ -1,6 +1,8 @@
 package main
 
 var replacements = map[string]string{
+    `HELMSUBST_DEPLOYMENT_SCHEDULER_NAME`: `{{ .Values.schedulerName }}`,
+
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES: ""`: `{{- toYaml .Values.controllerManager.resources | nindent 10 }}`,
 
 	`HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""`: `{{- toYaml .Values.audit.resources | nindent 10 }}`,
