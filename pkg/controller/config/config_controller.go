@@ -26,6 +26,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/configstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -93,6 +94,11 @@ func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.Controlle
 		return nil, fmt.Errorf("cacheManager must be non-nil")
 	}
 
+	r, err := newStatsReporter()
+	if err != nil {
+		return nil, err
+	}
+
 	return &ReconcileConfig{
 		reader:       mgr.GetCache(),
 		writer:       mgr.GetClient(),
@@ -100,6 +106,7 @@ func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.Controlle
 		scheme:       mgr.GetScheme(),
 		cs:           cs,
 		cacheManager: cm,
+		metrics:      r,
 		tracker:      tracker,
 		getPod:       getPod,
 	}, nil
@@ -139,6 +146,7 @@ type ReconcileConfig struct {
 	scheme       *runtime.Scheme
 	cacheManager *cm.CacheManager
 	cs           *watch.ControllerSwitch
+	metrics      *reporter
 
 	tracker *readiness.Tracker
 
@@ -163,6 +171,13 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 			return reconcile.Result{}, nil
 		}
 	}
+
+	reportMetrics := false
+	defer func() {
+		if reportMetrics {
+			r.metrics.reportConfig(ctx, metrics.ActiveStatus, 0)
+		}
+	}()
 
 	// Fetch the Config instance
 	if request.NamespacedName != keys.Config {
@@ -199,6 +214,8 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 		newExcluder.Add(instance.Spec.Match)
 		statsEnabled = instance.Spec.Readiness.StatsEnabled
+		// Report metrics of config only if its not deleted.
+		reportMetrics = true
 	}
 
 	// Enable verbose readiness stats if requested.
