@@ -175,7 +175,9 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	reportMetrics := false
 	defer func() {
 		if reportMetrics {
-			r.metrics.reportConfig(ctx, metrics.ActiveStatus, 0)
+			if err := r.metrics.reportConfig(ctx, metrics.ActiveStatus, 0); err != nil {
+				log.Info("Error when reporting config status metric", err)
+			}
 		}
 	}()
 
