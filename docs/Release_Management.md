@@ -8,7 +8,7 @@ This document describes Gatekeeper project release management, which includes re
 
 - **X.Y.Z** refers to the version (git tag) of Gatekeeper that is released. This is the version of the Gatekeeper image and the Chart version.
 - **Breaking changes** refer to schema changes, flag changes, and behavior changes of Gatekeeper that may require a clean installation during upgrade, and it may introduce changes that could break backward compatibility.
-- **Milestone** should be designed to include feature sets to accommodate 2 months release cycles including test gates. GitHub's milestones are used by maintainers to manage each release. PRs and Issues for each release should be created as part of a corresponding milestone.
+- **Milestone** should be designed to include feature sets to accommodate 3 months release cycles including test gates. GitHub's milestones are used by maintainers to manage each release. PRs and Issues for each release should be created as part of a corresponding milestone.
 - **Patch releases** refer to applicable fixes, including security fixes, may be backported to support releases, depending on severity and feasibility.
 - **Test gates** should include soak tests and upgrade tests from the last minor version.
 
