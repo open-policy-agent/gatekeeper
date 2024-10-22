@@ -21,7 +21,6 @@ import (
 	"flag"
 	"fmt"
 	"reflect"
-
 	// "strconv".
 	"time"
 
@@ -770,7 +769,9 @@ func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1bet
 			err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update CRD", status, err)
 			return err
 		}
-		ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = ""
+		if ct.Annotations != nil {
+			ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = ""
+		}
 	}
 	if !generateVAP {
 		return nil
