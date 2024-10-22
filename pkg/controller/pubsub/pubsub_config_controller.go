@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	PubsubEnabled = flag.Bool("enable-pub-sub", false, "Enabled pubsub to publish messages")
+	PubsubEnabled = flag.Bool("enable-pub-sub", false, "(alpha) Enabled pubsub to publish messages")
 	log           = logf.Log.WithName("controller").WithValues(logging.Process, "pubsub_controller")
 )
 
