@@ -70,12 +70,9 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
 \n        - --operation=mutation-webhook\
-\n        - --operation=generate\
 \n        - --disable-opa-builtin=http.send\
 \n        - --log-mutations\
 \n        - --mutation-annotations\
-\n        - --default-create-vap-for-templates=${GENERATE_VAP}\
-\n        - --default-create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
 \n        - --log-level=${LOG_LEVEL}\
 \n---\
 \napiVersion: apps/v1\
@@ -95,6 +92,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=audit\
 \n        - --operation=status\
 \n        - --operation=mutation-status\
+\n        - --operation=generate\
 \n        - --audit-chunk-size=500\
 \n        - --logtostderr\
 \n        - --default-create-vap-for-templates=${GENERATE_VAP}\

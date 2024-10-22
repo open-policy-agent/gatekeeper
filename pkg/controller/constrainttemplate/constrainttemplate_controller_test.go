@@ -305,6 +305,20 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		logger.Info("Running Test: block-vapb-generation-until annotation should not be present")
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			ct := &v1beta1.ConstraintTemplate{}
+			if err := c.Get(ctx, types.NamespacedName{Name: denyall + strings.ToLower(suffix)}, ct); err != nil {
+				return err
+			}
+			if _, ok := ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation]; ok {
+				return fmt.Errorf("unexpected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
+			return nil
+		})
 	})
 
 	t.Run("Vap should be created with v1beta1", func(t *testing.T) {
@@ -361,7 +375,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("Vap should not be created for rego only template", func(t *testing.T) {
 		suffix := "VapShouldNotBeCreatedForRegoOnlyTemplate"
 
-		logger.Info("Running test: Vap should not be created")
+		logger.Info("Running test: Vap should not be created for rego only template")
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -388,7 +402,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("Vap should not be created for only rego engine", func(t *testing.T) {
 		suffix := "VapShouldNotBeCreatedForOnlyRegoEngine"
 
-		logger.Info("Running test: Vap should not be created")
+		logger.Info("Running test: Vap should not be created for only rego engine")
 		constraintTemplate := makeReconcileConstraintTemplateWithRegoEngine(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -652,7 +666,7 @@ func TestReconcile(t *testing.T) {
 			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
 				return err
 			}
-			if time.Now().Before(cstr.GetCreationTimestamp().Add(time.Duration(*constraint.DefaultWaitForGeneration))) {
+			if time.Now().Before(cstr.GetCreationTimestamp().Add(time.Duration(30))) {
 				return fmt.Errorf("VAPBinding should not be created before default wait")
 			}
 			return nil
@@ -722,11 +736,28 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		logger.Info("Running test: VAP ConstraintTemplate should have block-VAPB-generation-until annotation")
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			ct := &v1beta1.ConstraintTemplate{}
+			if err := c.Get(ctx, types.NamespacedName{Name: denyall + strings.ToLower(suffix)}, ct); err != nil {
+				return err
+			}
+			if ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation] == "" {
+				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 
-	t.Run("VapBinding should be created with v1", func(t *testing.T) {
+	t.Run("VapBinding should be created with v1 with some delay after constraint CRD is available", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedV1"
-		logger.Info("Running test: VapBinding should be created with v1")
+		logger.Info("Running test: VapBinding should be created with v1 with some delay after constraint CRD is available")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraint.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
@@ -746,11 +777,27 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
+			ct := &v1beta1.ConstraintTemplate{}
+			if err := c.Get(ctx, types.NamespacedName{Name: denyall + strings.ToLower(suffix)}, ct); err != nil {
+				return err
+			}
+			timestamp := ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation]
+			if timestamp == "" {
+				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
 				return err
 			}
+			// blockTime, err := time.Parse(time.RFC3339, timestamp)
+			// if err != nil {
+			// 	return err
+			// }
+			// currentTime := time.Now()
+			// if currentTime.Before(blockTime) {
+			// 	t.Fatal("VAPBinding should not be created before the timestamp", currentTime, blockTime)
+			// }
 			return nil
 		})
 		if err != nil {
