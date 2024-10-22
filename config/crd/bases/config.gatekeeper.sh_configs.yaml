@@ -112,7 +112,41 @@ spec:
             type: object
           status:
             description: ConfigStatus defines the observed state of Config.
+            properties:
+              byPod:
+                items:
+                  properties:
+                    configUID:
+                      description: |-
+                        UID is a type that holds unique ID values, including UUIDs.  Because we
+                        don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                        intent and helps make sure that UIDs and names do not get conflated.
+                      type: string
+                    errors:
+                      items:
+                        properties:
+                          message:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                        - message
+                        type: object
+                      type: array
+                    id:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    operations:
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                type: array
             type: object
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}

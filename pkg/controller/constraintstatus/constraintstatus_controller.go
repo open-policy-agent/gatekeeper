@@ -25,6 +25,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -54,6 +55,9 @@ type Adder struct {
 // Add creates a new Constraint Status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
+	if !operations.IsAssigned(operations.Status) {
+		return nil
+	}
 	r := newReconciler(mgr, a.ControllerSwitch)
 	if a.IfWatching != nil {
 		r.ifWatching = a.IfWatching
