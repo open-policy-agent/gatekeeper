@@ -7,6 +7,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
 	expansionv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/expansionstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
@@ -110,9 +111,20 @@ func add(mgr manager.Manager, r *Reconciler) error {
 	}
 
 	// Watch for changes to ExpansionTemplates
-	return c.Watch(
+	err = c.Watch(
 		source.Kind(mgr.GetCache(), &expansionv1beta1.ExpansionTemplate{},
 			&handler.TypedEnqueueRequestForObject[*expansionv1beta1.ExpansionTemplate]{}))
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to ExpansionTemplateStatuses
+	err = c.Watch(
+		source.Kind(mgr.GetCache(), &statusv1beta1.ExpansionTemplatePodStatus{}, handler.TypedEnqueueRequestsFromMapFunc(expansionstatus.PodStatusToExpansionTemplateMapper(true))))
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
