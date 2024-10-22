@@ -53,6 +53,10 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_PRIORITY_CLASS_NAME": `{{ .Values.audit.priorityClassName }}`,
 
+	"HELMSUBST_DEPLOYMENT_AUDIT_DEFAULT_WAIT_VAPB_GENERATION": `{{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
+        - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
+        {{- end }}`,
+
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_NODE_SELECTOR: ""`: `{{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}`,
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SECURITY_CONTEXT: ""`: `{{- toYaml .Values.controllerManager.podSecurityContext | nindent 8 }}`,

@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"reflect"
+
 	// "strconv".
 	"time"
 
@@ -68,9 +69,9 @@ const (
 )
 
 var (
-	logger                   = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
-	defaultWaitForGeneration = flag.Int("default-wait-for-generation", 30, "Wait to generate ValidatingAdmissionPolicyBinding after the constraint CRD is created. Defaults to 30 seconds.")
-	discoveryErr             *apiutil.ErrResourceDiscoveryFailed
+	logger                       = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
+	defaultWaitForVAPBGeneration = flag.Int("default-wait-for-vapb-generation", 30, "(alpha) Wait to generate ValidatingAdmissionPolicyBinding after the constraint CRD is created.")
+	discoveryErr                 *apiutil.ErrResourceDiscoveryFailed
 )
 
 var gvkConstraintTemplate = schema.GroupVersionKind{
@@ -893,17 +894,17 @@ func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnot
 		if ct.Annotations == nil {
 			ct.Annotations = make(map[string]string)
 		}
-		ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*defaultWaitForGeneration) * time.Second).Format(time.RFC3339)
+		ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*defaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
 	default:
 		until := ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation]
 		t, err := time.Parse(time.RFC3339, until)
 		if err != nil {
 			return err
 		}
-		if t.Before(currentTime.Add(time.Duration(*defaultWaitForGeneration*2) * time.Second)) {
+		if t.Before(currentTime.Add(time.Duration(*defaultWaitForVAPBGeneration*2) * time.Second)) {
 			return nil
 		}
-		ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*defaultWaitForGeneration) * time.Second).Format(time.RFC3339)
+		ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*defaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
 	}
 	return r.Update(ctx, ct)
 }
