@@ -26,13 +26,8 @@ import (
 )
 
 var (
-<<<<<<< HEAD
 	ExportEnabled = flag.Bool("enable-pub-sub", false, "(alpha) Enabled pubsub to publish messages")
 	log           = logf.Log.WithName("controller").WithValues(logging.Process, "pubsub_controller")
-=======
-	ExportEnabled = flag.Bool("enable-pub-sub", false, "Enable export backend to publish messages")
-	log           = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
->>>>>>> fixing errors
 )
 
 type Adder struct {
