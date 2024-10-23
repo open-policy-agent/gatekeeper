@@ -347,7 +347,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			r.log.Info("constraint controller", "generateVAPB", generateVAPB)
 			// generate vapbinding resources
 			if generateVAPB && groupVersion != nil {
-				currentVapBinding, err := transform.VapForVersion(groupVersion)
+				currentVapBinding, err := transform.VapBindingForVersion(*groupVersion)
 				if err != nil {
 					return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
 				}
@@ -388,7 +388,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			// do not generate vapbinding resources
 			// remove if exists
 			if !generateVAPB && groupVersion != nil {
-				currentVapBinding, err := transform.VapForVersion(groupVersion)
+				currentVapBinding, err := transform.VapBindingForVersion(*groupVersion)
 				if err != nil {
 					return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
 				}

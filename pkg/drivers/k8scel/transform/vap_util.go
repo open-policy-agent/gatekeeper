@@ -90,3 +90,14 @@ func VapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
 		return nil, errors.New("unrecognized version")
 	}
 }
+
+func VapBindingForVersion(gvk schema.GroupVersion) (client.Object, error) {
+	switch gvk.Version {
+	case "v1":
+		return &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, nil
+	case "v1beta1":
+		return &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}, nil
+	default:
+		return nil, errors.New("unrecognized version")
+	}
+}
