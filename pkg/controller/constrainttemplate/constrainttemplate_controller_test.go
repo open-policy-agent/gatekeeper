@@ -32,6 +32,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -271,8 +272,8 @@ func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	constraint.VapAPIEnabled = ptr.To[bool](true)
-	constraint.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+	transform.VapAPIEnabled = ptr.To[bool](true)
+	transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
 
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
@@ -696,7 +697,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreatedV1"
 
 		logger.Info("Running test: Vap should be created with v1")
-		constraint.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -721,7 +722,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedV1"
 		logger.Info("Running test: VapBinding should be created with v1")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
-		constraint.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))

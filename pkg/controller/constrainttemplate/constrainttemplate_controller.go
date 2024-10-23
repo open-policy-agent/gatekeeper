@@ -22,7 +22,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -70,7 +69,6 @@ var (
 	discoveryErr *apiutil.ErrResourceDiscoveryFailed
 )
 
-var g *logr.Logger
 var gvkConstraintTemplate = schema.GroupVersionKind{
 	Group:   v1beta1.SchemeGroupVersion.Group,
 	Version: v1beta1.SchemeGroupVersion.Version,
