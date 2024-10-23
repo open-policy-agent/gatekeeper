@@ -40,7 +40,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
-	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -154,7 +153,12 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, cacheManager.Start(ctx))
 	}()
 
-	rec, err := newReconciler(mgr, cacheManager, cs, tracker)
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
+
+	rec, err := newReconciler(mgr, cacheManager, cs, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
 	require.NoError(t, err)
 
 	// Wrap the Controller Reconcile function so it writes each request to a map when it is finished reconciling.
@@ -337,8 +341,8 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 		fakes.WithNamespace("default"),
 		fakes.WithName("testpod"),
 	)
-	pod.Spec = corev1.PodSpec{
-		Containers: []corev1.Container{
+	pod.Spec = v1.PodSpec{
+		Containers: []v1.Container{
 			{
 				Name:  "nginx",
 				Image: "nginx",
@@ -444,7 +448,12 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 		_ = cacheManager.Start(ctx)
 	}()
 
-	rec, err := newReconciler(mgr, cacheManager, cs, tracker)
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
+
+	rec, err := newReconciler(mgr, cacheManager, cs, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
 	if err != nil {
 		return nil, fmt.Errorf("creating reconciler: %w", err)
 	}
@@ -618,7 +627,12 @@ func TestConfig_Retries(t *testing.T) {
 		assert.NoError(t, cacheManager.Start(ctx))
 	}()
 
-	rec, _ := newReconciler(mgr, cacheManager, cs, tracker)
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
+
+	rec, _ := newReconciler(mgr, cacheManager, cs, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)
