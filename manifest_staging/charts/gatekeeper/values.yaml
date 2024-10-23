@@ -39,10 +39,6 @@ auditChunkSize: 500
 logLevel: INFO
 logDenies: false
 logMutations: false
-logStatsAdmission: false
-logStatsAudit: false
-emitAdmissionEvents: false
-emitAuditEvents: false
 admissionEventsInvolvedNamespace: false
 auditEventsInvolvedNamespace: false
 resourceQuota: true
@@ -231,9 +227,6 @@ controllerManager:
 audit:
   serviceAccount:
     name: gatekeeper-admin
-  enablePubsub: false
-  connection: audit-connection
-  channel: audit-channel
   hostNetwork: false
   dnsPolicy: ClusterFirst
   metricsPort: 8888

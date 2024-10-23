@@ -16,6 +16,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	status "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -82,6 +83,7 @@ type ReadinessSpec struct {
 
 // ConfigStatus defines the observed state of Config.
 type ConfigStatus struct { // Important: Run "make" to regenerate code after modifying this file
+	ByPod []status.ConfigPodStatusStatus `json:"byPod,omitempty"`
 }
 
 type GVK struct {
@@ -92,6 +94,8 @@ type GVK struct {
 
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:storageversion
 
 // Config is the Schema for the configs API.
 type Config struct {

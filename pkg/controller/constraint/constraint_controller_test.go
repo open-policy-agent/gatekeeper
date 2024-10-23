@@ -1,6 +1,7 @@
 package constraint
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -12,12 +13,14 @@ import (
 	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func makeTemplateWithRegoAndCELEngine(vapGenerationVal *bool) *templates.ConstraintTemplate {
@@ -533,4 +536,121 @@ func TestShouldGenerateVAP(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReportErrorOnConstraintStatus(t *testing.T) {
+	tests := []struct {
+		name                   string
+		status                 *constraintstatusv1beta1.ConstraintPodStatus
+		err                    error
+		message                string
+		updateErr              error
+		expectedError          error
+		expectedStatusErrorLen int
+		expectedStatusError    []constraintstatusv1beta1.Error
+	}{
+		{
+			name: "successful update",
+			status: &constraintstatusv1beta1.ConstraintPodStatus{
+				Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+			},
+			err:                    errors.New("test error"),
+			message:                "test message",
+			updateErr:              nil,
+			expectedError:          errors.New("test error"),
+			expectedStatusErrorLen: 1,
+			expectedStatusError: []constraintstatusv1beta1.Error{
+				{
+					Message: "test error",
+				},
+			},
+		},
+		{
+			name: "update error",
+			status: &constraintstatusv1beta1.ConstraintPodStatus{
+				Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+			},
+			err:                    errors.New("test error"),
+			message:                "test message",
+			updateErr:              errors.New("update error"),
+			expectedError:          errors.New("test message, could not update constraint status: update error: test error"),
+			expectedStatusErrorLen: 1,
+			expectedStatusError: []constraintstatusv1beta1.Error{
+				{
+					Message: "test error",
+				},
+			},
+		},
+		{
+			name: "append status error",
+			status: &constraintstatusv1beta1.ConstraintPodStatus{
+				Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
+					Errors: []constraintstatusv1beta1.Error{
+						{
+							Message: "existing error",
+						},
+					},
+				},
+			},
+			err:                    errors.New("test error"),
+			message:                "test message",
+			updateErr:              nil,
+			expectedError:          errors.New("test error"),
+			expectedStatusErrorLen: 2,
+			expectedStatusError: []constraintstatusv1beta1.Error{
+				{
+					Message: "existing error",
+				},
+				{
+					Message: "test error",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := &fakeWriter{updateErr: tt.updateErr}
+			r := &ReconcileConstraint{
+				writer: writer,
+			}
+
+			err := r.reportErrorOnConstraintStatus(context.TODO(), tt.status, tt.err, tt.message)
+			if err == nil || err.Error() != tt.expectedError.Error() {
+				t.Errorf("expected error %v, got %v", tt.expectedError, err)
+			}
+
+			if len(tt.status.Status.Errors) != tt.expectedStatusErrorLen {
+				t.Errorf("expected %d error in status, got %d", tt.expectedStatusErrorLen, len(tt.status.Status.Errors))
+			}
+
+			if reflect.DeepEqual(tt.status.Status.Errors, tt.expectedStatusError) {
+				t.Errorf("expected status errors %v, got %v", tt.expectedStatusError, tt.status.Status.Errors)
+			}
+		})
+	}
+}
+
+type fakeWriter struct {
+	updateErr error
+}
+
+func (f *fakeWriter) Update(_ context.Context, _ client.Object, _ ...client.UpdateOption) error {
+	return f.updateErr
+}
+
+func (f *fakeWriter) Create(_ context.Context, _ client.Object, _ ...client.CreateOption) error {
+	return nil
+}
+
+func (f *fakeWriter) Delete(_ context.Context, _ client.Object, _ ...client.DeleteOption) error {
+	return nil
+}
+
+func (f *fakeWriter) Patch(_ context.Context, _ client.Object, _ client.Patch, _ ...client.PatchOption) error {
+	return nil
+}
+
+func (f *fakeWriter) DeleteAllOf(_ context.Context, _ client.Object, _ ...client.DeleteAllOfOption) error {
+	return nil
 }
