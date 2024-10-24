@@ -178,6 +178,7 @@ spec:
             - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - --operation=audit
             - --operation=status
+            - --operation=generate
             - HELMSUBST_DEPLOYMENT_AUDIT_PUBSUB_ARGS
             - HELMSUBST_MUTATION_STATUS_ENABLED_ARG
             - --logtostderr
@@ -192,6 +193,7 @@ spec:
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
+            - HELMSUBST_DEPLOYMENT_AUDIT_DEFAULT_WAIT_VAPB_GENERATION
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:

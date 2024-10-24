@@ -69,6 +69,7 @@ spec:
         - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
         - --operation=audit
         - --operation=status
+        - --operation=generate
         {{ if hasKey .Values.audit "enablePubsub" }}
         - --enable-pub-sub={{ .Values.audit.enablePubsub }}
         {{- end }}
@@ -102,6 +103,9 @@ spec:
         
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
+        {{- end }}
+        {{ if hasKey .Values "defaultWaitForVAPBGeneration"}}
+        - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}
         command:
         - /manager
