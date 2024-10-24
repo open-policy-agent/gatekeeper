@@ -144,11 +144,6 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 	}
 }
 
-func (r *Runner) tryAddExpansion(suiteDir string, t *Test) error {
-	_, err := r.makeTestExpander(suiteDir, t)
-	return err
-}
-
 func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t *Test) error {
 	client, err := r.newClient(r.includeTrace, r.useK8sCEL)
 	if err != nil {
@@ -245,6 +240,10 @@ func (r *Runner) makeTestExpander(suiteDir string, t *Test) (*expand.Expander, e
 	}
 
 	et, err := reader.ReadExpansion(r.filesystem, path.Join(suiteDir, expansionPath))
+	if err != nil {
+		return nil, err
+	}
+
 	er, err := expand.NewExpander([]*unstructured.Unstructured{et})
 	return er, err
 }
