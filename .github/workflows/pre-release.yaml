@@ -4,7 +4,9 @@ on:
     branches:
       - master
 
-permissions: read-all
+permissions:
+  contents: read
+  packages: write
 
 env:
   IMAGE_REPO: openpolicyagent/gatekeeper
@@ -26,6 +28,13 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish development
         run: |
           make docker-login
@@ -38,7 +47,7 @@ jobs:
           exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
           if [[ $exists == null ]]
           then
-            make docker-buildx-dev \
+            make PUSH_TO_GHCR=true docker-buildx-dev \
               DEV_TAG=${GITHUB_SHA::7} \
               PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
               OUTPUT_TYPE=type=registry \
@@ -50,7 +59,7 @@ jobs:
           exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
           if [[ $exists == null ]]
           then
-            make docker-buildx-crds-dev \
+            make PUSH_TO_GHCR=true docker-buildx-crds-dev \
               DEV_TAG=${GITHUB_SHA::7} \
               PLATFORM="linux/amd64,linux/arm64" \
               OUTPUT_TYPE=type=registry \
@@ -62,7 +71,7 @@ jobs:
           exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
           if [[ $exists == null ]]
           then
-            make docker-buildx-gator-dev \
+            make PUSH_TO_GHCR=true docker-buildx-gator-dev \
               DEV_TAG=${GITHUB_SHA::7} \
               PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
               OUTPUT_TYPE=type=registry \
@@ -71,85 +80,3 @@ jobs:
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-
-  pre-release-ghcr:
-    name: "Pre Release ghcr.io"
-    runs-on: "ubuntu-22.04"
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
-    timeout-minutes: 30
-    permissions:
-      packages: write
-      contents: read
-      actions: read
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@91182cccc01eb5e619899d80e4e971d6181294a7 # v2.10.1
-        with:
-          egress-policy: audit
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871 # v4.2.1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check if tag already exists in ghcr.io/${{ env.IMAGE_REPO }}
-        id: check-ghcr-image
-        run: |
-          if docker manifest inspect ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_REPO }}:${GITHUB_SHA::7} > /dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build and push ${{ env.IMAGE_REPO }} to GHCR
-        if: steps.check-ghcr-image.outputs.exists == 'false'
-        run: |
-          make REPOSITORY=ghcr.io/${{ env.IMAGE_REPO }} docker-buildx-dev \
-            DEV_TAG=${GITHUB_SHA::7} \
-            PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
-            OUTPUT_TYPE=type=registry \
-            GENERATE_ATTESTATIONS=true
-
-      - name: Check if tag already exists in ghcr.io/${{ env.CRD_IMAGE_REPO }}
-        id: check-ghcr-crd-image
-        run: |
-          if docker manifest inspect ghcr.io/${{ github.repository_owner }}/${{ env.CRD_IMAGE_REPO }}:${GITHUB_SHA::7} > /dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build and push ghcr.io/${{ env.CRD_IMAGE_REPO }}
-        if: steps.check-ghcr-crd-image.outputs.exists == 'false'
-        run: |
-          make CRD_REPOSITORY=ghcr.io/${{ env.CRD_IMAGE_REPO }} docker-buildx-crds-dev \
-            DEV_TAG=${GITHUB_SHA::7} \
-            PLATFORM="linux/amd64,linux/arm64" \
-            OUTPUT_TYPE=type=registry \
-            GENERATE_ATTESTATIONS=true
-
-      - name: Check if tag already exists in ghcr.io/${{ env.GATOR_IMAGE_REPO }}
-        id: check-ghcr-gator-image
-        run: |
-          if docker manifest inspect ghcr.io/${{ github.repository_owner }}/${{ env.GATOR_IMAGE_REPO }}:${GITHUB_SHA::7} > /dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-          
-      - name: Build and push ghcr.io/${{ env.GATOR_IMAGE_REPO }}
-        if: steps.check-ghcr-gator-image.outputs.exists == 'false'
-        run: |
-          make GATOR_REPOSITORY=ghcr.io/${{ env.GATOR_IMAGE_REPO }} docker-buildx-gator-dev \
-            DEV_TAG=${GITHUB_SHA::7} \
-            PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
-            OUTPUT_TYPE=type=registry \
-            GENERATE_ATTESTATIONS=true
