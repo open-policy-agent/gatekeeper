@@ -5,6 +5,7 @@ GATOR_REPOSITORY ?= openpolicyagent/gator
 IMG := $(REPOSITORY):latest
 CRD_IMG := $(CRD_REPOSITORY):latest
 GATOR_IMG := $(GATOR_REPOSITORY):latest
+PUSH_TO_GHCR ?= false
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
@@ -408,6 +409,7 @@ docker-buildx-crds: build-crds docker-buildx-builder
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
 		-t $(CRD_IMG) \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/$(CRD_IMG)) \
 		-f crd.Dockerfile .staging/crds/
 
 docker-buildx-dev: docker-buildx-builder
@@ -417,7 +419,9 @@ docker-buildx-dev: docker-buildx-builder
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
 		-t $(REPOSITORY):$(DEV_TAG) \
-		-t $(REPOSITORY):dev .
+		-t $(REPOSITORY):dev \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/$(REPOSITORY):$(DEV_TAG)) \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/$(REPOSITORY):dev) .
 
 docker-buildx-crds-dev: build-crds docker-buildx-builder
 	docker buildx build \
@@ -427,6 +431,8 @@ docker-buildx-crds-dev: build-crds docker-buildx-builder
 		--output=$(OUTPUT_TYPE) \
 		-t $(CRD_REPOSITORY):$(DEV_TAG) \
 		-t $(CRD_REPOSITORY):dev \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/$(CRD_REPOSITORY):$(DEV_TAG)) \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/$(CRD_REPOSITORY):dev) \
 		-f crd.Dockerfile .staging/crds/
 
 docker-buildx-release: docker-buildx-builder
@@ -435,7 +441,8 @@ docker-buildx-release: docker-buildx-builder
 		--build-arg LDFLAGS=${LDFLAGS} \
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
-		-t $(REPOSITORY):$(VERSION) .
+		-t $(REPOSITORY):$(VERSION) \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/$(REPOSITORY):$(VERSION)) .
 
 docker-buildx-crds-release: build-crds docker-buildx-builder
 	docker buildx build \
@@ -444,6 +451,7 @@ docker-buildx-crds-release: build-crds docker-buildx-builder
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
 		-t $(CRD_REPOSITORY):$(VERSION) \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/$(CRD_REPOSITORY):$(VERSION)) \
 		-f crd.Dockerfile .staging/crds/
 
 # Build gator image
@@ -455,6 +463,8 @@ docker-buildx-gator-dev: docker-buildx-builder
 		--output=$(OUTPUT_TYPE) \
 		-t ${GATOR_REPOSITORY}:${DEV_TAG} \
 		-t ${GATOR_REPOSITORY}:dev \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/${GATOR_REPOSITORY}:${DEV_TAG}) \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/${GATOR_REPOSITORY}:dev) \
 		-f gator.Dockerfile .
 
 docker-buildx-gator-release: docker-buildx-builder
@@ -464,6 +474,7 @@ docker-buildx-gator-release: docker-buildx-builder
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
 		-t ${GATOR_REPOSITORY}:${VERSION} \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/${GATOR_REPOSITORY}:${VERSION}) \
 		-f gator.Dockerfile .
 
 # Update manager_image_patch.yaml with image tag

@@ -11,6 +11,7 @@ env:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   tagged-release:
@@ -45,6 +46,13 @@ jobs:
         run: |
           echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish release
         run: |
           make docker-login
@@ -57,7 +65,7 @@ jobs:
           exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
           if [[ $exists == null ]]
           then
-            make docker-buildx-release \
+            make PUSH_TO_GHCR=true docker-buildx-release \
               VERSION=${TAG} \
               PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
               OUTPUT_TYPE=type=registry \
@@ -69,7 +77,7 @@ jobs:
           exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
           if [[ $exists == null ]]
           then
-            make docker-buildx-crds-release \
+            make PUSH_TO_GHCR=true docker-buildx-crds-release \
               VERSION=${TAG} \
               PLATFORM="linux/amd64,linux/arm64" \
               OUTPUT_TYPE=type=registry \
@@ -81,7 +89,7 @@ jobs:
           exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
           if [[ $exists == null ]]
           then
-            make docker-buildx-gator-release \
+            make PUSH_TO_GHCR=true docker-buildx-gator-release \
               VERSION=${TAG} \
               PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
               OUTPUT_TYPE=type=registry \
