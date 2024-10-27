@@ -60,22 +60,6 @@ Gatekeeper is assumed to be compatible with the [current Kubernetes Supported Ve
 
 For example, if Gatekeeper _supported_ versions are v3.7 and v3.8, and Kubernetes _supported_ versions are v1.22, v1.23, v1.24, then all supported Gatekeeper versions (v3.7, v3.8) are assumed to be compatible with all supported Kubernetes versions (v1.22, v1.23, v1.24). If Kubernetes v1.25 is released later, then Gatekeeper v3.7 and v3.8 will be assumed to be compatible with v1.25 if those Gatekeeper versions are still supported at that time.
 
-This is the official compatibility between Gatekeeper and Kubernetes versions.
-
-|                     | Kubernetes 1.22.z | Kubernetes 1.23.z | Kubernetes 1.24.z | Kubernetes 1.25.z | Kubernetes 1.26.z | Kubernetes 1.27.z | Kubernetes 1.28.z | Kubernetes 1.29.z | Kubernetes 1.30.z | Kubernetes 1.31.z |
-|---------------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|
-| **Gatekeeper 3.7**  | ✓                 | ✓                 | ✓                 | -                 | -                 | -                 | -                 | -                 | -                 | -                 |
-| **Gatekeeper 3.8**  | ✓                 | ✓                 | ✓                 | ✓                 | -                 | -                 | -                 | -                 | -                 | -                 |
-| **Gatekeeper 3.9**  | ✓                 | ✓                 | ✓                 | ✓                 | ✓                 | -                 | -                 | -                 | -                 | -                 |
-| **Gatekeeper 3.10** | ✓                 | ✓                 | ✓                 | ✓                 | ✓                 | ✓                 | -                 | -                 | -                 | -                 |
-| **Gatekeeper 3.11** | -                 | -                 | ✓                 | ✓                 | ✓                 | ✓                 | -                 | -                 | -                 | -                 |
-| **Gatekeeper 3.12** | -                 | -                 | ✓                 | ✓                 | ✓                 | ✓                 | ✓                 | -                 | -                 | -                 |
-| **Gatekeeper 3.13** | -                 | -                 | -                 | ✓                 | ✓                 | ✓                 | ✓                 | ✓                 | -                 | -                 |
-| **Gatekeeper 3.14** | -                 | -                 | -                 | -                 | ✓                 | ✓                 | ✓                 | ✓                 | ✓                 | -                 |
-| **Gatekeeper 3.15** | -                 | -                 | -                 | -                 | ✓                 | ✓                 | ✓                 | ✓                 | ✓                 | ✓                 |
-| **Gatekeeper 3.16** | -                 | -                 | -                 | -                 | -                 | ✓                 | ✓                 | ✓                 | ✓                 | ✓                 |
-| **Gatekeeper 3.17** | -                 | -                 | -                 | -                 | -                 | -                 | ✓                 | ✓                 | ✓                 | ✓                 |
-
 If you choose to use Gatekeeper with a version of Kubernetes that it does not support, you are using it at your own risk.
 
 ## Upgrades

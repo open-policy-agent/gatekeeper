@@ -112,6 +112,10 @@
         {
           "type": "doc",
           "id": "version-v3.7.x/opa-versions"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.7.x/kubernetes-versions"
         }
       ]
     },

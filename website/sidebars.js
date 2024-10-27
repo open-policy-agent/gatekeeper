@@ -46,7 +46,8 @@ module.exports = {
       items: [
         'operations',
         'performance-tuning',
-        'opa-versions'
+        'opa-versions',
+        'kubernetes-versions'
       ],
     },
     {
