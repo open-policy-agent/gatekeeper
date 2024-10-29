@@ -10,6 +10,9 @@ import (
 
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	gvkmanifestv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/gvkmanifest/v1alpha1"
+	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -58,7 +61,7 @@ func ReadUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
 			continue
 		}
 
-		u, err := readUnstructured([]byte(split))
+		u, err := ReadUnstructured([]byte(split))
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", gator.ErrInvalidYAML, err)
 		}
@@ -69,7 +72,7 @@ func ReadUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
 	return result, nil
 }
 
-func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
+func ReadUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
 	u := &unstructured.Unstructured{
 		Object: make(map[string]interface{}),
 	}
@@ -89,7 +92,7 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 		return nil, fmt.Errorf("reading ConstraintTemplate from %q: %w", path, err)
 	}
 
-	u, err := readUnstructured(bytes)
+	u, err := ReadUnstructured(bytes)
 	if err != nil {
 		return nil, fmt.Errorf("%w: parsing ConstraintTemplate YAML from %q: %w", gator.ErrAddingTemplate, path, err)
 	}
@@ -101,21 +104,14 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 	return template, nil
 }
 
-// TODO (https://github.com/open-policy-agent/gatekeeper/issues/1779): Move
-// this function into a location that makes it more obviously a shared resource
-// between `gator test` and `gator verify`
-
-// ToTemplate converts an unstructured template into a versionless ConstraintTemplate struct.
-func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*templates.ConstraintTemplate, error) {
+// ToStructured converts an unstructured object into an object with the schema defined
+// by u's group, version, and kind.
+func ToStructured(scheme *runtime.Scheme, u *unstructured.Unstructured) (runtime.Object, error) {
 	gvk := u.GroupVersionKind()
-	if gvk.Group != templatesv1.SchemeGroupVersion.Group || gvk.Kind != "ConstraintTemplate" {
-		return nil, fmt.Errorf("%w", gator.ErrNotATemplate)
-	}
-
 	t, err := scheme.New(gvk)
 	if err != nil {
 		// The type isn't registered in the scheme.
-		return nil, fmt.Errorf("%w: %w", gator.ErrAddingTemplate, err)
+		return nil, err
 	}
 
 	// YAML parsing doesn't properly handle ObjectMeta, so we must
@@ -127,6 +123,19 @@ func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*template
 		return nil, fmt.Errorf("calling unstructured.MarshalJSON(): %w", err)
 	}
 	err = json.Unmarshal(jsonBytes, t)
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// ToTemplate converts an unstructured template into a versionless ConstraintTemplate struct.
+func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*templates.ConstraintTemplate, error) {
+	if u.GroupVersionKind().Group != templatesv1.SchemeGroupVersion.Group || u.GroupVersionKind().Kind != "ConstraintTemplate" {
+		return nil, fmt.Errorf("%w", gator.ErrNotATemplate)
+	}
+
+	t, err := ToStructured(scheme, u)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", gator.ErrAddingTemplate, err)
 	}
@@ -146,6 +155,63 @@ func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*template
 	return template, nil
 }
 
+// ToSyncSet converts an unstructured SyncSet into a SyncSet struct.
+func ToSyncSet(scheme *runtime.Scheme, u *unstructured.Unstructured) (*syncsetv1alpha1.SyncSet, error) {
+	if u.GroupVersionKind().Group != syncsetv1alpha1.GroupVersion.Group || u.GroupVersionKind().Kind != "SyncSet" {
+		return nil, fmt.Errorf("%w", gator.ErrNotASyncSet)
+	}
+
+	s, err := ToStructured(scheme, u)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingSyncSet, err)
+	}
+
+	syncSet, isSyncSet := s.(*syncsetv1alpha1.SyncSet)
+	if !isSyncSet {
+		return nil, fmt.Errorf("%w: %T", gator.ErrAddingSyncSet, syncSet)
+	}
+
+	return syncSet, nil
+}
+
+// ToConfig converts an unstructured Config into a Config struct.
+func ToConfig(scheme *runtime.Scheme, u *unstructured.Unstructured) (*configv1alpha1.Config, error) {
+	if u.GroupVersionKind().Group != configv1alpha1.GroupVersion.Group || u.GroupVersionKind().Kind != "Config" {
+		return nil, fmt.Errorf("%w", gator.ErrNotAConfig)
+	}
+
+	s, err := ToStructured(scheme, u)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingConfig, err)
+	}
+
+	config, isConfig := s.(*configv1alpha1.Config)
+	if !isConfig {
+		return nil, fmt.Errorf("%w: %T", gator.ErrAddingConfig, config)
+	}
+
+	return config, nil
+}
+
+// ToGVKManifest converts an unstructured GVKManifest into a GVKManifest struct.
+func ToGVKManifest(scheme *runtime.Scheme, u *unstructured.Unstructured) (*gvkmanifestv1alpha1.GVKManifest, error) {
+	if u.GroupVersionKind().Group != gvkmanifestv1alpha1.GroupVersion.Group || u.GroupVersionKind().Kind != "GVKManifest" {
+		return nil, fmt.Errorf("%w", gator.ErrNotAGVKManifest)
+	}
+
+	s, err := ToStructured(scheme, u)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingGVKManifest, err)
+	}
+
+	gvkManifest, isGVKManifest := s.(*gvkmanifestv1alpha1.GVKManifest)
+	if !isGVKManifest {
+		return nil, fmt.Errorf("%w: %T", gator.ErrAddingGVKManifest, gvkManifest)
+	}
+
+	return gvkManifest, nil
+}
+
 // ReadObject reads a file from the filesystem abstraction at the specified
 // path, and returns an unstructured.Unstructured object if the file can be
 // successfully unmarshalled.
@@ -155,7 +221,7 @@ func ReadObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
 		return nil, fmt.Errorf("reading Constraint from %q: %w", path, err)
 	}
 
-	u, err := readUnstructured(bytes)
+	u, err := ReadUnstructured(bytes)
 	if err != nil {
 		return nil, fmt.Errorf("%w: parsing Constraint from %q: %w", gator.ErrAddingConstraint, path, err)
 	}
@@ -206,4 +272,29 @@ func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
 	}
 
 	return objs, nil
+}
+
+func IsTemplate(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == templatesv1.SchemeGroupVersion.Group && gvk.Kind == "ConstraintTemplate"
+}
+
+func IsConfig(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == configv1alpha1.GroupVersion.Group && gvk.Kind == "Config"
+}
+
+func IsSyncSet(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == syncsetv1alpha1.GroupVersion.Group && gvk.Kind == "SyncSet"
+}
+
+func IsGVKManifest(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == gvkmanifestv1alpha1.GroupVersion.Group && gvk.Kind == "GVKManifest"
+}
+
+func IsConstraint(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == "constraints.gatekeeper.sh"
 }
