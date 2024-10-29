@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis"
-	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
@@ -60,7 +59,7 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 	// search for templates, add them if they exist
 	ctx := context.Background()
 	for _, obj := range objs {
-		if !isTemplate(obj) {
+		if !reader.IsTemplate(obj) {
 			continue
 		}
 
@@ -78,7 +77,7 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 	// add all constraints.  A constraint must be added after its associated
 	// template or OPA will return an error
 	for _, obj := range objs {
-		if !isConstraint(obj) {
+		if !reader.IsConstraint(obj) {
 			continue
 		}
 
@@ -173,16 +172,6 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 	}
 
 	return responses, nil
-}
-
-func isTemplate(u *unstructured.Unstructured) bool {
-	gvk := u.GroupVersionKind()
-	return gvk.Group == templatesv1.SchemeGroupVersion.Group && gvk.Kind == "ConstraintTemplate"
-}
-
-func isConstraint(u *unstructured.Unstructured) bool {
-	gvk := u.GroupVersionKind()
-	return gvk.Group == "constraints.gatekeeper.sh"
 }
 
 func makeRegoDriver(tOpts Opts) (*rego.Driver, error) {
