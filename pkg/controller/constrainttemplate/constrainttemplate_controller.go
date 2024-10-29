@@ -490,7 +490,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 	// generating vap resources
 	if generateVap && isVapAPIEnabled && groupVersion != nil {
-		currentVap, err := transform.VapForVersion(groupVersion)
+		currentVap, err := vapForVersion(groupVersion)
 		if err != nil {
 			logger.Error(err, "error getting vap object with respective groupVersion")
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with runtime group version", status, err)
@@ -545,7 +545,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	// do not generate vap resources
 	// remove if exists
 	if !generateVap && isVapAPIEnabled && groupVersion != nil {
-		currentVap, err := transform.VapForVersion(groupVersion)
+		currentVap, err := vapForVersion(groupVersion)
 		if err != nil {
 			logger.Error(err, "error getting vap object with respective groupVersion")
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
@@ -744,6 +744,17 @@ func makeGvk(kind string) schema.GroupVersionKind {
 		Group:   "constraints.gatekeeper.sh",
 		Version: "v1beta1",
 		Kind:    kind,
+	}
+}
+
+func vapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
+	switch gvk.Version {
+	case "v1":
+		return &admissionregistrationv1.ValidatingAdmissionPolicy{}, nil
+	case "v1beta1":
+		return &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}, nil
+	default:
+		return nil, errors.New("unrecognized version")
 	}
 }
 

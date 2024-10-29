@@ -347,7 +347,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			r.log.Info("constraint controller", "generateVAPB", generateVAPB)
 			// generate vapbinding resources
 			if generateVAPB && groupVersion != nil {
-				currentVapBinding, err := transform.VapBindingForVersion(*groupVersion)
+				currentVapBinding, err := vapBindingForVersion(*groupVersion)
 				if err != nil {
 					return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
 				}
@@ -388,7 +388,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			// do not generate vapbinding resources
 			// remove if exists
 			if !generateVAPB && groupVersion != nil {
-				currentVapBinding, err := transform.VapBindingForVersion(*groupVersion)
+				currentVapBinding, err := vapBindingForVersion(*groupVersion)
 				if err != nil {
 					return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
 				}
@@ -616,6 +616,17 @@ func (c *ConstraintsCache) reportTotalConstraints(ctx context.Context, reporter 
 				log.Error(err, "failed to report total constraints")
 			}
 		}
+	}
+}
+
+func vapBindingForVersion(gvk schema.GroupVersion) (client.Object, error) {
+	switch gvk.Version {
+	case "v1":
+		return &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, nil
+	case "v1beta1":
+		return &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}, nil
+	default:
+		return nil, errors.New("unrecognized version")
 	}
 }
 

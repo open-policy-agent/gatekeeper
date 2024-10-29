@@ -1,7 +1,6 @@
 package transform
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -10,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	rest "k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var vapMux sync.RWMutex
@@ -78,26 +76,4 @@ func IsVapAPIEnabled(log *logr.Logger) (bool, *schema.GroupVersion) {
 	VapAPIEnabled = new(bool)
 	*VapAPIEnabled = false
 	return false, nil
-}
-
-func VapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
-	switch gvk.Version {
-	case "v1":
-		return &admissionregistrationv1.ValidatingAdmissionPolicy{}, nil
-	case "v1beta1":
-		return &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}, nil
-	default:
-		return nil, errors.New("unrecognized version")
-	}
-}
-
-func VapBindingForVersion(gvk schema.GroupVersion) (client.Object, error) {
-	switch gvk.Version {
-	case "v1":
-		return &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, nil
-	case "v1beta1":
-		return &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}, nil
-	default:
-		return nil, errors.New("unrecognized version")
-	}
 }
