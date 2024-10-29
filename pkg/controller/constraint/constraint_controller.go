@@ -74,12 +74,6 @@ var (
 	ErrVAPConditionsNotSatisfied            = errors.New("Conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
 )
 
-// var vapMux sync.RWMutex
-
-// var VapAPIEnabled *bool
-
-// var GroupVersion *schema.GroupVersion
-
 type Adder struct {
 	CFClient         *constraintclient.Client
 	ConstraintsCache *ConstraintsCache
