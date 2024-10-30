@@ -366,6 +366,10 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (gator.Client, 
 	}
 
 	review, err := c.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
+	if err != nil {
+		return nil, fmt.Errorf("reviewing %v %s/%s: %w",
+			toReview.GroupVersionKind(), toReview.GetNamespace(), toReview.GetName(), err)
+	}
 
 	if e != nil {
 		resultants, err := e.Expand(toReview)

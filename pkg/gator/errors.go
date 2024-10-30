@@ -19,6 +19,7 @@ var (
 	// SyncSet.
 	ErrNotAGVKManifest = errors.New("not a GVKManifest")
 	// ErrNotAnExpansion indicates the user-indicated file does not contain a
+	// ErrNotAnExpansion indicates the user-indicated file does not contain an
 	// ExpansionTemplate.
 	ErrNotAnExpansion = errors.New("not an Expansion Template")
 	// ErrAddingTemplate indicates a problem instantiating a Suite's ConstraintTemplate.
