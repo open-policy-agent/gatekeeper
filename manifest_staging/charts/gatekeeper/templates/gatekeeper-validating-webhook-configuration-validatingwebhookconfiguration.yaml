@@ -87,6 +87,7 @@ webhooks:
     - 'nodes/proxy'
     # For constraints that mitigate CVE-2020-8554
     - 'services/status'
+    scope: 'Namespaced'
   {{- end }}
   sideEffects: None
   timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
