@@ -352,6 +352,16 @@ metadata:
   name: k8suniqueserviceselector
   annotations:
     description: Requires Services to have unique selectors within a namespace.
+    metadata.gatekeeper.sh/requires-sync-data: |
+      "[
+        [
+          {
+            "groups": [""],
+            "versions": ["v1"],
+            "kinds": ["Service"]
+          }
+        ]
+      ]"
 spec:
   crd:
     spec:
@@ -392,6 +402,70 @@ spec:
           input_selector == other_selector
           msg := sprintf("same selector as service <%v> in namespace <%v>", [name, namespace])
         }
+`
+
+	TemplateReferentialMultEquivSets = `
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8suniqueingresshost
+  annotations:
+    metadata.gatekeeper.sh/title: "Unique Ingress Host"
+    metadata.gatekeeper.sh/version: 1.0.3
+    metadata.gatekeeper.sh/requires-sync-data: |
+      "[
+        [
+          {
+            "groups": ["extensions"],
+            "versions": ["v1beta1"],
+            "kinds": ["Ingress"]
+          },
+          {
+            "groups": ["networking.k8s.io"],
+            "versions": ["v1beta1", "v1"],
+            "kinds": ["Ingress"]
+          }
+        ]
+      ]"
+`
+
+	TemplateReferentialMultReqs = `
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8suniqueingresshostmultireq
+  annotations:
+    metadata.gatekeeper.sh/title: "Unique Ingress Host"
+    metadata.gatekeeper.sh/version: 1.0.3
+    metadata.gatekeeper.sh/requires-sync-data: |
+      "[
+        [
+          {
+            "groups": [""],
+            "versions": ["v1"],
+            "kinds": ["Pod"]
+          }
+        ],
+        [
+          {
+            "groups": ["networking.k8s.io"],
+            "versions": ["v1beta1", "v1"],
+            "kinds": ["Ingress"]
+          }
+        ]
+      ]"
+`
+
+	TemplateReferentialBadAnnotation = `
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8suniqueingresshostbadannotation
+  annotations:
+    metadata.gatekeeper.sh/title: "Unique Ingress Host"
+    metadata.gatekeeper.sh/version: 1.0.3
+    metadata.gatekeeper.sh/requires-sync-data: |
+      "{}"
 `
 
 	ConstraintReferential = `
