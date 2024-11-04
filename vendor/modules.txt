@@ -1627,4 +1627,3 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20240927180816-0f64229c5539 => github.com/abhipatnala/frameworks/constraint v0.0.0-20241010172729-61e15952c5c5
