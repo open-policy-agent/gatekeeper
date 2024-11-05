@@ -314,15 +314,6 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			logAddition(r.log, instance, enforcementAction)
 		}
 
-		requeueAfter, err := r.generateVAPB(ctx, enforcementAction, instance, status)
-		if err != nil {
-			return reconcile.Result{RequeueAfter: requeueAfter}, err
-		}
-		if requeueAfter != time.Duration(0) {
-			log.Info("requeueing after", "requeueAfter", requeueAfter)
-			return reconcile.Result{RequeueAfter: requeueAfter}, nil
-		}
-
 		status.Status.Enforced = true
 		if err = r.writer.Update(ctx, status); err != nil {
 			return reconcile.Result{Requeue: true}, nil
@@ -334,6 +325,14 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			status:            metrics.ActiveStatus,
 		})
 		reportMetrics = true
+		requeueAfter, err := r.generateVAPB(ctx, enforcementAction, instance, status)
+		if err != nil {
+			return reconcile.Result{RequeueAfter: requeueAfter}, err
+		}
+		if requeueAfter != time.Duration(0) {
+			log.Info("requeueing after", "requeueAfter", requeueAfter)
+			return reconcile.Result{RequeueAfter: requeueAfter}, nil
+		}
 	} else {
 		r.log.Info("handling constraint delete", "instance", instance)
 		if _, err := r.cfClient.RemoveConstraint(ctx, instance); err != nil {
