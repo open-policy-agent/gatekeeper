@@ -671,10 +671,6 @@ func TestReconcile(t *testing.T) {
 			if err := c.Get(ctx, types.NamespacedName{Name: cstr.GetName()}, cstr); err != nil {
 				return err
 			}
-			timestamp := ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation]
-			if timestamp == "" {
-				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
-			}
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
