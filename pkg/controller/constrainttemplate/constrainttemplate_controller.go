@@ -774,6 +774,7 @@ func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1bet
 		return nil
 	}
 
+	// Update templates to make sure that the VAPB generation block until timestamp set post CRD creation
 	err := r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, ct)
 	if err != nil {
 		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, err)
@@ -897,7 +898,7 @@ func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnot
 			return err
 		}
 		// if wait time is within the time window to generate vap binding, do not update the annotation
-		// otherwise update the annotation with the current time + wait time. This protects against manual updates on annotations with a timestamp that prevents binding from getting generated.
+		// otherwise update the annotation with the current time + wait time. This prevents clock skew from preventing generation on task reschedule.
 		if t.Before(currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second)) {
 			return nil
 		}

@@ -303,14 +303,6 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, "could not validate enforcement actions")
 			}
 
-			requeueAfter, err := r.generateVAPB(ctx, enforcementAction, instance, status)
-			if err != nil {
-				return reconcile.Result{RequeueAfter: requeueAfter}, err
-			}
-			if requeueAfter != time.Duration(0) {
-				log.Info("requeueing after", "requeueAfter", requeueAfter)
-				return reconcile.Result{RequeueAfter: requeueAfter}, nil
-			}
 			if err := r.cacheConstraint(ctx, instance); err != nil {
 				r.constraintsCache.addConstraintKey(constraintKey, tags{
 					enforcementAction: enforcementAction,
@@ -320,6 +312,15 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, status, err, "could not cache constraint")
 			}
 			logAddition(r.log, instance, enforcementAction)
+		}
+
+		requeueAfter, err := r.generateVAPB(ctx, enforcementAction, instance, status)
+		if err != nil {
+			return reconcile.Result{RequeueAfter: requeueAfter}, err
+		}
+		if requeueAfter != time.Duration(0) {
+			log.Info("requeueing after", "requeueAfter", requeueAfter)
+			return reconcile.Result{RequeueAfter: requeueAfter}, nil
 		}
 
 		status.Status.Enforced = true
@@ -522,9 +523,9 @@ func (r *ReconcileConstraint) generateVAPB(ctx context.Context, enforcementActio
 				_ = r.reportErrorOnConstraintStatus(ctx, status, ErrVAPConditionsNotSatisfied, "Cannot generate ValidatingAdmissionPolicyBinding")
 				generateVAPB = false
 			default:
-				// reconcile after default wait time for vapb generation if annotation is not set
+				// reconcile for vapb generation if annotation is not set
 				if ct.Annotations == nil || ct.Annotations[BlockVAPBGenerationUntilAnnotation] == "" {
-					return time.Duration(*DefaultWaitForVAPBGeneration) * time.Second, r.reportErrorOnConstraintStatus(ctx, status, errors.New("annotation to wait for ValidatingAdmissionPolicyBinding generation not found"), "could not find annotation to wait for ValidatingAdmissionPolicyBinding generation")
+					return time.Duration(1) * time.Second, r.reportErrorOnConstraintStatus(ctx, status, errors.New("annotation to wait for ValidatingAdmissionPolicyBinding generation not found"), "could not find annotation to wait for ValidatingAdmissionPolicyBinding generation")
 				}
 
 				// waiting for sometime before generating vapbinding, gives api-server time to cache CRDs
@@ -550,7 +551,7 @@ func (r *ReconcileConstraint) generateVAPB(ctx context.Context, enforcementActio
 		vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 		log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 		if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
-			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
+			if !apierrors.IsNotFound(err) {
 				return ret, err
 			}
 			currentVapBinding = nil
