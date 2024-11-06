@@ -15,10 +15,9 @@ var (
 	// ErrNotASyncSet indicates the user-indicated file does not contain a
 	// SyncSet.
 	ErrNotASyncSet = errors.New("not a SyncSet")
-	// ErrNotASyncSet indicates the user-indicated file does not contain a
-	// SyncSet.
+	// ErrNotAGVKManifest indicates the user-indicated file does not contain a
+	// GVK Manifest.
 	ErrNotAGVKManifest = errors.New("not a GVKManifest")
-	// ErrNotAnExpansion indicates the user-indicated file does not contain a
 	// ErrNotAnExpansion indicates the user-indicated file does not contain an
 	// ExpansionTemplate.
 	ErrNotAnExpansion = errors.New("not an Expansion Template")
