@@ -325,7 +325,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			status:            metrics.ActiveStatus,
 		})
 		reportMetrics = true
-		requeueAfter, err := r.generateVAPB(ctx, enforcementAction, instance, status)
+		requeueAfter, err := r.manageVAPB(ctx, enforcementAction, instance, status)
 		if err != nil {
 			return reconcile.Result{RequeueAfter: requeueAfter}, err
 		}
@@ -477,7 +477,7 @@ func (r *ReconcileConstraint) reportErrorOnConstraintStatus(ctx context.Context,
 	return err
 }
 
-func (r *ReconcileConstraint) generateVAPB(ctx context.Context, enforcementAction util.EnforcementAction, instance *unstructured.Unstructured, status *constraintstatusv1beta1.ConstraintPodStatus) (time.Duration, error) {
+func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction util.EnforcementAction, instance *unstructured.Unstructured, status *constraintstatusv1beta1.ConstraintPodStatus) (time.Duration, error) {
 	ret := time.Duration(0)
 	if !operations.IsAssigned(operations.Generate) {
 		log.Info("generate operation is not assigned, ValidatingAdmissionPolicyBinding resource will not be generated")
@@ -524,7 +524,7 @@ func (r *ReconcileConstraint) generateVAPB(ctx context.Context, enforcementActio
 			default:
 				// reconcile for vapb generation if annotation is not set
 				if ct.Annotations == nil || ct.Annotations[BlockVAPBGenerationUntilAnnotation] == "" {
-					return time.Duration(1) * time.Second, r.reportErrorOnConstraintStatus(ctx, status, errors.New("annotation to wait for ValidatingAdmissionPolicyBinding generation not found"), "could not find annotation to wait for ValidatingAdmissionPolicyBinding generation")
+					return ret, r.reportErrorOnConstraintStatus(ctx, status, errors.New("annotation to wait for ValidatingAdmissionPolicyBinding generation not found"), "could not find annotation to wait for ValidatingAdmissionPolicyBinding generation")
 				}
 
 				// waiting for sometime before generating vapbinding, gives api-server time to cache CRDs
