@@ -512,6 +512,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			hasVAP, err := ShouldGenerateVAP(unversionedCT)
 			switch {
 			case errors.Is(err, celSchema.ErrCodeNotDefined):
+				// TODO jgabani: follow up with enforcementPointStatus field under bypod to not swallow this error.
 				generateVAPB = false
 			case err != nil:
 				log.Error(err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy", "constraint", instance.GetName(), "constraint_template", unversionedCT.GetName())
