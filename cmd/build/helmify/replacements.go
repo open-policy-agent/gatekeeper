@@ -173,7 +173,7 @@ var replacements = map[string]string{
     - services/proxy
     - nodes/proxy
     - services/status
-    scope: 'Namespaced'
+    scope: '{{ .Values.mutatingWebhookScope }}'
   {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.mutatingWebhookURL }}
@@ -259,7 +259,7 @@ var replacements = map[string]string{
     - 'nodes/proxy'
     # For constraints that mitigate CVE-2020-8554
     - 'services/status'
-    scope: 'Namespaced'
+    scope: '{{ .Values.validatingWebhookScope }}'
   {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_MATCH_CONDITIONS": `{{ toYaml .Values.mutatingWebhookMatchConditions | nindent 4 }}`,

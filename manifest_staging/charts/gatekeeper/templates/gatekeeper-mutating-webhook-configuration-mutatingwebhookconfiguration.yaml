@@ -79,7 +79,7 @@ webhooks:
     - services/proxy
     - nodes/proxy
     - services/status
-    scope: 'Namespaced'
+    scope: '{{ .Values.mutatingWebhookScope }}'
   {{- end }}
   sideEffects: None
   timeoutSeconds: {{ .Values.mutatingWebhookTimeoutSeconds }}
