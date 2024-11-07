@@ -771,7 +771,7 @@ func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1bet
 		return nil
 	}
 
-	// Update templates to make sure that the VAPB generation block until timestamp set post CRD creation
+	// We add the annotation as a follow-on update to be sure the timestamp is set relative to a time after the CRD is successfully created. Creating the CRD with a delay timestamp already set would not account for request latency.
 	err := r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, ct)
 	if err != nil {
 		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, err)

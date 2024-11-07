@@ -478,21 +478,21 @@ func (r *ReconcileConstraint) reportErrorOnConstraintStatus(ctx context.Context,
 }
 
 func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction util.EnforcementAction, instance *unstructured.Unstructured, status *constraintstatusv1beta1.ConstraintPodStatus) (time.Duration, error) {
-	ret := time.Duration(0)
+	noDelay := time.Duration(0)
 	if !operations.IsAssigned(operations.Generate) {
 		log.Info("generate operation is not assigned, ValidatingAdmissionPolicyBinding resource will not be generated")
-		return ret, nil
+		return noDelay, nil
 	}
 	ct := &v1beta1.ConstraintTemplate{}
 	err := r.reader.Get(ctx, types.NamespacedName{Name: strings.ToLower(instance.GetKind())}, ct)
 	if err != nil {
-		return ret, err
+		return noDelay, err
 	}
 
 	generateVAPB, VAPEnforcementActions, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
 	if err != nil {
 		log.Error(err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
-		return ret, r.reportErrorOnConstraintStatus(ctx, status, err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
+		return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 	}
 	isAPIEnabled := false
 	var groupVersion *schema.GroupVersion
@@ -507,7 +507,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		} else {
 			unversionedCT := &templates.ConstraintTemplate{}
 			if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
-				return ret, r.reportErrorOnConstraintStatus(ctx, status, err, "could not convert ConstraintTemplate to unversioned")
+				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not convert ConstraintTemplate to unversioned")
 			}
 			hasVAP, err := ShouldGenerateVAP(unversionedCT)
 			switch {
@@ -525,14 +525,14 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			default:
 				// reconcile for vapb generation if annotation is not set
 				if ct.Annotations == nil || ct.Annotations[BlockVAPBGenerationUntilAnnotation] == "" {
-					return ret, r.reportErrorOnConstraintStatus(ctx, status, errors.New("annotation to wait for ValidatingAdmissionPolicyBinding generation not found"), "could not find annotation to wait for ValidatingAdmissionPolicyBinding generation")
+					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, errors.New("annotation to wait for ValidatingAdmissionPolicyBinding generation not found"), "could not find annotation to wait for ValidatingAdmissionPolicyBinding generation")
 				}
 
 				// waiting for sometime before generating vapbinding, gives api-server time to cache CRDs
 				timestamp := ct.Annotations[BlockVAPBGenerationUntilAnnotation]
 				t, err := time.Parse(time.RFC3339, timestamp)
 				if err != nil {
-					return ret, r.reportErrorOnConstraintStatus(ctx, status, err, "could not parse timestamp")
+					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not parse timestamp")
 				}
 				if t.After(time.Now()) {
 					return time.Until(t), nil
@@ -546,39 +546,39 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 	if generateVAPB && groupVersion != nil {
 		currentVapBinding, err := vapBindingForVersion(*groupVersion)
 		if err != nil {
-			return ret, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
+			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
 		}
 		vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 		log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 		if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
 			if !apierrors.IsNotFound(err) {
-				return ret, err
+				return noDelay, err
 			}
 			currentVapBinding = nil
 		}
 		transformedVapBinding, err := transform.ConstraintToBinding(instance, VAPEnforcementActions)
 		if err != nil {
-			return ret, r.reportErrorOnConstraintStatus(ctx, status, err, "could not transform constraint to ValidatingAdmissionPolicyBinding")
+			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not transform constraint to ValidatingAdmissionPolicyBinding")
 		}
 
 		newVapBinding, err := getRunTimeVAPBinding(groupVersion, transformedVapBinding, currentVapBinding)
 		if err != nil {
-			return ret, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding object with runtime group version")
+			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding object with runtime group version")
 		}
 
 		if err := controllerutil.SetControllerReference(instance, newVapBinding, r.scheme); err != nil {
-			return ret, err
+			return noDelay, err
 		}
 
 		if currentVapBinding == nil {
 			log.Info("creating vapbinding")
 			if err := r.writer.Create(ctx, newVapBinding); err != nil {
-				return ret, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not create ValidatingAdmissionPolicyBinding: %s", vapBindingName))
+				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not create ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 		} else if !reflect.DeepEqual(currentVapBinding, newVapBinding) {
 			log.Info("updating vapbinding")
 			if err := r.writer.Update(ctx, newVapBinding); err != nil {
-				return ret, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not update ValidatingAdmissionPolicyBinding: %s", vapBindingName))
+				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not update ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 		}
 	}
@@ -587,24 +587,24 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 	if !generateVAPB && groupVersion != nil {
 		currentVapBinding, err := vapBindingForVersion(*groupVersion)
 		if err != nil {
-			return ret, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
+			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
 		}
 		vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
 		log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 		if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
 			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
-				return ret, err
+				return noDelay, err
 			}
 			currentVapBinding = nil
 		}
 		if currentVapBinding != nil {
 			log.Info("deleting vapbinding")
 			if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
-				return ret, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
+				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 		}
 	}
-	return ret, nil
+	return noDelay, nil
 }
 
 func NewConstraintsCache() *ConstraintsCache {
