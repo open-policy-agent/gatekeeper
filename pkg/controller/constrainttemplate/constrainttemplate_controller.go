@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -314,6 +315,14 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return result, err
 	}
 
+	unversionedCT := &templates.ConstraintTemplate{}
+	if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
+		logger.Error(err, "conversion error")
+		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
+		logError(request.NamespacedName.Name)
+		return reconcile.Result{}, err
+	}
+
 	status, err := r.getOrCreatePodStatus(ctx, ct.Name)
 	if err != nil {
 		logger.Info("could not get/create pod status object", "error", err)
@@ -322,14 +331,6 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	status.Status.TemplateUID = ct.GetUID()
 	status.Status.ObservedGeneration = ct.GetGeneration()
 	status.Status.Errors = nil
-
-	unversionedCT := &templates.ConstraintTemplate{}
-	if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
-		logger.Error(err, "conversion error")
-		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
-		logError(request.NamespacedName.Name)
-		return reconcile.Result{}, err
-	}
 
 	unversionedProposedCRD, err := r.cfClient.CreateCRD(ctx, unversionedCT)
 	if err != nil {
@@ -378,13 +379,8 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return reconcile.Result{}, err
 	}
-	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
-	if err != nil && !errors.Is(err, celSchema.ErrCodeNotDefined) {
-		logger.Error(err, "generateVap error")
-	}
-	logger.Info("generateVap", "r.generateVap", generateVap)
 
-	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status, generateVap)
+	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status)
 	if err != nil {
 		logger.Error(err, "handle update error")
 		logError(request.NamespacedName.Name)
@@ -417,7 +413,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	unversionedCT *templates.ConstraintTemplate,
 	proposedCRD, currentCRD *apiextensionsv1.CustomResourceDefinition,
 	status *statusv1beta1.ConstraintTemplatePodStatus,
-	generateVap bool,
 ) (reconcile.Result, error) {
 	name := proposedCRD.GetName()
 	logger := logger.WithValues("name", ct.GetName(), "crdName", name)
@@ -445,131 +440,25 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	t := r.tracker.For(gvkConstraintTemplate)
 	t.Observe(unversionedCT)
 
-	var newCRD *apiextensionsv1.CustomResourceDefinition
-	if currentCRD == nil {
-		newCRD = proposedCRD.DeepCopy()
-	} else {
-		newCRD = currentCRD.DeepCopy()
-		newCRD.Spec = proposedCRD.Spec
+	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
+	if err != nil && !errors.Is(err, celSchema.ErrCodeNotDefined) {
+		logger.Error(err, "generateVap error")
 	}
 
-	if err := controllerutil.SetControllerReference(ct, newCRD, r.scheme); err != nil {
+	if err := r.generateCRD(ctx, ct, proposedCRD, currentCRD, status, logger, generateVap); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if currentCRD == nil {
-		logger.Info("creating crd")
-		if err := r.Create(ctx, newCRD); err != nil {
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create CRD", status, err)
-			return reconcile.Result{}, err
-		}
-	} else if !reflect.DeepEqual(newCRD, currentCRD) {
-		logger.Info("updating crd")
-		if err := r.Update(ctx, newCRD); err != nil {
-			err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update CRD", status, err)
-			return reconcile.Result{}, err
-		}
-	}
 	// This must go after CRD creation/update as otherwise AddWatch will always fail
 	logger.Info("making sure constraint is in watcher registry")
 	if err := r.addWatch(ctx, makeGvk(ct.Spec.CRD.Spec.Names.Kind)); err != nil {
 		logger.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
-	isVapAPIEnabled := false
-	var groupVersion *schema.GroupVersion
-	if generateVap {
-		isVapAPIEnabled, groupVersion = transform.IsVapAPIEnabled(&logger)
-	}
-	logger.Info("isVapAPIEnabled", "isVapAPIEnabled", isVapAPIEnabled)
-	logger.Info("groupVersion", "groupVersion", groupVersion)
-	if generateVap && (!isVapAPIEnabled || groupVersion == nil) {
-		logger.Error(constraint.ErrValidatingAdmissionPolicyAPIDisabled, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
-		err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, constraint.ErrValidatingAdmissionPolicyAPIDisabled)
+
+	err = r.manageVAP(ctx, ct, unversionedCT, status, logger, generateVap)
+	if err != nil {
 		return reconcile.Result{}, err
-	}
-	// generating vap resources
-	if generateVap && isVapAPIEnabled && groupVersion != nil {
-		currentVap, err := vapForVersion(groupVersion)
-		if err != nil {
-			logger.Error(err, "error getting vap object with respective groupVersion")
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with runtime group version", status, err)
-			return reconcile.Result{}, err
-		}
-		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
-		logger.Info("check if vap exists", "vapName", vapName)
-		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
-			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
-				return reconcile.Result{}, err
-			}
-			currentVap = nil
-		}
-		logger.Info("get vap", "vapName", vapName, "currentVap", currentVap)
-		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
-		if err != nil {
-			logger.Error(err, "transform to vap error", "vapName", vapName)
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to vap object", status, err)
-			return reconcile.Result{}, err
-		}
-
-		newVap, err := getRunTimeVAP(groupVersion, transformedVap, currentVap)
-		if err != nil {
-			logger.Error(err, "getRunTimeVAP error", "vapName", vapName)
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get runtime vap object", status, err)
-			return reconcile.Result{}, err
-		}
-
-		if err := controllerutil.SetControllerReference(ct, newVap, r.scheme); err != nil {
-			return reconcile.Result{}, err
-		}
-
-		if currentVap == nil {
-			logger.Info("creating vap", "vapName", vapName)
-			if err := r.Create(ctx, newVap); err != nil {
-				logger.Info("creating vap error", "vapName", vapName, "error", err)
-				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create vap object", status, err)
-				return reconcile.Result{}, err
-			}
-			// after vap is created, trigger update event for all constraints
-			if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
-				return reconcile.Result{}, err
-			}
-		} else if !reflect.DeepEqual(currentVap, newVap) {
-			logger.Info("updating vap")
-			if err := r.Update(ctx, newVap); err != nil {
-				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update vap object", status, err)
-				return reconcile.Result{}, err
-			}
-		}
-	}
-	// do not generate vap resources
-	// remove if exists
-	if !generateVap && isVapAPIEnabled && groupVersion != nil {
-		currentVap, err := vapForVersion(groupVersion)
-		if err != nil {
-			logger.Error(err, "error getting vap object with respective groupVersion")
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
-			return reconcile.Result{}, err
-		}
-		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
-		logger.Info("check if vap exists", "vapName", vapName)
-		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
-			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
-				return reconcile.Result{}, err
-			}
-			currentVap = nil
-		}
-		if currentVap != nil {
-			logger.Info("deleting vap")
-			if err := r.Delete(ctx, currentVap); err != nil {
-				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete vap object", status, err)
-				return reconcile.Result{}, err
-			}
-			// after vap is deleted, trigger update event for all constraints
-			if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
 	}
 	if err := r.Update(ctx, status); err != nil {
 		logger.Error(err, "update ct pod status error")
@@ -847,4 +736,173 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 	}
 
 	return obj, nil
+}
+
+func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1beta1.ConstraintTemplate, proposedCRD, currentCRD *apiextensionsv1.CustomResourceDefinition, status *statusv1beta1.ConstraintTemplatePodStatus, logger logr.Logger, generateVAP bool) error {
+	if !operations.IsAssigned(operations.Generate) {
+		return nil
+	}
+	var newCRD *apiextensionsv1.CustomResourceDefinition
+	if currentCRD == nil {
+		newCRD = proposedCRD.DeepCopy()
+	} else {
+		newCRD = currentCRD.DeepCopy()
+		newCRD.Spec = proposedCRD.Spec
+	}
+
+	if err := controllerutil.SetControllerReference(ct, newCRD, r.scheme); err != nil {
+		return err
+	}
+
+	if currentCRD == nil {
+		logger.Info("creating crd")
+		if err := r.Create(ctx, newCRD); err != nil {
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create CRD", status, err)
+			return err
+		}
+	} else if !reflect.DeepEqual(newCRD, currentCRD) {
+		logger.Info("updating crd")
+		if err := r.Update(ctx, newCRD); err != nil {
+			err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update CRD", status, err)
+			return err
+		}
+	}
+	if !generateVAP {
+		return nil
+	}
+
+	// We add the annotation as a follow-on update to be sure the timestamp is set relative to a time after the CRD is successfully created. Creating the CRD with a delay timestamp already set would not account for request latency.
+	err := r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, ct)
+	if err != nil {
+		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, err)
+	}
+	return err
+}
+
+func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1.ConstraintTemplate, unversionedCT *templates.ConstraintTemplate, status *statusv1beta1.ConstraintTemplatePodStatus, logger logr.Logger, generateVap bool) error {
+	if !operations.IsAssigned(operations.Generate) {
+		logger.Info("generate operation is not assigned, ValidatingAdmissionPolicy resource will not be generated")
+		return nil
+	}
+	isVapAPIEnabled := false
+	var groupVersion *schema.GroupVersion
+	logger.Info("generateVap", "r.generateVap", generateVap)
+
+	isVapAPIEnabled, groupVersion = transform.IsVapAPIEnabled(&logger)
+	logger.Info("isVapAPIEnabled", "isVapAPIEnabled", isVapAPIEnabled)
+	logger.Info("groupVersion", "groupVersion", groupVersion)
+
+	if generateVap && (!isVapAPIEnabled || groupVersion == nil) {
+		logger.Error(constraint.ErrValidatingAdmissionPolicyAPIDisabled, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
+		err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, constraint.ErrValidatingAdmissionPolicyAPIDisabled)
+		return err
+	}
+	// generating VAP resources
+	if generateVap && isVapAPIEnabled && groupVersion != nil {
+		currentVap, err := vapForVersion(groupVersion)
+		if err != nil {
+			logger.Error(err, "error getting VAP object with respective groupVersion")
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with runtime group version", status, err)
+			return err
+		}
+		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
+		logger.Info("check if VAP exists", "vapName", vapName)
+		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
+			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
+				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP object", status, err)
+				return err
+			}
+			currentVap = nil
+		}
+		logger.Info("get VAP", "vapName", vapName, "currentVap", currentVap)
+		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
+		if err != nil {
+			logger.Error(err, "transform to VAP error", "vapName", vapName)
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to VAP object", status, err)
+			return err
+		}
+
+		newVap, err := getRunTimeVAP(groupVersion, transformedVap, currentVap)
+		if err != nil {
+			logger.Error(err, "getRunTimeVAP error", "vapName", vapName)
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get runtime VAP object", status, err)
+			return err
+		}
+
+		if err := controllerutil.SetControllerReference(ct, newVap, r.scheme); err != nil {
+			return err
+		}
+
+		if currentVap == nil {
+			logger.Info("creating VAP", "vapName", vapName)
+			if err := r.Create(ctx, newVap); err != nil {
+				logger.Info("creating VAP error", "vapName", vapName, "error", err)
+				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create VAP object", status, err)
+				return err
+			}
+			// after VAP is created, trigger update event for all constraints
+			if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
+				return err
+			}
+		} else if !reflect.DeepEqual(currentVap, newVap) {
+			logger.Info("updating VAP")
+			if err := r.Update(ctx, newVap); err != nil {
+				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update VAP object", status, err)
+				return err
+			}
+		}
+	}
+	// do not generate VAP resources
+	// remove if exists
+	if !generateVap && isVapAPIEnabled && groupVersion != nil {
+		currentVap, err := vapForVersion(groupVersion)
+		if err != nil {
+			logger.Error(err, "error getting VAP object with respective groupVersion")
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
+			return err
+		}
+		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
+		logger.Info("check if VAP exists", "vapName", vapName)
+		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
+			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
+				return err
+			}
+			currentVap = nil
+		}
+		if currentVap != nil {
+			logger.Info("deleting VAP")
+			if err := r.Delete(ctx, currentVap); err != nil {
+				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete VAP object", status, err)
+				return err
+			}
+			// after VAP is deleted, trigger update event for all constraints
+			if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// updateTemplateWithBlockVAPBGenerationAnnotations updates the ConstraintTemplate with an annotation to block VAPB generation until specific time
+// This is to avoid the issue where the VAPB is generated before the CRD is cached in the API server.
+func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnotations(ctx context.Context, ct *v1beta1.ConstraintTemplate) error {
+	currentTime := time.Now()
+	if ct.Annotations != nil && ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] != "" {
+		until := ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation]
+		t, err := time.Parse(time.RFC3339, until)
+		if err != nil {
+			return err
+		}
+		// if wait time is within the time window to generate vap binding, do not update the annotation
+		// otherwise update the annotation with the current time + wait time. This prevents clock skew from preventing generation on task reschedule.
+		if t.Before(currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second)) {
+			return nil
+		}
+	}
+	if ct.Annotations == nil {
+		ct.Annotations = make(map[string]string)
+	}
+	ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
+	return r.Update(ctx, ct)
 }
