@@ -85,6 +85,12 @@ var replacements = map[string]string{
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PRIORITY_CLASS_NAME": `{{ .Values.controllerManager.priorityClassName }}`,
 
 	"HELMSUBST_DEPLOYMENT_REPLICAS": `{{ .Values.replicas }}`,
+	
+  `HELMSUBST_DEPLOYMENT_LABELS: ""`: `{{- include "gatekeeper.commonLabels" . | nindent 4 }}`,
+
+	"HELMSUBST_DEPLOYMENT_LABELS_NAME": `{{ .Chart.Name }}`,
+
+	"HELMSUBST_DEPLOYMENT_LABELS_VERSION": `{{ .Chart.AppVersion }}`,
 
 	"HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT": `{{ .Values.revisionHistoryLimit }}`,
 
