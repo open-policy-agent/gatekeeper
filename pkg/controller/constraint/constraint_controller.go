@@ -27,12 +27,12 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraintstatus"
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
@@ -49,8 +49,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
-	rest "k8s.io/client-go/rest"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -75,11 +73,6 @@ var (
 	ErrValidatingAdmissionPolicyAPIDisabled = errors.New("ValidatingAdmissionPolicy API is not enabled")
 	ErrVAPConditionsNotSatisfied            = errors.New("Conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
 )
-var vapMux sync.RWMutex
-
-var VapAPIEnabled *bool
-
-var GroupVersion *schema.GroupVersion
 
 type Adder struct {
 	CFClient         *constraintclient.Client
@@ -317,7 +310,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			isAPIEnabled := false
 			var groupVersion *schema.GroupVersion
 			if generateVAPB {
-				isAPIEnabled, groupVersion = IsVapAPIEnabled()
+				isAPIEnabled, groupVersion = transform.IsVapAPIEnabled(&log)
 			}
 			if generateVAPB {
 				if !isAPIEnabled {
@@ -618,67 +611,6 @@ func (c *ConstraintsCache) reportTotalConstraints(ctx context.Context, reporter 
 			}
 		}
 	}
-}
-
-func IsVapAPIEnabled() (bool, *schema.GroupVersion) {
-	vapMux.RLock()
-	if VapAPIEnabled != nil {
-		apiEnabled, gvk := *VapAPIEnabled, GroupVersion
-		vapMux.RUnlock()
-		return apiEnabled, gvk
-	}
-
-	vapMux.RUnlock()
-	vapMux.Lock()
-	defer vapMux.Unlock()
-
-	if VapAPIEnabled != nil {
-		return *VapAPIEnabled, GroupVersion
-	}
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		log.Info("IsVapAPIEnabled InClusterConfig", "error", err)
-		VapAPIEnabled = new(bool)
-		*VapAPIEnabled = false
-		return false, nil
-	}
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Info("IsVapAPIEnabled NewForConfig", "error", err)
-		*VapAPIEnabled = false
-		return false, nil
-	}
-
-	groupVersion := admissionregistrationv1.SchemeGroupVersion
-	resList, err := clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
-	if err == nil {
-		for i := 0; i < len(resList.APIResources); i++ {
-			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
-				VapAPIEnabled = new(bool)
-				*VapAPIEnabled = true
-				GroupVersion = &groupVersion
-				return true, GroupVersion
-			}
-		}
-	}
-
-	groupVersion = admissionregistrationv1beta1.SchemeGroupVersion
-	resList, err = clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
-	if err == nil {
-		for i := 0; i < len(resList.APIResources); i++ {
-			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
-				VapAPIEnabled = new(bool)
-				*VapAPIEnabled = true
-				GroupVersion = &groupVersion
-				return true, GroupVersion
-			}
-		}
-	}
-
-	log.Error(err, "error checking VAP API availability", "IsVapAPIEnabled", "false")
-	VapAPIEnabled = new(bool)
-	*VapAPIEnabled = false
-	return false, nil
 }
 
 func vapBindingForVersion(gvk schema.GroupVersion) (client.Object, error) {
