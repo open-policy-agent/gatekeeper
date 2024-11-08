@@ -114,6 +114,10 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_MUTATION_STATUS_ENABLED_ARG": `{{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}`,
 
+	"- HELMSUBST_DEPLOYMENT_AUDIT_DEFAULT_WAIT_VAPB_GENERATION": `{{ if hasKey .Values "defaultWaitForVAPBGeneration"}}
+        - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
+        {{- end }}`,
+
 	"- HELMSUBST_DEPLOYMENT_AUDIT_PUBSUB_ARGS": `{{ if hasKey .Values.audit "enablePubsub" }}
         - --enable-pub-sub={{ .Values.audit.enablePubsub }}
         {{- end }}
