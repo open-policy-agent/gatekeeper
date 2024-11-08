@@ -377,6 +377,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldNotBeCreatedForRegoOnlyTemplate"
 
 		logger.Info("Running test: Vap should not be created for rego only template")
+		constraint.DefaultGenerateVAP = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -398,6 +399,72 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		logger.Info("Running test: Warning should be present on constrainttemplate for not able to generate VAP")
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
+			sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), constraintTemplate.GetName())
+			if err != nil {
+				return err
+			}
+			key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
+			if err := c.Get(ctx, key, statusObj); err != nil {
+				return err
+			}
+
+			if statusObj.Status.VAPGenerationStatus.Warning == "" {
+				return fmt.Errorf("expected warning message")
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		logger.Info("Running test: EnforcementPointStatus should indicate missing CEL engine for constraint using VAP enforcementpoint with rego templates")
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			statusObj := &statusv1beta1.ConstraintPodStatus{}
+			sName, err := statusv1beta1.KeyForConstraint(util.GetPodName(), cstr)
+			if err != nil {
+				return err
+			}
+			key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
+			if err := c.Get(ctx, key, statusObj); err != nil {
+				return err
+			}
+
+			for _, ep := range statusObj.Status.EnforcementPointsStatus {
+				if ep.EnforcementPoint == util.VAPEnforcementPoint {
+					if ep.Message == "" {
+						return fmt.Errorf("expected message")
+					}
+					if ep.Enforced {
+						return fmt.Errorf("expected enforced to be false")
+					}
+					return nil
+				}
+			}
+			return fmt.Errorf("expected enforcement point status")
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		constraint.DefaultGenerateVAP = ptr.To[bool](false)
 	})
 
 	t.Run("Vap should not be created for only rego engine", func(t *testing.T) {
@@ -470,6 +537,29 @@ func TestReconcile(t *testing.T) {
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				return err
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		logger.Info("Running test: constraint template should have vap generated status set to true")
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
+			sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), constraintTemplate.GetName())
+			if err != nil {
+				return err
+			}
+			key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
+			if err := c.Get(ctx, key, statusObj); err != nil {
+				return err
+			}
+
+			if !statusObj.Status.VAPGenerationStatus.Generated {
+				return fmt.Errorf("Expected VAP generation status to be true")
 			}
 			return nil
 		})
@@ -816,6 +906,70 @@ func TestReconcile(t *testing.T) {
 			vapBindingCreationTime := vapBinding.GetCreationTimestamp().Time
 			if vapBindingCreationTime.Before(blockTime) {
 				return fmt.Errorf("VAPBinding should not be created before the timestamp")
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("VapBinding should be created with v1 without warnings in enforcementPointsStatus", func(t *testing.T) {
+		suffix := "VapBindingShouldBeCreatedV1EnforcementPointsStatus"
+		logger.Info("Running test: VapBinding should be created with v1 without warnings in enforcementPointsStatus")
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
+			sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), constraintTemplate.GetName())
+			if err != nil {
+				return err
+			}
+			key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
+			if err := c.Get(ctx, key, statusObj); err != nil {
+				return err
+			}
+
+			if !statusObj.Status.VAPGenerationStatus.Generated {
+				return fmt.Errorf("Expected VAP generation status to be true")
+			}
+
+			cStatusObj := &statusv1beta1.ConstraintPodStatus{}
+			name, err := statusv1beta1.KeyForConstraint(util.GetPodName(), cstr)
+			if err != nil {
+				return err
+			}
+			key = types.NamespacedName{Name: name, Namespace: util.GetNamespace()}
+			if err := c.Get(ctx, key, cStatusObj); err != nil {
+				return err
+			}
+
+			for _, ep := range cStatusObj.Status.EnforcementPointsStatus {
+				if ep.EnforcementPoint == util.VAPEnforcementPoint {
+					if ep.Message != "" {
+						return fmt.Errorf("message not expected")
+					}
+					if !ep.Enforced {
+						return fmt.Errorf("expected enforced to be true")
+					}
+					return nil
+				}
 			}
 			return nil
 		})

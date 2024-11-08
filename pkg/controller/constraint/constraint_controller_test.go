@@ -615,7 +615,7 @@ func TestReportErrorOnConstraintStatus(t *testing.T) {
 				writer: writer,
 			}
 
-			err := r.reportErrorOnConstraintStatus(context.TODO(), tt.status, tt.err, tt.message)
+			err := r.reportErrorOnConstraintStatus(context.TODO(), tt.status, constraintstatusv1beta1.EnforcementPointStatus{}, tt.err, tt.message)
 			if err == nil || err.Error() != tt.expectedError.Error() {
 				t.Errorf("expected error %v, got %v", tt.expectedError, err)
 			}

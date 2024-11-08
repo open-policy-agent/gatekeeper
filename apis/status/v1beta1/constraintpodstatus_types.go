@@ -39,11 +39,12 @@ type ConstraintPodStatusStatus struct {
 	// Storing the constraint UID allows us to detect drift, such as
 	// when a constraint has been recreated after its CRD was deleted
 	// out from under it, interrupting the watch
-	ConstraintUID      types.UID `json:"constraintUID,omitempty"`
-	Operations         []string  `json:"operations,omitempty"`
-	Enforced           bool      `json:"enforced,omitempty"`
-	Errors             []Error   `json:"errors,omitempty"`
-	ObservedGeneration int64     `json:"observedGeneration,omitempty"`
+	ConstraintUID           types.UID                `json:"constraintUID,omitempty"`
+	Operations              []string                 `json:"operations,omitempty"`
+	Enforced                bool                     `json:"enforced,omitempty"`
+	Errors                  []Error                  `json:"errors,omitempty"`
+	ObservedGeneration      int64                    `json:"observedGeneration,omitempty"`
+	EnforcementPointsStatus []EnforcementPointStatus `json:"enforcementPointsStatus,omitempty"`
 }
 
 // Error represents a single error caught while adding a constraint to engine.
@@ -51,6 +52,13 @@ type Error struct {
 	Code     string `json:"code"`
 	Message  string `json:"message"`
 	Location string `json:"location,omitempty"`
+}
+
+// EnforcementPointStatus represents the status of a single enforcement point.
+type EnforcementPointStatus struct {
+	EnforcementPoint string `json:"enforcementPoint"`
+	Enforced         bool   `json:"enforced"`
+	Message          string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true

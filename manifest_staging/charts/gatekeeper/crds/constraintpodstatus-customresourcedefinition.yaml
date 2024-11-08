@@ -50,6 +50,21 @@ spec:
                 type: string
               enforced:
                 type: boolean
+              enforcementPointsStatus:
+                items:
+                  description: EnforcementPointStatus represents the status of a single enforcement point.
+                  properties:
+                    enforced:
+                      type: boolean
+                    enforcementPoint:
+                      type: string
+                    message:
+                      type: string
+                  required:
+                  - enforced
+                  - enforcementPoint
+                  type: object
+                type: array
               errors:
                 items:
                   description: Error represents a single error caught while adding a constraint to engine.

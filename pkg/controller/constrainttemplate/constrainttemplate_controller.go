@@ -331,6 +331,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	status.Status.TemplateUID = ct.GetUID()
 	status.Status.ObservedGeneration = ct.GetGeneration()
 	status.Status.Errors = nil
+	status.Status.VAPGenerationStatus = statusv1beta1.VAPGenerationStatus{}
 
 	unversionedProposedCRD, err := r.cfClient.CreateCRD(ctx, unversionedCT)
 	if err != nil {
@@ -441,8 +442,13 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	t.Observe(unversionedCT)
 
 	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
-	if err != nil && !errors.Is(err, celSchema.ErrCodeNotDefined) {
+	if err != nil {
 		logger.Error(err, "generateVap error")
+		if generateVap {
+			generateVap = false
+			status.Status.VAPGenerationStatus.Generated = false
+			status.Status.VAPGenerationStatus.Warning = fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error())
+		}
 	}
 
 	if err := r.generateCRD(ctx, ct, proposedCRD, currentCRD, status, logger, generateVap); err != nil {
@@ -851,6 +857,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 				return err
 			}
 		}
+		status.Status.VAPGenerationStatus.Generated = true
 	}
 	// do not generate VAP resources
 	// remove if exists
