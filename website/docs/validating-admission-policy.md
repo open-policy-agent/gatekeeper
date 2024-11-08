@@ -6,7 +6,7 @@ title: Integration with Kubernetes Validating Admission Policy
 Validating Admission Policy CEL validation in Gatekeeper:
 Feature State: Gatekeeper version v3.18 (stable)
 
-::: note
+:::note
 Set --enable-k8s-native-validation=false` to disable evaluating Validating Admission Policy CEL in constraint templates.
 :::
 
