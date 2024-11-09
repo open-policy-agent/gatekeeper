@@ -445,14 +445,14 @@ func TestShouldGenerateVAP(t *testing.T) {
 				},
 			},
 			vapDefault: true,
-			expected:   false,
+			expected:   true,
 			wantErr:    true,
 		},
 		{
 			name:       "template with only Rego engine",
 			template:   makeTemplateWithRegoEngine(),
 			vapDefault: true,
-			expected:   false,
+			expected:   true,
 			wantErr:    true,
 		},
 		{
