@@ -34,7 +34,7 @@ pe "kubectl apply -f owner_must_be_provided_usevap.yaml"
 
 pe "cat owner_must_be_provided_usevap.yaml"
 
-p "VAPBinding with validation aciton warn should get created automatically with inclusion of VAP as enforcement point with warn action since ConstraintTemplate has CEL and intent to use VAP"
+p "VAPBinding with validation action warn should get created automatically with inclusion of VAP as enforcement point with warn action since ConstraintTemplate has CEL and intent to use VAP"
 
 pe "kubectl get ValidatingAdmissionPolicy"
 
