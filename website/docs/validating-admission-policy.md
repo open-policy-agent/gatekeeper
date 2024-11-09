@@ -174,3 +174,5 @@ spec:
     - name: "validation.gatekeeper.sh"
 ...
 ```
+
+To see this in action, checkout this [demo](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/scoped-enforcement-actions)
