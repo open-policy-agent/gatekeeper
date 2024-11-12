@@ -1,0 +1,23 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: all-must-have-owner
+spec:
+  enforcementAction: scoped
+  scopedEnforcementActions:
+  - action: deny
+    enforcementPoints:
+    - name: validation.gatekeeper.sh
+    - name: audit.gatekeeper.sh
+  - action: warn
+    enforcementPoints:
+    - name: vap.k8s.io
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    message: "All namespaces must have an `owner` label that points to your company username"
+    labels:
+      - key: owner
+        allowedRegex: "^[a-zA-Z]+.agilebank.demo$"
