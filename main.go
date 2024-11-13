@@ -32,7 +32,6 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	api "github.com/open-policy-agent/gatekeeper/v3/apis"
@@ -46,6 +45,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
@@ -114,7 +114,7 @@ var (
 	certServiceName                      = flag.String("cert-service-name", "gatekeeper-webhook-service", "The service name used to generate the TLS cert's hostname. Defaults to gatekeeper-webhook-service")
 	enableTLSHealthcheck                 = flag.Bool("enable-tls-healthcheck", false, "enable probing webhook API with certificate stored in certDir")
 	disabledBuiltins                     = util.NewFlagSet()
-	enableK8sCel                         = flag.Bool("enable-k8s-native-validation", true, "Beta: enable the validating admission policy driver")
+	enableK8sCel                         = flag.Bool("enable-k8s-native-validation", true, "enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
 )
 
