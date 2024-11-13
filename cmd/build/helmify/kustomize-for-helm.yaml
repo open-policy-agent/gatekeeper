@@ -60,6 +60,8 @@ kind: Deployment
 metadata:
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
+  labels:
+    HELMSUBST_DEPLOYMENT_LABELS: ""
 spec:
   replicas: HELMSUBST_DEPLOYMENT_REPLICAS
   revisionHistoryLimit: HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT
@@ -154,6 +156,8 @@ kind: Deployment
 metadata:
   name: gatekeeper-audit
   namespace: gatekeeper-system
+  labels:
+    HELMSUBST_DEPLOYMENT_LABELS: ""
 spec:
   revisionHistoryLimit: HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT
   template:
