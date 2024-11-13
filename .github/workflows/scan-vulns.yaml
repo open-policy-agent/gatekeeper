@@ -64,6 +64,12 @@ jobs:
         env:
           TRIVY_VERSION: "0.57.0"
 
+      - name: Download trivy db
+        run: |
+          trivy image \
+            --download-db-only \
+            --db-repository=ghcr.io/aquasecurity/trivy-db,public.ecr.aws/aquasecurity/trivy-db,docker.io/aquasec/trivy-db
+
       - name: Run trivy on git repository
         run: |
           trivy fs --format table --ignore-unfixed --skip-dirs website --scanners vuln .
