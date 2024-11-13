@@ -18,7 +18,7 @@ require (
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20241101234656-e78c8abd754a
 	github.com/open-policy-agent/opa v0.68.0
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.20.4
+	github.com/prometheus/client_golang v1.20.5
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.9.0
 	go.opentelemetry.io/contrib/detectors/aws/ec2 v1.21.1
