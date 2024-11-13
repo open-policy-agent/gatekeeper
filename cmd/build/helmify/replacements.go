@@ -86,6 +86,8 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_REPLICAS": `{{ .Values.replicas }}`,
 
+	`HELMSUBST_DEPLOYMENT_LABELS: ""`: `{{- include "gatekeeper.commonLabels" . | nindent 4 }}`,
+
 	"HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT": `{{ .Values.revisionHistoryLimit }}`,
 
 	`HELMSUBST_ANNOTATIONS: ""`: `{{- if .Values.podAnnotations }}
