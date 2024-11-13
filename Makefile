@@ -73,8 +73,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --disable-opa-builtin=http.send\
 \n        - --log-mutations\
 \n        - --mutation-annotations\
-\n        - --default-create-vap-for-templates=${GENERATE_VAP}\
-\n        - --default-create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
 \n        - --log-level=${LOG_LEVEL}\
 \n---\
 \napiVersion: apps/v1\
@@ -94,6 +92,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=audit\
 \n        - --operation=status\
 \n        - --operation=mutation-status\
+\n        - --operation=generate\
 \n        - --audit-chunk-size=500\
 \n        - --logtostderr\
 \n        - --default-create-vap-for-templates=${GENERATE_VAP}\
@@ -363,7 +362,7 @@ generate: __conversion-gen __controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 	$(CONVERSION_GEN) \
 		--output-base=/gatekeeper \
-		--input-dirs=./apis/mutations/v1,./apis/mutations/v1beta1,./apis/mutations/v1alpha1,./apis/expansion/v1alpha1,./apis/syncset/v1alpha1 \
+		--input-dirs=./apis/mutations/v1,./apis/mutations/v1beta1,./apis/mutations/v1alpha1,./apis/expansion/v1alpha1,./apis/syncset/v1alpha1,./apis/gvkmanifest/v1alpha1 \
 		--go-header-file=./hack/boilerplate.go.txt \
 		--output-file-base=zz_generated.conversion
 

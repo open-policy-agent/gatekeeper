@@ -4,8 +4,11 @@ title: Integration with Kubernetes Validating Admission Policy
 ---
 
 Validating Admission Policy CEL validation in Gatekeeper:
-Feature State: Gatekeeper version v3.17 (beta)
-❗ This feature is beta, subject to change (feedback is welcome!). It is enabled by default. Set --enable-k8s-native-validation=false` to disable evaluating Validating Admission Policy CEL in constraint templates.
+Feature State: Gatekeeper version v3.18 (stable)
+
+:::note
+Set --enable-k8s-native-validation=false` to disable evaluating Validating Admission Policy CEL in constraint templates.
+:::
 
 VAP management through Gatekeeper:
 Feature State: Gatekeeper version v3.16 (alpha)
@@ -113,7 +116,7 @@ With this new engine and source added to the constraint template, now Gatekeeper
 For some policies, you may want admission requests to be handled by the K8s Validating Admission Controller instead of the Gatekeeper admission webhook.
 
 The K8s Validating Admission Controller requires both the Validating Admission Policy (VAP) and Validating Admission Policy Binding (VAPB) resources to exist to enforce a policy. Gatekeeper can be configured to generate both of these resources. To generate VAP Bindings for all Constraints, ensure the Gatekeeper 
-`--default-create-vap-binding-for-constraint` flag is set to `true`. To generate VAP as part of all Constraint Templates with the VAP CEL engine `K8sNativeValidation`, ensure the Gatekeeper `--default-create-vap-for-templates=true` flag is set to `true`. By default both flags are set to `false` while the feature is still in alpha.
+`--default-create-vap-binding-for-constraints` flag is set to `true`. To generate VAP as part of all Constraint Templates with the VAP CEL engine `K8sNativeValidation`, ensure the Gatekeeper `--default-create-vap-for-templates=true` flag is set to `true`. By default both flags are set to `false` while the feature is still in alpha.
 
 To override the `--default-create-vap-for-templates` flag's behavior for a constraint template, set `generateVAP` to `true` explicitly under the K8sNativeValidation engine's `source` in the constraint template. 
 
@@ -171,3 +174,5 @@ spec:
     - name: "validation.gatekeeper.sh"
 ...
 ```
+
+To see this in action, checkout this [demo](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/scoped-enforcement-actions)
