@@ -408,7 +408,6 @@ docker-buildx-crds: build-crds docker-buildx-builder
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
 		-t $(CRD_IMG) \
-		$(if $(filter true,$(PUSH_TO_GHCR)),-t ghcr.io/$(CRD_IMG)) \
 		-f crd.Dockerfile .staging/crds/
 
 docker-buildx-dev: docker-buildx-builder

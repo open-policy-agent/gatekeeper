@@ -9,9 +9,7 @@ env:
   CRD_IMAGE_REPO: openpolicyagent/gatekeeper-crds
   GATOR_IMAGE_REPO: openpolicyagent/gator
 
-permissions:
-  contents: read
-  packages: write
+permissions: read-all
 
 jobs:
   tagged-release:
@@ -19,6 +17,7 @@ jobs:
     runs-on: "ubuntu-22.04"
     permissions:
       contents: write
+      packages: write
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
     timeout-minutes: 45
     steps:
@@ -65,11 +64,12 @@ jobs:
           exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
           if [[ $exists == null ]]
           then
-            make PUSH_TO_GHCR=true docker-buildx-release \
+            make docker-buildx-release \
               VERSION=${TAG} \
               PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
               OUTPUT_TYPE=type=registry \
-              GENERATE_ATTESTATIONS=true
+              GENERATE_ATTESTATIONS=true \
+              PUSH_TO_GHCR=true
           fi
 
           listUri="https://registry-1.docker.io/v2/${{ env.CRD_IMAGE_REPO }}/tags/list"
@@ -77,11 +77,12 @@ jobs:
           exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
           if [[ $exists == null ]]
           then
-            make PUSH_TO_GHCR=true docker-buildx-crds-release \
+            make docker-buildx-crds-release \
               VERSION=${TAG} \
               PLATFORM="linux/amd64,linux/arm64" \
               OUTPUT_TYPE=type=registry \
-              GENERATE_ATTESTATIONS=true
+              GENERATE_ATTESTATIONS=true \
+              PUSH_TO_GHCR=true
           fi
 
           listUri="https://registry-1.docker.io/v2/${{ env.GATOR_IMAGE_REPO }}/tags/list"
@@ -89,11 +90,12 @@ jobs:
           exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
           if [[ $exists == null ]]
           then
-            make PUSH_TO_GHCR=true docker-buildx-gator-release \
+            make docker-buildx-gator-release \
               VERSION=${TAG} \
               PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
               OUTPUT_TYPE=type=registry \
-              GENERATE_ATTESTATIONS=true
+              GENERATE_ATTESTATIONS=true \
+              PUSH_TO_GHCR=true
           fi
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
