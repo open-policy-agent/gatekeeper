@@ -217,9 +217,8 @@ func (in *Source) GetFailurePolicy() (*admissionv1.FailurePolicyType, error) {
 
 func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType, error) {
 	var out admissionv1beta1.FailurePolicyType
-	/// TODO(ritazh): default for now until the feature is safe to fail close
 	if in.FailurePolicy == nil {
-		out = admissionv1beta1.Ignore
+		out = admissionv1beta1.Fail
 		return &out, nil
 	}
 
@@ -235,7 +234,7 @@ func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType
 	return &out, nil
 }
 
-// ToUnstructured() is a convenience method for converting to unstructured.
+// MustToUnstructured() is a convenience method for converting to unstructured.
 // Intended for testing. It will panic on error.
 func (in *Source) MustToUnstructured() map[string]interface{} {
 	if in == nil {
