@@ -158,6 +158,34 @@ spec:
         }
 `
 
+	TemplateRestrictCustomField = `
+kind: ConstraintTemplate
+apiVersion: templates.gatekeeper.sh/v1beta1
+metadata:
+  name: restrictedcustomfield
+spec:
+  crd:
+    spec:
+      names:
+        kind: RestrictedCustomField
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            expectedCustomField: 
+              type: boolean
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package restrictedcustomfield
+        violation[{"msg": msg}] {
+          got := input.review.object.spec.customField
+          expected := input.parameters.expectedCustomField
+          got == expected
+          msg := sprintf("foo object has restricted custom field value of %v", [expected])
+        }
+`
+
 	ConstraintAlwaysValidate = `
 kind: AlwaysValidate
 apiVersion: constraints.gatekeeper.sh/v1beta1
@@ -262,6 +290,22 @@ metadata:
   name: other
 `
 
+	ConstraintRestrictCustomField = `
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RestrictedCustomField
+metadata:
+  name: restrict-foo-custom-field
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Foo"]
+    namespaces:
+      - "default"
+  parameters:
+    expectedCustomField: true
+`
+
 	Object = `
 kind: Object
 apiVersion: group.sh/v1
@@ -327,6 +371,17 @@ kind: Object
 apiVersion: group.sh/v1
 metadata:
   name: object`
+
+	ObjectFooTemplate = `
+apiVersion: apps/v1
+kind: FooTemplate
+metadata:
+  name: foo-template
+spec:
+  template:
+    spec:
+      customField: true
+`
 
 	NamespaceSelected = `
 kind: Namespace
@@ -681,5 +736,22 @@ spec:
     kinds:
       - apiGroups: ["*"]
         kinds: ["*"]
+`
+
+	ExpansionRestrictCustomField = `
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-foo
+spec:
+  applyTo:
+  - groups: [ "apps" ]
+    kinds: [ "FooTemplate" ]
+    versions: [ "v1" ]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Foo"
+    group: ""
+    version: "v1"
 `
 )
