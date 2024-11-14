@@ -39,8 +39,8 @@ type ConstraintTemplatePodStatusStatus struct {
 
 // VAPGenerationStatus represents the status of VAP generation.
 type VAPGenerationStatus struct {
-	Generated bool   `json:"generated,omitempty"`
-	Warning   string `json:"warning,omitempty"`
+	Code    string `json:"code,omitempty"`
+	Warning string `json:"warning,omitempty"`
 }
 
 // +kubebuilder:object:root=true

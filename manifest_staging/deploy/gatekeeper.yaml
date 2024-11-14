@@ -2664,14 +2664,17 @@ spec:
                 items:
                   description: EnforcementPointStatus represents the status of a single enforcement point.
                   properties:
-                    enforced:
-                      type: boolean
+                    code:
+                      type: string
                     enforcementPoint:
                       type: string
                     message:
                       type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
                   required:
-                  - enforced
+                  - code
                   - enforcementPoint
                   type: object
                 type: array
@@ -2781,8 +2784,8 @@ spec:
               vapGenerationStatus:
                 description: VAPGenerationStatus represents the status of VAP generation.
                 properties:
-                  generated:
-                    type: boolean
+                  code:
+                    type: string
                   warning:
                     type: string
                 type: object

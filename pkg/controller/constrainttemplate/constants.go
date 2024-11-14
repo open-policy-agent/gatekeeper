@@ -12,3 +12,10 @@ const (
 	// ErrParseCode indicates a problem parsing a ConstraintTemplate.
 	ErrParseCode = "parse_error"
 )
+
+const (
+	// ErrGenerateVAPCode indicates a problem generating a VAP.
+	ErrGenerateVAPCode = "errror"
+	// GeneratedVAPCode indicates a VAP was generated.
+	GeneratedVAPCode = "generated"
+)

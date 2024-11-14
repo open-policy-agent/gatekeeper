@@ -56,9 +56,10 @@ type Error struct {
 
 // EnforcementPointStatus represents the status of a single enforcement point.
 type EnforcementPointStatus struct {
-	EnforcementPoint string `json:"enforcementPoint"`
-	Enforced         bool   `json:"enforced"`
-	Message          string `json:"message,omitempty"`
+	EnforcementPoint   string `json:"enforcementPoint"`
+	Code               string `json:"code"`
+	Message            string `json:"message,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true

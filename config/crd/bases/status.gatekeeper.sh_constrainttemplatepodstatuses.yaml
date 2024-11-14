@@ -77,8 +77,8 @@ spec:
               vapGenerationStatus:
                 description: VAPGenerationStatus represents the status of VAP generation.
                 properties:
-                  generated:
-                    type: boolean
+                  code:
+                    type: string
                   warning:
                     type: string
                 type: object
