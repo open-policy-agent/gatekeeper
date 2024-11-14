@@ -35,6 +35,10 @@ type Test struct {
 	// the Suite. Must be an instance of Template.
 	Constraint string `json:"constraint"`
 
+	// Expansion is the path to the Expansion, relative to the file defining
+	// the Suite.
+	Expansion string `json:"expansion"`
+
 	// Cases are the test cases to run on the instantiated Constraint.
 	// Mutually exclusive with Invalid.
 	Cases []*Case `json:"cases,omitempty"`
