@@ -62,9 +62,8 @@ import (
 )
 
 const (
-	DenyAll        = "DenyAll"
-	denyall        = "denyall"
-	vapBindingName = "gatekeeper-denyallconstraint"
+	DenyAll = "DenyAll"
+	denyall = "denyall"
 )
 
 func makeReconcileConstraintTemplate(suffix string) *v1beta1.ConstraintTemplate {
@@ -423,7 +422,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		logger.Info("Running test: EnforcementPointStatus should indicate missing CEL engine for constraint using VAP enforcementpoint with rego templates")
+		logger.Info("Running test: EnforcementPointStatus should indicate missing CEL engine for constraint using VAP enforcementPoint with rego templates")
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
@@ -591,8 +590,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -628,8 +626,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -714,8 +711,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -763,7 +759,7 @@ func TestReconcile(t *testing.T) {
 			}
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				return err
 			}
 			blockTime, err := time.Parse(time.RFC3339, timestamp)
@@ -808,8 +804,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -894,20 +889,23 @@ func TestReconcile(t *testing.T) {
 			if timestamp == "" {
 				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
 			}
-			// check if vapbinding resource exists now
-			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
-				return err
-			}
 			blockTime, err := time.Parse(time.RFC3339, timestamp)
 			if err != nil {
+				return err
+			}
+			// check if vapbinding resource exists now
+			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				return err
 			}
 			vapBindingCreationTime := vapBinding.GetCreationTimestamp().Time
 			if vapBindingCreationTime.Before(blockTime) {
 				return fmt.Errorf("VAPBinding should not be created before the timestamp")
 			}
-			return nil
+			if err := c.Delete(ctx, cstr); err != nil {
+				return err
+			}
+			return c.Delete(ctx, vapBinding)
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -968,10 +966,10 @@ func TestReconcile(t *testing.T) {
 					if !ep.Enforced {
 						return fmt.Errorf("expected enforced to be true")
 					}
-					return nil
+					break
 				}
 			}
-			return nil
+			return c.Delete(ctx, cstr)
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -1191,7 +1189,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
 			return true
 		}, func() error {
-			err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
+			err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("cstr-%s", strings.ToLower(suffix))}, cstr)
 			if err != nil {
 				return err
 			}
@@ -1498,6 +1496,7 @@ violation[{"msg": "denied!"}] {
 
 	// Create the constraint for constraint template
 	cstr := newDenyAllCstr("")
+	cstr.SetName("denyallconstraint")
 	err = c.Create(ctx, cstr)
 	if err != nil {
 		t.Fatal(err)
@@ -1598,7 +1597,7 @@ func constraintEnforced(ctx context.Context, c client.Client, suffix string) err
 		return true
 	}, func() error {
 		cstr := newDenyAllCstr(suffix)
-		err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
+		err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("cstr-%s", strings.ToLower(suffix))}, cstr)
 		if err != nil {
 			return err
 		}
@@ -1619,7 +1618,7 @@ func isConstraintStatuErrorAsExpected(ctx context.Context, c client.Client, suff
 		return true
 	}, func() error {
 		cstr := newDenyAllCstr(suffix)
-		err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
+		err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("cstr-%s", strings.ToLower(suffix))}, cstr)
 		if err != nil {
 			return err
 		}
@@ -1652,7 +1651,7 @@ func newDenyAllCstr(suffix string) *unstructured.Unstructured {
 		Version: "v1beta1",
 		Kind:    DenyAll + suffix,
 	})
-	cstr.SetName("denyallconstraint")
+	cstr.SetName(fmt.Sprintf("cstr-%s", strings.ToLower(suffix)))
 	return cstr
 }
 
@@ -1679,7 +1678,7 @@ func newDenyAllCstrWithScopedEA(suffix string, ep ...string) *unstructured.Unstr
 		Version: "v1beta1",
 		Kind:    DenyAll + suffix,
 	})
-	cstr.SetName("denyallconstraint")
+	cstr.SetName(fmt.Sprintf("cstr-%s", strings.ToLower(suffix)))
 	return cstr
 }
 
