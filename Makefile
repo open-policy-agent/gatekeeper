@@ -426,6 +426,15 @@ docker-buildx-dev: docker-buildx-builder
 		$(if $(filter true,$(PUSH_TO_GHCR)),-t $(GHCR_REPOSITORY):$(DEV_TAG)) \
 		$(if $(filter true,$(PUSH_TO_GHCR)),-t $(GHCR_REPOSITORY):dev) .
 
+docker-buildx-release: docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--build-arg LDFLAGS=${LDFLAGS} \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t $(REPOSITORY):$(VERSION) \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t $(GHCR_REPOSITORY):$(VERSION)) .
+
 docker-buildx-crds-dev: build-crds docker-buildx-builder
 	docker buildx build \
 		$(_ATTESTATIONS) \
@@ -437,15 +446,6 @@ docker-buildx-crds-dev: build-crds docker-buildx-builder
 		$(if $(filter true,$(PUSH_TO_GHCR)),-t $(GHCR_CRD_REPOSITORY):$(DEV_TAG)) \
 		$(if $(filter true,$(PUSH_TO_GHCR)),-t $(GHCR_CRD_REPOSITORY):dev) \
 		-f crd.Dockerfile .staging/crds/
-
-docker-buildx-release: docker-buildx-builder
-	docker buildx build \
-		$(_ATTESTATIONS) \
-		--build-arg LDFLAGS=${LDFLAGS} \
-		--platform="$(PLATFORM)" \
-		--output=$(OUTPUT_TYPE) \
-		-t $(REPOSITORY):$(VERSION) \
-		$(if $(filter true,$(PUSH_TO_GHCR)),-t $(GHCR_REPOSITORY):$(VERSION)) .
 
 docker-buildx-crds-release: build-crds docker-buildx-builder
 	docker buildx build \
@@ -466,8 +466,8 @@ docker-buildx-gator-dev: docker-buildx-builder
 		--output=$(OUTPUT_TYPE) \
 		-t ${GATOR_REPOSITORY}:${DEV_TAG} \
 		-t ${GATOR_REPOSITORY}:dev \
-		$(if $(filter true,$(PUSH_TO_GHCR)),-t ${GHCR_REPOSITORY}:${DEV_TAG}) \
-		$(if $(filter true,$(PUSH_TO_GHCR)),-t ${GHCR_REPOSITORY}:dev) \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ${GHCR_GATOR_REPOSITORY}:${DEV_TAG}) \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ${GHCR_GATOR_REPOSITORY}:dev) \
 		-f gator.Dockerfile .
 
 docker-buildx-gator-release: docker-buildx-builder
@@ -477,7 +477,7 @@ docker-buildx-gator-release: docker-buildx-builder
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
 		-t ${GATOR_REPOSITORY}:${VERSION} \
-		$(if $(filter true,$(PUSH_TO_GHCR)),-t ${GHCR_REPOSITORY}:${VERSION}) \
+		$(if $(filter true,$(PUSH_TO_GHCR)),-t ${GHCR_GATOR_REPOSITORY}:${VERSION}) \
 		-f gator.Dockerfile .
 
 # Update manager_image_patch.yaml with image tag
