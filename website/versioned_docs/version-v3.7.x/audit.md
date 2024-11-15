@@ -95,7 +95,7 @@ In addition to information on the violated constraint, violating resource, and v
 audit log entries also contain:
 
 * An `audit_id` field that uniquely identifies a given audit run. This allows indexing of historical audits
-* An `event_type` field with a value of `violation_audited` to make it easy to programatically identify audit violations
+* An `event_type` field with a value of `violation_audited` to make it easy to programmatically identify audit violations
 
 #### Other Event Types
 

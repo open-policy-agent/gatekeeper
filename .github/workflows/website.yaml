@@ -1,4 +1,4 @@
-name: generate_website
+name: website
 
 on:
   push:
@@ -14,12 +14,13 @@ on:
       - ".github/workflows/website.yaml"
       - "website/**"
 
-permissions:
-  contents: write
+permissions: read-all
 
 jobs:
   deploy:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: website
@@ -59,3 +60,17 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./website/build
           destination_dir: ./website
+
+  check_typos:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@91182cccc01eb5e619899d80e4e971d6181294a7 # v2.10.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - uses: crate-ci/typos@b74202f74b4346efdbce7801d187ec57b266bac8 # v1.27.3
+        with:
+          files: ./website/docs ./website/versioned_docs
