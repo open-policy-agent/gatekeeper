@@ -65,9 +65,9 @@ import (
 
 const (
 	BlockVAPBGenerationUntilAnnotation = "gatekeeper.sh/block-vapb-generation-until"
-	ErrGenerateVAPBCode                = "errror"
-	GeneratedVAPBCode                  = "generated"
-	WaitVAPBCode                       = "waiting"
+	ErrGenerateVAPBState               = "errror"
+	GeneratedVAPBState                 = "generated"
+	WaitVAPBState                      = "waiting"
 )
 
 var (
@@ -492,7 +492,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		return noDelay, err
 	}
 
-	vapEnforcementPointStatus := constraintstatusv1beta1.EnforcementPointStatus{EnforcementPoint: util.VAPEnforcementPoint, Code: ErrGenerateVAPBCode, ObservedGeneration: instance.GetGeneration()}
+	vapEnforcementPointStatus := constraintstatusv1beta1.EnforcementPointStatus{EnforcementPoint: util.VAPEnforcementPoint, State: ErrGenerateVAPBState, ObservedGeneration: instance.GetGeneration()}
 	vapEnforcementPointStatusIndex := -1
 
 	for i, ep := range status.Status.EnforcementPointsStatus {
@@ -555,7 +555,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 				}
 				if t.After(time.Now()) {
 					wait := time.Until(t)
-					status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Code = WaitVAPBCode
+					status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].State = WaitVAPBState
 					status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Message = fmt.Sprintf("waiting for %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", wait)
 					err := r.writer.Update(ctx, status)
 					return wait, err
@@ -604,7 +604,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not update ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 		}
-		status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Code = GeneratedVAPBCode
+		status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].State = GeneratedVAPBState
 		status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Message = ""
 	}
 	// do not generate vapbinding resources

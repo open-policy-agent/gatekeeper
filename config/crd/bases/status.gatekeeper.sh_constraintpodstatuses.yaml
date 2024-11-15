@@ -53,8 +53,6 @@ spec:
                   description: EnforcementPointStatus represents the status of a single
                     enforcement point.
                   properties:
-                    code:
-                      type: string
                     enforcementPoint:
                       type: string
                     message:
@@ -62,9 +60,11 @@ spec:
                     observedGeneration:
                       format: int64
                       type: integer
+                    state:
+                      type: string
                   required:
-                  - code
                   - enforcementPoint
+                  - state
                   type: object
                 type: array
               errors:

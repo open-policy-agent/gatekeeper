@@ -39,7 +39,7 @@ type ConstraintTemplatePodStatusStatus struct {
 
 // VAPGenerationStatus represents the status of VAP generation.
 type VAPGenerationStatus struct {
-	Code    string `json:"code,omitempty"`
+	State   string `json:"state,omitempty"`
 	Warning string `json:"warning,omitempty"`
 }
 

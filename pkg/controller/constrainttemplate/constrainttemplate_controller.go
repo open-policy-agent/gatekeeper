@@ -446,7 +446,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "generateVap error")
 		if generateVap {
 			generateVap = false
-			status.Status.VAPGenerationStatus.Code = ErrGenerateVAPCode
+			status.Status.VAPGenerationStatus.State = ErrGenerateVAPState
 			status.Status.VAPGenerationStatus.Warning = fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error())
 		}
 	}
@@ -857,7 +857,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 				return err
 			}
 		}
-		status.Status.VAPGenerationStatus.Code = GeneratedVAPCode
+		status.Status.VAPGenerationStatus.State = GeneratedVAPState
 	}
 	// do not generate VAP resources
 	// remove if exists

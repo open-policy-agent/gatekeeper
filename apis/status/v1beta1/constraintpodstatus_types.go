@@ -57,7 +57,7 @@ type Error struct {
 // EnforcementPointStatus represents the status of a single enforcement point.
 type EnforcementPointStatus struct {
 	EnforcementPoint   string `json:"enforcementPoint"`
-	Code               string `json:"code"`
+	State              string `json:"state"`
 	Message            string `json:"message,omitempty"`
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
 }

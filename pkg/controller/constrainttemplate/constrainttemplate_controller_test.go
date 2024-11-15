@@ -452,7 +452,7 @@ func TestReconcile(t *testing.T) {
 					if ep.Message == "" {
 						return fmt.Errorf("expected message")
 					}
-					if ep.Code != ErrGenerateVAPCode {
+					if ep.State != ErrGenerateVAPState {
 						return fmt.Errorf("expected error code")
 					}
 					return nil
@@ -543,7 +543,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		logger.Info("Running test: constraint template should have vap generated status code set to generated")
+		logger.Info("Running test: constraint template should have vap generated status state set to generated")
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -557,8 +557,8 @@ func TestReconcile(t *testing.T) {
 				return err
 			}
 
-			if statusObj.Status.VAPGenerationStatus.Code != GeneratedVAPCode {
-				return fmt.Errorf("Expected VAP generation status code to be %s", GeneratedVAPCode)
+			if statusObj.Status.VAPGenerationStatus.State != GeneratedVAPState {
+				return fmt.Errorf("Expected VAP generation status state to be %s", GeneratedVAPState)
 			}
 			return nil
 		})
@@ -944,8 +944,8 @@ func TestReconcile(t *testing.T) {
 				return err
 			}
 
-			if statusObj.Status.VAPGenerationStatus.Code != GeneratedVAPCode {
-				return fmt.Errorf("Expected VAP generation status code to be %s", GeneratedVAPCode)
+			if statusObj.Status.VAPGenerationStatus.State != GeneratedVAPState {
+				return fmt.Errorf("Expected VAP generation status state to be %s", GeneratedVAPState)
 			}
 
 			cStatusObj := &statusv1beta1.ConstraintPodStatus{}
@@ -963,8 +963,8 @@ func TestReconcile(t *testing.T) {
 					if ep.Message != "" {
 						return fmt.Errorf("message not expected")
 					}
-					if ep.Code != constraint.GeneratedVAPBCode {
-						return fmt.Errorf("expected code to be %s", constraint.GeneratedVAPBCode)
+					if ep.State != constraint.GeneratedVAPBState {
+						return fmt.Errorf("expected state to be %s", constraint.GeneratedVAPBState)
 					}
 					break
 				}
