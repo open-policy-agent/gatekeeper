@@ -128,7 +128,7 @@ gator test --filename=manifests-and-policies/ --output=json
 `gator verify` organizes tests into three levels: Suites, Tests, and Cases:
 
 - A Suite is a file which defines Tests.
-- A Test declares a ConstraintTemplate, a Constraint, and Cases to test the
+- A Test declares a ConstraintTemplate, a Constraint, an ExpansionTemplate (optional), and Cases to test the
   Constraint.
 - A Case defines an object to validate and whether the object is expected to
   pass validation.
@@ -161,6 +161,8 @@ A Test compiles a ConstraintTemplate, and instantiates a Constraint for the
 ConstraintTemplate. It is an error for the Constraint to have a different type
 than that defined in the ConstraintTemplate spec.crd.spec.names.kind, or for the
 ConstraintTemplate to not compile.
+
+A Test can also optionally compile an ExpansionTemplate.
 
 ### Cases
 
@@ -262,6 +264,25 @@ the `run` flag:
 
 ```shell
 gator verify path/to/suites/... --run "disallowed"
+```
+
+### Validating Generated Resources with ExpansionTemplates
+`gator verify` may be used along with expansion templates to validate generated resources. The expansion template is optionally declared at the test level. If an expansion template is set for a test, gator will attempt to expand each object under the test. The violations for the parent object & its expanded resources will be aggregated.
+
+Example for declaring an expansion template in a Gator Suite:
+```yaml
+apiVersion: test.gatekeeper.sh/v1alpha1
+kind: Suite
+tests:
+- name: expansion
+  template: template.yaml
+  constraint: constraint.yaml
+  expansion: expansion.yaml
+  cases:
+  - name: example-expand
+    object: deployment.yaml
+    assertions:
+    - violations: yes
 ```
 
 ### Validating Metadata-Based Constraint Templates

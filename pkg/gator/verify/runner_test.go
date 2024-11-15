@@ -1170,6 +1170,68 @@ func TestRunner_Run(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "expansion system",
+			suite: Suite{
+				Tests: []Test{
+					{
+						Name:       "check custom field with expansion system",
+						Template:   "template.yaml",
+						Constraint: "constraint.yaml",
+						Expansion:  "expansion.yaml",
+						Cases: []*Case{
+							{
+								Name:       "Foo Template object",
+								Object:     "foo-template.yaml",
+								Assertions: []Assertion{{Message: ptr.To[string]("foo object has restricted custom field")}},
+							},
+						},
+					},
+					{
+						Name:       "check custom field without expansion system",
+						Template:   "template.yaml",
+						Constraint: "constraint.yaml",
+						Cases: []*Case{
+							{
+								Name:       "Foo Template object",
+								Object:     "foo-template.yaml",
+								Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
+							},
+						},
+					},
+				},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateRestrictCustomField),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintRestrictCustomField),
+				},
+				"foo-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ObjectFooTemplate),
+				},
+				"expansion.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ExpansionRestrictCustomField),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{
+					{
+						Name: "check custom field with expansion system",
+						CaseResults: []CaseResult{
+							{Name: "Foo Template object"},
+						},
+					},
+					{
+						Name: "check custom field without expansion system",
+						CaseResults: []CaseResult{
+							{Name: "Foo Template object"},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
