@@ -18,4 +18,6 @@ const (
 	ErrGenerateVAPState = "error"
 	// GeneratedVAPState indicates a VAP was generated.
 	GeneratedVAPState = "generated"
+	// DeletedVAPState indicates a VAP was deleted.
+	DeletedVAPState = "deleted"
 )

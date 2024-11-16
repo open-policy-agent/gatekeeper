@@ -68,6 +68,7 @@ const (
 	ErrGenerateVAPBState               = "errror"
 	GeneratedVAPBState                 = "generated"
 	WaitVAPBState                      = "waiting"
+	DeletedVAPBState                   = "deleted"
 )
 
 var (
@@ -513,7 +514,6 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 	}
 	isAPIEnabled := false
-	couldGenerateVAPB := shouldGenerateVAPB
 	var groupVersion *schema.GroupVersion
 	if shouldGenerateVAPB {
 		isAPIEnabled, groupVersion = transform.IsVapAPIEnabled(&log)
@@ -522,7 +522,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		if !isAPIEnabled {
 			log.Error(ErrValidatingAdmissionPolicyAPIDisabled, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName())
 			status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("cannot generate ValidatingAdmissionPolicyBinding: %s", ErrValidatingAdmissionPolicyAPIDisabled)})
-			couldGenerateVAPB = false
+			shouldGenerateVAPB = false
 		} else {
 			unversionedCT := &templates.ConstraintTemplate{}
 			if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
@@ -532,15 +532,15 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			switch {
 			case errors.Is(err, celSchema.ErrCELEngineMissing):
 				status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Message = err.Error()
-				couldGenerateVAPB = false
+				shouldGenerateVAPB = false
 			case err != nil:
 				log.Error(err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy", "constraint", instance.GetName(), "constraint_template", unversionedCT.GetName())
 				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy: %s", err)})
-				couldGenerateVAPB = false
+				shouldGenerateVAPB = false
 			case !hasVAP:
 				log.Error(ErrVAPConditionsNotSatisfied, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName(), "constraint_template", unversionedCT.GetName())
 				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("cannot generate ValidatingAdmissionPolicyBinding: %s", ErrVAPConditionsNotSatisfied)})
-				couldGenerateVAPB = false
+				shouldGenerateVAPB = false
 			default:
 				// reconcile for vapb generation if annotation is not set
 				if ct.Annotations == nil || ct.Annotations[BlockVAPBGenerationUntilAnnotation] == "" {
@@ -557,16 +557,15 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 					wait := time.Until(t)
 					status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].State = WaitVAPBState
 					status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Message = fmt.Sprintf("waiting for %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", wait)
-					err := r.writer.Update(ctx, status)
-					return wait, err
+					return wait, r.writer.Update(ctx, status)
 				}
 			}
 		}
 	}
 
-	r.log.Info("constraint controller", "generateVAPB", couldGenerateVAPB)
+	r.log.Info("constraint controller", "generateVAPB", shouldGenerateVAPB)
 	// generate vapbinding resources
-	if couldGenerateVAPB && groupVersion != nil {
+	if shouldGenerateVAPB && groupVersion != nil {
 		currentVapBinding, err := vapBindingForVersion(*groupVersion)
 		if err != nil {
 			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
@@ -609,7 +608,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 	}
 	// do not generate vapbinding resources
 	// remove if exists
-	if !couldGenerateVAPB && groupVersion != nil {
+	if !shouldGenerateVAPB && groupVersion != nil {
 		currentVapBinding, err := vapBindingForVersion(*groupVersion)
 		if err != nil {
 			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
@@ -627,15 +626,11 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
 				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
+			status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].State = DeletedVAPBState
+			status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Message = ""
 		}
 	}
-	if shouldGenerateVAPB {
-		log.Info("updating constraint status with enforcement point status", "status", status.Status)
-		if err := r.writer.Update(ctx, status); err != nil {
-			return noDelay, err
-		}
-	}
-	return noDelay, nil
+	return noDelay, r.writer.Update(ctx, status)
 }
 
 func NewConstraintsCache() *ConstraintsCache {
