@@ -15,7 +15,7 @@ const (
 
 const (
 	// ErrGenerateVAPState indicates a problem generating a VAP.
-	ErrGenerateVAPState = "errror"
+	ErrGenerateVAPState = "error"
 	// GeneratedVAPState indicates a VAP was generated.
 	GeneratedVAPState = "generated"
 )
