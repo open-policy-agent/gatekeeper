@@ -65,7 +65,7 @@ import (
 
 const (
 	BlockVAPBGenerationUntilAnnotation = "gatekeeper.sh/block-vapb-generation-until"
-	ErrGenerateVAPBState               = "errror"
+	ErrGenerateVAPBState               = "error"
 	GeneratedVAPBState                 = "generated"
 	WaitVAPBState                      = "waiting"
 	DeletedVAPBState                   = "deleted"

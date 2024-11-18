@@ -34,7 +34,7 @@ type ConstraintTemplatePodStatusStatus struct {
 	Operations          []string                           `json:"operations,omitempty"`
 	ObservedGeneration  int64                              `json:"observedGeneration,omitempty"`
 	Errors              []*templatesv1beta1.CreateCRDError `json:"errors,omitempty"`
-	VAPGenerationStatus *VAPGenerationStatus               `json:"vapGenerationStatus,omitempty"`
+	VAPGenerationStatus VAPGenerationStatus                `json:"vapGenerationStatus,omitempty"`
 }
 
 // VAPGenerationStatus represents the status of VAP generation.

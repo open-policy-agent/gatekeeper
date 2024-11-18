@@ -452,7 +452,7 @@ func TestReconcile(t *testing.T) {
 					if ep.Message == "" {
 						return fmt.Errorf("expected message")
 					}
-					if ep.State != ErrGenerateVAPState {
+					if ep.State != constraint.ErrGenerateVAPBState {
 						return fmt.Errorf("expected error code")
 					}
 					return nil
@@ -463,7 +463,6 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		constraint.DefaultGenerateVAP = ptr.To[bool](false)
 	})
 
 	t.Run("Vap should not be created for only rego engine", func(t *testing.T) {
