@@ -68,7 +68,6 @@ const (
 	ErrGenerateVAPBState               = "error"
 	GeneratedVAPBState                 = "generated"
 	WaitVAPBState                      = "waiting"
-	DeletedVAPBState                   = "deleted"
 )
 
 var (
