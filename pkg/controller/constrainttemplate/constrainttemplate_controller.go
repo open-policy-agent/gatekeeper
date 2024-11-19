@@ -445,9 +445,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "generateVap error")
 		if generateVap {
 			generateVap = false
-			status.Status.VAPGenerationStatus.State = ErrGenerateVAPState
-			status.Status.VAPGenerationStatus.ObservedGeneration = ct.GetGeneration()
-			status.Status.VAPGenerationStatus.Warning = fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error())
+			status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: ErrGenerateVAPState, ObservedGeneration: ct.GetGeneration(), Warning: fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error())}
 		}
 	}
 
@@ -857,9 +855,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 				return err
 			}
 		}
-		status.Status.VAPGenerationStatus.State = GeneratedVAPState
-		status.Status.VAPGenerationStatus.ObservedGeneration = ct.GetGeneration()
-		status.Status.VAPGenerationStatus.Warning = ""
+		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: GeneratedVAPState, ObservedGeneration: ct.GetGeneration(), Warning: ""}
 	}
 	// do not generate VAP resources
 	// remove if exists
@@ -884,9 +880,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete VAP object", status, err)
 				return err
 			}
-			status.Status.VAPGenerationStatus.State = DeletedVAPState
-			status.Status.VAPGenerationStatus.ObservedGeneration = ct.GetGeneration()
-			status.Status.VAPGenerationStatus.Warning = ""
+			status.Status.VAPGenerationStatus = nil
 			// after VAP is deleted, trigger update event for all constraints
 			if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
 				return err

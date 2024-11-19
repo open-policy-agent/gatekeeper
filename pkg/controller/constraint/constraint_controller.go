@@ -493,21 +493,6 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		return noDelay, err
 	}
 
-	vapEnforcementPointStatus := constraintstatusv1beta1.EnforcementPointStatus{EnforcementPoint: util.VAPEnforcementPoint, State: ErrGenerateVAPBState, ObservedGeneration: instance.GetGeneration()}
-	vapEnforcementPointStatusIndex := -1
-
-	for i, ep := range status.Status.EnforcementPointsStatus {
-		if ep.EnforcementPoint == util.VAPEnforcementPoint {
-			status.Status.EnforcementPointsStatus[i] = vapEnforcementPointStatus
-			vapEnforcementPointStatusIndex = i
-			break
-		}
-	}
-	if vapEnforcementPointStatusIndex == -1 {
-		status.Status.EnforcementPointsStatus = append(status.Status.EnforcementPointsStatus, vapEnforcementPointStatus)
-		vapEnforcementPointStatusIndex = len(status.Status.EnforcementPointsStatus) - 1
-	}
-
 	shouldGenerateVAPB, VAPEnforcementActions, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
 	if err != nil {
 		log.Error(err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
@@ -531,7 +516,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			hasVAP, err := ShouldGenerateVAP(unversionedCT)
 			switch {
 			case errors.Is(err, celSchema.ErrCELEngineMissing):
-				status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Message = err.Error()
+				updateEnforcementPointStatus(status, util.VAPEnforcementPoint, ErrGenerateVAPBState, err.Error(), instance.GetGeneration())
 				shouldGenerateVAPB = false
 			case err != nil:
 				log.Error(err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy", "constraint", instance.GetName(), "constraint_template", unversionedCT.GetName())
@@ -555,8 +540,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 				}
 				if t.After(time.Now()) {
 					wait := time.Until(t)
-					status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].State = WaitVAPBState
-					status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Message = fmt.Sprintf("waiting for %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", wait)
+					updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, fmt.Sprintf("waiting for %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", wait), instance.GetGeneration())
 					return wait, r.writer.Update(ctx, status)
 				}
 			}
@@ -603,8 +587,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not update ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 		}
-		status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].State = GeneratedVAPBState
-		status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Message = ""
+		updateEnforcementPointStatus(status, util.VAPEnforcementPoint, GeneratedVAPBState, "", instance.GetGeneration())
 	}
 	// do not generate vapbinding resources
 	// remove if exists
@@ -626,8 +609,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
 				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
-			status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].State = DeletedVAPBState
-			status.Status.EnforcementPointsStatus[vapEnforcementPointStatusIndex].Message = ""
+			cleanEnforcementPointStatus(status, util.VAPEnforcementPoint)
 		}
 	}
 	return noDelay, r.writer.Update(ctx, status)
@@ -751,4 +733,24 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 	}
 
 	return obj, nil
+}
+
+func updateEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodStatus, enforcementPoint string, state string, message string, observedGeneration int64) {
+	vapEnforcementPointStatus := constraintstatusv1beta1.EnforcementPointStatus{EnforcementPoint: enforcementPoint, State: state, ObservedGeneration: observedGeneration, Message: message}
+	for i, ep := range status.Status.EnforcementPointsStatus {
+		if ep.EnforcementPoint == enforcementPoint {
+			status.Status.EnforcementPointsStatus[i] = vapEnforcementPointStatus
+			return
+		}
+	}
+	status.Status.EnforcementPointsStatus = append(status.Status.EnforcementPointsStatus, vapEnforcementPointStatus)
+}
+
+func cleanEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodStatus, enforcementPoint string) {
+	for i, ep := range status.Status.EnforcementPointsStatus {
+		if ep.EnforcementPoint == enforcementPoint {
+			status.Status.EnforcementPointsStatus = append(status.Status.EnforcementPointsStatus[:i], status.Status.EnforcementPointsStatus[i+1:]...)
+			return
+		}
+	}
 }

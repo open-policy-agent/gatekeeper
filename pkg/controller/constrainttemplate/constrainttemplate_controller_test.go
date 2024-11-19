@@ -413,7 +413,7 @@ func TestReconcile(t *testing.T) {
 				return err
 			}
 
-			if statusObj.Status.VAPGenerationStatus.Warning == "" {
+			if statusObj.Status.VAPGenerationStatus == nil || statusObj.Status.VAPGenerationStatus.Warning == "" {
 				return fmt.Errorf("expected warning message")
 			}
 			return nil
@@ -556,7 +556,7 @@ func TestReconcile(t *testing.T) {
 				return err
 			}
 
-			if statusObj.Status.VAPGenerationStatus.State != GeneratedVAPState {
+			if statusObj.Status.VAPGenerationStatus == nil || statusObj.Status.VAPGenerationStatus.State != GeneratedVAPState {
 				return fmt.Errorf("Expected VAP generation status state to be %s", GeneratedVAPState)
 			}
 			return nil
@@ -943,7 +943,7 @@ func TestReconcile(t *testing.T) {
 				return err
 			}
 
-			if statusObj.Status.VAPGenerationStatus.State != GeneratedVAPState {
+			if statusObj.Status.VAPGenerationStatus == nil || statusObj.Status.VAPGenerationStatus.State != GeneratedVAPState {
 				return fmt.Errorf("Expected VAP generation status state to be %s", GeneratedVAPState)
 			}
 
