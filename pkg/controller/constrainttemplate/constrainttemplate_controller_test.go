@@ -641,7 +641,6 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should be created with VAP enforcement point after default wait", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedWithVAPEnforcementPoint"
 		logger.Info("Running test: VapBinding should be created with VAP enforcement point after default wait")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](false)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -817,7 +816,10 @@ func TestReconcile(t *testing.T) {
 			if vapBindingCreationTime.Before(blockTime) {
 				return fmt.Errorf("VAPBinding should not be created before the timestamp")
 			}
-			return nil
+			if err := c.Delete(ctx, cstr); err != nil {
+				return err
+			}
+			return c.Delete(ctx, vapBinding)
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -875,6 +877,16 @@ func TestReconcile(t *testing.T) {
 			t.Log(cfClient.Dump(ctx))
 			t.Fatalf("want 1 result, got %v", gotResults)
 		}
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Delete(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "delete cstr")
+			t.Fatal(err)
+		}
 	})
 
 	t.Run("Constraint with scoped enforcement actions is marked as enforced", func(t *testing.T) {
@@ -927,6 +939,16 @@ func TestReconcile(t *testing.T) {
 			t.Log(resp.TraceDump())
 			t.Log(cfClient.Dump(ctx))
 			t.Fatalf("want 1 result, got %v", gotResults)
+		}
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Delete(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "delete cstr")
+			t.Fatal(err)
 		}
 	})
 
