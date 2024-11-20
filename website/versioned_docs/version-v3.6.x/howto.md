@@ -151,4 +151,4 @@ The `input.review` object stores the [admission request](https://pkg.go.dev/k8s.
 - `uid`: The request's unique identifier. This cannot be populated by Kubernetes for audit.
 - `userInfo`: The request's user's information such as `username`, `uid`, `groups`, `extra`. This cannot be populated by Kubernetes for audit.
 
-> **_NOTE_** For `input.review` fields above that cannot be populated by Kubernetes for audit reviews, the constraint templates that rely on them are not auditable. It is up to the rego author to handle the case where these fields are unset and empty in order to avoid every matching resource being reported as violating resources. 
+> **_NOTE_** For `input.review` fields above that cannot be populated by Kubernetes for audit reviews, the constraint templates that rely on them are not auditable. It is up to the rego author to handle the case where these fields are unset and empty in order to avoid every matching resource being reported as violating resources.
