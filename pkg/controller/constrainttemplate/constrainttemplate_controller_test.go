@@ -683,11 +683,7 @@ func TestReconcile(t *testing.T) {
 			if vapBindingCreationTime.Before(blockTime) {
 				return fmt.Errorf("VAPBinding should be created after default wait")
 			}
-
-			if err := c.Delete(ctx, cstr); err != nil {
-				return err
-			}
-			return c.Delete(ctx, vapBinding)
+			return nil
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -816,10 +812,7 @@ func TestReconcile(t *testing.T) {
 			if vapBindingCreationTime.Before(blockTime) {
 				return fmt.Errorf("VAPBinding should not be created before the timestamp")
 			}
-			if err := c.Delete(ctx, cstr); err != nil {
-				return err
-			}
-			return c.Delete(ctx, vapBinding)
+			return nil
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -877,16 +870,6 @@ func TestReconcile(t *testing.T) {
 			t.Log(cfClient.Dump(ctx))
 			t.Fatalf("want 1 result, got %v", gotResults)
 		}
-
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			return c.Delete(ctx, cstr)
-		})
-		if err != nil {
-			logger.Error(err, "delete cstr")
-			t.Fatal(err)
-		}
 	})
 
 	t.Run("Constraint with scoped enforcement actions is marked as enforced", func(t *testing.T) {
@@ -939,16 +922,6 @@ func TestReconcile(t *testing.T) {
 			t.Log(resp.TraceDump())
 			t.Log(cfClient.Dump(ctx))
 			t.Fatalf("want 1 result, got %v", gotResults)
-		}
-
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			return c.Delete(ctx, cstr)
-		})
-		if err != nil {
-			logger.Error(err, "delete cstr")
-			t.Fatal(err)
 		}
 	})
 

@@ -361,6 +361,20 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				return reconcile.Result{}, err
 			}
 		}
+		isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
+		if isAPIEnabled {
+			currentVapBinding, err := vapBindingForVersion(*groupVersion)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+			vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
+			currentVapBinding.SetName(vapBindingName)
+			if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return reconcile.Result{}, err
+				}
+			}
+		}
 	}
 	return reconcile.Result{}, nil
 }
