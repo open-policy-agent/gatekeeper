@@ -548,9 +548,9 @@ Certain templates require [replicating data](sync.md) into OPA to enable correct
 ```
 This annotation contains two requirements. Requirement 1 contains two clauses. Syncing resources of group1, version3, kind1 (drawn from clause 1) would be sufficient to fulfill Requirement 1. So, too, would syncing resources of group3, version3, kind4 (drawn from clause 2). Syncing resources of group1, version1, and kind3 would not be, however.
 
-Requirement 2 is simpler: it denotes that group5, version5, kind5 must be synced for the policy to work properly. 
+Requirement 2 is simpler: it denotes that group5, version5, kind5 must be synced for the policy to work properly.
 
-This template annotation is descriptive, not prescriptive. The prescription of which resources to sync is done in `SyncSet` resources and/or the Gatekeeper `Config` resource. The management of these various requirements can get challenging as the number of templates requiring replicated data increases. 
+This template annotation is descriptive, not prescriptive. The prescription of which resources to sync is done in `SyncSet` resources and/or the Gatekeeper `Config` resource. The management of these various requirements can get challenging as the number of templates requiring replicated data increases.
 
 `gator sync test` aims to mitigate this challenge by enabling the user to check that their sync configuration is correct. The user passes in a set of Constraint Templates, GVK Manifest listing GVKs supported by the cluster, SyncSets, and/or a Gatekeeper Config, and the command will determine which requirements enumerated by the Constraint Templates are unfulfilled by the cluster and SyncSet(s)/Config.
 
@@ -558,7 +558,7 @@ This template annotation is descriptive, not prescriptive. The prescription of w
 
 #### Specifying Inputs
 
-`gator sync test` expects a `--filename` or `--image` flag, or input fron stdin. The flags can be used individually, in combination, and/or repeated.
+`gator sync test` expects a `--filename` or `--image` flag, or input from stdin. The flags can be used individually, in combination, and/or repeated.
 
 ```
 gator sync test --filename="template.yaml" –-filename="syncsets/" --filename="manifest.yaml"
@@ -590,7 +590,7 @@ spec:
         kinds: ["Kind4", "Kind5"]
 ```
 
-Optionally, the `--omit-gvk-manifest` flag can be used to skip the requirement of providing a manifest of supported GVKs for the cluster. If this is provided, all GVKs will be assumed to be supported by the cluster. If this assumption is not true, then the given config and templates may cause caching errors or incorrect evaluation on the cluster despite passing this command. 
+Optionally, the `--omit-gvk-manifest` flag can be used to skip the requirement of providing a manifest of supported GVKs for the cluster. If this is provided, all GVKs will be assumed to be supported by the cluster. If this assumption is not true, then the given config and templates may cause caching errors or incorrect evaluation on the cluster despite passing this command.
 
 #### Exit Codes
 

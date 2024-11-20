@@ -149,4 +149,4 @@ Different clusters may have different backing physical infrastructures and diffe
 
 ## Why Is This Hard?
 
-In a nutshell it's because it's a webhook, and because it's self-hosted. All REST servers require enough high-availabily infrastructure to satisfy their SLOs (see cloud availability zones / regions). Self-hosted webhooks create a circular dependency that has the potential to interfere with the self-healing Kubenetes usually provides. Any self-hosted admission webhook would be subject to these same concerns.
+In a nutshell it's because it's a webhook, and because it's self-hosted. All REST servers require enough high-availabily infrastructure to satisfy their SLOs (see cloud availability zones / regions). Self-hosted webhooks create a circular dependency that has the potential to interfere with the self-healing Kubernetes usually provides. Any self-hosted admission webhook would be subject to these same concerns.
