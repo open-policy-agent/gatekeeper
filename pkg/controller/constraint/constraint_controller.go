@@ -419,7 +419,7 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 func ShouldGenerateVAP(ct *templates.ConstraintTemplate) (bool, error) {
 	source, err := celSchema.GetSourceFromTemplate(ct)
 	if err != nil {
-		return *DefaultGenerateVAP, err
+		return false, err
 	}
 	if source.GenerateVAP == nil {
 		return *DefaultGenerateVAP, nil

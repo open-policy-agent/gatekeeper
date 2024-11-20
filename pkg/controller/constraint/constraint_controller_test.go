@@ -445,14 +445,14 @@ func TestShouldGenerateVAP(t *testing.T) {
 				},
 			},
 			vapDefault: true,
-			expected:   true,
+			expected:   false,
 			wantErr:    true,
 		},
 		{
 			name:       "template with only Rego engine",
 			template:   makeTemplateWithRegoEngine(),
 			vapDefault: true,
-			expected:   true,
+			expected:   false,
 			wantErr:    true,
 		},
 		{
@@ -510,18 +510,6 @@ func TestShouldGenerateVAP(t *testing.T) {
 			vapDefault: false,
 			expected:   false,
 			wantErr:    false,
-		},
-		{
-			name:       "missing, default 'yes'",
-			template:   makeTemplateWithCELEngine(nil),
-			vapDefault: true,
-			expected:   true,
-		},
-		{
-			name:       "missing, default 'no'",
-			template:   makeTemplateWithCELEngine(nil),
-			vapDefault: false,
-			expected:   false,
 		},
 	}
 	for _, test := range tests {

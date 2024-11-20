@@ -399,29 +399,6 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		logger.Info("Running test: Warning should be present on constrainttemplate for not able to generate VAP")
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
-			sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), constraintTemplate.GetName())
-			if err != nil {
-				return err
-			}
-			key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
-			if err := c.Get(ctx, key, statusObj); err != nil {
-				return err
-			}
-
-			if statusObj.Status.VAPGenerationStatus == nil || statusObj.Status.VAPGenerationStatus.Warning == "" {
-				return fmt.Errorf("expected warning message")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
 		logger.Info("Running test: EnforcementPointStatus should indicate missing CEL engine for constraint using VAP enforcementPoint with rego templates")
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {

@@ -441,12 +441,9 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	t.Observe(unversionedCT)
 
 	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
-	if err != nil {
+	if err != nil && !errors.Is(err, celSchema.ErrCELEngineMissing) {
 		logger.Error(err, "generateVap error")
-		if generateVap {
-			generateVap = false
-			status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: ErrGenerateVAPState, ObservedGeneration: ct.GetGeneration(), Warning: fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error())}
-		}
+		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: ErrGenerateVAPState, ObservedGeneration: ct.GetGeneration(), Warning: fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error())}
 	}
 
 	if err := r.generateCRD(ctx, ct, proposedCRD, currentCRD, status, logger, generateVap); err != nil {
