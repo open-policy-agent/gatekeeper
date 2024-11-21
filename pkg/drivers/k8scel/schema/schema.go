@@ -287,7 +287,7 @@ func GetSourceFromTemplate(ct *templates.ConstraintTemplate) (*Source, error) {
 		break
 	}
 	if source == nil {
-		return nil, ErrCodeNotDefined
+		return nil, ErrCELEngineMissing
 	}
 	return source, nil
 }

@@ -441,8 +441,9 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	t.Observe(unversionedCT)
 
 	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
-	if err != nil && !errors.Is(err, celSchema.ErrCodeNotDefined) {
+	if err != nil && !errors.Is(err, celSchema.ErrCELEngineMissing) {
 		logger.Error(err, "generateVap error")
+		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: ErrGenerateVAPState, ObservedGeneration: ct.GetGeneration(), Warning: fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error())}
 	}
 
 	if err := r.generateCRD(ctx, ct, proposedCRD, currentCRD, status, logger, generateVap); err != nil {
@@ -851,6 +852,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 				return err
 			}
 		}
+		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: GeneratedVAPState, ObservedGeneration: ct.GetGeneration(), Warning: ""}
 	}
 	// do not generate VAP resources
 	// remove if exists
@@ -875,6 +877,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete VAP object", status, err)
 				return err
 			}
+			status.Status.VAPGenerationStatus = nil
 			// after VAP is deleted, trigger update event for all constraints
 			if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
 				return err
