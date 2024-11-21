@@ -735,14 +735,14 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 }
 
 func updateEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodStatus, enforcementPoint string, state string, message string, observedGeneration int64) {
-	vapEnforcementPointStatus := constraintstatusv1beta1.EnforcementPointStatus{EnforcementPoint: enforcementPoint, State: state, ObservedGeneration: observedGeneration, Message: message}
+	enforcementPointStatus := constraintstatusv1beta1.EnforcementPointStatus{EnforcementPoint: enforcementPoint, State: state, ObservedGeneration: observedGeneration, Message: message}
 	for i, ep := range status.Status.EnforcementPointsStatus {
 		if ep.EnforcementPoint == enforcementPoint {
-			status.Status.EnforcementPointsStatus[i] = vapEnforcementPointStatus
+			status.Status.EnforcementPointsStatus[i] = enforcementPointStatus
 			return
 		}
 	}
-	status.Status.EnforcementPointsStatus = append(status.Status.EnforcementPointsStatus, vapEnforcementPointStatus)
+	status.Status.EnforcementPointsStatus = append(status.Status.EnforcementPointsStatus, enforcementPointStatus)
 }
 
 func cleanEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodStatus, enforcementPoint string) {
