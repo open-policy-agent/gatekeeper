@@ -116,7 +116,7 @@ var (
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("enable-k8s-native-validation", true, "enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
-	enableReferential                    = flag.Bool("enable-referential-rules", false, "Enable referential rules. Only use this flag if you know what you're doing; referential rules have edge cases where referential constraints may not be perfectly enforced due to the eventual consistency inherent in Kubernetes controllers")
+	enableReferential                    = flag.Bool("enable-referential-rules", true, "Enable referential rules. Only use this flag if you know what you're doing; referential rules have edge cases where referential constraints may not be perfectly enforced due to the eventual consistency inherent in Kubernetes controllers")
 )
 
 func init() {
