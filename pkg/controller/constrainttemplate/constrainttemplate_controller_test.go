@@ -703,7 +703,6 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should be created with VAP enforcement point after default wait", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedWithVAPEnforcementPoint"
 		logger.Info("Running test: VapBinding should be created with VAP enforcement point after default wait")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](false)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -746,11 +745,7 @@ func TestReconcile(t *testing.T) {
 			if vapBindingCreationTime.Before(blockTime) {
 				return fmt.Errorf("VAPBinding should be created after default wait")
 			}
-
-			if err := c.Delete(ctx, cstr); err != nil {
-				return err
-			}
-			return c.Delete(ctx, vapBinding)
+			return nil
 		})
 		if err != nil {
 			t.Fatal(err)
