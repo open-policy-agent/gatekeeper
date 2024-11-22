@@ -364,6 +364,20 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				return reconcile.Result{}, err
 			}
 		}
+		isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
+		if isAPIEnabled {
+			currentVapBinding, err := vapBindingForVersion(*groupVersion)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+			vapBindingName := getVAPBindingName(instance.GetName())
+			currentVapBinding.SetName(vapBindingName)
+			if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return reconcile.Result{}, err
+				}
+			}
+		}
 	}
 	return reconcile.Result{}, nil
 }
@@ -553,7 +567,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		if err != nil {
 			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
 		}
-		vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
+		vapBindingName := getVAPBindingName(instance.GetName())
 		log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 		if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
 			if !apierrors.IsNotFound(err) {
@@ -595,7 +609,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		if err != nil {
 			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
 		}
-		vapBindingName := fmt.Sprintf("gatekeeper-%s", instance.GetName())
+		vapBindingName := getVAPBindingName(instance.GetName())
 		log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 		if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
 			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
@@ -752,4 +766,8 @@ func cleanEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodSt
 			return
 		}
 	}
+}
+
+func getVAPBindingName(constraintName string) string {
+	return fmt.Sprintf("gatekeeper-%s", constraintName)
 }
