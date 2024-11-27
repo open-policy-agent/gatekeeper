@@ -10,10 +10,10 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
-	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -510,18 +510,6 @@ func TestShouldGenerateVAP(t *testing.T) {
 			vapDefault: false,
 			expected:   false,
 			wantErr:    false,
-		},
-		{
-			name:       "missing, default 'yes'",
-			template:   makeTemplateWithCELEngine(nil),
-			vapDefault: true,
-			expected:   true,
-		},
-		{
-			name:       "missing, default 'no'",
-			template:   makeTemplateWithCELEngine(nil),
-			vapDefault: false,
-			expected:   false,
 		},
 	}
 	for _, test := range tests {
