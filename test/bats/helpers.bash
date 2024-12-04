@@ -73,21 +73,6 @@ wait_for_process() {
   return 1
 }
 
-wait_for_error() {
-  wait_time="$1"
-  sleep_time="$2"
-  cmd="$3"
-  while [ "$wait_time" -gt 0 ]; do
-    if eval "$cmd"; then
-      sleep "$sleep_time"
-      wait_time=$((wait_time - sleep_time))
-    else
-      return 0
-    fi
-  done
-  return 1
-}
-
 get_ca_cert() {
   destination="$1"
   if [ $(kubectl get secret -n ${GATEKEEPER_NAMESPACE} gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | wc -w) -eq 0 ]; then
