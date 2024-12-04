@@ -61,10 +61,6 @@ teardown_file() {
 }
 
 @test "vap test" {
-  minor_version=$(echo "$KUBERNETES_VERSION" | cut -d'.' -f2)
-  if [ "$minor_version" -lt 28 ] || [ -z $ENABLE_VAP_TESTS ]; then
-    skip "skipping vap tests"
-  fi
   local api="$(kubectl api-resources | grep validatingadmission)"
   if [[ -z "$api" ]]; then
     echo "vap is not enabled for the cluster. skip vap test"
@@ -97,6 +93,7 @@ teardown_file() {
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
+    kubectl get validatingadmissionpolicybinding gatekeeper-all-must-have-label-scoped || kubectl get validatingadmissionpolicybinding gatekeeper-all-must-have-label
   fi
 }
 
