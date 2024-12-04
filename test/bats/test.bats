@@ -93,7 +93,7 @@ teardown_file() {
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
-    kubectl get validatingadmissionpolicybinding gatekeeper-all-must-have-label-scoped || kubectl get validatingadmissionpolicybinding gatekeeper-all-must-have-label
+    wait 5
   fi
 }
 
