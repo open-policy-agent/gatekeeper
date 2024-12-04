@@ -61,6 +61,9 @@ teardown_file() {
 }
 
 @test "vap test" {
+  if [ -z $ENABLE_VAP_TESTS ]; then
+    skip "skipping vap tests"
+  fi
   local api="$(kubectl api-resources | grep validatingadmission)"
   if [[ -z "$api" ]]; then
     echo "vap is not enabled for the cluster. skip vap test"
