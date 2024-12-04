@@ -41,8 +41,8 @@
       "collapsed": false,
       "items": [
         "operations",
-        "opa-versions"
-      ]
+        "opa-versions",
+        "kubernetes-versions"      ]
     },
     {
       "type": "category",
