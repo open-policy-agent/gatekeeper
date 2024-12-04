@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.23-bookworm@sha256:1a5326b07cbab12f4fd7800425f2cf25ff2bd62c404ef41b56cb99669a710a83 as builder
+FROM --platform=$BUILDPLATFORM golang:1.23-bookworm@sha256:3f3b9daa3de608f3e869cd2ff8baf21555cf0fca9fd34251b8f340f9b7c30ec5 as builder
 
 ARG TARGETPLATFORM
 ARG TARGETOS
@@ -20,7 +20,7 @@ RUN go mod init && go mod tidy
 
 RUN go build -o provider provider.go
 
-FROM gcr.io/distroless/static-debian12@sha256:69830f29ed7545c762777507426a412f97dad3d8d32bae3e74ad3fb6160917ea
+FROM gcr.io/distroless/static-debian12@sha256:f4a57e8ffd7ba407bdd0eb315bb54ef1f21a2100a7f032e9102e4da34fe7c196
 
 WORKDIR /
 

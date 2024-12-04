@@ -104,3 +104,5 @@ spec:
     - name: "audit.gatekeeper.sh"
 ...
 ```
+
+Checkout this [demo](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/scoped-enforcement-actions) to understand how enforcement points and actions work.

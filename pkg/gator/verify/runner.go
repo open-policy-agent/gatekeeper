@@ -12,7 +12,9 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -179,6 +181,20 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 		return c, nil
 	}
 
+	newExpander := func() (*expand.Expander, error) {
+		e, err := r.makeTestExpander(suiteDir, t)
+		if err != nil {
+			return nil, err
+		}
+
+		return e, nil
+	}
+
+	_, err := newExpander()
+	if err != nil {
+		return nil, err
+	}
+
 	results := make([]CaseResult, len(t.Cases))
 
 	for i, c := range t.Cases {
@@ -187,7 +203,7 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 			continue
 		}
 
-		results[i] = r.runCase(ctx, newClient, suiteDir, c)
+		results[i] = r.runCase(ctx, newClient, newExpander, suiteDir, c)
 	}
 
 	return results, nil
@@ -214,6 +230,22 @@ func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t *Test) (
 	}
 
 	return client, nil
+}
+
+func (r *Runner) makeTestExpander(suiteDir string, t *Test) (*expand.Expander, error) {
+	// Support Mutator logic? Then we need to add support for mutators as well or do we just ignore them?
+	expansionPath := t.Expansion
+	if expansionPath == "" {
+		return nil, nil
+	}
+
+	et, err := reader.ReadExpansion(r.filesystem, path.Join(suiteDir, expansionPath))
+	if err != nil {
+		return nil, err
+	}
+
+	er, err := expand.NewExpander([]*unstructured.Unstructured{et})
+	return er, err
 }
 
 func (r *Runner) addConstraint(ctx context.Context, suiteDir, constraintPath string, client gator.Client) error {
@@ -252,9 +284,9 @@ func (r *Runner) addTemplate(suiteDir, templatePath string, client gator.Client)
 }
 
 // RunCase executes a Case and returns the result of the run.
-func (r *Runner) runCase(ctx context.Context, newClient func() (gator.Client, error), suiteDir string, tc *Case) CaseResult {
+func (r *Runner) runCase(ctx context.Context, newClient func() (gator.Client, error), newExpander func() (*expand.Expander, error), suiteDir string, tc *Case) CaseResult {
 	start := time.Now()
-	trace, err := r.checkCase(ctx, newClient, suiteDir, tc)
+	trace, err := r.checkCase(ctx, newClient, newExpander, suiteDir, tc)
 
 	return CaseResult{
 		Name:    tc.Name,
@@ -264,7 +296,7 @@ func (r *Runner) runCase(ctx context.Context, newClient func() (gator.Client, er
 	}
 }
 
-func (r *Runner) checkCase(ctx context.Context, newClient func() (gator.Client, error), suiteDir string, tc *Case) (trace *string, err error) {
+func (r *Runner) checkCase(ctx context.Context, newClient func() (gator.Client, error), newExpander func() (*expand.Expander, error), suiteDir string, tc *Case) (trace *string, err error) {
 	if tc.Object == "" {
 		return nil, fmt.Errorf("%w: must define object", gator.ErrInvalidCase)
 	}
@@ -274,7 +306,7 @@ func (r *Runner) checkCase(ctx context.Context, newClient func() (gator.Client, 
 		return nil, fmt.Errorf("%w: assertions must be non-empty", gator.ErrInvalidCase)
 	}
 
-	review, err := r.runReview(ctx, newClient, suiteDir, tc)
+	review, err := r.runReview(ctx, newClient, newExpander, suiteDir, tc)
 	if err != nil {
 		return nil, err
 	}
@@ -293,8 +325,13 @@ func (r *Runner) checkCase(ctx context.Context, newClient func() (gator.Client, 
 	return trace, nil
 }
 
-func (r *Runner) runReview(ctx context.Context, newClient func() (gator.Client, error), suiteDir string, tc *Case) (*types.Responses, error) {
+func (r *Runner) runReview(ctx context.Context, newClient func() (gator.Client, error), newExpander func() (*expand.Expander, error), suiteDir string, tc *Case) (*types.Responses, error) {
 	c, err := newClient()
+	if err != nil {
+		return nil, err
+	}
+
+	e, err := newExpander()
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +364,36 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (gator.Client, 
 		Object: *toReview,
 		Source: mutationtypes.SourceTypeOriginal,
 	}
-	return c.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
+
+	review, err := c.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
+	if err != nil {
+		return nil, fmt.Errorf("reviewing %v %s/%s: %w",
+			toReview.GroupVersionKind(), toReview.GetNamespace(), toReview.GetName(), err)
+	}
+
+	if e != nil {
+		resultants, err := e.Expand(toReview)
+		if err != nil {
+			return nil, fmt.Errorf("expanding resource %s: %w", toReview.GetName(), err)
+		}
+
+		for _, resultant := range resultants {
+			au := target.AugmentedUnstructured{
+				Object: *resultant.Obj,
+				Source: mutationtypes.SourceTypeGenerated,
+			}
+			resultantReview, err := c.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
+			if err != nil {
+				return nil, fmt.Errorf("reviewing expanded resource %v %s/%s: %w",
+					resultant.Obj.GroupVersionKind(), resultant.Obj.GetNamespace(), resultant.Obj.GetName(), err)
+			}
+			expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantReview)
+			expansion.AggregateResponses(resultant.TemplateName, review, resultantReview)
+			expansion.AggregateStats(resultant.TemplateName, review, resultantReview)
+		}
+	}
+
+	return review, err
 }
 
 func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c gator.Client, toReview *unstructured.Unstructured) (*types.Responses, error) {

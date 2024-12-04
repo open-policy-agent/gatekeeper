@@ -115,7 +115,7 @@ In addition to information on the violated constraint, violating resource, and v
 audit log entries also contain:
 
 * An `audit_id` field that uniquely identifies a given audit run. This allows indexing of historical audits
-* An `event_type` field with a value of `violation_audited` to make it easy to programatically identify audit violations
+* An `event_type` field with a value of `violation_audited` to make it easy to programmatically identify audit violations
 
 Limitations of getting violations from audit logs:
 
@@ -139,7 +139,7 @@ This feature uses publish and subscribe (pubsub) model that allows Gatekeeper to
 Limitations/drawbacks of getting violations using pubsub channel:
 
 - There is an inherent risk of messages getting dropped. You might not receive all the published violations.
-- Additional dependancy on pubsub broker. 
+- Additional dependency on pubsub broker. 
 
 ## Running Audit
 For more details on how to deploy audit and 

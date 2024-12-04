@@ -37,3 +37,17 @@ tests:
     object: deny.yaml
     assertions:
     - violations: no
+- name: foo-is-bar-expansion
+  template: template.yaml
+  constraint: constraint.yaml
+  expansion: expansion.yaml
+  cases:
+  - name: foo-bar
+    object: allow_expansion.yaml
+    assertions:
+    - violations: no
+  - name: foo-not-bar
+    object: deny_expansion.yaml
+    assertions:
+    - violations: yes
+

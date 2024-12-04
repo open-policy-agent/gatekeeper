@@ -1,0 +1,36 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          type: object
+          properties:
+            message:
+              type: string
+            labels:
+              type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  allowedRegex:
+                    type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: K8sNativeValidation
+          source:
+            generateVAP: true
+            validations:
+            - expression: '(has(variables.anyObject.metadata) && variables.params.labels.all(entry, has(variables.anyObject.metadata.labels) && entry.key in variables.anyObject.metadata.labels))'
+              messageExpression: '"missing required label, requires all of: " + variables.params.labels.map(entry, entry.key).join(", ")'
+            - expression: '(has(variables.anyObject.metadata) && variables.params.labels.all(entry, has(variables.anyObject.metadata.labels) && entry.key in variables.anyObject.metadata.labels && string(variables.anyObject.metadata.labels[entry.key]).matches(string(entry.allowedRegex))))'
+              message: "regex mismatch"

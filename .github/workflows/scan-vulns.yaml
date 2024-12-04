@@ -32,13 +32,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@91182cccc01eb5e619899d80e4e971d6181294a7 # v2.10.1
+        uses: step-security/harden-runner@0080882f6c36860b6ba35c610c98ce87d4e2f26f # v2.10.2
         with:
           egress-policy: audit
 
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5.1.0
         with:
-          go-version: "1.22"
+          go-version: "1.23"
           check-latest: true
       - uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1.0.4
 
@@ -48,7 +48,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@91182cccc01eb5e619899d80e4e971d6181294a7 # v2.10.1
+        uses: step-security/harden-runner@0080882f6c36860b6ba35c610c98ce87d4e2f26f # v2.10.2
         with:
           egress-policy: audit
 
@@ -62,7 +62,13 @@ jobs:
           tar zxvf trivy_${{ env.TRIVY_VERSION }}_Linux-64bit.tar.gz
           echo "$(pwd)" >> $GITHUB_PATH
         env:
-          TRIVY_VERSION: "0.46.0"
+          TRIVY_VERSION: "0.57.0"
+
+      - name: Download trivy db
+        run: |
+          trivy image \
+            --download-db-only \
+            --db-repository=ghcr.io/aquasecurity/trivy-db,public.ecr.aws/aquasecurity/trivy-db,docker.io/aquasec/trivy-db
 
       - name: Run trivy on git repository
         run: |

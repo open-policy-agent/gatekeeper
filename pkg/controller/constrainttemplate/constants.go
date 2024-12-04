@@ -9,4 +9,13 @@ const (
 	ErrConversionCode = "conversion_error"
 	// ErrIngestCode indicates a problem ingesting a ConstraintTemplate Rego code.
 	ErrIngestCode = "ingest_error"
+	// ErrParseCode indicates a problem parsing a ConstraintTemplate.
+	ErrParseCode = "parse_error"
+)
+
+const (
+	// ErrGenerateVAPState indicates a problem generating a VAP.
+	ErrGenerateVAPState = "error"
+	// GeneratedVAPState indicates a VAP was generated.
+	GeneratedVAPState = "generated"
 )

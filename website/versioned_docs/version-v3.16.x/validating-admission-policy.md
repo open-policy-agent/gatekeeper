@@ -131,7 +131,7 @@ labels:
   "gatekeeper.sh/use-vap": "yes"
 ```
 
-By default, constraints will inherit the same behavior as the constraint template. However this behavior can be overriden by adding the following label to the constraint resource:
+By default, constraints will inherit the same behavior as the constraint template. However this behavior can be overridden by adding the following label to the constraint resource:
 
 ```yaml
 labels:

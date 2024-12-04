@@ -21,17 +21,19 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel"
-	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -60,9 +62,8 @@ import (
 )
 
 const (
-	DenyAll        = "DenyAll"
-	denyall        = "denyall"
-	vapBindingName = "gatekeeper-denyallconstraint"
+	DenyAll = "DenyAll"
+	denyall = "denyall"
 )
 
 func makeReconcileConstraintTemplate(suffix string) *v1beta1.ConstraintTemplate {
@@ -271,8 +272,8 @@ func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	constraint.VapAPIEnabled = ptr.To[bool](true)
-	constraint.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+	transform.VapAPIEnabled = ptr.To[bool](true)
+	transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
 
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
@@ -304,6 +305,20 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		logger.Info("Running Test: block-vapb-generation-until annotation should not be present")
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			ct := &v1beta1.ConstraintTemplate{}
+			if err := c.Get(ctx, types.NamespacedName{Name: denyall + strings.ToLower(suffix)}, ct); err != nil {
+				return err
+			}
+			if _, ok := ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation]; ok {
+				return fmt.Errorf("unexpected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
+			return nil
+		})
 	})
 
 	t.Run("Vap should be created with v1beta1", func(t *testing.T) {
@@ -360,7 +375,8 @@ func TestReconcile(t *testing.T) {
 	t.Run("Vap should not be created for rego only template", func(t *testing.T) {
 		suffix := "VapShouldNotBeCreatedForRegoOnlyTemplate"
 
-		logger.Info("Running test: Vap should not be created")
+		logger.Info("Running test: Vap should not be created for rego only template")
+		constraint.DefaultGenerateVAP = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -382,12 +398,54 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		logger.Info("Running test: EnforcementPointStatus should indicate missing CEL engine for constraint using VAP enforcementPoint with rego templates")
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			statusObj := &statusv1beta1.ConstraintPodStatus{}
+			sName, err := statusv1beta1.KeyForConstraint(util.GetPodName(), cstr)
+			if err != nil {
+				return err
+			}
+			key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
+			if err := c.Get(ctx, key, statusObj); err != nil {
+				return err
+			}
+
+			for _, ep := range statusObj.Status.EnforcementPointsStatus {
+				if ep.EnforcementPoint == util.VAPEnforcementPoint {
+					if ep.Message == "" {
+						return fmt.Errorf("expected message")
+					}
+					if ep.State != constraint.ErrGenerateVAPBState {
+						return fmt.Errorf("expected error code")
+					}
+					return nil
+				}
+			}
+			return fmt.Errorf("expected enforcement point status")
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	t.Run("Vap should not be created for only rego engine", func(t *testing.T) {
 		suffix := "VapShouldNotBeCreatedForOnlyRegoEngine"
 
-		logger.Info("Running test: Vap should not be created")
+		logger.Info("Running test: Vap should not be created for only rego engine")
 		constraintTemplate := makeReconcileConstraintTemplateWithRegoEngine(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -460,6 +518,29 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		logger.Info("Running test: constraint template should have vap generated status state set to generated")
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
+			sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), constraintTemplate.GetName())
+			if err != nil {
+				return err
+			}
+			key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
+			if err := c.Get(ctx, key, statusObj); err != nil {
+				return err
+			}
+
+			if statusObj.Status.VAPGenerationStatus == nil || statusObj.Status.VAPGenerationStatus.State != GeneratedVAPState {
+				return fmt.Errorf("Expected VAP generation status state to be %s", GeneratedVAPState)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	t.Run("VapBinding should not be created", func(t *testing.T) {
@@ -485,8 +566,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -522,8 +602,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -608,8 +687,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -622,10 +700,9 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VapBinding should be created with VAP enforcement Point", func(t *testing.T) {
+	t.Run("VapBinding should be created with VAP enforcement point after default wait", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedWithVAPEnforcementPoint"
-		logger.Info("Running test: VapBinding should be created with VAP enforcement point")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](false)
+		logger.Info("Running test: VapBinding should be created with VAP enforcement point after default wait")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -643,10 +720,30 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
+			ct := &v1beta1.ConstraintTemplate{}
+			if err := c.Get(ctx, types.NamespacedName{Name: denyall + strings.ToLower(suffix)}, ct); err != nil {
+				return err
+			}
+			timestamp := ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation]
+			if timestamp == "" {
+				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
+			// check if vapbinding resource exists now
+			if err := c.Get(ctx, types.NamespacedName{Name: cstr.GetName()}, cstr); err != nil {
+				return err
+			}
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				return err
+			}
+			blockTime, err := time.Parse(time.RFC3339, timestamp)
+			if err != nil {
+				return err
+			}
+			vapBindingCreationTime := vapBinding.GetCreationTimestamp().Time
+			if vapBindingCreationTime.Before(blockTime) {
+				return fmt.Errorf("VAPBinding should be created after default wait")
 			}
 			return nil
 		})
@@ -678,8 +775,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			vapBindingName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -696,7 +792,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreatedV1"
 
 		logger.Info("Running test: Vap should be created with v1")
-		constraint.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -715,13 +811,30 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		logger.Info("Running test: VAP ConstraintTemplate should have block-VAPB-generation-until annotation")
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			ct := &v1beta1.ConstraintTemplate{}
+			if err := c.Get(ctx, types.NamespacedName{Name: denyall + strings.ToLower(suffix)}, ct); err != nil {
+				return err
+			}
+			if ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation] == "" {
+				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 
-	t.Run("VapBinding should be created with v1", func(t *testing.T) {
+	t.Run("VapBinding should be created with v1 with some delay after constraint CRD is available", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedV1"
-		logger.Info("Running test: VapBinding should be created with v1")
+		logger.Info("Running test: VapBinding should be created with v1 with some delay after constraint CRD is available")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
-		constraint.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -739,12 +852,95 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-			// check if vapbinding resource exists now
-			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+			ct := &v1beta1.ConstraintTemplate{}
+			if err := c.Get(ctx, types.NamespacedName{Name: denyall + strings.ToLower(suffix)}, ct); err != nil {
 				return err
 			}
-			return nil
+			timestamp := ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation]
+			if timestamp == "" {
+				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
+			blockTime, err := time.Parse(time.RFC3339, timestamp)
+			if err != nil {
+				return err
+			}
+			// check if vapbinding resource exists now
+			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+				return err
+			}
+			vapBindingCreationTime := vapBinding.GetCreationTimestamp().Time
+			if vapBindingCreationTime.Before(blockTime) {
+				return fmt.Errorf("VAPBinding should not be created before the timestamp")
+			}
+			if err := c.Delete(ctx, cstr); err != nil {
+				return err
+			}
+			return c.Delete(ctx, vapBinding)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("VapBinding should be created with v1 without warnings in enforcementPointsStatus", func(t *testing.T) {
+		suffix := "VapBindingShouldBeCreatedV1EnforcementPointsStatus"
+		logger.Info("Running test: VapBinding should be created with v1 without warnings in enforcementPointsStatus")
+		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			logger.Error(err, "create cstr")
+			t.Fatal(err)
+		}
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
+			sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), constraintTemplate.GetName())
+			if err != nil {
+				return err
+			}
+			key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
+			if err := c.Get(ctx, key, statusObj); err != nil {
+				return err
+			}
+
+			if statusObj.Status.VAPGenerationStatus == nil || statusObj.Status.VAPGenerationStatus.State != GeneratedVAPState {
+				return fmt.Errorf("Expected VAP generation status state to be %s", GeneratedVAPState)
+			}
+
+			cStatusObj := &statusv1beta1.ConstraintPodStatus{}
+			name, err := statusv1beta1.KeyForConstraint(util.GetPodName(), cstr)
+			if err != nil {
+				return err
+			}
+			key = types.NamespacedName{Name: name, Namespace: util.GetNamespace()}
+			if err := c.Get(ctx, key, cStatusObj); err != nil {
+				return err
+			}
+
+			for _, ep := range cStatusObj.Status.EnforcementPointsStatus {
+				if ep.EnforcementPoint == util.VAPEnforcementPoint {
+					if ep.Message != "" {
+						return fmt.Errorf("message not expected")
+					}
+					if ep.State != constraint.GeneratedVAPBState {
+						return fmt.Errorf("expected state to be %s", constraint.GeneratedVAPBState)
+					}
+					break
+				}
+			}
+			return c.Delete(ctx, cstr)
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -910,7 +1106,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("Revew request initiated from an enforcement point not supported by client should result in error", func(t *testing.T) {
+	t.Run("Review request initiated from an enforcement point not supported by client should result in error", func(t *testing.T) {
 		suffix := "ReviewResultsInError"
 
 		logger.Info("Running test: Review request initiated from an enforcement point not supported by client should result in error")
@@ -964,7 +1160,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
 			return true
 		}, func() error {
-			err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
+			err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("cstr-%s", strings.ToLower(suffix))}, cstr)
 			if err != nil {
 				return err
 			}
@@ -1271,6 +1467,7 @@ violation[{"msg": "denied!"}] {
 
 	// Create the constraint for constraint template
 	cstr := newDenyAllCstr("")
+	cstr.SetName("denyallconstraint")
 	err = c.Create(ctx, cstr)
 	if err != nil {
 		t.Fatal(err)
@@ -1371,7 +1568,7 @@ func constraintEnforced(ctx context.Context, c client.Client, suffix string) err
 		return true
 	}, func() error {
 		cstr := newDenyAllCstr(suffix)
-		err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
+		err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("cstr-%s", strings.ToLower(suffix))}, cstr)
 		if err != nil {
 			return err
 		}
@@ -1392,7 +1589,7 @@ func isConstraintStatuErrorAsExpected(ctx context.Context, c client.Client, suff
 		return true
 	}, func() error {
 		cstr := newDenyAllCstr(suffix)
-		err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
+		err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("cstr-%s", strings.ToLower(suffix))}, cstr)
 		if err != nil {
 			return err
 		}
@@ -1425,7 +1622,7 @@ func newDenyAllCstr(suffix string) *unstructured.Unstructured {
 		Version: "v1beta1",
 		Kind:    DenyAll + suffix,
 	})
-	cstr.SetName("denyallconstraint")
+	cstr.SetName(fmt.Sprintf("cstr-%s", strings.ToLower(suffix)))
 	return cstr
 }
 
@@ -1452,7 +1649,7 @@ func newDenyAllCstrWithScopedEA(suffix string, ep ...string) *unstructured.Unstr
 		Version: "v1beta1",
 		Kind:    DenyAll + suffix,
 	})
-	cstr.SetName("denyallconstraint")
+	cstr.SetName(fmt.Sprintf("cstr-%s", strings.ToLower(suffix)))
 	return cstr
 }
 

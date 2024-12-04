@@ -73,7 +73,7 @@ To see how long it takes to review a constraint kind at admission time, enable t
 }
 ```
 
-In the excerpt above, notice `templateRunTimeNS` and `constraintCount`. The former indicates the time it takes to evaluate the number of constraints of kind `K8sRequiredLabels`, while the latter surfaces how many such constraints were evaluated for this template. Labels provide additional information about the execution environemnt setup, like whether tracing was enabled (`TraceEnabled`).
+In the excerpt above, notice `templateRunTimeNS` and `constraintCount`. The former indicates the time it takes to evaluate the number of constraints of kind `K8sRequiredLabels`, while the latter surfaces how many such constraints were evaluated for this template. Labels provide additional information about the execution environment setup, like whether tracing was enabled (`TraceEnabled`).
 
 #### Caveats
 

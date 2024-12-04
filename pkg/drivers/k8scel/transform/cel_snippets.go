@@ -1,7 +1,7 @@
 package transform
 
 import (
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
 	"k8s.io/apiserver/pkg/admission/plugin/policy/validating"
