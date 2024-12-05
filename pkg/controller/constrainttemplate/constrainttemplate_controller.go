@@ -310,6 +310,20 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 				logAction(ct, deletedAction)
 				r.metrics.registry.remove(request.NamespacedName)
 			}
+			isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&logger)
+			if isAPIEnabled {
+				currentVap, err := vapForVersion(groupVersion)
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+				vapName := getVAPName(ctUnversioned.GetName())
+				currentVap.SetName(vapName)
+				if err := r.Delete(ctx, currentVap); err != nil {
+					if !apierrors.IsNotFound(err) {
+						return reconcile.Result{}, err
+					}
+				}
+			}
 		}
 		err = r.deleteAllStatus(ctx, request.Name)
 		return result, err
@@ -648,6 +662,10 @@ func vapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
 	}
 }
 
+func getVAPName(constraintName string) string {
+	return fmt.Sprintf("gatekeeper-%s", constraintName)
+}
+
 func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy, currentVap client.Object) (client.Object, error) {
 	if currentVap == nil {
 		if gvk.Version == "v1" {
@@ -806,7 +824,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with runtime group version", status, err)
 			return err
 		}
-		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
+		vapName := getVAPName(unversionedCT.GetName())
 		logger.Info("check if VAP exists", "vapName", vapName)
 		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
 			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
@@ -863,7 +881,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with correct group version", status, err)
 			return err
 		}
-		vapName := fmt.Sprintf("gatekeeper-%s", unversionedCT.GetName())
+		vapName := getVAPName(unversionedCT.GetName())
 		logger.Info("check if VAP exists", "vapName", vapName)
 		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
 			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
