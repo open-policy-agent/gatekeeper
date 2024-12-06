@@ -905,7 +905,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		if *exportController.ExportEnabled {
 			err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
 			if err != nil {
-				am.log.Error(err, "export audit Publishing")
+				am.log.Error(err, "error exporting audit violation")
 			}
 		}
 		if *emitAuditEvents {

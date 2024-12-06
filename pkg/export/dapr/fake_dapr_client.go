@@ -355,7 +355,7 @@ func (r *FakeDapr) Publish(_ context.Context, _ string, _ interface{}, _ string)
 	return nil
 }
 
-func (r *FakeDapr) Close(connectionName string) error {
+func (r *FakeDapr) CloseConnection(connectionName string) error {
 	if len(r.openConnections) == 1 {
 		r.openConnections[connectionName].f()
 	}
@@ -363,7 +363,7 @@ func (r *FakeDapr) Close(connectionName string) error {
 	return nil
 }
 
-func (r *FakeDapr) Update(_ context.Context, connectionName string, config interface{}) error {
+func (r *FakeDapr) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
 	cfg, ok := config.(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("invalid type assertion, config is not in expected format")
@@ -378,7 +378,7 @@ func (r *FakeDapr) Update(_ context.Context, connectionName string, config inter
 	return nil
 }
 
-func (r *FakeDapr) Create(ctx context.Context, connectionName string, config interface{}) error {
+func (r *FakeDapr) CreateConnection(ctx context.Context, connectionName string, config interface{}) error {
 	var conn FakeDaprConnection
 	cfg, ok := config.(map[string]interface{})
 	if !ok {

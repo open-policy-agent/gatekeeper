@@ -26,12 +26,12 @@ func TestMain(m *testing.M) {
 		},
 	}
 	for name, fakeConn := range SupportedDrivers {
-		testSystem.connections[name] = name
-		_ = fakeConn.Create(ctx, name, cfg[name])
+		testSystem.connectionToDriver[name] = name
+		_ = fakeConn.CreateConnection(ctx, name, cfg[name])
 	}
 	r := m.Run()
-	for name, fakeConn := range testSystem.connections {
-		_ = SupportedDrivers[fakeConn].Close(name)
+	for name, fakeConn := range testSystem.connectionToDriver {
+		_ = SupportedDrivers[fakeConn].CloseConnection(name)
 	}
 
 	if r != 0 {
@@ -48,7 +48,7 @@ func TestNewSystem(t *testing.T) {
 		{
 			name: "requesting system",
 			want: &System{
-				connections: map[string]string{},
+				connectionToDriver: map[string]string{},
 			},
 		},
 	}
@@ -78,7 +78,7 @@ func TestSystem_UpsertConnection(t *testing.T) {
 			connectionName: "conn1",
 			newDriver:      dapr.Name,
 			setup: func(s *System) error {
-				s.connections = map[string]string{}
+				s.connectionToDriver = map[string]string{}
 				SupportedDrivers[dapr.Name] = dapr.FakeConn
 				return nil
 			},
@@ -90,9 +90,9 @@ func TestSystem_UpsertConnection(t *testing.T) {
 			connectionName: "conn1",
 			newDriver:      dapr.Name,
 			setup: func(s *System) error {
-				s.connections["conn1"] = dapr.Name
+				s.connectionToDriver["conn1"] = dapr.Name
 				SupportedDrivers[dapr.Name] = dapr.FakeConn
-				return SupportedDrivers[dapr.Name].Create(ctx, "conn1", map[string]interface{}{"component": "pubsub"})
+				return SupportedDrivers[dapr.Name].CreateConnection(ctx, "conn1", map[string]interface{}{"component": "pubsub"})
 			},
 			wantErr: false,
 		},
@@ -110,10 +110,10 @@ func TestSystem_UpsertConnection(t *testing.T) {
 			connectionName: "conn4",
 			newDriver:      dapr.Name,
 			setup: func(s *System) error {
-				s.connections["conn4"] = testdriver.Name
+				s.connectionToDriver["conn4"] = testdriver.Name
 				SupportedDrivers[dapr.Name] = dapr.FakeConn
 				SupportedDrivers[testdriver.Name] = testdriver.FakeConn
-				return SupportedDrivers[testdriver.Name].Create(ctx, "conn4", "config4")
+				return SupportedDrivers[testdriver.Name].CreateConnection(ctx, "conn4", "config4")
 			},
 			wantErr: false,
 		},
@@ -131,7 +131,7 @@ func TestSystem_UpsertConnection(t *testing.T) {
 			}
 
 			if !tt.wantErr {
-				if driver, ok := system.connections[tt.connectionName]; !ok || driver != tt.newDriver {
+				if driver, ok := system.connectionToDriver[tt.connectionName]; !ok || driver != tt.newDriver {
 					t.Errorf("connection %s not found or driver mismatch: got %v, want %v", tt.connectionName, driver, tt.newDriver)
 				}
 			}
@@ -149,9 +149,9 @@ func TestSystem_CloseConnection(t *testing.T) {
 		{
 			name: "close existing connection",
 			setup: func(s *System) {
-				s.connections["test-connection"] = dapr.Name
+				s.connectionToDriver["test-connection"] = dapr.Name
 				SupportedDrivers[dapr.Name] = dapr.FakeConn
-				_ = dapr.FakeConn.Create(context.TODO(), "test-connection", map[string]interface{}{"component": "pubsub"})
+				_ = dapr.FakeConn.CreateConnection(context.TODO(), "test-connection", map[string]interface{}{"component": "pubsub"})
 			},
 			connectionName: "test-connection",
 			wantErr:        false,
@@ -160,7 +160,7 @@ func TestSystem_CloseConnection(t *testing.T) {
 			name: "close non-existing connection",
 			setup: func(s *System) {
 				// No setup needed for non-existing connection
-				s.connections = map[string]string{}
+				s.connectionToDriver = map[string]string{}
 			},
 			connectionName: "non-existing-connection",
 			wantErr:        false,
@@ -179,7 +179,7 @@ func TestSystem_CloseConnection(t *testing.T) {
 				t.Errorf("CloseConnection() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			if _, exists := s.connections[tt.connectionName]; exists && !tt.wantErr {
+			if _, exists := s.connectionToDriver[tt.connectionName]; exists && !tt.wantErr {
 				t.Errorf("connection %s still exists after CloseConnection", tt.connectionName)
 			}
 		})
@@ -221,7 +221,7 @@ func TestSystem_Publish(t *testing.T) {
 		{
 			name: "Publishing to a connection that does exist",
 			fields: fields{
-				connections: testSystem.connections,
+				connections: testSystem.connectionToDriver,
 			},
 			args:    args{ctx: context.Background(), connection: "dapr", topic: "test", msg: nil},
 			wantErr: false,
@@ -230,8 +230,8 @@ func TestSystem_Publish(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &System{
-				mux:         sync.RWMutex{},
-				connections: tt.fields.connections,
+				mux:                sync.RWMutex{},
+				connectionToDriver: tt.fields.connections,
 			}
 			if err := s.Publish(tt.args.ctx, tt.args.connection, tt.args.topic, tt.args.msg); (err != nil) != tt.wantErr {
 				t.Errorf("System.Publish() error = %v, wantErr %v", err, tt.wantErr)

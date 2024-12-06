@@ -46,12 +46,12 @@ func (r *Dapr) Publish(_ context.Context, connectionName string, data interface{
 	return nil
 }
 
-func (r *Dapr) Close(connectionName string) error {
+func (r *Dapr) CloseConnection(connectionName string) error {
 	delete(r.openConnections, connectionName)
 	return nil
 }
 
-func (r *Dapr) Update(_ context.Context, connectionName string, config interface{}) error {
+func (r *Dapr) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
 	cfg, ok := config.(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("invalid type assertion, config is not in expected format")
@@ -66,7 +66,7 @@ func (r *Dapr) Update(_ context.Context, connectionName string, config interface
 	return nil
 }
 
-func (r *Dapr) Create(_ context.Context, connectionName string, config interface{}) error {
+func (r *Dapr) CreateConnection(_ context.Context, connectionName string, config interface{}) error {
 	var conn Connection
 	cfg, ok := config.(map[string]interface{})
 	if !ok {

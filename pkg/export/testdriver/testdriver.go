@@ -24,12 +24,12 @@ func (r *Connection) Publish(_ context.Context, _ string, _ interface{}, _ strin
 	return nil
 }
 
-func (r *Connection) Close(connectionName string) error {
+func (r *Connection) CloseConnection(connectionName string) error {
 	delete(r.openConnections, connectionName)
 	return nil
 }
 
-func (r *Connection) Update(_ context.Context, connectionName string, config interface{}) error {
+func (r *Connection) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
 	name, ok := config.(string)
 	if !ok {
 		return fmt.Errorf("invalid type assertion, config is not in expected format")
@@ -38,7 +38,7 @@ func (r *Connection) Update(_ context.Context, connectionName string, config int
 	return nil
 }
 
-func (r *Connection) Create(_ context.Context, connectionName string, config interface{}) error {
+func (r *Connection) CreateConnection(_ context.Context, connectionName string, config interface{}) error {
 	name, ok := config.(string)
 	if !ok {
 		return fmt.Errorf("invalid type assertion, config is not in expected format")

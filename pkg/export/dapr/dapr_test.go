@@ -44,7 +44,7 @@ func TestCreate(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := testClient.Create(context.TODO(), "another-test", tc.config)
+			err := testClient.CreateConnection(context.TODO(), "another-test", tc.config)
 			tmp, ok := testClient.(*Dapr)
 			if !ok {
 				t.Errorf("failed to type assert")
@@ -148,7 +148,7 @@ func TestDapr_Update(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := testClient
-			if err := r.Update(context.Background(), tt.connectionName, tt.config); (err != nil) != tt.wantErr {
+			if err := r.UpdateConnection(context.Background(), tt.connectionName, tt.config); (err != nil) != tt.wantErr {
 				t.Errorf("Dapr.Update() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr {

@@ -14,21 +14,21 @@ var SupportedDrivers = map[string]driver.Driver{
 }
 
 type System struct {
-	mux         sync.RWMutex
-	connections map[string]string
+	mux                sync.RWMutex
+	connectionToDriver map[string]string
 }
 
 func NewSystem() *System {
 	return &System{
-		connections: map[string]string{},
+		connectionToDriver: map[string]string{},
 	}
 }
 
 func (s *System) Publish(_ context.Context, connectionName string, subject string, msg interface{}) error {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
-	if c, ok := s.connections[connectionName]; ok {
-		return SupportedDrivers[c].Publish(context.Background(), connectionName, msg, subject)
+	if dName, ok := s.connectionToDriver[connectionName]; ok {
+		return SupportedDrivers[dName].Publish(context.Background(), connectionName, msg, subject)
 	}
 	return fmt.Errorf("connection is not initialized, name: %s ", connectionName)
 }
@@ -37,15 +37,15 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, conne
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	// Check if the connection already exists.
-	if oldDriver, ok := s.connections[connectionName]; ok {
+	if oldDriver, ok := s.connectionToDriver[connectionName]; ok {
 		// If the provider is the same, update the existing connection.
 		if oldDriver == newDriver {
-			return SupportedDrivers[newDriver].Update(ctx, connectionName, config)
+			return SupportedDrivers[newDriver].UpdateConnection(ctx, connectionName, config)
 		}
 	}
 	// Check if the provider is supported.
-	if conn, ok := SupportedDrivers[newDriver]; ok {
-		err := conn.Create(ctx, connectionName, config)
+	if d, ok := SupportedDrivers[newDriver]; ok {
+		err := d.CreateConnection(ctx, connectionName, config)
 		if err != nil {
 			return err
 		}
@@ -55,7 +55,7 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, conne
 			return err
 		}
 		// Add the new connection and provider to the maps.
-		s.connections[connectionName] = newDriver
+		s.connectionToDriver[connectionName] = newDriver
 		return nil
 	}
 	return fmt.Errorf("driver %s is not supported", newDriver)
@@ -68,14 +68,14 @@ func (s *System) CloseConnection(connectionName string) error {
 }
 
 func (s *System) closeConnection(connectionName string) error {
-	if c, ok := s.connections[connectionName]; ok {
+	if c, ok := s.connectionToDriver[connectionName]; ok {
 		if conn, ok := SupportedDrivers[c]; ok {
-			err := conn.Close(connectionName)
+			err := conn.CloseConnection(connectionName)
 			if err != nil {
 				return err
 			}
 		}
-		delete(s.connections, connectionName)
+		delete(s.connectionToDriver, connectionName)
 	}
 	return nil
 }

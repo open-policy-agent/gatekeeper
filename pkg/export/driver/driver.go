@@ -5,15 +5,15 @@ import (
 )
 
 type Driver interface {
-	// Publish single message with specific subject
+	// Publish publishes single message with specific subject using a connection
 	Publish(ctx context.Context, connectionName string, data interface{}, subject string) error
 
-	// Close connections
-	Close(connectionName string) error
+	// CloseConnection closes a connection
+	CloseConnection(connectionName string) error
 
-	// Update connection
-	Update(ctx context.Context, connectionName string, config interface{}) error
+	// UpdateConnection updates an existing connection
+	UpdateConnection(ctx context.Context, connectionName string, config interface{}) error
 
-	// Create connection
-	Create(ctx context.Context, connectionName string, config interface{}) error
+	// CreateConnection creates new connection
+	CreateConnection(ctx context.Context, connectionName string, config interface{}) error
 }
