@@ -1,6 +1,6 @@
 ---
-id: pubsub
-title: Consuming violations using Pubsub
+id: export
+title: Exporting violations
 ---
 
 `Feature State`: Gatekeeper version v3.13+ (alpha)
@@ -9,7 +9,7 @@ title: Consuming violations using Pubsub
 
 ## Description
 
-This feature pushes audit violations to a pubsub service. Users can subscribe to pubsub service to consume violations.
+This feature exports audit violations to a backend from where users can consume violations.
 
 > To gain insights into different methods of obtaining audit violations and the respective trade-offs for each approach, please refer to [Reading Audit Results](audit.md#reading-audit-results).
 
@@ -17,11 +17,11 @@ This feature pushes audit violations to a pubsub service. Users can subscribe to
 
 Install prerequisites such as a pubsub tool, a message broker etc.
 
-### Setting up audit with pubsub enabled
+### Setting up audit to export violations
 
 In the audit deployment, set the `--enable-pub-sub` flag to `true` to publish audit violations. Additionally, use `--audit-connection` (defaults to `audit-connection`) and `--audit-channel`(defaults to `audit-channel`) flags to allow audit to publish violations using desired connection onto desired channel. `--audit-connection` must be set to the name of the connection config, and `--audit-channel` must be set to name of the channel where violations should get published.
 
-A ConfigMap that contains `provider` and `config` fields in `data` is required to establish connection for sending violations over the channel. Following is an example ConfigMap to establish a connection that uses Dapr to publish messages:
+A ConfigMap that contains `driver` and `config` fields in `data` is required to establish connection for sending violations over the channel. Following is an example ConfigMap to establish a connection that uses Dapr to publish messages:
 
 ```yaml
 apiVersion: v1
@@ -30,20 +30,20 @@ metadata:
   name: audit-connection
   namespace: gatekeeper-system
 data:
-  provider: "dapr"
+  driver: "dapr"
   config: |
     {
       "component": "pubsub"
     }
 ```
 
-- `provider` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`
+- `driver` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`
 - `config` field is a json object that configures how the connection is made. E.g. which queue messages should be sent to.
 
-#### Available Pubsub drivers
+#### Available drivers
 Dapr: https://dapr.io/
 
-### Quick start with publishing violations using Dapr and Redis
+### Quick start with exporting violations using Dapr and Redis
 
 #### Prerequisites
 
@@ -130,7 +130,7 @@ Dapr: https://dapr.io/
     > [!IMPORTANT]
     > Please make sure `fake-subscriber` image is built and available in your cluster. Dockerfile to build image for `fake-subscriber` is under [gatekeeper/test/fake-subscriber](https://github.com/open-policy-agent/gatekeeper/tree/master/test/pubsub/fake-subscriber).
 
-#### Configure Gatekeeper with Pubsub enabled
+#### Configure Gatekeeper with Export enabled
 
 1. Create Gatekeeper namespace, and create Dapr pubsub component and Redis secret in Gatekeeper's namespace (`gatekeeper-system` by default). Please make sure to update `gatekeeper-system` namespace for the next steps if your cluster's Gatekeeper namespace is different.
 
@@ -180,7 +180,7 @@ Dapr: https://dapr.io/
       name: audit-connection
       namespace: gatekeeper-system
     data:
-      provider: "dapr"
+      driver: "dapr"
       config: |
         {
           "component": "pubsub"
