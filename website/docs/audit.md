@@ -133,14 +133,14 @@ In addition to violations, these other audit events may be useful (all uniquely 
 All of these events (including `violation_audited`) are marked 
 with the same `audit_id` for a given audit run.
 
-### Pubsub channel
+### Export violations
 
-This feature uses publish and subscribe (pubsub) model that allows Gatekeeper to export audit violations over a broker that can be consumed by a subscriber independently. Therefore, pubsub violations are not subject to reporting limits. Please refer to [this](pubsub.md) guide to configure audit to push violations over a channel.
+This feature allows plugging in different backends that allows Gatekeeper to export audit violations. Therefore, violations are not subject to reporting limits. Please refer to [this](export.md) guide to configure audit to push violations via this feature.
 
-Limitations/drawbacks of getting violations using pubsub channel:
+Limitations/drawbacks of exporting violations:
 
-- There is an inherent risk of messages getting dropped. You might not receive all the published violations.
-- Additional dependency on pubsub broker. 
+- There is a risk of messages getting dropped. You might not receive all the exported violations. This depends on the type of backend you are using for delivery. For example, using a network as backend to export violation has the risk of messages getting dropped.
+- Additional dependency depending on what is plugged in. For example, using pubsub tools to export violations.
 
 ## Running Audit
 For more details on how to deploy audit and 
