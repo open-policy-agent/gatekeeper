@@ -85,5 +85,5 @@ jobs:
       - name: Run trivy on images
         run: |
           for img in "gatekeeper-e2e:latest" "gatekeeper-crds:latest"; do
-              trivy image --ignore-unfixed --vuln-type="os,library" "${img}"
+              trivy image --ignore-unfixed --pkg-types="os,library" "${img}"
           done
