@@ -4,6 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
+    {{- include "gatekeeper.commonLabels" . | nindent 4 }}
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
     control-plane: audit-controller
@@ -62,15 +63,21 @@ spec:
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --audit-from-cache={{ .Values.auditFromCache }}
-        - --audit-chunk-size={{ .Values.auditChunkSize }}
+        {{ if hasKey .Values "auditChunkSize" }}- --audit-chunk-size={{ .Values.auditChunkSize }}{{- end }}
         - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
-        - --emit-audit-events={{ .Values.emitAuditEvents }}
+        {{ if hasKey .Values "emitAuditEvents" }}- --emit-audit-events={{ .Values.emitAuditEvents }}{{- end }}
+        {{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}
         - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
         - --operation=audit
         - --operation=status
-        {{ if .Values.audit.enablePubsub}}
+        - --operation=generate
+        {{ if hasKey .Values.audit "enablePubsub" }}
         - --enable-pub-sub={{ .Values.audit.enablePubsub }}
+        {{- end }}
+        {{ if hasKey .Values.audit "connection" }}
         - --audit-connection={{ .Values.audit.connection }}
+        {{- end }}
+        {{ if hasKey .Values.audit "channel" }}
         - --audit-channel={{ .Values.audit.channel }}
         {{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}
@@ -97,6 +104,9 @@ spec:
         
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
+        {{- end }}
+        {{ if hasKey .Values "defaultWaitForVAPBGeneration"}}
+        - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}
         command:
         - /manager
