@@ -176,21 +176,11 @@ At a high level, this requires:
 
 * The ability to read all objects in the group `mutations.gatekeeper.sh` (mutators)
 
-# A Note on Permissions
-
-"Create" implies the `create` and `delete` permissions in addition to the permissions implied by "Read" and "Write".
-
-"Write" implies the `update` permission in addition to the permissions implied by "Read".
-
-"Read" implies the `get`, `list`, and `watch` permissions. In some cases, like scraping audit results,
-`watch` is unnecessary, but does not substantially increase the power delegated to the service account
-under the theory that a `watch` is simply a more efficient version of polling `list`.
-
 ## Generation
 
 __--operation key:__ `generate`
 
-This operation serves .
+This operation enables CRD and VAP/VAPB generation.
 
 ### Required Behaviors
 
@@ -205,5 +195,15 @@ At a high level, this requires:
 * The ability to read all `ConstraintTemplate` objects
 * The ability to create CRDs (unfortunately RBAC doesn't have the syntax to scope this down to just CRDs in the `constraints.gatekeeper.sh` group)
 * The ability to read all `Constraint` resources (members of the group `constraints.gatekeeper.sh`)
-* The ability to read all `ValidatingAdmissionPolicy` objects
-* The ability to read all `ValidatingAdmissionPolicyBinding` objects
+* The ability to create `ValidatingAdmissionPolicy` objects
+* The ability to create `ValidatingAdmissionPolicyBinding` objects
+
+# A Note on Permissions
+
+"Create" implies the `create` and `delete` permissions in addition to the permissions implied by "Read" and "Write".
+
+"Write" implies the `update` permission in addition to the permissions implied by "Read".
+
+"Read" implies the `get`, `list`, and `watch` permissions. In some cases, like scraping audit results,
+`watch` is unnecessary, but does not substantially increase the power delegated to the service account
+under the theory that a `watch` is simply a more efficient version of polling `list`.
