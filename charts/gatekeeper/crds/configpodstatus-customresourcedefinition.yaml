@@ -6,21 +6,20 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.14.0
   labels:
     gatekeeper.sh/system: "yes"
-  name: constrainttemplatepodstatuses.status.gatekeeper.sh
+  name: configpodstatuses.status.gatekeeper.sh
 spec:
   group: status.gatekeeper.sh
   names:
-    kind: ConstraintTemplatePodStatus
-    listKind: ConstraintTemplatePodStatusList
-    plural: constrainttemplatepodstatuses
-    singular: constrainttemplatepodstatus
+    kind: ConfigPodStatus
+    listKind: ConfigPodStatusList
+    plural: configpodstatuses
+    singular: configpodstatus
   preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses API.
         properties:
           apiVersion:
             description: |-
@@ -40,25 +39,25 @@ spec:
           metadata:
             type: object
           status:
-            description: ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus.
             properties:
+              configUID:
+                description: |-
+                  UID is a type that holds unique ID values, including UUIDs.  Because we
+                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                  intent and helps make sure that UIDs and names do not get conflated.
+                type: string
               errors:
                 items:
-                  description: CreateCRDError represents a single error caught during parsing, compiling, etc.
                   properties:
-                    code:
-                      type: string
-                    location:
-                      type: string
                     message:
                       type: string
+                    type:
+                      type: string
                   required:
-                  - code
                   - message
                   type: object
                 type: array
               id:
-                description: 'Important: Run "make" to regenerate code after modifying this file'
                 type: string
               observedGeneration:
                 format: int64
@@ -67,23 +66,6 @@ spec:
                 items:
                   type: string
                 type: array
-              templateUID:
-                description: |-
-                  UID is a type that holds unique ID values, including UUIDs.  Because we
-                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                  intent and helps make sure that UIDs and names do not get conflated.
-                type: string
-              vapGenerationStatus:
-                description: VAPGenerationStatus represents the status of VAP generation.
-                properties:
-                  observedGeneration:
-                    format: int64
-                    type: integer
-                  state:
-                    type: string
-                  warning:
-                    type: string
-                type: object
             type: object
         type: object
     served: true
