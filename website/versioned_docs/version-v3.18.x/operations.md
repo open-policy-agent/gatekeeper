@@ -182,6 +182,8 @@ __--operation key:__ `generate`
 
 This operation enables CRD and VAP/VAPB generation.
 
+To avoid write contention, the Generate operation should be run as a singleton.
+
 ### Required Behaviors
 
 At a high level, this requires:
