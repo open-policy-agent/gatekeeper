@@ -50,7 +50,6 @@ At a high level, this requires:
   * It will also need the ability to write to the webhook secret in Gatekeeper's namespace
 * If you have events enabled, you will need permissions to create events in Gatekeeper's namespace
 
-
 ## Mutating Webhook
 
 __--operation key:__ `mutation-webhook`
@@ -185,3 +184,25 @@ At a high level, this requires:
 "Read" implies the `get`, `list`, and `watch` permissions. In some cases, like scraping audit results,
 `watch` is unnecessary, but does not substantially increase the power delegated to the service account
 under the theory that a `watch` is simply a more efficient version of polling `list`.
+
+## Generation
+
+__--operation key:__ `generate`
+
+This operation serves .
+
+### Required Behaviors
+
+At a high level, this requires:
+
+* Creating CRDs for a corresponding constraint template
+* Creating ValidatingAdmissionPolicies for ConstraintTemplates
+* Creating ValidatingAdmissionPolicyBindings for Constraints
+
+### Permissions Required
+
+* The ability to read all `ConstraintTemplate` objects
+* The ability to create CRDs (unfortunately RBAC doesn't have the syntax to scope this down to just CRDs in the `constraints.gatekeeper.sh` group)
+* The ability to read all `Constraint` resources (members of the group `constraints.gatekeeper.sh`)
+* The ability to read all `ValidatingAdmissionPolicy` objects
+* The ability to read all `ValidatingAdmissionPolicyBinding` objects
