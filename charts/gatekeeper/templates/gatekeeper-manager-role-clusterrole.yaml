@@ -66,6 +66,18 @@ rules:
 - apiGroups:
   - config.gatekeeper.sh
   resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - config.gatekeeper.sh
+  resources:
   - configs
   verbs:
   - create
