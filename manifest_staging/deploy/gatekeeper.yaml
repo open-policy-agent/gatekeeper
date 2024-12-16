@@ -5084,6 +5084,7 @@ spec:
         - --operation=audit
         - --operation=status
         - --operation=mutation-status
+        - --operation=generate
         - --logtostderr
         - --disable-opa-builtin={http.send}
         - --disable-cert-rotation
