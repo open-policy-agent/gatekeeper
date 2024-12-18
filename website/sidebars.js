@@ -34,7 +34,7 @@ module.exports = {
         'expansion',
         'gator',
         'workload-resources',
-        'pubsub',
+        'export',
         'validating-admission-policy',
         'enforcement-points'
       ],
@@ -66,7 +66,7 @@ module.exports = {
         'developers',
         'help',
         'security',
-        'pubsub-driver'
+        'export-driver'
       ],
     }
   ]
