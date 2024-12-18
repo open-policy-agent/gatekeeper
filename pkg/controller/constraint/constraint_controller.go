@@ -787,6 +787,7 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 
 	obj.Spec.ValidationActions = actions
 	if v1beta1Obj.Spec.MatchResources != nil {
+		obj.Spec.MatchResources = &admissionregistrationv1.MatchResources{}
 		if v1beta1Obj.Spec.MatchResources.ObjectSelector != nil {
 			obj.Spec.MatchResources.ObjectSelector = v1beta1Obj.Spec.MatchResources.ObjectSelector
 		}

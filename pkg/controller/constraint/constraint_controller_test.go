@@ -2,6 +2,7 @@ package constraint
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,9 +13,12 @@ import (
 	celSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/schema"
 	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
@@ -534,3 +538,101 @@ func TestShouldGenerateVAP(t *testing.T) {
 		})
 	}
 }
+func TestV1beta1ToV1(t *testing.T) {
+	tests := []struct {
+		name          string
+		v1beta1Obj    *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding
+		expectedObj   *admissionregistrationv1.ValidatingAdmissionPolicyBinding
+		expectedError error
+	}{
+		{
+			name: "valid conversion",
+			v1beta1Obj: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-binding",
+				},
+				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+					PolicyName: "test-policy",
+					ParamRef: &admissionregistrationv1beta1.ParamRef{
+						Name: "test-param",
+					},
+					ValidationActions: []admissionregistrationv1beta1.ValidationAction{
+						admissionregistrationv1beta1.Deny,
+						admissionregistrationv1beta1.Warn,
+					},
+					MatchResources: &admissionregistrationv1beta1.MatchResources{
+						ObjectSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"key": "value"},
+						},
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"key": "value"},
+						},
+					},
+				},
+			},
+			expectedObj: &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-binding",
+				},
+				Spec: admissionregistrationv1.ValidatingAdmissionPolicyBindingSpec{
+					PolicyName: "test-policy",
+					ParamRef: &admissionregistrationv1.ParamRef{
+						Name:                    "test-param",
+						ParameterNotFoundAction: ptr.To[admissionregistrationv1.ParameterNotFoundActionType](admissionregistrationv1.AllowAction),
+					},
+					ValidationActions: []admissionregistrationv1.ValidationAction{
+						admissionregistrationv1.Deny,
+						admissionregistrationv1.Warn,
+					},
+					MatchResources: &admissionregistrationv1.MatchResources{
+						ObjectSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"key": "value"},
+						},
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"key": "value"},
+						},
+					},
+				},
+			},
+			expectedError: nil,
+		},
+		{
+			name: "unrecognized enforcement action",
+			v1beta1Obj: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-binding",
+				},
+				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+					PolicyName: "test-policy",
+					ParamRef: &admissionregistrationv1beta1.ParamRef{
+						Name: "test-param",
+					},
+					ValidationActions: []admissionregistrationv1beta1.ValidationAction{
+						"unknown",
+					},
+				},
+			},
+			expectedObj:   nil,
+			expectedError: fmt.Errorf("%w: unrecognized enforcement action unknown, must be `warn` or `deny`", transform.ErrBadEnforcementAction),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj, err := v1beta1ToV1(tt.v1beta1Obj)
+			if err != nil && tt.expectedError == nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if err == nil && tt.expectedError != nil {
+				t.Fatalf("expected error %v, got none", tt.expectedError)
+			}
+			if err != nil && tt.expectedError != nil && err.Error() != tt.expectedError.Error() {
+				t.Fatalf("expected error %v, got %v", tt.expectedError, err)
+			}
+			if !reflect.DeepEqual(obj, tt.expectedObj) {
+				t.Errorf("expected object %v, got %v", tt.expectedObj, obj)
+			}
+		})
+	}
+}
+
