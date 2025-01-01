@@ -99,6 +99,9 @@ patchesJson6902:
       kind: Deployment
       name: gatekeeper-audit
     patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/name
+        value: "{{ .Values.audit.containerName }}"
       - op: remove
         path: /spec/template/spec/containers/0/resources/limits
       - op: remove
@@ -125,6 +128,9 @@ patchesJson6902:
       kind: Deployment
       name: gatekeeper-controller-manager
     patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/name
+        value: "{{ .Values.controllerManager.containerName }}"
       - op: remove
         path: /spec/template/spec/containers/0/resources/limits
       - op: remove

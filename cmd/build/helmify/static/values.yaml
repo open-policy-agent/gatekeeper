@@ -167,6 +167,7 @@ enableRuntimeDefaultSeccompProfile: true
 controllerManager:
   serviceAccount:
     name: gatekeeper-admin
+  containerName: manager
   exemptNamespaces: []
   exemptNamespacePrefixes: []
   hostNetwork: false
@@ -227,6 +228,7 @@ controllerManager:
 audit:
   serviceAccount:
     name: gatekeeper-admin
+  containerName: manager
   hostNetwork: false
   dnsPolicy: ClusterFirst
   metricsPort: 8888
