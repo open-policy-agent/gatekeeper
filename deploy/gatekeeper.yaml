@@ -2392,6 +2392,78 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.14.0
   labels:
     gatekeeper.sh/system: "yes"
+  name: configpodstatuses.status.gatekeeper.sh
+spec:
+  group: status.gatekeeper.sh
+  names:
+    kind: ConfigPodStatus
+    listKind: ConfigPodStatusList
+    plural: configpodstatuses
+    singular: configpodstatus
+  preserveUnknownFields: false
+  scope: Namespaced
+  versions:
+  - name: v1beta1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          status:
+            properties:
+              configUID:
+                description: |-
+                  UID is a type that holds unique ID values, including UUIDs.  Because we
+                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                  intent and helps make sure that UIDs and names do not get conflated.
+                type: string
+              errors:
+                items:
+                  properties:
+                    message:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - message
+                  type: object
+                type: array
+              id:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              operations:
+                items:
+                  type: string
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  labels:
+    gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
 spec:
   group: config.gatekeeper.sh
@@ -2498,10 +2570,44 @@ spec:
             type: object
           status:
             description: ConfigStatus defines the observed state of Config.
+            properties:
+              byPod:
+                items:
+                  properties:
+                    configUID:
+                      description: |-
+                        UID is a type that holds unique ID values, including UUIDs.  Because we
+                        don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                        intent and helps make sure that UIDs and names do not get conflated.
+                      type: string
+                    errors:
+                      items:
+                        properties:
+                          message:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                        - message
+                        type: object
+                      type: array
+                    id:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    operations:
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                type: array
             type: object
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -2554,6 +2660,24 @@ spec:
                 type: string
               enforced:
                 type: boolean
+              enforcementPointsStatus:
+                items:
+                  description: EnforcementPointStatus represents the status of a single enforcement point.
+                  properties:
+                    enforcementPoint:
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    state:
+                      type: string
+                  required:
+                  - enforcementPoint
+                  - state
+                  type: object
+                type: array
               errors:
                 items:
                   description: Error represents a single error caught while adding a constraint to engine.
@@ -2657,6 +2781,17 @@ spec:
                   don't ONLY use UUIDs, this is an alias to string.  Being a type captures
                   intent and helps make sure that UIDs and names do not get conflated.
                 type: string
+              vapGenerationStatus:
+                description: VAPGenerationStatus represents the status of VAP generation.
+                properties:
+                  observedGeneration:
+                    format: int64
+                    type: integer
+                  state:
+                    type: string
+                  warning:
+                    type: string
+                type: object
             type: object
         type: object
     served: true
@@ -4723,6 +4858,18 @@ rules:
 - apiGroups:
   - config.gatekeeper.sh
   resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - config.gatekeeper.sh
+  resources:
   - configs
   verbs:
   - create
@@ -4937,6 +5084,7 @@ spec:
         - --operation=audit
         - --operation=status
         - --operation=mutation-status
+        - --operation=generate
         - --logtostderr
         - --disable-opa-builtin={http.send}
         - --disable-cert-rotation
@@ -4961,7 +5109,7 @@ spec:
           value: manager
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-        image: openpolicyagent/gatekeeper:v3.18.0-beta.0
+        image: openpolicyagent/gatekeeper:v3.19.0-beta.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -5080,7 +5228,7 @@ spec:
           value: manager
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-        image: openpolicyagent/gatekeeper:v3.18.0-beta.0
+        image: openpolicyagent/gatekeeper:v3.19.0-beta.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
