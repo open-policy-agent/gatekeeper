@@ -39,15 +39,15 @@ require (
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.30.6
-	k8s.io/apiextensions-apiserver v0.30.6
-	k8s.io/apimachinery v0.30.6
-	k8s.io/apiserver v0.30.6
-	k8s.io/client-go v0.30.6
+	k8s.io/api v0.30.8
+	k8s.io/apiextensions-apiserver v0.30.8
+	k8s.io/apimachinery v0.30.8
+	k8s.io/apiserver v0.30.8
+	k8s.io/client-go v0.30.8
 	k8s.io/klog/v2 v2.120.1
 	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0
 	oras.land/oras-go v1.2.5
-	sigs.k8s.io/controller-runtime v0.18.5
+	sigs.k8s.io/controller-runtime v0.18.6
 	sigs.k8s.io/release-utils v0.7.7
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -85,7 +85,6 @@ require (
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-chi/chi/v5 v5.0.8 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -150,7 +149,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20240722135656-d784300faade // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240722135656-d784300faade // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/component-base v0.30.6 // indirect
+	k8s.io/component-base v0.30.8 // indirect
 	k8s.io/kube-openapi v0.0.0-20240430033511-f0e62f92d13f // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.29.0 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
