@@ -178,21 +178,21 @@ To see this in action, checkout this [demo](https://github.com/open-policy-agent
 
 <details>
 
-<summary>Do all engines in a ConstraintTemplate are evaluated? Is there a fallback among engines?</summary>
-Only one engine is evaluated for each ConstraintTemplate. K8sNativeValidation engine hold higher priority than Rego engine. There is no fallback mechanism between engines, hence a logical/syntactical error in policy logic is treated as violation depending on the enforcement action set of the Constraints created for ConstraintTemplate.
+<summary>Do all engines in a ConstraintTemplate get evaluated? Is there a fallback among engines?</summary>
+Only one engine is evaluated for each ConstraintTemplate. `K8sNativeValidation` engine holds a higher priority than the `Rego` engine. There is no fallback mechanism between engines, hence a logical/syntactical error in the policy logic is treated as violation depending on the enforcement action specified in the Constraint.
 
 </details>
 
 <details>
 
-<summary>If I have a template with Rego and CEL, which policy logic will be used in evaluating resources?</summary>
+<summary>If I have a template with Rego and CEL, which policy engine will be used when evaluating resources?</summary>
 
-K8sNativeValidation engine hold higher priority than Rego engine, so with a ConstraintTemplate that has both Rego and CEL. Policy logic written in CEL will get evaluated.
+K8sNativeValidation engine holds a higher priority than the Rego engine, so with a ConstraintTemplate that has both Rego and CEL. Policy logic written in CEL will get evaluated by the K8sNativeValidation engine.
 </details>
 
 <details>
 <summary>Can I change the priority of engines per ConstraintTemplate?
 </summary>
-Engine priority cannot be set per ConstraintTemplate.
+No, engine priority cannot be modified.
 
 </details>
