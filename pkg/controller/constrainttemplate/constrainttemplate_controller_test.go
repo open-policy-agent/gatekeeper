@@ -304,7 +304,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		logger.Info("Running Test: block-vapb-generation-until annotation should not be present")
+		logger.Info("Running Test: vapb annotation should not be present on constraint template")
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -314,6 +314,9 @@ func TestReconcile(t *testing.T) {
 			}
 			if _, ok := ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation]; ok {
 				return fmt.Errorf("unexpected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
+			if _, ok := ct.GetAnnotations()[constraint.VAPBGenerationAnnotation]; ok {
+				return fmt.Errorf("unexpected %s annotations on CT", constraint.VAPBGenerationAnnotation)
 			}
 			return nil
 		})
@@ -726,7 +729,6 @@ func TestReconcile(t *testing.T) {
 			if timestamp == "" {
 				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
 			}
-			// check if vapbinding resource exists now
 			if err := c.Get(ctx, types.NamespacedName{Name: cstr.GetName()}, cstr); err != nil {
 				return err
 			}
@@ -742,6 +744,9 @@ func TestReconcile(t *testing.T) {
 			vapBindingCreationTime := vapBinding.GetCreationTimestamp().Time
 			if vapBindingCreationTime.Before(blockTime) {
 				return fmt.Errorf("VAPBinding should be created after default wait")
+			}
+			if ct.GetAnnotations()[constraint.VAPBGenerationAnnotation] == constraint.VAPBGenerationUnblocked {
+				return fmt.Errorf("expected %s annotations on CT to be unblocked", constraint.VAPBGenerationAnnotation)
 			}
 			return nil
 		})
@@ -810,7 +815,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		logger.Info("Running test: VAP ConstraintTemplate should have block-VAPB-generation-until annotation")
+		logger.Info("Running test: VAP ConstraintTemplate should have VAPB annotation")
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -820,6 +825,9 @@ func TestReconcile(t *testing.T) {
 			}
 			if ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation] == "" {
 				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
+			if ct.GetAnnotations()[constraint.VAPBGenerationAnnotation] == "" {
+				return fmt.Errorf("expected %s annotations on CT", constraint.VAPBGenerationAnnotation)
 			}
 			return nil
 		})
@@ -870,6 +878,9 @@ func TestReconcile(t *testing.T) {
 			vapBindingCreationTime := vapBinding.GetCreationTimestamp().Time
 			if vapBindingCreationTime.Before(blockTime) {
 				return fmt.Errorf("VAPBinding should not be created before the timestamp")
+			}
+			if ct.GetAnnotations()[constraint.VAPBGenerationAnnotation] == constraint.VAPBGenerationUnblocked {
+				return fmt.Errorf("expected %s annotations on CT to be unblocked", constraint.VAPBGenerationAnnotation)
 			}
 			if err := c.Delete(ctx, cstr); err != nil {
 				return err
