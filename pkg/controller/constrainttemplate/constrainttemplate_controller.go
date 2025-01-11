@@ -440,7 +440,8 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: ErrGenerateVAPState, ObservedGeneration: ct.GetGeneration(), Warning: fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error())}
 	}
 
-	if err := r.generateCRD(ctx, ct, proposedCRD, currentCRD, status, logger, generateVap); err != nil {
+	var requeueAfter time.Duration
+	if err := r.generateCRD(ctx, ct, proposedCRD, currentCRD, status, logger, generateVap, &requeueAfter); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -459,7 +460,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "update ct pod status error")
 		return reconcile.Result{Requeue: true}, nil
 	}
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: requeueAfter}, nil
 }
 
 func (r *ReconcileConstraintTemplate) handleDelete(
@@ -737,7 +738,7 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 	return obj, nil
 }
 
-func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1beta1.ConstraintTemplate, proposedCRD, currentCRD *apiextensionsv1.CustomResourceDefinition, status *statusv1beta1.ConstraintTemplatePodStatus, logger logr.Logger, generateVAP bool) error {
+func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1beta1.ConstraintTemplate, proposedCRD, currentCRD *apiextensionsv1.CustomResourceDefinition, status *statusv1beta1.ConstraintTemplatePodStatus, logger logr.Logger, generateVAP bool, requeueAfter *time.Duration) error {
 	if !operations.IsAssigned(operations.Generate) {
 		return nil
 	}
@@ -769,9 +770,9 @@ func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1bet
 	if !generateVAP {
 		return nil
 	}
-
+	var err error
 	// We add the annotation as a follow-on update to be sure the timestamp is set relative to a time after the CRD is successfully created. Creating the CRD with a delay timestamp already set would not account for request latency.
-	err := r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, ct)
+	*requeueAfter, err = r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, ct)
 	if err != nil {
 		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, err)
 	}
@@ -887,23 +888,32 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 
 // updateTemplateWithBlockVAPBGenerationAnnotations updates the ConstraintTemplate with an annotation to block VAPB generation until specific time
 // This is to avoid the issue where the VAPB is generated before the CRD is cached in the API server.
-func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnotations(ctx context.Context, ct *v1beta1.ConstraintTemplate) error {
+func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnotations(ctx context.Context, ct *v1beta1.ConstraintTemplate) (time.Duration, error) {
+	noRequeue := time.Duration(0)
+	if ct.Annotations != nil && ct.Annotations[constraint.VAPBGenerationAnnotation] == constraint.VAPBGenerationUnblocked {
+		return noRequeue, nil
+	}
 	currentTime := time.Now()
 	if ct.Annotations != nil && ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] != "" {
 		until := ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation]
 		t, err := time.Parse(time.RFC3339, until)
 		if err != nil {
-			return err
+			return noRequeue, err
 		}
 		// if wait time is within the time window to generate vap binding, do not update the annotation
 		// otherwise update the annotation with the current time + wait time. This prevents clock skew from preventing generation on task reschedule.
 		if t.Before(currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second)) {
-			return nil
+			if t.Before(currentTime) {
+				ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationUnblocked
+				return noRequeue, r.Update(ctx, ct)
+			}
+			return t.Sub(currentTime), nil
 		}
 	}
 	if ct.Annotations == nil {
 		ct.Annotations = make(map[string]string)
 	}
 	ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
-	return r.Update(ctx, ct)
+	ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationBlocked
+	return time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second, r.Update(ctx, ct)
 }

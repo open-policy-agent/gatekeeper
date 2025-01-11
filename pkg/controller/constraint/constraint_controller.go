@@ -65,9 +65,12 @@ import (
 
 const (
 	BlockVAPBGenerationUntilAnnotation = "gatekeeper.sh/block-vapb-generation-until"
+	VAPBGenerationAnnotation           = "gatekeeper.sh/vapb-generation"
 	ErrGenerateVAPBState               = "error"
 	GeneratedVAPBState                 = "generated"
 	WaitVAPBState                      = "waiting"
+	VAPBGenerationBlocked              = "blocked"
+	VAPBGenerationUnblocked            = "unblocked"
 )
 
 var (
@@ -528,20 +531,22 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 				shouldGenerateVAPB = false
 			default:
 				// reconcile for vapb generation if annotation is not set
-				if ct.Annotations == nil || ct.Annotations[BlockVAPBGenerationUntilAnnotation] == "" {
+				if ct.Annotations == nil || (ct.Annotations[BlockVAPBGenerationUntilAnnotation] == "" && ct.Annotations[VAPBGenerationAnnotation] != "unblocked") {
 					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, errors.New("annotation to wait for ValidatingAdmissionPolicyBinding generation not found"), "could not find annotation to wait for ValidatingAdmissionPolicyBinding generation")
 				}
 
-				// waiting for sometime before generating vapbinding, gives api-server time to cache CRDs
-				timestamp := ct.Annotations[BlockVAPBGenerationUntilAnnotation]
-				t, err := time.Parse(time.RFC3339, timestamp)
-				if err != nil {
-					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not parse timestamp")
-				}
-				if t.After(time.Now()) {
-					wait := time.Until(t)
-					updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, fmt.Sprintf("waiting for %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", wait), instance.GetGeneration())
-					return wait, r.writer.Update(ctx, status)
+				if ct.Annotations[VAPBGenerationAnnotation] == "" || ct.Annotations[VAPBGenerationAnnotation] == VAPBGenerationBlocked {
+					// waiting for sometime before generating vapbinding, gives api-server time to cache CRDs
+					timestamp := ct.Annotations[BlockVAPBGenerationUntilAnnotation]
+					t, err := time.Parse(time.RFC3339, timestamp)
+					if err != nil {
+						return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not parse timestamp")
+					}
+					if t.After(time.Now()) {
+						wait := time.Until(t)
+						updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, fmt.Sprintf("waiting for %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", wait), instance.GetGeneration())
+						return wait, r.writer.Update(ctx, status)
+					}
 				}
 			}
 		}
