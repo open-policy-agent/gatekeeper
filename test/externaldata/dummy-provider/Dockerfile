@@ -20,7 +20,7 @@ RUN go mod init && go mod tidy
 
 RUN go build -o provider provider.go
 
-FROM gcr.io/distroless/static-debian12@sha256:5c7e2b465ac6a2a4e5f4f7f722ce43b147dabe87cb21ac6c4007ae5178a1fa58
+FROM gcr.io/distroless/static-debian12@sha256:3f2b64ef97bd285e36132c684e6b2ae8f2723293d09aae046196cca64251acac
 
 WORKDIR /
 
