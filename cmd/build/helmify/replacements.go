@@ -172,7 +172,7 @@ var replacements = map[string]string{
     - pods/proxy
     - pods/attach
     - pods/binding
-	- pods/resize
+    - pods/resize
     - deployments/scale
     - replicasets/scale
     - statefulsets/scale
@@ -257,7 +257,7 @@ var replacements = map[string]string{
     - 'pods/proxy'
     - 'pods/attach'
     - 'pods/binding'
-	- 'pods/resize'
+    - 'pods/resize'
     - 'deployments/scale'
     - 'replicasets/scale'
     - 'statefulsets/scale'
