@@ -64,21 +64,22 @@ webhooks:
     - UPDATE
     resources:
     - '*'
-    - pods/ephemeralcontainers
-    - pods/exec
-    - pods/log
-    - pods/eviction
-    - pods/portforward
-    - pods/proxy
-    - pods/attach
-    - pods/binding
-    - deployments/scale
-    - replicasets/scale
-    - statefulsets/scale
-    - replicationcontrollers/scale
-    - services/proxy
-    - nodes/proxy
-    - services/status
+    - 'pods/ephemeralcontainers'
+    - 'pods/exec'
+    - 'pods/log'
+    - 'pods/eviction'
+    - 'pods/portforward'
+    - 'pods/proxy'
+    - 'pods/attach'
+    - 'pods/binding'
+    - 'pods/resize'
+    - 'deployments/scale'
+    - 'replicasets/scale'
+    - 'statefulsets/scale'
+    - 'replicationcontrollers/scale'
+    - 'services/proxy'
+    - 'nodes/proxy'
+    - 'services/status'
   {{- end }}
   sideEffects: None
   timeoutSeconds: {{ .Values.mutatingWebhookTimeoutSeconds }}
