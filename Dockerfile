@@ -18,7 +18,7 @@ COPY . .
 
 RUN go build -mod vendor -a -ldflags "${LDFLAGS}" -o manager
 
-FROM gcr.io/distroless/static-debian12@sha256:f4a57e8ffd7ba407bdd0eb315bb54ef1f21a2100a7f032e9102e4da34fe7c196
+FROM gcr.io/distroless/static-debian12@sha256:3f2b64ef97bd285e36132c684e6b2ae8f2723293d09aae046196cca64251acac
 
 WORKDIR /
 COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/manager .
