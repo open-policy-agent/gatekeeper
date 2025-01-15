@@ -5379,7 +5379,6 @@ webhooks:
     - pods/proxy
     - pods/attach
     - pods/binding
-    - pods/resize
     - deployments/scale
     - replicasets/scale
     - statefulsets/scale
