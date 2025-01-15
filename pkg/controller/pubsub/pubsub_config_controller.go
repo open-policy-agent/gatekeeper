@@ -37,6 +37,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !*PubsubEnabled {
 		return nil
 	}
+	log.Info("Warning: Alpha flag enable-pub-sub is set to true. This flag may change in the future.")
 	r := newReconciler(mgr, a.PubsubSystem)
 	return add(mgr, r)
 }

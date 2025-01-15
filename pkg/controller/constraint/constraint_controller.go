@@ -373,6 +373,7 @@ func shouldGenerateVAPB(defaultGenerateVAPB bool, enforcementAction util.Enforce
 		VAPEnforcementActions, err = util.ScopedActionForEP(util.VAPEnforcementPoint, instance)
 	default:
 		if defaultGenerateVAPB {
+			log.Info("Warning: Alpha flag default-create-vap-binding-for-constraints is set to true. This flag may change in the future.")
 			VAPEnforcementActions = []string{string(enforcementAction)}
 		}
 	}
@@ -419,6 +420,9 @@ func ShouldGenerateVAP(ct *templates.ConstraintTemplate) (bool, error) {
 		return false, err
 	}
 	if source.GenerateVAP == nil {
+		if *DefaultGenerateVAP {
+			log.Info("Warning: Alpha flag default-create-vap-for-templates is set to true. This flag may change in the future.")
+		}
 		return *DefaultGenerateVAP, nil
 	}
 	return *source.GenerateVAP, nil
