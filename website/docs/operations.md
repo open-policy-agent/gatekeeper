@@ -103,6 +103,20 @@ At a high level, this requires:
 * The ability to write to the `Config` object in Gatekeeper's namespace
 * If you have events enabled, you will need permissions to create events in Gatekeeper's namespace
 
+## Connect
+
+__--operation key:__ `connect`
+
+This operation allows gatekeeper to review and validate `kubectl exec` commands via the validation webhook.
+
+### Required Behaviors
+
+...
+
+### Permissions Required
+
+...
+
 ## Status
 
 __--operation key:__ `status`
@@ -159,7 +173,7 @@ __--operation key:__ `mutation-controller`
 This operation runs the process responsible for ingesting and registering
 mutators. `mutation-controller` is run implicitly with the `mutation-webhook`
 and `mutation-status` operations, and is redundant if any of the 2
-aforementioned operations are already specified. 
+aforementioned operations are already specified.
 
 If the `webhook` or `audit` operation is used in isolation without the `mutation-webhook`
 or `mutation-status` operations, then the `mutation-controller` operation is
