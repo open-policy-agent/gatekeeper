@@ -909,6 +909,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 			}
 		}
 		if *emitAuditEvents {
+			log.Info("Warning: Alpha flag emit-audit-events is set to true. This flag may change in the future.")
 			uid := r.obj.GetUID()
 			rv := r.obj.GetResourceVersion()
 			emitEvent(constraint, timestamp, ea, strings.Join(r.ScopedEnforcementActions, ","), gvk, namespace, name, rv, msg, am.gkNamespace, uid, am.eventRecorder)
