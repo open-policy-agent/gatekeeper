@@ -108,7 +108,7 @@ spec:
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
             - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
-            - --stackdriver-metrics-interval={{ .Values.stackdriverMetricsInterval }}
+            - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
             - --otlp-endpoint={{ .Values.otlpEndpoint }}
             - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
@@ -206,7 +206,7 @@ spec:
             - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - HELMSUBST_METRICS_BACKEND_ARG
             - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
-            - --stackdriver-metrics-interval={{ .Values.stackdriverMetricsInterval }}
+            - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
             - --otlp-endpoint={{ .Values.otlpEndpoint }}
             - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
             - HELMSUBST_DEPLOYMENT_AUDIT_LOGFILE

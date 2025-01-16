@@ -3,7 +3,7 @@ revisionHistoryLimit: 10
 auditInterval: 60
 metricsBackends: ["prometheus"]
 stackdriverOnlyWhenAvailable: false
-stackdriverMetricsInterval: 10s
+stackdriverMetricInterval: 10s
 otlpEndpoint: ""
 otlpMetricInterval: 10s
 auditMatchKindOnly: false

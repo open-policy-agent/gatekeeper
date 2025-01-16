@@ -94,7 +94,7 @@ spec:
         - --metrics-backend={{ . }}
         {{- end }}
         - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
-        - --stackdriver-metrics-interval={{ .Values.stackdriverMetricsInterval }}
+        - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
         - --otlp-endpoint={{ .Values.otlpEndpoint }}
         - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
         {{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}
