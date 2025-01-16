@@ -64,10 +64,13 @@ spec:
         - --prometheus-port={{ .Values.controllerManager.metricsPort }}
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
+        - --disable-enforcementaction-validation={{ .Values.disableEnforcementActionValidation }}
         {{ if hasKey .Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}
         {{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}
         - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
         - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
+        - --log-level-key={{ (.Values.controllerManager.logLevelKey | empty | not) | ternary .Values.controllerManager.logLevelKey .Values.logLevelKey }}
+        - --log-level-encoder={{ (.Values.controllerManager.logLevelEncoder | empty | not) | ternary .Values.controllerManager.logLevelEncoder .Values.logLevelEncoder }}
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-external-data={{ .Values.enableExternalData }}
@@ -77,15 +80,23 @@ spec:
         - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
         - --max-serving-threads={{ .Values.maxServingThreads }}
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
+        - --client-ca-name={{ .Values.controllerManager.clientCAName }}
+        - --client-cn-name={{ .Values.controllerManager.clientCNName }}
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+        - --enable-pprof={{ .Values.enablePprof }}
+        - --pprof-port={{ .Values.pprofPort }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
+        - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
+        - --stackdriver-metrics-interval={{ .Values.stackdriverMetricsInterval }}
+        - --otlp-endpoint={{ .Values.otlpEndpoint }}
+        - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
         {{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}
         
