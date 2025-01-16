@@ -5,64 +5,64 @@ title: Runtime Flags
 
 ## Runtime Flags
 
-| Flag                                           | Default Value | Description |
-|------------------------------------------------|---------------|-------------|
-| `--log-file`                                   |               |             |
-| `--log-level`                                  |               |             |
-| `--log-level-key`                              |               |             |
-| `--log-level-encoder`                          |               |             |
-| `--health-addr`                                |               |             |
-| `--metrics-addr`                               |               |             |
-| `--port`                                       |               |             |
-| `--host`                                       |               |             |
-| `--cert-dir`                                   |               |             |
-| `--disable-cert-rotation`                      |               |             |
-| `--enable-pprof`                               |               |             |
-| `--pprof-port`                                 |               |             |
-| `--cert-service-name`                          |               |             |
-| `--enable-tls-healthcheck`                     |               |             |
-| `--enable-k8s-native-validation`               |               |             |
-| `--external-data-provider-response-cache-ttl`  |               |             |
-| `--audit-interval`                             |               |             |
-| `--constraint-violations-limit`                |               |             |
-| `--audit-chunk-size`                           |               |             |
-| `--audit-from-cache`                           |               |             |
-| `--emit-audit-events`                          |               |             |
-| `--audit-events-involved-namespace`            |               |             |
-| `--audit-match-kind-only`                      |               |             |
-| `--api-cache-dir`                              |               |             |
-| `--audit-connection`                           |               |             |
-| `--audit-channel`                              |               |             |
-| `--log-stats-audit`                            |               |             |
-| `--default-create-vap-binding-for-constraints` |               |             |
-| `--default-create-vap-for-templates`           |               |             |
-| `--default-wait-for-vapb-generation`           |               |             |
-| `--debug-use-fake-pod`                         |               |             |
-| `--enable-pub-sub`                             |               |             |
-| `--enable-generator-resource-expansion`        |               |             |
-| `--enable-external-data`                       |               |             |
-| `--otlp-endpoint`                              |               |             |
-| `--otlp-metric-interval`                       |               |             |
-| `--prometheus-port`                            |               |             |
-| `--stackdriver-only-when-available`            |               |             |
-| `--stackdriver-metric-interval`                |               |             |
-| `--metrics-backend`                            |               |             |
-| `--enable-mutation`                            |               |             |
-| `--log-mutations`                              |               |             |
-| `--mutation-annotations`                       |               |             |
-| `--operation`                                  |               |             |
-| `--readiness-retries`                          |               |             |
-| `--disable-enforcementaction-validation`       |               |             |
-| `--log-denies`                                 |               |             |
-| `--emit-admission-events`                      |               |             |
-| `--admission-events-involved-namespace`        |               |             |
-| `--log-stats-admission`                        |               |             |
-| `--validating-webhook-configuration-name`      |               |             |
-| `--mutating-webhook-configuration-name`        |               |             |
-| `--tls-min-version`                            |               |             |
-| `--client-ca-name`                             |               |             |
-| `--client-cn-name`                             |               |             |
-| `--exempt-namespace`                           |               |             |
-| `--exempt-namespace-prefix`                    |               |             |
-| `--exempt-namespace-suffix`                    |               |             |
-| `--max-serving-threads`                        |               |             |
+| Flag                                           | Default Value                                   | Description |
+|------------------------------------------------|-------------------------------------------------|-------------|
+| `--log-file`                                   | `""`                                            |             |
+| `--log-level`                                  | `"INFO"`                                        |             |
+| `--log-level-key`                              | `"level"`                                       |             |
+| `--log-level-encoder`                          | `"lower"`                                       |             |
+| `--health-addr`                                | `":9090"`                                       |             |
+| `--metrics-addr`                               | `"0"`                                           |             |
+| `--port`                                       | `443`                                           |             |
+| `--host`                                       | `""`                                            |             |
+| `--cert-dir`                                   | `"/certs"`                                      |             |
+| `--disable-cert-rotation`                      | `false`                                         |             |
+| `--enable-pprof`                               | `false`                                         |             |
+| `--pprof-port`                                 | `6060`                                          |             |
+| `--cert-service-name`                          | `"gatekeeper-webhook-service"`                  |             |
+| `--enable-tls-healthcheck`                     | `false`                                         |             |
+| `--enable-k8s-native-validation`               | `true`                                          |             |
+| `--external-data-provider-response-cache-ttl`  | `3*time.Minute`                                 |             |
+| `--audit-interval`                             | ``                                              |             |
+| `--constraint-violations-limit`                | ``                                              |             |
+| `--audit-chunk-size`                           | ``                                              |             |
+| `--audit-from-cache`                           | `false`                                         |             |
+| `--emit-audit-events`                          | `false`                                         |             |
+| `--audit-events-involved-namespace`            | `false`                                         |             |
+| `--audit-match-kind-only`                      | `false`                                         |             |
+| `--api-cache-dir`                              | ``                                              |             |
+| `--audit-connection`                           | ``                                              |             |
+| `--audit-channel`                              | ``                                              |             |
+| `--log-stats-audit`                            | `false`                                         |             |
+| `--default-create-vap-binding-for-constraints` | `false`                                         |             |
+| `--default-create-vap-for-templates`           | `false`                                         |             |
+| `--default-wait-for-vapb-generation`           | `30`                                            |             |
+| `--debug-use-fake-pod`                         | `false`                                         |             |
+| `--enable-pub-sub`                             | `false`                                         |             |
+| `--enable-generator-resource-expansion`        | `true`                                          |             |
+| `--enable-external-data`                       | `true`                                          |             |
+| `--otlp-endpoint`                              | `""`                                            |             |
+| `--otlp-metric-interval`                       | ``                                              |             |
+| `--prometheus-port`                            | `8888`                                          |             |
+| `--stackdriver-only-when-available`            | `false`                                         |             |
+| `--stackdriver-metric-interval`                | ``                                              |             |
+| `--metrics-backend`                            | `prometheus`                                    |             |
+| `--enable-mutation`                            | `false`                                         |             |
+| `--log-mutations`                              | `false`                                         |             |
+| `--mutation-annotations`                       | `false`                                         |             |
+| `--operation`                                  | ``                                              |             |
+| `--readiness-retries`                          | `0`                                             |             |
+| `--disable-enforcementaction-validation`       | `false`                                         |             |
+| `--log-denies`                                 | `false`                                         |             |
+| `--emit-admission-events`                      | `false`                                         |             |
+| `--admission-events-involved-namespace`        | `false`                                         |             |
+| `--log-stats-admission`                        | `false`                                         |             |
+| `--validating-webhook-configuration-name`      | `"gatekeeper-validating-webhook-configuration"` |             |
+| `--mutating-webhook-configuration-name`        | `"gatekeeper-mutating-webhook-configuration"`   |             |
+| `--tls-min-version`                            | `"1.3"`                                         |             |
+| `--client-ca-name`                             | `""`                                            |             |
+| `--client-cn-name`                             | `"kube-apiserver"`                              |             |
+| `--exempt-namespace`                           | ``                                              |             |
+| `--exempt-namespace-prefix`                    | ``                                              |             |
+| `--exempt-namespace-suffix`                    | ``                                              |             |
+| `--max-serving-threads`                        | `-1`                                            |             |
