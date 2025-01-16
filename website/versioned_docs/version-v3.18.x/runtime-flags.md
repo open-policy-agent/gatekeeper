@@ -22,17 +22,17 @@ title: Runtime Flags
 | `--cert-service-name`                          | `"gatekeeper-webhook-service"`                  |             |
 | `--enable-tls-healthcheck`                     | `false`                                         |             |
 | `--enable-k8s-native-validation`               | `true`                                          |             |
-| `--external-data-provider-response-cache-ttl`  | `3*time.Minute`                                 |             |
-| `--audit-interval`                             | ``                                              |             |
-| `--constraint-violations-limit`                | ``                                              |             |
-| `--audit-chunk-size`                           | ``                                              |             |
+| `--external-data-provider-response-cache-ttl`  | `3 * time.Minute`                               |             |
+| `--audit-interval`                             | `60`                                            |             |
+| `--constraint-violations-limit`                | `20`                                            |             |
+| `--audit-chunk-size`                           | `500`                                           |             |
 | `--audit-from-cache`                           | `false`                                         |             |
 | `--emit-audit-events`                          | `false`                                         |             |
 | `--audit-events-involved-namespace`            | `false`                                         |             |
 | `--audit-match-kind-only`                      | `false`                                         |             |
-| `--api-cache-dir`                              | ``                                              |             |
-| `--audit-connection`                           | ``                                              |             |
-| `--audit-channel`                              | ``                                              |             |
+| `--api-cache-dir`                              | `"/tmp/audit"`                                  |             |
+| `--audit-connection`                           | `"audit-connection"`                            |             |
+| `--audit-channel`                              | `"audit-channel"`                               |             |
 | `--log-stats-audit`                            | `false`                                         |             |
 | `--default-create-vap-binding-for-constraints` | `false`                                         |             |
 | `--default-create-vap-for-templates`           | `false`                                         |             |
@@ -42,15 +42,15 @@ title: Runtime Flags
 | `--enable-generator-resource-expansion`        | `true`                                          |             |
 | `--enable-external-data`                       | `true`                                          |             |
 | `--otlp-endpoint`                              | `""`                                            |             |
-| `--otlp-metric-interval`                       | ``                                              |             |
+| `--otlp-metric-interval`                       | `10 * time.Second`                              |             |
 | `--prometheus-port`                            | `8888`                                          |             |
 | `--stackdriver-only-when-available`            | `false`                                         |             |
-| `--stackdriver-metric-interval`                | ``                                              |             |
+| `--stackdriver-metric-interval`                | `10 * time.Second`                              |             |
 | `--metrics-backend`                            | `prometheus`                                    |             |
 | `--enable-mutation`                            | `false`                                         |             |
 | `--log-mutations`                              | `false`                                         |             |
 | `--mutation-annotations`                       | `false`                                         |             |
-| `--operation`                                  | ``                                              |             |
+| `--operation`                                  | None                                            |             |
 | `--readiness-retries`                          | `0`                                             |             |
 | `--disable-enforcementaction-validation`       | `false`                                         |             |
 | `--log-denies`                                 | `false`                                         |             |
@@ -62,7 +62,7 @@ title: Runtime Flags
 | `--tls-min-version`                            | `"1.3"`                                         |             |
 | `--client-ca-name`                             | `""`                                            |             |
 | `--client-cn-name`                             | `"kube-apiserver"`                              |             |
-| `--exempt-namespace`                           | ``                                              |             |
-| `--exempt-namespace-prefix`                    | ``                                              |             |
-| `--exempt-namespace-suffix`                    | ``                                              |             |
+| `--exempt-namespace`                           | None                                            |             |
+| `--exempt-namespace-prefix`                    | None                                            |             |
+| `--exempt-namespace-suffix`                    | None                                            |             |
 | `--max-serving-threads`                        | `-1`                                            |             |
