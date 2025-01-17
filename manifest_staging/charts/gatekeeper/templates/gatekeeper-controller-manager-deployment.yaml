@@ -87,8 +87,6 @@ spec:
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
-        - --enable-pprof={{ .Values.enablePprof }}
-        - --pprof-port={{ .Values.pprofPort }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}

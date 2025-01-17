@@ -53,8 +53,6 @@ auditEventsInvolvedNamespace: false
 resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
 enableK8sNativeValidation: true
-enablePprof: false
-pprofPort: 6060
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds

@@ -104,8 +104,6 @@ spec:
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
-            - --enable-pprof={{ .Values.enablePprof }}
-            - --pprof-port={{ .Values.pprofPort }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
             - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
@@ -219,8 +217,6 @@ spec:
             - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
-            - --enable-pprof={{ .Values.enablePprof }}
-            - --pprof-port={{ .Values.pprofPort }}
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
             - HELMSUBST_DEPLOYMENT_AUDIT_DEFAULT_WAIT_VAPB_GENERATION
