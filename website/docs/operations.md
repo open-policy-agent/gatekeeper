@@ -103,20 +103,6 @@ At a high level, this requires:
 * The ability to write to the `Config` object in Gatekeeper's namespace
 * If you have events enabled, you will need permissions to create events in Gatekeeper's namespace
 
-## Connect
-
-__--operation key:__ `connect`
-
-This operation allows gatekeeper to review and validate `kubectl exec` commands via the validation webhook.
-
-### Required Behaviors
-
-...
-
-### Permissions Required
-
-...
-
 ## Status
 
 __--operation key:__ `status`
