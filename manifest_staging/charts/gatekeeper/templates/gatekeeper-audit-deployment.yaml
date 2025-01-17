@@ -61,6 +61,7 @@ spec:
         - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
         - --log-level-key={{ (.Values.audit.logLevelKey | empty | not) | ternary .Values.audit.logLevelKey .Values.logLevelKey }}
         - --log-level-encoder={{ (.Values.audit.logLevelEncoder | empty | not) | ternary .Values.audit.logLevelEncoder .Values.logLevelEncoder }}
+        - --cert-dir={{ .Values.certDir }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
@@ -166,7 +167,7 @@ spec:
           {{- end }}
           {{- toYaml .Values.audit.securityContext | nindent 10}}
         volumeMounts:
-        - mountPath: /certs
+        - mountPath: {{ .Values.certDir }}
           name: cert
           readOnly: true
         - mountPath: /tmp/audit

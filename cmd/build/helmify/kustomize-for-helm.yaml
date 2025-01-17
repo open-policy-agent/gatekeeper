@@ -88,6 +88,7 @@ spec:
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
             - --log-level-key={{ (.Values.controllerManager.logLevelKey | empty | not) | ternary .Values.controllerManager.logLevelKey .Values.logLevelKey }}
             - --log-level-encoder={{ (.Values.controllerManager.logLevelEncoder | empty | not) | ternary .Values.controllerManager.logLevelEncoder .Values.logLevelEncoder }}
+            - --cert-dir={{ .Values.certDir }}
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
             - --enable-external-data={{ .Values.enableExternalData }}
@@ -144,6 +145,10 @@ spec:
             timeoutSeconds: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LIVENESS_TIMEOUT
           securityContext:
             HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""
+          volumeMounts:
+            - mountPath: HELMSUBST_DEPLOYMENT_CERT_VOLUME_MOUNT_PATH
+              name: cert
+              readOnly: true
           resources:
             HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES: ""
       nodeSelector:
@@ -184,6 +189,7 @@ spec:
             - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
             - --log-level-key={{ (.Values.audit.logLevelKey | empty | not) | ternary .Values.audit.logLevelKey .Values.logLevelKey }}
             - --log-level-encoder={{ (.Values.audit.logLevelEncoder | empty | not) | ternary .Values.audit.logLevelEncoder .Values.logLevelEncoder }}
+            - --cert-dir={{ .Values.certDir }}
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
             - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
@@ -239,6 +245,10 @@ spec:
             timeoutSeconds: HELMSUBST_DEPLOYMENT_AUDIT_LIVENESS_TIMEOUT
           securityContext:
             HELMSUBST_DEPLOYMENT_AUDIT_SECURITY_CONTEXT: ""
+          volumeMounts:
+            - mountPath: HELMSUBST_DEPLOYMENT_CERT_VOLUME_MOUNT_PATH
+              name: cert
+              readOnly: true
           resources:
             HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""
       nodeSelector:

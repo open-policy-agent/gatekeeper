@@ -71,6 +71,7 @@ spec:
         - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
         - --log-level-key={{ (.Values.controllerManager.logLevelKey | empty | not) | ternary .Values.controllerManager.logLevelKey .Values.logLevelKey }}
         - --log-level-encoder={{ (.Values.controllerManager.logLevelEncoder | empty | not) | ternary .Values.controllerManager.logLevelEncoder .Values.logLevelEncoder }}
+        - --cert-dir={{ .Values.certDir }}
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-external-data={{ .Values.enableExternalData }}
@@ -179,7 +180,7 @@ spec:
           {{- end }}
           {{- toYaml .Values.controllerManager.securityContext | nindent 10}}
         volumeMounts:
-        - mountPath: /certs
+        - mountPath: {{ .Values.certDir }}
           name: cert
           readOnly: true
       dnsPolicy: {{ .Values.controllerManager.dnsPolicy }}

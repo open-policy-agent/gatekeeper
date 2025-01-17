@@ -46,6 +46,7 @@ logLevelKey: level
 logLevelEncoder: lower
 logDenies: false
 logMutations: false
+certDir: /certs
 disableEnforcementActionValidation: false
 admissionEventsInvolvedNamespace: false
 auditEventsInvolvedNamespace: false
