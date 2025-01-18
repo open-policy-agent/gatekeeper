@@ -570,7 +570,7 @@ func (pkg *Package) MarshalJSON() ([]byte, error) {
 }
 
 // IsValidImportPath returns an error indicating if the import path is invalid.
-// If the import path is invalid, err is nil.
+// If the import path is valid, err is nil.
 func IsValidImportPath(v Value) (err error) {
 	switch v := v.(type) {
 	case Var:
@@ -1034,16 +1034,22 @@ func (head *Head) setJSONOptions(opts astJSON.Options) {
 
 func (head *Head) MarshalJSON() ([]byte, error) {
 	var loc *Location
-	if head.jsonOptions.MarshalOptions.IncludeLocation.Head {
+	includeLoc := head.jsonOptions.MarshalOptions.IncludeLocation
+	if includeLoc.Head {
 		if head.Location != nil {
 			loc = head.Location
+		}
+
+		for _, term := range head.Reference {
+			if term.Location != nil {
+				term.jsonOptions.MarshalOptions.IncludeLocation.Term = includeLoc.Term
+			}
 		}
 	}
 
 	// NOTE(sr): we do this to override the rendering of `head.Reference`.
 	// It's still what'll be used via the default means of encoding/json
 	// for unmarshaling a json object into a Head struct!
-	// NOTE(charlieegan3): we also need to optionally include the location
 	type h Head
 	return json.Marshal(struct {
 		h
