@@ -31,8 +31,15 @@ const (
 )
 
 func (d *Detector) onGKE() bool {
+	// Check if we are on k8s first
 	_, found := d.os.LookupEnv(k8sServiceHostEnv)
-	return found
+	if !found {
+		return false
+	}
+	// If we are on k8s, make sure that we are actually on GKE, and not a
+	// different managed k8s platform.
+	_, err := d.GKEClusterName()
+	return err == nil
 }
 
 // GKEHostID returns the instance ID of the instance on which this program is running.

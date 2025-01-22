@@ -40,11 +40,14 @@ const (
 	CloudFunctions
 	AppEngineStandard
 	AppEngineFlex
+	BareMetalSolution
 )
 
 // CloudPlatform returns the platform on which this program is running.
 func (d *Detector) CloudPlatform() Platform {
 	switch {
+	case d.onBareMetalSolution():
+		return BareMetalSolution
 	case d.onGKE():
 		return GKE
 	case d.onCloudFunctions():
