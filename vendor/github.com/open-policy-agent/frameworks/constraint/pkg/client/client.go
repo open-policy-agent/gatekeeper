@@ -623,6 +623,10 @@ func (c *Client) RemoveData(ctx context.Context, data interface{}) (*types.Respo
 	return resp, &errMap
 }
 
+func (c *Client) actionKey(constraint *unstructured.Unstructured) string {
+	return fmt.Sprintf("%s.%s", constraint.GetKind(), constraint.GetName())
+}
+
 // Review makes sure the provided object satisfies constraints applicable for specific enforcement points.
 // On error, the responses return value will still be populated so that
 // partial results can be analyzed.
@@ -689,8 +693,8 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...reviews.Re
 			for _, matchResult := range matchingConstraints {
 				if matchResult.error == nil {
 					targetConstraints = append(targetConstraints, matchResult.constraint)
-					targetScopedEnforcementActions[matchResult.constraint.GetName()] = matchResult.scopedEnforcementActions
-					targetEnforcementAction[matchResult.constraint.GetName()] = matchResult.enforcementAction
+					targetScopedEnforcementActions[c.actionKey(matchResult.constraint)] = matchResult.scopedEnforcementActions
+					targetEnforcementAction[c.actionKey(matchResult.constraint)] = matchResult.enforcementAction
 				} else {
 					autorejections[target] = append(autorejections[target], matchResult)
 				}
@@ -711,10 +715,10 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...reviews.Re
 		}
 
 		for i := range resp.Results {
-			if val, ok := scopedEnforcementActionsByTarget[target][resp.Results[i].Constraint.GetName()]; ok {
+			if val, ok := scopedEnforcementActionsByTarget[target][c.actionKey(resp.Results[i].Constraint)]; ok {
 				resp.Results[i].ScopedEnforcementActions = val
 			}
-			if val, ok := enforcementActionByTarget[target][resp.Results[i].Constraint.GetName()]; ok {
+			if val, ok := enforcementActionByTarget[target][c.actionKey(resp.Results[i].Constraint)]; ok {
 				resp.Results[i].EnforcementAction = val
 			}
 		}
