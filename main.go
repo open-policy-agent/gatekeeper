@@ -327,7 +327,7 @@ func innerMain() int {
 	setupErr := make(chan error)
 
 	// Setup termination with grace period. Required to give K8s Services time to disconnect the Pod endpoint on termination.
-	// Derived from how the controller-runtime sets up a signal handler with  ctrl.SetupSignalHandler()
+	// Derived from how the controller-runtime sets up a signal handler with ctrl.SetupSignalHandler()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := make(chan os.Signal, 2)
