@@ -493,7 +493,7 @@ func (r *ReconcileConstraint) reportErrorOnConstraintStatus(ctx context.Context,
 	status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("%s: %s", message, err)})
 	if err2 := r.writer.Update(ctx, status); err2 != nil {
 		log.Error(err2, message, "error", "could not update constraint status")
-		return errorpkg.Wrapf(err, fmt.Sprintf("%s, could not update constraint status: %s", message, err2))
+		return errorpkg.Wrapf(err, "%s", fmt.Sprintf("%s, could not update constraint status: %s", message, err2))
 	}
 	return err
 }

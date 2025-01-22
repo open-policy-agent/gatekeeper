@@ -1258,7 +1258,7 @@ func TestRunner_Run(t *testing.T) {
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
 				cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
 			); diff != "" {
-				t.Errorf(diff)
+				t.Error("%s", diff)
 			}
 		})
 	}
@@ -1633,7 +1633,7 @@ func TestRunner_RunCase(t *testing.T) {
 			if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
 				cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
 			); diff != "" {
-				t.Errorf(diff)
+				t.Error("%s", diff)
 			}
 		})
 	}

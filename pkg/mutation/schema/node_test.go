@@ -524,7 +524,7 @@ func TestNode_Remove(t *testing.T) {
 			}
 			gotConflictBefore := root.GetConflicts(pCheck.Nodes, Unknown)
 			if diff := cmp.Diff(tc.wantConflictBefore, gotConflictBefore, cmpopts.EquateEmpty()); diff != "" {
-				t.Errorf(diff)
+				t.Error("%s", diff)
 			}
 
 			for _, toRemove := range tc.toRemove {
@@ -537,7 +537,7 @@ func TestNode_Remove(t *testing.T) {
 
 			gotConflictAfter := root.GetConflicts(pCheck.Nodes, Unknown)
 			if diff := cmp.Diff(tc.wantConflictAfter, gotConflictAfter, cmpopts.EquateEmpty()); diff != "" {
-				t.Errorf(diff)
+				t.Error("%s", diff)
 			}
 		})
 	}
