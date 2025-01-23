@@ -1,5 +1,6 @@
 run:
   timeout: 5m
+  go: "1.23"
 
 issues:
   exclude-files:
@@ -22,16 +23,13 @@ linters-settings:
 
   misspell:
     locale: US
-  staticcheck:
-    # Select the Go version to target. The default is '1.13'.
-    go: "1.23"
 
 linters:
   disable-all: true
   enable:
     - errcheck
     - errorlint
-    - exportloopref
+    - copyloopvar
     - forcetypeassert
     - gci
     - gocritic

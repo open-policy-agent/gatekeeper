@@ -15,7 +15,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	pSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
-	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/v1/storage"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -219,7 +219,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 					Stats: []*instrumentation.Stat{
 						{
 							Name:  runTimeNS,
-							Value: uint64(evalElapsedTime.Nanoseconds()),
+							Value: evalElapsedTime.Nanoseconds(),
 							Source: instrumentation.Source{
 								Type:  instrumentation.EngineSourceType,
 								Value: pSchema.Name,
