@@ -3,7 +3,7 @@ package regorewriter
 import (
 	"strings"
 
-	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/ast"
 )
 
 // PackageTransformer takes a package path and transforms it to the new package path it will be

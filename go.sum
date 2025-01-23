@@ -333,8 +333,8 @@ github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQD
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
-github.com/sozercan/frameworks/constraint v0.0.0-20250123183526-62279e78b9a5 h1:8UVNDBOQm/oBSxVc2Gbn6Nn5iu6RB9MtNVjO7Yp9yD0=
-github.com/sozercan/frameworks/constraint v0.0.0-20250123183526-62279e78b9a5/go.mod h1:gkrOtCNNVFs/yw0aEJT3cRGMjfQYDIfSJV5Xx/vIJZI=
+github.com/sozercan/frameworks/constraint v0.0.0-20250123191509-ea09dbab7e9d h1:NdFfLtJr7qLZ/OHdhN3du2TJGEnNW/13UN+7QeTP9oM=
+github.com/sozercan/frameworks/constraint v0.0.0-20250123191509-ea09dbab7e9d/go.mod h1:gkrOtCNNVFs/yw0aEJT3cRGMjfQYDIfSJV5Xx/vIJZI=
 github.com/spf13/cobra v1.8.1 h1:e5/vxKd/rZsfSJMUX1agtjeTDf+qv1/JdBF8gg5k9ZM=
 github.com/spf13/cobra v1.8.1/go.mod h1:wHxEcudfqmLYa8iTfL+OuZPbBZkmvliBWKIezN3kD9Y=
 github.com/spf13/pflag v1.0.5 h1:iy+VFUOCP1a+8yFto/drg2CJ5u0yRoB7fZw3DKv/JXA=

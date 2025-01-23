@@ -17,7 +17,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/prometheus/client_golang/prometheus"
@@ -93,7 +92,6 @@ func TestReconcile(t *testing.T) {
 		t.Fatalf("unable to set up constraint framework client: %s", err)
 	}
 
-	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, true, false)
 	if err != nil {
 		t.Fatal(err)
@@ -182,5 +180,4 @@ func TestReconcile(t *testing.T) {
 	})
 
 	testMgrStopped()
-	cs.Stop()
 }

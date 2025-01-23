@@ -161,4 +161,4 @@ require (
 )
 
 // TODO: testing purposes only - remove this before merging
-replace github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20250123183526-62279e78b9a5
+replace github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20250123191509-ea09dbab7e9d

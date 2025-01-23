@@ -4,8 +4,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/open-policy-agent/opa/v1/ast"
-	"github.com/open-policy-agent/opa/v1/format"
+	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/format"
 )
 
 // Module represents a rego module.

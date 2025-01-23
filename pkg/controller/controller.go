@@ -47,7 +47,6 @@ import (
 var debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
 
 type Injector interface {
-	InjectControllerSwitch(*watch.ControllerSwitch)
 	InjectTracker(tracker *readiness.Tracker)
 
 	Add(mgr manager.Manager) error
@@ -94,18 +93,17 @@ var AddToManagerFuncs []func(manager.Manager) error
 
 // Dependencies are dependencies that can be injected into controllers.
 type Dependencies struct {
-	CFClient         *constraintclient.Client
-	WatchManger      *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
-	Tracker          *readiness.Tracker
-	GetPod           func(context.Context) (*corev1.Pod, error)
-	ProcessExcluder  *process.Excluder
-	MutationSystem   *mutation.System
-	ExpansionSystem  *expansion.System
-	ProviderCache    *externaldata.ProviderCache
-	PubsubSystem     *pubsub.System
-	SyncEventsCh     chan event.GenericEvent
-	CacheMgr         *cm.CacheManager
+	CFClient        *constraintclient.Client
+	WatchManger     *watch.Manager
+	Tracker         *readiness.Tracker
+	GetPod          func(context.Context) (*corev1.Pod, error)
+	ProcessExcluder *process.Excluder
+	MutationSystem  *mutation.System
+	ExpansionSystem *expansion.System
+	ProviderCache   *externaldata.ProviderCache
+	PubsubSystem    *pubsub.System
+	SyncEventsCh    chan event.GenericEvent
+	CacheMgr        *cm.CacheManager
 }
 
 type defaultPodGetter struct {
@@ -194,7 +192,6 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 	}
 
 	for _, a := range Injectors {
-		a.InjectControllerSwitch(deps.ControllerSwitch)
 		a.InjectTracker(deps.Tracker)
 
 		if a2, ok := a.(DataClientInjector); ok {
