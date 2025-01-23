@@ -425,8 +425,8 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.11.0
 ## explicit; go 1.22.0
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20250115145356-9e57a5775c15
-## explicit; go 1.22.0
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20250115145356-9e57a5775c15 => github.com/sozercan/frameworks/constraint v0.0.0-20250123183526-62279e78b9a5
+## explicit; go 1.22.7
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints
@@ -453,11 +453,7 @@ github.com/open-policy-agent/frameworks/constraint/pkg/schema
 github.com/open-policy-agent/frameworks/constraint/pkg/types
 # github.com/open-policy-agent/opa v1.0.1
 ## explicit; go 1.22.7
-github.com/open-policy-agent/opa/ast
-github.com/open-policy-agent/opa/ast/json
-github.com/open-policy-agent/opa/bundle
 github.com/open-policy-agent/opa/capabilities
-github.com/open-policy-agent/opa/format
 github.com/open-policy-agent/opa/internal/bundle
 github.com/open-policy-agent/opa/internal/cidr/merge
 github.com/open-policy-agent/opa/internal/compiler
@@ -509,13 +505,6 @@ github.com/open-policy-agent/opa/internal/wasm/opcode
 github.com/open-policy-agent/opa/internal/wasm/sdk/opa/capabilities
 github.com/open-policy-agent/opa/internal/wasm/types
 github.com/open-policy-agent/opa/internal/wasm/util
-github.com/open-policy-agent/opa/loader
-github.com/open-policy-agent/opa/rego
-github.com/open-policy-agent/opa/storage
-github.com/open-policy-agent/opa/storage/inmem
-github.com/open-policy-agent/opa/topdown
-github.com/open-policy-agent/opa/topdown/print
-github.com/open-policy-agent/opa/types
 github.com/open-policy-agent/opa/v1/ast
 github.com/open-policy-agent/opa/v1/ast/internal/scanner
 github.com/open-policy-agent/opa/v1/ast/internal/tokens
@@ -1644,3 +1633,4 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
+# github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20250123183526-62279e78b9a5

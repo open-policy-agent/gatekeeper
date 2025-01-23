@@ -1,6 +1,6 @@
 package rego
 
-import "github.com/open-policy-agent/opa/ast"
+import "github.com/open-policy-agent/opa/v1/ast"
 
 const (
 	// templatePath is the path the Template's Rego code is stored.

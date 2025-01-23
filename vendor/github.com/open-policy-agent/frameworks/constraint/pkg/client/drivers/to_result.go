@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/opa/rego"
+	"github.com/open-policy-agent/opa/v1/rego"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 

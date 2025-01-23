@@ -5,7 +5,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/v1/storage"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
