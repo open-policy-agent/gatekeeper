@@ -28,9 +28,9 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -56,8 +56,8 @@ type GetPodInjector interface {
 	InjectGetPod(func(context.Context) (*corev1.Pod, error))
 }
 
-type PubsubInjector interface {
-	InjectPubsubSystem(pubsubSystem *pubsub.System)
+type ExportInjector interface {
+	InjectExportSystem(exportSystem *export.System)
 }
 
 type DataClientInjector interface {
@@ -101,7 +101,7 @@ type Dependencies struct {
 	MutationSystem  *mutation.System
 	ExpansionSystem *expansion.System
 	ProviderCache   *externaldata.ProviderCache
-	PubsubSystem    *pubsub.System
+	ExportSystem     *export.System
 	SyncEventsCh    chan event.GenericEvent
 	CacheMgr        *cm.CacheManager
 }
@@ -212,8 +212,8 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)
 		}
-		if a2, ok := a.(PubsubInjector); ok {
-			a2.InjectPubsubSystem(deps.PubsubSystem)
+		if a2, ok := a.(ExportInjector); ok {
+			a2.InjectExportSystem(deps.ExportSystem)
 		}
 		if a2, ok := a.(CacheManagerInjector); ok {
 			// this is used by the config controller to sync
