@@ -18,11 +18,11 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
-	pubsubController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/pubsub"
+	exportController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -91,7 +91,7 @@ type Manager struct {
 	auditCache *CacheLister
 
 	expansionSystem *expansion.System
-	pubsubSystem    *pubsub.System
+	exportSystem    *export.System
 }
 
 // StatusViolation represents each violation under status.
@@ -107,7 +107,7 @@ type StatusViolation struct {
 }
 
 // ConstraintMsg represents publish message for each constraint.
-type PubsubMsg struct {
+type ExportMsg struct {
 	ID                    string            `json:"id,omitempty"`
 	Details               interface{}       `json:"details,omitempty"`
 	EventType             string            `json:"eventType,omitempty"`
@@ -269,7 +269,7 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 		gkNamespace:     util.GetNamespace(),
 		auditCache:      deps.CacheLister,
 		expansionSystem: deps.ExpansionSystem,
-		pubsubSystem:    deps.PubSubSystem,
+		exportSystem:    deps.ExportSystem,
 	}
 	return am, nil
 }
@@ -902,10 +902,10 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		details := r.Metadata["details"]
 		labels := r.obj.GetLabels()
 		logViolation(am.log, constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels)
-		if *pubsubController.PubsubEnabled {
-			err := am.pubsubSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
+		if *exportController.ExportEnabled {
+			err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
 			if err != nil {
-				am.log.Error(err, "pubsub audit Publishing")
+				am.log.Error(err, "error exporting audit violation")
 			}
 		}
 		if *emitAuditEvents {
@@ -1162,7 +1162,7 @@ func violationMsg(constraint *unstructured.Unstructured, enforcementAction util.
 	userConstraintAnnotations := constraint.GetAnnotations()
 	delete(userConstraintAnnotations, "kubectl.kubernetes.io/last-applied-configuration")
 
-	return PubsubMsg{
+	return ExportMsg{
 		Message:               message,
 		Details:               details,
 		ID:                    timestamp,

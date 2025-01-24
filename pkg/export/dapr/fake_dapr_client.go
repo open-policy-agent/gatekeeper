@@ -17,7 +17,7 @@ import (
 	pb "github.com/dapr/go-sdk/dapr/proto/runtime/v1"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub/connection"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/driver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -326,66 +326,76 @@ func (s *testDaprServer) BulkPublishEventAlpha1(_ context.Context, req *pb.BulkP
 	return &pb.BulkPublishResponse{FailedEntries: failedEntries}, nil
 }
 
-func FakeConnection() (connection.Connection, func()) {
+func FakeConnection() (driver.Driver, func()) {
 	ctx := context.Background()
 	c, f := getTestClient(ctx)
 	return &Dapr{
-		client:          c,
-		pubSubComponent: "test",
+		openConnections: map[string]Connection{
+			"test": {
+				client:    c,
+				component: "test",
+			},
+		},
 	}, f
 }
 
-type FakeDapr struct {
-	// Array of clients to talk to different endpoints
+type FakeDaprConnection struct {
+	component string
+
 	client daprClient.Client
-
-	// Name of the pubsub component
-	pubSubComponent string
-
 	// closing function
 	f func()
 }
 
-func (r *FakeDapr) Publish(_ context.Context, _ interface{}, _ string) error {
+type FakeDapr struct {
+	openConnections map[string]FakeDaprConnection
+}
+
+func (r *FakeDapr) Publish(_ context.Context, _ string, _ interface{}, _ string) error {
 	return nil
 }
 
-func (r *FakeDapr) CloseConnection() error {
-	r.f()
+func (r *FakeDapr) CloseConnection(connectionName string) error {
+	if len(r.openConnections) == 1 {
+		r.openConnections[connectionName].f()
+	}
+	delete(r.openConnections, connectionName)
 	return nil
 }
 
-func (r *FakeDapr) UpdateConnection(_ context.Context, config interface{}) error {
-	var cfg ClientConfig
-	m, ok := config.(map[string]interface{})
+func (r *FakeDapr) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
+	cfg, ok := config.(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("invalid type assertion, config is not in expected format")
 	}
-	cfg.Component, ok = m["component"].(string)
+	component, ok := cfg["component"].(string)
 	if !ok {
 		return fmt.Errorf("failed to get value of component")
 	}
-	r.pubSubComponent = cfg.Component
+	conn := r.openConnections[connectionName]
+	conn.component = component
+	r.openConnections[connectionName] = conn
 	return nil
 }
 
-// Returns a fake client for dapr.
-func FakeNewConnection(ctx context.Context, config interface{}) (connection.Connection, error) {
-	var cfg ClientConfig
-	m, ok := config.(map[string]interface{})
+func (r *FakeDapr) CreateConnection(ctx context.Context, connectionName string, config interface{}) error {
+	var conn FakeDaprConnection
+	cfg, ok := config.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("invalid type assertion, config is not in expected format")
+		return fmt.Errorf("invalid type assertion, config is not in expected format")
 	}
-	cfg.Component, ok = m["component"].(string)
+	conn.component, ok = cfg["component"].(string)
 	if !ok {
-		return nil, fmt.Errorf("failed to get value of component")
+		return fmt.Errorf("failed to get value of component")
 	}
 
 	c, f := getTestClient(ctx)
+	conn.client = c
+	conn.f = f
+	r.openConnections[connectionName] = conn
+	return nil
+}
 
-	return &FakeDapr{
-		client:          c,
-		pubSubComponent: cfg.Component,
-		f:               f,
-	}, nil
+var FakeConn = &FakeDapr{
+	openConnections: map[string]FakeDaprConnection{},
 }

@@ -1,4 +1,4 @@
-package pubsub
+package export
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"flag"
 	"fmt"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -25,36 +25,36 @@ import (
 )
 
 var (
-	PubsubEnabled = flag.Bool("enable-pub-sub", false, "(alpha) Enabled pubsub to publish messages")
+	ExportEnabled = flag.Bool("enable-pub-sub", false, "(alpha) Enabled pubsub to publish messages")
 	log           = logf.Log.WithName("controller").WithValues(logging.Process, "pubsub_controller")
 )
 
 type Adder struct {
-	PubsubSystem *pubsub.System
+	ExportSystem *export.System
 }
 
 func (a *Adder) Add(mgr manager.Manager) error {
-	if !*PubsubEnabled {
+	if !*ExportEnabled {
 		return nil
 	}
 	log.Info("Warning: Alpha flag enable-pub-sub is set to true. This flag may change in the future.")
-	r := newReconciler(mgr, a.PubsubSystem)
+	r := newReconciler(mgr, a.ExportSystem)
 	return add(mgr, r)
 }
 
 func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 
-func (a *Adder) InjectPubsubSystem(pubsubSystem *pubsub.System) {
-	a.PubsubSystem = pubsubSystem
+func (a *Adder) InjectExportSystem(exportSystem *export.System) {
+	a.ExportSystem = exportSystem
 }
 
 type Reconciler struct {
 	client.Client
 	scheme *runtime.Scheme
-	system *pubsub.System
+	system *export.System
 }
 
-func newReconciler(mgr manager.Manager, system *pubsub.System) *Reconciler {
+func newReconciler(mgr manager.Manager, system *export.System) *Reconciler {
 	return &Reconciler{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
@@ -63,7 +63,7 @@ func newReconciler(mgr manager.Manager, system *pubsub.System) *Reconciler {
 }
 
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	c, err := controller.New("pubsub-config-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("export-config-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -111,10 +111,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	if len(cfg.Data) == 0 {
-		return reconcile.Result{}, fmt.Errorf(fmt.Sprintf("data missing in configmap %s, unable to configure respective pubsub", request.NamespacedName))
+		return reconcile.Result{}, fmt.Errorf(fmt.Sprintf("data missing in configmap %s, unable to establish connection", request.NamespacedName))
 	}
-	if _, ok := cfg.Data["provider"]; !ok {
-		return reconcile.Result{}, fmt.Errorf(fmt.Sprintf("missing provider field in configmap %s, unable to configure respective pubsub", request.NamespacedName))
+	if _, ok := cfg.Data["driver"]; !ok {
+		return reconcile.Result{}, fmt.Errorf(fmt.Sprintf("missing driver field in configmap %s, unable to establish connection", request.NamespacedName))
 	}
 	var config interface{}
 	err = json.Unmarshal([]byte(cfg.Data["config"]), &config)
@@ -122,11 +122,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	err = r.system.UpsertConnection(ctx, config, request.Name, cfg.Data["provider"])
+	err = r.system.UpsertConnection(ctx, config, request.Name, cfg.Data["driver"])
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	log.Info("Connection upsert successful", "name", request.Name, "provider", cfg.Data["provider"])
+	log.Info("Connection upsert successful", "name", request.Name, "driver", cfg.Data["driver"])
 	return reconcile.Result{}, nil
 }

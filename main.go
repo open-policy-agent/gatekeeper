@@ -47,11 +47,11 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness/pruner"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
@@ -435,7 +435,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
 	expansionSystem := expansion.NewSystem(mutationSystem)
-	pubsubSystem := pubsub.NewSystem()
+	exportSystem := export.NewSystem()
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -508,7 +508,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		MutationSystem:  mutationSystem,
 		ExpansionSystem: expansionSystem,
 		ProviderCache:   providerCache,
-		PubsubSystem:    pubsubSystem,
+		ExportSystem:     exportSystem,
 	}
 
 	if err := controller.AddToManager(mgr, &opts); err != nil {
@@ -538,7 +538,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 			ProcessExcluder: processExcluder,
 			CacheLister:     auditCache,
 			ExpansionSystem: expansionSystem,
-			PubSubSystem:    pubsubSystem,
+			ExportSystem:    exportSystem,
 		}
 		if err := audit.AddToManager(mgr, &auditDeps); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
