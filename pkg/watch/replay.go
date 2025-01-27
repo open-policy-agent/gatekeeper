@@ -262,7 +262,6 @@ func (wm *Manager) replayEvents(ctx context.Context, r *Registrar, gvk schema.Gr
 	}
 
 	for _, o := range lst.Items {
-		o := o
 		e := event.GenericEvent{
 			Object: &o,
 		}

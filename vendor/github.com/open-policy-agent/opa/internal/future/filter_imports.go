@@ -4,7 +4,7 @@
 
 package future
 
-import "github.com/open-policy-agent/opa/ast"
+import "github.com/open-policy-agent/opa/v1/ast"
 
 // FilterFutureImports filters OUT any future imports from the passed slice of
 // `*ast.Import`s.
@@ -34,4 +34,16 @@ func IsFutureKeyword(imp *ast.Import, kw string) bool {
 		ast.FutureRootDocument.Equal(path[0]) &&
 		path[1].Equal(ast.StringTerm("keywords")) &&
 		path[2].Equal(ast.StringTerm(kw))
+}
+
+func WhichFutureKeyword(imp *ast.Import) (string, bool) {
+	path := imp.Path.Value.(ast.Ref)
+	if len(path) == 3 &&
+		ast.FutureRootDocument.Equal(path[0]) &&
+		path[1].Equal(ast.StringTerm("keywords")) {
+		if str, ok := path[2].Value.(ast.String); ok {
+			return string(str), true
+		}
+	}
+	return "", false
 }

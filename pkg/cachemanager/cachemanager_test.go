@@ -245,7 +245,6 @@ func TestCacheManager_AddObject(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.cm.AddObject(context.Background(), &unstructured.Unstructured{Object: unstructuredPod})
 			if tc.expectedMetricStatus == metrics.ActiveStatus {

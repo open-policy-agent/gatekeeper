@@ -222,6 +222,7 @@ func (d *Driver) eval(ctx context.Context, compiler *ast.Compiler, target string
 		rego.Query(queryPath.String()),
 		rego.EnablePrintStatements(d.printEnabled),
 		rego.PrintHook(d.printHook),
+		rego.SetRegoVersion(ast.RegoV0),
 	}
 
 	buf := topdown.NewBufferTracer()
