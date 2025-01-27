@@ -13,7 +13,17 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: '{{ .Release.Namespace }}'
 spec:
-  minAvailable: {{ .Values.pdb.controllerManager.minAvailable }}
+  {{- if and .Values.maxAvailable .Values.maxUnavailable }}
+    {{ fail "Only one of 'maxAvailable' or 'maxUnavailable' can be set, but not both" }}
+    {{- else if not (or .Values.maxAvailable .Values.maxUnavailable) }}
+    {{ fail "One of 'maxAvailable' or 'maxUnavailable' must be set" }}
+    {{- else }}
+    {{ if .Values.maxAvailable }}
+    maxAvailable: {{ .Values.maxAvailable }}
+    {{ else if .Values.maxUnavailable }}
+    maxUnavailable: {{ .Values.maxUnavailable }}
+    {{ end }}
+  {{- end }}: ""
   selector:
     matchLabels:
       app: '{{ template "gatekeeper.name" . }}'
