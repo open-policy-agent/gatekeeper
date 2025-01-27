@@ -116,6 +116,7 @@ var (
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("enable-k8s-native-validation", true, "enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
+	enableReferential                    = flag.Bool("enable-referential-rules", true, "Enable referential rules. This flag defaults to true. Set this value to false if you want to disallow referential constraints. Because referential constraints read objects other than the object-under-test, they may be subject to race conditions. Users concerned about this may want to disable referential rules")
 )
 
 func init() {
@@ -409,6 +410,12 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		}
 		cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
 	}
+
+	externs := rego.Externs()
+	if *enableReferential {
+		externs = rego.Externs("inventory")
+	}
+	args = append(args, externs)
 
 	driver, err := rego.New(args...)
 	if err != nil {
