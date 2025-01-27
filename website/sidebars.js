@@ -36,7 +36,8 @@ module.exports = {
         'workload-resources',
         'pubsub',
         'validating-admission-policy',
-        'enforcement-points'
+        'enforcement-points',
+        'runtime-flags'
       ],
     },
     {
