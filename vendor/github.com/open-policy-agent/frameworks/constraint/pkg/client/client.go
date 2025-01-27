@@ -735,7 +735,7 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...reviews.Re
 			// add the target label to these stats for future collation.
 			targetLabel := &instrumentation.Label{Name: "target", Value: target}
 			for _, stat := range stats {
-				if stat.Labels == nil || len(stat.Labels) == 0 {
+				if len(stat.Labels) == 0 {
 					stat.Labels = []*instrumentation.Label{targetLabel}
 				} else {
 					stat.Labels = append(stat.Labels, targetLabel)

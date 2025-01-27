@@ -150,7 +150,6 @@ type ParserOptions struct {
 	AllFutureKeywords bool
 	FutureKeywords    []string
 	SkipRules         bool
-	JSONOptions       *astJSON.Options
 	// RegoVersion is the version of Rego to parse for.
 	RegoVersion        RegoVersion
 	unreleasedKeywords bool // TODO(sr): cleanup
@@ -237,10 +236,11 @@ func (p *Parser) WithSkipRules(skip bool) *Parser {
 	return p
 }
 
-// WithJSONOptions sets the Options which will be set on nodes to configure
-// their JSON marshaling behavior.
-func (p *Parser) WithJSONOptions(jsonOptions *astJSON.Options) *Parser {
-	p.po.JSONOptions = jsonOptions
+// WithJSONOptions sets the JSON options on the parser (now a no-op).
+//
+// Deprecated: Use SetOptions in the json package instead, where a longer description
+// of why this is deprecated also can be found.
+func (p *Parser) WithJSONOptions(_ *astJSON.Options) *Parser {
 	return p
 }
 
@@ -494,19 +494,6 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 		stmts = p.parseAnnotations(stmts)
 	}
 
-	if p.po.JSONOptions != nil {
-		for i := range stmts {
-			vis := NewGenericVisitor(func(x interface{}) bool {
-				if x, ok := x.(customJSON); ok {
-					x.setJSONOptions(*p.po.JSONOptions)
-				}
-				return false
-			})
-
-			vis.Walk(stmts[i])
-		}
-	}
-
 	return stmts, p.s.comments, p.s.errors
 }
 
@@ -591,7 +578,7 @@ func (p *Parser) parsePackage() *Package {
 			pkg.Path[0] = DefaultRootDocument.Copy().SetLocation(v[0].Location)
 			first, ok := v[0].Value.(Var)
 			if !ok {
-				p.errorf(v[0].Location, "unexpected %v token: expecting var", TypeName(v[0].Value))
+				p.errorf(v[0].Location, "unexpected %v token: expecting var", ValueName(v[0].Value))
 				return nil
 			}
 			pkg.Path[1] = StringTerm(string(first)).SetLocation(v[0].Location)
@@ -600,7 +587,7 @@ func (p *Parser) parsePackage() *Package {
 				case String:
 					pkg.Path[i] = v[i-1]
 				default:
-					p.errorf(v[i-1].Location, "unexpected %v token: expecting string", TypeName(v[i-1].Value))
+					p.errorf(v[i-1].Location, "unexpected %v token: expecting string", ValueName(v[i-1].Value))
 					return nil
 				}
 			}
@@ -643,7 +630,7 @@ func (p *Parser) parseImport() *Import {
 		case Ref:
 			for i := 1; i < len(v); i++ {
 				if _, ok := v[i].Value.(String); !ok {
-					p.errorf(v[i].Location, "unexpected %v token: expecting string", TypeName(v[i].Value))
+					p.errorf(v[i].Location, "unexpected %v token: expecting string", ValueName(v[i].Value))
 					return nil
 				}
 			}
@@ -971,9 +958,8 @@ func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 
 	switch x := ref.Value.(type) {
 	case Var:
-		// Modify the code to add the location to the head ref
-		// and set the head ref's jsonOptions.
-		head = VarHead(x, ref.Location, p.po.JSONOptions)
+		// TODO
+		head = VarHead(x, ref.Location, nil)
 	case Ref:
 		head = RefHead(x)
 	case Call:
@@ -1717,7 +1703,7 @@ func (p *Parser) parseRef(head *Term, offset int) (term *Term) {
 	case Var, *Array, Object, Set, *ArrayComprehension, *ObjectComprehension, *SetComprehension, Call:
 		// ok
 	default:
-		p.errorf(loc, "illegal ref (head cannot be %v)", TypeName(h))
+		p.errorf(loc, "illegal ref (head cannot be %v)", ValueName(h))
 	}
 
 	ref := []*Term{head}
@@ -2318,7 +2304,7 @@ func (p *Parser) validateDefaultRuleArgs(rule *Rule) bool {
 			switch v := x.Value.(type) {
 			case Var: // do nothing
 			default:
-				p.error(rule.Loc(), fmt.Sprintf("illegal default rule (arguments cannot contain %v)", TypeName(v)))
+				p.error(rule.Loc(), fmt.Sprintf("illegal default rule (arguments cannot contain %v)", ValueName(v)))
 				valid = false
 				return true
 			}
