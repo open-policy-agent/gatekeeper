@@ -16,9 +16,9 @@ limitations under the License.
 package controller
 
 import (
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/pubsub"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/export"
 )
 
 func init() {
-	Injectors = append(Injectors, &pubsub.Adder{})
+	Injectors = append(Injectors, &export.Adder{})
 }

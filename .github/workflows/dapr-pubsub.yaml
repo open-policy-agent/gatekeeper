@@ -1,18 +1,18 @@
-name: dapr-pubsub
+name: dapr-export
 on:
   push:
     paths:
-      - "pkg/pubsub/dapr"
-      - "test/pubsub/**"
+      - "pkg/export/dapr"
+      - "test/export/**"
   pull_request:
     paths:
-      - "pkg/pubsub/dapr"
-      - "test/pubsub/**"
+      - "pkg/export/dapr"
+      - "test/export/**"
 permissions: read-all
 
 jobs:
   dapr_test:
-    name: "Dapr pubsub test"
+    name: "Dapr export test"
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     strategy:
@@ -50,20 +50,20 @@ jobs:
         kind load docker-image --name kind gatekeeper-e2e:latest gatekeeper-crds:latest
         kubectl create ns gatekeeper-system
         make e2e-publisher-deploy
-        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_PUBSUB=true LOG_LEVEL=DEBUG
-        make test-e2e ENABLE_PUBSUB_TESTS=1
+        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG
+        make test-e2e ENABLE_EXPORT_TESTS=1
 
     - name: Save logs
       if: ${{ always() }}
       run: |
         kubectl logs -n fake-subscriber -l app=sub --tail=-1 > logs-audit-subscribe.json
-        kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-publish.json
+        kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-export.json
 
     - name: Upload artifacts
       uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
       if: ${{ always() }}
       with:
-        name: pubsub-logs
+        name: export-logs
         path: |
           logs-*.json
 
