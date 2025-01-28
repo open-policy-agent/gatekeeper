@@ -118,8 +118,8 @@ var replacements = map[string]string{
         - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}`,
 
-	"- HELMSUBST_DEPLOYMENT_AUDIT_PUBSUB_ARGS": `{{ if hasKey .Values.audit "enablePubsub" }}
-        - --enable-pub-sub={{ .Values.audit.enablePubsub }}
+	"- HELMSUBST_DEPLOYMENT_AUDIT_EXPORT_ARGS": `{{ if hasKey .Values.audit "exportViolations" }}
+        - --export-violations={{ .Values.audit.exportViolations }}
         {{- end }}
         {{ if hasKey .Values.audit "connection" }}
         - --audit-connection={{ .Values.audit.connection }}

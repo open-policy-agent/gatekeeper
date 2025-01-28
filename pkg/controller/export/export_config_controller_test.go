@@ -25,7 +25,7 @@ func TestReconcile(t *testing.T) {
 		t.Fatalf("Unexpected error parsing flag: %v", err)
 	}
 
-	err = flag.CommandLine.Parse([]string{"--enable-pub-sub", "true"})
+	err = flag.CommandLine.Parse([]string{"--export-violations", "true"})
 	if err != nil {
 		t.Fatalf("Unexpected error parsing flag: %v", err)
 	}

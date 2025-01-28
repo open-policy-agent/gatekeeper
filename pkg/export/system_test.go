@@ -211,7 +211,7 @@ func TestSystem_Publish(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "Publishing to a connection that does not exist",
+			name: "Exporting to a connection that does not exist",
 			fields: fields{
 				connections: map[string]string{"audit": dapr.Name},
 			},
@@ -219,7 +219,7 @@ func TestSystem_Publish(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "Publishing to a connection that does exist",
+			name: "Exporting to a connection that does exist",
 			fields: fields{
 				connections: testSystem.connectionToDriver,
 			},

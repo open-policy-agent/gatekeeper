@@ -25,8 +25,8 @@ import (
 )
 
 var (
-	ExportEnabled = flag.Bool("enable-pub-sub", false, "(alpha) Enabled pubsub to publish messages")
-	log           = logf.Log.WithName("controller").WithValues(logging.Process, "pubsub_controller")
+	ExportEnabled = flag.Bool("export-violations", false, "(alpha) Enable exporting violations to external systems")
+	log           = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
 )
 
 type Adder struct {
@@ -37,7 +37,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !*ExportEnabled {
 		return nil
 	}
-	log.Info("Warning: Alpha flag enable-pub-sub is set to true. This flag may change in the future.")
+	log.Info("Warning: Alpha flag export-violations is set to true. This flag may change in the future.")
 	r := newReconciler(mgr, a.ExportSystem)
 	return add(mgr, r)
 }

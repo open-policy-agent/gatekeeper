@@ -67,8 +67,8 @@ var (
 	auditEventsInvolvedNamespace = flag.Bool("audit-events-involved-namespace", false, "emit audit events for each violation in the involved objects namespace, the default (false) generates events in the namespace Gatekeeper is installed in. Audit events from cluster-scoped resources will still follow the default behavior")
 	auditMatchKindOnly           = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	apiCacheDir                  = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
-	auditConnection              = flag.String("audit-connection", defaultConnection, "(alpha) Connection name for publishing audit violation messages. Defaults to audit-connection")
-	auditChannel                 = flag.String("audit-channel", defaultChannel, "(alpha) Channel name for publishing audit violation messages. Defaults to audit-channel")
+	auditConnection              = flag.String("audit-connection", defaultConnection, "(alpha) Connection name for exporting audit violation messages. Defaults to audit-connection")
+	auditChannel                 = flag.String("audit-channel", defaultChannel, "(alpha) Channel name for exporting audit violation messages. Defaults to audit-channel")
 	emptyAuditResults            = newLimitQueue(0)
 	logStatsAudit                = flag.Bool("log-stats-audit", false, "(alpha) log stats metrics for the audit run")
 )
@@ -106,7 +106,7 @@ type StatusViolation struct {
 	EnforcementActions []string `json:"enforcementActions,omitempty"`
 }
 
-// ConstraintMsg represents publish message for each constraint.
+// ExportMsg represents export message for each violation.
 type ExportMsg struct {
 	ID                    string            `json:"id,omitempty"`
 	Details               interface{}       `json:"details,omitempty"`
