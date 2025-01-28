@@ -50,8 +50,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
-
 func (a *Adder) InjectTracker(tracker *readiness.Tracker) {
 	a.Tracker = tracker
 }

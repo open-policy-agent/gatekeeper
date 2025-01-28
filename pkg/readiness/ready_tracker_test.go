@@ -128,8 +128,6 @@ func setupController(
 		return fmt.Errorf("setting up tracker: %w", err)
 	}
 
-	sw := watch.NewSwitch()
-
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),
 		fakes.WithName("no-pod"),
@@ -159,17 +157,16 @@ func setupController(
 
 	// Setup all Controllers
 	opts := controller.Dependencies{
-		CFClient:         cfClient,
-		WatchManger:      wm,
-		ControllerSwitch: sw,
-		Tracker:          tracker,
-		GetPod:           func(_ context.Context) (*corev1.Pod, error) { return pod, nil },
-		ProcessExcluder:  processExcluder,
-		MutationSystem:   mutationSystem,
-		ExpansionSystem:  expansionSystem,
-		ProviderCache:    providerCache,
-		CacheMgr:         cacheManager,
-		SyncEventsCh:     events,
+		CFClient:        cfClient,
+		WatchManger:     wm,
+		Tracker:         tracker,
+		GetPod:          func(_ context.Context) (*corev1.Pod, error) { return pod, nil },
+		ProcessExcluder: processExcluder,
+		MutationSystem:  mutationSystem,
+		ExpansionSystem: expansionSystem,
+		ProviderCache:   providerCache,
+		CacheMgr:        cacheManager,
+		SyncEventsCh:    events,
 	}
 	if err := controller.AddToManager(mgr, &opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)

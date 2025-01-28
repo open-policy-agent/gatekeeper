@@ -77,11 +77,10 @@ var gvkConstraintTemplate = schema.GroupVersionKind{
 }
 
 type Adder struct {
-	CFClient         *constraintclient.Client
-	WatchManager     *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
-	Tracker          *readiness.Tracker
-	GetPod           func(context.Context) (*corev1.Pod, error)
+	CFClient     *constraintclient.Client
+	WatchManager *watch.Manager
+	Tracker      *readiness.Tracker
+	GetPod       func(context.Context) (*corev1.Pod, error)
 }
 
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -92,7 +91,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	}
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	r, err := newReconciler(mgr, a.CFClient, a.WatchManager, a.ControllerSwitch, a.Tracker, events, events, a.GetPod)
+	r, err := newReconciler(mgr, a.CFClient, a.WatchManager, a.Tracker, events, events, a.GetPod)
 	if err != nil {
 		return err
 	}
@@ -107,10 +106,6 @@ func (a *Adder) InjectWatchManager(wm *watch.Manager) {
 	a.WatchManager = wm
 }
 
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
-	a.ControllerSwitch = cs
-}
-
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
@@ -123,7 +118,7 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 // cstrEvents is the channel from which constraint controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
-func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
+func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex and vap label
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -142,7 +137,6 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 		CFClient:         cfClient,
 		ConstraintsCache: constraintsCache,
 		WatchManager:     wm,
-		ControllerSwitch: cs,
 		Events:           cstrEvents,
 		Tracker:          tracker,
 		GetPod:           getPod,
@@ -158,20 +152,18 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 		// via the registrar below.
 		statusEvents := make(chan event.GenericEvent, 1024)
 		csAdder := constraintstatus.Adder{
-			CFClient:         cfClient,
-			WatchManager:     wm,
-			ControllerSwitch: cs,
-			Events:           statusEvents,
-			IfWatching:       statusW.IfWatching,
+			CFClient:     cfClient,
+			WatchManager: wm,
+			Events:       statusEvents,
+			IfWatching:   statusW.IfWatching,
 		}
 		if err := csAdder.Add(mgr); err != nil {
 			return nil, err
 		}
 
 		ctsAdder := constrainttemplatestatus.Adder{
-			CfClient:         cfClient,
-			WatchManager:     wm,
-			ControllerSwitch: cs,
+			CfClient:     cfClient,
+			WatchManager: wm,
 		}
 		if err := ctsAdder.Add(mgr); err != nil {
 			return nil, err
@@ -185,7 +177,6 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 		cfClient:      cfClient,
 		watcher:       w,
 		statusWatcher: statusW,
-		cs:            cs,
 		metrics:       r,
 		tracker:       tracker,
 		getPod:        getPod,
@@ -245,7 +236,6 @@ type ReconcileConstraintTemplate struct {
 	watcher       *watch.Registrar
 	statusWatcher *watch.Registrar
 	cfClient      *constraintclient.Client
-	cs            *watch.ControllerSwitch
 	metrics       *reporter
 	tracker       *readiness.Tracker
 	getPod        func(context.Context) (*corev1.Pod, error)
@@ -255,8 +245,6 @@ type ReconcileConstraintTemplate struct {
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingadmissionpolicies;validatingadmissionpolicybindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
-// TODO(acpana): remove in 3.16 as per https://github.com/open-policy-agent/gatekeeper/issues/3084
-// +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/finalizers,verbs=get;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=externaldata.gatekeeper.sh,resources=providers,verbs=get;list;watch;create;update;patch;delete
 
@@ -264,14 +252,6 @@ type ReconcileConstraintTemplate struct {
 // and what is in the ConstraintTemplate.Spec.
 func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	logger := logger.WithValues("template_name", request.Name)
-	// Short-circuit if shutting down.
-	if r.cs != nil {
-		running := r.cs.Enter()
-		defer r.cs.Exit()
-		if !running {
-			return reconcile.Result{}, nil
-		}
-	}
 
 	defer r.metrics.registry.report(ctx, r.metrics)
 
