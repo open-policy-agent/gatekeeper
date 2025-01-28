@@ -26,7 +26,9 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/go-logr/zapr"
@@ -308,9 +310,40 @@ func innerMain() int {
 		}
 	}
 
+	// Always enable downstream checking for the webhooks, if enabled.
+	if len(webhooks) > 0 {
+		tlsChecker := webhook.NewTLSChecker(*certDir, *port)
+		setupLog.Info("setting up TLS readiness probe")
+		if err := mgr.AddReadyzCheck("tls-check", tlsChecker); err != nil {
+			setupLog.Error(err, "unable to create tls readiness check")
+			return 1
+		}
+	}
+
+	setupLog.Error(errors.New("Canary"), "Canary")
+
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
 	setupErr := make(chan error)
-	ctx := ctrl.SetupSignalHandler()
+
+	// Setup termination with grace period. Required to give K8s Services time to disconnect the Pod endpoint on termination.
+	// Derived from how the controller-runtime sets up a signal handler with ctrl.SetupSignalHandler()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, []os.Signal{os.Interrupt, syscall.SIGTERM}...)
+	go func() {
+		<-c
+		setupLog.Info("Shutting Down, waiting for 10s")
+		go func() {
+			time.Sleep(10* time.Second)
+			setupLog.Info("Shutdown grace period finished")
+			cancel()
+		}()
+		<-c
+		setupLog.Info("Second signal received, killing now")
+		os.Exit(1) // second signal. Exit directly.
+	}()
+
 	go func() {
 		setupErr <- setupControllers(ctx, mgr, tracker, setupFinished)
 	}()
