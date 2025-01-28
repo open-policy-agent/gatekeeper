@@ -10,7 +10,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,11 +37,10 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !*PubsubEnabled {
 		return nil
 	}
+	log.Info("Warning: Alpha flag enable-pub-sub is set to true. This flag may change in the future.")
 	r := newReconciler(mgr, a.PubsubSystem)
 	return add(mgr, r)
 }
-
-func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 

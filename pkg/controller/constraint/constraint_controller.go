@@ -87,7 +87,6 @@ type Adder struct {
 	CFClient         *constraintclient.Client
 	ConstraintsCache *ConstraintsCache
 	WatchManager     *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
 	Events           <-chan event.GenericEvent
 	Tracker          *readiness.Tracker
 	GetPod           func(context.Context) (*corev1.Pod, error)
@@ -107,10 +106,6 @@ func (a *Adder) InjectWatchManager(w *watch.Manager) {
 	a.WatchManager = w
 }
 
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
-	a.ControllerSwitch = cs
-}
-
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
@@ -127,7 +122,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r := newReconciler(mgr, a.CFClient, a.ControllerSwitch, reporter, a.ConstraintsCache, a.Tracker)
+	r := newReconciler(mgr, a.CFClient, reporter, a.ConstraintsCache, a.Tracker)
 	if a.GetPod != nil {
 		r.getPod = a.GetPod
 	}
@@ -151,7 +146,6 @@ type tags struct {
 func newReconciler(
 	mgr manager.Manager,
 	cfClient *constraintclient.Client,
-	cs *watch.ControllerSwitch,
 	reporter StatsReporter,
 	constraintsCache *ConstraintsCache,
 	tracker *readiness.Tracker,
@@ -162,7 +156,6 @@ func newReconciler(
 		statusClient: mgr.GetClient(),
 		reader:       mgr.GetCache(),
 
-		cs:               cs,
 		scheme:           mgr.GetScheme(),
 		cfClient:         cfClient,
 		log:              log,
@@ -209,7 +202,6 @@ type ReconcileConstraint struct {
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	cs               *watch.ControllerSwitch
 	scheme           *runtime.Scheme
 	cfClient         *constraintclient.Client
 	log              logr.Logger
@@ -229,15 +221,6 @@ type ReconcileConstraint struct {
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec.
 func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	// Short-circuit if shutting down.
-	if r.cs != nil {
-		running := r.cs.Enter()
-		defer r.cs.Exit()
-		if !running {
-			return reconcile.Result{}, nil
-		}
-	}
-
 	gvk, unpackedRequest, err := util.UnpackRequest(request)
 	if err != nil {
 		// Unrecoverable, do not retry.
@@ -390,6 +373,7 @@ func shouldGenerateVAPB(defaultGenerateVAPB bool, enforcementAction util.Enforce
 		VAPEnforcementActions, err = util.ScopedActionForEP(util.VAPEnforcementPoint, instance)
 	default:
 		if defaultGenerateVAPB {
+			log.Info("Warning: Alpha flag default-create-vap-binding-for-constraints is set to true. This flag may change in the future.")
 			VAPEnforcementActions = []string{string(enforcementAction)}
 		}
 	}
@@ -436,6 +420,9 @@ func ShouldGenerateVAP(ct *templates.ConstraintTemplate) (bool, error) {
 		return false, err
 	}
 	if source.GenerateVAP == nil {
+		if *DefaultGenerateVAP {
+			log.Info("Warning: Alpha flag default-create-vap-for-templates is set to true. This flag may change in the future.")
+		}
 		return *DefaultGenerateVAP, nil
 	}
 	return *source.GenerateVAP, nil
@@ -737,6 +724,7 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 
 	obj.Spec.ValidationActions = actions
 	if v1beta1Obj.Spec.MatchResources != nil {
+		obj.Spec.MatchResources = &admissionregistrationv1.MatchResources{}
 		if v1beta1Obj.Spec.MatchResources.ObjectSelector != nil {
 			obj.Spec.MatchResources.ObjectSelector = v1beta1Obj.Spec.MatchResources.ObjectSelector
 		}

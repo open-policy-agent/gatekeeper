@@ -38,7 +38,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"golang.org/x/net/context"
@@ -246,7 +245,6 @@ func TestReconcile(t *testing.T) {
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
-	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
@@ -259,7 +257,7 @@ func TestReconcile(t *testing.T) {
 
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, cfClient, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1498,7 +1496,6 @@ violation[{"msg": "denied!"}] {
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
-	cs := watch.NewSwitch()
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),
 		fakes.WithName("no-pod"),
@@ -1506,7 +1503,7 @@ violation[{"msg": "denied!"}] {
 
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, cfClient, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
