@@ -159,7 +159,7 @@ __--operation key:__ `mutation-controller`
 This operation runs the process responsible for ingesting and registering
 mutators. `mutation-controller` is run implicitly with the `mutation-webhook`
 and `mutation-status` operations, and is redundant if any of the 2
-aforementioned operations are already specified.
+aforementioned operations are already specified. 
 
 If the `webhook` or `audit` operation is used in isolation without the `mutation-webhook`
 or `mutation-status` operations, then the `mutation-controller` operation is
