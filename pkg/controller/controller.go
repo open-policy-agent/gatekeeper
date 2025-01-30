@@ -101,7 +101,7 @@ type Dependencies struct {
 	MutationSystem  *mutation.System
 	ExpansionSystem *expansion.System
 	ProviderCache   *externaldata.ProviderCache
-	ExportSystem     *export.System
+	ExportSystem    *export.System
 	SyncEventsCh    chan event.GenericEvent
 	CacheMgr        *cm.CacheManager
 }

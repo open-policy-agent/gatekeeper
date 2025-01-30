@@ -25,7 +25,7 @@ func TestReconcile(t *testing.T) {
 		t.Fatalf("Unexpected error parsing flag: %v", err)
 	}
 
-	err = flag.CommandLine.Parse([]string{"--enable-pub-sub", "true"})
+	err = flag.CommandLine.Parse([]string{"--enable-violation-export", "true"})
 	if err != nil {
 		t.Fatalf("Unexpected error parsing flag: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			wantErr:  true,
-			errorMsg: fmt.Sprintf("data missing in configmap %s, unable to establish connection", request.NamespacedName),
+			errorMsg: fmt.Sprintf("data missing in configmap %s, unable to configure exporter", request.NamespacedName),
 		},
 	}
 	for _, tc := range testCases {

@@ -508,7 +508,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		MutationSystem:  mutationSystem,
 		ExpansionSystem: expansionSystem,
 		ProviderCache:   providerCache,
-		ExportSystem:     exportSystem,
+		ExportSystem:    exportSystem,
 	}
 
 	if err := controller.AddToManager(mgr, &opts); err != nil {

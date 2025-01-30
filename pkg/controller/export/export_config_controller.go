@@ -25,8 +25,8 @@ import (
 )
 
 var (
-	ExportEnabled = flag.Bool("enable-pub-sub", false, "(alpha) Enabled pubsub to publish messages")
-	log           = logf.Log.WithName("controller").WithValues(logging.Process, "pubsub_controller")
+	ExportEnabled = flag.Bool("enable-violation-export", false, "(alpha) Enable exporting violations to external systems")
+	log           = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
 )
 
 type Adder struct {
@@ -37,7 +37,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !*ExportEnabled {
 		return nil
 	}
-	log.Info("Warning: Alpha flag enable-pub-sub is set to true. This flag may change in the future.")
+	log.Info("Warning: Alpha flag enable-violation-export is set to true. This flag may change in the future.")
 	r := newReconciler(mgr, a.ExportSystem)
 	return add(mgr, r)
 }
@@ -111,10 +111,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	if len(cfg.Data) == 0 {
-		return reconcile.Result{}, fmt.Errorf(fmt.Sprintf("data missing in configmap %s, unable to establish connection", request.NamespacedName))
+		return reconcile.Result{}, fmt.Errorf(fmt.Sprintf("data missing in configmap %s, unable to configure exporter", request.NamespacedName))
 	}
 	if _, ok := cfg.Data["driver"]; !ok {
-		return reconcile.Result{}, fmt.Errorf(fmt.Sprintf("missing driver field in configmap %s, unable to establish connection", request.NamespacedName))
+		return reconcile.Result{}, fmt.Errorf(fmt.Sprintf("missing driver field in configmap %s, unable to configure exporter", request.NamespacedName))
 	}
 	var config interface{}
 	err = json.Unmarshal([]byte(cfg.Data["config"]), &config)

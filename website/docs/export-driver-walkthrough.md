@@ -3,7 +3,7 @@ id: export-driver
 title: Export Interface/Driver walkthrough
 ---
 
-This guide provides an overview of the driver interface, including details of its structure and functionality. Additionally, it offers instructions on adding a new driver and utilizing different backends to export violations.
+This guide provides an overview of the driver interface, including details of its structure and functionality. Additionally, it offers instructions on adding a new driver and utilizing different backends to export audit violations.
 
 ## Driver interface
 
@@ -25,7 +25,7 @@ type Driver interface {
 
 As an example, the Dapr driver implements these methods to publish message and manage connection to do so. Please refer to [dapr.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/export/dapr/dapr.go) to understand the logic that goes in each of these methods.
 
-### How to add new driver to export violations to foo backend
+### How to add new driver to export audit violations to foo backend
 
 A driver must maintain a map of open connections associated with backend `foo`.
 
