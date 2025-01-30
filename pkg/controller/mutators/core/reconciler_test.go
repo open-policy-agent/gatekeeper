@@ -198,7 +198,7 @@ func (m *fakeMutatorObject) DeepCopyObject() runtime.Object {
 
 	err := m.err
 	if err != nil {
-		err = fmt.Errorf("%s", err.Error())
+		err = fmt.Errorf("%w", err)
 	}
 
 	return &fakeMutatorObject{

@@ -59,7 +59,7 @@ func (e errorMutator) HasDiff(types.Mutator) bool {
 }
 
 func (e errorMutator) DeepCopy() types.Mutator {
-	return errorMutator{err: fmt.Errorf("%s", e.err.Error())}
+	return errorMutator{err: fmt.Errorf("%w", e.err)}
 }
 
 func (e errorMutator) Value(_ types.MetadataGetter) (interface{}, error) {

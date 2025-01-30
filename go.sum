@@ -286,6 +286,8 @@ github.com/onsi/gomega v1.34.2 h1:pNCwDkzrsv7MS9kpaQvVb1aVLahQXyJ/Tv5oAZMI3i8=
 github.com/onsi/gomega v1.34.2/go.mod h1:v1xfxRgk0KIsG+QOdm7p8UosrOzPYRo60fd3B/1Dukc=
 github.com/open-policy-agent/cert-controller v0.11.0 h1:zXaXeaS4eRAZXhUH5SxWqky681Y2KWjQv/z3X8iMcaQ=
 github.com/open-policy-agent/cert-controller v0.11.0/go.mod h1:456gr2XKHzxDOjxJZUST5rLIX8olrHkBUymy49FZzps=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20250130204619-df595163a8ba h1:2dXMSgosKdJzjo5eG5n02TD1lGQp5V7TdhUy8gVoJS4=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20250130204619-df595163a8ba/go.mod h1:mJcwyAQJRi5mZmzQ4xAM7V3rggiFJ9x/TtDf8XoOzrU=
 github.com/open-policy-agent/opa v1.1.0 h1:HMz2evdEMTyNqtdLjmu3Vyx06BmhNYAx67Yz3Ll9q2s=
 github.com/open-policy-agent/opa v1.1.0/go.mod h1:T1pASQ1/vwfTa+e2fYcfpLCvWgYtqtiUv+IuA/dLPQs=
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
@@ -329,8 +331,6 @@ github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQD
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
-github.com/sozercan/frameworks/constraint v0.0.0-20250127193537-3a9b8bb3a0d5 h1:D2yDs9WTOznpZKmA4Cfmx5YV6r5/DuWlYpHp5mXhW5k=
-github.com/sozercan/frameworks/constraint v0.0.0-20250127193537-3a9b8bb3a0d5/go.mod h1:mJcwyAQJRi5mZmzQ4xAM7V3rggiFJ9x/TtDf8XoOzrU=
 github.com/spf13/cobra v1.8.1 h1:e5/vxKd/rZsfSJMUX1agtjeTDf+qv1/JdBF8gg5k9ZM=
 github.com/spf13/cobra v1.8.1/go.mod h1:wHxEcudfqmLYa8iTfL+OuZPbBZkmvliBWKIezN3kD9Y=
 github.com/spf13/pflag v1.0.5 h1:iy+VFUOCP1a+8yFto/drg2CJ5u0yRoB7fZw3DKv/JXA=
