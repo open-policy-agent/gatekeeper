@@ -162,7 +162,7 @@ Dapr: https://dapr.io/
     # auditPodAnnotations is used to add annotations required by Dapr to inject sidecar to audit pod
     echo 'auditPodAnnotations: {dapr.io/enabled: "true", dapr.io/app-id: "audit", dapr.io/metrics-port: "9999", dapr.io/sidecar-seccomp-profile-type: "RuntimeDefault"}' > /tmp/annotations.yaml
     helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
-    --set audit.enableViolationExport=true \
+    --set enableViolationExport=true \
     --set audit.connection=audit-connection \
     --set audit.channel=audit-channel \
     --values /tmp/annotations.yaml
