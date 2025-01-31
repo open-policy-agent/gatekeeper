@@ -735,6 +735,8 @@ func TestReconcile(t *testing.T) {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+				// Since tests retries 3000 times at 100 retries per second, adding sleep makes sure that this test gets covarage time > 30s to cover the default wait.
+				time.Sleep(10 * time.Millisecond)
 				return err
 			}
 			blockTime, err := time.Parse(time.RFC3339, timestamp)
@@ -873,6 +875,8 @@ func TestReconcile(t *testing.T) {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+				// Since tests retries 3000 times at 100 retries per second, adding sleep makes sure that this test gets covarage time > 30s to cover the default wait.
+				time.Sleep(10 * time.Millisecond)
 				return err
 			}
 			vapBindingCreationTime := vapBinding.GetCreationTimestamp().Time
