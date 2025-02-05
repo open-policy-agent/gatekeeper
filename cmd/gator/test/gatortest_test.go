@@ -6,6 +6,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/test"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -93,6 +94,56 @@ func Test_formatOutput(t *testing.T) {
 			output := formatOutput(tc.inputFormat, tc.input, nil)
 			if diff := cmp.Diff(tc.expectedOutput, output); diff != "" {
 				t.Fatal(diff)
+			}
+		})
+	}
+}
+
+// Test_enforcableFailures makes sure that the `gator test` is able to detect
+// denied constraints when if found some.
+func Test_enforcableFailures(t *testing.T) {
+	testCases := []struct{
+		name string
+		input []*test.GatorResult
+		expectedOutput bool
+	}{
+		{
+			name: "don't fail on warn action",
+			input: []*test.GatorResult{{
+				Result: types.Result{
+					EnforcementAction: string(util.Warn),
+				},
+			}},
+			expectedOutput: false,
+		},
+		{
+			name: "fail on deny action",
+			input: []*test.GatorResult{{
+				Result: types.Result{
+					EnforcementAction: string(util.Deny),
+				},
+			}},
+			expectedOutput: true,
+		},
+		{
+			name: "fail if at least one scoped deny action",
+			input: []*test.GatorResult{{
+				Result: types.Result{
+					EnforcementAction: string(util.Dryrun),
+					ScopedEnforcementActions: []string{
+						string(util.Scoped),
+						string(util.Deny),
+					},
+				},
+			}},
+			expectedOutput: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if ok := enforceableFailures(tc.input); ok != tc.expectedOutput {
+					t.Fatalf("unexpected output: %v", ok)
 			}
 		})
 	}
