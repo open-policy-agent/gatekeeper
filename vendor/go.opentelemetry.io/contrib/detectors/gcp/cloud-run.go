@@ -1,16 +1,5 @@
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
 package gcp // import "go.opentelemetry.io/contrib/detectors/gcp"
 
@@ -24,7 +13,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 const serviceNamespace = "cloud-run-managed"
@@ -61,7 +50,7 @@ func NewCloudRun() *CloudRun {
 	}
 }
 
-func (c *CloudRun) cloudRegion(ctx context.Context) (string, error) {
+func (c *CloudRun) cloudRegion() (string, error) {
 	region, err := c.mc.Get("instance/region")
 	if err != nil {
 		return "", err
@@ -95,7 +84,7 @@ func (c *CloudRun) Detect(ctx context.Context) (*resource.Resource, error) {
 		attributes = append(attributes, semconv.CloudAccountID(projectID))
 	}
 
-	if region, err := c.cloudRegion(ctx); hasProblem(err) {
+	if region, err := c.cloudRegion(); hasProblem(err) {
 		errInfo = append(errInfo, err.Error())
 	} else if region != "" {
 		attributes = append(attributes, semconv.CloudRegion(region))
