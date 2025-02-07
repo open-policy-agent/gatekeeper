@@ -71,8 +71,8 @@ spec:
         - --operation=audit
         - --operation=status
         - --operation=generate
-        {{ if hasKey .Values.audit "enablePubsub" }}
-        - --enable-pub-sub={{ .Values.audit.enablePubsub }}
+        {{ if hasKey .Values "enableViolationExport" }}
+        - --enable-violation-export={{ .Values.enableViolationExport }}
         {{- end }}
         {{ if hasKey .Values.audit "connection" }}
         - --audit-connection={{ .Values.audit.connection }}
