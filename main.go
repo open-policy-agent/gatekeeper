@@ -284,10 +284,6 @@ func innerMain() int {
 		close(setupFinished)
 	}
 
-	// ControllerSwitch will be used to disable controllers during our teardown process,
-	// avoiding conflicts in finalizer cleanup.
-	sw := watch.NewSwitch()
-
 	// Setup tracker and register readiness probe.
 	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled, *expansion.ExpansionEnabled)
 	if err != nil {
@@ -316,7 +312,7 @@ func innerMain() int {
 	setupErr := make(chan error)
 	ctx := ctrl.SetupSignalHandler()
 	go func() {
-		setupErr <- setupControllers(ctx, mgr, sw, tracker, setupFinished)
+		setupErr <- setupControllers(ctx, mgr, tracker, setupFinished)
 	}()
 
 	setupLog.Info("starting manager")
@@ -348,12 +344,7 @@ blockingLoop:
 			break blockingLoop
 		}
 	}
-
-	// Manager stops controllers asynchronously.
-	// Instead, we use ControllerSwitch to synchronously prevent them from doing more work.
-	// This can be removed when finalizer and status teardown is removed.
 	setupLog.Info("disabling controllers...")
-	sw.Stop()
 
 	if hadError {
 		return 1
@@ -361,7 +352,7 @@ blockingLoop:
 	return 0
 }
 
-func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}) error {
+func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.Tracker, setupFinished chan struct{}) error {
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
@@ -508,17 +499,16 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	}
 
 	opts := controller.Dependencies{
-		CFClient:         client,
-		WatchManger:      wm,
-		SyncEventsCh:     events,
-		CacheMgr:         cm,
-		ControllerSwitch: sw,
-		Tracker:          tracker,
-		ProcessExcluder:  processExcluder,
-		MutationSystem:   mutationSystem,
-		ExpansionSystem:  expansionSystem,
-		ProviderCache:    providerCache,
-		PubsubSystem:     pubsubSystem,
+		CFClient:        client,
+		WatchManger:     wm,
+		SyncEventsCh:    events,
+		CacheMgr:        cm,
+		Tracker:         tracker,
+		ProcessExcluder: processExcluder,
+		MutationSystem:  mutationSystem,
+		ExpansionSystem: expansionSystem,
+		ProviderCache:   providerCache,
+		PubsubSystem:    pubsubSystem,
 	}
 
 	if err := controller.AddToManager(mgr, &opts); err != nil {

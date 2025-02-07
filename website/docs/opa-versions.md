@@ -10,6 +10,7 @@ Gatekeeper depends on [Open Policy Agent](https://www.openpolicyagent.org/). To 
 | `v3.18.2`          | `v0.68.0`   |
 | `v3.18.1`          | `v0.68.0`   |
 | `v3.18.0`          | `v0.68.0`   |
+| `v3.17.2`          | `v0.68.0`   |
 | `v3.17.1`          | `v0.67.0`   |
 | `v3.17.0`          | `v0.67.0`   |
 | `v3.16.3`          | `v0.64.1`   |

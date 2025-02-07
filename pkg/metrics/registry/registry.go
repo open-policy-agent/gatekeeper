@@ -78,7 +78,7 @@ func (es *exporterSet) Set(s string) error {
 	return nil
 }
 
-func (es *exporterSet) MustRegister(name string, new StartExporter) {
+func (es *exporterSet) MustRegister(name string, new StartExporter) { // nolint:revive
 	if _, ok := es.registeredExporters[name]; ok {
 		panic(fmt.Sprintf("exporter %v registered twice", name))
 	}

@@ -71,7 +71,7 @@ func (img image) newMutatedImage(domain, path, tag string) image {
 }
 
 // ignoreUnset returns `new` if `new` is set, otherwise it returns `old`.
-func ignoreUnset(old, new string) string {
+func ignoreUnset(old, new string) string { // nolint:revive
 	if new != "" {
 		return new
 	}

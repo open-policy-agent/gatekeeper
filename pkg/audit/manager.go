@@ -59,9 +59,9 @@ const (
 )
 
 var (
-	auditInterval                = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
-	constraintViolationsLimit    = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
-	auditChunkSize               = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
+	auditInterval                = flag.Int64("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
+	constraintViolationsLimit    = flag.Int("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
+	auditChunkSize               = flag.Int("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
 	auditFromCache               = flag.Bool("audit-from-cache", false, "audit synced resources from internal cache, bypassing direct queries to Kubernetes API server")
 	emitAuditEvents              = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events with detailed info for each violation from an audit")
 	auditEventsInvolvedNamespace = flag.Bool("audit-events-involved-namespace", false, "emit audit events for each violation in the involved objects namespace, the default (false) generates events in the namespace Gatekeeper is installed in. Audit events from cluster-scoped resources will still follow the default behavior")
@@ -373,7 +373,7 @@ func (am *Manager) auditResources(
 	timestamp string,
 ) error {
 	// delete all from cache dir before starting audit
-	err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
+	err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
 	if err != nil {
 		am.log.Error(err, "unable to remove existing content from cache directory in auditResources", "apiCacheDir", *apiCacheDir)
 		return err
@@ -484,7 +484,7 @@ func (am *Manager) auditResources(
 		for kind := range gvKinds {
 			am.log.V(logging.DebugLevel).Info("Listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 			// delete all existing folders from cache dir before starting next kind
-			err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
+			err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
 			if err != nil {
 				am.log.Error(err, "unable to remove existing content from cache directory in kindsLoop", "apiCacheDir", *apiCacheDir)
 				return err
@@ -667,7 +667,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 		subDir := fmt.Sprintf("%s_%d", kind, i)
 		pDir := path.Join(*apiCacheDir, subDir)
 
-		files, err := am.getFilesFromDir(pDir, int(*auditChunkSize))
+		files, err := am.getFilesFromDir(pDir, *auditChunkSize)
 		if err != nil {
 			am.log.Error(err, "Unable to get files from directory")
 			continue
@@ -870,7 +870,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		key := util.GetUniqueKey(*constraint)
 		keyQueue, ok := updateLists[key]
 		if !ok {
-			keyQueue = newLimitQueue(int(*constraintViolationsLimit))
+			keyQueue = newLimitQueue(*constraintViolationsLimit)
 			updateLists[key] = keyQueue
 		}
 
@@ -909,6 +909,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 			}
 		}
 		if *emitAuditEvents {
+			log.Info("Warning: Alpha flag emit-audit-events is set to true. This flag may change in the future.")
 			uid := r.obj.GetUID()
 			rv := r.obj.GetResourceVersion()
 			emitEvent(constraint, timestamp, ea, strings.Join(r.ScopedEnforcementActions, ","), gvk, namespace, name, rv, msg, am.gkNamespace, uid, am.eventRecorder)
@@ -959,7 +960,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 
 	var statusViolations []interface{}
 	for auditResults.Len() > 0 {
-		if uint(len(statusViolations)) < *constraintViolationsLimit {
+		if len(statusViolations) < *constraintViolationsLimit {
 			// Append the maximum statusViolation for this constraint in sort order until constraintViolationsLimit is reached.
 			statusViolations = append(statusViolations, auditResults.Pop())
 		} else {

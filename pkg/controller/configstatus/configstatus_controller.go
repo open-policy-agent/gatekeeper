@@ -46,8 +46,6 @@ type Adder struct {
 	WatchManager *watch.Manager
 }
 
-func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
-
 func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 
 // Add creates a new config Status Controller and adds it to the Manager. The Manager will set fields on the Controller
