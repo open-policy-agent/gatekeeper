@@ -11,7 +11,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -95,7 +95,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	cfg := &corev1.ConfigMap{}
 	err := r.Get(ctx, request.NamespacedName, cfg)
 	if err != nil {
-		if !errors.IsNotFound(err) {
+		if !k8serrors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
 		deleted = true

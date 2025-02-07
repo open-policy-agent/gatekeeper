@@ -219,7 +219,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 					Stats: []*instrumentation.Stat{
 						{
 							Name:  runTimeNS,
-							Value: uint64(evalElapsedTime.Nanoseconds()),
+							Value: evalElapsedTime.Nanoseconds(),
 							Source: instrumentation.Source{
 								Type:  instrumentation.EngineSourceType,
 								Value: pSchema.Name,
