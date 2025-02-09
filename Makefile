@@ -22,7 +22,7 @@ LOG_LEVEL ?= "INFO"
 GENERATE_VAP ?= false
 GENERATE_VAPBINDING ?= false
 
-VERSION := v3.18.0-beta.0
+VERSION := v3.19.0-beta.1
 
 KIND_VERSION ?= 0.17.0
 KIND_CLUSTER_FILE ?= test/bats/tests/kindcluster.yml
@@ -41,7 +41,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v1.57.1
+GOLANGCI_LINT_VERSION := v1.63.4
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint

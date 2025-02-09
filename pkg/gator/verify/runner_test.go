@@ -1235,9 +1235,6 @@ func TestRunner_Run(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		// Required for parallel tests.
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1258,7 +1255,7 @@ func TestRunner_Run(t *testing.T) {
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
 				cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
 			); diff != "" {
-				t.Errorf(diff)
+				t.Errorf("%s", diff)
 			}
 		})
 	}
@@ -1591,9 +1588,6 @@ func TestRunner_RunCase(t *testing.T) {
 	)
 
 	for _, tc := range testCases {
-		// Required for parallel tests.
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1633,7 +1627,7 @@ func TestRunner_RunCase(t *testing.T) {
 			if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
 				cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
 			); diff != "" {
-				t.Errorf(diff)
+				t.Errorf("%s", diff)
 			}
 		})
 	}

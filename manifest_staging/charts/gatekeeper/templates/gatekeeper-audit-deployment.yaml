@@ -135,7 +135,7 @@ spec:
             path: /healthz
             port: {{ .Values.audit.healthPort }}
           timeoutSeconds: {{ .Values.audit.livenessTimeout }}
-        name: manager
+        name: '{{ .Values.audit.containerName }}'
         ports:
         - containerPort: {{ .Values.audit.metricsPort }}
           name: metrics

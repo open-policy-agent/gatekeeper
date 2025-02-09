@@ -47,14 +47,14 @@ enableK8sNativeValidation: true
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.18.0-beta.0
+  release: v3.19.0-beta.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.18.0-beta.0
+      tag: v3.19.0-beta.1
 postUpgrade:
   labelNamespace:
     serviceAccount:
@@ -63,7 +63,7 @@ postUpgrade:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.18.0-beta.0
+      tag: v3.19.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -97,7 +97,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.18.0-beta.0
+      tag: v3.19.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -141,7 +141,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.18.0-beta.0
+      tag: v3.19.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""
@@ -167,6 +167,7 @@ enableRuntimeDefaultSeccompProfile: true
 controllerManager:
   serviceAccount:
     name: gatekeeper-admin
+  containerName: manager
   exemptNamespaces: []
   exemptNamespacePrefixes: []
   hostNetwork: false
@@ -227,6 +228,7 @@ controllerManager:
 audit:
   serviceAccount:
     name: gatekeeper-admin
+  containerName: manager
   hostNetwork: false
   dnsPolicy: ClusterFirst
   metricsPort: 8888
