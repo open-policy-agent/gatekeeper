@@ -113,7 +113,7 @@ postInstall:
     enabled: true
     image:
       repository: curlimages/curl
-      tag: 7.83.1
+      tag: 8.12.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     waitTimeout: 60
