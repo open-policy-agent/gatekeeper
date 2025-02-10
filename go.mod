@@ -17,7 +17,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/gomega v1.34.2
 	github.com/open-policy-agent/cert-controller v0.11.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20250130204619-df595163a8ba
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20250207225241-cd781308bbb9
 	github.com/open-policy-agent/opa v1.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.20.5
