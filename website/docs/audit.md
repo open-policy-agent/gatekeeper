@@ -135,12 +135,12 @@ with the same `audit_id` for a given audit run.
 
 ### Export violations
 
-This feature allows plugging in different backends that allows Gatekeeper to export audit violations. Therefore, violations are not subject to reporting limits. Please refer to [this](export.md) guide to configure audit to push violations via this feature.
+This feature allows different systems to be provided for Gatekeeper to export audit violations. Thereby, ensuing violations are not subject to reporting limits. Please refer to [this](export.md) guide to configure audit to push violations via this feature.
 
 Limitations/drawbacks of exporting violations:
 
 - There is a risk of messages getting dropped. You might not receive all the exported violations. This depends on the type of backend you are using for delivery. For example, using a network as backend to export violation has the risk of messages getting dropped.
-- Additional dependency depending on what is plugged in. For example, using pubsub tools to export violations.
+- Additional dependency on the backend system provided. For example, using pubsub tools to export violations.
 
 ## Running Audit
 For more details on how to deploy audit and 
