@@ -86,6 +86,8 @@ cat my-manifest.yaml | gator test --image=localhost:5000/gator/template-library:
   --image=localhost:5000/gator/constraints:v1
 ```
 
+The `--deny-only` will only output violations about denied constraints, not the ones using `warn` enforcement action.
+
 #### Exit Codes
 
 `gator test` will return a `0` exit status when the objects, Templates, and
