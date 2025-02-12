@@ -321,8 +321,6 @@ func innerMain() int {
 		}
 	}
 
-	setupLog.Error(errors.New("Canary"), "Canary")
-
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
 	setupErr := make(chan error)
 
