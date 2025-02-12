@@ -56,7 +56,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness/pruner"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/version"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -551,12 +550,6 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 			setupLog.Error(err, "unable to register audit with the manager")
 			return err
 		}
-	}
-
-	setupLog.Info("setting up upgrade")
-	if err := upgrade.AddToManager(mgr); err != nil {
-		setupLog.Error(err, "unable to register upgrade with the manager")
-		return err
 	}
 
 	return nil
