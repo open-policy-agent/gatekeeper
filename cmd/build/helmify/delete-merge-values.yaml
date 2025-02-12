@@ -15,6 +15,11 @@ spec:
               $patch: delete
             - containerPort: 9090
               $patch: delete
+          volumeMounts:
+            - mountPath: /certs
+              name: cert
+              readOnly: true
+              $patch: delete
 ---
 kind: Deployment
 apiVersion: apps/v1
@@ -30,4 +35,9 @@ spec:
             - containerPort: 8888
               $patch: delete
             - containerPort: 9090
+              $patch: delete
+          volumeMounts:
+            - mountPath: /certs
+              name: cert
+              readOnly: true
               $patch: delete
