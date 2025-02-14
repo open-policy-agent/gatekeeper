@@ -119,6 +119,7 @@ var (
 	enableK8sCel                         = flag.Bool("enable-k8s-native-validation", true, "enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
 	enableReferential                    = flag.Bool("enable-referential-rules", true, "Enable referential rules. This flag defaults to true. Set this value to false if you want to disallow referential constraints. Because referential constraints read objects other than the object-under-test, they may be subject to race conditions. Users concerned about this may want to disable referential rules")
+	shutdownDelay                        = flag.Int("shutdown-delay", 10, "Time in seconds the controller runtime shutdown gets delayed after receiving a pod termination event. Prevents failing webhooks on pod shutdown. default: 10")
 )
 
 func init() {
@@ -326,6 +327,7 @@ func innerMain() int {
 
 	// Setup termination with grace period. Required to give K8s Services time to disconnect the Pod endpoint on termination.
 	// Derived from how the controller-runtime sets up a signal handler with ctrl.SetupSignalHandler()
+	// controller-runtime upstream issue: https://github.com/kubernetes-sigs/controller-runtime/issues/3113
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := make(chan os.Signal, 2)
@@ -334,7 +336,7 @@ func innerMain() int {
 		<-c
 		setupLog.Info("Shutting Down, waiting for 10s")
 		go func() {
-			time.Sleep(10* time.Second)
+			time.Sleep(time.Duration(*shutdownDelay) * time.Second)
 			setupLog.Info("Shutdown grace period finished")
 			cancel()
 		}()
