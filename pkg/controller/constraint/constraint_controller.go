@@ -65,9 +65,12 @@ import (
 
 const (
 	BlockVAPBGenerationUntilAnnotation = "gatekeeper.sh/block-vapb-generation-until"
+	VAPBGenerationAnnotation           = "gatekeeper.sh/vapb-generation-state"
 	ErrGenerateVAPBState               = "error"
 	GeneratedVAPBState                 = "generated"
 	WaitVAPBState                      = "waiting"
+	VAPBGenerationBlocked              = "blocked"
+	VAPBGenerationUnblocked            = "unblocked"
 )
 
 var (
@@ -87,7 +90,6 @@ type Adder struct {
 	CFClient         *constraintclient.Client
 	ConstraintsCache *ConstraintsCache
 	WatchManager     *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
 	Events           <-chan event.GenericEvent
 	Tracker          *readiness.Tracker
 	GetPod           func(context.Context) (*corev1.Pod, error)
@@ -107,10 +109,6 @@ func (a *Adder) InjectWatchManager(w *watch.Manager) {
 	a.WatchManager = w
 }
 
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
-	a.ControllerSwitch = cs
-}
-
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
@@ -127,7 +125,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r := newReconciler(mgr, a.CFClient, a.ControllerSwitch, reporter, a.ConstraintsCache, a.Tracker)
+	r := newReconciler(mgr, a.CFClient, reporter, a.ConstraintsCache, a.Tracker)
 	if a.GetPod != nil {
 		r.getPod = a.GetPod
 	}
@@ -151,7 +149,6 @@ type tags struct {
 func newReconciler(
 	mgr manager.Manager,
 	cfClient *constraintclient.Client,
-	cs *watch.ControllerSwitch,
 	reporter StatsReporter,
 	constraintsCache *ConstraintsCache,
 	tracker *readiness.Tracker,
@@ -162,7 +159,6 @@ func newReconciler(
 		statusClient: mgr.GetClient(),
 		reader:       mgr.GetCache(),
 
-		cs:               cs,
 		scheme:           mgr.GetScheme(),
 		cfClient:         cfClient,
 		log:              log,
@@ -209,7 +205,6 @@ type ReconcileConstraint struct {
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	cs               *watch.ControllerSwitch
 	scheme           *runtime.Scheme
 	cfClient         *constraintclient.Client
 	log              logr.Logger
@@ -229,15 +224,6 @@ type ReconcileConstraint struct {
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec.
 func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	// Short-circuit if shutting down.
-	if r.cs != nil {
-		running := r.cs.Enter()
-		defer r.cs.Exit()
-		if !running {
-			return reconcile.Result{}, nil
-		}
-	}
-
 	gvk, unpackedRequest, err := util.UnpackRequest(request)
 	if err != nil {
 		// Unrecoverable, do not retry.
@@ -390,6 +376,7 @@ func shouldGenerateVAPB(defaultGenerateVAPB bool, enforcementAction util.Enforce
 		VAPEnforcementActions, err = util.ScopedActionForEP(util.VAPEnforcementPoint, instance)
 	default:
 		if defaultGenerateVAPB {
+			log.Info("Warning: Alpha flag default-create-vap-binding-for-constraints is set to true. This flag may change in the future.")
 			VAPEnforcementActions = []string{string(enforcementAction)}
 		}
 	}
@@ -436,6 +423,9 @@ func ShouldGenerateVAP(ct *templates.ConstraintTemplate) (bool, error) {
 		return false, err
 	}
 	if source.GenerateVAP == nil {
+		if *DefaultGenerateVAP {
+			log.Info("Warning: Alpha flag default-create-vap-for-templates is set to true. This flag may change in the future.")
+		}
 		return *DefaultGenerateVAP, nil
 	}
 	return *source.GenerateVAP, nil
@@ -489,7 +479,7 @@ func (r *ReconcileConstraint) reportErrorOnConstraintStatus(ctx context.Context,
 	status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("%s: %s", message, err)})
 	if err2 := r.writer.Update(ctx, status); err2 != nil {
 		log.Error(err2, message, "error", "could not update constraint status")
-		return errorpkg.Wrapf(err, fmt.Sprintf("%s, could not update constraint status: %s", message, err2))
+		return errorpkg.Wrapf(err, "%s", fmt.Sprintf("%s, could not update constraint status: %s", message, err2))
 	}
 	return err
 }
@@ -541,20 +531,22 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 				shouldGenerateVAPB = false
 			default:
 				// reconcile for vapb generation if annotation is not set
-				if ct.Annotations == nil || ct.Annotations[BlockVAPBGenerationUntilAnnotation] == "" {
+				if ct.Annotations == nil || (ct.Annotations[BlockVAPBGenerationUntilAnnotation] == "" && ct.Annotations[VAPBGenerationAnnotation] != "unblocked") {
 					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, errors.New("annotation to wait for ValidatingAdmissionPolicyBinding generation not found"), "could not find annotation to wait for ValidatingAdmissionPolicyBinding generation")
 				}
 
-				// waiting for sometime before generating vapbinding, gives api-server time to cache CRDs
-				timestamp := ct.Annotations[BlockVAPBGenerationUntilAnnotation]
-				t, err := time.Parse(time.RFC3339, timestamp)
-				if err != nil {
-					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not parse timestamp")
-				}
-				if t.After(time.Now()) {
-					wait := time.Until(t)
-					updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, fmt.Sprintf("waiting for %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", wait), instance.GetGeneration())
-					return wait, r.writer.Update(ctx, status)
+				if ct.Annotations[VAPBGenerationAnnotation] == "" || ct.Annotations[VAPBGenerationAnnotation] == VAPBGenerationBlocked {
+					// waiting for sometime before generating vapbinding, gives api-server time to cache CRDs
+					timestamp := ct.Annotations[BlockVAPBGenerationUntilAnnotation]
+					t, err := time.Parse(time.RFC3339, timestamp)
+					if err != nil {
+						return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not parse timestamp")
+					}
+					if t.After(time.Now()) {
+						wait := time.Until(t)
+						updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, fmt.Sprintf("waiting for %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", wait), instance.GetGeneration())
+						return wait, r.writer.Update(ctx, status)
+					}
 				}
 			}
 		}
@@ -737,6 +729,7 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 
 	obj.Spec.ValidationActions = actions
 	if v1beta1Obj.Spec.MatchResources != nil {
+		obj.Spec.MatchResources = &admissionregistrationv1.MatchResources{}
 		if v1beta1Obj.Spec.MatchResources.ObjectSelector != nil {
 			obj.Spec.MatchResources.ObjectSelector = v1beta1Obj.Spec.MatchResources.ObjectSelector
 		}

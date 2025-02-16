@@ -176,6 +176,30 @@ At a high level, this requires:
 
 * The ability to read all objects in the group `mutations.gatekeeper.sh` (mutators)
 
+## Generation
+
+__--operation key:__ `generate`
+
+This operation enables CRD and VAP/VAPB generation.
+
+To avoid write contention, the Generate operation should be run as a singleton.
+
+### Required Behaviors
+
+At a high level, this requires:
+
+* Creating CRDs for a corresponding constraint template
+* Creating ValidatingAdmissionPolicies for ConstraintTemplates
+* Creating ValidatingAdmissionPolicyBindings for Constraints
+
+### Permissions Required
+
+* The ability to read all `ConstraintTemplate` objects
+* The ability to create CRDs (unfortunately RBAC doesn't have the syntax to scope this down to just CRDs in the `constraints.gatekeeper.sh` group)
+* The ability to read all `Constraint` resources (members of the group `constraints.gatekeeper.sh`)
+* The ability to create `ValidatingAdmissionPolicy` objects
+* The ability to create `ValidatingAdmissionPolicyBinding` objects
+
 # A Note on Permissions
 
 "Create" implies the `create` and `delete` permissions in addition to the permissions implied by "Read" and "Write".

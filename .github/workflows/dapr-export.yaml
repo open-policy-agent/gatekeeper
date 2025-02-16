@@ -1,0 +1,69 @@
+name: dapr-export
+on:
+  push:
+    paths:
+      - "pkg/export/dapr"
+      - "test/export/**"
+  pull_request:
+    paths:
+      - "pkg/export/dapr"
+      - "test/export/**"
+permissions: read-all
+
+jobs:
+  dapr_test:
+    name: "Dapr export test"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        DAPR_VERSION: ["1.12"]
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+      with:
+        egress-policy: audit
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+    - name: Bootstrap e2e
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/bin
+        mkdir .tmp
+        echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+        make e2e-bootstrap
+        make e2e-helm-install
+        helm repo add dapr https://dapr.github.io/helm-charts/
+        helm repo add bitnami https://charts.bitnami.com/bitnami
+        helm repo update
+        helm upgrade --install dapr dapr/dapr --version=${{ matrix.DAPR_VERSION }} --namespace dapr-system --create-namespace --wait --debug
+        helm upgrade --install redis bitnami/redis --namespace default --set image.tag=7.0-debian-11 --wait --debug
+        make e2e-subscriber-build-load-image
+        make e2e-subscriber-deploy
+
+    - name: Run e2e
+      run: |
+        make docker-buildx IMG=gatekeeper-e2e:latest
+        make e2e-build-load-externaldata-image
+        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest
+        kind load docker-image --name kind gatekeeper-e2e:latest gatekeeper-crds:latest
+        kubectl create ns gatekeeper-system
+        make e2e-publisher-deploy
+        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG
+        make test-e2e ENABLE_EXPORT_TESTS=1
+
+    - name: Save logs
+      if: ${{ always() }}
+      run: |
+        kubectl logs -n fake-subscriber -l app=sub --tail=-1 > logs-audit-subscribe.json
+        kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-export.json
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+      if: ${{ always() }}
+      with:
+        name: export-logs
+        path: |
+          logs-*.json
+

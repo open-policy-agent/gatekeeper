@@ -173,3 +173,26 @@ spec:
 ```
 
 To see this in action, checkout this [demo](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/scoped-enforcement-actions)
+
+## FAQs
+
+<details>
+
+<summary>Do all engines in a ConstraintTemplate get evaluated? Is there a fallback among engines?</summary>
+Only one engine is evaluated for each ConstraintTemplate. `K8sNativeValidation` engine holds a higher priority than the `Rego` engine. There is no fallback mechanism between engines, hence a logical/syntactical error in the policy logic is treated as violation depending on the enforcement action specified in the Constraint.
+
+</details>
+
+<details>
+
+<summary>If I have a template with Rego and CEL, which policy engine will be used when evaluating resources?</summary>
+
+K8sNativeValidation engine holds a higher priority than the Rego engine, so with a ConstraintTemplate that has both Rego and CEL. Policy logic written in CEL will get evaluated by the K8sNativeValidation engine.
+</details>
+
+<details>
+<summary>Can I change the priority of engines per ConstraintTemplate?
+</summary>
+No, engine priority cannot be modified.
+
+</details>
