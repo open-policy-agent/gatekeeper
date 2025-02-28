@@ -20,7 +20,7 @@ jobs:
         DAPR_VERSION: ["1.12"]
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+      uses: step-security/harden-runner@4d991eb9b905ef189e4c376166672c3f2f230481 # v2.11.0
       with:
         egress-policy: audit
 
@@ -60,7 +60,7 @@ jobs:
         kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-export.json
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+      uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
       if: ${{ always() }}
       with:
         name: export-logs
