@@ -52,7 +52,7 @@ func TestCreateConnection(t *testing.T) {
 			name:           "Missing maxAuditResults",
 			connectionName: "conn4",
 			config: map[string]interface{}{
-				"path":      "/tmp/audit",
+				"path": "/tmp/audit",
 			},
 			expectError: true,
 		},
@@ -60,7 +60,7 @@ func TestCreateConnection(t *testing.T) {
 			name:           "Exceeding maxAuditResults",
 			connectionName: "conn4",
 			config: map[string]interface{}{
-				"path":      "/tmp/audit",
+				"path":            "/tmp/audit",
 				"maxAuditResults": 10.0,
 			},
 			expectError: true,
@@ -150,7 +150,7 @@ func TestUpdateConnection(t *testing.T) {
 			name:           "Missing maxAuditResults",
 			connectionName: "conn1",
 			config: map[string]interface{}{
-				"path":      "/tmp/audit",
+				"path": "/tmp/audit",
 			},
 			expectError: true,
 		},
@@ -158,7 +158,7 @@ func TestUpdateConnection(t *testing.T) {
 			name:           "Exceeding maxAuditResults",
 			connectionName: "conn1",
 			config: map[string]interface{}{
-				"path":      "/tmp/audit",
+				"path":            "/tmp/audit",
 				"maxAuditResults": 10.0,
 			},
 			expectError: true,

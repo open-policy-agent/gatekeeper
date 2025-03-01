@@ -49,7 +49,7 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("invalid config format")
 	}
 
-	path, pathOk := cfg["path"].(string)	
+	path, pathOk := cfg["path"].(string)
 	if !pathOk {
 		return fmt.Errorf("missing or invalid values in config for connection: %s", connectionName)
 	}
@@ -80,11 +80,11 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("connection not found: %s for Disk driver", connectionName)
 	}
 
-	var err error
+	var cleanUpErr error
 	if path, ok := cfg["path"].(string); ok {
 		if conn.Path != path {
 			if err := os.RemoveAll(conn.Path); err != nil {
-				err = fmt.Errorf("connection updated but failed to remove content form old path: %w", err)
+				cleanUpErr = fmt.Errorf("connection updated but failed to remove content form old path: %w", err)
 			}
 			conn.Path = path
 		}
@@ -102,7 +102,7 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	}
 
 	r.openConnections[connectionName] = conn
-	return err
+	return cleanUpErr
 }
 
 func (r *Writer) CloseConnection(connectionName string) error {
