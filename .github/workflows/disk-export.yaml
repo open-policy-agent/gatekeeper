@@ -1,17 +1,19 @@
-name: dapr-export
+name: disk-export
 on:
   push:
     paths:
       - "pkg/export/dapr"
+      - "pkg/export/disk"
       - "test/export/**"
   pull_request:
     paths:
       - "pkg/export/dapr"
+      - "pkg/export/disk"
       - "test/export/**"
 permissions: read-all
 
 jobs:
-  dapr_test:
+  disk_test:
     name: "Disk export test"
     runs-on: ubuntu-22.04
     timeout-minutes: 15
