@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit
+  namespace: gatekeeper-system
+data:
+  driver: "diskwriter"
+  config: |
+    {
+      "path": "/tmp/violations",
+      "maxAuditResults": 3
+    }
