@@ -34,11 +34,16 @@ jobs:
 
     - name: Run e2e
       run: |
-        make docker-buildx IMG=gatekeeper-e2e:latest
+        make docker-buildx \
+          IMG=gatekeeper-e2e:latest
+
         make e2e-build-load-externaldata-image
-        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest
-        kind load docker-image --name kind gatekeeper-e2e:latest gatekeeper-crds:latest
+
+        kind load docker-image --name kind \
+          gatekeeper-e2e:latest
+        
         make e2e-reader-build-load-image
+        
         make deploy \
           IMG=gatekeeper-e2e:latest \ 
           USE_LOCAL_IMG=true \
