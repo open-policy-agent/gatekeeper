@@ -134,7 +134,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n"
 
 MANAGER_SIDECAR_IMAGE_PATCH := "\n        - --enable-violation-export=true\
-\n        - --constraint-violations-limit=0\
 \n        - --audit-connection=audit\
 \n        - --audit-channel=audit\
 \n        volumeMounts:\
