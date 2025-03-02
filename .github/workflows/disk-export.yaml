@@ -44,12 +44,7 @@ jobs:
         
         make e2e-reader-build-load-image
         
-        make deploy \
-          IMG=gatekeeper-e2e:latest \ 
-          USE_LOCAL_IMG=true \
-          GENERATE_VAP=true \
-          GENERATE_VAPBINDING=true \
-          EXPORT_BACKEND=disk
+        make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true GENERATE_VAP=true GENERATE_VAPBINDING=true EXPORT_BACKEND=disk
         
         kubectl apply -f test/export/fake-reader/export_config.yaml
         make test-e2e ENABLE_EXPORT_TESTS=1
