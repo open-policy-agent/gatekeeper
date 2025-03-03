@@ -42,7 +42,7 @@ jobs:
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
 
       - name: Cache dependencies
-        uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
         with:
           path: ${{ steps.yarn-cache.outputs.dir }}
           key: ${{ runner.os }}-website-${{ hashFiles('**/yarn.lock') }}
@@ -71,6 +71,6 @@ jobs:
 
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.5.2
 
-      - uses: crate-ci/typos@212923e4ff05b7fc2294a204405eec047b807138 # v1.29.9
+      - uses: crate-ci/typos@8951ef9cb569c860bc8f3f18070fbfaf65cdb349 # v1.30.0
         with:
           files: ./website/docs ./website/versioned_docs
