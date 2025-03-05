@@ -47,11 +47,11 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness/pruner"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
@@ -116,6 +116,7 @@ var (
 	disabledBuiltins                     = util.NewFlagSet()
 	enableK8sCel                         = flag.Bool("enable-k8s-native-validation", true, "enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
+	enableReferential                    = flag.Bool("enable-referential-rules", true, "Enable referential rules. This flag defaults to true. Set this value to false if you want to disallow referential constraints. Because referential constraints read objects other than the object-under-test, they may be subject to race conditions. Users concerned about this may want to disable referential rules")
 )
 
 func init() {
@@ -284,10 +285,6 @@ func innerMain() int {
 		close(setupFinished)
 	}
 
-	// ControllerSwitch will be used to disable controllers during our teardown process,
-	// avoiding conflicts in finalizer cleanup.
-	sw := watch.NewSwitch()
-
 	// Setup tracker and register readiness probe.
 	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled, *expansion.ExpansionEnabled)
 	if err != nil {
@@ -316,7 +313,7 @@ func innerMain() int {
 	setupErr := make(chan error)
 	ctx := ctrl.SetupSignalHandler()
 	go func() {
-		setupErr <- setupControllers(ctx, mgr, sw, tracker, setupFinished)
+		setupErr <- setupControllers(ctx, mgr, tracker, setupFinished)
 	}()
 
 	setupLog.Info("starting manager")
@@ -348,12 +345,7 @@ blockingLoop:
 			break blockingLoop
 		}
 	}
-
-	// Manager stops controllers asynchronously.
-	// Instead, we use ControllerSwitch to synchronously prevent them from doing more work.
-	// This can be removed when finalizer and status teardown is removed.
 	setupLog.Info("disabling controllers...")
-	sw.Stop()
 
 	if hadError {
 		return 1
@@ -361,7 +353,7 @@ blockingLoop:
 	return 0
 }
 
-func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}) error {
+func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.Tracker, setupFinished chan struct{}) error {
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
@@ -419,6 +411,12 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 		cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
 	}
 
+	externs := rego.Externs()
+	if *enableReferential {
+		externs = rego.Externs("inventory")
+	}
+	args = append(args, externs)
+
 	driver, err := rego.New(args...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up Driver")
@@ -444,7 +442,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
 	expansionSystem := expansion.NewSystem(mutationSystem)
-	pubsubSystem := pubsub.NewSystem()
+	exportSystem := export.NewSystem()
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -508,17 +506,16 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 	}
 
 	opts := controller.Dependencies{
-		CFClient:         client,
-		WatchManger:      wm,
-		SyncEventsCh:     events,
-		CacheMgr:         cm,
-		ControllerSwitch: sw,
-		Tracker:          tracker,
-		ProcessExcluder:  processExcluder,
-		MutationSystem:   mutationSystem,
-		ExpansionSystem:  expansionSystem,
-		ProviderCache:    providerCache,
-		PubsubSystem:     pubsubSystem,
+		CFClient:        client,
+		WatchManger:     wm,
+		SyncEventsCh:    events,
+		CacheMgr:        cm,
+		Tracker:         tracker,
+		ProcessExcluder: processExcluder,
+		MutationSystem:  mutationSystem,
+		ExpansionSystem: expansionSystem,
+		ProviderCache:   providerCache,
+		ExportSystem:    exportSystem,
 	}
 
 	if err := controller.AddToManager(mgr, &opts); err != nil {
@@ -548,7 +545,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, sw *watch.Controlle
 			ProcessExcluder: processExcluder,
 			CacheLister:     auditCache,
 			ExpansionSystem: expansionSystem,
-			PubSubSystem:    pubsubSystem,
+			ExportSystem:    exportSystem,
 		}
 		if err := audit.AddToManager(mgr, &auditDeps); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
