@@ -140,7 +140,7 @@ MANAGER_SIDECAR_IMAGE_PATCH := "\n        - --enable-violation-export=true\
 \n        - mountPath: /tmp/violations\
 \n          name: tmp-violations\
 \n      - name: go-sub\
-\n        image: fake-reader:latest\
+\n        image: ${FAKE_READER_IMAGE}\
 \n        imagePullPolicy: Never\
 \n        securityContext:\
 \n          allowPrivilegeEscalation: false\
