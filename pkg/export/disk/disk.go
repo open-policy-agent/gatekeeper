@@ -36,7 +36,7 @@ const (
 )
 
 const (
-	Name = "diskwriter"
+	Name = "disk"
 )
 
 var Connections = &Writer{

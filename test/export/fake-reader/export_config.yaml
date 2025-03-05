@@ -4,7 +4,7 @@ metadata:
   name: audit
   namespace: gatekeeper-system
 data:
-  driver: "diskwriter"
+  driver: "disk"
   config: |
     {
       "path": "/tmp/violations",

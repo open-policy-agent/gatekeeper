@@ -76,7 +76,7 @@ func main() {
 
 		// Process the read content
 		for _, line := range lines {
-			log.Printf("Processed line: %s\n", line)
+			log.Printf("%s\n", line)
 		}
 
 		// Release the lock
