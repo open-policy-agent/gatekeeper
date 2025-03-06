@@ -48,6 +48,7 @@ var (
 	runtimeScheme                      = k8sruntime.NewScheme()
 	codecs                             = serializer.NewCodecFactory(runtimeScheme)
 	deserializer                       = codecs.UniversalDeserializer()
+	errOldObjectIsNil                  = errors.New("oldObject cannot be nil for DELETE operations")
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction and scopedEnforcementActions field of a constraint")
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
 	emitAdmissionEvents                = flag.Bool("emit-admission-events", false, "(alpha) emit Kubernetes events for each admission violation")
@@ -149,6 +150,22 @@ func (h *webhookHandler) tracingLevel(ctx context.Context, req *admission.Reques
 }
 
 func (h *webhookHandler) skipExcludedNamespace(req *admissionv1.AdmissionRequest, excludedProcess process.Process) (bool, error) {
+	if req.Operation == admissionv1.Delete {
+		// oldObject is the existing object.
+		// It is null for DELETE operations in API servers prior to v1.15.0.
+		// https://github.com/kubernetes/website/pull/14671
+		if req.OldObject.Raw == nil {
+			return false, errOldObjectIsNil
+		}
+
+		// For admission webhooks registered for DELETE operations on k8s built APIs or CRDs,
+		// the apiserver now sends the existing object as admissionRequest.Request.OldObject to the webhook
+		// object is the new object being admitted.
+		// It is null for DELETE operations.
+		// https://github.com/kubernetes/kubernetes/pull/76346
+		req.Object = req.OldObject
+	}
+
 	obj := &unstructured.Unstructured{}
 	if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
 		return false, err
