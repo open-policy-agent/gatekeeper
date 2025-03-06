@@ -21,6 +21,7 @@ import (
 	exportController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -104,28 +105,6 @@ type StatusViolation struct {
 	Message            string   `json:"message"`
 	EnforcementAction  string   `json:"enforcementAction"`
 	EnforcementActions []string `json:"enforcementActions,omitempty"`
-}
-
-// ExportMsg represents export message for each violation.
-type ExportMsg struct {
-	ID                    string            `json:"id,omitempty"`
-	Details               interface{}       `json:"details,omitempty"`
-	EventType             string            `json:"eventType,omitempty"`
-	Group                 string            `json:"group,omitempty"`
-	Version               string            `json:"version,omitempty"`
-	Kind                  string            `json:"kind,omitempty"`
-	Name                  string            `json:"name,omitempty"`
-	Namespace             string            `json:"namespace,omitempty"`
-	Message               string            `json:"message,omitempty"`
-	EnforcementAction     string            `json:"enforcementAction,omitempty"`
-	EnforcementActions    []string          `json:"enforcementActions,omitempty"`
-	ConstraintAnnotations map[string]string `json:"constraintAnnotations,omitempty"`
-	ResourceGroup         string            `json:"resourceGroup,omitempty"`
-	ResourceAPIVersion    string            `json:"resourceAPIVersion,omitempty"`
-	ResourceKind          string            `json:"resourceKind,omitempty"`
-	ResourceNamespace     string            `json:"resourceNamespace,omitempty"`
-	ResourceName          string            `json:"resourceName,omitempty"`
-	ResourceLabels        map[string]string `json:"resourceLabels,omitempty"`
 }
 
 // A max PriorityQueue implements heap.Interface and holds StatusViolation.
@@ -280,16 +259,27 @@ func (am *Manager) audit(ctx context.Context) error {
 	timestamp := startTime.UTC().Format(time.RFC3339)
 	am.log = log.WithValues(logging.AuditID, timestamp)
 	logStart(am.log)
+	exportErrorMap := make(map[string]error)
+	if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: "audit is started", ID: timestamp}); err != nil {
+		exportErrorMap[err.Error()] = err
+		am.log.Error(err, "failed to export audit start message")
+	}
 	// record audit latency
 	defer func() {
-		logFinish(am.log)
 		endTime := time.Now()
 		latency := endTime.Sub(startTime)
+		logFinish(am.log, latency)
 		if err := am.reporter.reportLatency(latency); err != nil {
 			am.log.Error(err, "failed to report latency")
 		}
 		if err := am.reporter.reportRunEnd(endTime); err != nil {
 			am.log.Error(err, "failed to report run end time")
+		}
+		if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: "audit is completed", ID: timestamp}); err != nil {
+			exportErrorMap[err.Error()] = err
+		}
+		for _, v := range exportErrorMap {
+			am.log.Error(v, "failed to export audit violation")
 		}
 	}()
 
@@ -334,10 +324,10 @@ func (am *Manager) audit(ctx context.Context) error {
 			am.log.Error(err, "Auditing")
 		}
 
-		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
 	} else {
 		am.log.Info("Auditing via discovery client")
-		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
 		if err != nil {
 			return err
 		}
@@ -371,6 +361,7 @@ func (am *Manager) auditResources(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
+	exportErrorMap map[string]error,
 ) error {
 	// delete all from cache dir before starting audit
 	err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
@@ -558,7 +549,7 @@ func (am *Manager) auditResources(
 			}
 			// Loop through all subDirs to review all files for this kind.
 			am.log.V(logging.DebugLevel).Info("Reviewing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
-			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -660,6 +651,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
+	exportErrorMap map[string]error,
 ) error {
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
@@ -744,7 +736,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 
 			if len(resp.Results()) > 0 {
 				results := ToResults(&augmentedObj.Object, resp)
-				am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+				am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
 			}
 		}
 	}
@@ -864,6 +856,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
+	exportErrorMap map[string]error,
 ) {
 	for _, r := range res {
 		constraint := r.Constraint
@@ -905,7 +898,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		if *exportController.ExportEnabled {
 			err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
 			if err != nil {
-				am.log.Error(err, "error exporting audit violation")
+				exportErrorMap[err.Error()] = err
 			}
 		}
 		if *emitAuditEvents {
@@ -1136,10 +1129,11 @@ func logStart(l logr.Logger) {
 	)
 }
 
-func logFinish(l logr.Logger) {
+func logFinish(l logr.Logger, t time.Duration) {
 	l.Info(
 		"auditing is complete",
 		logging.EventType, "audit_finished",
+		"duration", t.String(),
 	)
 }
 
@@ -1162,7 +1156,7 @@ func violationMsg(constraint *unstructured.Unstructured, enforcementAction util.
 	userConstraintAnnotations := constraint.GetAnnotations()
 	delete(userConstraintAnnotations, "kubectl.kubernetes.io/last-applied-configuration")
 
-	return ExportMsg{
+	return exportutil.ExportMsg{
 		Message:               message,
 		Details:               details,
 		ID:                    timestamp,

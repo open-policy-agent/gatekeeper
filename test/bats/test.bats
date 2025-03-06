@@ -16,6 +16,7 @@ teardown_file() {
   kubectl label ns ${GATEKEEPER_NAMESPACE} admission.gatekeeper.sh/ignore=no-self-managing --overwrite || true
   kubectl delete ns \
     gatekeeper-test-playground \
+    gatekeeper-test-playground-scoped \
     gatekeeper-excluded-namespace \
     gatekeeper-excluded-prefix-match-namespace \
     gatekeeper-excluded-suffix-match-namespace || true
