@@ -57,7 +57,7 @@ spec:
             - "--operation=mutation-webhook"
             - "--disable-opa-builtin={http.send}"
           image: openpolicyagent/gatekeeper:v3.19.0-beta.1
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           name: manager
           ports:
             - containerPort: 8888
@@ -175,7 +175,7 @@ spec:
               value: "manager"
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           livenessProbe:
             httpGet:
               path: /healthz
