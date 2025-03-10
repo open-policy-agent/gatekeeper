@@ -418,6 +418,108 @@ func TestReviewDefaultNS(t *testing.T) {
 	t.Run("with max threads", testFn)
 }
 
+func TestExcludedNamespaces(t *testing.T) {
+	cfg := &v1alpha1.Config{
+		Spec: v1alpha1.ConfigSpec{
+			Match: []v1alpha1.MatchEntry{
+				{
+					ExcludedNamespaces: []wildcard.Wildcard{"kube-*"},
+					Processes:          []string{"*"},
+				},
+			},
+			Validation: v1alpha1.Validation{
+				Traces: []v1alpha1.Trace{},
+			},
+		},
+	}
+	ctx := context.Background()
+	opa, err := makeOpaClient()
+	if err != nil {
+		t.Fatalf("Could not initialize OPA: %s", err)
+	}
+	if _, err := opa.AddTemplate(ctx, validRegoTemplate()); err != nil {
+		t.Fatalf("could not add template: %s", err)
+	}
+	if _, err := opa.AddConstraint(ctx, validRegoTemplateConstraint()); err != nil {
+		t.Fatalf("could not add constraint: %s", err)
+	}
+	pe := process.New()
+	pe.Add(cfg.Spec.Match)
+	expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
+	handler := validationHandler{
+		opa:             opa,
+		expansionSystem: expSystem,
+		webhookHandler: webhookHandler{
+			injectedConfig:  cfg,
+			client:          &nsGetter{},
+			reader:          &nsGetter{},
+			processExcluder: pe,
+		},
+		log: log,
+	}
+	tc := []struct {
+		Name            string
+		Namespace       string
+		Operation       admissionv1.Operation
+		Raw             []byte
+		OldRaw          []byte
+		AllowedExpected bool
+	}{
+		{
+			Name:            "ExcludedNamespace invalid create",
+			Namespace:       "notkube-test",
+			Operation:       admissionv1.Create,
+			Raw:             []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": ""}}`),
+			AllowedExpected: false,
+		},
+		{
+			Name:            "ExcludedNamespace valid create",
+			Namespace:       "kube-test",
+			Operation:       admissionv1.Create,
+			Raw:             []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": ""}}`),
+			AllowedExpected: true,
+		},
+		{
+			Name:            "ExcludedNamespace invalid delete",
+			Namespace:       "kube-test",
+			Operation:       admissionv1.Delete,
+			Raw:             nil,
+			OldRaw:          nil,   // OldRaw is nil for K8s < 1.15
+			AllowedExpected: false, // in that case, we do not except a valid namespace exclusion
+		},
+		{
+			Name:            "ExcludedNamespace valid delete",
+			Namespace:       "kube-test",
+			Operation:       admissionv1.Delete,
+			OldRaw:          []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": ""}}`),
+			AllowedExpected: true,
+		},
+	}
+	for _, tt := range tc {
+		t.Run(tt.Name, func(t *testing.T) {
+			review := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Kind: metav1.GroupVersionKind{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+					Object: runtime.RawExtension{
+						Raw: tt.Raw,
+					},
+					OldObject: runtime.RawExtension{
+						Raw: tt.OldRaw,
+					},
+					Namespace: tt.Namespace,
+					Operation: tt.Operation,
+				},
+			}
+			resp := handler.Handle(context.Background(), review)
+			require.Equal(t, tt.AllowedExpected, resp.Allowed, "invalid admission response")
+		})
+	}
+}
+
 func TestConstraintValidation(t *testing.T) {
 	tc := []struct {
 		Name          string
