@@ -1,15 +1,15 @@
 ---
-id: pubsub
-title: Consuming violations using Pubsub
+id: export
+title: Exporting violations
 ---
 
 `Feature State`: Gatekeeper version v3.13+ (alpha)
 
-> ❗ This feature is alpha, subject to change (feedback is welcome!).
+> ❗ This feature is alpha, subject to change (feedback is welcome!). This feature was previously known as "Consuming violations using Pubsub".
 
 ## Description
 
-This feature pushes audit violations to a pubsub service. Users can subscribe to pubsub service to consume violations.
+This feature exports audit violations to a backend from where users can consume violations.
 
 > To gain insights into different methods of obtaining audit violations and the respective trade-offs for each approach, please refer to [Reading Audit Results](audit.md#reading-audit-results).
 
@@ -17,11 +17,11 @@ This feature pushes audit violations to a pubsub service. Users can subscribe to
 
 Install prerequisites such as a pubsub tool, a message broker etc.
 
-### Setting up audit with pubsub enabled
+### Setting up audit to export violations
 
-In the audit deployment, set the `--enable-pub-sub` flag to `true` to publish audit violations. Additionally, use `--audit-connection` (defaults to `audit-connection`) and `--audit-channel`(defaults to `audit-channel`) flags to allow audit to publish violations using desired connection onto desired channel. `--audit-connection` must be set to the name of the connection config, and `--audit-channel` must be set to name of the channel where violations should get published.
+In the audit deployment, set the `--enable-violation-export` flag to `true` to export audit violations. Additionally, use `--audit-connection` (defaults to `audit-connection`) and `--audit-channel`(defaults to `audit-channel`) flags to allow audit to export violations using desired connection onto desired channel. `--audit-connection` must be set to the name of the connection config, and `--audit-channel` must be set to name of the channel where violations should get published.
 
-A ConfigMap that contains `provider` and `config` fields in `data` is required to establish connection for sending violations over the channel. Following is an example ConfigMap to establish a connection that uses Dapr to publish messages:
+A ConfigMap that contains `driver` and `config` fields in `data` is required to establish connection for sending violations over the channel. Following is an example ConfigMap to establish a connection that uses Dapr to export messages:
 
 ```yaml
 apiVersion: v1
@@ -30,29 +30,31 @@ metadata:
   name: audit-connection
   namespace: gatekeeper-system
 data:
-  provider: "dapr"
+  driver: "dapr"
   config: |
     {
       "component": "pubsub"
     }
 ```
 
-- `provider` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`
+- `driver` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`
 - `config` field is a json object that configures how the connection is made. E.g. which queue messages should be sent to.
 
-#### Available Pubsub drivers
+#### Available drivers
 Dapr: https://dapr.io/
 
-### Quick start with publishing violations using Dapr and Redis
+### Quick start with exporting violations using Dapr and Redis
 
 #### Prerequisites
 
 1. Install Dapr
 
    To install Dapr with specific requirements and configuration, please refer to [Dapr docs](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-deploy/).
-    > [!IMPORTANT]
-    > - Make sure to set `SIDECAR_DROP_ALL_CAPABILITIES` environment variable on `dapr-sidecar` injector pod to `true` to avoid getting `PodSecurity violation` errors for the injected sidecar container as Gatekeeper by default requires workloads to run with [restricted](https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted) policy. If using helm charts to install Dapr, you can use `--set dapr_sidecar_injector.sidecarDropALLCapabilities=true`.
-    > - Additionally, [configure appropriate seccompProfile for sidecar containers](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#configure-seccompprofile-for-sidecar-containers) injected by Dapr to avoid getting `PodSecurity violation` errors. We are setting required Dapr annotation for audit pod while deploying Gatekeeper later in this quick start to avoid getting `PodSecurity violation` error.
+
+  :::important
+    - Make sure to set `SIDECAR_DROP_ALL_CAPABILITIES` environment variable on `dapr-sidecar` injector pod to `true` to avoid getting `PodSecurity violation` errors for the injected sidecar container as Gatekeeper by default requires workloads to run with [restricted](https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted) policy. If using helm charts to install Dapr, you can use `--set dapr_sidecar_injector.sidecarDropALLCapabilities=true`.
+    - Additionally, [configure appropriate seccompProfile for sidecar containers](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#configure-seccompprofile-for-sidecar-containers) injected by Dapr to avoid getting `PodSecurity violation` errors. We are setting required Dapr annotation for audit pod while deploying Gatekeeper later in this quick start to avoid getting `PodSecurity violation` error.
+  :::
 
     > Dapr is installed with mtls enabled by default, for more details on the same please refer to [Dapr security](https://docs.dapr.io/operations/security/mtls/#setting-up-mtls-with-the-configuration-resource).
 
@@ -127,10 +129,11 @@ Dapr: https://dapr.io/
             imagePullPolicy: Never
     ```
 
-    > [!IMPORTANT]
-    > Please make sure `fake-subscriber` image is built and available in your cluster. Dockerfile to build image for `fake-subscriber` is under [gatekeeper/test/fake-subscriber](https://github.com/open-policy-agent/gatekeeper/tree/master/test/pubsub/fake-subscriber).
+    :::important
+    Please make sure `fake-subscriber` image is built and available in your cluster. Dockerfile to build image for `fake-subscriber` is under [gatekeeper/test/fake-subscriber](https://github.com/open-policy-agent/gatekeeper/tree/master/test/export/fake-subscriber).
+    :::
 
-#### Configure Gatekeeper with Pubsub enabled
+#### Configure Gatekeeper with Export enabled
 
 1. Create Gatekeeper namespace, and create Dapr pubsub component and Redis secret in Gatekeeper's namespace (`gatekeeper-system` by default). Please make sure to update `gatekeeper-system` namespace for the next steps if your cluster's Gatekeeper namespace is different.
 
@@ -156,13 +159,13 @@ Dapr: https://dapr.io/
     EOF
     ```
 
-2. To upgrade or install Gatekeeper with `--enable-pub-sub` set to `true`, `--audit-connection` set to `audit-connection`, `--audit-channel` set to `audit-channel` on audit pod.
+2. To upgrade or install Gatekeeper with `--enable-violation-export` set to `true`, `--audit-connection` set to `audit-connection`, `--audit-channel` set to `audit-channel` on audit pod.
 
     ```shell
     # auditPodAnnotations is used to add annotations required by Dapr to inject sidecar to audit pod
     echo 'auditPodAnnotations: {dapr.io/enabled: "true", dapr.io/app-id: "audit", dapr.io/metrics-port: "9999", dapr.io/sidecar-seccomp-profile-type: "RuntimeDefault"}' > /tmp/annotations.yaml
     helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
-    --set audit.enablePubsub=true \
+    --set enableViolationExport=true \
     --set audit.connection=audit-connection \
     --set audit.channel=audit-channel \
     --values /tmp/annotations.yaml
@@ -180,7 +183,7 @@ Dapr: https://dapr.io/
       name: audit-connection
       namespace: gatekeeper-system
     data:
-      provider: "dapr"
+      driver: "dapr"
       config: |
         {
           "component": "pubsub"
@@ -188,7 +191,7 @@ Dapr: https://dapr.io/
     EOF
     ```
 
-    **Note:** Name of the connection configMap must match the value of `--audit-connection` for it to be used by audit to publish violation. At the moment, only one connection config can exists for audit.
+    **Note:** Name of the connection configMap must match the value of `--audit-connection` for it to be used by audit to export violation. At the moment, only one connection config can exists for audit.
 
 4. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
 
@@ -203,12 +206,12 @@ Dapr: https://dapr.io/
     ```log
     kubectl logs -l app=sub -c go-sub -n fake-subscriber 
     2023/07/18 20:16:41 Listening...
-    2023/07/18 20:37:20 main.PubsubMsg{ID:"2023-07-18T20:37:19Z", Details:map[string]interface {}{"missing_labels":[]interface {}{"test"}}, EventType:"violation_audited", Group:"constraints.gatekeeper.sh", Version:"v1beta1", Kind:"K8sRequiredLabels", Name:"pod-must-have-test", Namespace:"", Message:"you must provide labels: {\"test\"}", EnforcementAction:"deny", ConstraintAnnotations:map[string]string(nil), ResourceGroup:"", ResourceAPIVersion:"v1", ResourceKind:"Pod", ResourceNamespace:"nginx", ResourceName:"nginx-deployment-58899467f5-j85bs", ResourceLabels:map[string]string{"app":"nginx", "owner":"admin", "pod-template-hash":"58899467f5"}}
+    2023/07/18 20:37:20 main.ExportMsg{ID:"2023-07-18T20:37:19Z", Details:map[string]interface {}{"missing_labels":[]interface {}{"test"}}, EventType:"violation_audited", Group:"constraints.gatekeeper.sh", Version:"v1beta1", Kind:"K8sRequiredLabels", Name:"pod-must-have-test", Namespace:"", Message:"you must provide labels: {\"test\"}", EnforcementAction:"deny", ConstraintAnnotations:map[string]string(nil), ResourceGroup:"", ResourceAPIVersion:"v1", ResourceKind:"Pod", ResourceNamespace:"nginx", ResourceName:"nginx-deployment-58899467f5-j85bs", ResourceLabels:map[string]string{"app":"nginx", "owner":"admin", "pod-template-hash":"58899467f5"}}
     ```
 
 ### Violations
 
-The audit pod publishes violations in following format:
+The audit pod exports violations in following format:
 
 ```json
 {

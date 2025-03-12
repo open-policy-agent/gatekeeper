@@ -17,7 +17,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/gomega v1.34.2
 	github.com/open-policy-agent/cert-controller v0.11.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20250130204619-df595163a8ba
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20250207225241-cd781308bbb9
 	github.com/open-policy-agent/opa v1.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.20.5
@@ -38,14 +38,14 @@ require (
 	golang.org/x/sync v0.10.0
 	golang.org/x/time v0.9.0
 	google.golang.org/grpc v1.70.0
-	google.golang.org/protobuf v1.36.3
+	google.golang.org/protobuf v1.36.5
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.30.9
-	k8s.io/apiextensions-apiserver v0.30.9
-	k8s.io/apimachinery v0.30.9
-	k8s.io/apiserver v0.30.9
-	k8s.io/client-go v0.30.9
+	k8s.io/api v0.30.10
+	k8s.io/apiextensions-apiserver v0.30.10
+	k8s.io/apimachinery v0.30.10
+	k8s.io/apiserver v0.30.10
+	k8s.io/client-go v0.30.10
 	k8s.io/klog/v2 v2.120.1
 	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0
 	oras.land/oras-go v1.2.5
@@ -153,7 +153,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250115164207-1a7da9e5054f // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/component-base v0.30.9 // indirect
+	k8s.io/component-base v0.30.10 // indirect
 	k8s.io/kube-openapi v0.0.0-20240430033511-f0e62f92d13f // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.29.0 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect

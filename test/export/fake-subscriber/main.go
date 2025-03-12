@@ -11,7 +11,7 @@ import (
 	daprd "github.com/dapr/go-sdk/service/http"
 )
 
-type PubsubMsg struct {
+type ExportMsg struct {
 	ID                    string            `json:"id,omitempty"`
 	Details               interface{}       `json:"details,omitempty"`
 	EventType             string            `json:"eventType,omitempty"`
@@ -52,7 +52,7 @@ func main() {
 }
 
 func eventHandler(_ context.Context, e *common.TopicEvent) (retry bool, err error) {
-	var msg PubsubMsg
+	var msg ExportMsg
 	jsonInput, err := strconv.Unquote(string(e.RawData))
 	if err != nil {
 		log.Fatalf("error unquoting %v", err)
