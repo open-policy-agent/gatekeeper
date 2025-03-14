@@ -260,7 +260,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	am.log = log.WithValues(logging.AuditID, timestamp)
 	logStart(am.log)
 	exportErrorMap := make(map[string]error)
-	if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: "audit is started", ID: timestamp}); err != nil {
+	if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
 		exportErrorMap[err.Error()] = err
 		am.log.Error(err, "failed to export audit start message")
 	}
@@ -275,7 +275,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		if err := am.reporter.reportRunEnd(endTime); err != nil {
 			am.log.Error(err, "failed to report run end time")
 		}
-		if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: "audit is completed", ID: timestamp}); err != nil {
+		if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
 			exportErrorMap[err.Error()] = err
 		}
 		for _, v := range exportErrorMap {

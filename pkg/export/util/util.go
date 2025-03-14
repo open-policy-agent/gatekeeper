@@ -42,3 +42,8 @@ const (
 	ErrWritingMessage     ExportError = "error_writing_message"
 	ErrCleaningUpAudit    ExportError = "error_cleaning_up_audit"
 )
+
+const (
+	AuditStartedMsg   = "audit is started"
+	AuditCompletedMsg = "audit is completed"
+)

@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"k8s.io/client-go/util/retry"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type Connection struct {
@@ -32,16 +34,17 @@ type Writer struct {
 }
 
 const (
+	Name                = "disk"
 	maxAllowedAuditRuns = 5
-)
-
-const (
-	Name = "disk"
+	maxAuditResults     = "maxAuditResults"
+	violationPath       = "path"
 )
 
 var Connections = &Writer{
 	openConnections: make(map[string]Connection),
 }
+
+var log = logf.Log.WithName("disk-driver").WithValues(logging.Process, "export")
 
 func (r *Writer) CreateConnection(_ context.Context, connectionName string, config interface{}) error {
 	cfg, ok := config.(map[string]interface{})
@@ -49,14 +52,13 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("invalid config format")
 	}
 
-	path, pathOk := cfg["path"].(string)
+	path, pathOk := cfg[violationPath].(string)
 	if !pathOk {
-		return fmt.Errorf("missing or invalid values in config for connection: %s", connectionName)
+		return fmt.Errorf("missing or invalid values in config for connection %s", connectionName)
 	}
-	var err error
-	maxResults, maxResultsOk := cfg["maxAuditResults"].(float64)
+	maxResults, maxResultsOk := cfg[maxAuditResults].(float64)
 	if !maxResultsOk {
-		return fmt.Errorf("missing or invalid 'maxAuditResults' for connection: %s", connectionName)
+		return fmt.Errorf("missing or invalid 'maxAuditResults' for connection %s", connectionName)
 	}
 	if maxResults > maxAllowedAuditRuns {
 		return fmt.Errorf("maxAuditResults cannot be greater than %d", maxAllowedAuditRuns)
@@ -66,7 +68,7 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 		Path:            path,
 		MaxAuditResults: int(maxResults),
 	}
-	return err
+	return nil
 }
 
 func (r *Writer) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
@@ -77,11 +79,11 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 
 	conn, exists := r.openConnections[connectionName]
 	if !exists {
-		return fmt.Errorf("connection not found: %s for Disk driver", connectionName)
+		return fmt.Errorf("connection %s for disk driver not found", connectionName)
 	}
 
 	var cleanUpErr error
-	if path, ok := cfg["path"].(string); ok {
+	if path, ok := cfg[violationPath].(string); ok {
 		if conn.Path != path {
 			if err := os.RemoveAll(conn.Path); err != nil {
 				cleanUpErr = fmt.Errorf("connection updated but failed to remove content form old path: %w", err)
@@ -89,16 +91,16 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 			conn.Path = path
 		}
 	} else {
-		return fmt.Errorf("missing or invalid 'path' for connection: %s", connectionName)
+		return fmt.Errorf("missing or invalid 'path' for connection %s", connectionName)
 	}
 
-	if maxResults, ok := cfg["maxAuditResults"].(float64); ok {
+	if maxResults, ok := cfg[maxAuditResults].(float64); ok {
 		if maxResults > maxAllowedAuditRuns {
 			return fmt.Errorf("maxAuditResults cannot be greater than %d", maxAllowedAuditRuns)
 		}
 		conn.MaxAuditResults = int(maxResults)
 	} else {
-		return fmt.Errorf("missing or invalid 'maxAuditResults' for connection: %s", connectionName)
+		return fmt.Errorf("missing or invalid 'maxAuditResults' for connection %s", connectionName)
 	}
 
 	r.openConnections[connectionName] = conn
@@ -108,7 +110,7 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 func (r *Writer) CloseConnection(connectionName string) error {
 	conn, ok := r.openConnections[connectionName]
 	if !ok {
-		return fmt.Errorf("connection not found: %s for disk driver", connectionName)
+		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
 	err := os.RemoveAll(conn.Path)
 	delete(r.openConnections, connectionName)
@@ -118,7 +120,7 @@ func (r *Writer) CloseConnection(connectionName string) error {
 func (r *Writer) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
 	conn, ok := r.openConnections[connectionName]
 	if !ok {
-		return fmt.Errorf("connection not found: %s for disk driver", connectionName)
+		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
 
 	var violation util.ExportMsg
@@ -126,7 +128,7 @@ func (r *Writer) Publish(_ context.Context, connectionName string, data interfac
 		return fmt.Errorf("invalid data type, cannot convert data to exportMsg")
 	}
 
-	if violation.Message == "audit is started" {
+	if violation.Message == util.AuditStartedMsg {
 		err := conn.handleAuditStart(violation.ID, topic)
 		if err != nil {
 			return fmt.Errorf("error handling audit start: %w", err)
@@ -148,7 +150,7 @@ func (r *Writer) Publish(_ context.Context, connectionName string, data interfac
 		return fmt.Errorf("error writing message to disk: %w", err)
 	}
 
-	if violation.Message == "audit is completed" {
+	if violation.Message == util.AuditCompletedMsg {
 		err := conn.handleAuditEnd(topic)
 		if err != nil {
 			return fmt.Errorf("error handling audit end: %w", err)
@@ -161,6 +163,7 @@ func (r *Writer) Publish(_ context.Context, connectionName string, data interfac
 }
 
 func (conn *Connection) handleAuditStart(auditID string, topic string) error {
+	// Replace ':' with '_' to avoid issues with file names in windows
 	conn.currentAuditRun = strings.ReplaceAll(auditID, ":", "_")
 
 	// Ensure the directory exists
@@ -197,6 +200,7 @@ func (conn *Connection) handleAuditEnd(topic string) error {
 	if err := os.Rename(path.Join(conn.Path, topic, appendExtension(conn.currentAuditRun, "txt")), readyFilePath); err != nil {
 		return fmt.Errorf("failed to rename file: %w, %s", err, conn.currentAuditRun)
 	}
+	log.Info("File renamed", "filename", readyFilePath)
 
 	return conn.cleanupOldAuditFiles(topic)
 }
