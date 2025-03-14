@@ -1,0 +1,28 @@
+name: create_tag
+on: 
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  create_tag:
+    name: "Create tag"
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release-pr') && startsWith(github.event.pull_request.title, format('chore{0} Prepare', ':'))
+    runs-on: ubuntu-22.04
+    steps:
+    - name: "Set release tag"
+      env:
+        GITHUB_CONTEXT: ${{ toJson(github.event.pull_request.labels.*.name) }}
+      run: |
+        RELEASE_TAG=$(echo "$GITHUB_CONTEXT" | jq '.[1]' | tr -d '"')
+        echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+    
+    - name: Check out code
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+    - uses: rickstaa/action-create-tag@a1c7777fcb2fee4f19b0f283ba888afa11678b72 #v1.7.2
+      with:
+        tag: ${{ env.RELEASE_TAG }}
+        tag_exists_error: false
