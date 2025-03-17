@@ -52,7 +52,7 @@ jobs:
           make patch-version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x TAG=v${TAG} OLDVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.$((PATCH_VERSION-1)) OPA_VERSIONS="${versions}"
       
       - name: Create release pull request
-        uses: peter-evans/create-pull-request@67ccf781d68cd99b580ae25a5c18a1cc84ffff1f # v7.0.6
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
         with:
           commit-message: "chore: Patch docs for ${{ env.TAG }} release"
           title: "chore: Patch docs for ${{ env.TAG }} release"
