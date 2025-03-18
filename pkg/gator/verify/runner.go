@@ -104,7 +104,6 @@ func (r *Runner) runTests(ctx context.Context, filter Filter, suitePath string, 
 
 	results := make([]TestResult, len(tests))
 	for i, t := range tests {
-		t := t
 		if t.Skip || !filter.MatchesTest(&t) {
 			results[i] = r.skipTest(&t)
 			continue

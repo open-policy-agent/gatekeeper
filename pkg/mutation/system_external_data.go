@@ -101,7 +101,6 @@ func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCe
 
 			responses[provider.Name] = make(map[string]*externaldata.Item)
 			for _, item := range resp.Response.Items {
-				item := item // for scoping
 				responses[provider.Name][item.Key] = &item
 			}
 		}(&provider, keys.UnsortedList())

@@ -76,3 +76,16 @@ To enable Delete operations for the `validation.gatekeeper.sh` admission webhook
 ```
 
 You can now check for deletes.
+
+### How to Enable Validation of Connect Operations
+
+This operation allows gatekeeper to review and validate `kubectl exec` commands via the validation webhook.
+
+To enable Connect operations for the `validation.gatekeeper.sh` admission webhook, add "CONNECT" to the list of operations in the `gatekeeper-validating-webhook-configuration`.
+
+```yaml
+    operations:
+    - CREATE
+    - UPDATE
+    - CONNECT
+```

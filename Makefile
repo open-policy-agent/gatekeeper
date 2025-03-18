@@ -15,7 +15,7 @@ PUSH_TO_GHCR ?= false
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
-ENABLE_PUBSUB ?= false
+ENABLE_EXPORT ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
@@ -41,7 +41,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v1.57.1
+GOLANGCI_LINT_VERSION := v1.63.4
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -203,7 +203,7 @@ e2e-helm-install:
 	./.staging/helm/linux-amd64/helm version --client
 
 e2e-helm-deploy: e2e-helm-install
-ifeq ($(ENABLE_PUBSUB),true)
+ifeq ($(ENABLE_EXPORT),true)
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
@@ -220,7 +220,7 @@ ifeq ($(ENABLE_PUBSUB),true)
 		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
-		--set audit.enablePubsub=${ENABLE_PUBSUB} \
+		--set enableViolationExport=${ENABLE_EXPORT} \
 		--set audit.connection=${AUDIT_CONNECTION} \
 		--set audit.channel=${AUDIT_CHANNEL} \
 		--set-string auditPodAnnotations.dapr\\.io/enabled=true \
@@ -292,17 +292,17 @@ e2e-helm-upgrade:
 		--set mutationAnnotations=true;\
 
 e2e-subscriber-build-load-image:
-	docker buildx build --platform="linux/amd64" -t ${FAKE_SUBSCRIBER_IMAGE} --load -f test/pubsub/fake-subscriber/Dockerfile test/pubsub/fake-subscriber
+	docker buildx build --platform="linux/amd64" -t ${FAKE_SUBSCRIBER_IMAGE} --load -f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
 	kind load docker-image --name kind ${FAKE_SUBSCRIBER_IMAGE}
 
 e2e-subscriber-deploy:
 	kubectl create ns fake-subscriber
 	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: fake-subscriber/' | kubectl apply -f -
-	kubectl apply -f test/pubsub/fake-subscriber/manifest/subscriber.yaml
+	kubectl apply -f test/export/fake-subscriber/manifest/subscriber.yaml
 
 e2e-publisher-deploy:
 	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -
-	kubectl apply -f test/pubsub/publish-components.yaml
+	kubectl apply -f test/export/publish-components.yaml
 
 # Build manager binary
 manager: generate

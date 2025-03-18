@@ -472,7 +472,10 @@ func (c *fakeClient) Get(ctx context.Context, key client.ObjectKey, obj client.O
 		return err
 	}
 
-	if _, isUnstructured := obj.(runtime.Unstructured); isUnstructured {
+	_, isUnstructured := obj.(runtime.Unstructured)
+	_, isPartialObject := obj.(*metav1.PartialObjectMetadata)
+
+	if isUnstructured || isPartialObject {
 		gvk, err := apiutil.GVKForObject(obj, c.scheme)
 		if err != nil {
 			return err

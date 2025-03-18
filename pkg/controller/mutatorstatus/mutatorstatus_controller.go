@@ -46,11 +46,8 @@ import (
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "mutator_status_controller")
 
 type Adder struct {
-	WatchManager     *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
+	WatchManager *watch.Manager
 }
-
-func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 
@@ -60,24 +57,21 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.IsAssigned(operations.MutationStatus) {
 		return nil
 	}
-	r := newReconciler(mgr, a.ControllerSwitch)
+	r := newReconciler(mgr)
 	return add(mgr, r)
 }
 
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
-	cs *watch.ControllerSwitch,
 ) reconcile.Reconciler {
 	return &ReconcileMutatorStatus{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
 		writer:       mgr.GetClient(),
 		statusClient: mgr.GetClient(),
 		reader:       mgr.GetCache(),
-
-		cs:     cs,
-		scheme: mgr.GetScheme(),
-		log:    log,
+		scheme:       mgr.GetScheme(),
+		log:          log,
 	}
 }
 
@@ -217,10 +211,8 @@ type ReconcileMutatorStatus struct {
 	reader       client.Reader
 	writer       client.Writer
 	statusClient client.StatusClient
-
-	cs     *watch.ControllerSwitch
-	scheme *runtime.Scheme
-	log    logr.Logger
+	scheme       *runtime.Scheme
+	log          logr.Logger
 }
 
 // +kubebuilder:rbac:groups=mutations.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -229,15 +221,6 @@ type ReconcileMutatorStatus struct {
 // Reconcile reads that state of the cluster for a mutator object and makes changes based on the state read
 // and what is in the mutator.Spec.
 func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	// Short-circuit if shutting down.
-	if r.cs != nil {
-		running := r.cs.Enter()
-		defer r.cs.Exit()
-		if !running {
-			return reconcile.Result{}, nil
-		}
-	}
-
 	gvk, unpackedRequest, err := util.UnpackRequest(request)
 	if err != nil {
 		// Unrecoverable, do not retry.
