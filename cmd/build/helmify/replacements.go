@@ -218,6 +218,18 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY": `{{ .Values.validatingWebhookCheckIgnoreFailurePolicy }}`,
 
+	"- HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_OPERATION_RULES": `- apiGroups:
+    - ""
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - namespaces
+    scope: '{{ .Values.validatingWebhookCheckIgnoreScope }}'
+  {{- end }}`,
+
 	"HELMSUBST_VALIDATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.validatingWebhookURL }}
     url: https://{{ .Values.validatingWebhookURL }}/v1/admit
     {{- else }}

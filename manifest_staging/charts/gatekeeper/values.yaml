@@ -16,6 +16,7 @@ validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookObjectSelector: {}
 validatingWebhookMatchConditions: []
 validatingWebhookCheckIgnoreFailurePolicy: Fail
+validatingWebhookCheckIgnoreScope: '*'
 validatingWebhookCustomRules: {}
 validatingWebhookURL: null
 validatingWebhookScope: '*'
