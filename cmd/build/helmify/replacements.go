@@ -227,8 +227,7 @@ var replacements = map[string]string{
     - UPDATE
     resources:
     - namespaces
-    scope: '{{ .Values.validatingWebhookCheckIgnoreScope }}'
-  {{- end }}`,
+    scope: '{{ .Values.validatingWebhookCheckIgnoreScope }}'`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.validatingWebhookURL }}
     url: https://{{ .Values.validatingWebhookURL }}/v1/admit

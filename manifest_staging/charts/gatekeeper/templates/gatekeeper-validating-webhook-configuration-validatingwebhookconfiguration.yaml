@@ -119,7 +119,6 @@ webhooks:
     resources:
     - namespaces
     scope: '{{ .Values.validatingWebhookCheckIgnoreScope }}'
-  {{- end }}
   sideEffects: None
   timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
 {{- end }}
