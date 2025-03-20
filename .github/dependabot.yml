@@ -63,3 +63,17 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore"
+
+  - package-ecosystem: "docker"
+    directory: "/test/export/fake-subscriber"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "docker"
+    directory: "/test/export/fake-reader"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"

@@ -41,11 +41,13 @@ data:
 - `config` field is a json object that configures how the connection is made. E.g. which queue messages should be sent to.
 
 #### Available drivers
-Dapr: https://dapr.io/
+
+- Dapr: Export violations using pubsub model provided with [Dapr](https://dapr.io/)
+- Disk: Export violations to file system.
 
 ### Quick start with exporting violations using Dapr and Redis
 
-#### Prerequisites
+#### Prerequisites for Dapr
 
 1. Install Dapr
 
@@ -130,10 +132,10 @@ Dapr: https://dapr.io/
     ```
 
     :::important
-    Please make sure `fake-subscriber` image is built and available in your cluster. Dockerfile to build image for `fake-subscriber` is under [gatekeeper/test/fake-subscriber](https://github.com/open-policy-agent/gatekeeper/tree/master/test/export/fake-subscriber).
+    Please make sure `fake-subscriber` image is built and available in your cluster. Dockerfile to build image for `fake-subscriber` is under [gatekeeper/test/export/fake-subscriber](https://github.com/open-policy-agent/gatekeeper/tree/master/test/export/fake-subscriber).
     :::
 
-#### Configure Gatekeeper with Export enabled
+#### Configure Gatekeeper with Export enabled with Dapr
 
 1. Create Gatekeeper namespace, and create Dapr pubsub component and Redis secret in Gatekeeper's namespace (`gatekeeper-system` by default). Please make sure to update `gatekeeper-system` namespace for the next steps if your cluster's Gatekeeper namespace is different.
 
@@ -207,6 +209,121 @@ Dapr: https://dapr.io/
     kubectl logs -l app=sub -c go-sub -n fake-subscriber 
     2023/07/18 20:16:41 Listening...
     2023/07/18 20:37:20 main.ExportMsg{ID:"2023-07-18T20:37:19Z", Details:map[string]interface {}{"missing_labels":[]interface {}{"test"}}, EventType:"violation_audited", Group:"constraints.gatekeeper.sh", Version:"v1beta1", Kind:"K8sRequiredLabels", Name:"pod-must-have-test", Namespace:"", Message:"you must provide labels: {\"test\"}", EnforcementAction:"deny", ConstraintAnnotations:map[string]string(nil), ResourceGroup:"", ResourceAPIVersion:"v1", ResourceKind:"Pod", ResourceNamespace:"nginx", ResourceName:"nginx-deployment-58899467f5-j85bs", ResourceLabels:map[string]string{"app":"nginx", "owner":"admin", "pod-template-hash":"58899467f5"}}
+    ```
+
+### Quick start with exporting violations on node storage using Disk driver via emptyDir
+
+#### Prerequisites for Disk driver
+
+1. Build `fake-reader` image from [gatekeeper/test/export/fake-reader](https://github.com/open-policy-agent/gatekeeper/tree/master/test/export/fake-reader)
+
+    ```bash
+    docker buildx build -t <your_img_name:tag> --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
+    ```
+
+2. Update `gatekeeper-audit` deployment to add `emptyDir` volume.
+
+    ```yaml
+    volumes:
+    - emptyDir: {}
+      name: tmp-violations
+    ```
+
+    :::tip
+    You can replace emptyDir to use PVC or any other types of volumes.
+    :::
+
+3. Update `gatekeeper-audit` deployment to add `volumeMount` to `manager` container.
+
+    ```yaml
+    volumeMounts:
+    - mountPath: /tmp/violations
+      name: tmp-violations
+    ```
+
+4. Update `gatekeeper-audit` deployment to add a `sidecar` reader container.
+
+    ```yaml
+      volumeMounts:
+      - mountPath: /tmp/violations
+        name: tmp-violations
+    - name: go-sub
+      image: <your_img_name:tag>
+      imagePullPolicy: Never
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+        readOnlyRootFilesystem: true
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumeMounts:
+      - mountPath: /tmp/violations
+        name: tmp-violations
+    ```
+
+#### Configure Gatekeeper with Export enabled to Disk
+
+1. Update `gatekeeper-audit` deployment to add following flags
+
+    ```yaml
+    ...
+    - --enable-violation-export=true
+    - --audit-connection=audit
+    - --audit-channel=audit
+    ...
+    ```
+
+2. Deploy Gatekeeper charts with aforementioned changes.
+
+    :::tip
+    You can use below command that uses a rule defined in [Makefile](https://github.com/open-policy-agent/gatekeeper/blob/master/Makefile) to deploy gatekeeper that mounts emptyDir with sidecar reader container.
+
+    
+    make deploy IMG=gatekeeper-e2e:latest IMG=<gatekeeper_image> EXPORT_BACKEND=disk FAKE_READER_IMAGE=<your_reader_image>
+    :::
+
+    **Note:** Verify that after the audit pod is running there is a Dapr sidecar injected and running along side `manager` container.
+
+3. Create connection config to establish a connection.
+
+    ```shell
+    kubectl apply -f - <<EOF
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: audit
+      namespace: gatekeeper-system
+    data:
+      driver: "disk"
+      config: |
+        {
+          "path": "/tmp/violations",
+          "maxAuditResults": 3
+        }
+
+    EOF
+    ```
+
+    **Note:** Name of the connection configMap must match the value of `--audit-connection` for it to be used by audit to export violation. At the moment, only one connection config can exists for audit.
+
+4. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
+
+    ```log
+    kubectl get constraint
+    NAME                 ENFORCEMENT-ACTION   TOTAL-VIOLATIONS
+    pod-must-have-test                        0
+    ```
+
+5. Finally, check the sidecar reader logs to see the violations written.
+
+    ```log
+    kubectl logs -l gatekeeper.sh/operation=audit -c go-sub -n gatekeeper-system 
+    2025/03/05 00:37:16 {"id":"2025-03-05T00:37:13Z","details":{"missing_labels":["test"]},"eventType":"violation_audited","group":"constraints.gatekeeper.sh","version":"v1beta1","kind":"K8sRequiredLabels","name":"pod-must-have-test","message":"you must provide labels: {\"test\"}","enforcementAction":"deny","resourceAPIVersion":"v1","resourceKind":"Pod","resourceNamespace":"nginx","resourceName":"nginx-deployment-2-79479fc6db-7qbnm","resourceLabels":{"app":"nginx-ingress","app.kubernetes.io/component":"controller","pod-template-hash":"79479fc6db"}}
     ```
 
 ### Violations
