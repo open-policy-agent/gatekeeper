@@ -75,7 +75,59 @@ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/
 
 ### Accessing replicated data
 
-Once data is synced, ConstraintTemplates can access the cached data under the `data.inventory` document.
+Once data is synced, ConstraintTemplates can access the cached data under the `data.inventory` document. ConstraintTemplates must specify the Group/Version/Kinds that they will need in a `metadata.gatekeeper.sh/requires-sync-data` annotation. This is specified in a format like this:
+```
+[
+  [ // Requirement 1
+    { // Clause 1
+      "groups": ["group1", group2"]
+      "versions": ["version1", "version2", "version3"]
+      "kinds": ["kind1", "kind2"]
+    },
+    { // Clause 2
+      "groups": ["group3", group4"]
+      "versions": ["version3", "version4"]
+      "kinds": ["kind3", "kind4"]
+    }
+  ],
+  [ // Requirement 2
+    { // Clause 1
+      "groups": ["group5"]
+      "versions": ["version5"]
+      "kinds": ["kind5"]
+    }
+  ]
+]
+```
+Each clause within the requirement is treated as a logical OR. So "group1/version1/kind1" OR "group2/version2/kind2" OR "group2/version1/kind1", etc.
+So, for example, if a Constraint Template required to sync PodDisruptionBudgets, Deployments, and StatefulSets, the annotation would be as follows:
+```
+metadata.gatekeeper.sh/requires-sync-data: |
+      "[
+        [
+          {
+            "groups": ["policy"],
+            "versions": ["v1"],
+            "kinds": ["PodDisruptionBudget"]
+          }
+        ],
+        [
+          {
+            "groups": ["apps"],
+            "versions": ["v1"],
+            "kinds": ["Deployment"]
+          }
+        ],
+        [
+          {
+            "groups": ["apps"],
+            "versions": ["v1"],
+            "kinds": ["StatefulSet"]
+          }
+        ]
+      ]
+      "
+```
 
 The `data.inventory` document has the following format:
   * For cluster-scoped objects: `data.inventory.cluster[<groupVersion>][<kind>][<name>]`
