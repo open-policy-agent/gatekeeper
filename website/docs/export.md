@@ -283,8 +283,7 @@ data:
     :::tip
     You can use below command that uses a rule defined in [Makefile](https://github.com/open-policy-agent/gatekeeper/blob/master/Makefile) to deploy gatekeeper that mounts emptyDir with sidecar reader container.
 
-    
-    make deploy IMG=gatekeeper-e2e:latest IMG=<gatekeeper_image> EXPORT_BACKEND=disk FAKE_READER_IMAGE=<your_reader_image>
+    make deploy IMG=<gatekeeper_image> EXPORT_BACKEND=disk FAKE_READER_IMAGE=<your_reader_image>
     :::
 
     **Note:** Verify that after the audit pod is running there is a Dapr sidecar injected and running along side `manager` container.
@@ -305,7 +304,6 @@ data:
           "path": "/tmp/violations",
           "maxAuditResults": 3
         }
-
     EOF
     ```
 

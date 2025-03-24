@@ -11,35 +11,17 @@ import (
 	"time"
 )
 
-type PubsubMsg struct {
-	ID                    string            `json:"id,omitempty"`
-	Details               interface{}       `json:"details,omitempty"`
-	EventType             string            `json:"eventType,omitempty"`
-	Group                 string            `json:"group,omitempty"`
-	Version               string            `json:"version,omitempty"`
-	Kind                  string            `json:"kind,omitempty"`
-	Name                  string            `json:"name,omitempty"`
-	Namespace             string            `json:"namespace,omitempty"`
-	Message               string            `json:"message,omitempty"`
-	EnforcementAction     string            `json:"enforcementAction,omitempty"`
-	ConstraintAnnotations map[string]string `json:"constraintAnnotations,omitempty"`
-	ResourceGroup         string            `json:"resourceGroup,omitempty"`
-	ResourceAPIVersion    string            `json:"resourceAPIVersion,omitempty"`
-	ResourceKind          string            `json:"resourceKind,omitempty"`
-	ResourceNamespace     string            `json:"resourceNamespace,omitempty"`
-	ResourceName          string            `json:"resourceName,omitempty"`
-	ResourceLabels        map[string]string `json:"resourceLabels,omitempty"`
-}
-
-// Modifications for acturate simulation
-// varify if violation exists for a constraint owned by policy and then post it - add sleep (2s) for a batch size of 2k violations
-// hold 2k violations in variable - read from tmp-violations.txt
-// hold tmp file for previous violations
-// 2 files
-// 1 - GK publish violations
-// 1 - policy read violations.
 func main() {
 	dirPath := "/tmp/violations/"
+	info, err := os.Stat(dirPath)
+	if err != nil {
+		log.Fatalf("failed to stat path: %v", err)
+		os.Exit(1)
+	}
+	if !info.IsDir() {
+		log.Fatalf("path is not a directory")
+		os.Exit(1)
+	}
 
 	for {
 		// Find the latest created file in dirPath
@@ -50,8 +32,7 @@ func main() {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		// Open the file in read-write mode
-		file, err := os.OpenFile(latestFile, os.O_RDWR, 0o644)
+		file, err := os.OpenFile(latestFile, os.O_RDONLY, 0o644)
 		if err != nil {
 			log.Printf("Error opening file: %v\n", err)
 			time.Sleep(5 * time.Second)
