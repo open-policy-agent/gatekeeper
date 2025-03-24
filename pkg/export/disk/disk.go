@@ -56,6 +56,9 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	if !pathOk {
 		return fmt.Errorf("missing or invalid values in config for connection %s", connectionName)
 	}
+	if err := validatePath(path); err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
 	maxResults, maxResultsOk := cfg[maxAuditResults].(float64)
 	if !maxResultsOk {
 		return fmt.Errorf("missing or invalid 'maxAuditResults' for connection %s", connectionName)
@@ -82,13 +85,21 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("connection %s for disk driver not found", connectionName)
 	}
 
-	var cleanUpErr error
 	if path, ok := cfg[violationPath].(string); ok {
 		if conn.Path != path {
+			if err := validatePath(path); err != nil {
+				return fmt.Errorf("invalid path: %w", err)
+			}
+			if conn.File != nil {
+				if err := conn.unlockAndCloseFile(); err != nil {
+					return fmt.Errorf("connection update failed, error closing file: %w.", err)
+				}
+			}
 			if err := os.RemoveAll(conn.Path); err != nil {
-				cleanUpErr = fmt.Errorf("connection updated but failed to remove content form old path: %w", err)
+				return fmt.Errorf("connection update failed, error deleting violations stored at old path: %w.", err)
 			}
 			conn.Path = path
+			conn.File = nil
 		}
 	} else {
 		return fmt.Errorf("missing or invalid 'path' for connection %s", connectionName)
@@ -104,7 +115,7 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	}
 
 	r.openConnections[connectionName] = conn
-	return cleanUpErr
+	return nil
 }
 
 func (r *Writer) CloseConnection(connectionName string) error {
@@ -112,8 +123,13 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	if !ok {
 		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
-	err := os.RemoveAll(conn.Path)
 	delete(r.openConnections, connectionName)
+	if conn.File != nil {
+		if err := conn.unlockAndCloseFile(); err != nil {
+			return fmt.Errorf("connection is closed without removing respective violations. error closing file: %w", err)
+		}
+	}
+	err := os.RemoveAll(conn.Path)
 	return err
 }
 
@@ -142,7 +158,7 @@ func (r *Writer) Publish(_ context.Context, connectionName string, data interfac
 	}
 
 	if conn.File == nil {
-		return fmt.Errorf("no file to write the violation in")
+		return fmt.Errorf("failed to write violation: no file provided")
 	}
 
 	_, err = conn.File.WriteString(string(jsonData) + "\n")
@@ -185,6 +201,7 @@ func (conn *Connection) handleAuditStart(auditID string, topic string) error {
 	if err != nil {
 		return fmt.Errorf("failed to acquire lock: %w", err)
 	}
+	log.Info("Writing latest violations at ")
 	return nil
 }
 
@@ -272,4 +289,26 @@ func getEarliestFile(dirPath string) (string, []string, error) {
 
 func appendExtension(name string, ext string) string {
 	return name + "." + ext
+}
+
+// validatePath checks if the provided path is valid and writable.
+func validatePath(path string) error {
+	if path == "" {
+		return fmt.Errorf("path cannot be empty")
+	}
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("path must not contain '..', dir traversal is not allowed")	
+	}
+	// validate if the path is writable
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("failed to stat path: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("path is not a directory")
+	}
+	return nil
 }

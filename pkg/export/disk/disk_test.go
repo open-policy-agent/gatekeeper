@@ -18,7 +18,7 @@ func TestCreateConnection(t *testing.T) {
 	writer := &Writer{
 		openConnections: make(map[string]Connection),
 	}
-
+	tmpPath := t.TempDir()
 	tests := []struct {
 		name           string
 		connectionName string
@@ -29,7 +29,7 @@ func TestCreateConnection(t *testing.T) {
 			name:           "Valid config",
 			connectionName: "conn1",
 			config: map[string]interface{}{
-				"path":            "/tmp/audit",
+				"path":            tmpPath,
 				"maxAuditResults": 3.0,
 			},
 			expectError: false,
@@ -52,7 +52,7 @@ func TestCreateConnection(t *testing.T) {
 			name:           "Missing maxAuditResults",
 			connectionName: "conn4",
 			config: map[string]interface{}{
-				"path": "/tmp/audit",
+				"path": tmpPath,
 			},
 			expectError: true,
 		},
@@ -60,7 +60,7 @@ func TestCreateConnection(t *testing.T) {
 			name:           "Exceeding maxAuditResults",
 			connectionName: "conn4",
 			config: map[string]interface{}{
-				"path":            "/tmp/audit",
+				"path":            tmpPath,
 				"maxAuditResults": 10.0,
 			},
 			expectError: true,
@@ -101,10 +101,9 @@ func TestUpdateConnection(t *testing.T) {
 	writer := &Writer{
 		openConnections: make(map[string]Connection),
 	}
-
-	// Pre-create a connection to update
+	tmpPath := t.TempDir()
 	writer.openConnections["conn1"] = Connection{
-		Path:            "/tmp/audit",
+		Path:            tmpPath,
 		MaxAuditResults: 3,
 	}
 
@@ -118,7 +117,7 @@ func TestUpdateConnection(t *testing.T) {
 			name:           "Valid update",
 			connectionName: "conn1",
 			config: map[string]interface{}{
-				"path":            "/tmp/audit_updated",
+				"path":            t.TempDir(),
 				"maxAuditResults": 4.0,
 			},
 			expectError: false,
@@ -133,7 +132,7 @@ func TestUpdateConnection(t *testing.T) {
 			name:           "Connection not found",
 			connectionName: "conn2",
 			config: map[string]interface{}{
-				"path":            "/tmp/audit",
+				"path":            t.TempDir(),
 				"maxAuditResults": 2.0,
 			},
 			expectError: true,
@@ -150,7 +149,7 @@ func TestUpdateConnection(t *testing.T) {
 			name:           "Missing maxAuditResults",
 			connectionName: "conn1",
 			config: map[string]interface{}{
-				"path": "/tmp/audit",
+				"path": t.TempDir(),
 			},
 			expectError: true,
 		},
@@ -158,7 +157,7 @@ func TestUpdateConnection(t *testing.T) {
 			name:           "Exceeding maxAuditResults",
 			connectionName: "conn1",
 			config: map[string]interface{}{
-				"path":            "/tmp/audit",
+				"path":            t.TempDir(),
 				"maxAuditResults": 10.0,
 			},
 			expectError: true,
@@ -201,31 +200,62 @@ func TestCloseConnection(t *testing.T) {
 		openConnections: make(map[string]Connection),
 	}
 
-	// Pre-create a connection to close
-	writer.openConnections["conn1"] = Connection{
-		Path:            "/tmp/audit",
-		MaxAuditResults: 10,
-	}
-
 	tests := []struct {
 		name           string
 		connectionName string
+		setup          func() error
 		expectError    bool
 	}{
 		{
 			name:           "Valid close",
 			connectionName: "conn1",
+			setup: func() error {
+				// Pre-create a connection to close
+				writer.openConnections["conn1"] = Connection{
+					Path:            t.TempDir(),
+					MaxAuditResults: 10,
+				}
+				return nil
+			},
 			expectError:    false,
 		},
 		{
 			name:           "Connection not found",
 			connectionName: "conn2",
+			setup: nil,
 			expectError:    true,
+		},
+		{
+			name:           "Valid close with open and locked file",
+			connectionName: "conn3",
+			setup: func() error {
+				// Pre-create a connection to close
+				d := t.TempDir()
+				if err := os.MkdirAll(d, 0o755); err != nil {
+					return err
+				}
+				file, err := os.CreateTemp(d, "testfile")
+				if err != nil {
+					return err
+				}
+				writer.openConnections["conn3"] = Connection{
+					Path:            d,
+					MaxAuditResults: 10,
+					File:			file,
+				}
+				return syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+			},
+			expectError:    false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.setup != nil {
+				if err := tt.setup(); err != nil {
+					t.Fatalf("Setup failed: %v", err)
+				}
+			}
 			err := writer.CloseConnection(tt.connectionName)
 			if (err != nil) != tt.expectError {
 				t.Errorf("CloseConnection() error = %v, expectError %v", err, tt.expectError)
@@ -247,7 +277,7 @@ func TestPublish(t *testing.T) {
 
 	// Pre-create a connection to publish to
 	writer.openConnections["conn1"] = Connection{
-		Path:            "/tmp/audit",
+		Path:            t.TempDir(),
 		MaxAuditResults: 1,
 	}
 
@@ -380,11 +410,6 @@ func TestPublish(t *testing.T) {
 			}
 		})
 	}
-
-	err := os.RemoveAll("/tmp/audit")
-	if err != nil {
-		t.Fatalf("Failed to clean up: %v", err)
-	}
 }
 
 func TestHandleAuditStart(t *testing.T) {
@@ -398,7 +423,7 @@ func TestHandleAuditStart(t *testing.T) {
 		{
 			name: "Valid audit start",
 			connection: Connection{
-				Path: "/tmp/audit",
+				Path: t.TempDir(),
 			},
 			auditID:     "audit1",
 			topic:       "topic1",
@@ -428,11 +453,6 @@ func TestHandleAuditStart(t *testing.T) {
 			}
 		})
 	}
-
-	err := os.RemoveAll("/tmp/audit")
-	if err != nil {
-		t.Fatalf("Failed to clean up: %v", err)
-	}
 }
 
 func TestHandleAuditEnd(t *testing.T) {
@@ -447,7 +467,7 @@ func TestHandleAuditEnd(t *testing.T) {
 		{
 			name: "Valid audit end",
 			connection: Connection{
-				Path:            "/tmp/audit",
+				Path:            t.TempDir(),
 				currentAuditRun: "audit1",
 			},
 			topic: "topic1",
@@ -468,7 +488,7 @@ func TestHandleAuditEnd(t *testing.T) {
 		{
 			name: "Cleanup old audit files error",
 			connection: Connection{
-				Path:            "/tmp/audit",
+				Path:            t.TempDir(),
 				currentAuditRun: "audit1",
 				MaxAuditResults: 1,
 			},
@@ -517,11 +537,6 @@ func TestHandleAuditEnd(t *testing.T) {
 			}
 		})
 	}
-
-	err := os.RemoveAll("/tmp/audit")
-	if err != nil {
-		t.Fatalf("Failed to clean up: %v", err)
-	}
 }
 
 func listFiles(dir string) ([]string, error) {
@@ -550,7 +565,7 @@ func TestUnlockAndCloseFile(t *testing.T) {
 		{
 			name: "Valid unlock and close",
 			connection: Connection{
-				Path: "/tmp/audit",
+				Path: t.TempDir(),
 			},
 			setup: func(conn *Connection) error {
 				if err := os.MkdirAll(conn.Path, 0o755); err != nil {
@@ -568,7 +583,7 @@ func TestUnlockAndCloseFile(t *testing.T) {
 		{
 			name: "No file to close",
 			connection: Connection{
-				Path: "/tmp/audit",
+				Path: t.TempDir(),
 			},
 			setup:       nil,
 			expectError: true,
@@ -576,7 +591,7 @@ func TestUnlockAndCloseFile(t *testing.T) {
 		{
 			name: "Invalid file descriptor",
 			connection: Connection{
-				Path: "/tmp/audit",
+				Path: t.TempDir(),
 			},
 			setup: func(conn *Connection) error {
 				file, err := os.CreateTemp(conn.Path, "testfile")
@@ -604,11 +619,6 @@ func TestUnlockAndCloseFile(t *testing.T) {
 			}
 		})
 	}
-
-	err := os.RemoveAll("/tmp/audit")
-	if err != nil {
-		t.Fatalf("Failed to clean up: %v", err)
-	}
 }
 
 func TestCleanupOldAuditFiles(t *testing.T) {
@@ -623,7 +633,7 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 		{
 			name: "No files to clean up",
 			connection: Connection{
-				Path:            "/tmp/audit",
+				Path:            t.TempDir(),
 				MaxAuditResults: 5,
 			},
 			topic: "topic1",
@@ -636,7 +646,7 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 		{
 			name: "Files within limit",
 			connection: Connection{
-				Path:            "/tmp/audit",
+				Path:            t.TempDir(),
 				MaxAuditResults: 5,
 			},
 			topic: "topic1",
@@ -658,7 +668,7 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 		{
 			name: "Files exceeding limit",
 			connection: Connection{
-				Path:            "/tmp/audit",
+				Path:            t.TempDir(),
 				MaxAuditResults: 2,
 			},
 			topic: "topic1",
@@ -680,7 +690,7 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 		{
 			name: "Error getting earliest file",
 			connection: Connection{
-				Path:            "/invalid/path",
+				Path:            t.TempDir(),
 				MaxAuditResults: 2,
 			},
 			topic:         "topic1",
@@ -712,10 +722,6 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 				}
 			}
 		})
-	}
-	err := os.RemoveAll("/tmp/audit")
-	if err != nil {
-		t.Fatalf("Failed to clean up: %v", err)
 	}
 }
 
