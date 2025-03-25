@@ -239,29 +239,29 @@ data:
 
     ```yaml
     audit: 
-    exportVolume: 
-      name: tmp-violations 
-      emptyDir: {} 
-    exportVolumeMount: 
-      path: /tmp/violations 
-    exportSidecar: 
-      name: go-sub 
-      image: fake-reader:latest 
-      imagePullPolicy: Always 
-      securityContext: 
-        allowPrivilegeEscalation: false 
-        capabilities: 
-          drop: 
-          - ALL 
-        readOnlyRootFilesystem: true 
-        runAsGroup: 999 
-        runAsNonRoot: true 
-        runAsUser: 1000 
-        seccompProfile: 
-          type: RuntimeDefault 
-      volumeMounts: 
-      - mountPath: /tmp/violations 
-        name: tmp-violations
+      exportVolume: 
+        name: tmp-violations 
+        emptyDir: {} 
+      exportVolumeMount: 
+        path: /tmp/violations 
+      exportSidecar: 
+        name: go-sub 
+        image: fake-reader:latest 
+        imagePullPolicy: Always 
+        securityContext: 
+          allowPrivilegeEscalation: false 
+          capabilities: 
+            drop: 
+            - ALL 
+          readOnlyRootFilesystem: true 
+          runAsGroup: 999 
+          runAsNonRoot: true 
+          runAsUser: 1000 
+          seccompProfile: 
+            type: RuntimeDefault 
+        volumeMounts: 
+        - mountPath: /tmp/violations 
+          name: tmp-violations
     ```
 
 3. Deploy Gatekeeper charts with `values.yaml`.

@@ -201,7 +201,7 @@ func (conn *Connection) handleAuditStart(auditID string, topic string) error {
 	if err != nil {
 		return fmt.Errorf("failed to acquire lock: %w", err)
 	}
-	log.Info("Writing latest violations at ")
+	log.Info("Writing latest violations in", "filename", conn.File.Name())
 	return nil
 }
 
