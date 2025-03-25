@@ -223,71 +223,59 @@ data:
 
     **Note:** Make sure the fake-reader image is available in your preferred registry or cluster.
 
-2. Deploy Gatekeeper charts with needed configuration.
+2. Create `values.yaml` with the following variables.
 
-    You can use below command that uses a rule defined in [Makefile](https://github.com/open-policy-agent/gatekeeper/blob/master/Makefile) to deploy gatekeeper that mounts emptyDir with sidecar reader container.
-  
-    ```bash
-    make deploy IMG=<gatekeeper_image> EXPORT_BACKEND=disk FAKE_READER_IMAGE=<your_reader_image> FAKE_READER_IMAGE_PULL_POLICY=<your_preferred_image_pull_policy>
+    ```yaml
+    audit: 
+      exportVolume: 
+        <your-volume> 
+      exportVolumeMount: 
+        <your-volume-mount-path>
+      exportSidecar: 
+        <your-side-car>
     ```
 
-    Alternatively, you can follow the below steps to manually update Gatekeeper and configure export.
+    Here is the default `values.yaml` that you can use.
 
-    1. Update `gatekeeper-audit` deployment to add `emptyDir` volume.
+    ```yaml
+    audit: 
+    exportVolume: 
+      name: tmp-violations 
+      emptyDir: {} 
+    exportVolumeMount: 
+      path: /tmp/violations 
+    exportSidecar: 
+      name: go-sub 
+      image: fake-reader:latest 
+      imagePullPolicy: Always 
+      securityContext: 
+        allowPrivilegeEscalation: false 
+        capabilities: 
+          drop: 
+          - ALL 
+        readOnlyRootFilesystem: true 
+        runAsGroup: 999 
+        runAsNonRoot: true 
+        runAsUser: 1000 
+        seccompProfile: 
+          type: RuntimeDefault 
+      volumeMounts: 
+      - mountPath: /tmp/violations 
+        name: tmp-violations
+    ```
 
-        ```yaml
-        volumes:
-        - emptyDir: {}
-          name: tmp-violations
-        ```
+3. Deploy Gatekeeper charts with `values.yaml`.
 
-        :::tip
-        You can replace emptyDir to use PVC or any other types of volumes.
-        :::
+    ```shell
+    helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
+    ...
+    --set enableViolationExport=true \
+    --set audit.connection=audit-connection \
+    --set audit.channel=audit-channel \
+    --values /path/to/values.yaml
+    ```
 
-    2. Update `gatekeeper-audit` deployment to add `volumeMount` to `manager` container.
-
-        ```yaml
-        volumeMounts:
-        - mountPath: /tmp/violations
-          name: tmp-violations
-        ```
-
-    3. Update `gatekeeper-audit` deployment to add a `sidecar` reader container.
-
-        ```yaml
-        - name: go-sub
-          image: <your_img_name:tag>
-          imagePullPolicy: <your_preferred_image_pull_policy>
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - ALL
-            readOnlyRootFilesystem: true
-            runAsGroup: 999
-            runAsNonRoot: true
-            runAsUser: 1000
-            seccompProfile:
-              type: RuntimeDefault
-          volumeMounts:
-          - mountPath: /tmp/violations
-            name: tmp-violations
-        ```
-
-    4. Update `gatekeeper-audit` deployment to add following flags
-
-        ```yaml
-        ...
-        - --enable-violation-export=true
-        - --audit-connection=audit
-        - --audit-channel=audit
-        ...
-        ```
-
-    **Note:** Verify that after the audit pod is running there is a sidecar running along side `manager` container after deploying Gatekeeper.
-
-3. Create connection config to establish a connection.
+4. Create connection config to establish a connection.
 
     ```shell
     kubectl apply -f - <<EOF
@@ -308,7 +296,7 @@ data:
 
     **Note:** Name of the connection configMap must match the value of `--audit-connection` for it to be used by audit to export violation. At the moment, only one connection config can exists for audit.
 
-4. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
+5. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
 
     ```log
     kubectl get constraint
@@ -316,7 +304,7 @@ data:
     pod-must-have-test                        0
     ```
 
-5. Finally, check the sidecar reader logs to see the violations written.
+6. Finally, check the sidecar reader logs to see the violations written.
 
     ```log
     kubectl logs -l gatekeeper.sh/operation=audit -c go-sub -n gatekeeper-system 
