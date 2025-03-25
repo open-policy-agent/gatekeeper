@@ -244,9 +244,6 @@ data:
 4. Update `gatekeeper-audit` deployment to add a `sidecar` reader container.
 
     ```yaml
-      volumeMounts:
-      - mountPath: /tmp/violations
-        name: tmp-violations
     - name: go-sub
       image: <your_img_name:tag>
       imagePullPolicy: Never
