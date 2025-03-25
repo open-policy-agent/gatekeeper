@@ -54,7 +54,7 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 
 	path, pathOk := cfg[violationPath].(string)
 	if !pathOk {
-		return fmt.Errorf("missing or invalid values in config for connection %s", connectionName)
+		return fmt.Errorf("missing or invalid 'path' for connection %s", connectionName)
 	}
 	if err := validatePath(path); err != nil {
 		return fmt.Errorf("invalid path: %w", err)
