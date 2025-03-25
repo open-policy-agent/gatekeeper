@@ -92,11 +92,11 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 			}
 			if conn.File != nil {
 				if err := conn.unlockAndCloseFile(); err != nil {
-					return fmt.Errorf("connection update failed, error closing file: %w.", err)
+					return fmt.Errorf("connection update failed, error closing file: %w", err)
 				}
 			}
 			if err := os.RemoveAll(conn.Path); err != nil {
-				return fmt.Errorf("connection update failed, error deleting violations stored at old path: %w.", err)
+				return fmt.Errorf("connection update failed, error deleting violations stored at old path: %w", err)
 			}
 			conn.Path = path
 			conn.File = nil
@@ -297,7 +297,7 @@ func validatePath(path string) error {
 		return fmt.Errorf("path cannot be empty")
 	}
 	if strings.Contains(path, "..") {
-		return fmt.Errorf("path must not contain '..', dir traversal is not allowed")	
+		return fmt.Errorf("path must not contain '..', dir traversal is not allowed")
 	}
 	// validate if the path is writable
 	if err := os.MkdirAll(path, 0o755); err != nil {

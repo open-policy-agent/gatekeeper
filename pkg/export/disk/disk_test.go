@@ -23,6 +23,7 @@ func TestCreateConnection(t *testing.T) {
 		name           string
 		connectionName string
 		config         interface{}
+		err            error
 		expectError    bool
 	}{
 		{
@@ -37,8 +38,11 @@ func TestCreateConnection(t *testing.T) {
 		{
 			name:           "Invalid config format",
 			connectionName: "conn2",
-			config:         "invalid config",
-			expectError:    true,
+			config: map[int]interface{}{
+				1: "test",
+			},
+			err:         fmt.Errorf("invalid config format"),
+			expectError: true,
 		},
 		{
 			name:           "Missing path",
@@ -46,6 +50,7 @@ func TestCreateConnection(t *testing.T) {
 			config: map[string]interface{}{
 				"maxAuditResults": 10.0,
 			},
+			err:         fmt.Errorf("missing or invalid 'path' for connection conn3"),
 			expectError: true,
 		},
 		{
@@ -54,6 +59,7 @@ func TestCreateConnection(t *testing.T) {
 			config: map[string]interface{}{
 				"path": tmpPath,
 			},
+			err:         fmt.Errorf("missing or invalid 'maxAuditResults' for connection conn4"),
 			expectError: true,
 		},
 		{
@@ -63,6 +69,7 @@ func TestCreateConnection(t *testing.T) {
 				"path":            tmpPath,
 				"maxAuditResults": 10.0,
 			},
+			err:         fmt.Errorf("maxAuditResults cannot be greater than 5"),
 			expectError: true,
 		},
 	}
@@ -70,7 +77,7 @@ func TestCreateConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := writer.CreateConnection(context.Background(), tt.connectionName, tt.config)
-			if (err != nil) != tt.expectError {
+			if tt.expectError && tt.err.Error() != err.Error() {
 				t.Errorf("CreateConnection() error = %v, expectError %v", err, tt.expectError)
 			}
 			if !tt.expectError {
@@ -80,14 +87,21 @@ func TestCreateConnection(t *testing.T) {
 				}
 				path, pathOk := tt.config.(map[string]interface{})["path"].(string)
 				if !pathOk {
-					t.Fatalf("Failed to get path from config")
+					t.Errorf("Failed to get path from config")
 				}
 				if conn.Path != path {
 					t.Errorf("Expected path %s, got %s", path, conn.Path)
 				}
+				info, err := os.Stat(path)
+				if err != nil {
+					t.Errorf("failed to stat path: %s", err.Error())
+				}
+				if !info.IsDir() {
+					t.Errorf("path is not a directory")
+				}
 				maxAuditResults, maxResultsOk := tt.config.(map[string]interface{})["maxAuditResults"].(float64)
 				if !maxResultsOk {
-					t.Fatalf("Failed to get maxAuditResults from config")
+					t.Errorf("Failed to get maxAuditResults from config")
 				}
 				if conn.MaxAuditResults != int(maxAuditResults) {
 					t.Errorf("Expected maxAuditResults %d, got %d", int(maxAuditResults), conn.MaxAuditResults)
@@ -102,9 +116,20 @@ func TestUpdateConnection(t *testing.T) {
 		openConnections: make(map[string]Connection),
 	}
 	tmpPath := t.TempDir()
+	file, err := os.CreateTemp(tmpPath, "testfile")
+	if err != nil {
+		t.Errorf("Failed to create temp file: %v", err)
+	}
+
+	err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+	if err != nil {
+		t.Errorf("Failed to lock file: %v", err)
+	}
+
 	writer.openConnections["conn1"] = Connection{
 		Path:            tmpPath,
 		MaxAuditResults: 3,
+		File:            file,
 	}
 
 	tests := []struct {
@@ -112,6 +137,7 @@ func TestUpdateConnection(t *testing.T) {
 		connectionName string
 		config         interface{}
 		expectError    bool
+		err            error
 	}{
 		{
 			name:           "Valid update",
@@ -121,12 +147,16 @@ func TestUpdateConnection(t *testing.T) {
 				"maxAuditResults": 4.0,
 			},
 			expectError: false,
+			err:         nil,
 		},
 		{
 			name:           "Invalid config format",
 			connectionName: "conn1",
-			config:         "invalid config",
-			expectError:    true,
+			config: map[int]interface{}{
+				1: "test",
+			},
+			expectError: true,
+			err:         fmt.Errorf("invalid config format"),
 		},
 		{
 			name:           "Connection not found",
@@ -136,6 +166,7 @@ func TestUpdateConnection(t *testing.T) {
 				"maxAuditResults": 2.0,
 			},
 			expectError: true,
+			err:         fmt.Errorf("connection conn2 for disk driver not found"),
 		},
 		{
 			name:           "Missing path",
@@ -144,6 +175,7 @@ func TestUpdateConnection(t *testing.T) {
 				"maxAuditResults": 2.0,
 			},
 			expectError: true,
+			err:         fmt.Errorf("missing or invalid 'path' for connection conn1"),
 		},
 		{
 			name:           "Missing maxAuditResults",
@@ -152,6 +184,7 @@ func TestUpdateConnection(t *testing.T) {
 				"path": t.TempDir(),
 			},
 			expectError: true,
+			err:         fmt.Errorf("missing or invalid 'maxAuditResults' for connection conn1"),
 		},
 		{
 			name:           "Exceeding maxAuditResults",
@@ -161,13 +194,14 @@ func TestUpdateConnection(t *testing.T) {
 				"maxAuditResults": 10.0,
 			},
 			expectError: true,
+			err:         fmt.Errorf("maxAuditResults cannot be greater than 5"),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := writer.UpdateConnection(context.Background(), tt.connectionName, tt.config)
-			if (err != nil) != tt.expectError {
+			if tt.expectError && tt.err.Error() != err.Error() {
 				t.Errorf("UpdateConnection() error = %v, expectError %v", err, tt.expectError)
 			}
 			if !tt.expectError {
@@ -177,14 +211,21 @@ func TestUpdateConnection(t *testing.T) {
 				}
 				path, pathOk := tt.config.(map[string]interface{})["path"].(string)
 				if !pathOk {
-					t.Fatalf("Failed to get path from config")
+					t.Errorf("Failed to get path from config")
 				}
 				if conn.Path != path {
 					t.Errorf("Expected path %s, got %s", path, conn.Path)
 				}
+				info, err := os.Stat(path)
+				if err != nil {
+					t.Errorf("failed to stat path: %s", err.Error())
+				}
+				if !info.IsDir() {
+					t.Errorf("path is not a directory")
+				}
 				maxAuditResults, maxResultsOk := tt.config.(map[string]interface{})["maxAuditResults"].(float64)
 				if !maxResultsOk {
-					t.Fatalf("Failed to get maxAuditResults from config")
+					t.Errorf("Failed to get maxAuditResults from config")
 				}
 				if conn.MaxAuditResults != int(maxAuditResults) {
 					t.Errorf("Expected maxAuditResults %d, got %d", int(maxAuditResults), conn.MaxAuditResults)
@@ -217,12 +258,12 @@ func TestCloseConnection(t *testing.T) {
 				}
 				return nil
 			},
-			expectError:    false,
+			expectError: false,
 		},
 		{
 			name:           "Connection not found",
 			connectionName: "conn2",
-			setup: nil,
+			setup:          nil,
 			expectError:    true,
 		},
 		{
@@ -241,11 +282,11 @@ func TestCloseConnection(t *testing.T) {
 				writer.openConnections["conn3"] = Connection{
 					Path:            d,
 					MaxAuditResults: 10,
-					File:			file,
+					File:            file,
 				}
 				return syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
 			},
-			expectError:    false,
+			expectError: false,
 		},
 	}
 
@@ -253,7 +294,7 @@ func TestCloseConnection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setup != nil {
 				if err := tt.setup(); err != nil {
-					t.Fatalf("Setup failed: %v", err)
+					t.Errorf("Setup failed: %v", err)
 				}
 			}
 			err := writer.CloseConnection(tt.connectionName)
@@ -376,11 +417,11 @@ func TestPublish(t *testing.T) {
 			if !tt.expectError {
 				files, err := listFiles(path.Join(writer.openConnections[tt.connectionName].Path, tt.topic))
 				if err != nil {
-					t.Fatalf("Failed to list files: %v", err)
+					t.Errorf("Failed to list files: %v", err)
 				}
 				msg, ok := tt.data.(util.ExportMsg)
 				if !ok {
-					t.Fatalf("Failed to convert data to ExportMsg")
+					t.Errorf("Failed to convert data to ExportMsg")
 				}
 				if msg.Message == "audit is started" {
 					if len(files) > 2 {
@@ -399,7 +440,7 @@ func TestPublish(t *testing.T) {
 					}
 					content, err := os.ReadFile(files[0])
 					if err != nil {
-						t.Fatalf("Failed to read file: %v", err)
+						t.Errorf("Failed to read file: %v", err)
 					}
 					for _, msg := range []string{"audit is started", "audit is in progress", "audit is completed"} {
 						if !strings.Contains(string(content), msg) {
@@ -518,7 +559,7 @@ func TestHandleAuditEnd(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setup != nil {
 				if err := tt.setup(&tt.connection); err != nil {
-					t.Fatalf("Setup failed: %v", err)
+					t.Errorf("Setup failed: %v", err)
 				}
 			}
 			err := tt.connection.handleAuditEnd(tt.topic)
@@ -529,7 +570,7 @@ func TestHandleAuditEnd(t *testing.T) {
 			if !tt.expectError {
 				files, err := listFiles(path.Join(tt.connection.Path, tt.topic))
 				if err != nil {
-					t.Fatalf("Failed to list files: %v", err)
+					t.Errorf("Failed to list files: %v", err)
 				}
 				if slices.Contains(files, tt.expectedFile) {
 					t.Errorf("Expected file %s to exist, but it does not. Files: %v", tt.expectedFile, files)
@@ -610,7 +651,7 @@ func TestUnlockAndCloseFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setup != nil {
 				if err := tt.setup(&tt.connection); err != nil {
-					t.Fatalf("Setup failed: %v", err)
+					t.Errorf("Setup failed: %v", err)
 				}
 			}
 			err := tt.connection.unlockAndCloseFile()
@@ -704,7 +745,7 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setup != nil {
 				if err := tt.setup(&tt.connection); err != nil {
-					t.Fatalf("Setup failed: %v", err)
+					t.Errorf("Setup failed: %v", err)
 				}
 			}
 			err := tt.connection.cleanupOldAuditFiles(tt.topic)
@@ -715,7 +756,7 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 				dir := path.Join(tt.connection.Path, tt.topic)
 				files, err := os.ReadDir(dir)
 				if err != nil {
-					t.Fatalf("Failed to read directory: %v", err)
+					t.Errorf("Failed to read directory: %v", err)
 				}
 				if len(files) != tt.expectedFiles {
 					t.Errorf("Expected %d files, got %d", tt.expectedFiles, len(files))
@@ -798,7 +839,7 @@ func TestGetEarliestFile(t *testing.T) {
 			dir := t.TempDir()
 			if tt.setup != nil {
 				if err := tt.setup(dir); err != nil {
-					t.Fatalf("Setup failed: %v", err)
+					t.Errorf("Setup failed: %v", err)
 				}
 			}
 			earliestFile, files, err := getEarliestFile(dir)
