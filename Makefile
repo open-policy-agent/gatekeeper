@@ -44,6 +44,7 @@ HELM_DAPR_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
 HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
 	--set audit.connection=${AUDIT_CONNECTION} \
 	--set audit.channel=${AUDIT_CHANNEL} \
+	-f /tmp/values.yaml \
 
 HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
 	--set image.crdRepository=${HELM_CRD_REPO} \
@@ -75,6 +76,7 @@ GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
 BENCHMARK_FILE_NAME ?= benchmarks.txt
 FAKE_SUBSCRIBER_IMAGE ?= fake-subscriber:latest
 FAKE_READER_IMAGE ?= fake-reader:latest
+FAKE_READER_IMAGE_PULL_POLICY ?= IfNotPresent
 
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
@@ -141,7 +143,7 @@ MANAGER_SIDECAR_IMAGE_PATCH := "\n        - --enable-violation-export=true\
 \n          name: tmp-violations\
 \n      - name: go-sub\
 \n        image: ${FAKE_READER_IMAGE}\
-\n        imagePullPolicy: Never\
+\n        imagePullPolicy: ${FAKE_READER_IMAGE_PULL_POLICY}\
 \n        securityContext:\
 \n          allowPrivilegeEscalation: false\
 \n          capabilities:\
@@ -160,6 +162,31 @@ MANAGER_SIDECAR_IMAGE_PATCH := "\n        - --enable-violation-export=true\
 \n      - emptyDir: {}\
 \n        name: tmp-violations\
 \n"
+
+HELM_EXPORT_VARIABLES := "audit:\
+\n  exportVolume:\
+\n    name: tmp-violations\
+\n    emptyDir: {}\
+\n  exportVolumeMount:\
+\n    path: /tmp/violations\
+\n  exportSidecar:\
+\n    name: go-sub\
+\n    image: ${FAKE_READER_IMAGE}\
+\n    imagePullPolicy: ${FAKE_READER_IMAGE_PULL_POLICY}\
+\n    securityContext:\
+\n      allowPrivilegeEscalation: false\
+\n      capabilities:\
+\n        drop:\
+\n        - ALL\
+\n      readOnlyRootFilesystem: true\
+\n      runAsGroup: 999\
+\n      runAsNonRoot: true\
+\n      runAsUser: 1000\
+\n      seccompProfile:\
+\n        type: RuntimeDefault\
+\n    volumeMounts:\
+\n    - mountPath: /tmp/violations\
+\n      name: tmp-violations"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -257,13 +284,13 @@ e2e-helm-install:
 	cd .staging/helm && tar -xvf helmbin.tar.gz
 	./.staging/helm/linux-amd64/helm version --client
 
-e2e-helm-deploy: e2e-helm-install
+e2e-helm-deploy: e2e-helm-install $(LOCALBIN) create-values
 ifeq ($(ENABLE_EXPORT),true)
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
-		$(HELM_EXPORT_ARGS) \
-		${HELM_DAPR_ARGS} \
+		$(if $(filter disk,$(EXPORT_BACKEND)),$(HELM_EXPORT_ARGS)) \
+		$(if $(filter dapr,$(EXPORT_BACKEND)),$(HELM_DAPR_ARGS)) \
 		$(HELM_EXTRA_ARGS)
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
@@ -601,3 +628,6 @@ tilt: generate manifests tilt-prepare
 
 tilt-clean:
 	rm -rf .tiltbuild
+
+create-values:
+	@echo ${HELM_EXPORT_VARIABLES} > /tmp/values.yaml
