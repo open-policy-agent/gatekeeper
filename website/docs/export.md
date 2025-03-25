@@ -213,7 +213,7 @@ data:
 
 ### Quick start with exporting violations on node storage using Disk driver via emptyDir
 
-#### Prerequisites for Disk driver
+#### Configure Gatekeeper with Export enabled to Disk
 
 1. Build `fake-reader` image from [gatekeeper/test/export/fake-reader](https://github.com/open-policy-agent/gatekeeper/tree/master/test/export/fake-reader)
 
@@ -221,69 +221,71 @@ data:
     docker buildx build -t <your_img_name:tag> --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
     ```
 
-2. Update `gatekeeper-audit` deployment to add `emptyDir` volume.
+    **Note:** Make sure the fake-reader image is available in your preferred registry or cluster.
 
-    ```yaml
-    volumes:
-    - emptyDir: {}
-      name: tmp-violations
-    ```
+2. Deploy Gatekeeper charts with needed configuration.
 
-    :::tip
-    You can replace emptyDir to use PVC or any other types of volumes.
-    :::
-
-3. Update `gatekeeper-audit` deployment to add `volumeMount` to `manager` container.
-
-    ```yaml
-    volumeMounts:
-    - mountPath: /tmp/violations
-      name: tmp-violations
-    ```
-
-4. Update `gatekeeper-audit` deployment to add a `sidecar` reader container.
-
-    ```yaml
-    - name: go-sub
-      image: <your_img_name:tag>
-      imagePullPolicy: Never
-      securityContext:
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
-        readOnlyRootFilesystem: true
-        runAsGroup: 999
-        runAsNonRoot: true
-        runAsUser: 1000
-        seccompProfile:
-          type: RuntimeDefault
-      volumeMounts:
-      - mountPath: /tmp/violations
-        name: tmp-violations
-    ```
-
-#### Configure Gatekeeper with Export enabled to Disk
-
-1. Update `gatekeeper-audit` deployment to add following flags
-
-    ```yaml
-    ...
-    - --enable-violation-export=true
-    - --audit-connection=audit
-    - --audit-channel=audit
-    ...
-    ```
-
-2. Deploy Gatekeeper charts with aforementioned changes.
-
-    :::tip
     You can use below command that uses a rule defined in [Makefile](https://github.com/open-policy-agent/gatekeeper/blob/master/Makefile) to deploy gatekeeper that mounts emptyDir with sidecar reader container.
+  
+    ```bash
+    make deploy IMG=<gatekeeper_image> EXPORT_BACKEND=disk FAKE_READER_IMAGE=<your_reader_image> FAKE_READER_IMAGE_PULL_POLICY=<your_preferred_image_pull_policy>
+    ```
 
-    make deploy IMG=<gatekeeper_image> EXPORT_BACKEND=disk FAKE_READER_IMAGE=<your_reader_image>
-    :::
+    Alternatively, you can follow the below steps to manually update Gatekeeper and configure export.
 
-    **Note:** Verify that after the audit pod is running there is a Dapr sidecar injected and running along side `manager` container.
+    1. Update `gatekeeper-audit` deployment to add `emptyDir` volume.
+
+        ```yaml
+        volumes:
+        - emptyDir: {}
+          name: tmp-violations
+        ```
+
+        :::tip
+        You can replace emptyDir to use PVC or any other types of volumes.
+        :::
+
+    2. Update `gatekeeper-audit` deployment to add `volumeMount` to `manager` container.
+
+        ```yaml
+        volumeMounts:
+        - mountPath: /tmp/violations
+          name: tmp-violations
+        ```
+
+    3. Update `gatekeeper-audit` deployment to add a `sidecar` reader container.
+
+        ```yaml
+        - name: go-sub
+          image: <your_img_name:tag>
+          imagePullPolicy: <your_preferred_image_pull_policy>
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 999
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+          - mountPath: /tmp/violations
+            name: tmp-violations
+        ```
+
+    4. Update `gatekeeper-audit` deployment to add following flags
+
+        ```yaml
+        ...
+        - --enable-violation-export=true
+        - --audit-connection=audit
+        - --audit-channel=audit
+        ...
+        ```
+
+    **Note:** Verify that after the audit pod is running there is a sidecar running along side `manager` container after deploying Gatekeeper.
 
 3. Create connection config to establish a connection.
 
