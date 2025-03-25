@@ -136,12 +136,12 @@ func (r *Writer) CloseConnection(connectionName string) error {
 func (r *Writer) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
 	conn, ok := r.openConnections[connectionName]
 	if !ok {
-		return fmt.Errorf("connection %s not found for disk driver", connectionName)
+		return fmt.Errorf("invalid connection: %s not found for disk driver", connectionName)
 	}
 
 	var violation util.ExportMsg
 	if violation, ok = data.(util.ExportMsg); !ok {
-		return fmt.Errorf("invalid data type, cannot convert data to exportMsg")
+		return fmt.Errorf("invalid data type: cannot convert data to exportMsg")
 	}
 
 	if violation.Message == util.AuditStartedMsg {

@@ -261,7 +261,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	logStart(am.log)
 	exportErrorMap := make(map[string]error)
 	if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
-		exportErrorMap[err.Error()] = err
+		exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
 		am.log.Error(err, "failed to export audit start message")
 	}
 	// record audit latency
@@ -276,7 +276,7 @@ func (am *Manager) audit(ctx context.Context) error {
 			am.log.Error(err, "failed to report run end time")
 		}
 		if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
-			exportErrorMap[err.Error()] = err
+			exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
 		}
 		for _, v := range exportErrorMap {
 			am.log.Error(v, "failed to export audit violation")
@@ -898,7 +898,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		if *exportController.ExportEnabled {
 			err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
 			if err != nil {
-				exportErrorMap[err.Error()] = err
+				exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
 			}
 		}
 		if *emitAuditEvents {
