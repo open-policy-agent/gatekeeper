@@ -260,9 +260,11 @@ func (am *Manager) audit(ctx context.Context) error {
 	am.log = log.WithValues(logging.AuditID, timestamp)
 	logStart(am.log)
 	exportErrorMap := make(map[string]error)
-	if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
-		exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
-		am.log.Error(err, "failed to export audit start message")
+	if *exportController.ExportEnabled {
+		if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
+			exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
+			am.log.Error(err, "failed to export audit start message")
+		}
 	}
 	// record audit latency
 	defer func() {
@@ -275,8 +277,10 @@ func (am *Manager) audit(ctx context.Context) error {
 		if err := am.reporter.reportRunEnd(endTime); err != nil {
 			am.log.Error(err, "failed to report run end time")
 		}
-		if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
-			exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
+		if *exportController.ExportEnabled {
+			if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
+				exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
+			}
 		}
 		for _, v := range exportErrorMap {
 			am.log.Error(v, "failed to export audit violation")
