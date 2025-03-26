@@ -50,7 +50,7 @@ jobs:
         kind load docker-image --name kind gatekeeper-e2e:latest gatekeeper-crds:latest
         kubectl create ns gatekeeper-system
         make e2e-publisher-deploy
-        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG
+        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG EXPORT_BACKEND=dapr
         make test-e2e ENABLE_EXPORT_TESTS=1
 
     - name: Save logs

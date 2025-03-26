@@ -162,6 +162,13 @@ spec:
           readOnly: true
         - mountPath: /tmp/audit
           name: tmp-volume
+        {{- if .Values.audit.exportVolumeMount }}
+        - mountPath: {{ .Values.audit.exportVolumeMount.path }}
+          name: {{ .Values.audit.exportVolume.name }}
+        {{- end }}
+      {{ if .Values.audit.exportSidecar }}
+      - {{ toYaml .Values.audit.exportSidecar | nindent 8 }}
+      {{- end }}
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
       hostNetwork: {{ .Values.audit.hostNetwork }}
       imagePullSecrets:
@@ -182,6 +189,9 @@ spec:
         secret:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
+      {{- if .Values.audit.exportVolume }}
+      - {{- toYaml .Values.audit.exportVolume | nindent 8 }}
+      {{- end }}
       {{- if .Values.audit.writeToRAMDisk }}
       - emptyDir:
           medium: Memory
