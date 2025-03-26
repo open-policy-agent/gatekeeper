@@ -41,11 +41,14 @@ HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true
 	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
 
-HELM_DISK_EXPORT_ARGS := -f /tmp/values.yaml \
+HELM_DISK_EXPORT_ARGS := --set audit.exportVolumeMount.path=${EXPORT_DISK_PATH} \
+	--set audit.exportConfig.maxAuditResults=${MAX_AUDIT_RESULTS} \
+	-f /tmp/values.yaml \
 
 HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
 	--set audit.connection=${AUDIT_CONNECTION} \
 	--set audit.channel=${AUDIT_CHANNEL} \
+	--set exportBackend=${EXPORT_BACKEND} \
 
 HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
 	--set image.crdRepository=${HELM_CRD_REPO} \
@@ -168,8 +171,6 @@ HELM_EXPORT_VARIABLES := "audit:\
 \n  exportVolume:\
 \n    name: tmp-violations\
 \n    emptyDir: {}\
-\n  exportVolumeMount:\
-\n    path: /tmp/violations\
 \n  exportSidecar:\
 \n    name: go-sub\
 \n    image: ${FAKE_READER_IMAGE}\
@@ -338,9 +339,8 @@ e2e-publisher-deploy:
 	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -
 	kubectl apply -f test/export/fake-subscriber/manifest/publish-components.yaml
 
-e2e-reader-build-load-image:
-	docker buildx build --platform="linux/amd64" -t ${FAKE_READER_IMAGE} --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
-	kind load docker-image --name kind ${FAKE_READER_IMAGE}
+e2e-reader-build-image:
+	docker buildx build --platform="$(PLATFORM)" -t ${FAKE_READER_IMAGE} --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
 
 # Build manager binary
 manager: generate

@@ -39,10 +39,9 @@ jobs:
 
         make e2e-build-load-externaldata-image
 
+        make e2e-reader-build-image PLATFORM="linux/amd64"
         kind load docker-image --name kind \
-          gatekeeper-e2e:latest
-        
-        make e2e-reader-build-load-image
+          gatekeeper-e2e:latest fake-reader:latest
         
         make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true GENERATE_VAP=true GENERATE_VAPBINDING=true EXPORT_BACKEND=disk
         
