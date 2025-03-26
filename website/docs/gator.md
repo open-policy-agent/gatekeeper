@@ -86,7 +86,12 @@ cat my-manifest.yaml | gator test --image=localhost:5000/gator/template-library:
   --image=localhost:5000/gator/constraints:v1
 ```
 
-The `--deny-only` will only output violations about denied constraints, not the ones using `warn` enforcement action.
+The `--deny-only` flag will only output violations about denied constraints, not the ones using `warn` enforcement action.
+
+:::note
+`--deny-only` flag is available after Gatekeeper 3.19.
+:::
+
 
 #### Exit Codes
 
