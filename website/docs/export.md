@@ -221,6 +221,10 @@ data:
     docker buildx build -t <your_img_name:tag> --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
     ```
 
+    :::tip
+    You can use `make e2e-reader-build-image FAKE_READER_IMAGE=<your_img_name:tag>` defined in [Makefile](https://github.com/open-policy-agent/gatekeeper/tree/master/Makefile)
+    :::
+
     **Note:** Make sure the fake-reader image is available in your preferred registry or cluster.
 
 2. Create `values.yaml` with the following variables.
@@ -271,6 +275,8 @@ data:
     --set enableViolationExport=true \
     --set audit.connection=audit-connection \
     --set audit.channel=audit-channel \
+    --set audit.exportConfig.maxAuditResults=3 \
+    --set exportBackend=disk \
     --values /path/to/values.yaml
     ```
 
@@ -282,28 +288,7 @@ data:
     gatekeeper-audit-6865f5f56d-vclxw                2/2     Running   0               12s
     ```
 
-4. Create connection config to establish a connection.
-
-    ```shell
-    kubectl apply -f - <<EOF
-    apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: audit-connection
-      namespace: gatekeeper-system
-    data:
-      driver: "disk"
-      config: |
-        {
-          "path": "/tmp/violations",
-          "maxAuditResults": 3
-        }
-    EOF
-    ```
-
-    **Note:** Name of the connection configMap must match the value of `--audit-connection` for it to be used by audit to export violation. At the moment, only one connection config can exists for audit.
-
-5. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
+4. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
 
     ```log
     kubectl get constraint
@@ -311,7 +296,7 @@ data:
     pod-must-have-test                        0
     ```
 
-6. Finally, check the sidecar reader logs to see the violations written.
+5. Finally, check the sidecar reader logs to see the violations written.
 
     ```log
     kubectl logs -l gatekeeper.sh/operation=audit -c go-sub -n gatekeeper-system 

@@ -1,0 +1,15 @@
+---
+{{- if and .Values.enableViolationExport (eq .Values.exportBackend "disk" ) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: '{{ .Values.audit.connection }}'
+  namespace: '{{ .Release.Namespace }}'
+data:
+  driver: '{{ .Values.exportBackend }}'
+  config: |
+    {
+      "path": "{{ .Values.audit.exportVolumeMount.path }}",
+      "maxAuditResults": {{ .Values.audit.exportConfig.maxAuditResults }}
+    }
+{{- end }}
