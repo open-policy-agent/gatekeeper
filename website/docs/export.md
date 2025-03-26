@@ -268,11 +268,18 @@ data:
 
     ```shell
     helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
-    ...
     --set enableViolationExport=true \
     --set audit.connection=audit-connection \
     --set audit.channel=audit-channel \
     --values /path/to/values.yaml
+    ```
+
+    **Note**: After the audit pod starts, verify that it contains two running containers.
+
+    ```shell
+    kubectl get pod -n gatekeeper-system 
+    NAME                                             READY   STATUS    RESTARTS        AGE
+    gatekeeper-audit-6865f5f56d-vclxw                2/2     Running   0               12s
     ```
 
 4. Create connection config to establish a connection.
@@ -282,7 +289,7 @@ data:
     apiVersion: v1
     kind: ConfigMap
     metadata:
-      name: audit
+      name: audit-connection
       namespace: gatekeeper-system
     data:
       driver: "disk"
