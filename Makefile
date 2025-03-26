@@ -37,14 +37,15 @@ NODE_VERSION ?= 16-bullseye-slim
 YQ_VERSION ?= 4.30.6
 
 HELM_ARGS ?=
-HELM_DAPR_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
+HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
 	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
+
+HELM_DISK_EXPORT_ARGS := -f /tmp/values.yaml \
 
 HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
 	--set audit.connection=${AUDIT_CONNECTION} \
 	--set audit.channel=${AUDIT_CHANNEL} \
-	-f /tmp/values.yaml \
 
 HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
 	--set image.crdRepository=${HELM_CRD_REPO} \
@@ -289,8 +290,9 @@ ifeq ($(ENABLE_EXPORT),true)
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
-		$(if $(filter disk,$(EXPORT_BACKEND)),$(HELM_EXPORT_ARGS)) \
-		$(if $(filter dapr,$(EXPORT_BACKEND)),$(HELM_DAPR_ARGS)) \
+		$(HELM_EXPORT_ARGS) \
+		$(if $(filter disk,$(EXPORT_BACKEND)),$(HELM_DISK_EXPORT_ARGS)) \
+		$(if $(filter dapr,$(EXPORT_BACKEND)),$(HELM_DAPR_EXPORT_ARGS)) \
 		$(HELM_EXTRA_ARGS)
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
