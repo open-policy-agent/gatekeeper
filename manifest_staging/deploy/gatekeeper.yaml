@@ -5323,22 +5323,6 @@ webhooks:
     - UPDATE
     resources:
     - '*'
-    - pods/ephemeralcontainers
-    - pods/exec
-    - pods/log
-    - pods/eviction
-    - pods/portforward
-    - pods/proxy
-    - pods/attach
-    - pods/binding
-    - pods/resize
-    - deployments/scale
-    - replicasets/scale
-    - statefulsets/scale
-    - replicationcontrollers/scale
-    - services/proxy
-    - nodes/proxy
-    - services/status
   sideEffects: None
   timeoutSeconds: 1
 ---
