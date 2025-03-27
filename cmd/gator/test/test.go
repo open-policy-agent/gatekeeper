@@ -53,6 +53,7 @@ var (
 	flagImages       []string
 	flagTempDir      string
 	flagEnableK8sCel bool
+	flagDenyOnly     bool
 )
 
 const (
@@ -76,6 +77,7 @@ func init() {
 	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "enable-k8s-native-validation", "", true, "enable the validating admission policy driver")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
+	Cmd.Flags().BoolVarP(&flagDenyOnly, "deny-only", "", false, "output only denied constraints")
 }
 
 func run(_ *cobra.Command, _ []string) {
@@ -98,13 +100,20 @@ func run(_ *cobra.Command, _ []string) {
 	// Whether or not we return non-zero depends on whether we have a `deny`
 	// enforcementAction on one of the violated constraints
 	exitCode := 0
-	if enforceableFailure(results) {
+	if enforceableFailures(results) {
 		exitCode = 1
 	}
 	os.Exit(exitCode)
 }
 
-func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instrumentation.StatsEntry) string {
+func formatOutput(flagOutput string, allResults []*test.GatorResult, stats []*instrumentation.StatsEntry) string {
+	var results []*test.GatorResult
+	for _, result := range allResults {
+		if flagDenyOnly && !enforceableFailure(result) {
+			continue
+		}
+		results = append(results, result)
+	}
 	switch strings.ToLower(flagOutput) {
 	case stringJSON:
 		var jsonB []byte
@@ -204,17 +213,23 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 	return ""
 }
 
-func enforceableFailure(results []*test.GatorResult) bool {
+func enforceableFailures(results []*test.GatorResult) bool {
 	for _, result := range results {
-		if result.EnforcementAction == string(util.Deny) {
+		if enforceableFailure(result) {
 			return true
 		}
-		for _, action := range result.ScopedEnforcementActions {
-			if action == string(util.Deny) {
-				return true
-			}
+	}
+	return false
+}
+
+func enforceableFailure(result *test.GatorResult) bool {
+	if result.EnforcementAction == string(util.Deny) {
+		return true
+	}
+	for _, action := range result.ScopedEnforcementActions {
+		if action == string(util.Deny) {
+			return true
 		}
 	}
-
 	return false
 }

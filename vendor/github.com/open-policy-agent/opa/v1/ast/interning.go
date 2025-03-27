@@ -17,6 +17,9 @@ var (
 	minusOneTerm = &Term{Value: Number("-1")}
 
 	InternedNullTerm = &Term{Value: Null{}}
+
+	InternedEmptyString = StringTerm("")
+	InternedEmptyObject = ObjectTerm()
 )
 
 // InternedBooleanTerm returns an interned term with the given boolean value.
@@ -58,6 +61,29 @@ func InternedIntNumberTermFromString(s string) *Term {
 // term, otherwise false.
 func HasInternedIntNumberTerm(i int) bool {
 	return i >= -1 && i < len(intNumberTerms)
+}
+
+func InternedStringTerm(s string) *Term {
+	if term, ok := internedStringTerms[s]; ok {
+		return term
+	}
+
+	return StringTerm(s)
+}
+
+var internedStringTerms = map[string]*Term{
+	"":   InternedEmptyString,
+	"0":  StringTerm("0"),
+	"1":  StringTerm("1"),
+	"2":  StringTerm("2"),
+	"3":  StringTerm("3"),
+	"4":  StringTerm("4"),
+	"5":  StringTerm("5"),
+	"6":  StringTerm("6"),
+	"7":  StringTerm("7"),
+	"8":  StringTerm("8"),
+	"9":  StringTerm("9"),
+	"10": StringTerm("10"),
 }
 
 var stringToIntNumberTermMap = map[string]*Term{
@@ -1092,7 +1118,3 @@ var intNumberTerms = [...]*Term{
 	{Value: Number("511")},
 	{Value: Number("512")},
 }
-
-var InternedEmptyString = StringTerm("")
-
-var InternedEmptyObject = ObjectTerm()

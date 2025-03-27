@@ -21,6 +21,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/prometheus/client_golang/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -43,11 +44,13 @@ func setupManager(t *testing.T) manager.Manager {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	metrics.Registry = prometheus.NewRegistry()
+	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
 		Metrics: metricsserver.Options{
 			BindAddress: "0",
 		},
 		MapperProvider: apiutil.NewDynamicRESTMapper,
+		Controller:    config.Controller{SkipNameValidation: &skipNameValidation},
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)

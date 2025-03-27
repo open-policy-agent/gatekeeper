@@ -73,7 +73,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 
 // PodStatusToConfigMapper correlates a ConfigPodStatus with its corresponding Config.
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToConfigMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ConfigPodStatus] {
+func PodStatusToConfigMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ConfigPodStatus, reconcile.Request] {
 	return func(_ context.Context, obj *v1beta1.ConfigPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConfigNameLabel]

@@ -60,6 +60,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 )
 
 const (
@@ -74,6 +75,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	logger := zap.New(zap.UseDevMode(true), zap.WriteTo(testutils.NewTestWriter(t)))
 	ctrl.SetLogger(logger)
 	metrics.Registry = prometheus.NewRegistry()
+	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
 		HealthProbeBindAddress: "127.0.0.1:29090",
 		Metrics: metricsserver.Options{
@@ -81,6 +83,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 		},
 		MapperProvider: apiutil.NewDynamicRESTMapper,
 		Logger:         logger,
+		Controller:    config.Controller{SkipNameValidation: &skipNameValidation},
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)

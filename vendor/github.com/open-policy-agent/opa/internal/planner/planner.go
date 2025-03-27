@@ -223,7 +223,7 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 	}
 
 	// Initialize parameters for functions.
-	for i := 0; i < len(rules[0].Head.Args); i++ {
+	for range len(rules[0].Head.Args) {
 		fn.Params = append(fn.Params, p.newLocal())
 	}
 
@@ -385,7 +385,7 @@ func (p *Planner) planRules(rules []*ast.Rule) (string, error) {
 							return nil
 						})
 					default:
-						return fmt.Errorf("illegal rule kind")
+						return errors.New("illegal rule kind")
 					}
 				})
 			})
@@ -497,7 +497,6 @@ func (p *Planner) planDotOr(obj ir.Local, key ir.Operand, or stmtFactory, iter p
 
 func (p *Planner) planNestedObjects(obj ir.Local, ref ast.Ref, iter planLocalIter) error {
 	if len(ref) == 0 {
-		//return fmt.Errorf("nested object construction didn't create object")
 		return iter(obj)
 	}
 
@@ -991,8 +990,7 @@ func (p *Planner) planExprCall(e *ast.Expr, iter planiter) error {
 		op := e.Operator()
 
 		if replacement := p.mocks.Lookup(operator); replacement != nil {
-			switch r := replacement.Value.(type) {
-			case ast.Ref:
+			if r, ok := replacement.Value.(ast.Ref); ok {
 				if !r.HasPrefix(ast.DefaultRootRef) && !r.HasPrefix(ast.InputRootRef) {
 					// replacement is builtin
 					operator = r.String()
@@ -1147,7 +1145,7 @@ func (p *Planner) planExprCallFunc(name string, arity int, void bool, operands [
 		})
 
 	default:
-		return fmt.Errorf("impossible replacement, arity mismatch")
+		return errors.New("impossible replacement, arity mismatch")
 	}
 }
 
@@ -1173,7 +1171,7 @@ func (p *Planner) planExprCallValue(value *ast.Term, arity int, operands []*ast.
 			})
 		})
 	default:
-		return fmt.Errorf("impossible replacement, arity mismatch")
+		return errors.New("impossible replacement, arity mismatch")
 	}
 }
 
@@ -1750,7 +1748,7 @@ func (p *Planner) planRef(ref ast.Ref, iter planiter) error {
 
 	head, ok := ref[0].Value.(ast.Var)
 	if !ok {
-		return fmt.Errorf("illegal ref: non-var head")
+		return errors.New("illegal ref: non-var head")
 	}
 
 	if head.Compare(ast.DefaultRootDocument.Value) == 0 {
@@ -1767,7 +1765,7 @@ func (p *Planner) planRef(ref ast.Ref, iter planiter) error {
 
 	p.ltarget, ok = p.vars.GetOp(head)
 	if !ok {
-		return fmt.Errorf("illegal ref: unsafe head")
+		return errors.New("illegal ref: unsafe head")
 	}
 
 	return p.planRefRec(ref, 1, iter)

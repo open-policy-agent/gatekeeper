@@ -7,6 +7,7 @@ package ast
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -133,7 +134,7 @@ func (c parsedTermCache) String() string {
 	s.WriteRune('{')
 	var e *parsedTermCacheItem
 	for e = c.m; e != nil; e = e.next {
-		s.WriteString(fmt.Sprintf("%v", e))
+		s.WriteString(e.String())
 	}
 	s.WriteRune('}')
 	return s.String()
@@ -517,7 +518,7 @@ func parseAnnotations(comments []*Comment) ([]*Annotations, Errors) {
 	var curr *metadataParser
 	var blocks []*metadataParser
 
-	for i := 0; i < len(comments); i++ {
+	for i := range comments {
 		if curr != nil {
 			if comments[i].Location.Row == comments[i-1].Location.Row+1 && comments[i].Location.Col == 1 {
 				curr.Append(comments[i])
@@ -725,7 +726,9 @@ func (p *Parser) parseRules() []*Rule {
 
 	// p[x] if ...  becomes a single-value rule p[x]
 	if hasIf && !usesContains && len(rule.Head.Ref()) == 2 {
-		if !rule.Head.Ref()[1].IsGround() && len(rule.Head.Args) == 0 {
+		v := rule.Head.Ref()[1]
+		_, isRef := v.Value.(Ref)
+		if (!v.IsGround() || isRef) && len(rule.Head.Args) == 0 {
 			rule.Head.Key = rule.Head.Ref()[1]
 		}
 
@@ -1638,6 +1641,10 @@ func (p *Parser) parseNumber() *Term {
 
 func (p *Parser) parseString() *Term {
 	if p.s.lit[0] == '"' {
+		if p.s.lit == "\"\"" {
+			return NewTerm(InternedEmptyString.Value).SetLocation(p.s.Loc())
+		}
+
 		var s string
 		err := json.Unmarshal([]byte(p.s.lit), &s)
 		if err != nil {
@@ -2060,7 +2067,7 @@ func (p *Parser) parseTermPairList(end tokens.Token, r [][2]*Term) [][2]*Term {
 func (p *Parser) parseTermOp(values ...tokens.Token) *Term {
 	for i := range values {
 		if p.s.tok == values[i] {
-			r := RefTerm(VarTerm(fmt.Sprint(p.s.tok)).SetLocation(p.s.Loc())).SetLocation(p.s.Loc())
+			r := RefTerm(VarTerm(p.s.tok.String()).SetLocation(p.s.Loc())).SetLocation(p.s.Loc())
 			p.scan()
 			return r
 		}
@@ -2354,7 +2361,7 @@ func (b *metadataParser) Parse() (*Annotations, error) {
 	var raw rawAnnotation
 
 	if len(bytes.TrimSpace(b.buf.Bytes())) == 0 {
-		return nil, fmt.Errorf("expected METADATA block, found whitespace")
+		return nil, errors.New("expected METADATA block, found whitespace")
 	}
 
 	if err := yaml.Unmarshal(b.buf.Bytes(), &raw); err != nil {
@@ -2403,7 +2410,7 @@ func (b *metadataParser) Parse() (*Annotations, error) {
 
 		a.Path, err = ParseRef(k)
 		if err != nil {
-			return nil, fmt.Errorf("invalid document reference")
+			return nil, errors.New("invalid document reference")
 		}
 
 		switch v := v.(type) {
@@ -2503,7 +2510,7 @@ func unwrapPair(pair map[string]interface{}) (string, interface{}) {
 	return "", nil
 }
 
-var errInvalidSchemaRef = fmt.Errorf("invalid schema reference")
+var errInvalidSchemaRef = errors.New("invalid schema reference")
 
 // NOTE(tsandall): 'schema' is not registered as a root because it's not
 // supported by the compiler or evaluator today. Once we fix that, we can remove
@@ -2542,7 +2549,7 @@ func parseRelatedResource(rr interface{}) (*RelatedResourceAnnotation, error) {
 			}
 			return &RelatedResourceAnnotation{Ref: *u}, nil
 		}
-		return nil, fmt.Errorf("ref URL may not be empty string")
+		return nil, errors.New("ref URL may not be empty string")
 	case map[string]interface{}:
 		description := strings.TrimSpace(getSafeString(rr, "description"))
 		ref := strings.TrimSpace(getSafeString(rr, "ref"))
@@ -2553,10 +2560,10 @@ func parseRelatedResource(rr interface{}) (*RelatedResourceAnnotation, error) {
 			}
 			return &RelatedResourceAnnotation{Description: description, Ref: *u}, nil
 		}
-		return nil, fmt.Errorf("'ref' value required in object")
+		return nil, errors.New("'ref' value required in object")
 	}
 
-	return nil, fmt.Errorf("invalid value type, must be string or map")
+	return nil, errors.New("invalid value type, must be string or map")
 }
 
 func parseAuthor(a interface{}) (*AuthorAnnotation, error) {
@@ -2574,10 +2581,10 @@ func parseAuthor(a interface{}) (*AuthorAnnotation, error) {
 		if len(name) > 0 || len(email) > 0 {
 			return &AuthorAnnotation{name, email}, nil
 		}
-		return nil, fmt.Errorf("'name' and/or 'email' values required in object")
+		return nil, errors.New("'name' and/or 'email' values required in object")
 	}
 
-	return nil, fmt.Errorf("invalid value type, must be string or map")
+	return nil, errors.New("invalid value type, must be string or map")
 }
 
 func getSafeString(m map[string]interface{}, k string) string {
@@ -2599,7 +2606,7 @@ func parseAuthorString(s string) (*AuthorAnnotation, error) {
 	parts := strings.Fields(s)
 
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("author is an empty string")
+		return nil, errors.New("author is an empty string")
 	}
 
 	namePartCount := len(parts)
@@ -2609,7 +2616,7 @@ func parseAuthorString(s string) (*AuthorAnnotation, error) {
 		strings.HasSuffix(trailing, emailSuffix) {
 		email = trailing[len(emailPrefix):]
 		email = email[0 : len(email)-len(emailSuffix)]
-		namePartCount = namePartCount - 1
+		namePartCount -= 1
 	}
 
 	name := strings.Join(parts[0:namePartCount], " ")
@@ -2635,7 +2642,7 @@ func convertYAMLMapKeyTypes(x any, path []string) (any, error) {
 		return result, nil
 	case []any:
 		for i := range x {
-			x[i], err = convertYAMLMapKeyTypes(x[i], append(path, fmt.Sprintf("%d", i)))
+			x[i], err = convertYAMLMapKeyTypes(x[i], append(path, strconv.Itoa(i)))
 			if err != nil {
 				return nil, err
 			}
@@ -2681,7 +2688,7 @@ func IsFutureKeywordForRegoVersion(s string, v RegoVersion) bool {
 func (p *Parser) futureImport(imp *Import, allowedFutureKeywords map[string]tokens.Token) {
 	path := imp.Path.Value.(Ref)
 
-	if len(path) == 1 || !path[1].Equal(StringTerm("keywords")) {
+	if len(path) == 1 || !path[1].Equal(keywordsTerm) {
 		p.errorf(imp.Path.Location, "invalid import, must be `future.keywords`")
 		return
 	}
