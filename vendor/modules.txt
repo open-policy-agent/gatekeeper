@@ -425,8 +425,8 @@ github.com/onsi/gomega/matchers/support/goraph/edge
 github.com/onsi/gomega/matchers/support/goraph/node
 github.com/onsi/gomega/matchers/support/goraph/util
 github.com/onsi/gomega/types
-# github.com/open-policy-agent/cert-controller v0.11.0
-## explicit; go 1.22.0
+# github.com/open-policy-agent/cert-controller v0.12.1-0.20250327012017-2e84676bfc1e
+## explicit; go 1.23.0
 github.com/open-policy-agent/cert-controller/pkg/rotator
 # github.com/open-policy-agent/frameworks/constraint v0.0.0-20250327000311-9109e9aee867
 ## explicit; go 1.22.7
