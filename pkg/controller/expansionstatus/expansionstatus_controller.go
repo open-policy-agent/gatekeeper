@@ -79,7 +79,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 
 // PodStatusToExpansionTemplateMapper correlates a ExpansionTemplatePodStatus with its corresponding expansion template.
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToExpansionTemplateMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ExpansionTemplatePodStatus] {
+func PodStatusToExpansionTemplateMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ExpansionTemplatePodStatus, reconcile.Request] {
 	return func(_ context.Context, obj *v1beta1.ExpansionTemplatePodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ExpansionTemplateNameLabel]

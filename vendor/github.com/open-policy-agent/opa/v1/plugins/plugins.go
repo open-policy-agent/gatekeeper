@@ -448,6 +448,11 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 		f(m)
 	}
 
+	if m.parserOptions.RegoVersion == ast.RegoUndefined {
+		// Default to v1 if rego-version is not set through options
+		m.parserOptions.RegoVersion = ast.DefaultRegoVersion
+	}
+
 	if m.logger == nil {
 		m.logger = logging.Get()
 	}
@@ -480,13 +485,7 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 		return nil, err
 	}
 
-	serviceOpts := cfg.ServiceOptions{
-		Raw:                   parsedConfig.Services,
-		AuthPlugin:            m.AuthPlugin,
-		Keys:                  m.keys,
-		Logger:                m.logger,
-		DistributedTacingOpts: m.distributedTacingOpts,
-	}
+	serviceOpts := m.DefaultServiceOpts(parsedConfig)
 
 	m.services, err = cfg.ParseServicesConfig(serviceOpts)
 	if err != nil {
@@ -502,8 +501,8 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 
 		m.reporter.RegisterGatherer("min_compatible_version", func(_ context.Context) (any, error) {
 			var minimumCompatibleVersion string
-			if m.compiler != nil && m.compiler.Required != nil {
-				minimumCompatibleVersion, _ = m.compiler.Required.MinimumCompatibleVersion()
+			if c := m.GetCompiler(); c != nil && c.Required != nil {
+				minimumCompatibleVersion, _ = c.Required.MinimumCompatibleVersion()
 			}
 			return minimumCompatibleVersion, nil
 		})
@@ -755,14 +754,19 @@ func (m *Manager) Stop(ctx context.Context) {
 	}
 }
 
-// Reconfigure updates the configuration on the manager.
-func (m *Manager) Reconfigure(config *config.Config) error {
-	opts := cfg.ServiceOptions{
+func (m *Manager) DefaultServiceOpts(config *config.Config) cfg.ServiceOptions {
+	return cfg.ServiceOptions{
 		Raw:                   config.Services,
 		AuthPlugin:            m.AuthPlugin,
 		Logger:                m.logger,
+		Keys:                  m.keys,
 		DistributedTacingOpts: m.distributedTacingOpts,
 	}
+}
+
+// Reconfigure updates the configuration on the manager.
+func (m *Manager) Reconfigure(config *config.Config) error {
+	opts := m.DefaultServiceOpts(config)
 
 	keys, err := keys.ParseKeysConfig(config.Keys)
 	if err != nil {
@@ -799,7 +803,7 @@ func (m *Manager) Reconfigure(config *config.Config) error {
 
 	m.Config = config
 	m.interQueryBuiltinCacheConfig = interQueryBuiltinCacheConfig
-	for name, client := range services {
+	for name, client := range services { //nolint:gocritic
 		m.services[name] = client
 	}
 
