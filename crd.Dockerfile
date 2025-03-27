@@ -1,4 +1,4 @@
-FROM --platform=$TARGETPLATFORM registry.k8s.io/kubectl:v1.32.1 AS builder
+FROM --platform=$TARGETPLATFORM registry.k8s.io/kubectl:v1.32.2 AS builder
 
 ARG TARGETPLATFORM
 ARG TARGETOS
