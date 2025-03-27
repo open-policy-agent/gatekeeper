@@ -31,7 +31,7 @@ func getLastIP(cidr *net.IPNet) (net.IP, error) {
 	prefixLen, bits := cidr.Mask.Size()
 	if prefixLen == 0 && bits == 0 {
 		// non-standard mask, see https://golang.org/pkg/net/#IPMask.Size
-		return nil, fmt.Errorf("CIDR mask is in non-standard format")
+		return nil, errors.New("CIDR mask is in non-standard format")
 	}
 	var lastIP []byte
 	if prefixLen == bits {
@@ -137,7 +137,7 @@ func evalNetCIDRContainsMatchesOperand(operand int, a *ast.Term, iter func(cidr,
 	case ast.String:
 		return iter(a, a)
 	case *ast.Array:
-		for i := 0; i < v.Len(); i++ {
+		for i := range v.Len() {
 			cidr, err := getCIDRMatchTerm(v.Elem(i))
 			if err != nil {
 				return fmt.Errorf("operand %v: %v", operand, err)
@@ -255,7 +255,7 @@ func (c cidrBlockRanges) Less(i, j int) bool {
 	}
 
 	// Then compare first IP.
-	cmp = bytes.Compare(*c[i].First, *c[i].First)
+	cmp = bytes.Compare(*c[i].First, *c[j].First)
 	if cmp < 0 {
 		return true
 	} else if cmp > 0 {
@@ -274,7 +274,7 @@ func builtinNetCIDRMerge(_ BuiltinContext, operands []*ast.Term, iter func(*ast.
 
 	switch v := operands[0].Value.(type) {
 	case *ast.Array:
-		for i := 0; i < v.Len(); i++ {
+		for i := range v.Len() {
 			network, err := generateIPNet(v.Elem(i))
 			if err != nil {
 				return err

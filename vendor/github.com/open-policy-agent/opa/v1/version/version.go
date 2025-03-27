@@ -11,7 +11,7 @@ import (
 )
 
 // Version is the canonical version of OPA.
-var Version = "1.1.0"
+var Version = "1.2.0"
 
 // GoVersion is the version of Go this was built with
 var GoVersion = runtime.Version()
@@ -44,6 +44,6 @@ func init() {
 		}
 	}
 	if dirty {
-		Vcs = Vcs + "-dirty"
+		Vcs += "-dirty"
 	}
 }

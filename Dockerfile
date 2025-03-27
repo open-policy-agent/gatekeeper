@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.24-bookworm@sha256:d7d795d0a9f51b00d9c9bfd17388c2c626004a50c6ed7c581e095122507fe1ab AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24-bookworm@sha256:fa1a01d362a7b9df68b021d59a124d28cae6d99ebd1a876e3557c4dd092f1b1d AS builder
 
 ARG TARGETPLATFORM
 ARG TARGETOS
@@ -18,7 +18,7 @@ COPY . .
 
 RUN go build -mod vendor -a -ldflags "${LDFLAGS}" -o manager
 
-FROM gcr.io/distroless/static-debian12@sha256:3f2b64ef97bd285e36132c684e6b2ae8f2723293d09aae046196cca64251acac
+FROM gcr.io/distroless/static-debian12@sha256:95ea148e8e9edd11cc7f639dc11825f38af86a14e5c7361753c741ceadef2167
 
 WORKDIR /
 COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/manager .

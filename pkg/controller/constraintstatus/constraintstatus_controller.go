@@ -84,7 +84,7 @@ type PackerMap func(obj client.Object) []reconcile.Request
 
 // PodStatusToConstraintMapper correlates a ConstraintPodStatus with its corresponding constraint
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToConstraintMapper(selfOnly bool, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.ConstraintPodStatus] {
+func PodStatusToConstraintMapper(selfOnly bool, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.ConstraintPodStatus, reconcile.Request] {
 	return func(ctx context.Context, obj *v1beta1.ConstraintPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConstraintNameLabel]

@@ -3,10 +3,11 @@ package drivers
 import (
 	"context"
 
+	"github.com/open-policy-agent/opa/v1/storage"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	"github.com/open-policy-agent/opa/storage"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // A Driver implements Rego query execution of Templates and Constraints.
