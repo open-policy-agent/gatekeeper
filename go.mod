@@ -16,7 +16,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/onsi/gomega v1.36.3
-	github.com/open-policy-agent/cert-controller v0.11.0
+	github.com/open-policy-agent/cert-controller v0.12.1-0.20250327012017-2e84676bfc1e
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20250327000311-9109e9aee867
 	github.com/open-policy-agent/opa v1.2.0
 	github.com/pkg/errors v0.9.1
