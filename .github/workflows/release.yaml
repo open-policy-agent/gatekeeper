@@ -25,6 +25,7 @@ jobs:
         run: |
             # Filter out local helm-gh-pages image so we don't delete it
             docker system prune -a -f --filter "label!=org.opencontainers.image.source=https://github.com/stefanprodan/alpine-base"
+            # Cleaning up unused tools as per the suggested workaround - https://github.com/actions/runner-images/issues/2840#issuecomment-790492173
             sudo rm -rf /usr/share/dotnet
             sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
