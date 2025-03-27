@@ -32,13 +32,19 @@ type VirtualCache interface {
 	Keys() []ast.Ref
 }
 
+// BaseCache defines the interface for a cache that stores cached base documents, i.e. data.
+type BaseCache interface {
+	Get(ast.Ref) ast.Value
+	Put(ast.Ref, ast.Value)
+}
+
 type virtualCache struct {
 	stack []*virtualCacheElem
 }
 
 type virtualCacheElem struct {
 	value     *ast.Term
-	children  *util.HashMap
+	children  *util.HasherMap[*ast.Term, *virtualCacheElem]
 	undefined bool
 }
 
@@ -65,12 +71,12 @@ func (c *virtualCache) Pop() {
 //	ast.Term, true is impossible
 func (c *virtualCache) Get(ref ast.Ref) (*ast.Term, bool) {
 	node := c.stack[len(c.stack)-1]
-	for i := 0; i < len(ref); i++ {
+	for i := range ref {
 		x, ok := node.children.Get(ref[i])
 		if !ok {
 			return nil, false
 		}
-		node = x.(*virtualCacheElem)
+		node = x
 	}
 	if node.undefined {
 		return nil, true
@@ -83,10 +89,10 @@ func (c *virtualCache) Get(ref ast.Ref) (*ast.Term, bool) {
 // indicate that the Ref has resolved to undefined.
 func (c *virtualCache) Put(ref ast.Ref, value *ast.Term) {
 	node := c.stack[len(c.stack)-1]
-	for i := 0; i < len(ref); i++ {
+	for i := range ref {
 		x, ok := node.children.Get(ref[i])
 		if ok {
-			node = x.(*virtualCacheElem)
+			node = x
 		} else {
 			next := newVirtualCacheElem()
 			node.children.Put(ref[i], next)
@@ -107,13 +113,13 @@ func (c *virtualCache) Keys() []ast.Ref {
 
 func keysRecursive(root ast.Ref, node *virtualCacheElem) []ast.Ref {
 	var keys []ast.Ref
-	node.children.Iter(func(k, v util.T) bool {
-		ref := root.Append(k.(*ast.Term))
-		if v.(*virtualCacheElem).value != nil {
+	node.children.Iter(func(k *ast.Term, v *virtualCacheElem) bool {
+		ref := root.Append(k)
+		if v.value != nil {
 			keys = append(keys, ref)
 		}
-		if v.(*virtualCacheElem).children.Len() > 0 {
-			keys = append(keys, keysRecursive(ref, v.(*virtualCacheElem))...)
+		if v.children.Len() > 0 {
+			keys = append(keys, keysRecursive(ref, v)...)
 		}
 		return false
 	})
@@ -124,12 +130,8 @@ func newVirtualCacheElem() *virtualCacheElem {
 	return &virtualCacheElem{children: newVirtualCacheHashMap()}
 }
 
-func newVirtualCacheHashMap() *util.HashMap {
-	return util.NewHashMap(func(a, b util.T) bool {
-		return a.(*ast.Term).Equal(b.(*ast.Term))
-	}, func(x util.T) int {
-		return x.(*ast.Term).Hash()
-	})
+func newVirtualCacheHashMap() *util.HasherMap[*ast.Term, *virtualCacheElem] {
+	return util.NewHasherMap[*ast.Term, *virtualCacheElem](ast.TermValueEqual)
 }
 
 // baseCache implements a trie structure to cache base documents read out of
@@ -148,11 +150,17 @@ func newBaseCache() *baseCache {
 
 func (c *baseCache) Get(ref ast.Ref) ast.Value {
 	node := c.root
-	for i := 0; i < len(ref); i++ {
+	for i := range ref {
 		node = node.children[ref[i].Value]
 		if node == nil {
 			return nil
 		} else if node.value != nil {
+			if len(ref) == 1 && ast.IsScalar(node.value) {
+				// If the node is a scalar, return the value directly
+				// and avoid an allocation when calling Find.
+				return node.value
+			}
+
 			result, err := node.value.Find(ref[i+1:])
 			if err != nil {
 				return nil
@@ -165,7 +173,7 @@ func (c *baseCache) Get(ref ast.Ref) ast.Value {
 
 func (c *baseCache) Put(ref ast.Ref, value ast.Value) {
 	node := c.root
-	for i := 0; i < len(ref); i++ {
+	for i := range ref {
 		if child, ok := node.children[ref[i].Value]; ok {
 			node = child
 		} else {
@@ -232,7 +240,7 @@ type comprehensionCache struct {
 
 type comprehensionCacheElem struct {
 	value    *ast.Term
-	children *util.HashMap
+	children *util.HasherMap[*ast.Term, *comprehensionCacheElem]
 }
 
 func newComprehensionCache() *comprehensionCache {
@@ -264,22 +272,22 @@ func newComprehensionCacheElem() *comprehensionCacheElem {
 
 func (c *comprehensionCacheElem) Get(key []*ast.Term) *ast.Term {
 	node := c
-	for i := 0; i < len(key); i++ {
+	for i := range key {
 		x, ok := node.children.Get(key[i])
 		if !ok {
 			return nil
 		}
-		node = x.(*comprehensionCacheElem)
+		node = x
 	}
 	return node.value
 }
 
 func (c *comprehensionCacheElem) Put(key []*ast.Term, value *ast.Term) {
 	node := c
-	for i := 0; i < len(key); i++ {
+	for i := range key {
 		x, ok := node.children.Get(key[i])
 		if ok {
-			node = x.(*comprehensionCacheElem)
+			node = x
 		} else {
 			next := newComprehensionCacheElem()
 			node.children.Put(key[i], next)
@@ -289,12 +297,8 @@ func (c *comprehensionCacheElem) Put(key []*ast.Term, value *ast.Term) {
 	node.value = value
 }
 
-func newComprehensionCacheHashMap() *util.HashMap {
-	return util.NewHashMap(func(a, b util.T) bool {
-		return a.(*ast.Term).Equal(b.(*ast.Term))
-	}, func(x util.T) int {
-		return x.(*ast.Term).Hash()
-	})
+func newComprehensionCacheHashMap() *util.HasherMap[*ast.Term, *comprehensionCacheElem] {
+	return util.NewHasherMap[*ast.Term, *comprehensionCacheElem](ast.TermValueEqual)
 }
 
 type functionMocksStack struct {

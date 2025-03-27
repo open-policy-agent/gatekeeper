@@ -373,10 +373,6 @@ func exprLocalVars(e *Event) *ast.ValueMap {
 	vars := ast.NewValueMap()
 
 	findVars := func(term *ast.Term) bool {
-		//if r, ok := term.Value.(ast.Ref); ok {
-		//	fmt.Printf("ref: %v\n", r)
-		//	//return true
-		//}
 		if name, ok := term.Value.(ast.Var); ok {
 			if meta, ok := e.LocalMetadata[name]; ok {
 				if val := e.Locals.Get(name); val != nil {
@@ -867,7 +863,7 @@ func printArrows(w *bytes.Buffer, l []varInfo, printValueAt int) {
 			spaces = (col - prevCol) - 1
 		}
 
-		for j := 0; j < spaces; j++ {
+		for j := range spaces {
 			tab := false
 			for _, t := range info.exprLoc.Tabs {
 				if t == j+prevCol+1 {
