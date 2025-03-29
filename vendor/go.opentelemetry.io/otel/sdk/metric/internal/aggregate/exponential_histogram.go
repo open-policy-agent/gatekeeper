@@ -48,18 +48,18 @@ type expoHistogramDataPoint[N int64 | float64] struct {
 	zeroCount  uint64
 }
 
-func newExpoHistogramDataPoint[N int64 | float64](attrs attribute.Set, maxSize int, maxScale int32, noMinMax, noSum bool) *expoHistogramDataPoint[N] {
+func newExpoHistogramDataPoint[N int64 | float64](attrs attribute.Set, maxSize int, maxScale int32, noMinMax, noSum bool) *expoHistogramDataPoint[N] { // nolint:revive // we need this control flag
 	f := math.MaxFloat64
-	max := N(f) // if N is int64, max will overflow to -9223372036854775808
-	min := N(-f)
+	ma := N(f) // if N is int64, max will overflow to -9223372036854775808
+	mi := N(-f)
 	if N(maxInt64) > N(f) {
-		max = N(maxInt64)
-		min = N(minInt64)
+		ma = N(maxInt64)
+		mi = N(minInt64)
 	}
 	return &expoHistogramDataPoint[N]{
 		attrs:    attrs,
-		min:      max,
-		max:      min,
+		min:      ma,
+		max:      mi,
 		maxSize:  maxSize,
 		noMinMax: noMinMax,
 		noSum:    noSum,
