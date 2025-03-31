@@ -22,7 +22,7 @@ LOG_LEVEL ?= "INFO"
 GENERATE_VAP ?= false
 GENERATE_VAPBINDING ?= false
 
-VERSION := v3.19.0-rc.1
+VERSION := v3.19.0-rc.2
 
 KIND_VERSION ?= 0.17.0
 KIND_CLUSTER_FILE ?= test/bats/tests/kindcluster.yml
