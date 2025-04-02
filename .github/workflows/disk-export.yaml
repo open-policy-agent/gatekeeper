@@ -34,18 +34,14 @@ jobs:
 
     - name: Run e2e
       run: |
-        make docker-buildx \
-          IMG=gatekeeper-e2e:latest
-
-        make e2e-build-load-externaldata-image
-
-        make e2e-reader-build-image PLATFORM="linux/amd64"
-        kind load docker-image --name kind \
-          gatekeeper-e2e:latest fake-reader:latest
+        make docker-buildx IMG=gatekeeper-e2e:latest
+        make e2e-reader-build-image
+        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest
+        kind load docker-image --name kind gatekeeper-e2e:latest fake-reader:latest gatekeeper-crds:latest
+        cmdkubectl create ns gatekeeper-system
         
-        make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true GENERATE_VAP=true GENERATE_VAPBINDING=true EXPORT_BACKEND=disk
+        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG EXPORT_BACKEND=disk FAKE_READER_IMAGE_PULL_POLICY=Never AUDIT_CONNECTION=audit-connection AUDIT_CHANNEL=audit-channel EXPORT_DISK_PATH=/tmp/violations MAX_AUDIT_RESULTS=3 FAKE_READER_IMAGE=fake-reader:latest
         
-        kubectl apply -f test/export/fake-reader/export_config.yaml
         make test-e2e ENABLE_EXPORT_TESTS=1
 
     - name: Save logs

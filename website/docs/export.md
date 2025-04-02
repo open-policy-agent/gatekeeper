@@ -218,28 +218,51 @@ data:
 1. Build `fake-reader` image from [gatekeeper/test/export/fake-reader](https://github.com/open-policy-agent/gatekeeper/tree/master/test/export/fake-reader)
 
     ```bash
-    docker buildx build -t <your_img_name:tag> --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
+    docker buildx build -t fake-reader:latest --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
     ```
 
     :::tip
-    You can use `make e2e-reader-build-image FAKE_READER_IMAGE=<your_img_name:tag>` defined in [Makefile](https://github.com/open-policy-agent/gatekeeper/tree/master/Makefile)
+    You can use `make e2e-reader-build-image` defined in [Makefile](https://github.com/open-policy-agent/gatekeeper/tree/master/Makefile) to build image for the reader.
     :::
 
     **Note:** Make sure the fake-reader image is available in your preferred registry or cluster.
 
-2. Create `values.yaml` with the following variables.
+2. Deploy Gatekeeper charts with `values.yaml`.
+
+    ```shell
+    helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
+    --set enableViolationExport=true \
+    --set audit.connection=audit-connection \
+    --set audit.channel=audit-channel \
+    --set audit.exportConfig.maxAuditResults=3 \
+    --set exportBackend=disk \
+    --set audit.exportSidecar.image=fake-reader:latest \
+    --set audit.exportSidecar.imagePullPolicy=IfNotPresent \
+    --set audit.exportVolumeMount.path=/tmp/violations \
+    ```
+
+    **Note**: After the audit pod starts, verify that it contains two running containers.
+
+    ```shell
+    kubectl get pod -n gatekeeper-system 
+    NAME                                             READY   STATUS    RESTARTS        AGE
+    gatekeeper-audit-6865f5f56d-vclxw                2/2     Running   0               12s
+    ```
+
+    :::tip
+    The command above deploys the audit pod with a default sidecar reader and volume. To customize the sidecar reader or volume according to your requirements, you can set the following variables in your values.yaml file:
 
     ```yaml
     audit: 
       exportVolume: 
-        <your-volume> 
+        <your-volume>
       exportVolumeMount: 
-        <your-volume-mount-path>
+        path: <volume-mount-path>
       exportSidecar: 
         <your-side-car>
     ```
-
-    Here is the default `values.yaml` that you can use.
+    
+    Below are the defaults:
 
     ```yaml
     audit: 
@@ -249,8 +272,8 @@ data:
       exportVolumeMount: 
         path: /tmp/violations 
       exportSidecar: 
-        name: go-sub 
-        image: fake-reader:latest 
+        name: reader
+        image: openpolicyagent/fake-reader:dev
         imagePullPolicy: Always 
         securityContext: 
           allowPrivilegeEscalation: false 
@@ -267,28 +290,9 @@ data:
         - mountPath: /tmp/violations 
           name: tmp-violations
     ```
+    :::
 
-3. Deploy Gatekeeper charts with `values.yaml`.
-
-    ```shell
-    helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
-    --set enableViolationExport=true \
-    --set audit.connection=audit-connection \
-    --set audit.channel=audit-channel \
-    --set audit.exportConfig.maxAuditResults=3 \
-    --set exportBackend=disk \
-    --values /path/to/values.yaml
-    ```
-
-    **Note**: After the audit pod starts, verify that it contains two running containers.
-
-    ```shell
-    kubectl get pod -n gatekeeper-system 
-    NAME                                             READY   STATUS    RESTARTS        AGE
-    gatekeeper-audit-6865f5f56d-vclxw                2/2     Running   0               12s
-    ```
-
-4. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
+3. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
 
     ```log
     kubectl get constraint
@@ -296,7 +300,7 @@ data:
     pod-must-have-test                        0
     ```
 
-5. Finally, check the sidecar reader logs to see the violations written.
+4. Finally, check the sidecar reader logs to see the violations written.
 
     ```log
     kubectl logs -l gatekeeper.sh/operation=audit -c go-sub -n gatekeeper-system 

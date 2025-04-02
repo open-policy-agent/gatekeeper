@@ -43,7 +43,9 @@ HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true
 
 HELM_DISK_EXPORT_ARGS := --set audit.exportVolumeMount.path=${EXPORT_DISK_PATH} \
 	--set audit.exportConfig.maxAuditResults=${MAX_AUDIT_RESULTS} \
-	-f /tmp/values.yaml \
+	--set audit.exportSidecar.image=${FAKE_READER_IMAGE} \
+	--set audit.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
+
 
 HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
 	--set audit.connection=${AUDIT_CONNECTION} \
@@ -137,34 +139,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --default-create-vap-for-templates=${GENERATE_VAP}\
 \n        - --default-create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
 \n        - --log-level=${LOG_LEVEL}\
-\n"
-
-MANAGER_SIDECAR_IMAGE_PATCH := "\n        - --enable-violation-export=true\
-\n        - --audit-connection=audit\
-\n        - --audit-channel=audit\
-\n        volumeMounts:\
-\n        - mountPath: /tmp/violations\
-\n          name: tmp-violations\
-\n      - name: go-sub\
-\n        image: ${FAKE_READER_IMAGE}\
-\n        imagePullPolicy: ${FAKE_READER_IMAGE_PULL_POLICY}\
-\n        securityContext:\
-\n          allowPrivilegeEscalation: false\
-\n          capabilities:\
-\n            drop:\
-\n            - ALL\
-\n          readOnlyRootFilesystem: true\
-\n          runAsGroup: 999\
-\n          runAsNonRoot: true\
-\n          runAsUser: 1000\
-\n          seccompProfile:\
-\n            type: RuntimeDefault\
-\n        volumeMounts:\
-\n        - mountPath: /tmp/violations\
-\n          name: tmp-violations\
-\n      volumes:\
-\n      - emptyDir: {}\
-\n        name: tmp-violations\
 \n"
 
 HELM_EXPORT_VARIABLES := "audit:\
@@ -286,7 +260,7 @@ e2e-helm-install:
 	cd .staging/helm && tar -xvf helmbin.tar.gz
 	./.staging/helm/linux-amd64/helm version --client
 
-e2e-helm-deploy: e2e-helm-install $(LOCALBIN) create-values
+e2e-helm-deploy: e2e-helm-install $(LOCALBIN)
 ifeq ($(ENABLE_EXPORT),true)
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
@@ -365,9 +339,6 @@ deploy: patch-image manifests
 ifeq ($(ENABLE_GENERATOR_EXPANSION),true)
 	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
 	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
-endif
-ifeq ($(EXPORT_BACKEND),disk)
-	@bash -c 'echo -e ${MANAGER_SIDECAR_IMAGE_PATCH} >> ./config/overlays/dev/manager_image_patch.yaml'
 endif
 	docker run \
 		-v $(shell pwd)/config:/config \
@@ -630,6 +601,3 @@ tilt: generate manifests tilt-prepare
 
 tilt-clean:
 	rm -rf .tiltbuild
-
-create-values:
-	@echo ${HELM_EXPORT_VARIABLES} > /tmp/values.yaml

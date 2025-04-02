@@ -24,13 +24,13 @@ func main() {
 	for {
 		// Find the latest created file in dirPath
 		latestFile, files, err := getLatestFile(dirPath)
-		log.Println("available files", files)
-		log.Println("reading from", latestFile)
 		if err != nil {
-			log.Println("Error finding latest file", err)
+			log.Println("Latest file is not found, retring in 5 seconds", err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
+		log.Println("available files", files)
+		log.Println("reading from", latestFile)
 		file, err := os.OpenFile(latestFile, os.O_RDONLY, 0o644)
 		if err != nil {
 			log.Println("Error opening file", err)

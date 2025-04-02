@@ -162,11 +162,11 @@ spec:
           readOnly: true
         - mountPath: /tmp/audit
           name: tmp-volume
-        {{- if .Values.audit.exportVolumeMount }}
+        {{- if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") }}
         - mountPath: {{ .Values.audit.exportVolumeMount.path }}
           name: {{ .Values.audit.exportVolume.name }}
         {{- end }}
-      {{ if .Values.audit.exportSidecar }}
+      {{ if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") }}
       - {{ toYaml .Values.audit.exportSidecar | nindent 8 }}
       {{- end }}
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
@@ -189,7 +189,7 @@ spec:
         secret:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
-      {{- if .Values.audit.exportVolume }}
+      {{- if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") }}
       - {{- toYaml .Values.audit.exportVolume | nindent 8 }}
       {{- end }}
       {{- if .Values.audit.writeToRAMDisk }}

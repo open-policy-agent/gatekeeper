@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -122,7 +123,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	err = r.system.UpsertConnection(ctx, config, request.Name, cfg.Data["driver"])
+	err = r.system.UpsertConnection(ctx, config, request.Name, strings.ToLower(cfg.Data["driver"]))
 	if err != nil {
 		return reconcile.Result{}, err
 	}
