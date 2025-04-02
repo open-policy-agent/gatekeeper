@@ -69,17 +69,17 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 
 	path, maxResults, err := unmarshalConfig(config)
 	if err != nil {
-		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
+		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
 	}
 
 	if conn.Path != path {
 		if conn.File != nil {
 			if err := conn.unlockAndCloseFile(); err != nil {
-				return fmt.Errorf("connection update failed, error closing file: %w", err)
+				return fmt.Errorf("error updating connection %s, error closing file: %w", connectionName, err)
 			}
 		}
 		if err := os.RemoveAll(conn.Path); err != nil {
-			return fmt.Errorf("connection update failed, error deleting violations stored at old path: %w", err)
+			return fmt.Errorf("error updating connection %s, error deleting violations stored at old path: %w", connectionName, err)
 		}
 		conn.Path = path
 		conn.File = nil
@@ -283,13 +283,6 @@ func validatePath(path string) error {
 	// validate if the path is writable
 	if err := os.MkdirAll(path, 0o777); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("failed to stat path: %w", err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("path is not a directory")
 	}
 	return nil
 }

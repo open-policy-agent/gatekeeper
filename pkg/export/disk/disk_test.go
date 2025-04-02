@@ -41,7 +41,7 @@ func TestCreateConnection(t *testing.T) {
 			config: map[int]interface{}{
 				1: "test",
 			},
-			err:         fmt.Errorf("invalid config format"),
+			err:         fmt.Errorf("error creating connection conn2: invalid config format"),
 			expectError: true,
 		},
 		{
@@ -50,7 +50,7 @@ func TestCreateConnection(t *testing.T) {
 			config: map[string]interface{}{
 				"maxAuditResults": 10.0,
 			},
-			err:         fmt.Errorf("missing or invalid 'path' for connection conn3"),
+			err:         fmt.Errorf("error creating connection conn3: missing or invalid 'path'"),
 			expectError: true,
 		},
 		{
@@ -59,7 +59,7 @@ func TestCreateConnection(t *testing.T) {
 			config: map[string]interface{}{
 				"path": tmpPath,
 			},
-			err:         fmt.Errorf("missing or invalid 'maxAuditResults' for connection conn4"),
+			err:         fmt.Errorf("error creating connection conn4: missing or invalid 'maxAuditResults'"),
 			expectError: true,
 		},
 		{
@@ -69,7 +69,7 @@ func TestCreateConnection(t *testing.T) {
 				"path":            tmpPath,
 				"maxAuditResults": 10.0,
 			},
-			err:         fmt.Errorf("maxAuditResults cannot be greater than 5"),
+			err:         fmt.Errorf("error creating connection conn4: maxAuditResults cannot be greater than the maximum allowed audit runs: 5"),
 			expectError: true,
 		},
 	}
@@ -156,7 +156,7 @@ func TestUpdateConnection(t *testing.T) {
 				1: "test",
 			},
 			expectError: true,
-			err:         fmt.Errorf("invalid config format"),
+			err:         fmt.Errorf("error updating connection conn1: invalid config format"),
 		},
 		{
 			name:           "Connection not found",
@@ -175,7 +175,7 @@ func TestUpdateConnection(t *testing.T) {
 				"maxAuditResults": 2.0,
 			},
 			expectError: true,
-			err:         fmt.Errorf("missing or invalid 'path' for connection conn1"),
+			err:         fmt.Errorf("error updating connection conn1: missing or invalid 'path'"),
 		},
 		{
 			name:           "Missing maxAuditResults",
@@ -184,7 +184,7 @@ func TestUpdateConnection(t *testing.T) {
 				"path": t.TempDir(),
 			},
 			expectError: true,
-			err:         fmt.Errorf("missing or invalid 'maxAuditResults' for connection conn1"),
+			err:         fmt.Errorf("error updating connection conn1: missing or invalid 'maxAuditResults'"),
 		},
 		{
 			name:           "Exceeding maxAuditResults",
@@ -194,7 +194,7 @@ func TestUpdateConnection(t *testing.T) {
 				"maxAuditResults": 10.0,
 			},
 			expectError: true,
-			err:         fmt.Errorf("maxAuditResults cannot be greater than 5"),
+			err:         fmt.Errorf("error updating connection conn1: maxAuditResults cannot be greater than the maximum allowed audit runs: 5"),
 		},
 	}
 
@@ -857,3 +857,150 @@ func TestGetFilesSortedByModTimeAsc(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatePath(t *testing.T) {
+	tests := []struct {
+		name        string
+		path        string
+		setup       func(path string) error
+		expectError bool
+		expectedErr string
+	}{
+		{
+			name:        "Valid path",
+			path:        t.TempDir(),
+			setup:       nil,
+			expectError: false,
+		},
+		{
+			name:        "Empty path",
+			path:        "",
+			setup:       nil,
+			expectError: true,
+			expectedErr: "path cannot be empty",
+		},
+		{
+			name:        "Path with '..'",
+			path:        "../invalid/path",
+			setup:       nil,
+			expectError: true,
+			expectedErr: "path must not contain '..', dir traversal is not allowed",
+		},
+		{
+			name: "Path is a file",
+			path: func() string {
+				file, err := os.CreateTemp("", "testfile")
+				if err != nil {
+					t.Fatalf("Failed to create temp file: %v", err)
+				}
+				return file.Name()
+			}(),
+			setup:       nil,
+			expectError: true,
+			expectedErr: "failed to create directory",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setup != nil {
+				if err := tt.setup(tt.path); err != nil {
+					t.Fatalf("Setup failed: %v", err)
+				}
+			}
+			err := validatePath(tt.path)
+			if (err != nil) != tt.expectError {
+				t.Errorf("validatePath() error = %v, expectError %v", err, tt.expectError)
+			}
+			if tt.expectError && err != nil && !strings.Contains(err.Error(), tt.expectedErr) {
+				t.Errorf("Expected error to contain %q, got %q", tt.expectedErr, err.Error())
+			}
+		})
+	}
+}
+
+func TestUnmarshalConfig(t *testing.T) {
+	tmpPath := t.TempDir()
+
+	tests := []struct {
+		name        string
+		config      interface{}
+		expectedPath string
+		expectedMax float64
+		expectError bool
+		expectedErr string
+	}{
+		{
+			name: "Valid config",
+			config: map[string]interface{}{
+				"path":            tmpPath,
+				"maxAuditResults": 3.0,
+			},
+			expectedPath: tmpPath,
+			expectedMax:  3.0,
+			expectError:  false,
+		},
+		{
+			name:        "Invalid config format",
+			config:      map[int]interface{}{1: "test"},
+			expectError: true,
+			expectedErr: "invalid config format",
+		},
+		{
+			name: "Missing path",
+			config: map[string]interface{}{
+				"maxAuditResults": 3.0,
+			},
+			expectError: true,
+			expectedErr: "missing or invalid 'path'",
+		},
+		{
+			name: "Invalid path",
+			config: map[string]interface{}{
+				"path":            "../invalid/path",
+				"maxAuditResults": 3.0,
+			},
+			expectError: true,
+			expectedErr: "invalid path",
+		},
+		{
+			name: "Missing maxAuditResults",
+			config: map[string]interface{}{
+				"path": tmpPath,
+			},
+			expectError: true,
+			expectedErr: "missing or invalid 'maxAuditResults'",
+		},
+		{
+			name: "Exceeding maxAuditResults",
+			config: map[string]interface{}{
+				"path":            tmpPath,
+				"maxAuditResults": 10.0,
+			},
+			expectError: true,
+			expectedErr: "maxAuditResults cannot be greater than the maximum allowed audit runs",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, maxResults, err := unmarshalConfig(tt.config)
+			if (err != nil) != tt.expectError {
+				t.Errorf("unmarshalConfig() error = %v, expectError %v", err, tt.expectError)
+			}
+			if tt.expectError && err != nil && !strings.Contains(err.Error(), tt.expectedErr) {
+				t.Errorf("Expected error to contain %q, got %q", tt.expectedErr, err.Error())
+			}
+			if !tt.expectError {
+				if path != tt.expectedPath {
+					t.Errorf("Expected path %q, got %q", tt.expectedPath, path)
+				}
+				if maxResults != tt.expectedMax {
+					t.Errorf("Expected maxAuditResults %f, got %f", tt.expectedMax, maxResults)
+				}
+			}
+		})
+	}
+}
+
+
