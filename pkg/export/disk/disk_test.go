@@ -766,7 +766,7 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 	}
 }
 
-func TestGetEarliestFile(t *testing.T) {
+func TestGetFilesSortedByModTimeAsc(t *testing.T) {
 	tests := []struct {
 		name          string
 		setup         func(dir string) error
@@ -842,7 +842,7 @@ func TestGetEarliestFile(t *testing.T) {
 					t.Errorf("Setup failed: %v", err)
 				}
 			}
-			earliestFile, files, err := getEarliestFile(dir)
+			files, err := getFilesSortedByModTimeAsc(dir)
 			if (err != nil) != tt.expectError {
 				t.Errorf("getEarliestFile() error = %v, expectError %v", err, tt.expectError)
 			}
@@ -850,8 +850,8 @@ func TestGetEarliestFile(t *testing.T) {
 				if len(files) != tt.expectedFiles {
 					t.Errorf("Expected %d files, got %d", tt.expectedFiles, len(files))
 				}
-				if tt.expectedFile != "" && !strings.HasSuffix(earliestFile, tt.expectedFile) {
-					t.Errorf("Expected earliest file %s, got %s", tt.expectedFile, earliestFile)
+				if tt.expectedFile != "" && !strings.HasSuffix(files[0], tt.expectedFile) {
+					t.Errorf("Expected earliest file %s, got %s", tt.expectedFile, files[0])
 				}
 			}
 		})

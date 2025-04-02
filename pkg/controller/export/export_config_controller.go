@@ -124,7 +124,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	err = r.system.UpsertConnection(ctx, config, request.Name, cfg.Data["driver"])
 	if err != nil {
-		return reconcile.Result{Requeue: true}, err
+		return reconcile.Result{}, err
 	}
 
 	log.Info("Connection upsert successful", "name", request.Name, "driver", cfg.Data["driver"])
