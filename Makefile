@@ -46,7 +46,6 @@ HELM_DISK_EXPORT_ARGS := --set audit.exportVolumeMount.path=${EXPORT_DISK_PATH} 
 	--set audit.exportSidecar.image=${FAKE_READER_IMAGE} \
 	--set audit.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
 
-
 HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
 	--set audit.connection=${AUDIT_CONNECTION} \
 	--set audit.channel=${AUDIT_CHANNEL} \
