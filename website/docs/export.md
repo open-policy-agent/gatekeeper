@@ -215,19 +215,7 @@ data:
 
 #### Configure Gatekeeper with Export enabled to Disk
 
-1. Build `fake-reader` image from [gatekeeper/test/export/fake-reader](https://github.com/open-policy-agent/gatekeeper/tree/master/test/export/fake-reader)
-
-    ```bash
-    docker buildx build -t fake-reader:latest --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
-    ```
-
-    :::tip
-    You can use `make e2e-reader-build-image` defined in [Makefile](https://github.com/open-policy-agent/gatekeeper/tree/master/Makefile) to build image for the reader.
-    :::
-
-    **Note:** Make sure the fake-reader image is available in your preferred registry or cluster.
-
-2. Deploy Gatekeeper charts with `values.yaml`.
+1. Deploy Gatekeeper with disk export configurations.
 
     ```shell
     helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
@@ -236,8 +224,8 @@ data:
     --set audit.channel=audit-channel \
     --set audit.exportConfig.maxAuditResults=3 \
     --set exportBackend=disk \
-    --set audit.exportSidecar.image=fake-reader:latest \
-    --set audit.exportSidecar.imagePullPolicy=IfNotPresent \
+    --set audit.exportSidecar.image=ghcr.io/open-policy-agent/fake-reader:latest \
+    --set audit.exportSidecar.imagePullPolicy=Always \
     --set audit.exportVolumeMount.path=/tmp/violations \
     ```
 
@@ -273,7 +261,7 @@ data:
         path: /tmp/violations 
       exportSidecar: 
         name: reader
-        image: openpolicyagent/fake-reader:dev
+        image: ghcr.io/open-policy-agent/fake-reader:latest
         imagePullPolicy: Always 
         securityContext: 
           allowPrivilegeEscalation: false 
@@ -292,7 +280,7 @@ data:
     ```
     :::
 
-3. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
+2. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
 
     ```log
     kubectl get constraint
@@ -300,7 +288,7 @@ data:
     pod-must-have-test                        0
     ```
 
-4. Finally, check the sidecar reader logs to see the violations written.
+3. Finally, check the sidecar reader logs to see the violations written.
 
     ```log
     kubectl logs -l gatekeeper.sh/operation=audit -c go-sub -n gatekeeper-system 

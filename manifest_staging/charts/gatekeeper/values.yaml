@@ -236,7 +236,7 @@ audit:
     emptyDir: {}
   exportSidecar:
     name: reader
-    image: openpolicyagent/fake-reader:dev
+    image: ghcr.io/open-policy-agent/fake-reader:latest
     imagePullPolicy: Always
     securityContext:
       allowPrivilegeEscalation: false
