@@ -45,6 +45,10 @@ space.
 
 ### Usage
 
+:::note
+Flag `enable-k8s-native-validation` enables ConstraintTempalte containing "validating admission policy styled CEL". By defalt, this flag is enabled.
+:::
+
 #### Specifying inputs
 
 `gator test` supports inputs through the `--filename` and `--image` flags, and
@@ -129,6 +133,10 @@ gator test --filename=manifests-and-policies/ --output=json
 ```
 
 ## The `gator verify` subcommand
+
+:::note
+Flag `enable-k8s-native-validation` enables ConstraintTempalte containing "validating admission policy styled CEL". By defalt, this flag is enabled.
+:::
 
 ### Writing Test Suites
 
