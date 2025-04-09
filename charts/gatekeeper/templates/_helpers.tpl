@@ -77,7 +77,7 @@ Common labels
 helm.sh/chart: {{ include "gatekeeper.chart" . }}
 {{ include "gatekeeper.selectorLabels" . }}
 {{- if .Chart.Version }}
-app.kubernetes.io/version: {{ .Chart.Version | quote }}
+app.kubernetes.io/version: {{ .Chart.Version | replace "+" "_" | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- if .Values.commonLabels }}
