@@ -16,8 +16,10 @@ validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookObjectSelector: {}
 validatingWebhookMatchConditions: []
 validatingWebhookCheckIgnoreFailurePolicy: Fail
+validatingWebhookCheckIgnoreScope: '*'
 validatingWebhookCustomRules: {}
 validatingWebhookURL: null
+validatingWebhookScope: '*'
 enableDeleteOperations: false
 enableConnectOperations: false
 enableExternalData: true
@@ -34,6 +36,7 @@ mutatingWebhookMatchConditions: []
 mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
 mutatingWebhookURL: null
+mutatingWebhookScope: '*'
 mutationAnnotations: false
 auditChunkSize: 500
 logLevel: INFO
