@@ -158,3 +158,70 @@ k8srequiredlabels.constraints.gatekeeper.sh/ns-must-have-gk created
 $ kubectl create ns foobar
 Error from server ([ns-must-have-gk] you must provide labels: {"gatekeeper"}): admission webhook "validation.gatekeeper.sh" denied the request: [ns-must-have-gk] you must provide labels: {"gatekeeper"}
 ```
+
+## Enable OPA Rego v1 syntax in ConstraintTemplates
+
+Gatekeeper 3.19 ships with ability to use OPA Rego v1 as policy language in ConstraintTemplates. Using Rego v1 syntax is opt-in, by default only Rego v0 is allowed. You can use below spec to enable Rego v1 syntax:
+
+```yaml
+...
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            version: "v1"
+            rego: |
+              <v1-rego-code>
+...
+```
+
+:::note
+Rego v1 syntax can only be used under `targets[_].code[_].[engine: Rego].source`.
+:::
+
+Here is a sample ConstraintTemplate using Rego v1 syntax:
+
+```yaml
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          type: object
+          properties:
+            message:
+              type: string
+            labels:
+              type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  allowedRegex:
+                    type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            version: "v1"
+            rego: |
+              package k8srequiredlabels
+
+              violation contains {"msg": msg, "details": {"missing_labels": missing}} if {
+                provided := {label | input.review.object.metadata.labels[label]}
+                required := {label | label := input.parameters.labels[_]}
+                missing := required - provided
+                count(missing) > 0
+                msg := sprintf("you must provide labels: %v", [missing])
+              }
+```
