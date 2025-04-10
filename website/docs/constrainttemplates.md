@@ -177,7 +177,7 @@ Gatekeeper 3.19 ships with ability to use OPA Rego v1 as policy language in Cons
 ```
 
 :::note
-Rego v1 syntax can only be used under `targets[_].code[_].[engine: Rego].source`.
+Rego v1 syntax can only be used under `targets[_].code[_].[engine: Rego].source` with `version: "v1"`
 :::
 
 Here is a sample ConstraintTemplate using Rego v1 syntax:
@@ -217,11 +217,12 @@ spec:
             rego: |
               package k8srequiredlabels
 
-              violation contains {"msg": msg, "details": {"missing_labels": missing}} if {
-                provided := {label | input.review.object.metadata.labels[label]}
-                required := {label | label := input.parameters.labels[_]}
-                missing := required - provided
-                count(missing) > 0
-                msg := sprintf("you must provide labels: %v", [missing])
-              }
+              violation contains 
+                {"msg": msg, "details": {"missing_labels": missing}} if {
+                  provided := {label | input.review.object.metadata.labels[label]}
+                  required := {label | label := input.parameters.labels[_]}
+                  missing := required - provided
+                  count(missing) > 0
+                  msg := sprintf("you must provide labels: %v", [missing])
+                }
 ```
