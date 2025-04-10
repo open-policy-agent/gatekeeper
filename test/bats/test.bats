@@ -682,7 +682,7 @@ __expansion_audit_test() {
 }
 
 @test "rego v1 tests" {
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_v1.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_regov1.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabels -ojson | jq -r -e '.status.byPod[0]'"
 
   kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -oyaml
@@ -691,5 +691,5 @@ __expansion_audit_test() {
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
   assert_match 'denied' "${output}"
   assert_failure
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_v1.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_regov1.yaml"
 }
