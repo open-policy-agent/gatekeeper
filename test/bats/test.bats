@@ -70,7 +70,6 @@ teardown_file() {
   else
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
 
-    # check status resource on expansion template
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsvap -ojson | jq -r -e '.status.byPod[0]'"
 
     kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsvap -oyaml
@@ -680,4 +679,17 @@ __expansion_audit_test() {
   run kubectl delete -f test/export/pod_must_have_test.yaml --ignore-not-found
   run kubectl delete -f test/export/nginx_deployment.yaml --ignore-not-found
   run kubectl delete ns nginx --ignore-not-found
+}
+
+@test "rego v1 tests" {
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_regov1.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabels -ojson | jq -r -e '.status.byPod[0]'"
+
+  kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -oyaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided.yaml"
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+  assert_match 'denied' "${output}"
+  assert_failure
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_regov1.yaml"
 }
