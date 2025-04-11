@@ -177,7 +177,7 @@ Gatekeeper 3.19 ships with ability to use OPA Rego v1 as policy language in Cons
 ```
 
 :::note
-Rego v1 syntax can only be used under `targets[_].code[_].[engine: Rego].source` with `version: "v1"`. You do not need to `import rego.v1` to use rego v1 syntax.
+Rego v1 syntax can only be used under `targets[_].code[_].[engine: Rego].source` with `version: "v1"`. No need to add `import rego.v1` to use rego v1 syntax.
 :::
 
 Here is a sample ConstraintTemplate using Rego v1 syntax:
