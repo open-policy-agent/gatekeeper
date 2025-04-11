@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: allowed-namespace
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: all-must-have-owner
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    message: "All namespaces must have an `owner` label that points to your company username"
+    labels:
+      - key: owner
+        allowedRegex: "^[a-zA-Z]+.agilebank.demo$"
+---
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+  annotations:
+    description: >-
+      Requires resources to contain specified labels, with values matching
+      provided regular expressions.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            message:
+              type: string
+            labels:
+              type: array
+              description: >-
+                A list of labels and values the object must specify.
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                    description: >-
+                      The required label.
+                  allowedRegex:
+                    type: string
+                    description: >-
+                      If specified, a regular expression the annotation's value
+                      must match. The value must contain at least one match for
+                      the regular expression.
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            version: "v1"
+            rego: |
+              package k8srequiredlabels
+
+              violation contains 
+                {"msg": msg, "details": {"missing_labels": missing}} 
+                if {
+                  provided := {label | input.review.object.metadata.labels[label]}
+                  required := {label | label := input.parameters.labels[_]}
+                  missing := required - provided
+                  count(missing) > 0
+                  msg := sprintf("you must provide labels: %v", [missing])
+                }

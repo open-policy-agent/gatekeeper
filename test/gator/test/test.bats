@@ -85,6 +85,10 @@ match_yaml_msg () {
   ! bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml"
 }
 
+@test "manifest with rego v1 template and violations included as flag returns 1 exit status" {
+  ! bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations-rego-v1.yaml"
+}
+
 @test "multiple files passed in flags is supported" {
  run bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml" --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" -oyaml
   [ "$status" -eq 1 ]
