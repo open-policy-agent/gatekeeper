@@ -218,7 +218,8 @@ spec:
               package k8srequiredlabels
 
               violation contains 
-                {"msg": msg, "details": {"missing_labels": missing}} if {
+                {"msg": msg, "details": {"missing_labels": missing}} 
+                if {
                   provided := {label | input.review.object.metadata.labels[label]}
                   required := {label | label := input.parameters.labels[_]}
                   missing := required - provided
