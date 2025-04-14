@@ -26,14 +26,14 @@ jobs:
         working-directory: website
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@4d991eb9b905ef189e4c376166672c3f2f230481 # v2.11.0
+        uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf # v2.11.1
         with:
           egress-policy: audit
 
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.5.2
 
       - name: Setup Node
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "16"
 
@@ -65,12 +65,12 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@4d991eb9b905ef189e4c376166672c3f2f230481 # v2.11.0
+        uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf # v2.11.1
         with:
           egress-policy: audit
 
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.5.2
 
-      - uses: crate-ci/typos@d08e4083f112e684fb88f6babd9ae60a1f1cd84f # v1.30.3
+      - uses: crate-ci/typos@b1a1ef3893ff35ade0cfa71523852a49bfd05d19 # v1.31.1
         with:
           files: ./website/docs ./website/versioned_docs
