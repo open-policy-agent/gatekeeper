@@ -162,24 +162,11 @@ var replacements = map[string]string{
     operations:
     - CREATE
     - UPDATE
-    resources:
+    resources: 
     - '*'
-    - pods/ephemeralcontainers
-    - pods/exec
-    - pods/log
-    - pods/eviction
-    - pods/portforward
-    - pods/proxy
-    - pods/attach
-    - pods/binding
-    - pods/resize
-    - deployments/scale
-    - replicasets/scale
-    - statefulsets/scale
-    - replicationcontrollers/scale
-    - services/proxy
-    - nodes/proxy
-    - services/status
+    {{- range .Values.mutatingWebhookSubResources }}
+    - {{ . }}
+    {{- end }}
   {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.mutatingWebhookURL }}
