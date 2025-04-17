@@ -162,24 +162,11 @@ var replacements = map[string]string{
     operations:
     - CREATE
     - UPDATE
-    resources:
+    resources: 
     - '*'
-    - pods/ephemeralcontainers
-    - pods/exec
-    - pods/log
-    - pods/eviction
-    - pods/portforward
-    - pods/proxy
-    - pods/attach
-    - pods/binding
-    - pods/resize
-    - deployments/scale
-    - replicasets/scale
-    - statefulsets/scale
-    - replicationcontrollers/scale
-    - services/proxy
-    - nodes/proxy
-    - services/status
+    {{- range .Values.mutatingWebhookSubResources }}
+    - {{ . }}
+    {{- end }}
   {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.mutatingWebhookURL }}
@@ -249,23 +236,9 @@ var replacements = map[string]string{
     - '*'
     # Explicitly list all known subresources except "status" (to avoid destabilizing the cluster and increasing load on gatekeeper).
     # You can find a rough list of subresources by doing a case-sensitive search in the Kubernetes codebase for 'Subresource("'
-    - 'pods/ephemeralcontainers'
-    - 'pods/exec'
-    - 'pods/log'
-    - 'pods/eviction'
-    - 'pods/portforward'
-    - 'pods/proxy'
-    - 'pods/attach'
-    - 'pods/binding'
-    - 'pods/resize'
-    - 'deployments/scale'
-    - 'replicasets/scale'
-    - 'statefulsets/scale'
-    - 'replicationcontrollers/scale'
-    - 'services/proxy'
-    - 'nodes/proxy'
-    # For constraints that mitigate CVE-2020-8554
-    - 'services/status'
+    {{- range .Values.validatingWebhookSubResources }}
+    - {{ . }}
+    {{- end }}
   {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_MATCH_CONDITIONS": `{{ toYaml .Values.mutatingWebhookMatchConditions | nindent 4 }}`,
