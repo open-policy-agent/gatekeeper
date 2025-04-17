@@ -102,9 +102,9 @@ func Test_formatOutput(t *testing.T) {
 // Test_enforcableFailures makes sure that the `gator test` is able to detect
 // denied constraints when if found some.
 func Test_enforcableFailures(t *testing.T) {
-	testCases := []struct{
-		name string
-		input []*test.GatorResult
+	testCases := []struct {
+		name           string
+		input          []*test.GatorResult
 		expectedOutput bool
 	}{
 		{
@@ -143,7 +143,7 @@ func Test_enforcableFailures(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			if ok := enforceableFailures(tc.input); ok != tc.expectedOutput {
-					t.Fatalf("unexpected output: %v", ok)
+				t.Fatalf("unexpected output: %v", ok)
 			}
 		})
 	}

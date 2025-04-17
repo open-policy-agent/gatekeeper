@@ -7,10 +7,10 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"github.com/prometheus/client_golang/prometheus"
-	"sigs.k8s.io/controller-runtime/pkg/config"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -53,7 +53,7 @@ func SetupManager(t *testing.T, cfg *rest.Config) (manager.Manager, *watch.Manag
 		},
 		MapperProvider: apiutil.NewDynamicRESTMapper,
 		Logger:         NewLogger(t),
-		Controller:    config.Controller{SkipNameValidation: &skipNameValidation},
+		Controller:     config.Controller{SkipNameValidation: &skipNameValidation},
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)

@@ -644,6 +644,7 @@ func TestV1beta1ToV1(t *testing.T) {
 					ValidationActions: []admissionregistrationv1beta1.ValidationAction{
 						admissionregistrationv1beta1.Deny,
 						admissionregistrationv1beta1.Warn,
+						admissionregistrationv1beta1.Audit,
 					},
 					MatchResources: &admissionregistrationv1beta1.MatchResources{
 						ObjectSelector: &metav1.LabelSelector{
@@ -668,6 +669,7 @@ func TestV1beta1ToV1(t *testing.T) {
 					ValidationActions: []admissionregistrationv1.ValidationAction{
 						admissionregistrationv1.Deny,
 						admissionregistrationv1.Warn,
+						admissionregistrationv1.Audit,
 					},
 					MatchResources: &admissionregistrationv1.MatchResources{
 						ObjectSelector: &metav1.LabelSelector{
@@ -698,7 +700,7 @@ func TestV1beta1ToV1(t *testing.T) {
 				},
 			},
 			expectedObj:   nil,
-			expectedError: fmt.Errorf("%w: unrecognized enforcement action unknown, must be `warn` or `deny`", transform.ErrBadEnforcementAction),
+			expectedError: fmt.Errorf("%w: unrecognized enforcement action unknown, must be `warn`, `deny` or `dryrun`", transform.ErrBadEnforcementAction),
 		},
 	}
 
