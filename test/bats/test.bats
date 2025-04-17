@@ -16,6 +16,7 @@ teardown_file() {
   kubectl label ns ${GATEKEEPER_NAMESPACE} admission.gatekeeper.sh/ignore=no-self-managing --overwrite || true
   kubectl delete ns \
     gatekeeper-test-playground \
+    gatekeeper-test-playground-scoped \
     gatekeeper-excluded-namespace \
     gatekeeper-excluded-prefix-match-namespace \
     gatekeeper-excluded-suffix-match-namespace || true
@@ -673,7 +674,7 @@ __expansion_audit_test() {
 
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels pod-must-have-test"
 
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "total_violations"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "total_violations ${EXPORT_BACKEND}"
 
   run kubectl delete -f test/export/k8srequiredlabels_ct.yaml --ignore-not-found
   run kubectl delete -f test/export/pod_must_have_test.yaml --ignore-not-found
