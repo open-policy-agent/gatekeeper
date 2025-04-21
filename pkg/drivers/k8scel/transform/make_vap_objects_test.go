@@ -400,6 +400,25 @@ func TestConstraintToBinding(t *testing.T) {
 			},
 		},
 		{
+			name:               "with dryrun",
+			enforcementActions: []string{"dryrun"},
+			constraint:         newTestConstraint("dryrun", nil, nil, &unstructured.Unstructured{}),
+			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "gatekeeper-foo-name",
+				},
+				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+					PolicyName: "gatekeeper-footemplate",
+					ParamRef: &admissionregistrationv1beta1.ParamRef{
+						Name:                    "foo-name",
+						ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
+					},
+					MatchResources:    &admissionregistrationv1beta1.MatchResources{},
+					ValidationActions: []admissionregistrationv1beta1.ValidationAction{admissionregistrationv1beta1.Audit},
+				},
+			},
+		},
+		{
 			name:               "unrecognized enforcement action",
 			enforcementActions: []string{"magicunicorns"},
 			constraint:         newTestConstraint("magicunicorns", nil, nil, &unstructured.Unstructured{}),
