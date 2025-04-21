@@ -241,7 +241,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
 		resourceName = req.AdmissionRequest.Name
-		rawObj := getAnyObject(req)		
+		rawObj := getAnyObject(req)
 		if rawObj != nil {
 			if _, _, err := deserializer.Decode(rawObj, nil, obj); err == nil {
 				// On a CREATE operation, the client may omit name and
