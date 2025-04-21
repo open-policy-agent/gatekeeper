@@ -8,6 +8,7 @@ import (
 	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -86,12 +87,14 @@ func ConstraintToBinding(constraint *unstructured.Unstructured, actions []string
 
 	for _, action := range actions {
 		switch action {
-		case string(apiconstraints.Deny):
+		case string(util.Deny):
 			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Deny)
-		case string(apiconstraints.Warn):
+		case string(util.Warn):
 			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Warn)
+		case string(util.Dryrun):
+			enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Audit)
 		default:
-			return nil, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn` or `deny`", ErrBadEnforcementAction, action)
+			return nil, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn`, `deny` or `dryrun`", ErrBadEnforcementAction, action)
 		}
 	}
 
