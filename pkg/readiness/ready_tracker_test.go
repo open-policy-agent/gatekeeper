@@ -55,12 +55,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/config"
 )
 
 const (
@@ -83,7 +83,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 		},
 		MapperProvider: apiutil.NewDynamicRESTMapper,
 		Logger:         logger,
-		Controller:    config.Controller{SkipNameValidation: &skipNameValidation},
+		Controller:     config.Controller{SkipNameValidation: &skipNameValidation},
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
