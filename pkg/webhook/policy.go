@@ -241,8 +241,9 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
 		resourceName = req.AdmissionRequest.Name
-		if req.AdmissionRequest.Object.Raw != nil {
-			if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err == nil {
+		rawObj := getAnyObject(req)		
+		if rawObj != nil {
+			if _, _, err := deserializer.Decode(rawObj, nil, obj); err == nil {
 				// On a CREATE operation, the client may omit name and
 				// rely on the server to generate the name.
 				if len(resourceName) == 0 {
@@ -423,7 +424,7 @@ func getAnyObject(req *admission.Request) []byte {
 	if req.AdmissionRequest.Operation == admissionv1.Delete {
 		return req.AdmissionRequest.OldObject.Raw
 	}
-	return req.AdmissionRequest.OldObject.Raw
+	return req.AdmissionRequest.Object.Raw
 }
 
 func (h *validationHandler) validateConstraint(req *admission.Request) (bool, error) {
@@ -585,10 +586,11 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 
 	resultants := []*expansion.Resultant{}
 	// Skip the expansion if admissionRequest.Obj is nil.
-	if req.AdmissionRequest.Object.Raw != nil {
+	rawObj := getAnyObject(req)
+	if rawObj != nil {
 		// Convert the request's generator resource to unstructured for expansion
 		obj := &unstructured.Unstructured{}
-		if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
+		if _, _, err := deserializer.Decode(rawObj, nil, obj); err != nil {
 			return nil, fmt.Errorf("error decoding generator resource %s: %w", req.Name, err)
 		}
 		obj.SetNamespace(req.Namespace)
