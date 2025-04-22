@@ -1107,7 +1107,7 @@ func TestValidateProvider(t *testing.T) {
 	}
 }
 
-func TestGetAnyObject(t *testing.T) {
+func TestGetReqObject(t *testing.T) {
 	tests := []struct {
 		name           string
 		operation      admissionv1.Operation
@@ -1148,7 +1148,7 @@ func TestGetAnyObject(t *testing.T) {
 				},
 			}
 
-			result := getAnyObject(req)
+			result := getReqObject(req)
 			if !bytes.Equal(result, tt.expectedOutput) {
 				t.Errorf("getAnyObject() = %s, want %s", string(result), string(tt.expectedOutput))
 			}

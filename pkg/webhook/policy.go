@@ -241,7 +241,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
 		resourceName = req.AdmissionRequest.Name
-		rawObj := getAnyObject(req)
+		rawObj := getReqObject(req)
 		if rawObj != nil {
 			if _, _, err := deserializer.Decode(rawObj, nil, obj); err == nil {
 				// On a CREATE operation, the client may omit name and
@@ -400,7 +400,7 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 // The returned boolean is only true if error is non-nil and is a result of user
 // error.
 func (h *validationHandler) validateTemplate(ctx context.Context, req *admission.Request) (bool, error) {
-	templ, _, err := deserializer.Decode(getAnyObject(req), nil, nil)
+	templ, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -420,7 +420,7 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 	return false, nil
 }
 
-func getAnyObject(req *admission.Request) []byte {
+func getReqObject(req *admission.Request) []byte {
 	if req.AdmissionRequest.Operation == admissionv1.Delete {
 		return req.AdmissionRequest.OldObject.Raw
 	}
@@ -429,7 +429,7 @@ func getAnyObject(req *admission.Request) []byte {
 
 func (h *validationHandler) validateConstraint(req *admission.Request) (bool, error) {
 	obj := &unstructured.Unstructured{}
-	if _, _, err := deserializer.Decode(getAnyObject(req), nil, obj); err != nil {
+	if _, _, err := deserializer.Decode(getReqObject(req), nil, obj); err != nil {
 		return false, err
 	}
 	if err := h.opa.ValidateConstraint(obj); err != nil {
@@ -455,7 +455,7 @@ func (h *validationHandler) validateConstraint(req *admission.Request) (bool, er
 }
 
 func (h *validationHandler) validateExpansionTemplate(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(getAnyObject(req), nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -479,7 +479,7 @@ func (h *validationHandler) validateConfigResource(req *admission.Request) error
 }
 
 func (h *validationHandler) validateAssignMetadata(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(getAnyObject(req), nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -496,7 +496,7 @@ func (h *validationHandler) validateAssignMetadata(req *admission.Request) (bool
 }
 
 func (h *validationHandler) validateAssign(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(getAnyObject(req), nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -513,7 +513,7 @@ func (h *validationHandler) validateAssign(req *admission.Request) (bool, error)
 }
 
 func (h *validationHandler) validateAssignImage(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(getAnyObject(req), nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -530,7 +530,7 @@ func (h *validationHandler) validateAssignImage(req *admission.Request) (bool, e
 }
 
 func (h *validationHandler) validateModifySet(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(getAnyObject(req), nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -547,7 +547,7 @@ func (h *validationHandler) validateModifySet(req *admission.Request) (bool, err
 }
 
 func (h *validationHandler) validateProvider(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(getAnyObject(req), nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -586,7 +586,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 
 	resultants := []*expansion.Resultant{}
 	// Skip the expansion if admissionRequest.Obj is nil.
-	rawObj := getAnyObject(req)
+	rawObj := getReqObject(req)
 	if rawObj != nil {
 		// Convert the request's generator resource to unstructured for expansion
 		obj := &unstructured.Unstructured{}
