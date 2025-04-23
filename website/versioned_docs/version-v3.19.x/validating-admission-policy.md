@@ -109,7 +109,7 @@ spec:
           ...
 ```
 
-With this new engine and source added to the constraint template, now Gatekeeper webhook, audit, and shift-left can validate resources with these new VAP CEL-based rules.
+With this new engine and source added to the constraint template, now Gatekeeper webhook, audit, and shift-left can validate resources with these new VAP CEL-based rules. For more details on VAP-style CEL syntax, refer to the [Validating Admission Policy documentation](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/).
 
 ## Policy updates to generate Validating Admission Policy and Binding resources
 
