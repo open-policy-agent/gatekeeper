@@ -158,3 +158,23 @@ k8srequiredlabels.constraints.gatekeeper.sh/ns-must-have-gk created
 $ kubectl create ns foobar
 Error from server ([ns-must-have-gk] you must provide labels: {"gatekeeper"}): admission webhook "validation.gatekeeper.sh" denied the request: [ns-must-have-gk] you must provide labels: {"gatekeeper"}
 ```
+
+## Built-in variables across all engines
+
+### Common variables
+
+### Rego variables
+
+| Variable | Description |
+| --- | --- |
+| `input.review` | Contains input request object under review |
+| `input.params` | Contains constraint parameters i.e. `input.params = constraint.spec` |
+| `data.lib`     | Used to import rego code defined under `libs` in ConstraintTemplate |
+| `data.inventory` | Contains synced resources for referential policies |
+
+### CEL variables
+
+| Variable | Description |
+| --- | --- |
+| `variables.params` | Contains constraint parameters i.e. `variable.params = constraint.spec` |
+| `variables.anyObject` | Contains either an object or (on DELETE requests) oldObject |

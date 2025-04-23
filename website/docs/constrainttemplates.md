@@ -227,3 +227,23 @@ spec:
                   msg := sprintf("you must provide labels: %v", [missing])
                 }
 ```
+
+## Built-in variables across all engines
+
+### Common variables
+
+### Rego variables
+
+| Variable | Description |
+| --- | --- |
+| `input.review` | Contains input request object under review |
+| `input.params` | Contains constraint parameters i.e. `input.params = constraint.spec` |
+| `data.lib`     | Used to import rego code defined under `libs` in ConstraintTemplate |
+| `data.inventory` | Contains synced resources for referential policies |
+
+### CEL variables
+
+| Variable | Description |
+| --- | --- |
+| `variables.params` | Contains constraint parameters i.e. `variable.params = constraint.spec` |
+| `variables.anyObject` | Contains either an object or (on DELETE requests) oldObject |
