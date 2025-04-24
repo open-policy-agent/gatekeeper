@@ -168,13 +168,13 @@ Error from server ([ns-must-have-gk] you must provide labels: {"gatekeeper"}): a
 | Variable | Description |
 | --- | --- |
 | `input.review` | Contains input request object under review |
-| `input.params` | Contains constraint parameters i.e. `input.params = constraint.spec` |
-| `data.lib`     | Used to import rego code defined under `libs` in ConstraintTemplate |
-| `data.inventory` | Contains synced resources for referential policies |
+| `input.parameters` | Contains constraint parameters e.g. `input.parameters.repos` see [example](https://open-policy-agent.github.io/gatekeeper-library/website/validation/allowedrepos) |
+| `data.lib`     |  It serves as an import path for helper functions defined under `libs` in ConstraintTemplate, e.g. data.lib.exempt_container.is_exempt see [example](https://open-policy-agent.github.io/gatekeeper-library/website/validation/host-network-ports) |
+| `data.inventory` | Refers to a structure that stores synced cluster resources. It is used in Rego policies to validate or enforce referential rules based on the current state of the cluster. e.g. unique ingress host [example(https://open-policy-agent.github.io/gatekeeper-library/website/validation/uniqueingresshost/) |
 
 ### CEL variables
 
 | Variable | Description |
 | --- | --- |
-| `variables.params` | Contains constraint parameters i.e. `variable.params = constraint.spec` |
-| `variables.anyObject` | Contains either an object or (on DELETE requests) oldObject |
+| `variables.params` | Contains constraint parameters e.g. `variables.params.labels` see [example](https://open-policy-agent.github.io/gatekeeper-library/website/validation/requiredlabels) |
+| `variables.anyObject` | Contains either an object or (on DELETE requests) oldObject, see [example](https://open-policy-agent.github.io/gatekeeper-library/website/validation/requiredlabels) |
