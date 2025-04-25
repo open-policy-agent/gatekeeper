@@ -224,9 +224,6 @@ data:
     --set audit.channel=audit-channel \
     --set audit.exportConfig.maxAuditResults=3 \
     --set exportBackend=disk \
-    --set audit.exportSidecar.image=ghcr.io/open-policy-agent/fake-reader:latest \
-    --set audit.exportSidecar.imagePullPolicy=Always \
-    --set audit.exportVolumeMount.path=/tmp/violations \
     ```
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
