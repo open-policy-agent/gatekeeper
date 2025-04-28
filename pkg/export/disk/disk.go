@@ -157,7 +157,7 @@ func (conn *Connection) handleAuditStart(auditID string, topic string) error {
 
 	dir := path.Join(conn.Path, topic)
 	if err := os.MkdirAll(dir, 0o777); err != nil {
-		return fmt.Errorf("failed to create directories:` %w", err)
+		return fmt.Errorf("failed to create directories: %w", err)
 	}
 
 	// Set the dir permissions to make sure reader can modify files if need be after the lock is released.

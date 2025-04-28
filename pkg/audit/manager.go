@@ -262,8 +262,8 @@ func (am *Manager) audit(ctx context.Context) error {
 	exportErrorMap := make(map[string]error)
 	if *exportController.ExportEnabled {
 		if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
-			exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
 			am.log.Error(err, "failed to export audit start message")
+			exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
 		}
 	}
 	// record audit latency
