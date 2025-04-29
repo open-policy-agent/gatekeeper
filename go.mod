@@ -4,11 +4,6 @@ go 1.24.0
 
 toolchain go1.24.2
 
-replace (
-	github.com/open-policy-agent/cert-controller => /mount/d/go/src/github.com/open-policy-agent/cert-controller
-	github.com/open-policy-agent/frameworks/constraint => /mount/d/go/src/github.com/open-policy-agent/frameworks/constraint
-)
-
 require (
 	cloud.google.com/go/trace v1.10.11
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.44.0
@@ -21,8 +16,8 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/onsi/gomega v1.37.0
-	github.com/open-policy-agent/cert-controller v0.12.1-0.20250327012017-2e84676bfc1e
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20250328190153-08aa5ffa6033
+	github.com/open-policy-agent/cert-controller v0.12.1-0.20250429233417-902d0dae41cb
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20250429231206-7a3c70aae2a1
 	github.com/open-policy-agent/opa v1.3.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.22.0
