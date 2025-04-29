@@ -47,7 +47,7 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			wantErr:  true,
-			errorMsg: "data missing in configmap, unable to configure exporter",
+			errorMsg: "data missing in configmap gatekeeper-system/dapr, unable to configure exporter",
 		},
 	}
 	for _, tc := range testCases {
