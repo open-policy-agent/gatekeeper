@@ -113,13 +113,13 @@ func (h *webhookHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error
 
 // isGatekeeperResource returns true if the request relates to a gatekeeper resource.
 func (h *webhookHandler) isGatekeeperResource(req *admission.Request) bool {
-	if req.AdmissionRequest.Kind.Group == "templates.gatekeeper.sh" ||
-		req.AdmissionRequest.Kind.Group == "constraints.gatekeeper.sh" ||
-		req.AdmissionRequest.Kind.Group == mutationsGroup ||
-		req.AdmissionRequest.Kind.Group == "config.gatekeeper.sh" ||
-		req.AdmissionRequest.Kind.Group == externalDataGroup ||
-		req.AdmissionRequest.Kind.Group == "expansion.gatekeeper.sh" ||
-		req.AdmissionRequest.Kind.Group == "status.gatekeeper.sh" {
+	if req.Kind.Group == "templates.gatekeeper.sh" ||
+		req.Kind.Group == "constraints.gatekeeper.sh" ||
+		req.Kind.Group == mutationsGroup ||
+		req.Kind.Group == "config.gatekeeper.sh" ||
+		req.Kind.Group == externalDataGroup ||
+		req.Kind.Group == "expansion.gatekeeper.sh" ||
+		req.Kind.Group == "status.gatekeeper.sh" {
 		return true
 	}
 
@@ -131,13 +131,13 @@ func (h *webhookHandler) tracingLevel(ctx context.Context, req *admission.Reques
 	traceEnabled := false
 	dump := false
 	for _, trace := range cfg.Spec.Validation.Traces {
-		if trace.User != req.AdmissionRequest.UserInfo.Username {
+		if trace.User != req.UserInfo.Username {
 			continue
 		}
 		gvk := v1alpha1.GVK{
-			Group:   req.AdmissionRequest.Kind.Group,
-			Version: req.AdmissionRequest.Kind.Version,
-			Kind:    req.AdmissionRequest.Kind.Kind,
+			Group:   req.Kind.Group,
+			Version: req.Kind.Version,
+			Kind:    req.Kind.Kind,
 		}
 		if gvk == trace.Kind {
 			traceEnabled = true

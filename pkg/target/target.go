@@ -260,11 +260,11 @@ func (h *K8sValidationTarget) GetCache() handler.Cache {
 // setObjectOnDelete enforces that we use at least K8s API v1.15.0+ on DELETE operations
 // and copies over the oldObject into the Object field for the given AdmissionRequest.
 func setObjectOnDelete(review *gkReview) error {
-	if review.AdmissionRequest.Operation == admissionv1.Delete {
+	if review.Operation == admissionv1.Delete {
 		// oldObject is the existing object.
 		// It is null for DELETE operations in API servers prior to v1.15.0.
 		// https://github.com/kubernetes/website/pull/14671
-		if review.AdmissionRequest.OldObject.Raw == nil {
+		if review.OldObject.Raw == nil {
 			return ErrOldObjectIsNil
 		}
 
@@ -273,7 +273,7 @@ func setObjectOnDelete(review *gkReview) error {
 		// object is the new object being admitted.
 		// It is null for DELETE operations.
 		// https://github.com/kubernetes/kubernetes/pull/76346
-		review.AdmissionRequest.Object = review.AdmissionRequest.OldObject
+		review.Object = review.OldObject
 	}
 	return nil
 }
