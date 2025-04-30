@@ -30,7 +30,7 @@ gator test --filename="manifest.yaml" --filename="templates-and-constraints/"
 cat manifest.yaml | gator test
 
 # Output structured violations data
-gator test --filename="manifest.yaml" --output=json
+gator test --filename="manifest.yaml" --output=json`
 
 )
 
