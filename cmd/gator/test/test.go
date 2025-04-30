@@ -32,9 +32,6 @@ cat manifest.yaml | gator test
 # Output structured violations data
 gator test --filename="manifest.yaml" --output=json
 
-Note: The alpha "gator test" has been renamed to "gator verify".  "gator
-verify" verifies individual Constraint Templates against suites of tests, where "gator
-test" evaluates sets of resources against sets of Constraints and Templates.`
 )
 
 var Cmd = &cobra.Command{
