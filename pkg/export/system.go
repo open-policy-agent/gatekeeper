@@ -7,6 +7,7 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/dapr"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/driver"
+	"k8s.io/client-go/util/retry"
 )
 
 var SupportedDrivers = map[string]driver.Driver{
@@ -69,13 +70,16 @@ func (s *System) CloseConnection(connectionName string) error {
 
 func (s *System) closeConnection(connectionName string) error {
 	if c, ok := s.connectionToDriver[connectionName]; ok {
-		if conn, ok := SupportedDrivers[c]; ok {
-			err := conn.CloseConnection(connectionName)
-			if err != nil {
-				return err
-			}
-		}
+		// connection should be deleted from the map before closing it to make sure old connection is not accessible if close fails
+		// also avoids not respecting the latest connection with the same name if close fails
 		delete(s.connectionToDriver, connectionName)
+		if conn, ok := SupportedDrivers[c]; ok {
+			return retry.OnError(retry.DefaultBackoff, func(_ error) bool {
+				return true
+			}, func() error {
+				return conn.CloseConnection(connectionName)
+			})
+		}
 	}
 	return nil
 }
