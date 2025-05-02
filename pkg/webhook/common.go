@@ -113,6 +113,7 @@ func (h *webhookHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error
 
 // isGatekeeperResource returns true if the request relates to a gatekeeper resource.
 func (h *webhookHandler) isGatekeeperResource(req *admission.Request) bool {
+	// Directly accessing the Kind field from AdmissionRequest, as it is embedded within admission.Request.
 	if req.Kind.Group == "templates.gatekeeper.sh" ||
 		req.Kind.Group == "constraints.gatekeeper.sh" ||
 		req.Kind.Group == mutationsGroup ||

@@ -113,6 +113,7 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 	}
+	// Directly accessing the NamespaceName.String(), as NamespaceName is embedded within reconcile.Request.
 	sk := aggregator.Key{Source: "syncset", ID: request.String()}
 
 	if !exists || !syncset.GetDeletionTimestamp().IsZero() {

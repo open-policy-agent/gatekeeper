@@ -260,6 +260,7 @@ func (h *K8sValidationTarget) GetCache() handler.Cache {
 // setObjectOnDelete enforces that we use at least K8s API v1.15.0+ on DELETE operations
 // and copies over the oldObject into the Object field for the given AdmissionRequest.
 func setObjectOnDelete(review *gkReview) error {
+	// Directly accessing the Operation field from AdmissionRequest, as it is embedded within gkReview.
 	if review.Operation == admissionv1.Delete {
 		// oldObject is the existing object.
 		// It is null for DELETE operations in API servers prior to v1.15.0.

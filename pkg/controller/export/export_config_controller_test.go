@@ -3,6 +3,7 @@ package export
 import (
 	"context"
 	"flag"
+	"fmt"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/dapr"
@@ -47,7 +48,7 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			wantErr:  true,
-			errorMsg: "data missing in configmap gatekeeper-system/dapr, unable to configure exporter",
+			errorMsg: fmt.Sprintf("data missing in configmap %s, unable to configure exporter", request.NamespacedName),
 		},
 	}
 	for _, tc := range testCases {

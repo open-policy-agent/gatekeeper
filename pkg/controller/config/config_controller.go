@@ -193,6 +193,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	r.cacheManager.ExcludeProcesses(newExcluder)
+	// Directly accessing the NamespaceName.String(), as NamespaceName is embedded within reconcile.Request.
 	configSourceKey := aggregator.Key{Source: "config", ID: request.String()}
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
 		r.tracker.For(configGVK).TryCancelExpect(instance)
