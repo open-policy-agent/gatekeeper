@@ -36,7 +36,7 @@ gator test --filename="manifest.yaml" --output=json`
 
 var Cmd = &cobra.Command{
 	Use:     "test",
-	Short:   "test evaluates resources against policies as defined by constraint templates and constraints. Note: The alpha `gator test` has been renamed to `gator verify`.",
+	Short:   "test evaluates resources against policies as defined by constraint templates and constraints.",
 	Example: examples,
 	Run:     run,
 	Args:    cobra.NoArgs,
