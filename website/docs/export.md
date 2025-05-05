@@ -217,6 +217,39 @@ data:
 
 1. Deploy Gatekeeper with disk export configurations.
 
+    Below are the default configurations that enable disk export and add a sidecar container to the Gatekeeper audit pod:
+
+    ```yaml
+    audit: 
+      exportVolume: 
+        name: tmp-violations 
+        emptyDir: {} 
+      exportVolumeMount: 
+        path: /tmp/violations 
+      exportSidecar: 
+        name: reader
+        image: ghcr.io/open-policy-agent/fake-reader:latest
+        imagePullPolicy: Always 
+        securityContext: 
+          allowPrivilegeEscalation: false 
+          capabilities: 
+            drop: 
+            - ALL 
+          readOnlyRootFilesystem: true 
+          runAsGroup: 999 
+          runAsNonRoot: true 
+          runAsUser: 1000 
+          seccompProfile: 
+            type: RuntimeDefault 
+        volumeMounts: 
+        - mountPath: /tmp/violations 
+          name: tmp-violations
+    ```
+
+    :::warning
+    The reader sidecar image `ghcr.io/open-policy-agent/fake-reader:latest` and the provided default configurations are intended for demonstration and quickstart purposes only. They are not recommended for production environments. For production use, it is advised to create and configure a custom sidecar image tailored to your specific requirements.
+    :::
+
     ```shell
     helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
     --set enableViolationExport=true \
@@ -245,35 +278,6 @@ data:
         path: <volume-mount-path>
       exportSidecar: 
         <your-side-car>
-    ```
-    
-    Below are the defaults:
-
-    ```yaml
-    audit: 
-      exportVolume: 
-        name: tmp-violations 
-        emptyDir: {} 
-      exportVolumeMount: 
-        path: /tmp/violations 
-      exportSidecar: 
-        name: reader
-        image: ghcr.io/open-policy-agent/fake-reader:latest
-        imagePullPolicy: Always 
-        securityContext: 
-          allowPrivilegeEscalation: false 
-          capabilities: 
-            drop: 
-            - ALL 
-          readOnlyRootFilesystem: true 
-          runAsGroup: 999 
-          runAsNonRoot: true 
-          runAsUser: 1000 
-          seccompProfile: 
-            type: RuntimeDefault 
-        volumeMounts: 
-        - mountPath: /tmp/violations 
-          name: tmp-violations
     ```
     :::
 
