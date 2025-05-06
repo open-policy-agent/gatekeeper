@@ -12,7 +12,7 @@ ENV GO111MODULE=on \
     GOARCH=${TARGETARCH} \
     GOARM=${TARGETVARIANT}
 
-WORKDIR /go/src/github.com/open-policy-agent/gatekeeper/test/export/fake-subscriber
+WORKDIR /go/src/github.com/open-policy-agent/gatekeeper/test/export/fake-reader
 
 COPY . .
 
@@ -24,7 +24,7 @@ FROM gcr.io/distroless/static-debian12@sha256:3d0f463de06b7ddff27684ec3bfd0b54a4
 
 WORKDIR /
 
-COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/test/export/fake-subscriber/main .
+COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/test/export/fake-reader/main .
 
 USER 65532:65532
 

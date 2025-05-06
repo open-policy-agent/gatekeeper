@@ -1,0 +1,61 @@
+name: disk-export
+on:
+  push:
+    paths:
+      - "pkg/export/dapr"
+      - "pkg/export/disk"
+      - "test/export/**"
+  pull_request:
+    paths:
+      - "pkg/export/dapr"
+      - "pkg/export/disk"
+      - "test/export/**"
+permissions: read-all
+
+jobs:
+  disk_test:
+    name: "Disk export test"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+      with:
+        egress-policy: audit
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+    - name: Bootstrap e2e
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/bin
+        echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+        make e2e-bootstrap
+
+    - name: Run e2e
+      run: |
+        make docker-buildx IMG=gatekeeper-e2e:latest
+        make e2e-build-load-externaldata-image
+        make e2e-reader-build-image
+        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest
+        kind load docker-image --name kind gatekeeper-e2e:latest fake-reader:latest gatekeeper-crds:latest
+        kubectl create ns gatekeeper-system
+        
+        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG EXPORT_BACKEND=disk FAKE_READER_IMAGE_PULL_POLICY=Never AUDIT_CONNECTION=audit-connection AUDIT_CHANNEL=audit-channel EXPORT_DISK_PATH=/tmp/violations MAX_AUDIT_RESULTS=3 FAKE_READER_IMAGE=fake-reader:latest
+        
+        make test-e2e ENABLE_EXPORT_TESTS=1 EXPORT_BACKEND=disk
+
+    - name: Save logs
+      if: ${{ always() }}
+      run: |
+        kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c manager --tail=-1 > logs-audit-manager.json
+        kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c reader --tail=-1 > logs-audit-export.json
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+      if: ${{ always() }}
+      with:
+        name: export-logs
+        path: |
+          logs-*.json
+
