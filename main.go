@@ -334,7 +334,7 @@ func innerMain() int {
 	signal.Notify(c, []os.Signal{os.Interrupt, syscall.SIGTERM}...)
 	go func() {
 		<-c
-		setupLog.Info("Shutting Down, waiting for 10s")
+		setupLog.Info(fmt.Sprintf("Shutting Down, waiting for %vs", shutdownDelay))
 		go func() {
 			time.Sleep(time.Duration(*shutdownDelay) * time.Second)
 			setupLog.Info("Shutdown grace period finished")
