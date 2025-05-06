@@ -693,3 +693,31 @@ __expansion_audit_test() {
   assert_failure
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_regov1.yaml"
 }
+
+@test "shutdown delay"  {
+  # Get the name of the Gatekeeper pod
+  POD_NAME=$(kubectl get pods -n ${GATEKEEPER_NAMESPACE} -l control-plane=controller-manager -o jsonpath='{.items[0].metadata.name}')
+
+  # Trigger the termination of the Gatekeeper pod
+  TERMINATION_START=$(date +%s)
+  run kubectl delete pod ${POD_NAME} -n ${GATEKEEPER_NAMESPACE}
+
+  # Monitor the termination process to ensure the grace period is respected
+  echo "Monitoring the termination process..."
+  run kubectl get pod ${POD_NAME} -n ${GATEKEEPER_NAMESPACE} -w --ignore-not-found
+
+  # Wait for the pod to be fully terminated
+  run kubectl wait --for=delete pod/${POD_NAME} -n ${GATEKEEPER_NAMESPACE} --timeout=120s
+
+  TERMINATION_END=$(date +%s)
+  TERMINATION_DURATION=$((TERMINATION_END - TERMINATION_START))
+
+  # Validate that the pod is terminated after the specified grace period
+  GRACE_PERIOD=10
+  if [ "${TERMINATION_DURATION}" -ge "${GRACE_PERIOD}" ]; then
+      echo "Pod termination respected the grace period of ${GRACE_PERIOD} seconds."
+  else
+      echo "Pod termination did not respect the grace period. Termination duration: ${TERMINATION_DURATION} seconds."
+      assert_failure
+  fi
+}
