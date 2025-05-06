@@ -8,6 +8,7 @@ package ast
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -19,14 +20,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/OneOfOne/xxhash"
+	"github.com/cespare/xxhash/v2"
 
 	astJSON "github.com/open-policy-agent/opa/v1/ast/json"
 	"github.com/open-policy-agent/opa/v1/ast/location"
 	"github.com/open-policy-agent/opa/v1/util"
 )
 
-var errFindNotFound = fmt.Errorf("find: not found")
+var errFindNotFound = errors.New("find: not found")
 
 // Location records a position in source code.
 type Location = location.Location
@@ -55,13 +56,12 @@ type Value interface {
 // InterfaceToValue converts a native Go value x to a Value.
 func InterfaceToValue(x interface{}) (Value, error) {
 	switch x := x.(type) {
+	case Value:
+		return x, nil
 	case nil:
 		return NullValue, nil
 	case bool:
-		if x {
-			return InternedBooleanTerm(true).Value, nil
-		}
-		return InternedBooleanTerm(false).Value, nil
+		return InternedBooleanTerm(x).Value, nil
 	case json.Number:
 		if interned := InternedIntNumberTermFromString(string(x)); interned != nil {
 			return interned.Value, nil
@@ -85,6 +85,12 @@ func InterfaceToValue(x interface{}) (Value, error) {
 				return nil, err
 			}
 			r[i].Value = e
+		}
+		return NewArray(r...), nil
+	case []string:
+		r := util.NewPtrSlice[Term](len(x))
+		for i, e := range x {
+			r[i].Value = String(e)
 		}
 		return NewArray(r...), nil
 	case map[string]any:
@@ -182,7 +188,7 @@ func valueToInterface(v Value, resolver Resolver, opt JSONOpt) (interface{}, err
 		return string(v), nil
 	case *Array:
 		buf := []interface{}{}
-		for i := 0; i < v.Len(); i++ {
+		for i := range v.Len() {
 			x1, err := valueToInterface(v.Elem(i).Value, resolver, opt)
 			if err != nil {
 				return nil, err
@@ -535,7 +541,7 @@ func NullTerm() *Term {
 }
 
 // Equal returns true if the other term Value is also Null.
-func (null Null) Equal(other Value) bool {
+func (Null) Equal(other Value) bool {
 	switch other.(type) {
 	case Null:
 		return true
@@ -546,7 +552,7 @@ func (null Null) Equal(other Value) bool {
 
 // Compare compares null to other, return <0, 0, or >0 if it is less than, equal to,
 // or greater than other.
-func (null Null) Compare(other Value) int {
+func (Null) Compare(other Value) int {
 	if _, ok := other.(Null); ok {
 		return 0
 	}
@@ -554,7 +560,7 @@ func (null Null) Compare(other Value) int {
 }
 
 // Find returns the current value or a not found error.
-func (null Null) Find(path Ref) (Value, error) {
+func (Null) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return NullValue, nil
 	}
@@ -562,7 +568,7 @@ func (null Null) Find(path Ref) (Value, error) {
 }
 
 // Hash returns the hash code for the Value.
-func (null Null) Hash() int {
+func (Null) Hash() int {
 	return 0
 }
 
@@ -571,7 +577,7 @@ func (Null) IsGround() bool {
 	return true
 }
 
-func (null Null) String() string {
+func (Null) String() string {
 	return "null"
 }
 
@@ -618,10 +624,7 @@ func (bol Boolean) Compare(other Value) int {
 // Find returns the current value or a not found error.
 func (bol Boolean) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
-		if bol {
-			return InternedBooleanTerm(true).Value, nil
-		}
-		return InternedBooleanTerm(false).Value, nil
+		return InternedBooleanTerm(bool(bol)).Value, nil
 	}
 	return nil, errFindNotFound
 }
@@ -718,7 +721,7 @@ func (num Number) Hash() int {
 	f, err := json.Number(num).Float64()
 	if err != nil {
 		bs := []byte(num)
-		h := xxhash.Checksum64(bs)
+		h := xxhash.Sum64(bs)
 		return int(h)
 	}
 	return int(f)
@@ -834,8 +837,7 @@ func (str String) String() string {
 
 // Hash returns the hash code for the Value.
 func (str String) Hash() int {
-	h := xxhash.ChecksumString64S(string(str), hashSeed0)
-	return int(h)
+	return int(xxhash.Sum64String(string(str)))
 }
 
 // Var represents a variable as defined by the language.
@@ -876,8 +878,7 @@ func (v Var) Find(path Ref) (Value, error) {
 
 // Hash returns the hash code for the Value.
 func (v Var) Hash() int {
-	h := xxhash.ChecksumString64S(string(v), hashSeed0)
-	return int(h)
+	return int(xxhash.Sum64String(string(v)))
 }
 
 // IsGround always returns false.
@@ -1014,6 +1015,25 @@ func (ref Ref) Copy() Ref {
 	return termSliceCopy(ref)
 }
 
+// CopyNonGround returns a new ref with deep copies of the non-ground parts and shallow
+// copies of the ground parts. This is a *much* cheaper operation than Copy for operations
+// that only intend to modify (e.g. plug) the non-ground parts. The head element of the ref
+// is always shallow copied.
+func (ref Ref) CopyNonGround() Ref {
+	cpy := make(Ref, len(ref))
+	cpy[0] = ref[0]
+
+	for i := 1; i < len(ref); i++ {
+		if ref[i].Value.IsGround() {
+			cpy[i] = ref[i]
+		} else {
+			cpy[i] = ref[i].Copy()
+		}
+	}
+
+	return cpy
+}
+
 // Equal returns true if ref is equal to other.
 func (ref Ref) Equal(other Value) bool {
 	switch o := other.(type) {
@@ -1143,7 +1163,7 @@ func (ref Ref) Ptr() (string, error) {
 		if str, ok := term.Value.(String); ok {
 			parts = append(parts, url.PathEscape(string(str)))
 		} else {
-			return "", fmt.Errorf("invalid path value type")
+			return "", errors.New("invalid path value type")
 		}
 	}
 	return strings.Join(parts, "/"), nil
@@ -1155,20 +1175,12 @@ func IsVarCompatibleString(s string) bool {
 	return varRegexp.MatchString(s)
 }
 
-var sbPool = sync.Pool{
-	New: func() any {
-		return &strings.Builder{}
-	},
-}
-
 func (ref Ref) String() string {
 	if len(ref) == 0 {
 		return ""
 	}
 
-	sb := sbPool.Get().(*strings.Builder)
-	sb.Reset()
-
+	sb := sbPool.Get()
 	defer sbPool.Put(sb)
 
 	sb.Grow(10 * len(ref))
@@ -1311,7 +1323,15 @@ func (arr *Array) Find(path Ref) (Value, error) {
 	if i < 0 || i >= arr.Len() {
 		return nil, errFindNotFound
 	}
-	return arr.Elem(i).Value.Find(path[1:])
+
+	term := arr.Elem(i)
+	// Using Find on scalar values costs an allocation (type -> Value conversion)
+	// and since we already have the Value here, we can avoid that.
+	if len(path) == 1 && IsScalar(term.Value) {
+		return term.Value, nil
+	}
+
+	return term.Value.Find(path[1:])
 }
 
 // Get returns the element at pos or nil if not possible.
@@ -1366,20 +1386,19 @@ func (arr *Array) MarshalJSON() ([]byte, error) {
 }
 
 func (arr *Array) String() string {
-	sb := sbPool.Get().(*strings.Builder)
-	sb.Reset()
+	sb := sbPool.Get()
 	sb.Grow(len(arr.elems) * 16)
 
 	defer sbPool.Put(sb)
 
-	sb.WriteRune('[')
+	sb.WriteByte('[')
 	for i, e := range arr.elems {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
 		sb.WriteString(e.String())
 	}
-	sb.WriteRune(']')
+	sb.WriteByte(']')
 
 	return sb.String()
 }
@@ -1565,20 +1584,19 @@ func (s *set) String() string {
 		return "set()"
 	}
 
-	sb := sbPool.Get().(*strings.Builder)
-	sb.Reset()
+	sb := sbPool.Get()
 	sb.Grow(s.Len() * 16)
 
 	defer sbPool.Put(sb)
 
-	sb.WriteRune('{')
+	sb.WriteByte('{')
 	for i := range s.sortedKeys() {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
 		sb.WriteString(s.keys[i].Value.String())
 	}
-	sb.WriteRune('}')
+	sb.WriteByte('}')
 
 	return sb.String()
 }
@@ -1746,20 +1764,6 @@ func (s *set) Sorted() *Array {
 // Slice returns a slice of terms contained in the set.
 func (s *set) Slice() []*Term {
 	return s.sortedKeys()
-}
-
-// Internal method to use for cases where a set may be reused in favor
-// of creating a new one (with the associated allocations).
-func (s *set) clear() {
-	clear(s.elems)
-	s.keys = s.keys[:0]
-	s.hash = 0
-	s.ground = true
-	s.sortGuard = sync.Once{}
-}
-
-func (s *set) insertNoGuard(x *Term) {
-	s.insert(x, false)
 }
 
 // NOTE(philipc): We assume a many-readers, single-writer model here.
@@ -2213,7 +2217,7 @@ type objectElem struct {
 type objectElemSlice []*objectElem
 
 func (s objectElemSlice) Less(i, j int) bool { return Compare(s[i].key.Value, s[j].key.Value) < 0 }
-func (s objectElemSlice) Swap(i, j int)      { x := s[i]; s[i] = s[j]; s[j] = x }
+func (s objectElemSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s objectElemSlice) Len() int           { return len(s) }
 
 // Item is a helper for constructing an tuple containing two Terms
@@ -2253,7 +2257,7 @@ func (obj *object) Compare(other Value) int {
 	if len(b.keys) < len(akeys) {
 		minLen = len(bkeys)
 	}
-	for i := 0; i < minLen; i++ {
+	for i := range minLen {
 		keysCmp := Compare(akeys[i].key, bkeys[i].key)
 		if keysCmp < 0 {
 			return -1
@@ -2282,11 +2286,17 @@ func (obj *object) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return obj, nil
 	}
-	value := obj.Get(path[0])
-	if value == nil {
+	term := obj.Get(path[0])
+	if term == nil {
 		return nil, errFindNotFound
 	}
-	return value.Value.Find(path[1:])
+	// Using Find on scalar values costs an allocation (type -> Value conversion)
+	// and since we already have the Value here, we can avoid that.
+	if len(path) == 1 && IsScalar(term.Value) {
+		return term.Value, nil
+	}
+
+	return term.Value.Find(path[1:])
 }
 
 func (obj *object) Insert(k, v *Term) {
@@ -2375,7 +2385,8 @@ func (obj *object) Foreach(f func(*Term, *Term)) {
 }
 
 // Map returns a new Object constructed by mapping each element in the object
-// using the function f.
+// using the function f. If f returns an error, the error is returned by Map.
+// If f return a nil key, the element is skipped.
 func (obj *object) Map(f func(*Term, *Term) (*Term, *Term, error)) (Object, error) {
 	cpy := newobject(obj.Len())
 	for _, node := range obj.sortedKeys() {
@@ -2383,7 +2394,9 @@ func (obj *object) Map(f func(*Term, *Term) (*Term, *Term, error)) (Object, erro
 		if err != nil {
 			return nil, err
 		}
-		cpy.insert(k, v, false)
+		if k != nil {
+			cpy.insert(k, v, false)
+		}
 	}
 	return cpy, nil
 }
@@ -2484,13 +2497,12 @@ func (obj *object) Len() int {
 }
 
 func (obj *object) String() string {
-	sb := sbPool.Get().(*strings.Builder)
-	sb.Reset()
+	sb := sbPool.Get()
 	sb.Grow(obj.Len() * 32)
 
 	defer sbPool.Put(sb)
 
-	sb.WriteRune('{')
+	sb.WriteByte('{')
 
 	for i, elem := range obj.sortedKeys() {
 		if i > 0 {
@@ -2500,7 +2512,7 @@ func (obj *object) String() string {
 		sb.WriteString(": ")
 		sb.WriteString(elem.value.String())
 	}
-	sb.WriteRune('}')
+	sb.WriteByte('}')
 
 	return sb.String()
 }
@@ -2750,7 +2762,7 @@ func filterObject(o Value, filter Value) (Value, error) {
 		return o, nil
 	case *Array:
 		values := NewArray()
-		for i := 0; i < v.Len(); i++ {
+		for i := range v.Len() {
 			subFilter := filteredObj.Get(StringTerm(strconv.Itoa(i)))
 			if subFilter != nil {
 				filteredValue, err := filterObject(v.Elem(i).Value, subFilter.Value)
@@ -3024,7 +3036,7 @@ func (c Call) Compare(other Value) int {
 }
 
 // Find returns the current value or a not found error.
-func (c Call) Find(Ref) (Value, error) {
+func (Call) Find(Ref) (Value, error) {
 	return nil, errFindNotFound
 }
 
@@ -3054,14 +3066,10 @@ func (c Call) String() string {
 
 func termSliceCopy(a []*Term) []*Term {
 	cpy := make([]*Term, len(a))
-	termSliceCopyTo(a, cpy)
-	return cpy
-}
-
-func termSliceCopyTo(src, dst []*Term) {
-	for i := range src {
-		dst[i] = src[i].Copy()
+	for i := range a {
+		cpy[i] = a[i].Copy()
 	}
+	return cpy
 }
 
 func termSliceEqual(a, b []*Term) bool {
@@ -3115,7 +3123,7 @@ func unmarshalBody(b []interface{}) (Body, error) {
 	}
 	return buf, nil
 unmarshal_error:
-	return nil, fmt.Errorf("ast: unable to unmarshal body")
+	return nil, errors.New("ast: unable to unmarshal body")
 }
 
 func unmarshalExpr(expr *Expr, v map[string]interface{}) error {
@@ -3252,7 +3260,7 @@ func unmarshalTermSlice(s []interface{}) ([]*Term, error) {
 			}
 			return nil, err
 		}
-		return nil, fmt.Errorf("ast: unable to unmarshal term")
+		return nil, errors.New("ast: unable to unmarshal term")
 	}
 	return buf, nil
 }
@@ -3261,7 +3269,7 @@ func unmarshalTermSliceValue(d map[string]interface{}) ([]*Term, error) {
 	if s, ok := d["value"].([]interface{}); ok {
 		return unmarshalTermSlice(s)
 	}
-	return nil, fmt.Errorf(`ast: unable to unmarshal term (expected {"value": [...], "type": ...} where type is one of: ref, array, or set)`)
+	return nil, errors.New(`ast: unable to unmarshal term (expected {"value": [...], "type": ...} where type is one of: ref, array, or set)`)
 }
 
 func unmarshalWith(i interface{}) (*With, error) {
@@ -3281,7 +3289,7 @@ func unmarshalWith(i interface{}) (*With, error) {
 		}
 		return nil, err
 	}
-	return nil, fmt.Errorf(`ast: unable to unmarshal with modifier (expected {"target": {...}, "value": {...}})`)
+	return nil, errors.New(`ast: unable to unmarshal with modifier (expected {"target": {...}, "value": {...}})`)
 }
 
 func unmarshalValue(d map[string]interface{}) (Value, error) {
@@ -3399,5 +3407,5 @@ func unmarshalValue(d map[string]interface{}) (Value, error) {
 		}
 	}
 unmarshal_error:
-	return nil, fmt.Errorf("ast: unable to unmarshal term")
+	return nil, errors.New("ast: unable to unmarshal term")
 }

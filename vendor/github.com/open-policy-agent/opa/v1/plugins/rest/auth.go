@@ -126,10 +126,14 @@ type bearerAuthPlugin struct {
 	// encode is set to true for the OCIDownloader because
 	// it expects tokens in plain text but needs them in base64.
 	encode bool
+	logger logging.Logger
 }
 
 func (ap *bearerAuthPlugin) NewClient(c Config) (*http.Client, error) {
 	t, err := DefaultTLSConfig(c)
+
+	ap.logger = c.logger
+
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +157,9 @@ func (ap *bearerAuthPlugin) NewClient(c Config) (*http.Client, error) {
 
 func (ap *bearerAuthPlugin) Prepare(req *http.Request) error {
 	token := ap.Token
+	if ap.logger == nil {
+		ap.logger = logging.Get()
+	}
 
 	if ap.TokenPath != "" {
 		bytes, err := os.ReadFile(ap.TokenPath)
@@ -166,7 +173,12 @@ func (ap *bearerAuthPlugin) Prepare(req *http.Request) error {
 		token = base64.StdEncoding.EncodeToString([]byte(token))
 	}
 
-	req.Header.Add("Authorization", fmt.Sprintf("%v %v", ap.Scheme, token))
+	if req.Response != nil && (req.Response.StatusCode == http.StatusPermanentRedirect || req.Response.StatusCode == http.StatusTemporaryRedirect) {
+		ap.logger.Debug("not attaching authorization header as the response contains a redirect")
+	} else {
+		ap.logger.Debug("attaching authorization header")
+		req.Header.Add("Authorization", fmt.Sprintf("%v %v", ap.Scheme, token))
+	}
 	return nil
 }
 
@@ -194,7 +206,7 @@ func convertSignatureToBase64(alg string, der []byte) (string, error) {
 	return signatureData, nil
 }
 
-func pointsFromDER(der []byte) (R, S *big.Int, err error) {
+func pointsFromDER(der []byte) (R, S *big.Int, err error) { //nolint:gocritic
 	R, S = &big.Int{}, &big.Int{}
 	data := asn1.RawValue{}
 	if _, err := asn1.Unmarshal(der, &data); err != nil {
@@ -364,7 +376,7 @@ func (ap *oauth2ClientCredentialsAuthPlugin) createAuthJWT(ctx context.Context, 
 	return &jwt, nil
 }
 
-func (ap *oauth2ClientCredentialsAuthPlugin) mapKMSAlgToSign(alg string) (string, error) {
+func (*oauth2ClientCredentialsAuthPlugin) mapKMSAlgToSign(alg string) (string, error) {
 	switch alg {
 	case "ECDSA_SHA_256":
 		return "ES256", nil
@@ -382,12 +394,7 @@ func (ap *oauth2ClientCredentialsAuthPlugin) SignWithKMS(ctx context.Context, pa
 
 	encodedHdr := base64.RawURLEncoding.EncodeToString(hdrBuf)
 	encodedPayload := base64.RawURLEncoding.EncodeToString(payload)
-	input := strings.Join(
-		[]string{
-			encodedHdr,
-			encodedPayload,
-		}, ".",
-	)
+	input := encodedHdr + "." + encodedPayload
 	digest, err := messageDigest([]byte(input), ap.AWSKmsKey.Algorithm)
 	if err != nil {
 		return nil, err
@@ -616,7 +623,7 @@ func (ap *oauth2ClientCredentialsAuthPlugin) requestToken(ctx context.Context) (
 		return nil, err
 	}
 
-	if strings.ToLower(tokenResponse.TokenType) != "bearer" {
+	if !strings.EqualFold(tokenResponse.TokenType, "bearer") {
 		return nil, errors.New("unknown token type returned from token endpoint")
 	}
 
@@ -751,7 +758,7 @@ func (ap *clientTLSAuthPlugin) NewClient(c Config) (*http.Client, error) {
 	return client, nil
 }
 
-func (ap *clientTLSAuthPlugin) Prepare(_ *http.Request) error {
+func (*clientTLSAuthPlugin) Prepare(_ *http.Request) error {
 	return nil
 }
 

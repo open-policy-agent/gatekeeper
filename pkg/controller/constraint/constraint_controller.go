@@ -722,8 +722,10 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 			actions = append(actions, admissionregistrationv1.Deny)
 		case admissionregistrationv1beta1.Warn:
 			actions = append(actions, admissionregistrationv1.Warn)
+		case admissionregistrationv1beta1.Audit:
+			actions = append(actions, admissionregistrationv1.Audit)
 		default:
-			return nil, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn` or `deny`", transform.ErrBadEnforcementAction, action)
+			return nil, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn`, `deny` or `dryrun`", transform.ErrBadEnforcementAction, action)
 		}
 	}
 

@@ -22,9 +22,9 @@ LOG_LEVEL ?= "INFO"
 GENERATE_VAP ?= false
 GENERATE_VAPBINDING ?= false
 
-VERSION := v3.19.0-beta.1
+VERSION := v3.20.0-beta.0
 
-KIND_VERSION ?= 0.17.0
+KIND_VERSION ?= 0.27.0
 KIND_CLUSTER_FILE ?= test/bats/tests/kindcluster.yml
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.30.0
@@ -361,7 +361,7 @@ lint:
 	docker run -t --rm -v $(shell pwd):/app \
 		-v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
 		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} \
-		golangci-lint run -v --fix
+		golangci-lint run -v --fix --concurrency 2
 
 # Generate code
 generate: __conversion-gen __controller-gen

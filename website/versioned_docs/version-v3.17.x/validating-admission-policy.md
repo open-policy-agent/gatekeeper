@@ -174,6 +174,13 @@ spec:
 
 To see this in action, checkout this [demo](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/scoped-enforcement-actions)
 
+Below is the mapping of Gatekeeper's `enforcementActions` to `validatingAdmissionPolicyBinding.spec.validationActions`:
+
+| `enforcementAction` | `validationActions` |
+| --- | --- |
+| `deny` | `Deny` |
+| `warn` | `Warn` |
+
 ## FAQs
 
 <details>

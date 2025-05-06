@@ -19,6 +19,8 @@ var (
 type Source struct {
 	// Rego holds the main code for the constraint template. The `Violations` rule is the entry point.
 	Rego string `json:"rego,omitempty"`
+	// Version holds the version of the Rego code supplied in `Rego`.
+	Version string `json:"version,omitempty"`
 	// Libs holds supporting code for the main rego library. Modules can be imported from `data.libs`.
 	Libs []string `json:"libs,omitempty"`
 }
@@ -31,6 +33,7 @@ func (in *Source) ToUnstructured() map[string]interface{} {
 	out := map[string]interface{}{}
 
 	out["rego"] = in.Rego
+	out["version"] = in.Version
 
 	if in.Libs != nil {
 		var libs []interface{}
@@ -49,7 +52,9 @@ func GetSource(code templates.Code) (*Source, error) {
 	if !ok {
 		return nil, ErrBadType
 	}
+
 	source := &Source{}
+
 	rego, found, err := unstructured.NestedString(v, "rego")
 	if err != nil {
 		return nil, fmt.Errorf("%w: while extracting Rego source", err)
@@ -57,7 +62,18 @@ func GetSource(code templates.Code) (*Source, error) {
 	if !found {
 		return nil, fmt.Errorf("%w: rego", ErrMissingField)
 	}
+
 	source.Rego = rego
+
+	version, found, err := unstructured.NestedString(v, "version")
+	if err != nil {
+		return nil, fmt.Errorf("%w: while extracting Rego version", err)
+	}
+	if !found || version == "" {
+		version = "v0"
+	}
+
+	source.Version = version
 
 	libs, found, err := unstructured.NestedStringSlice(v, "libs")
 	if err != nil {
@@ -66,5 +82,6 @@ func GetSource(code templates.Code) (*Source, error) {
 	if found {
 		source.Libs = libs
 	}
+
 	return source, nil
 }

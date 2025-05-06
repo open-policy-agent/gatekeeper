@@ -78,7 +78,7 @@ func newReconciler(
 type PackerMap func(obj client.Object) []reconcile.Request
 
 // PodStatusToMutatorMapper correlates a MutatorPodStatus with its corresponding mutator.
-func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.MutatorPodStatus] {
+func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.MutatorPodStatus, reconcile.Request] {
 	return func(ctx context.Context, obj *v1beta1.MutatorPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.MutatorNameLabel]
@@ -116,7 +116,7 @@ func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler
 	}
 }
 
-func eventPackerMapFuncHardcodeGVKForAssign(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.Assign] {
+func eventPackerMapFuncHardcodeGVKForAssign(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.Assign, reconcile.Request] {
 	mf := util.EventPackerMapFunc()
 	return func(ctx context.Context, obj *mutationsv1.Assign) []reconcile.Request {
 		u := &unstructured.Unstructured{}
@@ -127,7 +127,7 @@ func eventPackerMapFuncHardcodeGVKForAssign(gvk schema.GroupVersionKind) handler
 	}
 }
 
-func eventPackerMapFuncHardcodeGVKForAssignMetadata(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.AssignMetadata] {
+func eventPackerMapFuncHardcodeGVKForAssignMetadata(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.AssignMetadata, reconcile.Request] {
 	mf := util.EventPackerMapFunc()
 	return func(ctx context.Context, obj *mutationsv1.AssignMetadata) []reconcile.Request {
 		u := &unstructured.Unstructured{}
@@ -138,7 +138,7 @@ func eventPackerMapFuncHardcodeGVKForAssignMetadata(gvk schema.GroupVersionKind)
 	}
 }
 
-func eventPackerMapFuncHardcodeGVKForAssignImage(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1alpha1.AssignImage] {
+func eventPackerMapFuncHardcodeGVKForAssignImage(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1alpha1.AssignImage, reconcile.Request] {
 	mf := util.EventPackerMapFunc()
 	return func(ctx context.Context, obj *mutationsv1alpha1.AssignImage) []reconcile.Request {
 		u := &unstructured.Unstructured{}
@@ -149,7 +149,7 @@ func eventPackerMapFuncHardcodeGVKForAssignImage(gvk schema.GroupVersionKind) ha
 	}
 }
 
-func eventPackerMapFuncHardcodeGVKForModifySet(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.ModifySet] {
+func eventPackerMapFuncHardcodeGVKForModifySet(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.ModifySet, reconcile.Request] {
 	mf := util.EventPackerMapFunc()
 	return func(ctx context.Context, obj *mutationsv1.ModifySet) []reconcile.Request {
 		u := &unstructured.Unstructured{}
