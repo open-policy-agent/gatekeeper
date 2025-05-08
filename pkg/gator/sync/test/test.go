@@ -46,7 +46,7 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 			if err != nil {
 				return nil, nil, fmt.Errorf("converting unstructured %q to syncset: %w", obj.GetName(), err)
 			}
-			key := aggregator.Key{Source: "syncset", ID: syncSet.ObjectMeta.Name}
+			key := aggregator.Key{Source: "syncset", ID: syncSet.Name}
 			gvks := make([]schema.GroupVersionKind, len(syncSet.Spec.GVKs))
 			for _, gvkEntry := range syncSet.Spec.GVKs {
 				gvk := schema.GroupVersionKind{
@@ -67,7 +67,7 @@ func Test(unstrucs []*unstructured.Unstructured, omitGVKManifest bool) (map[stri
 			}
 			hasConfig = true
 
-			key := aggregator.Key{Source: "config", ID: config.ObjectMeta.Name}
+			key := aggregator.Key{Source: "config", ID: config.Name}
 			gvks := make([]schema.GroupVersionKind, len(config.Spec.Sync.SyncOnly))
 			for _, syncOnlyEntry := range config.Spec.Sync.SyncOnly {
 				gvk := schema.GroupVersionKind{

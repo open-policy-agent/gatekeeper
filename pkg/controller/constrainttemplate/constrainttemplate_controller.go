@@ -282,7 +282,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 			result, err = r.handleDelete(ctx, ctUnversioned)
 			if err != nil {
 				logger.Error(err, "deletion error")
-				logError(request.NamespacedName.Name)
+				logError(request.Name)
 				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 				return reconcile.Result{}, err
 			}
@@ -313,7 +313,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
 		logger.Error(err, "conversion error")
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
-		logError(request.NamespacedName.Name)
+		logError(request.Name)
 		return reconcile.Result{}, err
 	}
 
@@ -339,7 +339,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 			logger.Error(updateErr, "update status error")
 			return reconcile.Result{Requeue: true}, nil
 		}
-		logError(request.NamespacedName.Name)
+		logError(request.Name)
 		return reconcile.Result{}, nil
 	}
 
@@ -348,7 +348,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		logger.Error(err, "CRD conversion error")
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
-		logError(request.NamespacedName.Name)
+		logError(request.Name)
 		err := r.reportErrorOnCTStatus(ctx, ErrConversionCode, "Could not convert from unversioned resource", status, err)
 		return reconcile.Result{}, err
 	}
@@ -369,7 +369,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 
 	default:
 		logger.Error(err, "client.Get CRD error")
-		logError(request.NamespacedName.Name)
+		logError(request.Name)
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return reconcile.Result{}, err
 	}
@@ -377,7 +377,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status)
 	if err != nil {
 		logger.Error(err, "handle update error")
-		logError(request.NamespacedName.Name)
+		logError(request.Name)
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return result, err
 	}
@@ -658,7 +658,7 @@ func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrati
 	if gvk.Version == "v1" {
 		v1CurrentVAP, ok := currentVap.(*admissionregistrationv1.ValidatingAdmissionPolicy)
 		if !ok {
-			return nil, errors.New("Unable to convert to v1 VAP")
+			return nil, errors.New("unable to convert to v1 VAP")
 		}
 		v1CurrentVAP = v1CurrentVAP.DeepCopy()
 		tempVAP, err := v1beta1ToV1(transformedVap)
@@ -671,7 +671,7 @@ func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrati
 
 	v1beta1VAP, ok := currentVap.(*admissionregistrationv1beta1.ValidatingAdmissionPolicy)
 	if !ok {
-		return nil, errors.New("Unable to convert to v1 VAP")
+		return nil, errors.New("unable to convert to v1 VAP")
 	}
 	v1beta1VAP.Spec = transformedVap.Spec
 	return v1beta1VAP.DeepCopy(), nil

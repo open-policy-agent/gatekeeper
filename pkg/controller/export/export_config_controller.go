@@ -112,10 +112,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	if len(cfg.Data) == 0 {
-		return reconcile.Result{}, fmt.Errorf(fmt.Sprintf("data missing in configmap %s, unable to configure exporter", request.NamespacedName))
+		return reconcile.Result{}, fmt.Errorf("data missing in configmap %s, unable to configure exporter", request.NamespacedName)
 	}
 	if _, ok := cfg.Data["driver"]; !ok {
-		return reconcile.Result{}, fmt.Errorf(fmt.Sprintf("missing driver field in configmap %s, unable to configure exporter", request.NamespacedName))
+		return reconcile.Result{}, fmt.Errorf("missing driver field in configmap %s, unable to configure exporter", request.NamespacedName)
 	}
 	var config interface{}
 	err = json.Unmarshal([]byte(cfg.Data["config"]), &config)

@@ -49,7 +49,7 @@ func (h *namespaceLabelHandler) Handle(_ context.Context, req admission.Request)
 	if req.Operation == admissionv1.Delete {
 		return admission.Allowed("Delete is always allowed")
 	}
-	if req.AdmissionRequest.Kind.Group != "" || req.AdmissionRequest.Kind.Kind != namespaceKind {
+	if req.Kind.Group != "" || req.Kind.Kind != namespaceKind {
 		return admission.Allowed("Not a namespace")
 	}
 	obj := &unstructured.Unstructured{}

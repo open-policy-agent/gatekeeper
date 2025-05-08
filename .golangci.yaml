@@ -1,54 +1,68 @@
+version: "2"
 run:
+  go: "1.24"
   timeout: 5m
-  go: "1.23"
-
-issues:
-  exclude-files:
-    - pkg/target/matchcrd_constant.go
-  exclude:
-    - 'deprecated: This package is intended for older projects transitioning from OPA v0.x and will remain for the lifetime of OPA v1.x'
-
-linters-settings:
-  gocritic:
-    enabled-tags:
-    - performance
-  gosec:
-    excludes:
-    - G108
-  importas:
-    no-unaliased: true
-    alias:
-      - pkg: "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-        alias: constraintclient
-  lll:
-    line-length: 200
-
-  misspell:
-    locale: US
-
 linters:
-  disable-all: true
+  default: none
   enable:
+    - copyloopvar
     - errcheck
     - errorlint
-    - copyloopvar
     - forcetypeassert
-    - gci
-    - gocritic
     - goconst
+    - gocritic
     - godot
-    - gofmt
-    - gofumpt
-    - goimports
     - gosec
-    - gosimple
     - govet
     - importas
     - ineffassign
     - misspell
     - revive # replacement for golint
     - staticcheck
-    - typecheck
     - unconvert
     - unused
     - whitespace
+  settings:
+    gocritic:
+      enabled-tags:
+        - performance
+    gosec:
+      excludes:
+        - G108
+    importas:
+      alias:
+        - pkg: github.com/open-policy-agent/frameworks/constraint/pkg/client
+          alias: constraintclient
+      no-unaliased: true
+    lll:
+      line-length: 200
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: (.+)\.go$
+        text: 'deprecated: This package is intended for older projects transitioning from OPA v0.x and will remain for the lifetime of OPA v1.x'
+    paths:
+      - pkg/target/matchcrd_constant.go
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - pkg/target/matchcrd_constant.go
+      - third_party$
+      - builtin$
+      - examples$

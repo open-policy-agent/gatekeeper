@@ -1207,7 +1207,7 @@ func TestHandleReviewForDelete(t *testing.T) {
 
 			if tc.checkEquality {
 				// open box: make sure that the OldObject field has been copied into the Object field
-				if !reflect.DeepEqual(gkr.AdmissionRequest.OldObject, gkr.AdmissionRequest.Object) {
+				if !reflect.DeepEqual(gkr.OldObject, gkr.Object) {
 					t.Fatal("oldObject and object need to match")
 				}
 			}

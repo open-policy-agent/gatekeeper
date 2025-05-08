@@ -113,18 +113,18 @@ func (s *Scanner) readString() (string, error) {
 
 	for {
 		s.read()
-		switch {
-		case s.ch == quote:
+		switch s.ch {
+		case quote:
 			// String terminated
 			return out.String(), nil
-		case s.ch == '\\':
+		case '\\':
 			// Escaped character
 			s.read()
 			if s.ch == eof {
 				continue
 			}
 			out.WriteRune(s.ch)
-		case s.ch == eof:
+		case eof:
 			// Unterminated string
 			s.setError(ErrUnterminatedString)
 			return out.String(), s.err

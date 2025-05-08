@@ -105,12 +105,12 @@ type mutationHandler struct {
 func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	timeStart := time.Now()
 
-	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
+	if isGkServiceAccount(req.UserInfo) {
 		return admission.Allowed("Gatekeeper does not self-manage")
 	}
 
-	if req.AdmissionRequest.Operation != admissionv1.Create &&
-		req.AdmissionRequest.Operation != admissionv1.Update {
+	if req.Operation != admissionv1.Create &&
+		req.Operation != admissionv1.Update {
 		return admission.Allowed("Mutating only on create or update")
 	}
 
@@ -159,16 +159,16 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		if !ok {
 			return admission.Errored(int32(http.StatusInternalServerError), errors.New("failed to cast namespace object"))
 		}
-	case req.AdmissionRequest.Namespace != "":
-		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
+	case req.Namespace != "":
+		if err := h.client.Get(ctx, types.NamespacedName{Name: req.Namespace}, ns); err != nil {
 			if !k8serrors.IsNotFound(err) {
-				h.log.Error(err, "error retrieving namespace", "name", req.AdmissionRequest.Namespace)
+				h.log.Error(err, "error retrieving namespace", "name", req.Namespace)
 				return admission.Errored(int32(http.StatusInternalServerError), err)
 			}
 			// bypass cached client and ask api-server directly
-			err = h.reader.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns)
+			err = h.reader.Get(ctx, types.NamespacedName{Name: req.Namespace}, ns)
 			if err != nil {
-				h.log.Error(err, "error retrieving namespace from API server", "name", req.AdmissionRequest.Namespace)
+				h.log.Error(err, "error retrieving namespace from API server", "name", req.Namespace)
 				return admission.Errored(int32(http.StatusInternalServerError), err)
 			}
 		}
@@ -191,7 +191,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 	mutable := &mutationtypes.Mutable{
 		Object:    &obj,
 		Namespace: ns,
-		Username:  req.AdmissionRequest.UserInfo.Username,
+		Username:  req.UserInfo.Username,
 		Source:    mutationtypes.SourceTypeOriginal,
 	}
 	mutated, err := h.mutationSystem.Mutate(mutable)
