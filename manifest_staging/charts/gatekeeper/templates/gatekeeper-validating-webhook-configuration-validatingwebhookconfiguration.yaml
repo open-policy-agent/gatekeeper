@@ -118,7 +118,7 @@ webhooks:
     - UPDATE
     resources:
     - namespaces
-    scope: '{{ .Values.validatingWebhookCheckIgnoreScope }}'
+    scope: '*'
   sideEffects: None
   timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
 {{- end }}
