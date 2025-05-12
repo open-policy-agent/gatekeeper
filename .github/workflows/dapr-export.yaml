@@ -20,7 +20,7 @@ jobs:
         DAPR_VERSION: ["1.12"]
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@4d991eb9b905ef189e4c376166672c3f2f230481 # v2.11.0
+      uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
       with:
         egress-policy: audit
 
@@ -50,8 +50,8 @@ jobs:
         kind load docker-image --name kind gatekeeper-e2e:latest gatekeeper-crds:latest
         kubectl create ns gatekeeper-system
         make e2e-publisher-deploy
-        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG
-        make test-e2e ENABLE_EXPORT_TESTS=1
+        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG AUDIT_CHANNEL=audit-channel EXPORT_BACKEND=dapr
+        make test-e2e ENABLE_EXPORT_TESTS=1 EXPORT_BACKEND=dapr
 
     - name: Save logs
       if: ${{ always() }}
@@ -60,7 +60,7 @@ jobs:
         kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-export.json
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       if: ${{ always() }}
       with:
         name: export-logs

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 	"time"
 
@@ -78,12 +79,8 @@ func (pr PartialResult) Rego(options ...func(*Rego)) *Rego {
 	r := New(options...)
 
 	// Propagate any custom builtins.
-	for k, v := range pr.builtinDecls {
-		r.builtinDecls[k] = v
-	}
-	for k, v := range pr.builtinFuncs {
-		r.builtinFuncs[k] = v
-	}
+	maps.Copy(r.builtinDecls, pr.builtinDecls)
+	maps.Copy(r.builtinFuncs, pr.builtinFuncs)
 	return r
 }
 
@@ -128,6 +125,7 @@ type EvalContext struct {
 	capabilities                *ast.Capabilities
 	strictBuiltinErrors         bool
 	virtualCache                topdown.VirtualCache
+	baseCache                   topdown.BaseCache
 }
 
 func (e *EvalContext) RawInput() *interface{} {
@@ -365,11 +363,19 @@ func EvalPrintHook(ph print.Hook) EvalOption {
 	}
 }
 
-// EvalVirtualCache sets the topdown.VirtualCache to use for evaluation. This is
-// optional, and if not set, the default cache is used.
+// EvalVirtualCache sets the topdown.VirtualCache to use for evaluation.
+// This is optional, and if not set, the default cache is used.
 func EvalVirtualCache(vc topdown.VirtualCache) EvalOption {
 	return func(e *EvalContext) {
 		e.virtualCache = vc
+	}
+}
+
+// EvalBaseCache sets the topdown.BaseCache to use for evaluation.
+// This is optional, and if not set, the default cache is used.
+func EvalBaseCache(bc topdown.BaseCache) EvalOption {
+	return func(e *EvalContext) {
+		e.baseCache = bc
 	}
 }
 
@@ -825,7 +831,7 @@ func memoize(decl *Function, bctx BuiltinContext, terms []*ast.Term, ifEmpty fun
 	// The term slice _may_ include an output term depending on how the caller
 	// referred to the built-in function. Only use the arguments as the cache
 	// key. Unification ensures we don't get false positive matches.
-	for i := 0; i < decl.Decl.Arity(); i++ {
+	for i := range decl.Decl.Arity() {
 		if _, err := b.WriteString(terms[i].String()); err != nil {
 			return nil, err
 		}
@@ -1570,7 +1576,7 @@ func (r *Rego) Compile(ctx context.Context, opts ...CompileOption) (*CompileResu
 	}
 
 	if tgt := r.targetPlugin(r.target); tgt != nil {
-		return nil, fmt.Errorf("unsupported for rego target plugins")
+		return nil, errors.New("unsupported for rego target plugins")
 	}
 
 	return r.compileWasm(modules, queries, compileQueryType) // TODO(sr) control flow is funky here
@@ -1630,10 +1636,9 @@ func WithNoInline(paths []string) PrepareOption {
 func WithBuiltinFuncs(bis map[string]*topdown.Builtin) PrepareOption {
 	return func(p *PrepareConfig) {
 		if p.builtinFuncs == nil {
-			p.builtinFuncs = make(map[string]*topdown.Builtin, len(bis))
-		}
-		for k, v := range bis {
-			p.builtinFuncs[k] = v
+			p.builtinFuncs = maps.Clone(bis)
+		} else {
+			maps.Copy(p.builtinFuncs, bis)
 		}
 	}
 }
@@ -1648,7 +1653,7 @@ func (p *PrepareConfig) BuiltinFuncs() map[string]*topdown.Builtin {
 // of evaluating them.
 func (r *Rego) PrepareForEval(ctx context.Context, opts ...PrepareOption) (PreparedEvalQuery, error) {
 	if !r.hasQuery() {
-		return PreparedEvalQuery{}, fmt.Errorf("cannot evaluate empty query")
+		return PreparedEvalQuery{}, errors.New("cannot evaluate empty query")
 	}
 
 	pCfg := &PrepareConfig{}
@@ -1702,7 +1707,7 @@ func (r *Rego) PrepareForEval(ctx context.Context, opts ...PrepareOption) (Prepa
 
 		if r.hasWasmModule() {
 			_ = txnClose(ctx, err) // Ignore error
-			return PreparedEvalQuery{}, fmt.Errorf("wasm target not supported")
+			return PreparedEvalQuery{}, errors.New("wasm target not supported")
 		}
 
 		var modules []*ast.Module
@@ -1767,7 +1772,7 @@ func (r *Rego) PrepareForEval(ctx context.Context, opts ...PrepareOption) (Prepa
 // of partially evaluating them.
 func (r *Rego) PrepareForPartial(ctx context.Context, opts ...PrepareOption) (PreparedPartialQuery, error) {
 	if !r.hasQuery() {
-		return PreparedPartialQuery{}, fmt.Errorf("cannot evaluate empty query")
+		return PreparedPartialQuery{}, errors.New("cannot evaluate empty query")
 	}
 
 	pCfg := &PrepareConfig{}
@@ -1980,7 +1985,7 @@ func (r *Rego) parseInput() (ast.Value, error) {
 	return r.parseRawInput(r.rawInput, r.metrics)
 }
 
-func (r *Rego) parseRawInput(rawInput *interface{}, m metrics.Metrics) (ast.Value, error) {
+func (*Rego) parseRawInput(rawInput *interface{}, m metrics.Metrics) (ast.Value, error) {
 	var input ast.Value
 
 	if rawInput == nil {
@@ -2183,7 +2188,8 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 		WithSeed(ectx.seed).
 		WithPrintHook(ectx.printHook).
 		WithDistributedTracingOpts(r.distributedTacingOpts).
-		WithVirtualCache(ectx.virtualCache)
+		WithVirtualCache(ectx.virtualCache).
+		WithBaseCache(ectx.baseCache)
 
 	if !ectx.time.IsZero() {
 		q = q.WithTime(ectx.time)
@@ -2270,7 +2276,7 @@ func (r *Rego) evalWasm(ctx context.Context, ectx *EvalContext) (ResultSet, erro
 func (r *Rego) valueToQueryResult(res ast.Value, ectx *EvalContext) (ResultSet, error) {
 	resultSet, ok := res.(ast.Set)
 	if !ok {
-		return nil, fmt.Errorf("illegal result type")
+		return nil, errors.New("illegal result type")
 	}
 
 	if resultSet.Len() == 0 {
@@ -2281,7 +2287,7 @@ func (r *Rego) valueToQueryResult(res ast.Value, ectx *EvalContext) (ResultSet, 
 	err := resultSet.Iter(func(term *ast.Term) error {
 		obj, ok := term.Value.(ast.Object)
 		if !ok {
-			return fmt.Errorf("illegal result type")
+			return errors.New("illegal result type")
 		}
 		qr := topdown.QueryResult{}
 		obj.Foreach(func(k, v *ast.Term) {
@@ -2391,7 +2397,7 @@ func (r *Rego) partialResult(ctx context.Context, pCfg *PrepareConfig) (PartialR
 	module, err := ast.ParseModuleWithOpts(id, "package "+ectx.partialNamespace,
 		ast.ParserOptions{RegoVersion: r.regoVersion})
 	if err != nil {
-		return PartialResult{}, fmt.Errorf("bad partial namespace")
+		return PartialResult{}, errors.New("bad partial namespace")
 	}
 
 	module.Rules = make([]*ast.Rule, len(pq.Queries))
@@ -2609,14 +2615,14 @@ func (r *Rego) rewriteQueryToCaptureValue(_ ast.QueryCompiler, query ast.Body) (
 	return query, nil
 }
 
-func (r *Rego) rewriteQueryForPartialEval(_ ast.QueryCompiler, query ast.Body) (ast.Body, error) {
+func (*Rego) rewriteQueryForPartialEval(_ ast.QueryCompiler, query ast.Body) (ast.Body, error) {
 	if len(query) != 1 {
-		return nil, fmt.Errorf("partial evaluation requires single ref (not multiple expressions)")
+		return nil, errors.New("partial evaluation requires single ref (not multiple expressions)")
 	}
 
 	term, ok := query[0].Terms.(*ast.Term)
 	if !ok {
-		return nil, fmt.Errorf("partial evaluation requires ref (not expression)")
+		return nil, errors.New("partial evaluation requires ref (not expression)")
 	}
 
 	ref, ok := term.Value.(ast.Ref)
@@ -2625,7 +2631,7 @@ func (r *Rego) rewriteQueryForPartialEval(_ ast.QueryCompiler, query ast.Body) (
 	}
 
 	if !ref.IsGround() {
-		return nil, fmt.Errorf("partial evaluation requires ground ref")
+		return nil, errors.New("partial evaluation requires ground ref")
 	}
 
 	return ast.NewBody(ast.Equality.Expr(ast.Wildcard, term)), nil
@@ -2635,7 +2641,7 @@ func (r *Rego) rewriteQueryForPartialEval(_ ast.QueryCompiler, query ast.Body) (
 // this wouldn't be done, except for handling queries with the `Partial` API
 // where rewriting them can substantially simplify the result, and it is unlikely
 // that the caller would need expression values.
-func (r *Rego) rewriteEqualsForPartialQueryCompile(_ ast.QueryCompiler, query ast.Body) (ast.Body, error) {
+func (*Rego) rewriteEqualsForPartialQueryCompile(_ ast.QueryCompiler, query ast.Body) (ast.Body, error) {
 	doubleEq := ast.Equal.Ref()
 	unifyOp := ast.Equality.Ref()
 	ast.WalkExprs(query, func(x *ast.Expr) bool {
@@ -2844,17 +2850,26 @@ func parseStringsToRefs(s []string) ([]ast.Ref, error) {
 func finishFunction(name string, bctx topdown.BuiltinContext, result *ast.Term, err error, iter func(*ast.Term) error) error {
 	if err != nil {
 		var e *HaltError
+		sb := strings.Builder{}
 		if errors.As(err, &e) {
+			sb.Grow(len(name) + len(e.Error()) + 2)
+			sb.WriteString(name)
+			sb.WriteString(": ")
+			sb.WriteString(e.Error())
 			tdErr := &topdown.Error{
 				Code:     topdown.BuiltinErr,
-				Message:  fmt.Sprintf("%v: %v", name, e.Error()),
+				Message:  sb.String(),
 				Location: bctx.Location,
 			}
 			return topdown.Halt{Err: tdErr.Wrap(e)}
 		}
+		sb.Grow(len(name) + len(err.Error()) + 2)
+		sb.WriteString(name)
+		sb.WriteString(": ")
+		sb.WriteString(err.Error())
 		tdErr := &topdown.Error{
 			Code:     topdown.BuiltinErr,
-			Message:  fmt.Sprintf("%v: %v", name, err.Error()),
+			Message:  sb.String(),
 			Location: bctx.Location,
 		}
 		return tdErr.Wrap(err)
@@ -2895,14 +2910,8 @@ func (r *Rego) planQuery(queries []ast.Body, evalQueryType queryType) (*ir.Polic
 	}
 
 	decls := make(map[string]*ast.Builtin, len(r.builtinDecls)+len(ast.BuiltinMap))
-
-	for k, v := range ast.BuiltinMap {
-		decls[k] = v
-	}
-
-	for k, v := range r.builtinDecls {
-		decls[k] = v
-	}
+	maps.Copy(decls, ast.BuiltinMap)
+	maps.Copy(decls, r.builtinDecls)
 
 	const queryName = "eval" // NOTE(tsandall): the query name is arbitrary
 

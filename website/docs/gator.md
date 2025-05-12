@@ -45,6 +45,10 @@ space.
 
 ### Usage
 
+:::note
+Flag `enable-k8s-native-validation` enables ConstraintTemplate containing "validating admission policy styled CEL". By default, this flag is enabled and set to `true`.
+:::
+
 #### Specifying inputs
 
 `gator test` supports inputs through the `--filename` and `--image` flags, and
@@ -86,6 +90,13 @@ cat my-manifest.yaml | gator test --image=localhost:5000/gator/template-library:
   --image=localhost:5000/gator/constraints:v1
 ```
 
+The `--deny-only` flag will only output violations about denied constraints, not the ones using `warn` enforcement action.
+
+:::note
+`--deny-only` flag is available after Gatekeeper 3.19.
+:::
+
+
 #### Exit Codes
 
 `gator test` will return a `0` exit status when the objects, Templates, and
@@ -122,6 +133,10 @@ gator test --filename=manifests-and-policies/ --output=json
 ```
 
 ## The `gator verify` subcommand
+
+:::note
+Flag `enable-k8s-native-validation` enables ConstraintTemplate containing "validating admission policy styled CEL". By default, this flag is enabled and set to `true`.
+:::
 
 ### Writing Test Suites
 

@@ -7,6 +7,9 @@ Gatekeeper depends on [Open Policy Agent](https://www.openpolicyagent.org/). To 
 
 | Gatekeeper Version | OPA Version |
 | ------------------ | ----------- |
+| `v3.19.1`          | `v1.3.0`   |
+| `v3.19.0`          | `v1.3.0`   |
+| `v3.18.3`          | `v0.68.0`   |
 | `v3.18.2`          | `v0.68.0`   |
 | `v3.18.1`          | `v0.68.0`   |
 | `v3.18.0`          | `v0.68.0`   |

@@ -100,7 +100,7 @@ func (d *Driver) AddTemplate(_ context.Context, ct *templates.ConstraintTemplate
 	if err != nil {
 		return err
 	}
-	matcher := matchconditions.NewMatcher(filterCompiler.Compile(matchAccessors, celVars, environment.StoredExpressions), failurePolicy, "validatingadmissionpolicy", "vap-matcher", ct.GetName())
+	matcher := matchconditions.NewMatcher(filterCompiler.CompileCondition(matchAccessors, celVars, environment.StoredExpressions), failurePolicy, "validatingadmissionpolicy", "vap-matcher", ct.GetName())
 
 	validationAccessors, err := source.GetValidations()
 	if err != nil {
@@ -113,10 +113,10 @@ func (d *Driver) AddTemplate(_ context.Context, ct *templates.ConstraintTemplate
 	}
 
 	validator := validating.NewValidator(
-		filterCompiler.Compile(validationAccessors, celVars, environment.StoredExpressions),
+		filterCompiler.CompileCondition(validationAccessors, celVars, environment.StoredExpressions),
 		matcher,
-		filterCompiler.Compile(nil, celVars, environment.StoredExpressions),
-		filterCompiler.Compile(messageAccessors, celVars, environment.StoredExpressions),
+		filterCompiler.CompileCondition(nil, celVars, environment.StoredExpressions),
+		filterCompiler.CompileCondition(messageAccessors, celVars, environment.StoredExpressions),
 		failurePolicy,
 	)
 

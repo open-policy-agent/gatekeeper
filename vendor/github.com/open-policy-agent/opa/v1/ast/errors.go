@@ -6,7 +6,8 @@ package ast
 
 import (
 	"fmt"
-	"sort"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -35,15 +36,12 @@ func (e Errors) Error() string {
 // Sort sorts the error slice by location. If the locations are equal then the
 // error message is compared.
 func (e Errors) Sort() {
-	sort.Slice(e, func(i, j int) bool {
-		a := e[i]
-		b := e[j]
-
+	slices.SortFunc(e, func(a, b *Error) int {
 		if cmp := a.Location.Compare(b.Location); cmp != 0 {
-			return cmp < 0
+			return cmp
 		}
 
-		return a.Error() < b.Error()
+		return strings.Compare(a.Error(), b.Error())
 	})
 }
 
@@ -62,6 +60,9 @@ const (
 
 	// RecursionErr indicates recursion was found during compilation.
 	RecursionErr = "rego_recursion_error"
+
+	// FormatErr indicates an error occurred during formatting.
+	FormatErr = "rego_format_error"
 )
 
 // IsError returns true if err is an AST error with code.
@@ -92,9 +93,9 @@ func (e *Error) Error() string {
 	if e.Location != nil {
 
 		if len(e.Location.File) > 0 {
-			prefix += e.Location.File + ":" + fmt.Sprint(e.Location.Row)
+			prefix += e.Location.File + ":" + strconv.Itoa(e.Location.Row)
 		} else {
-			prefix += fmt.Sprint(e.Location.Row) + ":" + fmt.Sprint(e.Location.Col)
+			prefix += strconv.Itoa(e.Location.Row) + ":" + strconv.Itoa(e.Location.Col)
 		}
 	}
 

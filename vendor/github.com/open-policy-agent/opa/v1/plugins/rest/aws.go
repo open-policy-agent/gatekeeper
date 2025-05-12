@@ -69,7 +69,7 @@ type awsEnvironmentCredentialService struct {
 	logger logging.Logger
 }
 
-func (cs *awsEnvironmentCredentialService) credentials(context.Context) (aws.Credentials, error) {
+func (*awsEnvironmentCredentialService) credentials(context.Context) (aws.Credentials, error) {
 	var creds aws.Credentials
 	creds.AccessKey = os.Getenv(accessKeyEnvVar)
 	if creds.AccessKey == "" {
@@ -678,7 +678,7 @@ func (ap *ecrAuthPlugin) Prepare(r *http.Request) error {
 
 	ap.logger.Debug("Signing request with ECR authorization token")
 
-	r.Header.Set("Authorization", fmt.Sprintf("Basic %s", ap.token.AuthorizationToken))
+	r.Header.Set("Authorization", "Basic "+ap.token.AuthorizationToken)
 	return nil
 }
 
