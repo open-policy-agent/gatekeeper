@@ -4972,9 +4972,6 @@ rules:
   resources:
   - constrainttemplates/finalizers
   verbs:
-  - delete
-  - get
-  - patch
   - update
 - apiGroups:
   - templates.gatekeeper.sh

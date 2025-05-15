@@ -247,8 +247,8 @@ type ReconcileConstraintTemplate struct {
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=externaldata.gatekeeper.sh,resources=providers,verbs=get;list;watch;create;update;patch;delete
-// finalizers is needed for OwnerReferencesPermissionEnforcement admission plugin.
-// +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/finalizers,verbs=get;update;patch;delete
+// update permission on finalizers is needed to access metadata.ownerReferences[x].blockOwnerDeletion for OwnerReferencesPermissionEnforcement admission plugin - https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#ownerreferencespermissionenforcement.
+// +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/finalizers,verbs=update
 
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
 // and what is in the ConstraintTemplate.Spec.
