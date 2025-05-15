@@ -180,6 +180,12 @@ rules:
 - apiGroups:
   - templates.gatekeeper.sh
   resources:
+  - constrainttemplates/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - templates.gatekeeper.sh
+  resources:
   - constrainttemplates/status
   verbs:
   - get
