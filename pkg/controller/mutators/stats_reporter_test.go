@@ -25,9 +25,11 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r S
 	assert.NoError(t, err)
 	mutatorIngestionCountM, err = meter.Int64Counter(mutatorIngestionCountMetricName)
 	assert.NoError(t, err)
-	_, err = meter.Int64ObservableGauge(mutatorsMetricName, metric.WithInt64Callback(r.(*reporter).observeMutatorsStatus))
+	reporterInstance, ok := r.(*reporter)
+	assert.True(t, ok, "Failed to assert type *reporter")
+	_, err = meter.Int64ObservableGauge(mutatorsMetricName, metric.WithInt64Callback(reporterInstance.observeMutatorsStatus))
 	assert.NoError(t, err)
-	_, err = meter.Int64ObservableGauge(mutatorsConflictingCountMetricsName, metric.WithInt64Callback(r.(*reporter).observeMutatorsInConflict))
+	_, err = meter.Int64ObservableGauge(mutatorsConflictingCountMetricsName, metric.WithInt64Callback(reporterInstance.observeMutatorsInConflict))
 	assert.NoError(t, err)
 
 	return rdr, r
