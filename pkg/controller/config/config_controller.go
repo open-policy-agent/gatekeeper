@@ -149,7 +149,7 @@ type ReconcileConfig struct {
 func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Config instance
 	if request.NamespacedName != keys.Config {
-		log.Info("Ignoring unsupported config name", "namespace", request.NamespacedName.Namespace, "name", request.NamespacedName.Name)
+		log.Info("Ignoring unsupported config name", "namespace", request.Namespace, "name", request.Name)
 		return reconcile.Result{}, nil
 	}
 	exists := true
@@ -193,7 +193,8 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	r.cacheManager.ExcludeProcesses(newExcluder)
-	configSourceKey := aggregator.Key{Source: "config", ID: request.NamespacedName.String()}
+	// Directly accessing the NamespaceName.String(), as NamespaceName is embedded within reconcile.Request.
+	configSourceKey := aggregator.Key{Source: "config", ID: request.String()}
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
 		r.tracker.For(configGVK).TryCancelExpect(instance)
 
@@ -203,7 +204,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	r.tracker.For(configGVK).Observe(instance)
 
 	if deleted {
-		return reconcile.Result{}, r.deleteStatus(ctx, request.NamespacedName.Namespace, request.NamespacedName.Name)
+		return reconcile.Result{}, r.deleteStatus(ctx, request.Namespace, request.Name)
 	}
 	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance, nil)
 }

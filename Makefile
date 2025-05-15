@@ -22,9 +22,9 @@ LOG_LEVEL ?= "INFO"
 GENERATE_VAP ?= false
 GENERATE_VAPBINDING ?= false
 
-VERSION := v3.19.0-beta.1
+VERSION := v3.20.0-beta.0
 
-KIND_VERSION ?= 0.17.0
+KIND_VERSION ?= 0.27.0
 KIND_CLUSTER_FILE ?= test/bats/tests/kindcluster.yml
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.30.0
@@ -37,17 +37,51 @@ NODE_VERSION ?= 16-bullseye-slim
 YQ_VERSION ?= 4.30.6
 
 HELM_ARGS ?=
+HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
+	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
+	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
+
+HELM_DISK_EXPORT_ARGS := --set audit.exportVolumeMount.path=${EXPORT_DISK_PATH} \
+	--set audit.exportConfig.maxAuditResults=${MAX_AUDIT_RESULTS} \
+	--set audit.exportSidecar.image=${FAKE_READER_IMAGE} \
+	--set audit.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
+
+HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
+	--set audit.connection=${AUDIT_CONNECTION} \
+	--set audit.channel=${AUDIT_CHANNEL} \
+	--set exportBackend=${EXPORT_BACKEND} \
+
+HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
+	--set image.crdRepository=${HELM_CRD_REPO} \
+	--set image.release=${HELM_RELEASE} \
+	--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
+	--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
+	--set postInstall.labelNamespace.enabled=true \
+	--set postInstall.probeWebhook.enabled=true \
+	--set emitAdmissionEvents=true \
+	--set emitAuditEvents=true \
+	--set admissionEventsInvolvedNamespace=true \
+	--set auditEventsInvolvedNamespace=true \
+	--set disabledBuiltins={http.send} \
+	--set logMutations=true \
+	--set logLevel=${LOG_LEVEL} \
+	--set defaultCreateVAPForTemplates=${GENERATE_VAP} \
+	--set defaultCreateVAPBindingForConstraints=${GENERATE_VAPBINDING} \
+	--set mutationAnnotations=true;\
+
 GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v1.63.4
+GOLANGCI_LINT_VERSION := v2.0.2
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
 
 BENCHMARK_FILE_NAME ?= benchmarks.txt
 FAKE_SUBSCRIBER_IMAGE ?= fake-subscriber:latest
+FAKE_READER_IMAGE ?= fake-reader:latest
+FAKE_READER_IMAGE_PULL_POLICY ?= IfNotPresent
 
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
@@ -105,6 +139,29 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --default-create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
 \n        - --log-level=${LOG_LEVEL}\
 \n"
+
+HELM_EXPORT_VARIABLES := "audit:\
+\n  exportVolume:\
+\n    name: tmp-violations\
+\n    emptyDir: {}\
+\n  exportSidecar:\
+\n    name: go-sub\
+\n    image: ${FAKE_READER_IMAGE}\
+\n    imagePullPolicy: ${FAKE_READER_IMAGE_PULL_POLICY}\
+\n    securityContext:\
+\n      allowPrivilegeEscalation: false\
+\n      capabilities:\
+\n        drop:\
+\n        - ALL\
+\n      readOnlyRootFilesystem: true\
+\n      runAsGroup: 999\
+\n      runAsNonRoot: true\
+\n      runAsUser: 1000\
+\n      seccompProfile:\
+\n        type: RuntimeDefault\
+\n    volumeMounts:\
+\n    - mountPath: /tmp/violations\
+\n      name: tmp-violations"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -202,53 +259,20 @@ e2e-helm-install:
 	cd .staging/helm && tar -xvf helmbin.tar.gz
 	./.staging/helm/linux-amd64/helm version --client
 
-e2e-helm-deploy: e2e-helm-install
+e2e-helm-deploy: e2e-helm-install $(LOCALBIN)
 ifeq ($(ENABLE_EXPORT),true)
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
-		--set image.repository=${HELM_REPO} \
-		--set image.crdRepository=${HELM_CRD_REPO} \
-		--set image.release=${HELM_RELEASE} \
-		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
-		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
-		--set postInstall.labelNamespace.enabled=true \
-		--set postInstall.probeWebhook.enabled=true \
-		--set emitAdmissionEvents=true \
-		--set emitAuditEvents=true \
-		--set admissionEventsInvolvedNamespace=true \
-		--set auditEventsInvolvedNamespace=true \
-		--set disabledBuiltins={http.send} \
-		--set logMutations=true \
-		--set enableViolationExport=${ENABLE_EXPORT} \
-		--set audit.connection=${AUDIT_CONNECTION} \
-		--set audit.channel=${AUDIT_CHANNEL} \
-		--set-string auditPodAnnotations.dapr\\.io/enabled=true \
-		--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
-		--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
-		--set logLevel=${LOG_LEVEL} \
-		--set mutationAnnotations=true;
+		$(HELM_EXPORT_ARGS) \
+		$(if $(filter disk,$(EXPORT_BACKEND)),$(HELM_DISK_EXPORT_ARGS)) \
+		$(if $(filter dapr,$(EXPORT_BACKEND)),$(HELM_DAPR_EXPORT_ARGS)) \
+		$(HELM_EXTRA_ARGS)
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
 		--debug --wait \
-		--set image.repository=${HELM_REPO} \
-		--set image.crdRepository=${HELM_CRD_REPO} \
-		--set image.release=${HELM_RELEASE} \
-		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
-		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
-		--set postInstall.labelNamespace.enabled=true \
-		--set postInstall.probeWebhook.enabled=true \
-		--set emitAdmissionEvents=true \
-		--set emitAuditEvents=true \
-		--set admissionEventsInvolvedNamespace=true \
-		--set auditEventsInvolvedNamespace=true \
-		--set disabledBuiltins={http.send} \
-		--set logMutations=true \
-		--set logLevel=${LOG_LEVEL} \
-		--set defaultCreateVAPForTemplates=${GENERATE_VAP} \
-		--set defaultCreateVAPBindingForConstraints=${GENERATE_VAPBINDING} \
-		--set mutationAnnotations=true;
+		$(HELM_EXTRA_ARGS)
 endif
 
 e2e-helm-upgrade-init: e2e-helm-install
@@ -273,23 +297,7 @@ e2e-helm-upgrade:
 	./.staging/helm/linux-amd64/helm upgrade gatekeeper manifest_staging/charts/gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
-		--set image.repository=${HELM_REPO} \
-		--set image.crdRepository=${HELM_CRD_REPO} \
-		--set image.release=${HELM_RELEASE} \
-		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
-		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
-		--set postInstall.labelNamespace.enabled=true \
-		--set postInstall.probeWebhook.enabled=true \
-		--set emitAdmissionEvents=true \
-		--set emitAuditEvents=true \
-		--set admissionEventsInvolvedNamespace=true \
-		--set auditEventsInvolvedNamespace=true \
-		--set disabledBuiltins={http.send} \
-		--set logMutations=true \
-		--set logLevel=${LOG_LEVEL} \
-		--set defaultCreateVAPForTemplates=${GENERATE_VAP} \
-		--set defaultCreateVAPBindingForConstraints=${GENERATE_VAPBINDING} \
-		--set mutationAnnotations=true;\
+		$(HELM_EXTRA_ARGS)
 
 e2e-subscriber-build-load-image:
 	docker buildx build --platform="linux/amd64" -t ${FAKE_SUBSCRIBER_IMAGE} --load -f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
@@ -302,7 +310,10 @@ e2e-subscriber-deploy:
 
 e2e-publisher-deploy:
 	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -
-	kubectl apply -f test/export/publish-components.yaml
+	kubectl apply -f test/export/fake-subscriber/manifest/publish-components.yaml
+
+e2e-reader-build-image:
+	docker buildx build --platform="$(PLATFORM)" -t ${FAKE_READER_IMAGE} --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
 
 # Build manager binary
 manager: generate
@@ -361,7 +372,7 @@ lint:
 	docker run -t --rm -v $(shell pwd):/app \
 		-v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
 		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} \
-		golangci-lint run -v --fix
+		golangci-lint run -v --fix --concurrency 2
 
 # Generate code
 generate: __conversion-gen __controller-gen

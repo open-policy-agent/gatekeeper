@@ -124,7 +124,7 @@ func convertToScopedEnforcementActions(object interface{}) (*[]apiconstraints.Sc
 	}
 	obj := []apiconstraints.ScopedEnforcementAction{}
 	if err := json.Unmarshal(j, &obj); err != nil {
-		return nil, fmt.Errorf("Could not convert JSON to scopedEnforcementActions: %w", err)
+		return nil, fmt.Errorf("could not convert JSON to scopedEnforcementActions: %w", err)
 	}
 	return &obj, nil
 }

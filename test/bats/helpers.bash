@@ -140,8 +140,17 @@ mutator_enforced() {
 }
 
 total_violations() {
+  local backend="$1"
   ct_total_violations="$(kubectl get k8srequiredlabels pod-must-have-test -n gatekeeper-system -ojson | jq '.status.totalViolations')"
   audit_id="$(kubectl get k8srequiredlabels pod-must-have-test -n gatekeeper-system -ojson | jq '.status.auditTimestamp')"
-  violations="$(kubectl logs -n fake-subscriber -l app=sub -c go-sub --tail=-1 | grep $audit_id | grep violation_audited | wc -l)"
+  violations=""
+  if [[ "${backend}" == "dapr" ]]; then
+    violations="$(kubectl logs -n fake-subscriber -l app=sub -c go-sub --tail=-1 | grep $audit_id | grep violation_audited | wc -l)"
+  elif [[ "${backend}" == "disk" ]]; then
+    violations="$(kubectl logs -n gatekeeper-system -l gatekeeper.sh/operation=audit -c reader --tail=-1 | grep $audit_id | grep violation_audited | wc -l)"
+  else
+    echo "Unknown backend: ${backend}"
+    return 1
+  fi
   [[ "${ct_total_violations}" -eq "${violations}" ]]
 }

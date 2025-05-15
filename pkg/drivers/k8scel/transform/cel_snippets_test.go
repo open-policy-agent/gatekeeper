@@ -259,7 +259,7 @@ func TestMatchKinds(t *testing.T) {
 			}
 			celOpts := cel.OptionalVariableDeclarations{HasParams: true}
 			filterCompiler.CompileAndStoreVariables(AllVariablesCEL(), celOpts, environment.StoredExpressions)
-			matcher := matchconditions.NewMatcher(filterCompiler.Compile(MatchKindsCEL(), celOpts, environment.StoredExpressions), ptr.To[v1.FailurePolicyType](v1.Fail), "matchTest", "kind", test.name)
+			matcher := matchconditions.NewMatcher(filterCompiler.CompileCondition(MatchKindsCEL(), celOpts, environment.StoredExpressions), ptr.To[v1.FailurePolicyType](v1.Fail), "matchTest", "kind", test.name)
 
 			obj := &unstructured.Unstructured{}
 			obj.SetName("RandomName")
@@ -464,7 +464,7 @@ func TestMatchNameGlob(t *testing.T) {
 				}
 				celOpts := cel.OptionalVariableDeclarations{HasParams: true}
 				filterCompiler.CompileAndStoreVariables(AllVariablesCEL(), celOpts, environment.StoredExpressions)
-				matcher := matchconditions.NewMatcher(filterCompiler.Compile(MatchNameGlobCEL(), celOpts, environment.StoredExpressions), ptr.To[v1.FailurePolicyType](v1.Fail), "matchTest", "name", test.name)
+				matcher := matchconditions.NewMatcher(filterCompiler.CompileCondition(MatchNameGlobCEL(), celOpts, environment.StoredExpressions), ptr.To[v1.FailurePolicyType](v1.Fail), "matchTest", "name", test.name)
 
 				constraint := &unstructured.Unstructured{Object: map[string]interface{}{}}
 				if test.matcher != nil {
@@ -634,7 +634,7 @@ func TestMatchNamespacesGlob(t *testing.T) {
 				}
 				celOpts := cel.OptionalVariableDeclarations{HasParams: true}
 				filterCompiler.CompileAndStoreVariables(AllVariablesCEL(), celOpts, environment.StoredExpressions)
-				matcher := matchconditions.NewMatcher(filterCompiler.Compile(MatchNamespacesGlobCEL(), celOpts, environment.StoredExpressions), ptr.To[v1.FailurePolicyType](v1.Fail), "matchTest", "name", test.name)
+				matcher := matchconditions.NewMatcher(filterCompiler.CompileCondition(MatchNamespacesGlobCEL(), celOpts, environment.StoredExpressions), ptr.To[v1.FailurePolicyType](v1.Fail), "matchTest", "name", test.name)
 
 				versionedAttributes, err := RequestToVersionedAttributes(subTest.request)
 				if err != nil {
@@ -808,7 +808,7 @@ func TestMatchExcludedNamespacesGlob(t *testing.T) {
 				}
 				celOpts := cel.OptionalVariableDeclarations{HasParams: true}
 				filterCompiler.CompileAndStoreVariables(AllVariablesCEL(), celOpts, environment.StoredExpressions)
-				matcher := matchconditions.NewMatcher(filterCompiler.Compile(MatchExcludedNamespacesGlobCEL(), celOpts, environment.StoredExpressions), ptr.To[v1.FailurePolicyType](v1.Fail), "matchTest", "name", test.name)
+				matcher := matchconditions.NewMatcher(filterCompiler.CompileCondition(MatchExcludedNamespacesGlobCEL(), celOpts, environment.StoredExpressions), ptr.To[v1.FailurePolicyType](v1.Fail), "matchTest", "name", test.name)
 
 				versionedAttributes, err := RequestToVersionedAttributes(subTest.request)
 				if err != nil {
@@ -873,7 +873,7 @@ func TestParamsBinding(t *testing.T) {
 			celOpts := cel.OptionalVariableDeclarations{HasParams: true}
 			filterCompiler.CompileAndStoreVariables(AllVariablesCEL(), celOpts, environment.StoredExpressions)
 			matcher := matchconditions.NewMatcher(
-				filterCompiler.Compile(
+				filterCompiler.CompileCondition(
 					[]cel.ExpressionAccessor{
 						&matchconditions.MatchCondition{
 							Name:       "TestParams",
@@ -954,7 +954,7 @@ func TestObjectBinding(t *testing.T) {
 			celOpts := cel.OptionalVariableDeclarations{HasParams: true}
 			filterCompiler.CompileAndStoreVariables(AllVariablesCEL(), celOpts, environment.StoredExpressions)
 			matcher := matchconditions.NewMatcher(
-				filterCompiler.Compile(
+				filterCompiler.CompileCondition(
 					[]cel.ExpressionAccessor{
 						&matchconditions.MatchCondition{
 							Name:       "TestObject",

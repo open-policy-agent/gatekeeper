@@ -124,7 +124,7 @@ type Compiler struct {
 
 	localvargen                *localVarGenerator
 	moduleLoader               ModuleLoader
-	ruleIndices                *util.HashMap
+	ruleIndices                *util.HasherMap[Ref, RuleIndex]
 	stages                     []stage
 	maxErrs                    int
 	sorted                     []string // list of sorted module names
@@ -303,15 +303,10 @@ type stage struct {
 func NewCompiler() *Compiler {
 
 	c := &Compiler{
-		Modules:       map[string]*Module{},
-		RewrittenVars: map[Var]Var{},
-		Required:      &Capabilities{},
-		ruleIndices: util.NewHashMap(func(a, b util.T) bool {
-			r1, r2 := a.(Ref), b.(Ref)
-			return r1.Equal(r2)
-		}, func(x util.T) int {
-			return x.(Ref).Hash()
-		}),
+		Modules:               map[string]*Module{},
+		RewrittenVars:         map[Var]Var{},
+		Required:              &Capabilities{},
+		ruleIndices:           util.NewHasherMap[Ref, RuleIndex](RefEqual),
 		maxErrs:               CompileErrorLimitDefault,
 		after:                 map[string][]CompilerStageDefinition{},
 		unsafeBuiltinsMap:     map[string]struct{}{},
@@ -825,7 +820,7 @@ func (c *Compiler) RuleIndex(path Ref) RuleIndex {
 	if !ok {
 		return nil
 	}
-	return r.(RuleIndex)
+	return r
 }
 
 // PassesTypeCheck determines whether the given body passes type checking
@@ -1114,7 +1109,7 @@ func (c *Compiler) checkRuleConflicts() {
 		for _, rule := range node.Values {
 			r := rule.(*Rule)
 			ref := r.Ref()
-			name = rw(ref.Copy()).String() // varRewriter operates in-place
+			name = rw(ref.CopyNonGround()).String() // varRewriter operates in-place
 			kinds[r.Head.RuleKind()] = struct{}{}
 			arities[len(r.Head.Args)] = struct{}{}
 			if r.Default {
@@ -1156,7 +1151,7 @@ func (c *Compiler) checkRuleConflicts() {
 			//   data.p.q[r][s] { r := input.r; s := input.s }
 			//   data.p[q].r.s { q := input.q }
 
-			if r.Ref().IsGround() && len(node.Children) > 0 {
+			if ref.IsGround() && len(node.Children) > 0 {
 				conflicts = node.flattenChildren()
 			}
 
@@ -1351,7 +1346,7 @@ func compileSchema(goSchema interface{}, allowNet []string) (*gojsonschema.Schem
 	if goSchema != nil {
 		refLoader = gojsonschema.NewGoLoader(goSchema)
 	} else {
-		return nil, fmt.Errorf("no schema as input to compile")
+		return nil, errors.New("no schema as input to compile")
 	}
 	schemasCompiled, err := sl.Compile(refLoader)
 	if err != nil {
@@ -1370,13 +1365,13 @@ func mergeSchemas(schemas ...*gojsonschema.SubSchema) (*gojsonschema.SubSchema, 
 		if len(schemas[i].PropertiesChildren) > 0 {
 			if !schemas[i].Types.Contains("object") {
 				if err := schemas[i].Types.Add("object"); err != nil {
-					return nil, fmt.Errorf("unable to set the type in schemas")
+					return nil, errors.New("unable to set the type in schemas")
 				}
 			}
 		} else if len(schemas[i].ItemsChildren) > 0 {
 			if !schemas[i].Types.Contains("array") {
 				if err := schemas[i].Types.Add("array"); err != nil {
-					return nil, fmt.Errorf("unable to set the type in schemas")
+					return nil, errors.New("unable to set the type in schemas")
 				}
 			}
 		}
@@ -1388,12 +1383,12 @@ func mergeSchemas(schemas ...*gojsonschema.SubSchema) (*gojsonschema.SubSchema, 
 		} else if result.Types.Contains("object") && len(result.PropertiesChildren) > 0 && schemas[i].Types.Contains("object") && len(schemas[i].PropertiesChildren) > 0 {
 			result.PropertiesChildren = append(result.PropertiesChildren, schemas[i].PropertiesChildren...)
 		} else if result.Types.Contains("array") && len(result.ItemsChildren) > 0 && schemas[i].Types.Contains("array") && len(schemas[i].ItemsChildren) > 0 {
-			for j := 0; j < len(schemas[i].ItemsChildren); j++ {
+			for j := range len(schemas[i].ItemsChildren) {
 				if len(result.ItemsChildren)-1 < j && !(len(schemas[i].ItemsChildren)-1 < j) {
 					result.ItemsChildren = append(result.ItemsChildren, schemas[i].ItemsChildren[j])
 				}
 				if result.ItemsChildren[j].Types.String() != schemas[i].ItemsChildren[j].Types.String() {
-					return nil, fmt.Errorf("unable to merge these schemas")
+					return nil, errors.New("unable to merge these schemas")
 				}
 			}
 		}
@@ -1482,7 +1477,7 @@ func (parser *schemaParser) parseSchemaWithPropertyKey(schema interface{}, prope
 				}
 				return parser.parseSchema(objectOrArrayResult)
 			} else if subSchema.Types.String() != allOfResult.Types.String() {
-				return nil, fmt.Errorf("unable to merge these schemas")
+				return nil, errors.New("unable to merge these schemas")
 			}
 		}
 		return parser.parseSchema(allOfResult)
@@ -1738,13 +1733,9 @@ func (c *Compiler) err(err *Error) {
 	c.Errors = append(c.Errors, err)
 }
 
-func (c *Compiler) getExports() *util.HashMap {
+func (c *Compiler) getExports() *util.HasherMap[Ref, []Ref] {
 
-	rules := util.NewHashMap(func(a, b util.T) bool {
-		return a.(Ref).Equal(b.(Ref))
-	}, func(v util.T) int {
-		return v.(Ref).Hash()
-	})
+	rules := util.NewHasherMap[Ref, []Ref](RefEqual)
 
 	for _, name := range c.sorted {
 		mod := c.Modules[name]
@@ -1757,18 +1748,30 @@ func (c *Compiler) getExports() *util.HashMap {
 	return rules
 }
 
-func hashMapAdd(rules *util.HashMap, pkg, rule Ref) {
+func refSliceEqual(a, b []Ref) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !a[i].Equal(b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func hashMapAdd(rules *util.HasherMap[Ref, []Ref], pkg, rule Ref) {
 	prev, ok := rules.Get(pkg)
 	if !ok {
 		rules.Put(pkg, []Ref{rule})
 		return
 	}
-	for _, p := range prev.([]Ref) {
+	for _, p := range prev {
 		if p.Equal(rule) {
 			return
 		}
 	}
-	rules.Put(pkg, append(prev.([]Ref), rule))
+	rules.Put(pkg, append(prev, rule))
 }
 
 func (c *Compiler) GetAnnotationSet() *AnnotationSet {
@@ -1867,7 +1870,7 @@ func (c *Compiler) resolveAllRefs() {
 
 		var ruleExports []Ref
 		if x, ok := rules.Get(mod.Package.Path); ok {
-			ruleExports = x.([]Ref)
+			ruleExports = x
 		}
 
 		globals := getGlobals(mod.Package, ruleExports, mod.Imports)
@@ -3014,7 +3017,7 @@ func (qc *queryCompiler) resolveRefs(qctx *QueryContext, body Body) (Body, error
 			var ruleExports []Ref
 			rules := qc.compiler.getExports()
 			if exist, ok := rules.Get(pkg.Path); ok {
-				ruleExports = exist.([]Ref)
+				ruleExports = exist
 			}
 
 			globals = getGlobals(qctx.Package, ruleExports, qctx.Imports)
@@ -3027,7 +3030,7 @@ func (qc *queryCompiler) resolveRefs(qctx *QueryContext, body Body) (Body, error
 	return resolveRefsInBody(globals, ignore, body), nil
 }
 
-func (qc *queryCompiler) rewriteComprehensionTerms(_ *QueryContext, body Body) (Body, error) {
+func (*queryCompiler) rewriteComprehensionTerms(_ *QueryContext, body Body) (Body, error) {
 	gen := newLocalVarGenerator("q", body)
 	f := newEqualityFactory(gen)
 	node, err := rewriteComprehensionTerms(f, body)
@@ -3037,13 +3040,13 @@ func (qc *queryCompiler) rewriteComprehensionTerms(_ *QueryContext, body Body) (
 	return node.(Body), nil
 }
 
-func (qc *queryCompiler) rewriteDynamicTerms(_ *QueryContext, body Body) (Body, error) {
+func (*queryCompiler) rewriteDynamicTerms(_ *QueryContext, body Body) (Body, error) {
 	gen := newLocalVarGenerator("q", body)
 	f := newEqualityFactory(gen)
 	return rewriteDynamics(f, body), nil
 }
 
-func (qc *queryCompiler) rewriteExprTerms(_ *QueryContext, body Body) (Body, error) {
+func (*queryCompiler) rewriteExprTerms(_ *QueryContext, body Body) (Body, error) {
 	gen := newLocalVarGenerator("q", body)
 	return rewriteExprTermsInBody(gen, body), nil
 }
@@ -3542,10 +3545,8 @@ func (n *TreeNode) add(path Ref, rule *Rule) {
 		}
 		node.Children[sub.Key] = sub
 		node.Sorted = append(node.Sorted, sub.Key)
-	} else {
-		if rule != nil {
-			node.Values = append(node.Values, rule)
-		}
+	} else if rule != nil {
+		node.Values = append(node.Values, rule)
 	}
 }
 
@@ -4231,6 +4232,9 @@ func (f *equalityFactory) Generate(other *Term) *Expr {
 	return expr
 }
 
+// TODO: Move to internal package?
+const LocalVarPrefix = "__local"
+
 type localVarGenerator struct {
 	exclude VarSet
 	suffix  string
@@ -4255,7 +4259,7 @@ func newLocalVarGenerator(suffix string, node interface{}) *localVarGenerator {
 
 func (l *localVarGenerator) Generate() Var {
 	for {
-		result := Var("__local" + l.suffix + strconv.Itoa(l.next) + "__")
+		result := Var(LocalVarPrefix + l.suffix + strconv.Itoa(l.next) + "__")
 		l.next++
 		if !l.exclude.Contains(result) {
 			return result
@@ -4411,7 +4415,7 @@ func resolveRefsInExpr(globals map[Var]*usedRef, ignore *declaredVarStack, expr 
 		cpy.Terms = resolveRefsInTerm(globals, ignore, ts)
 	case []*Term:
 		buf := make([]*Term, len(ts))
-		for i := 0; i < len(ts); i++ {
+		for i := range ts {
 			buf[i] = resolveRefsInTerm(globals, ignore, ts[i])
 		}
 		cpy.Terms = buf
@@ -4516,7 +4520,7 @@ func resolveRefsInTerm(globals map[Var]*usedRef, ignore *declaredVarStack, term 
 
 func resolveRefsInTermArray(globals map[Var]*usedRef, ignore *declaredVarStack, terms *Array) []*Term {
 	cpy := make([]*Term, terms.Len())
-	for i := 0; i < terms.Len(); i++ {
+	for i := range terms.Len() {
 		cpy[i] = resolveRefsInTerm(globals, ignore, terms.Elem(i))
 	}
 	return cpy
@@ -4524,7 +4528,7 @@ func resolveRefsInTermArray(globals map[Var]*usedRef, ignore *declaredVarStack, 
 
 func resolveRefsInTermSlice(globals map[Var]*usedRef, ignore *declaredVarStack, terms []*Term) []*Term {
 	cpy := make([]*Term, len(terms))
-	for i := 0; i < len(terms); i++ {
+	for i := range terms {
 		cpy[i] = resolveRefsInTerm(globals, ignore, terms[i])
 	}
 	return cpy
@@ -4798,7 +4802,7 @@ func rewriteDynamicsOne(original *Expr, f *equalityFactory, term *Term, result B
 		connectGeneratedExprs(original, generated)
 		return result, result[len(result)-1].Operand(0)
 	case *Array:
-		for i := 0; i < v.Len(); i++ {
+		for i := range v.Len() {
 			var t *Term
 			result, t = rewriteDynamicsOne(original, f, v.Elem(i), result)
 			v.set(i, t)
@@ -4875,7 +4879,7 @@ func rewriteExprTermsInHead(gen *localVarGenerator, rule *Rule) {
 
 func rewriteExprTermsInBody(gen *localVarGenerator, body Body) Body {
 	cpy := make(Body, 0, len(body))
-	for i := 0; i < len(body); i++ {
+	for i := range body {
 		for _, expr := range expandExpr(gen, body[i]) {
 			cpy.Append(expr)
 		}
@@ -5028,7 +5032,7 @@ func expandExprRef(gen *localVarGenerator, v []*Term) (support []*Expr) {
 }
 
 func expandExprTermArray(gen *localVarGenerator, arr *Array) (support []*Expr) {
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		extras, v := expandExprTerm(gen, arr.Elem(i))
 		arr.set(i, v)
 		support = append(support, extras...)
@@ -5710,7 +5714,7 @@ func validateWith(c *Compiler, unsafeBuiltinsMap map[string]struct{}, expr *Expr
 	case isDataRef(target):
 		ref := target.Value.(Ref)
 		targetNode := c.RuleTree
-		for i := 0; i < len(ref)-1; i++ {
+		for i := range len(ref) - 1 {
 			child := targetNode.Child(ref[i].Value)
 			if child == nil {
 				break

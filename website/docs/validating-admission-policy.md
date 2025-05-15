@@ -109,7 +109,7 @@ spec:
           ...
 ```
 
-With this new engine and source added to the constraint template, now Gatekeeper webhook, audit, and shift-left can validate resources with these new VAP CEL-based rules.
+With this new engine and source added to the constraint template, now Gatekeeper webhook, audit, and shift-left can validate resources with these new VAP CEL-based rules. For more details on VAP-style CEL syntax, refer to the Kubernetes [Validating Admission Policy documentation](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/).
 
 ## Policy updates to generate Validating Admission Policy and Binding resources
 
@@ -177,19 +177,23 @@ spec:
 
 To see this in action, checkout this [demo](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/scoped-enforcement-actions)
 
+Below is the mapping of Gatekeeper's `enforcementActions` to `validatingAdmissionPolicyBinding.spec.validationActions`:
+
+| `enforcementAction` | `validationActions` |
+| --- | --- |
+| `deny` | `Deny` |
+| `warn` | `Warn` |
+| `dryrun` | `Audit` |
+
 ## FAQs
 
 <details>
-
 <summary>Do all engines in a ConstraintTemplate get evaluated? Is there a fallback among engines?</summary>
 Only one engine is evaluated for each ConstraintTemplate. `K8sNativeValidation` engine holds a higher priority than the `Rego` engine. There is no fallback mechanism between engines, hence a logical/syntactical error in the policy logic is treated as violation depending on the enforcement action specified in the Constraint.
-
 </details>
 
 <details>
-
 <summary>If I have a template with Rego and CEL, which policy engine will be used when evaluating resources?</summary>
-
 K8sNativeValidation engine holds a higher priority than the Rego engine, so with a ConstraintTemplate that has both Rego and CEL. Policy logic written in CEL will get evaluated by the K8sNativeValidation engine.
 </details>
 
@@ -197,5 +201,10 @@ K8sNativeValidation engine holds a higher priority than the Rego engine, so with
 <summary>Can I change the priority of engines per ConstraintTemplate?
 </summary>
 No, engine priority cannot be modified.
+</details>
 
+<details>
+<summary>Why does CEL use anyobject?
+</summary>
+Gatekeeper sets Object to oldObject on DELETE requests however, Kubernetes does not do this for ValidatingAdmissionPolicy. In order for evaluation in both environments to behave identically, we must be sure that Object is unset on DELETE. Hence Gatekeeper sets anyObject for users who need the "if DELETE Object == OldObject" behavior.
 </details>

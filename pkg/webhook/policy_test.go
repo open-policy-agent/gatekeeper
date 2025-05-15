@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"testing"
@@ -13,7 +14,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -526,42 +526,63 @@ func TestConstraintValidation(t *testing.T) {
 		Template      *templates.ConstraintTemplate
 		Constraint    string
 		ErrorExpected bool
+		Operation     admissionv1.Operation
 	}{
 		{
 			Name:          "Valid Constraint labelselector",
 			Template:      validRegoTemplate(),
 			Constraint:    goodLabelSelector,
 			ErrorExpected: false,
+			Operation:     admissionv1.Create,
 		},
 		{
 			Name:          "Invalid Constraint labelselector",
 			Template:      validRegoTemplate(),
 			Constraint:    badLabelSelector,
 			ErrorExpected: true,
+			Operation:     admissionv1.Create,
 		},
 		{
 			Name:          "Valid Constraint namespaceselector",
 			Template:      validRegoTemplate(),
 			Constraint:    goodNamespaceSelector,
 			ErrorExpected: false,
+			Operation:     admissionv1.Create,
 		},
 		{
 			Name:          "Invalid Constraint namespaceselector",
 			Template:      validRegoTemplate(),
 			Constraint:    badNamespaceSelector,
 			ErrorExpected: true,
+			Operation:     admissionv1.Create,
 		},
 		{
 			Name:          "Valid Constraint enforcementaction",
 			Template:      validRegoTemplate(),
 			Constraint:    goodEnforcementAction,
 			ErrorExpected: false,
+			Operation:     admissionv1.Create,
 		},
 		{
 			Name:          "Invalid Constraint enforcementaction",
 			Template:      validRegoTemplate(),
 			Constraint:    badEnforcementAction,
 			ErrorExpected: true,
+			Operation:     admissionv1.Create,
+		},
+		{
+			Name:          "Valid Constraint labelselector with delete operation",
+			Template:      validRegoTemplate(),
+			Constraint:    goodLabelSelector,
+			ErrorExpected: false,
+			Operation:     admissionv1.Delete,
+		},
+		{
+			Name:          "Invalid Constraint labelselector with delete operation",
+			Template:      validRegoTemplate(),
+			Constraint:    badLabelSelector,
+			ErrorExpected: true,
+			Operation:     admissionv1.Delete,
 		},
 	}
 	for _, tt := range tc {
@@ -592,10 +613,18 @@ func TestConstraintValidation(t *testing.T) {
 						Version: "v1beta1",
 						Kind:    "K8sGoodRego",
 					},
-					Object: runtime.RawExtension{
-						Raw: b,
-					},
+					Operation: tt.Operation,
+					Name:      "constraint",
 				},
+			}
+			if tt.Operation == admissionv1.Delete {
+				review.OldObject = runtime.RawExtension{
+					Raw: b,
+				}
+			} else {
+				review.Object = runtime.RawExtension{
+					Raw: b,
+				}
 			}
 			_, err = handler.validateGatekeeperResources(ctx, review)
 			if err != nil && !tt.ErrorExpected {
@@ -992,11 +1021,11 @@ func TestValidateConfigResource(t *testing.T) {
 			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Name: tt.rName,
-					Kind: metav1.GroupVersionKind(configv1alpha1.GroupVersion.WithKind("Config")),
+					Kind: metav1.GroupVersionKind(v1alpha1.GroupVersion.WithKind("Config")),
 				},
 			}
 			if tt.deleteOp {
-				req.AdmissionRequest.Operation = admissionv1.Delete
+				req.Operation = admissionv1.Delete
 			}
 
 			_, err := handler.validateGatekeeperResources(context.Background(), req)
@@ -1072,6 +1101,55 @@ func TestValidateProvider(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("validationHandler.validateGatekeeperResources() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetReqObject(t *testing.T) {
+	tests := []struct {
+		name           string
+		operation      admissionv1.Operation
+		objectRaw      []byte
+		oldObjectRaw   []byte
+		expectedOutput []byte
+	}{
+		{
+			name:           "Create operation",
+			operation:      admissionv1.Create,
+			objectRaw:      []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "test-pod"}}`),
+			oldObjectRaw:   nil,
+			expectedOutput: []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "test-pod"}}`),
+		},
+		{
+			name:           "Update operation",
+			operation:      admissionv1.Update,
+			objectRaw:      []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "updated-pod"}}`),
+			oldObjectRaw:   nil,
+			expectedOutput: []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "updated-pod"}}`),
+		},
+		{
+			name:           "Delete operation",
+			operation:      admissionv1.Delete,
+			objectRaw:      nil,
+			oldObjectRaw:   []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "deleted-pod"}}`),
+			expectedOutput: []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "deleted-pod"}}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: tt.operation,
+					Object:    runtime.RawExtension{Raw: tt.objectRaw},
+					OldObject: runtime.RawExtension{Raw: tt.oldObjectRaw},
+				},
+			}
+
+			result := getReqObject(req)
+			if !bytes.Equal(result, tt.expectedOutput) {
+				t.Errorf("getAnyObject() = %s, want %s", string(result), string(tt.expectedOutput))
 			}
 		})
 	}
