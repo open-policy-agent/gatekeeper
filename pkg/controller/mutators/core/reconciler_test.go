@@ -203,7 +203,7 @@ func (m *fakeMutatorObject) DeepCopyObject() runtime.Object {
 
 	return &fakeMutatorObject{
 		TypeMeta:   m.TypeMeta,
-		ObjectMeta: *m.ObjectMeta.DeepCopy(),
+		ObjectMeta: *m.DeepCopy(),
 		mutator:    mutator,
 		err:        err,
 	}
