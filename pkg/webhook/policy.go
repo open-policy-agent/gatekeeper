@@ -80,7 +80,7 @@ func init() {
 
 // Explicitly list all known subresources except "status" (to avoid destabilizing the cluster and increasing load on gatekeeper). But include "services/status" for constraints that mitigate CVE-2020-8554.
 // You can find a rough list of subresources by doing a case-sensitive search in the Kubernetes codebase for 'Subresource("'
-// +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*;pods/ephemeralcontainers;pods/exec;pods/log;pods/eviction;pods/portforward;pods/proxy;pods/attach;pods/binding;deployments/scale;replicasets/scale;statefulsets/scale;replicationcontrollers/scale;services/proxy;nodes/proxy;services/status,versions=*,name=validation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
+// +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*;pods/ephemeralcontainers;pods/exec;pods/log;pods/eviction;pods/portforward;pods/proxy;pods/attach;pods/binding;pods/resize;deployments/scale;replicasets/scale;statefulsets/scale;replicationcontrollers/scale;services/proxy;nodes/proxy;services/status,versions=*,name=validation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager.
@@ -139,7 +139,7 @@ type validationHandler struct {
 func (h *validationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	timeStart := time.Now()
 
-	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
+	if isGkServiceAccount(req.UserInfo) {
 		return admission.Allowed("Gatekeeper does not self-manage")
 	}
 
@@ -190,11 +190,11 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 			h.log.WithValues(
 				logging.Process, "admission",
 				logging.EventType, "review_response_stats",
-				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
-				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
-				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
-				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
-				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
+				logging.ResourceGroup, req.Kind.Group,
+				logging.ResourceAPIVersion, req.Kind.Version,
+				logging.ResourceKind, req.Kind.Kind,
+				logging.ResourceNamespace, req.Namespace,
+				logging.RequestUsername, req.UserInfo.Username,
 			),
 			resp.StatsEntries, "admission review request stats",
 		)
@@ -240,9 +240,10 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 	obj := &unstructured.Unstructured{}
 
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
-		resourceName = req.AdmissionRequest.Name
-		if req.AdmissionRequest.Object.Raw != nil {
-			if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err == nil {
+		resourceName = req.Name
+		rawObj := getReqObject(req)
+		if rawObj != nil {
+			if _, _, err := deserializer.Decode(rawObj, nil, obj); err == nil {
 				// On a CREATE operation, the client may omit name and
 				// rely on the server to generate the name.
 				if len(resourceName) == 0 {
@@ -301,12 +302,12 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				logging.ConstraintKind:               r.Constraint.GetKind(),
 				logging.ConstraintAction:             r.EnforcementAction,
 				logging.ConstraintEnforcementActions: strings.Join(actions, ","),
-				logging.ResourceGroup:                req.AdmissionRequest.Kind.Group,
-				logging.ResourceAPIVersion:           req.AdmissionRequest.Kind.Version,
-				logging.ResourceKind:                 req.AdmissionRequest.Kind.Kind,
-				logging.ResourceNamespace:            req.AdmissionRequest.Namespace,
+				logging.ResourceGroup:                req.Kind.Group,
+				logging.ResourceAPIVersion:           req.Kind.Version,
+				logging.ResourceKind:                 req.Kind.Kind,
+				logging.ResourceNamespace:            req.Namespace,
 				logging.ResourceName:                 resourceName,
-				logging.RequestUsername:              req.AdmissionRequest.UserInfo.Username,
+				logging.RequestUsername:              req.UserInfo.Username,
 			}
 
 			if len(actions) == 0 {
@@ -326,12 +327,12 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 					reason = "FailedAdmission"
 				}
 
-				ref := getViolationRef(h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, obj.GetNamespace(), obj.GetResourceVersion(), obj.GetUID(), r.Constraint.GetKind(), r.Constraint.GetName(), r.Constraint.GetNamespace(), *admissionEventsInvolvedNamespace)
+				ref := getViolationRef(h.gkNamespace, req.Kind.Kind, resourceName, obj.GetNamespace(), obj.GetResourceVersion(), obj.GetUID(), r.Constraint.GetKind(), r.Constraint.GetName(), r.Constraint.GetNamespace(), *admissionEventsInvolvedNamespace)
 
 				if *admissionEventsInvolvedNamespace {
 					h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Constraint: %s, Message: %s", eventMsg, r.Constraint.GetName(), r.Msg)
 				} else {
-					h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint: %s, Message: %s", eventMsg, req.AdmissionRequest.Namespace, r.Constraint.GetName(), r.Msg)
+					h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint: %s, Message: %s", eventMsg, req.Namespace, r.Constraint.GetName(), r.Msg)
 				}
 			}
 		}
@@ -367,7 +368,7 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return false, fmt.Errorf("resource cannot have metadata.name larger than 63 char; length: %d", len(req.Name))
 	}
 
-	gvk := req.AdmissionRequest.Kind
+	gvk := req.Kind
 	switch {
 	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
 		return h.validateTemplate(ctx, req)
@@ -399,7 +400,7 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 // The returned boolean is only true if error is non-nil and is a result of user
 // error.
 func (h *validationHandler) validateTemplate(ctx context.Context, req *admission.Request) (bool, error) {
-	templ, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	templ, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -419,9 +420,16 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 	return false, nil
 }
 
+func getReqObject(req *admission.Request) []byte {
+	if req.Operation == admissionv1.Delete {
+		return req.OldObject.Raw
+	}
+	return req.Object.Raw
+}
+
 func (h *validationHandler) validateConstraint(req *admission.Request) (bool, error) {
 	obj := &unstructured.Unstructured{}
-	if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err != nil {
+	if _, _, err := deserializer.Decode(getReqObject(req), nil, obj); err != nil {
 		return false, err
 	}
 	if err := h.opa.ValidateConstraint(obj); err != nil {
@@ -447,7 +455,7 @@ func (h *validationHandler) validateConstraint(req *admission.Request) (bool, er
 }
 
 func (h *validationHandler) validateExpansionTemplate(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -471,7 +479,7 @@ func (h *validationHandler) validateConfigResource(req *admission.Request) error
 }
 
 func (h *validationHandler) validateAssignMetadata(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -488,7 +496,7 @@ func (h *validationHandler) validateAssignMetadata(req *admission.Request) (bool
 }
 
 func (h *validationHandler) validateAssign(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -505,7 +513,7 @@ func (h *validationHandler) validateAssign(req *admission.Request) (bool, error)
 }
 
 func (h *validationHandler) validateAssignImage(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -522,7 +530,7 @@ func (h *validationHandler) validateAssignImage(req *admission.Request) (bool, e
 }
 
 func (h *validationHandler) validateModifySet(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -539,7 +547,7 @@ func (h *validationHandler) validateModifySet(req *admission.Request) (bool, err
 }
 
 func (h *validationHandler) validateProvider(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	obj, _, err := deserializer.Decode(getReqObject(req), nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -578,10 +586,11 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 
 	resultants := []*expansion.Resultant{}
 	// Skip the expansion if admissionRequest.Obj is nil.
-	if req.AdmissionRequest.Object.Raw != nil {
+	rawObj := getReqObject(req)
+	if rawObj != nil {
 		// Convert the request's generator resource to unstructured for expansion
 		obj := &unstructured.Unstructured{}
-		if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
+		if _, _, err := deserializer.Decode(rawObj, nil, obj); err != nil {
 			return nil, fmt.Errorf("error decoding generator resource %s: %w", req.Name, err)
 		}
 		obj.SetNamespace(req.Namespace)
@@ -597,7 +606,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		base := &mutationtypes.Mutable{
 			Object:    obj,
 			Namespace: review.Namespace,
-			Username:  req.AdmissionRequest.UserInfo.Username,
+			Username:  req.UserInfo.Username,
 		}
 		resultants, err = h.expansionSystem.Expand(base)
 		if err != nil {
@@ -653,14 +662,14 @@ func (h *validationHandler) createReviewForRequest(ctx context.Context, req *adm
 		Source:           mutationtypes.SourceTypeOriginal,
 		IsAdmission:      true,
 	}
-	if req.AdmissionRequest.Namespace != "" {
+	if req.Namespace != "" {
 		ns := &corev1.Namespace{}
-		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
+		if err := h.client.Get(ctx, types.NamespacedName{Name: req.Namespace}, ns); err != nil {
 			if !k8serrors.IsNotFound(err) {
 				return nil, err
 			}
 			// bypass cached client and ask api-server directly
-			err = h.reader.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns)
+			err = h.reader.Get(ctx, types.NamespacedName{Name: req.Namespace}, ns)
 			if err != nil {
 				return nil, err
 			}

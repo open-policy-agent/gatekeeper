@@ -50,8 +50,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
-
 func (a *Adder) InjectTracker(tracker *readiness.Tracker) {
 	a.Tracker = tracker
 }
@@ -163,7 +161,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.registry.remove(request.NamespacedName)
 		r.getTracker().CancelExpect(versionedET)
 		r.queueConflicts(oldConflicts)
-		return reconcile.Result{}, r.deleteStatus(ctx, request.NamespacedName.Name)
+		return reconcile.Result{}, r.deleteStatus(ctx, request.Name)
 	}
 
 	upsertErr := r.system.UpsertTemplate(et)

@@ -49,6 +49,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -66,11 +67,13 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	metrics.Registry = prometheus.NewRegistry()
+	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
 		Metrics: metricsserver.Options{
 			BindAddress: "0",
 		},
 		MapperProvider: apiutil.NewDynamicRESTMapper,
+		Controller:     config.Controller{SkipNameValidation: &skipNameValidation},
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -125,7 +128,6 @@ func TestReconcile(t *testing.T) {
 
 	dataClient := &fakes.FakeCfClient{}
 
-	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +160,7 @@ func TestReconcile(t *testing.T) {
 		fakes.WithName("no-pod"),
 	)
 
-	rec, err := newReconciler(mgr, cacheManager, cs, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
 	require.NoError(t, err)
 
 	// Wrap the Controller Reconcile function so it writes each request to a map when it is finished reconciling.
@@ -290,8 +292,6 @@ func TestReconcile(t *testing.T) {
 
 	// fooPod should be namespace excluded, hence not added to the cache
 	require.False(t, dataClient.Contains(map[fakes.CfDataKey]interface{}{{Gvk: fooPod.GroupVersionKind(), Key: "default"}: struct{}{}}))
-
-	cs.Stop()
 }
 
 // tests that expectations for sync only resource gets canceled when it gets deleted.
@@ -424,7 +424,6 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 		}
 	}
 
-	cs := watch.NewSwitch()
 	processExcluder := process.Get()
 	syncMetricsCache := syncutil.NewMetricsCache()
 	reg, err := wm.NewRegistrar(
@@ -453,7 +452,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 		fakes.WithName("no-pod"),
 	)
 
-	rec, err := newReconciler(mgr, cacheManager, cs, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
 	if err != nil {
 		return nil, fmt.Errorf("creating reconciler: %w", err)
 	}
@@ -600,7 +599,6 @@ func TestConfig_Retries(t *testing.T) {
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	dataClient := &fakes.FakeCfClient{}
-	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
@@ -632,7 +630,7 @@ func TestConfig_Retries(t *testing.T) {
 		fakes.WithName("no-pod"),
 	)
 
-	rec, _ := newReconciler(mgr, cacheManager, cs, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
+	rec, _ := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)

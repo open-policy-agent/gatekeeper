@@ -45,11 +45,10 @@ import (
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_status_controller")
 
 type Adder struct {
-	CFClient         *constraintclient.Client
-	WatchManager     *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
-	Events           <-chan event.GenericEvent
-	IfWatching       func(schema.GroupVersionKind, func() error) (bool, error)
+	CFClient     *constraintclient.Client
+	WatchManager *watch.Manager
+	Events       <-chan event.GenericEvent
+	IfWatching   func(schema.GroupVersionKind, func() error) (bool, error)
 }
 
 // Add creates a new Constraint Status Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -58,7 +57,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.IsAssigned(operations.Status) {
 		return nil
 	}
-	r := newReconciler(mgr, a.ControllerSwitch)
+	r := newReconciler(mgr)
 	if a.IfWatching != nil {
 		r.ifWatching = a.IfWatching
 	}
@@ -68,7 +67,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
-	cs *watch.ControllerSwitch,
 ) *ReconcileConstraintStatus {
 	return &ReconcileConstraintStatus{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
@@ -76,7 +74,6 @@ func newReconciler(
 		statusClient: mgr.GetClient(),
 		reader:       mgr.GetCache(),
 
-		cs:         cs,
 		scheme:     mgr.GetScheme(),
 		log:        log,
 		ifWatching: func(_ schema.GroupVersionKind, fn func() error) (bool, error) { return true, fn() },
@@ -87,7 +84,7 @@ type PackerMap func(obj client.Object) []reconcile.Request
 
 // PodStatusToConstraintMapper correlates a ConstraintPodStatus with its corresponding constraint
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToConstraintMapper(selfOnly bool, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.ConstraintPodStatus] {
+func PodStatusToConstraintMapper(selfOnly bool, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.ConstraintPodStatus, reconcile.Request] {
 	return func(ctx context.Context, obj *v1beta1.ConstraintPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConstraintNameLabel]
@@ -145,7 +142,6 @@ type ReconcileConstraintStatus struct {
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	cs         *watch.ControllerSwitch
 	scheme     *runtime.Scheme
 	log        logr.Logger
 	ifWatching func(schema.GroupVersionKind, func() error) (bool, error)
@@ -157,15 +153,6 @@ type ReconcileConstraintStatus struct {
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec.
 func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	// Short-circuit if shutting down.
-	if r.cs != nil {
-		running := r.cs.Enter()
-		defer r.cs.Exit()
-		if !running {
-			return reconcile.Result{}, nil
-		}
-	}
-
 	gvk, unpackedRequest, err := util.UnpackRequest(request)
 	if err != nil {
 		// Unrecoverable, do not retry.

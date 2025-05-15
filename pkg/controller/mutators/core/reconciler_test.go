@@ -198,12 +198,12 @@ func (m *fakeMutatorObject) DeepCopyObject() runtime.Object {
 
 	err := m.err
 	if err != nil {
-		err = fmt.Errorf(err.Error())
+		err = fmt.Errorf("%w", err)
 	}
 
 	return &fakeMutatorObject{
 		TypeMeta:   m.TypeMeta,
-		ObjectMeta: *m.ObjectMeta.DeepCopy(),
+		ObjectMeta: *m.DeepCopy(),
 		mutator:    mutator,
 		err:        err,
 	}

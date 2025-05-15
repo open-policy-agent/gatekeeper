@@ -45,9 +45,8 @@ import (
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_template_status_controller")
 
 type Adder struct {
-	CfClient         *constraintclient.Client
-	WatchManager     *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
+	CfClient     *constraintclient.Client
+	WatchManager *watch.Manager
 }
 
 // Add creates a new Constraint Status Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -56,30 +55,27 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.IsAssigned(operations.Status) {
 		return nil
 	}
-	r := newReconciler(mgr, a.ControllerSwitch)
+	r := newReconciler(mgr)
 	return add(mgr, r)
 }
 
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
-	cs *watch.ControllerSwitch,
 ) reconcile.Reconciler {
 	return &ReconcileConstraintStatus{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
 		writer:       mgr.GetClient(),
 		statusClient: mgr.GetClient(),
 		reader:       mgr.GetCache(),
-
-		cs:     cs,
-		scheme: mgr.GetScheme(),
-		log:    log,
+		scheme:       mgr.GetScheme(),
+		log:          log,
 	}
 }
 
 // PodStatusToConstraintTemplateMapper correlates a ConstraintTemplatePodStatus with its corresponding constraint template
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToConstraintTemplateMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ConstraintTemplatePodStatus] {
+func PodStatusToConstraintTemplateMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ConstraintTemplatePodStatus, reconcile.Request] {
 	return func(_ context.Context, obj *v1beta1.ConstraintTemplatePodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConstraintTemplateNameLabel]
@@ -132,10 +128,8 @@ type ReconcileConstraintStatus struct {
 	reader       client.Reader
 	writer       client.Writer
 	statusClient client.StatusClient
-
-	cs     *watch.ControllerSwitch
-	scheme *runtime.Scheme
-	log    logr.Logger
+	scheme       *runtime.Scheme
+	log          logr.Logger
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -144,14 +138,6 @@ type ReconcileConstraintStatus struct {
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec.
 func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	// Short-circuit if shutting down.
-	if r.cs != nil {
-		running := r.cs.Enter()
-		defer r.cs.Exit()
-		if !running {
-			return reconcile.Result{}, nil
-		}
-	}
 	template := &unstructured.Unstructured{}
 	gv := constrainttemplatev1beta1.SchemeGroupVersion
 	template.SetGroupVersionKind(gv.WithKind("ConstraintTemplate"))

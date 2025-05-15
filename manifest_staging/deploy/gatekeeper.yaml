@@ -4970,15 +4970,6 @@ rules:
 - apiGroups:
   - templates.gatekeeper.sh
   resources:
-  - constrainttemplates/finalizers
-  verbs:
-  - delete
-  - get
-  - patch
-  - update
-- apiGroups:
-  - templates.gatekeeper.sh
-  resources:
   - constrainttemplates/status
   verbs:
   - get
@@ -5109,7 +5100,7 @@ spec:
           value: manager
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-        image: openpolicyagent/gatekeeper:v3.19.0-beta.1
+        image: openpolicyagent/gatekeeper:v3.20.0-beta.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -5228,7 +5219,7 @@ spec:
           value: manager
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-        image: openpolicyagent/gatekeeper:v3.19.0-beta.1
+        image: openpolicyagent/gatekeeper:v3.20.0-beta.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -5379,6 +5370,7 @@ webhooks:
     - pods/proxy
     - pods/attach
     - pods/binding
+    - pods/resize
     - deployments/scale
     - replicasets/scale
     - statefulsets/scale

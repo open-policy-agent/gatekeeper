@@ -10,7 +10,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -54,9 +53,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 
 func (a *Adder) InjectCacheManager(o *cm.CacheManager) {
 	a.CacheManager = o
-}
-
-func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {
 }
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
@@ -117,7 +113,8 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 	}
-	sk := aggregator.Key{Source: "syncset", ID: request.NamespacedName.String()}
+	// Directly accessing the NamespaceName.String(), as NamespaceName is embedded within reconcile.Request.
+	sk := aggregator.Key{Source: "syncset", ID: request.String()}
 
 	if !exists || !syncset.GetDeletionTimestamp().IsZero() {
 		log.V(logging.DebugLevel).Info("handling SyncSet delete", "instance", syncset)

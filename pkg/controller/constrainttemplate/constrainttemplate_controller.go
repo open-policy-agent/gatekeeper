@@ -77,11 +77,10 @@ var gvkConstraintTemplate = schema.GroupVersionKind{
 }
 
 type Adder struct {
-	CFClient         *constraintclient.Client
-	WatchManager     *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
-	Tracker          *readiness.Tracker
-	GetPod           func(context.Context) (*corev1.Pod, error)
+	CFClient     *constraintclient.Client
+	WatchManager *watch.Manager
+	Tracker      *readiness.Tracker
+	GetPod       func(context.Context) (*corev1.Pod, error)
 }
 
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -92,7 +91,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	}
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	r, err := newReconciler(mgr, a.CFClient, a.WatchManager, a.ControllerSwitch, a.Tracker, events, events, a.GetPod)
+	r, err := newReconciler(mgr, a.CFClient, a.WatchManager, a.Tracker, events, events, a.GetPod)
 	if err != nil {
 		return err
 	}
@@ -107,10 +106,6 @@ func (a *Adder) InjectWatchManager(wm *watch.Manager) {
 	a.WatchManager = wm
 }
 
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
-	a.ControllerSwitch = cs
-}
-
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
@@ -123,7 +118,7 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 // cstrEvents is the channel from which constraint controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
-func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
+func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex and vap label
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -142,7 +137,6 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 		CFClient:         cfClient,
 		ConstraintsCache: constraintsCache,
 		WatchManager:     wm,
-		ControllerSwitch: cs,
 		Events:           cstrEvents,
 		Tracker:          tracker,
 		GetPod:           getPod,
@@ -158,20 +152,18 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 		// via the registrar below.
 		statusEvents := make(chan event.GenericEvent, 1024)
 		csAdder := constraintstatus.Adder{
-			CFClient:         cfClient,
-			WatchManager:     wm,
-			ControllerSwitch: cs,
-			Events:           statusEvents,
-			IfWatching:       statusW.IfWatching,
+			CFClient:     cfClient,
+			WatchManager: wm,
+			Events:       statusEvents,
+			IfWatching:   statusW.IfWatching,
 		}
 		if err := csAdder.Add(mgr); err != nil {
 			return nil, err
 		}
 
 		ctsAdder := constrainttemplatestatus.Adder{
-			CfClient:         cfClient,
-			WatchManager:     wm,
-			ControllerSwitch: cs,
+			CfClient:     cfClient,
+			WatchManager: wm,
 		}
 		if err := ctsAdder.Add(mgr); err != nil {
 			return nil, err
@@ -185,7 +177,6 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 		cfClient:      cfClient,
 		watcher:       w,
 		statusWatcher: statusW,
-		cs:            cs,
 		metrics:       r,
 		tracker:       tracker,
 		getPod:        getPod,
@@ -245,7 +236,6 @@ type ReconcileConstraintTemplate struct {
 	watcher       *watch.Registrar
 	statusWatcher *watch.Registrar
 	cfClient      *constraintclient.Client
-	cs            *watch.ControllerSwitch
 	metrics       *reporter
 	tracker       *readiness.Tracker
 	getPod        func(context.Context) (*corev1.Pod, error)
@@ -255,8 +245,6 @@ type ReconcileConstraintTemplate struct {
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingadmissionpolicies;validatingadmissionpolicybindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
-// TODO(acpana): remove in 3.16 as per https://github.com/open-policy-agent/gatekeeper/issues/3084
-// +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/finalizers,verbs=get;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=externaldata.gatekeeper.sh,resources=providers,verbs=get;list;watch;create;update;patch;delete
 
@@ -264,14 +252,6 @@ type ReconcileConstraintTemplate struct {
 // and what is in the ConstraintTemplate.Spec.
 func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	logger := logger.WithValues("template_name", request.Name)
-	// Short-circuit if shutting down.
-	if r.cs != nil {
-		running := r.cs.Enter()
-		defer r.cs.Exit()
-		if !running {
-			return reconcile.Result{}, nil
-		}
-	}
 
 	defer r.metrics.registry.report(ctx, r.metrics)
 
@@ -302,7 +282,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 			result, err = r.handleDelete(ctx, ctUnversioned)
 			if err != nil {
 				logger.Error(err, "deletion error")
-				logError(request.NamespacedName.Name)
+				logError(request.Name)
 				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 				return reconcile.Result{}, err
 			}
@@ -333,7 +313,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
 		logger.Error(err, "conversion error")
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
-		logError(request.NamespacedName.Name)
+		logError(request.Name)
 		return reconcile.Result{}, err
 	}
 
@@ -359,7 +339,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 			logger.Error(updateErr, "update status error")
 			return reconcile.Result{Requeue: true}, nil
 		}
-		logError(request.NamespacedName.Name)
+		logError(request.Name)
 		return reconcile.Result{}, nil
 	}
 
@@ -368,7 +348,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		logger.Error(err, "CRD conversion error")
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
-		logError(request.NamespacedName.Name)
+		logError(request.Name)
 		err := r.reportErrorOnCTStatus(ctx, ErrConversionCode, "Could not convert from unversioned resource", status, err)
 		return reconcile.Result{}, err
 	}
@@ -389,7 +369,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 
 	default:
 		logger.Error(err, "client.Get CRD error")
-		logError(request.NamespacedName.Name)
+		logError(request.Name)
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return reconcile.Result{}, err
 	}
@@ -397,7 +377,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status)
 	if err != nil {
 		logger.Error(err, "handle update error")
-		logError(request.NamespacedName.Name)
+		logError(request.Name)
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return result, err
 	}
@@ -460,7 +440,8 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: ErrGenerateVAPState, ObservedGeneration: ct.GetGeneration(), Warning: fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error())}
 	}
 
-	if err := r.generateCRD(ctx, ct, proposedCRD, currentCRD, status, logger, generateVap); err != nil {
+	var requeueAfter time.Duration
+	if err := r.generateCRD(ctx, ct, proposedCRD, currentCRD, status, logger, generateVap, &requeueAfter); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -479,7 +460,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		logger.Error(err, "update ct pod status error")
 		return reconcile.Result{Requeue: true}, nil
 	}
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: requeueAfter}, nil
 }
 
 func (r *ReconcileConstraintTemplate) handleDelete(
@@ -677,7 +658,7 @@ func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrati
 	if gvk.Version == "v1" {
 		v1CurrentVAP, ok := currentVap.(*admissionregistrationv1.ValidatingAdmissionPolicy)
 		if !ok {
-			return nil, errors.New("Unable to convert to v1 VAP")
+			return nil, errors.New("unable to convert to v1 VAP")
 		}
 		v1CurrentVAP = v1CurrentVAP.DeepCopy()
 		tempVAP, err := v1beta1ToV1(transformedVap)
@@ -690,7 +671,7 @@ func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrati
 
 	v1beta1VAP, ok := currentVap.(*admissionregistrationv1beta1.ValidatingAdmissionPolicy)
 	if !ok {
-		return nil, errors.New("Unable to convert to v1 VAP")
+		return nil, errors.New("unable to convert to v1 VAP")
 	}
 	v1beta1VAP.Spec = transformedVap.Spec
 	return v1beta1VAP.DeepCopy(), nil
@@ -757,7 +738,7 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 	return obj, nil
 }
 
-func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1beta1.ConstraintTemplate, proposedCRD, currentCRD *apiextensionsv1.CustomResourceDefinition, status *statusv1beta1.ConstraintTemplatePodStatus, logger logr.Logger, generateVAP bool) error {
+func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1beta1.ConstraintTemplate, proposedCRD, currentCRD *apiextensionsv1.CustomResourceDefinition, status *statusv1beta1.ConstraintTemplatePodStatus, logger logr.Logger, generateVAP bool, requeueAfter *time.Duration) error {
 	if !operations.IsAssigned(operations.Generate) {
 		return nil
 	}
@@ -789,9 +770,9 @@ func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1bet
 	if !generateVAP {
 		return nil
 	}
-
+	var err error
 	// We add the annotation as a follow-on update to be sure the timestamp is set relative to a time after the CRD is successfully created. Creating the CRD with a delay timestamp already set would not account for request latency.
-	err := r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, ct)
+	*requeueAfter, err = r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, ct)
 	if err != nil {
 		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, err)
 	}
@@ -907,23 +888,32 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 
 // updateTemplateWithBlockVAPBGenerationAnnotations updates the ConstraintTemplate with an annotation to block VAPB generation until specific time
 // This is to avoid the issue where the VAPB is generated before the CRD is cached in the API server.
-func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnotations(ctx context.Context, ct *v1beta1.ConstraintTemplate) error {
+func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnotations(ctx context.Context, ct *v1beta1.ConstraintTemplate) (time.Duration, error) {
+	noRequeue := time.Duration(0)
+	if ct.Annotations != nil && ct.Annotations[constraint.VAPBGenerationAnnotation] == constraint.VAPBGenerationUnblocked {
+		return noRequeue, nil
+	}
 	currentTime := time.Now()
 	if ct.Annotations != nil && ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] != "" {
 		until := ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation]
 		t, err := time.Parse(time.RFC3339, until)
 		if err != nil {
-			return err
+			return noRequeue, err
 		}
 		// if wait time is within the time window to generate vap binding, do not update the annotation
 		// otherwise update the annotation with the current time + wait time. This prevents clock skew from preventing generation on task reschedule.
 		if t.Before(currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second)) {
-			return nil
+			if t.Before(currentTime) {
+				ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationUnblocked
+				return noRequeue, r.Update(ctx, ct)
+			}
+			return t.Sub(currentTime), nil
 		}
 	}
 	if ct.Annotations == nil {
 		ct.Annotations = make(map[string]string)
 	}
 	ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
-	return r.Update(ctx, ct)
+	ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationBlocked
+	return time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second, r.Update(ctx, ct)
 }

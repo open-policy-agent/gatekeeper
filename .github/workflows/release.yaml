@@ -25,9 +25,13 @@ jobs:
         run: |
             # Filter out local helm-gh-pages image so we don't delete it
             docker system prune -a -f --filter "label!=org.opencontainers.image.source=https://github.com/stefanprodan/alpine-base"
+            # Cleaning up unused tools as per the suggested workaround - https://github.com/actions/runner-images/issues/2840#issuecomment-790492173
+            # Partially cleaning up from suggested workaround. If we are still running out of space, we can remove everything suggested in the workaround
+            sudo rm -rf /usr/share/dotnet
+            sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
       - name: Harden Runner
-        uses: step-security/harden-runner@0080882f6c36860b6ba35c610c98ce87d4e2f26f # v2.10.2
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
         with:
           egress-policy: audit
 
@@ -35,9 +39,9 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Set up Go
-        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          go-version: "1.23"
+          go-version: "1.24"
           check-latest: true
 
       - name: Get tag
@@ -46,7 +50,7 @@ jobs:
           echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

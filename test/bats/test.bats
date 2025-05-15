@@ -16,6 +16,7 @@ teardown_file() {
   kubectl label ns ${GATEKEEPER_NAMESPACE} admission.gatekeeper.sh/ignore=no-self-managing --overwrite || true
   kubectl delete ns \
     gatekeeper-test-playground \
+    gatekeeper-test-playground-scoped \
     gatekeeper-excluded-namespace \
     gatekeeper-excluded-prefix-match-namespace \
     gatekeeper-excluded-suffix-match-namespace || true
@@ -70,7 +71,6 @@ teardown_file() {
   else
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
 
-    # check status resource on expansion template
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsvap -ojson | jq -r -e '.status.byPod[0]'"
 
     kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsvap -oyaml
@@ -661,23 +661,36 @@ __expansion_audit_test() {
   run kubectl delete --ignore-not-found -f test/expansion/expand_pod_cronjob.yaml
 }
 
-@test "gatekeeper pubsub test" {
-  if [ -z $ENABLE_PUBSUB_TESTS ]; then
-    skip "skipping pubsub tests"
+@test "gatekeeper export_violation test" {
+  if [ -z $ENABLE_EXPORT_TESTS ]; then
+    skip "skipping export tests"
   fi
 
   run kubectl create ns nginx
-  run kubectl create -f test/pubsub/nginx_deployment.yaml
+  run kubectl create -f test/export/nginx_deployment.yaml
 
-  run kubectl apply -f test/pubsub/k8srequiredlabels_ct.yaml
-  run kubectl apply -f test/pubsub/pod_must_have_test.yaml
+  run kubectl apply -f test/export/k8srequiredlabels_ct.yaml
+  run kubectl apply -f test/export/pod_must_have_test.yaml
 
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels pod-must-have-test"
 
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "total_violations"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "total_violations ${EXPORT_BACKEND}"
 
-  run kubectl delete -f test/pubsub/k8srequiredlabels_ct.yaml --ignore-not-found
-  run kubectl delete -f test/pubsub/pod_must_have_test.yaml --ignore-not-found
-  run kubectl delete -f test/pubsub/nginx_deployment.yaml --ignore-not-found
+  run kubectl delete -f test/export/k8srequiredlabels_ct.yaml --ignore-not-found
+  run kubectl delete -f test/export/pod_must_have_test.yaml --ignore-not-found
+  run kubectl delete -f test/export/nginx_deployment.yaml --ignore-not-found
   run kubectl delete ns nginx --ignore-not-found
+}
+
+@test "rego v1 tests" {
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_regov1.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabels -ojson | jq -r -e '.status.byPod[0]'"
+
+  kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -oyaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided.yaml"
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+  assert_match 'denied' "${output}"
+  assert_failure
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_regov1.yaml"
 }

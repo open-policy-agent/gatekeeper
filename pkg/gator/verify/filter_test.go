@@ -53,9 +53,6 @@ func TestFilter_Error(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		// Required for parallel tests.
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -157,9 +154,6 @@ func TestFilter_MatchesTest(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		// Required for parallel tests.
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -243,9 +237,6 @@ func TestFilter_MatchesCase(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		// Required for parallel tests.
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

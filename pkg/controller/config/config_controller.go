@@ -28,7 +28,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -53,9 +52,8 @@ var (
 )
 
 type Adder struct {
-	ControllerSwitch *watch.ControllerSwitch
-	Tracker          *readiness.Tracker
-	CacheManager     *cm.CacheManager
+	Tracker      *readiness.Tracker
+	CacheManager *cm.CacheManager
 	// GetPod returns an instance of the currently running Gatekeeper pod
 	GetPod func(context.Context) (*corev1.Pod, error)
 }
@@ -63,16 +61,12 @@ type Adder struct {
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.CacheManager, a.ControllerSwitch, a.Tracker, a.GetPod)
+	r, err := newReconciler(mgr, a.CacheManager, a.Tracker, a.GetPod)
 	if err != nil {
 		return err
 	}
 
 	return add(mgr, r)
-}
-
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
-	a.ControllerSwitch = cs
 }
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
@@ -88,7 +82,7 @@ func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, erro
 }
 
 // newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConfig, error) {
+func newReconciler(mgr manager.Manager, cm *cm.CacheManager, tracker *readiness.Tracker, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConfig, error) {
 	if cm == nil {
 		return nil, fmt.Errorf("cacheManager must be non-nil")
 	}
@@ -98,7 +92,6 @@ func newReconciler(mgr manager.Manager, cm *cm.CacheManager, cs *watch.Controlle
 		writer:       mgr.GetClient(),
 		statusClient: mgr.GetClient(),
 		scheme:       mgr.GetScheme(),
-		cs:           cs,
 		cacheManager: cm,
 		tracker:      tracker,
 		getPod:       getPod,
@@ -138,7 +131,6 @@ type ReconcileConfig struct {
 
 	scheme       *runtime.Scheme
 	cacheManager *cm.CacheManager
-	cs           *watch.ControllerSwitch
 
 	tracker *readiness.Tracker
 
@@ -155,18 +147,9 @@ type ReconcileConfig struct {
 // and what is in the Config.Spec
 // Automatically generate RBAC rules to allow the Controller to read all things (for sync).
 func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	// Short-circuit if shutting down.
-	if r.cs != nil {
-		running := r.cs.Enter()
-		defer r.cs.Exit()
-		if !running {
-			return reconcile.Result{}, nil
-		}
-	}
-
 	// Fetch the Config instance
 	if request.NamespacedName != keys.Config {
-		log.Info("Ignoring unsupported config name", "namespace", request.NamespacedName.Namespace, "name", request.NamespacedName.Name)
+		log.Info("Ignoring unsupported config name", "namespace", request.Namespace, "name", request.Name)
 		return reconcile.Result{}, nil
 	}
 	exists := true
@@ -210,7 +193,8 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	r.cacheManager.ExcludeProcesses(newExcluder)
-	configSourceKey := aggregator.Key{Source: "config", ID: request.NamespacedName.String()}
+	// Directly accessing the NamespaceName.String(), as NamespaceName is embedded within reconcile.Request.
+	configSourceKey := aggregator.Key{Source: "config", ID: request.String()}
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
 		r.tracker.For(configGVK).TryCancelExpect(instance)
 
@@ -220,7 +204,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	r.tracker.For(configGVK).Observe(instance)
 
 	if deleted {
-		return reconcile.Result{}, r.deleteStatus(ctx, request.NamespacedName.Namespace, request.NamespacedName.Name)
+		return reconcile.Result{}, r.deleteStatus(ctx, request.Namespace, request.Name)
 	}
 	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance, nil)
 }

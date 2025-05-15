@@ -28,9 +28,9 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -47,7 +47,6 @@ import (
 var debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
 
 type Injector interface {
-	InjectControllerSwitch(*watch.ControllerSwitch)
 	InjectTracker(tracker *readiness.Tracker)
 
 	Add(mgr manager.Manager) error
@@ -57,8 +56,8 @@ type GetPodInjector interface {
 	InjectGetPod(func(context.Context) (*corev1.Pod, error))
 }
 
-type PubsubInjector interface {
-	InjectPubsubSystem(pubsubSystem *pubsub.System)
+type ExportInjector interface {
+	InjectExportSystem(exportSystem *export.System)
 }
 
 type DataClientInjector interface {
@@ -94,18 +93,17 @@ var AddToManagerFuncs []func(manager.Manager) error
 
 // Dependencies are dependencies that can be injected into controllers.
 type Dependencies struct {
-	CFClient         *constraintclient.Client
-	WatchManger      *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
-	Tracker          *readiness.Tracker
-	GetPod           func(context.Context) (*corev1.Pod, error)
-	ProcessExcluder  *process.Excluder
-	MutationSystem   *mutation.System
-	ExpansionSystem  *expansion.System
-	ProviderCache    *externaldata.ProviderCache
-	PubsubSystem     *pubsub.System
-	SyncEventsCh     chan event.GenericEvent
-	CacheMgr         *cm.CacheManager
+	CFClient        *constraintclient.Client
+	WatchManger     *watch.Manager
+	Tracker         *readiness.Tracker
+	GetPod          func(context.Context) (*corev1.Pod, error)
+	ProcessExcluder *process.Excluder
+	MutationSystem  *mutation.System
+	ExpansionSystem *expansion.System
+	ProviderCache   *externaldata.ProviderCache
+	ExportSystem    *export.System
+	SyncEventsCh    chan event.GenericEvent
+	CacheMgr        *cm.CacheManager
 }
 
 type defaultPodGetter struct {
@@ -194,7 +192,6 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 	}
 
 	for _, a := range Injectors {
-		a.InjectControllerSwitch(deps.ControllerSwitch)
 		a.InjectTracker(deps.Tracker)
 
 		if a2, ok := a.(DataClientInjector); ok {
@@ -215,8 +212,8 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)
 		}
-		if a2, ok := a.(PubsubInjector); ok {
-			a2.InjectPubsubSystem(deps.PubsubSystem)
+		if a2, ok := a.(ExportInjector); ok {
+			a2.InjectExportSystem(deps.ExportSystem)
 		}
 		if a2, ok := a.(CacheManagerInjector); ok {
 			// this is used by the config controller to sync

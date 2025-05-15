@@ -11,6 +11,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/topdown"
+	"github.com/open-policy-agent/opa/v1/topdown/print"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
@@ -20,14 +29,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/rego"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/topdown"
-	"github.com/open-policy-agent/opa/topdown/print"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 )
 
 const (
@@ -106,6 +107,7 @@ func (d *Driver) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 		if err != nil {
 			return err
 		}
+
 		targets = append(targets, target.Target)
 	}
 
@@ -222,6 +224,7 @@ func (d *Driver) eval(ctx context.Context, compiler *ast.Compiler, target string
 		rego.Query(queryPath.String()),
 		rego.EnablePrintStatements(d.printEnabled),
 		rego.PrintHook(d.printHook),
+		rego.SetRegoVersion(ast.RegoV0),
 	}
 
 	buf := topdown.NewBufferTracer()
@@ -326,7 +329,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 					Stats: []*instrumentation.Stat{
 						{
 							Name:  templateRunTimeNS,
-							Value: uint64(evalEndTime.Nanoseconds()),
+							Value: uint64(evalEndTime.Nanoseconds()), // nolint: gosec
 							Source: instrumentation.Source{
 								Type:  instrumentation.EngineSourceType,
 								Value: schema.Name,
@@ -431,8 +434,9 @@ func rewriteModulePackage(module *ast.Module) error {
 	pathParts := ast.Ref([]*ast.Term{ast.VarTerm(templatePath)})
 
 	packageRef := ast.Ref([]*ast.Term{ast.VarTerm("data")})
-	newPath := packageRef.Extend(pathParts)
-	module.Package.Path = newPath
+
+	module.Package.Path = packageRef.Extend(pathParts)
+
 	return nil
 }
 

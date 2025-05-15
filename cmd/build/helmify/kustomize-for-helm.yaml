@@ -201,7 +201,7 @@ spec:
             - --operation=audit
             - --operation=status
             - --operation=generate
-            - HELMSUBST_DEPLOYMENT_AUDIT_PUBSUB_ARGS
+            - HELMSUBST_DEPLOYMENT_AUDIT_VIOLATION_EXPORT_ARGS
             - HELMSUBST_MUTATION_STATUS_ENABLED_ARG
             - --logtostderr
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
