@@ -636,7 +636,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := isConstraintStatuErrorAsExpected(ctx, c, suffix, true, "Conditions are not satisfied")
+		err := isConstraintStatuErrorAsExpected(ctx, c, suffix, true, "conditions are not satisfied")
 		if err != nil {
 			t.Fatal(err)
 		}

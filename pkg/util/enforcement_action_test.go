@@ -214,7 +214,7 @@ func TestGetScopedEnforcementAction(t *testing.T) {
 					"scopedEnforcementActions": "invalid",
 				},
 			},
-			expectedError: errors.New("Could not convert JSON to scopedEnforcementActions: json: cannot unmarshal string into Go value of type []constraints.ScopedEnforcementAction"),
+			expectedError: errors.New("could not convert JSON to scopedEnforcementActions: json: cannot unmarshal string into Go value of type []constraints.ScopedEnforcementAction"),
 			expectedObj:   nil,
 		},
 	}
@@ -373,7 +373,7 @@ func TestScopedActionForEP(t *testing.T) {
 				},
 			},
 			expectedActions: nil,
-			expectedError:   errors.New("Could not convert JSON to scopedEnforcementActions: json: cannot unmarshal string into Go value of type []constraints.ScopedEnforcementAction"),
+			expectedError:   errors.New("could not convert JSON to scopedEnforcementActions: json: cannot unmarshal string into Go value of type []constraints.ScopedEnforcementAction"),
 		},
 	}
 
