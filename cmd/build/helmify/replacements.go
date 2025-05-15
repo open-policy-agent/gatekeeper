@@ -167,6 +167,7 @@ var replacements = map[string]string{
     {{- range .Values.mutatingWebhookSubResources }}
     - {{ . }}
     {{- end }}
+    scope: '{{ .Values.mutatingWebhookScope }}'
   {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.mutatingWebhookURL }}
@@ -205,6 +206,17 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY": `{{ .Values.validatingWebhookCheckIgnoreFailurePolicy }}`,
 
+	"- HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_OPERATION_RULES": `- apiGroups:
+    - ""
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - namespaces
+    scope: '*'`,
+
 	"HELMSUBST_VALIDATING_WEBHOOK_CLIENT_CONFIG: \"\"": `{{- if .Values.validatingWebhookURL }}
     url: https://{{ .Values.validatingWebhookURL }}/v1/admit
     {{- else }}
@@ -239,6 +251,7 @@ var replacements = map[string]string{
     {{- range .Values.validatingWebhookSubResources }}
     - {{ . }}
     {{- end }}
+    scope: '{{ .Values.validatingWebhookScope }}'
   {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_MATCH_CONDITIONS": `{{ toYaml .Values.mutatingWebhookMatchConditions | nindent 4 }}`,
