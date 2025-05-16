@@ -36,7 +36,8 @@ module.exports = {
         'workload-resources',
         'export',
         'validating-admission-policy',
-        'enforcement-points'
+        'enforcement-points',
+        'runtime-flags'
       ],
     },
     {
