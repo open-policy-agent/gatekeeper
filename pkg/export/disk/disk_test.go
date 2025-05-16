@@ -826,7 +826,7 @@ func TestGetFilesSortedByModTimeAsc(t *testing.T) {
 		{
 			name: "Error walking directory",
 			setup: func(dir string) error {
-				return os.Chmod(dir, 0o000)
+				return os.RemoveAll(dir)
 			},
 			expectedFile:  "",
 			expectedFiles: 0,
