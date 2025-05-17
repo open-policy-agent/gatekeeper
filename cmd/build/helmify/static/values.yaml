@@ -227,6 +227,7 @@ controllerManager:
       # - from:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
+  operations: ["webhook"]
 exportBackend: ""
 audit:
   exportConfig:
