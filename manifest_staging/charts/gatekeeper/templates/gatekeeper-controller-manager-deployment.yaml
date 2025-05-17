@@ -69,7 +69,9 @@ spec:
         - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
         - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
         - --exempt-namespace={{ .Release.Namespace }}
-        - --operation=webhook
+        {{- range .Values.controllerManager.operations }}
+        - --operation={{ . }}
+        {{- end }}
         - --enable-external-data={{ .Values.enableExternalData }}
         - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
         - --log-mutations={{ .Values.logMutations }}
