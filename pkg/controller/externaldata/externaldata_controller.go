@@ -10,7 +10,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,8 +43,6 @@ type Adder struct {
 func (a *Adder) InjectCFClient(c *constraintclient.Client) {
 	a.CFClient = c
 }
-
-func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
@@ -114,7 +111,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		deleted = true
 		provider = &externaldatav1beta1.Provider{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: request.NamespacedName.Name,
+				Name: request.Name,
 			},
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Provider",

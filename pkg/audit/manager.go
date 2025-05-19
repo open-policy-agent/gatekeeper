@@ -18,11 +18,12 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
-	pubsubController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/pubsub"
+	exportController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -59,16 +60,16 @@ const (
 )
 
 var (
-	auditInterval                = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
-	constraintViolationsLimit    = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
-	auditChunkSize               = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
+	auditInterval                = flag.Int64("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
+	constraintViolationsLimit    = flag.Int("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
+	auditChunkSize               = flag.Int("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
 	auditFromCache               = flag.Bool("audit-from-cache", false, "audit synced resources from internal cache, bypassing direct queries to Kubernetes API server")
 	emitAuditEvents              = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events with detailed info for each violation from an audit")
 	auditEventsInvolvedNamespace = flag.Bool("audit-events-involved-namespace", false, "emit audit events for each violation in the involved objects namespace, the default (false) generates events in the namespace Gatekeeper is installed in. Audit events from cluster-scoped resources will still follow the default behavior")
 	auditMatchKindOnly           = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	apiCacheDir                  = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
-	auditConnection              = flag.String("audit-connection", defaultConnection, "(alpha) Connection name for publishing audit violation messages. Defaults to audit-connection")
-	auditChannel                 = flag.String("audit-channel", defaultChannel, "(alpha) Channel name for publishing audit violation messages. Defaults to audit-channel")
+	auditConnection              = flag.String("audit-connection", defaultConnection, "(alpha) Connection name for exporting audit violation messages. Defaults to audit-connection")
+	auditChannel                 = flag.String("audit-channel", defaultChannel, "(alpha) Channel name for exporting audit violation messages. Defaults to audit-channel")
 	emptyAuditResults            = newLimitQueue(0)
 	logStatsAudit                = flag.Bool("log-stats-audit", false, "(alpha) log stats metrics for the audit run")
 )
@@ -91,7 +92,7 @@ type Manager struct {
 	auditCache *CacheLister
 
 	expansionSystem *expansion.System
-	pubsubSystem    *pubsub.System
+	exportSystem    *export.System
 }
 
 // StatusViolation represents each violation under status.
@@ -104,28 +105,6 @@ type StatusViolation struct {
 	Message            string   `json:"message"`
 	EnforcementAction  string   `json:"enforcementAction"`
 	EnforcementActions []string `json:"enforcementActions,omitempty"`
-}
-
-// ConstraintMsg represents publish message for each constraint.
-type PubsubMsg struct {
-	ID                    string            `json:"id,omitempty"`
-	Details               interface{}       `json:"details,omitempty"`
-	EventType             string            `json:"eventType,omitempty"`
-	Group                 string            `json:"group,omitempty"`
-	Version               string            `json:"version,omitempty"`
-	Kind                  string            `json:"kind,omitempty"`
-	Name                  string            `json:"name,omitempty"`
-	Namespace             string            `json:"namespace,omitempty"`
-	Message               string            `json:"message,omitempty"`
-	EnforcementAction     string            `json:"enforcementAction,omitempty"`
-	EnforcementActions    []string          `json:"enforcementActions,omitempty"`
-	ConstraintAnnotations map[string]string `json:"constraintAnnotations,omitempty"`
-	ResourceGroup         string            `json:"resourceGroup,omitempty"`
-	ResourceAPIVersion    string            `json:"resourceAPIVersion,omitempty"`
-	ResourceKind          string            `json:"resourceKind,omitempty"`
-	ResourceNamespace     string            `json:"resourceNamespace,omitempty"`
-	ResourceName          string            `json:"resourceName,omitempty"`
-	ResourceLabels        map[string]string `json:"resourceLabels,omitempty"`
 }
 
 // A max PriorityQueue implements heap.Interface and holds StatusViolation.
@@ -269,7 +248,7 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 		gkNamespace:     util.GetNamespace(),
 		auditCache:      deps.CacheLister,
 		expansionSystem: deps.ExpansionSystem,
-		pubsubSystem:    deps.PubSubSystem,
+		exportSystem:    deps.ExportSystem,
 	}
 	return am, nil
 }
@@ -280,16 +259,31 @@ func (am *Manager) audit(ctx context.Context) error {
 	timestamp := startTime.UTC().Format(time.RFC3339)
 	am.log = log.WithValues(logging.AuditID, timestamp)
 	logStart(am.log)
+	exportErrorMap := make(map[string]error)
+	if *exportController.ExportEnabled {
+		if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
+			am.log.Error(err, "failed to export audit start message")
+			exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
+		}
+	}
 	// record audit latency
 	defer func() {
-		logFinish(am.log)
 		endTime := time.Now()
 		latency := endTime.Sub(startTime)
+		logFinish(am.log, latency)
 		if err := am.reporter.reportLatency(latency); err != nil {
 			am.log.Error(err, "failed to report latency")
 		}
 		if err := am.reporter.reportRunEnd(endTime); err != nil {
 			am.log.Error(err, "failed to report run end time")
+		}
+		if *exportController.ExportEnabled {
+			if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
+				exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
+			}
+		}
+		for _, v := range exportErrorMap {
+			am.log.Error(v, "failed to export audit violation")
 		}
 	}()
 
@@ -334,10 +328,10 @@ func (am *Manager) audit(ctx context.Context) error {
 			am.log.Error(err, "Auditing")
 		}
 
-		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
 	} else {
 		am.log.Info("Auditing via discovery client")
-		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
 		if err != nil {
 			return err
 		}
@@ -371,9 +365,10 @@ func (am *Manager) auditResources(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
+	exportErrorMap map[string]error,
 ) error {
 	// delete all from cache dir before starting audit
-	err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
+	err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
 	if err != nil {
 		am.log.Error(err, "unable to remove existing content from cache directory in auditResources", "apiCacheDir", *apiCacheDir)
 		return err
@@ -484,7 +479,7 @@ func (am *Manager) auditResources(
 		for kind := range gvKinds {
 			am.log.V(logging.DebugLevel).Info("Listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 			// delete all existing folders from cache dir before starting next kind
-			err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
+			err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
 			if err != nil {
 				am.log.Error(err, "unable to remove existing content from cache directory in kindsLoop", "apiCacheDir", *apiCacheDir)
 				return err
@@ -558,7 +553,7 @@ func (am *Manager) auditResources(
 			}
 			// Loop through all subDirs to review all files for this kind.
 			am.log.V(logging.DebugLevel).Info("Reviewing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
-			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -660,6 +655,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
+	exportErrorMap map[string]error,
 ) error {
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
@@ -667,7 +663,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 		subDir := fmt.Sprintf("%s_%d", kind, i)
 		pDir := path.Join(*apiCacheDir, subDir)
 
-		files, err := am.getFilesFromDir(pDir, int(*auditChunkSize))
+		files, err := am.getFilesFromDir(pDir, *auditChunkSize)
 		if err != nil {
 			am.log.Error(err, "Unable to get files from directory")
 			continue
@@ -744,7 +740,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 
 			if len(resp.Results()) > 0 {
 				results := ToResults(&augmentedObj.Object, resp)
-				am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+				am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
 			}
 		}
 	}
@@ -864,13 +860,14 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
+	exportErrorMap map[string]error,
 ) {
 	for _, r := range res {
 		constraint := r.Constraint
 		key := util.GetUniqueKey(*constraint)
 		keyQueue, ok := updateLists[key]
 		if !ok {
-			keyQueue = newLimitQueue(int(*constraintViolationsLimit))
+			keyQueue = newLimitQueue(*constraintViolationsLimit)
 			updateLists[key] = keyQueue
 		}
 
@@ -902,13 +899,14 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		details := r.Metadata["details"]
 		labels := r.obj.GetLabels()
 		logViolation(am.log, constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels)
-		if *pubsubController.PubsubEnabled {
-			err := am.pubsubSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
+		if *exportController.ExportEnabled {
+			err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
 			if err != nil {
-				am.log.Error(err, "pubsub audit Publishing")
+				exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
 			}
 		}
 		if *emitAuditEvents {
+			log.Info("Warning: Alpha flag emit-audit-events is set to true. This flag may change in the future.")
 			uid := r.obj.GetUID()
 			rv := r.obj.GetResourceVersion()
 			emitEvent(constraint, timestamp, ea, strings.Join(r.ScopedEnforcementActions, ","), gvk, namespace, name, rv, msg, am.gkNamespace, uid, am.eventRecorder)
@@ -959,7 +957,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 
 	var statusViolations []interface{}
 	for auditResults.Len() > 0 {
-		if uint(len(statusViolations)) < *constraintViolationsLimit {
+		if len(statusViolations) < *constraintViolationsLimit {
 			// Append the maximum statusViolation for this constraint in sort order until constraintViolationsLimit is reached.
 			statusViolations = append(statusViolations, auditResults.Pop())
 		} else {
@@ -1135,10 +1133,11 @@ func logStart(l logr.Logger) {
 	)
 }
 
-func logFinish(l logr.Logger) {
+func logFinish(l logr.Logger, t time.Duration) {
 	l.Info(
 		"auditing is complete",
 		logging.EventType, "audit_finished",
+		"duration", t.String(),
 	)
 }
 
@@ -1161,7 +1160,7 @@ func violationMsg(constraint *unstructured.Unstructured, enforcementAction util.
 	userConstraintAnnotations := constraint.GetAnnotations()
 	delete(userConstraintAnnotations, "kubectl.kubernetes.io/last-applied-configuration")
 
-	return PubsubMsg{
+	return exportutil.ExportMsg{
 		Message:               message,
 		Details:               details,
 		ID:                    timestamp,

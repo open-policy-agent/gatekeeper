@@ -38,7 +38,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"golang.org/x/net/context"
@@ -246,7 +245,6 @@ func TestReconcile(t *testing.T) {
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
-	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
@@ -259,7 +257,7 @@ func TestReconcile(t *testing.T) {
 
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, cfClient, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +304,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		logger.Info("Running Test: block-vapb-generation-until annotation should not be present")
+		logger.Info("Running Test: vapb annotation should not be present on constraint template")
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -316,6 +314,9 @@ func TestReconcile(t *testing.T) {
 			}
 			if _, ok := ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation]; ok {
 				return fmt.Errorf("unexpected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
+			if _, ok := ct.GetAnnotations()[constraint.VAPBGenerationAnnotation]; ok {
+				return fmt.Errorf("unexpected %s annotations on CT", constraint.VAPBGenerationAnnotation)
 			}
 			return nil
 		})
@@ -635,7 +636,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := isConstraintStatuErrorAsExpected(ctx, c, suffix, true, "Conditions are not satisfied")
+		err := isConstraintStatuErrorAsExpected(ctx, c, suffix, true, "conditions are not satisfied")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -728,13 +729,14 @@ func TestReconcile(t *testing.T) {
 			if timestamp == "" {
 				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
 			}
-			// check if vapbinding resource exists now
 			if err := c.Get(ctx, types.NamespacedName{Name: cstr.GetName()}, cstr); err != nil {
 				return err
 			}
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+				// Since tests retries 3000 times at 100 retries per second, adding sleep makes sure that this test gets covarage time > 30s to cover the default wait.
+				time.Sleep(10 * time.Millisecond)
 				return err
 			}
 			blockTime, err := time.Parse(time.RFC3339, timestamp)
@@ -744,6 +746,9 @@ func TestReconcile(t *testing.T) {
 			vapBindingCreationTime := vapBinding.GetCreationTimestamp().Time
 			if vapBindingCreationTime.Before(blockTime) {
 				return fmt.Errorf("VAPBinding should be created after default wait")
+			}
+			if ct.GetAnnotations()[constraint.VAPBGenerationAnnotation] != constraint.VAPBGenerationUnblocked {
+				return fmt.Errorf("expected %s annotations on CT to be unblocked", constraint.VAPBGenerationAnnotation)
 			}
 			return nil
 		})
@@ -812,7 +817,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		logger.Info("Running test: VAP ConstraintTemplate should have block-VAPB-generation-until annotation")
+		logger.Info("Running test: VAP ConstraintTemplate should have VAPB annotation")
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -822,6 +827,9 @@ func TestReconcile(t *testing.T) {
 			}
 			if ct.GetAnnotations()[constraint.BlockVAPBGenerationUntilAnnotation] == "" {
 				return fmt.Errorf("expected %s annotations on CT", constraint.BlockVAPBGenerationUntilAnnotation)
+			}
+			if ct.GetAnnotations()[constraint.VAPBGenerationAnnotation] == "" {
+				return fmt.Errorf("expected %s annotations on CT", constraint.VAPBGenerationAnnotation)
 			}
 			return nil
 		})
@@ -867,11 +875,16 @@ func TestReconcile(t *testing.T) {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+				// Since tests retries 3000 times at 100 retries per second, adding sleep makes sure that this test gets covarage time > 30s to cover the default wait.
+				time.Sleep(10 * time.Millisecond)
 				return err
 			}
 			vapBindingCreationTime := vapBinding.GetCreationTimestamp().Time
 			if vapBindingCreationTime.Before(blockTime) {
 				return fmt.Errorf("VAPBinding should not be created before the timestamp")
+			}
+			if ct.GetAnnotations()[constraint.VAPBGenerationAnnotation] != constraint.VAPBGenerationUnblocked {
+				return fmt.Errorf("expected %s annotations on CT to be unblocked", constraint.VAPBGenerationAnnotation)
 			}
 			if err := c.Delete(ctx, cstr); err != nil {
 				return err
@@ -1498,7 +1511,6 @@ violation[{"msg": "denied!"}] {
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
-	cs := watch.NewSwitch()
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),
 		fakes.WithName("no-pod"),
@@ -1506,7 +1518,7 @@ violation[{"msg": "denied!"}] {
 
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, cfClient, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 	if err != nil {
 		t.Fatal(err)
 	}

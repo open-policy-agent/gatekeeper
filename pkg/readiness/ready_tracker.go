@@ -506,7 +506,6 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, 
 		unsatisfiedmap[o] = struct{}{}
 	}
 	for _, o := range ul.Items {
-		o := o
 		k, err := objKeyFromObject(&o)
 		if err != nil {
 			return errors.Wrapf(err, "while getting key for %v in collectForObjectTracker", o)

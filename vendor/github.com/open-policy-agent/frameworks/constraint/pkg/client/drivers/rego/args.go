@@ -3,13 +3,14 @@ package rego
 import (
 	"fmt"
 
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/topdown/print"
+	opatypes "github.com/open-policy-agent/opa/v1/types"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/topdown/print"
-	opatypes "github.com/open-policy-agent/opa/types"
-	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 )
 
 type Arg func(*Driver) error

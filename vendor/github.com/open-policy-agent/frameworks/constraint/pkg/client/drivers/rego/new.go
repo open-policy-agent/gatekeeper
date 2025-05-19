@@ -1,8 +1,8 @@
 package rego
 
 import (
-	"github.com/open-policy-agent/opa/rego"
-	opatypes "github.com/open-policy-agent/opa/types"
+	"github.com/open-policy-agent/opa/v1/rego"
+	opatypes "github.com/open-policy-agent/opa/v1/types"
 )
 
 // New constructs a new Driver and registers the built-in external_data function

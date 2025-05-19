@@ -39,11 +39,13 @@ type Opts struct {
 
 func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error) {
 	args := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
-	k8sDriver, err := k8scel.New()
-	if err != nil {
-		return nil, fmt.Errorf("creating K8s native driver: %w", err)
+	if tOpts.UseK8sCEL {
+		k8sDriver, err := makeK8sCELDriver(tOpts)
+		if err != nil {
+			return nil, fmt.Errorf("creating K8s native driver: %w", err)
+		}
+		args = append(args, constraintclient.Driver(k8sDriver))
 	}
-	args = append(args, constraintclient.Driver(k8sDriver))
 
 	driver, err := makeRegoDriver(tOpts)
 	if err != nil {
@@ -184,4 +186,14 @@ func makeRegoDriver(tOpts Opts) (*rego.Driver, error) {
 	}
 
 	return rego.New(args...)
+}
+
+func makeK8sCELDriver(tOpts Opts) (*k8scel.Driver, error) {
+	var args []k8scel.Arg
+
+	if tOpts.GatherStats {
+		args = append(args, k8scel.GatherStats())
+	}
+
+	return k8scel.New(args...)
 }

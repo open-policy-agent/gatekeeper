@@ -251,9 +251,6 @@ func TestRunner_Run_Integer(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		// Required for parallel tests.
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

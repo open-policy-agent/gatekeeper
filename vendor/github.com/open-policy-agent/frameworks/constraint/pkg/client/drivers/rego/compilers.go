@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/open-policy-agent/opa/v1/ast"
+
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/regorewriter"
-	"github.com/open-policy-agent/opa/ast"
 )
 
 var ErrNoRego = errors.New("Could not extract Rego from the constraint template")
@@ -159,7 +160,17 @@ func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, targetSpec *te
 	if err != nil {
 		return nil, err
 	}
-	entryPoint, err := parseModule(templatePath, regoSrc.Rego)
+
+	var version ast.RegoVersion
+	switch regoSrc.Version {
+	case "v1":
+		version = ast.RegoV1
+	default:
+		// v0 and any other value is v0
+		version = ast.RegoV0
+	}
+
+	entryPoint, err := parseModule(templatePath, version, regoSrc.Rego)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", clienterrors.ErrInvalidConstraintTemplate, err)
 	}
@@ -184,7 +195,7 @@ func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, targetSpec *te
 	for idx, libSrc := range regoSrc.Libs {
 		libPath := fmt.Sprintf(`%s["lib_%d"]`, templateLibPrefix, idx)
 
-		m, err := parseModule(libPath, libSrc)
+		m, err := parseModule(libPath, version, libSrc)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v",
 				clienterrors.ErrInvalidConstraintTemplate, err)
@@ -235,8 +246,10 @@ func compileTemplateTarget(module []*ast.Module, capabilities *ast.Capabilities,
 }
 
 // parseModule parses the module and also fails empty modules.
-func parseModule(path, rego string) (*ast.Module, error) {
-	module, err := ast.ParseModule(path, rego)
+func parseModule(path string, version ast.RegoVersion, rego string) (*ast.Module, error) {
+	module, err := ast.ParseModuleWithOpts(path, rego, ast.ParserOptions{
+		RegoVersion: version,
+	})
 	if err != nil {
 		return nil, err
 	}

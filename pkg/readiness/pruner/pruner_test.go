@@ -15,7 +15,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/require"
@@ -81,20 +80,18 @@ func setupTest(_ context.Context, t *testing.T, readyTrackerClient readiness.Lis
 	cm, err := cachemanager.NewCacheManager(config)
 	require.NoError(t, err, "creating cachemanager")
 
-	sw := watch.NewSwitch()
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
 	frameworksexternaldata.NewCache()
 	opts := controller.Dependencies{
-		CFClient:         testutils.SetupDataClient(t),
-		WatchManger:      wm,
-		ControllerSwitch: sw,
-		Tracker:          tracker,
-		ProcessExcluder:  process.Get(),
-		MutationSystem:   mutationSystem,
-		ExpansionSystem:  expansion.NewSystem(mutationSystem),
-		ProviderCache:    frameworksexternaldata.NewCache(),
-		CacheMgr:         cm,
-		SyncEventsCh:     events,
+		CFClient:        testutils.SetupDataClient(t),
+		WatchManger:     wm,
+		Tracker:         tracker,
+		ProcessExcluder: process.Get(),
+		MutationSystem:  mutationSystem,
+		ExpansionSystem: expansion.NewSystem(mutationSystem),
+		ProviderCache:   frameworksexternaldata.NewCache(),
+		CacheMgr:        cm,
+		SyncEventsCh:    events,
 	}
 	require.NoError(t, controller.AddToManager(mgr, &opts), "registering controllers")
 

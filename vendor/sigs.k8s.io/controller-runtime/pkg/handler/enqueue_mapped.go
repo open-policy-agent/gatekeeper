@@ -21,19 +21,20 @@ import (
 
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/priorityqueue"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // MapFunc is the signature required for enqueueing requests from a generic function.
 // This type is usually used with EnqueueRequestsFromMapFunc when registering an event handler.
-type MapFunc = TypedMapFunc[client.Object]
+type MapFunc = TypedMapFunc[client.Object, reconcile.Request]
 
 // TypedMapFunc is the signature required for enqueueing requests from a generic function.
 // This type is usually used with EnqueueRequestsFromTypedMapFunc when registering an event handler.
 //
 // TypedMapFunc is experimental and subject to future change.
-type TypedMapFunc[T any] func(context.Context, T) []reconcile.Request
+type TypedMapFunc[object any, request comparable] func(context.Context, object) []request
 
 // EnqueueRequestsFromMapFunc enqueues Requests by running a transformation function that outputs a collection
 // of reconcile.Requests on each Event.  The reconcile.Requests may be for an arbitrary set of objects
@@ -61,49 +62,91 @@ func EnqueueRequestsFromMapFunc(fn MapFunc) EventHandler {
 // objects and both sets of Requests are enqueue.
 //
 // TypedEnqueueRequestsFromMapFunc is experimental and subject to future change.
-func TypedEnqueueRequestsFromMapFunc[T any](fn TypedMapFunc[T]) TypedEventHandler[T] {
-	return &enqueueRequestsFromMapFunc[T]{
-		toRequests: fn,
+func TypedEnqueueRequestsFromMapFunc[object any, request comparable](fn TypedMapFunc[object, request]) TypedEventHandler[object, request] {
+	return &enqueueRequestsFromMapFunc[object, request]{
+		toRequests:                   fn,
+		objectImplementsClientObject: implementsClientObject[object](),
 	}
 }
 
-var _ EventHandler = &enqueueRequestsFromMapFunc[client.Object]{}
+var _ EventHandler = &enqueueRequestsFromMapFunc[client.Object, reconcile.Request]{}
 
-type enqueueRequestsFromMapFunc[T any] struct {
+type enqueueRequestsFromMapFunc[object any, request comparable] struct {
 	// Mapper transforms the argument into a slice of keys to be reconciled
-	toRequests TypedMapFunc[T]
+	toRequests                   TypedMapFunc[object, request]
+	objectImplementsClientObject bool
 }
 
 // Create implements EventHandler.
-func (e *enqueueRequestsFromMapFunc[T]) Create(ctx context.Context, evt event.TypedCreateEvent[T], q workqueue.RateLimitingInterface) {
-	reqs := map[reconcile.Request]empty{}
-	e.mapAndEnqueue(ctx, q, evt.Object, reqs)
+func (e *enqueueRequestsFromMapFunc[object, request]) Create(
+	ctx context.Context,
+	evt event.TypedCreateEvent[object],
+	q workqueue.TypedRateLimitingInterface[request],
+) {
+	reqs := map[request]empty{}
+
+	var lowPriority bool
+	if e.objectImplementsClientObject && isPriorityQueue(q) && !isNil(evt.Object) {
+		clientObjectEvent := event.CreateEvent{Object: any(evt.Object).(client.Object)}
+		if isObjectUnchanged(clientObjectEvent) {
+			lowPriority = true
+		}
+	}
+	e.mapAndEnqueue(ctx, q, evt.Object, reqs, lowPriority)
 }
 
 // Update implements EventHandler.
-func (e *enqueueRequestsFromMapFunc[T]) Update(ctx context.Context, evt event.TypedUpdateEvent[T], q workqueue.RateLimitingInterface) {
-	reqs := map[reconcile.Request]empty{}
-	e.mapAndEnqueue(ctx, q, evt.ObjectOld, reqs)
-	e.mapAndEnqueue(ctx, q, evt.ObjectNew, reqs)
+func (e *enqueueRequestsFromMapFunc[object, request]) Update(
+	ctx context.Context,
+	evt event.TypedUpdateEvent[object],
+	q workqueue.TypedRateLimitingInterface[request],
+) {
+	var lowPriority bool
+	if e.objectImplementsClientObject && isPriorityQueue(q) && !isNil(evt.ObjectOld) && !isNil(evt.ObjectNew) {
+		lowPriority = any(evt.ObjectOld).(client.Object).GetResourceVersion() == any(evt.ObjectNew).(client.Object).GetResourceVersion()
+	}
+	reqs := map[request]empty{}
+	e.mapAndEnqueue(ctx, q, evt.ObjectOld, reqs, lowPriority)
+	e.mapAndEnqueue(ctx, q, evt.ObjectNew, reqs, lowPriority)
 }
 
 // Delete implements EventHandler.
-func (e *enqueueRequestsFromMapFunc[T]) Delete(ctx context.Context, evt event.TypedDeleteEvent[T], q workqueue.RateLimitingInterface) {
-	reqs := map[reconcile.Request]empty{}
-	e.mapAndEnqueue(ctx, q, evt.Object, reqs)
+func (e *enqueueRequestsFromMapFunc[object, request]) Delete(
+	ctx context.Context,
+	evt event.TypedDeleteEvent[object],
+	q workqueue.TypedRateLimitingInterface[request],
+) {
+	reqs := map[request]empty{}
+	e.mapAndEnqueue(ctx, q, evt.Object, reqs, false)
 }
 
 // Generic implements EventHandler.
-func (e *enqueueRequestsFromMapFunc[T]) Generic(ctx context.Context, evt event.TypedGenericEvent[T], q workqueue.RateLimitingInterface) {
-	reqs := map[reconcile.Request]empty{}
-	e.mapAndEnqueue(ctx, q, evt.Object, reqs)
+func (e *enqueueRequestsFromMapFunc[object, request]) Generic(
+	ctx context.Context,
+	evt event.TypedGenericEvent[object],
+	q workqueue.TypedRateLimitingInterface[request],
+) {
+	reqs := map[request]empty{}
+	e.mapAndEnqueue(ctx, q, evt.Object, reqs, false)
 }
 
-func (e *enqueueRequestsFromMapFunc[T]) mapAndEnqueue(ctx context.Context, q workqueue.RateLimitingInterface, object T, reqs map[reconcile.Request]empty) {
-	for _, req := range e.toRequests(ctx, object) {
+func (e *enqueueRequestsFromMapFunc[object, request]) mapAndEnqueue(
+	ctx context.Context,
+	q workqueue.TypedRateLimitingInterface[request],
+	o object,
+	reqs map[request]empty,
+	lowPriority bool,
+) {
+	for _, req := range e.toRequests(ctx, o) {
 		_, ok := reqs[req]
 		if !ok {
-			q.Add(req)
+			if lowPriority {
+				q.(priorityqueue.PriorityQueue[request]).AddWithOpts(priorityqueue.AddOpts{
+					Priority: LowPriority,
+				}, req)
+			} else {
+				q.Add(req)
+			}
 			reqs[req] = empty{}
 		}
 	}

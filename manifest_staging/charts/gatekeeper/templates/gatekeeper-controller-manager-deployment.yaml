@@ -143,7 +143,7 @@ spec:
             path: /healthz
             port: {{ .Values.controllerManager.healthPort }}
           timeoutSeconds: {{ .Values.controllerManager.livenessTimeout }}
-        name: manager
+        name: '{{ .Values.controllerManager.containerName }}'
         ports:
         - containerPort: {{ .Values.controllerManager.port }}
           name: webhook-server

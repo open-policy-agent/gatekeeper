@@ -670,7 +670,6 @@ func TestMatch(t *testing.T) {
 	}
 
 	for _, tc := range table {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			m := &Matchable{Object: tc.object, Namespace: tc.namespace, Source: tc.source}
 			matches, err := Matches(&tc.matcher, m)

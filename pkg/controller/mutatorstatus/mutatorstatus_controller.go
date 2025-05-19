@@ -46,11 +46,8 @@ import (
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "mutator_status_controller")
 
 type Adder struct {
-	WatchManager     *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
+	WatchManager *watch.Manager
 }
-
-func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 
@@ -60,31 +57,28 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.IsAssigned(operations.MutationStatus) {
 		return nil
 	}
-	r := newReconciler(mgr, a.ControllerSwitch)
+	r := newReconciler(mgr)
 	return add(mgr, r)
 }
 
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
-	cs *watch.ControllerSwitch,
 ) reconcile.Reconciler {
 	return &ReconcileMutatorStatus{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
 		writer:       mgr.GetClient(),
 		statusClient: mgr.GetClient(),
 		reader:       mgr.GetCache(),
-
-		cs:     cs,
-		scheme: mgr.GetScheme(),
-		log:    log,
+		scheme:       mgr.GetScheme(),
+		log:          log,
 	}
 }
 
 type PackerMap func(obj client.Object) []reconcile.Request
 
 // PodStatusToMutatorMapper correlates a MutatorPodStatus with its corresponding mutator.
-func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.MutatorPodStatus] {
+func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler.MapFunc) handler.TypedMapFunc[*v1beta1.MutatorPodStatus, reconcile.Request] {
 	return func(ctx context.Context, obj *v1beta1.MutatorPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.MutatorNameLabel]
@@ -122,7 +116,7 @@ func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler
 	}
 }
 
-func eventPackerMapFuncHardcodeGVKForAssign(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.Assign] {
+func eventPackerMapFuncHardcodeGVKForAssign(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.Assign, reconcile.Request] {
 	mf := util.EventPackerMapFunc()
 	return func(ctx context.Context, obj *mutationsv1.Assign) []reconcile.Request {
 		u := &unstructured.Unstructured{}
@@ -133,7 +127,7 @@ func eventPackerMapFuncHardcodeGVKForAssign(gvk schema.GroupVersionKind) handler
 	}
 }
 
-func eventPackerMapFuncHardcodeGVKForAssignMetadata(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.AssignMetadata] {
+func eventPackerMapFuncHardcodeGVKForAssignMetadata(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.AssignMetadata, reconcile.Request] {
 	mf := util.EventPackerMapFunc()
 	return func(ctx context.Context, obj *mutationsv1.AssignMetadata) []reconcile.Request {
 		u := &unstructured.Unstructured{}
@@ -144,7 +138,7 @@ func eventPackerMapFuncHardcodeGVKForAssignMetadata(gvk schema.GroupVersionKind)
 	}
 }
 
-func eventPackerMapFuncHardcodeGVKForAssignImage(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1alpha1.AssignImage] {
+func eventPackerMapFuncHardcodeGVKForAssignImage(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1alpha1.AssignImage, reconcile.Request] {
 	mf := util.EventPackerMapFunc()
 	return func(ctx context.Context, obj *mutationsv1alpha1.AssignImage) []reconcile.Request {
 		u := &unstructured.Unstructured{}
@@ -155,7 +149,7 @@ func eventPackerMapFuncHardcodeGVKForAssignImage(gvk schema.GroupVersionKind) ha
 	}
 }
 
-func eventPackerMapFuncHardcodeGVKForModifySet(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.ModifySet] {
+func eventPackerMapFuncHardcodeGVKForModifySet(gvk schema.GroupVersionKind) handler.TypedMapFunc[*mutationsv1.ModifySet, reconcile.Request] {
 	mf := util.EventPackerMapFunc()
 	return func(ctx context.Context, obj *mutationsv1.ModifySet) []reconcile.Request {
 		u := &unstructured.Unstructured{}
@@ -217,10 +211,8 @@ type ReconcileMutatorStatus struct {
 	reader       client.Reader
 	writer       client.Writer
 	statusClient client.StatusClient
-
-	cs     *watch.ControllerSwitch
-	scheme *runtime.Scheme
-	log    logr.Logger
+	scheme       *runtime.Scheme
+	log          logr.Logger
 }
 
 // +kubebuilder:rbac:groups=mutations.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -229,15 +221,6 @@ type ReconcileMutatorStatus struct {
 // Reconcile reads that state of the cluster for a mutator object and makes changes based on the state read
 // and what is in the mutator.Spec.
 func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	// Short-circuit if shutting down.
-	if r.cs != nil {
-		running := r.cs.Enter()
-		defer r.cs.Exit()
-		if !running {
-			return reconcile.Result{}, nil
-		}
-	}
-
 	gvk, unpackedRequest, err := util.UnpackRequest(request)
 	if err != nil {
 		// Unrecoverable, do not retry.

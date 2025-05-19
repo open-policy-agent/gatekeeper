@@ -66,6 +66,18 @@ rules:
 - apiGroups:
   - config.gatekeeper.sh
   resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - config.gatekeeper.sh
+  resources:
   - configs
   verbs:
   - create
@@ -165,15 +177,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - templates.gatekeeper.sh
-  resources:
-  - constrainttemplates/finalizers
-  verbs:
-  - delete
-  - get
-  - patch
-  - update
 - apiGroups:
   - templates.gatekeeper.sh
   resources:

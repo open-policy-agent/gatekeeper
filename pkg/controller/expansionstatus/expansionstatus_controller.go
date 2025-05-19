@@ -49,8 +49,6 @@ type Adder struct {
 	WatchManager *watch.Manager
 }
 
-func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
-
 func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 
 // Add creates a new Constraint Status Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -81,7 +79,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 
 // PodStatusToExpansionTemplateMapper correlates a ExpansionTemplatePodStatus with its corresponding expansion template.
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToExpansionTemplateMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ExpansionTemplatePodStatus] {
+func PodStatusToExpansionTemplateMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ExpansionTemplatePodStatus, reconcile.Request] {
 	return func(_ context.Context, obj *v1beta1.ExpansionTemplatePodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ExpansionTemplateNameLabel]

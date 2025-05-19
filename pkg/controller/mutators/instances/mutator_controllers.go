@@ -11,7 +11,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -123,8 +122,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	}
 	return assignMetadata.Add(mgr)
 }
-
-func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t

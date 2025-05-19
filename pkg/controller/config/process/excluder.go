@@ -73,13 +73,13 @@ func (s *Excluder) Add(entry []configv1alpha1.MatchEntry) {
 	}
 }
 
-func (s *Excluder) Replace(new *Excluder) {
+func (s *Excluder) Replace(new *Excluder) { // nolint:revive
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	s.excludedNamespaces = new.excludedNamespaces
 }
 
-func (s *Excluder) Equals(new *Excluder) bool {
+func (s *Excluder) Equals(new *Excluder) bool { // nolint:revive
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 	return reflect.DeepEqual(s.excludedNamespaces, new.excludedNamespaces)

@@ -122,7 +122,6 @@ violation[{"msg": "denied!"}] {
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
-	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
@@ -133,11 +132,10 @@ violation[{"msg": "denied!"}] {
 	)
 
 	adder := constrainttemplate.Adder{
-		CFClient:         cfClient,
-		WatchManager:     wm,
-		ControllerSwitch: cs,
-		Tracker:          tracker,
-		GetPod:           func(context.Context) (*corev1.Pod, error) { return pod, nil },
+		CFClient:     cfClient,
+		WatchManager: wm,
+		Tracker:      tracker,
+		GetPod:       func(context.Context) (*corev1.Pod, error) { return pod, nil },
 	}
 	err = adder.Add(mgr)
 	if err != nil {

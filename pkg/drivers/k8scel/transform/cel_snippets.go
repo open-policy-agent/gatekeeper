@@ -176,14 +176,6 @@ func BindObjectV1Beta1() admissionregistrationv1beta1.Variable {
 	}
 }
 
-func BindObjectCEL() cel.NamedExpressionAccessor {
-	v := BindObjectV1Beta1()
-	return &validating.Variable{
-		Name:       v.Name,
-		Expression: v.Expression,
-	}
-}
-
 func AllMatchersV1Beta1() []admissionregistrationv1beta1.MatchCondition {
 	return []admissionregistrationv1beta1.MatchCondition{
 		MatchExcludedNamespacesGlobV1Beta1(),

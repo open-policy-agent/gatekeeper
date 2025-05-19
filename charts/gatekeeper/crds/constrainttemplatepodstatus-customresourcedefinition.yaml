@@ -73,6 +73,17 @@ spec:
                   don't ONLY use UUIDs, this is an alias to string.  Being a type captures
                   intent and helps make sure that UIDs and names do not get conflated.
                 type: string
+              vapGenerationStatus:
+                description: VAPGenerationStatus represents the status of VAP generation.
+                properties:
+                  observedGeneration:
+                    format: int64
+                    type: integer
+                  state:
+                    type: string
+                  warning:
+                    type: string
+                type: object
             type: object
         type: object
     served: true

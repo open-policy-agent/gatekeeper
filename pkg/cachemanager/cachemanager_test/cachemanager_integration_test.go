@@ -266,7 +266,7 @@ func TestCacheManager_instance_updates(t *testing.T) {
 		value, found, err := unstructured.NestedString(unInstance.Object, "metadata", "labels", "testlabel")
 		require.NoError(t, err)
 
-		return found && "test" == value
+		return found && value == "test"
 	}, eventuallyTimeout, eventuallyTicker)
 }
 

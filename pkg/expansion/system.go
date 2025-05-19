@@ -48,7 +48,7 @@ type TemplateID string
 type IDSet map[TemplateID]bool
 
 func keyForTemplate(template *expansionunversioned.ExpansionTemplate) TemplateID {
-	return TemplateID(template.ObjectMeta.Name)
+	return TemplateID(template.Name)
 }
 
 func (s *System) UpsertTemplate(template *expansionunversioned.ExpansionTemplate) error {
@@ -182,7 +182,7 @@ func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 		res, err := expandResource(base.Object, base.Namespace, te)
 		resultants = append(resultants, &Resultant{
 			Obj:               res,
-			TemplateName:      te.ObjectMeta.Name,
+			TemplateName:      te.Name,
 			EnforcementAction: te.Spec.EnforcementAction,
 		})
 		if err != nil {

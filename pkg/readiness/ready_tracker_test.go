@@ -55,6 +55,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -74,6 +75,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	logger := zap.New(zap.UseDevMode(true), zap.WriteTo(testutils.NewTestWriter(t)))
 	ctrl.SetLogger(logger)
 	metrics.Registry = prometheus.NewRegistry()
+	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
 		HealthProbeBindAddress: "127.0.0.1:29090",
 		Metrics: metricsserver.Options{
@@ -81,6 +83,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 		},
 		MapperProvider: apiutil.NewDynamicRESTMapper,
 		Logger:         logger,
+		Controller:     config.Controller{SkipNameValidation: &skipNameValidation},
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -128,8 +131,6 @@ func setupController(
 		return fmt.Errorf("setting up tracker: %w", err)
 	}
 
-	sw := watch.NewSwitch()
-
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),
 		fakes.WithName("no-pod"),
@@ -159,17 +160,16 @@ func setupController(
 
 	// Setup all Controllers
 	opts := controller.Dependencies{
-		CFClient:         cfClient,
-		WatchManger:      wm,
-		ControllerSwitch: sw,
-		Tracker:          tracker,
-		GetPod:           func(_ context.Context) (*corev1.Pod, error) { return pod, nil },
-		ProcessExcluder:  processExcluder,
-		MutationSystem:   mutationSystem,
-		ExpansionSystem:  expansionSystem,
-		ProviderCache:    providerCache,
-		CacheMgr:         cacheManager,
-		SyncEventsCh:     events,
+		CFClient:        cfClient,
+		WatchManger:     wm,
+		Tracker:         tracker,
+		GetPod:          func(_ context.Context) (*corev1.Pod, error) { return pod, nil },
+		ProcessExcluder: processExcluder,
+		MutationSystem:  mutationSystem,
+		ExpansionSystem: expansionSystem,
+		ProviderCache:   providerCache,
+		CacheMgr:        cacheManager,
+		SyncEventsCh:    events,
 	}
 	if err := controller.AddToManager(mgr, &opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)

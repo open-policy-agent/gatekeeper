@@ -1,6 +1,6 @@
 package rego
 
-import "github.com/open-policy-agent/opa/ast"
+import "github.com/open-policy-agent/opa/v1/ast"
 
 const (
 	// templatePath is the path the Template's Rego code is stored.
@@ -18,24 +18,20 @@ const (
 	// This removes boilerplate that would otherwise need to be present in every
 	// Template's Rego code. The violation's response is written to a standard
 	// location we can read from to see if any violations occurred.
-	hookModuleRego = `
-package hooks
+	hookModuleRego = `package hooks
 
 # Determine if the object under review violates any passed Constraints.
 violation[response] {
   # Iterate over all keys to Constraints in storage.
   key := input.constraints[_]
-
   # Construct the input object from the Constraint and temporary object in storage.
   # Silently exits if the Constraint no longer exists.
   inp := {
     "review": input.review,
     "parameters": data.constraints[key.kind][key.name],
   }
-
   # Run the Template with Constraint.
   data.template.violation[r] with input as inp
-
   # Construct the response, defaulting "details" to empty object if it is not
   # specified.
   response := {
@@ -51,7 +47,7 @@ var hookModule *ast.Module
 
 func init() {
 	var err error
-	hookModule, err = parseModule(hookModulePath, hookModuleRego)
+	hookModule, err = parseModule(hookModulePath, ast.RegoV0, hookModuleRego)
 	if err != nil {
 		panic(err)
 	}

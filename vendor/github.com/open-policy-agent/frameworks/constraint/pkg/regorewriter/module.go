@@ -4,8 +4,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/format"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/format"
 )
 
 // Module represents a rego module.
@@ -27,7 +27,9 @@ func (m *Module) Write() error {
 
 // Content returns the module as a byte slice of rego source code.
 func (m *Module) Content() ([]byte, error) {
-	return format.Ast(m.Module)
+	return format.AstWithOpts(m.Module, format.Opts{
+		RegoVersion: m.Module.RegoVersion(),
+	})
 }
 
 // IsTestFile returns true if the module corresponds to a unit test.

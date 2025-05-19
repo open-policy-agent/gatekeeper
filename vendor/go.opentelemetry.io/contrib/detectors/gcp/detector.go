@@ -1,29 +1,19 @@
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
 package gcp // import "go.opentelemetry.io/contrib/detectors/gcp"
 
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"cloud.google.com/go/compute/metadata"
 	"github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 // NewDetector returns a resource detector which detects resource attributes on:
@@ -61,6 +51,13 @@ func (d *detector) Detect(ctx context.Context) (*resource.Resource, error) {
 		b.add(semconv.FaaSNameKey, d.detector.FaaSName)
 		b.add(semconv.FaaSVersionKey, d.detector.FaaSVersion)
 		b.add(semconv.FaaSInstanceKey, d.detector.FaaSID)
+		b.add(semconv.CloudRegionKey, d.detector.FaaSCloudRegion)
+	case gcp.CloudRunJob:
+		b.attrs = append(b.attrs, semconv.CloudPlatformGCPCloudRun)
+		b.add(semconv.FaaSNameKey, d.detector.FaaSName)
+		b.add(semconv.FaaSInstanceKey, d.detector.FaaSID)
+		b.add(semconv.GCPCloudRunJobExecutionKey, d.detector.CloudRunJobExecution)
+		b.addInt(semconv.GCPCloudRunJobTaskIndexKey, d.detector.CloudRunJobTaskIndex)
 		b.add(semconv.CloudRegionKey, d.detector.FaaSCloudRegion)
 	case gcp.CloudFunctions:
 		b.attrs = append(b.attrs, semconv.CloudPlatformGCPCloudFunctions)
@@ -105,6 +102,18 @@ type resourceBuilder struct {
 func (r *resourceBuilder) add(key attribute.Key, detect func() (string, error)) {
 	if v, err := detect(); err == nil {
 		r.attrs = append(r.attrs, key.String(v))
+	} else {
+		r.errs = append(r.errs, err)
+	}
+}
+
+func (r *resourceBuilder) addInt(key attribute.Key, detect func() (string, error)) {
+	if v, err := detect(); err == nil {
+		if vi, err := strconv.Atoi(v); err == nil {
+			r.attrs = append(r.attrs, key.Int(vi))
+		} else {
+			r.errs = append(r.errs, err)
+		}
 	} else {
 		r.errs = append(r.errs, err)
 	}

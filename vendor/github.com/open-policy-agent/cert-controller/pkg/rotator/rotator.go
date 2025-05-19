@@ -35,6 +35,7 @@ import (
 )
 
 const (
+	defaultControllerName             = "cert-rotator"
 	defaultCertName                   = "tls.crt"
 	defaultKeyName                    = "tls.key"
 	caCertName                        = "ca.crt"
@@ -133,7 +134,9 @@ func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 			return err
 		}
 	}
-
+	if cr.controllerName == "" {
+		cr.controllerName = defaultControllerName
+	}
 	if cr.CertName == "" {
 		cr.CertName = defaultCertName
 	}
@@ -174,7 +177,7 @@ func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 		refreshCertIfNeededDelegate: cr.refreshCertIfNeeded,
 		fieldOwner:                  cr.FieldOwner,
 	}
-	if err := addController(mgr, reconciler); err != nil {
+	if err := addController(mgr, reconciler, cr.controllerName); err != nil {
 		return err
 	}
 	return nil
@@ -256,6 +259,10 @@ type CertRotator struct {
 	// testNoBackgroundRotation doesn't actually start the rotator in the background.
 	// This should only be used for testing.
 	testNoBackgroundRotation bool
+	// controllerName allows setting the controller name to register it multiple times
+	// fixing the new k8s check that produces 'controller with name cert-rotator already exists'
+	// This should only be used for testing.
+	controllerName string
 }
 
 func (cr *CertRotator) NeedLeaderElection() bool {
@@ -692,9 +699,9 @@ func reconcileSecretAndWebhookMapFunc(webhook WebhookInfo, r *ReconcileWH) func(
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
-func addController(mgr manager.Manager, r *ReconcileWH) error {
+func addController(mgr manager.Manager, r *ReconcileWH, controllerName string) error {
 	// Create a new controller
-	c, err := controller.NewUnmanaged("cert-rotator", mgr, controller.Options{Reconciler: r})
+	c, err := controller.NewUnmanaged(controllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
