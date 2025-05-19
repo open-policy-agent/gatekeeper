@@ -20,7 +20,8 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ConstraintPodStatus is the Schema for the constraintpodstatuses API.
+        description: ConstraintPodStatus is the Schema for the constraintpodstatuses
+          API.
         properties:
           apiVersion:
             description: |-
@@ -52,7 +53,8 @@ spec:
                 type: boolean
               enforcementPointsStatus:
                 items:
-                  description: EnforcementPointStatus represents the status of a single enforcement point.
+                  description: EnforcementPointStatus represents the status of a single
+                    enforcement point.
                   properties:
                     enforcementPoint:
                       type: string
@@ -70,7 +72,8 @@ spec:
                 type: array
               errors:
                 items:
-                  description: Error represents a single error caught while adding a constraint to engine.
+                  description: Error represents a single error caught while adding
+                    a constraint to engine.
                   properties:
                     code:
                       type: string
