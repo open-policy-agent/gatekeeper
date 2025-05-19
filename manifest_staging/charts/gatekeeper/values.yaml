@@ -224,10 +224,13 @@ controllerManager:
   networkPolicy:
     enabled: false
     ingress: []
-      # - from:
-      #   - ipBlock:
-      #       cidr: 0.0.0.0/0
-  operations: ["webhook"]
+  disableWebhookOperation: false
+  disableGenerateOperation: true
+  disableMutationWebhookOperation: true
+  disableAuditOperation: true
+  disableStatusOperation: true
+  disableMutationStatusOperation: true
+  disableMutationControllerOperation: true
 exportBackend: ""
 audit:
   exportConfig:
@@ -291,6 +294,13 @@ audit:
       - 999
   writeToRAMDisk: false
   extraRules: []
+  disableWebhookOperation: false
+  disableGenerateOperation: true
+  disableMutationWebhookOperation: true
+  disableAuditOperation: true
+  disableStatusOperation: true
+  disableMutationStatusOperation: true
+  disableMutationControllerOperation: true
 crds:
   affinity: {}
   tolerations: []
