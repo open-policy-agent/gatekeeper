@@ -270,13 +270,14 @@ func innerMain() int {
 				Namespace: util.GetNamespace(),
 				Name:      secretName,
 			},
-			CertDir:        *certDir,
-			CAName:         caName,
-			CAOrganization: caOrganization,
-			DNSName:        fmt.Sprintf("%s.%s.svc", *certServiceName, util.GetNamespace()),
-			IsReady:        setupFinished,
-			Webhooks:       webhooks,
-			ExtKeyUsages:   &keyUsages,
+			CertDir:              *certDir,
+			CAName:               caName,
+			CAOrganization:       caOrganization,
+			DNSName:              fmt.Sprintf("%s.%s.svc", *certServiceName, util.GetNamespace()),
+			IsReady:              setupFinished,
+			Webhooks:             webhooks,
+			ExtKeyUsages:         &keyUsages,
+			EnableReadinessCheck: true,
 		}); err != nil {
 			setupLog.Error(err, "unable to set up cert rotation")
 			return 1
