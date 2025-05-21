@@ -298,7 +298,7 @@ audit:
   disableGenerateOperation: false
   disableMutationWebhookOperation: true
   disableAuditOperation: true
-  disableStatusOperation: true
+  disableStatusOperation: false
   disableMutationStatusOperation: true
   disableMutationControllerOperation: true
 crds:
