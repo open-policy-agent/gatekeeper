@@ -297,7 +297,7 @@ audit:
   disableWebhookOperation: true
   disableGenerateOperation: false
   disableMutationWebhookOperation: true
-  disableAuditOperation: true
+  disableAuditOperation: false
   disableStatusOperation: false
   disableMutationStatusOperation: true
   disableMutationControllerOperation: true
