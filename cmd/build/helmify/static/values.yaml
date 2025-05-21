@@ -226,7 +226,6 @@ controllerManager:
     ingress: []
   disableWebhookOperation: false
   disableGenerateOperation: true
-  disableMutationWebhookOperation: false
   disableAuditOperation: true
   disableStatusOperation: true
   disableMutationStatusOperation: true
@@ -296,7 +295,6 @@ audit:
   extraRules: []
   disableWebhookOperation: true
   disableGenerateOperation: false
-  disableMutationWebhookOperation: true
   disableAuditOperation: false
   disableStatusOperation: false
   disableMutationStatusOperation: false

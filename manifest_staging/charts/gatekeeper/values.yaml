@@ -226,7 +226,6 @@ controllerManager:
     ingress: []
   disableWebhookOperation: false
   disableGenerateOperation: true
-  disableMutationWebhookOperation: true
   disableAuditOperation: true
   disableStatusOperation: true
   disableMutationStatusOperation: true
@@ -294,12 +293,11 @@ audit:
       - 999
   writeToRAMDisk: false
   extraRules: []
-  disableWebhookOperation: false
-  disableGenerateOperation: true
-  disableMutationWebhookOperation: true
-  disableAuditOperation: true
-  disableStatusOperation: true
-  disableMutationStatusOperation: true
+  disableWebhookOperation: true
+  disableGenerateOperation: false
+  disableAuditOperation: false
+  disableStatusOperation: false
+  disableMutationStatusOperation: false
   disableMutationControllerOperation: true
 crds:
   affinity: {}

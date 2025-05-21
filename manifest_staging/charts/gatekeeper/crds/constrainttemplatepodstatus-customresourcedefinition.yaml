@@ -20,8 +20,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses
-          API.
+        description: ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses API.
         properties:
           apiVersion:
             description: |-
@@ -41,13 +40,11 @@ spec:
           metadata:
             type: object
           status:
-            description: ConstraintTemplatePodStatusStatus defines the observed state
-              of ConstraintTemplatePodStatus.
+            description: ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus.
             properties:
               errors:
                 items:
-                  description: CreateCRDError represents a single error caught during
-                    parsing, compiling, etc.
+                  description: CreateCRDError represents a single error caught during parsing, compiling, etc.
                   properties:
                     code:
                       type: string
@@ -61,8 +58,7 @@ spec:
                   type: object
                 type: array
               id:
-                description: 'Important: Run "make" to regenerate code after modifying
-                  this file'
+                description: 'Important: Run "make" to regenerate code after modifying this file'
                 type: string
               observedGeneration:
                 format: int64
