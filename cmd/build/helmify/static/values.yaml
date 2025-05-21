@@ -299,7 +299,7 @@ audit:
   disableMutationWebhookOperation: true
   disableAuditOperation: false
   disableStatusOperation: false
-  disableMutationStatusOperation: true
+  disableMutationStatusOperation: false
   disableMutationControllerOperation: true
 crds:
   affinity: {}
