@@ -295,7 +295,7 @@ audit:
   writeToRAMDisk: false
   extraRules: []
   disableWebhookOperation: false
-  disableGenerateOperation: true
+  disableGenerateOperation: false
   disableMutationWebhookOperation: true
   disableAuditOperation: true
   disableStatusOperation: true
