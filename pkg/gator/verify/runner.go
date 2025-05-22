@@ -11,6 +11,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
@@ -238,12 +239,12 @@ func (r *Runner) makeTestExpander(suiteDir string, t *Test) (*expand.Expander, e
 		return nil, nil
 	}
 
-	et, err := reader.ReadExpansion(r.filesystem, path.Join(suiteDir, expansionPath))
+	expansionsTemplates, err := reader.ReadExpansions(r.filesystem, path.Join(suiteDir, expansionPath))
 	if err != nil {
 		return nil, err
 	}
 
-	er, err := expand.NewExpander([]*unstructured.Unstructured{et})
+	er, err := expand.NewExpander(expansionsTemplates)
 	return er, err
 }
 
