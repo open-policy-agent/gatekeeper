@@ -243,18 +243,28 @@ func ReadConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	return u, nil
 }
 
-func ReadExpansion(f fs.FS, path string) (*unstructured.Unstructured, error) {
-	u, err := ReadObject(f, path)
+func ReadExpansions(f fs.FS, path string) ([]*unstructured.Unstructured, error) {
+	bytes, err := fs.ReadFile(f, path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading ExpansionTemplate from %q: %w", path, err)
+	}
+	objs, err := ReadUnstructureds(bytes)
+	if err != nil {
+		return nil, fmt.Errorf("reading %q: %w", path, err)
 	}
 
-	gvk := u.GroupVersionKind()
-	if gvk.Group != "expansion.gatekeeper.sh" || gvk.Kind != "ExpansionTemplate" {
-		return nil, gator.ErrNotAnExpansion
+	if len(objs) == 0 {
+		return nil, fmt.Errorf("%w: %q", gator.ErrNotAnExpansion, path)
 	}
 
-	return u, nil
+	for _, obj := range objs {
+		gvk := obj.GroupVersionKind()
+		if gvk.Group != "expansion.gatekeeper.sh" || gvk.Kind != "ExpansionTemplate" {
+			return nil, gator.ErrNotAnExpansionß
+		}
+	}
+
+	return objs, nil
 }
 
 // ReadK8sResources reads JSON or YAML k8s resources from an io.Reader,
