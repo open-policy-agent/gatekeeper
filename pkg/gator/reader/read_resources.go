@@ -261,7 +261,7 @@ func ReadExpansions(f fs.FS, path string) ([]*unstructured.Unstructured, error) 
 	for _, obj := range objs {
 		gvk := obj.GroupVersionKind()
 		if gvk.Group != "expansion.gatekeeper.sh" || gvk.Kind != "ExpansionTemplate" {
-			return nil, gator.ErrNotAnExpansion
+			return nil, fmt.Errorf("%w: %q", gator.ErrNotAnExpansion, path)
 		}
 	}
 
