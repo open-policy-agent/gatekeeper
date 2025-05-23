@@ -17,46 +17,47 @@ package resourcemapping
 import (
 	"strings"
 
-	semconv "go.opentelemetry.io/otel/semconv/v1.18.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	monitoredrespb "google.golang.org/genproto/googleapis/api/monitoredres"
 )
 
 const (
 	ProjectIDAttributeKey = "gcp.project.id"
 
-	awsAccount        = "aws_account"
-	awsEc2Instance    = "aws_ec2_instance"
-	clusterName       = "cluster_name"
-	containerName     = "container_name"
-	gceInstance       = "gce_instance"
-	genericNode       = "generic_node"
-	genericTask       = "generic_task"
-	instanceID        = "instance_id"
-	job               = "job"
-	k8sCluster        = "k8s_cluster"
-	k8sContainer      = "k8s_container"
-	k8sNode           = "k8s_node"
-	k8sPod            = "k8s_pod"
-	location          = "location"
-	namespace         = "namespace"
-	namespaceName     = "namespace_name"
-	nodeID            = "node_id"
-	nodeName          = "node_name"
-	podName           = "pod_name"
-	region            = "region"
-	taskID            = "task_id"
-	zone              = "zone"
-	gaeInstance       = "gae_instance"
-	gaeApp            = "gae_app"
-	gaeModuleID       = "module_id"
-	gaeVersionID      = "version_id"
-	cloudRunRevision  = "cloud_run_revision"
-	cloudFunction     = "cloud_function"
-	cloudFunctionName = "function_name"
-	serviceName       = "service_name"
-	configurationName = "configuration_name"
-	revisionName      = "revision_name"
-	bmsInstance       = "baremetalsolution.googleapis.com/Instance"
+	awsAccount           = "aws_account"
+	awsEc2Instance       = "aws_ec2_instance"
+	clusterName          = "cluster_name"
+	containerName        = "container_name"
+	gceInstance          = "gce_instance"
+	genericNode          = "generic_node"
+	genericTask          = "generic_task"
+	instanceID           = "instance_id"
+	job                  = "job"
+	k8sCluster           = "k8s_cluster"
+	k8sContainer         = "k8s_container"
+	k8sNode              = "k8s_node"
+	k8sPod               = "k8s_pod"
+	location             = "location"
+	namespace            = "namespace"
+	namespaceName        = "namespace_name"
+	nodeID               = "node_id"
+	nodeName             = "node_name"
+	podName              = "pod_name"
+	region               = "region"
+	taskID               = "task_id"
+	zone                 = "zone"
+	gaeInstance          = "gae_instance"
+	gaeApp               = "gae_app"
+	gaeModuleID          = "module_id"
+	gaeVersionID         = "version_id"
+	cloudRunRevision     = "cloud_run_revision"
+	cloudFunction        = "cloud_function"
+	cloudFunctionName    = "function_name"
+	serviceName          = "service_name"
+	configurationName    = "configuration_name"
+	revisionName         = "revision_name"
+	bmsInstance          = "baremetalsolution.googleapis.com/Instance"
+	unknownServicePrefix = "unknown_service"
 )
 
 var (
@@ -115,7 +116,7 @@ var (
 			}},
 			gaeModuleID:  {otelKeys: []string{string(semconv.FaaSNameKey)}},
 			gaeVersionID: {otelKeys: []string{string(semconv.FaaSVersionKey)}},
-			instanceID:   {otelKeys: []string{string(semconv.FaaSIDKey)}},
+			instanceID:   {otelKeys: []string{string(semconv.FaaSInstanceKey)}},
 		},
 		gaeApp: {
 			location: {otelKeys: []string{
@@ -149,7 +150,7 @@ var (
 			},
 			namespace: {otelKeys: []string{string(semconv.ServiceNamespaceKey)}},
 			job:       {otelKeys: []string{string(semconv.ServiceNameKey), string(semconv.FaaSNameKey)}},
-			taskID:    {otelKeys: []string{string(semconv.ServiceInstanceIDKey), string(semconv.FaaSIDKey)}},
+			taskID:    {otelKeys: []string{string(semconv.ServiceInstanceIDKey), string(semconv.FaaSInstanceKey)}},
 		},
 		genericNode: {
 			location: {
@@ -229,8 +230,8 @@ func commonResourceAttributesToMonitoredResource(cloudPlatform string, attrs Rea
 		_, hasServiceName := attrs.GetString(string(semconv.ServiceNameKey))
 		_, hasFaaSName := attrs.GetString(string(semconv.FaaSNameKey))
 		_, hasServiceInstanceID := attrs.GetString(string(semconv.ServiceInstanceIDKey))
-		_, hasFaaSID := attrs.GetString(string(semconv.FaaSIDKey))
-		if (hasServiceName && hasServiceInstanceID) || (hasFaaSID && hasFaaSName) {
+		_, hasFaaSInstance := attrs.GetString(string(semconv.FaaSInstanceKey))
+		if (hasServiceName && hasServiceInstanceID) || (hasFaaSInstance && hasFaaSName) {
 			return createMonitoredResource(genericTask, attrs)
 		}
 
@@ -252,9 +253,13 @@ func createMonitoredResource(
 		// Coalesce the possible keys in order
 		for _, otelKey := range mappingConfig.otelKeys {
 			mrValue, ok = resourceAttrs.GetString(otelKey)
-			if mrValue != "" {
+			if mrValue != "" && !strings.HasPrefix(mrValue, unknownServicePrefix) {
 				break
 			}
+		}
+		if mrValue == "" && contains(mappingConfig.otelKeys, string(semconv.ServiceNameKey)) {
+			// the service name started with unknown_service, and was ignored above
+			mrValue, ok = resourceAttrs.GetString(string(semconv.ServiceNameKey))
 		}
 		if !ok || mrValue == "" {
 			mrValue = mappingConfig.fallbackLiteral
@@ -265,6 +270,15 @@ func createMonitoredResource(
 		Type:   monitoredResourceType,
 		Labels: mrLabels,
 	}
+}
+
+func contains(list []string, element string) bool {
+	for _, item := range list {
+		if item == element {
+			return true
+		}
+	}
+	return false
 }
 
 func sanitizeUTF8(s string) string {
