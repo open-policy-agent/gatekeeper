@@ -283,21 +283,12 @@ github.com/onsi/ginkgo/v2 v2.23.3 h1:edHxnszytJ4lD9D5Jjc4tiDkPBZ3siDeJJkUZJJVkp0
 github.com/onsi/ginkgo/v2 v2.23.3/go.mod h1:zXTP6xIp3U8aVuXN8ENK9IXRaTjFnpVB9mGmaSRvxnM=
 github.com/onsi/gomega v1.37.0 h1:CdEG8g0S133B4OswTDC/5XPSzE1OeP29QOioj2PID2Y=
 github.com/onsi/gomega v1.37.0/go.mod h1:8D9+Txp43QWKhM24yyOBEdpkzN8FvJyAwecBgsU4KU0=
-<<<<<<< HEAD
 github.com/open-policy-agent/cert-controller v0.12.1-0.20250519175553-99fd97718416 h1:tiXsyq/jn2FIiTHBj85nXmzUdM2e+sP50lyWR3RooMs=
 github.com/open-policy-agent/cert-controller v0.12.1-0.20250519175553-99fd97718416/go.mod h1:OscPE2pmXWhJAdlnU5dCRqhm41Xx/2xwgBSgpEzw5AY=
-github.com/open-policy-agent/frameworks/constraint v0.0.0-20250429231206-7a3c70aae2a1 h1:uLDnuSjUabRGqs0wu0Mq4z+vns6B8lGDCFQap8jxBpc=
-github.com/open-policy-agent/frameworks/constraint v0.0.0-20250429231206-7a3c70aae2a1/go.mod h1:c8E1e+CrEOQyoVsr9uVPfBG6TcmoKP2ApvKWyuvAqGk=
-github.com/open-policy-agent/opa v1.3.0 h1:zVvQvQg+9+FuSRBt4LgKNzJwsWl/c85kD5jPozJTydY=
-github.com/open-policy-agent/opa v1.3.0/go.mod h1:t9iPNhaplD2qpiBqeudzJtEX3fKHK8zdA29oFvofAHo=
-=======
-github.com/open-policy-agent/cert-controller v0.12.1-0.20250429233417-902d0dae41cb h1:7VGQqKaCFomHZGdnL/O083hooA2ZqNw/4ewRz/Vzh3o=
-github.com/open-policy-agent/cert-controller v0.12.1-0.20250429233417-902d0dae41cb/go.mod h1:BZ9v91PYIm9ZQP4TKXhxN2eM3wTyxDWRh7mM1cqlmH4=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20250519192110-ca0eb7929d25 h1:P02iWBp+QY1k6C56uiSdJVDiBF0f5r0A8s/01Lc4mec=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20250519192110-ca0eb7929d25/go.mod h1:zgD+6CO5+pzU5J58i0xn+Dkj6+sVAEpxkaeMdJk6iGs=
 github.com/open-policy-agent/opa v1.4.2 h1:ag4upP7zMsa4WE2p1pwAFeG4Pn3mNwfAx9DLhhJfbjU=
 github.com/open-policy-agent/opa v1.4.2/go.mod h1:DNzZPKqKh4U0n0ANxcCVlw8lCSv2c+h5G/3QvSYdWZ8=
->>>>>>> bumping frameworks and OPA
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
