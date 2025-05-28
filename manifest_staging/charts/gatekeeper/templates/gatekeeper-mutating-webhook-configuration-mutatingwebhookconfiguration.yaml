@@ -67,6 +67,7 @@ webhooks:
     {{- range .Values.mutatingWebhookSubResources }}
     - {{ . }}
     {{- end }}
+    scope: '{{ .Values.mutatingWebhookScope }}'
   {{- end }}
   sideEffects: None
   timeoutSeconds: {{ .Values.mutatingWebhookTimeoutSeconds }}

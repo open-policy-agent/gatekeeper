@@ -227,9 +227,9 @@ func (conn *Connection) cleanupOldAuditFiles(topic string) error {
 		return fmt.Errorf("failed removing older audit files, error getting files sorted by mod time: %w", err)
 	}
 	var errs []error
-	for i := 0; i < len(files)-conn.MaxAuditResults; i++ {		
+	for i := 0; i < len(files)-conn.MaxAuditResults; i++ {
 		if e := os.Remove(files[i]); e != nil {
-			errs  = append(errs, fmt.Errorf("error removing file: %w", e))
+			errs = append(errs, fmt.Errorf("error removing file: %w", e))
 		}
 	}
 
@@ -238,34 +238,34 @@ func (conn *Connection) cleanupOldAuditFiles(topic string) error {
 
 func getFilesSortedByModTimeAsc(dirPath string) ([]string, error) {
 	type fileInfo struct {
-        path    string
-        modTime time.Time
-    }
-    var filesInfo []fileInfo
+		path    string
+		modTime time.Time
+	}
+	var filesInfo []fileInfo
 
-    err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
-        if err != nil {
-            return err
-        }
-        if !info.IsDir() {
-            filesInfo = append(filesInfo, fileInfo{path: path, modTime: info.ModTime()})
-        }
-        return nil
-    })
-    if err != nil {
-        return nil, err
-    }
+	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			filesInfo = append(filesInfo, fileInfo{path: path, modTime: info.ModTime()})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    sort.Slice(filesInfo, func(i, j int) bool {
-        return filesInfo[i].modTime.Before(filesInfo[j].modTime)
-    })
+	sort.Slice(filesInfo, func(i, j int) bool {
+		return filesInfo[i].modTime.Before(filesInfo[j].modTime)
+	})
 
-    var sortedFiles []string
-    for _, fi := range filesInfo {
-        sortedFiles = append(sortedFiles, fi.path)
-    }
+	var sortedFiles []string
+	for _, fi := range filesInfo {
+		sortedFiles = append(sortedFiles, fi.path)
+	}
 
-    return sortedFiles, nil
+	return sortedFiles, nil
 }
 
 func appendExtension(name string, ext string) string {
