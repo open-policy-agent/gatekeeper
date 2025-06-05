@@ -893,9 +893,17 @@ func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnot
 	if ct.Annotations != nil && ct.Annotations[constraint.VAPBGenerationAnnotation] == constraint.VAPBGenerationUnblocked {
 		return noRequeue, nil
 	}
+	latestCT := &v1beta1.ConstraintTemplate{}
+	err := r.Get(ctx, types.NamespacedName{Name: ct.GetName()}, latestCT)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return time.Duration(time.Millisecond), err
+		}
+		return noRequeue, nil
+	}
 	currentTime := time.Now()
-	if ct.Annotations != nil && ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] != "" {
-		until := ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation]
+	if latestCT.Annotations != nil && latestCT.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] != "" {
+		until := latestCT.Annotations[constraint.BlockVAPBGenerationUntilAnnotation]
 		t, err := time.Parse(time.RFC3339, until)
 		if err != nil {
 			return noRequeue, err
@@ -904,16 +912,16 @@ func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnot
 		// otherwise update the annotation with the current time + wait time. This prevents clock skew from preventing generation on task reschedule.
 		if t.Before(currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second)) {
 			if t.Before(currentTime) {
-				ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationUnblocked
-				return noRequeue, r.Update(ctx, ct)
+				latestCT.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationUnblocked
+				return noRequeue, r.Update(ctx, latestCT)
 			}
 			return t.Sub(currentTime), nil
 		}
 	}
-	if ct.Annotations == nil {
-		ct.Annotations = make(map[string]string)
+	if latestCT.Annotations == nil {
+		latestCT.Annotations = make(map[string]string)
 	}
-	ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
-	ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationBlocked
-	return time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second, r.Update(ctx, ct)
+	latestCT.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
+	latestCT.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationBlocked
+	return time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second, r.Update(ctx, latestCT)
 }
