@@ -70,14 +70,16 @@ func (s *System) CloseConnection(connectionName string) error {
 }
 
 func (s *System) closeConnection(connectionName string) error {
-	if c, ok := s.connectionToDriver[connectionName]; ok {
-		if conn, ok := SupportedDrivers[c]; ok {
+	if driverName, ok := s.connectionToDriver[connectionName]; ok {
+		// connection should be deleted from the map before closing it to make sure old connection is not accessible if close fails
+		// also avoids not respecting the latest connection with the same name if close fails
+		delete(s.connectionToDriver, connectionName)
+		if conn, ok := SupportedDrivers[driverName]; ok {
 			err := conn.CloseConnection(connectionName)
 			if err != nil {
 				return err
 			}
 		}
-		delete(s.connectionToDriver, connectionName)
 	}
 	return nil
 }

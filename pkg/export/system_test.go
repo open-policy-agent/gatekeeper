@@ -239,3 +239,68 @@ func TestSystem_Publish(t *testing.T) {
 		})
 	}
 }
+
+func TestSystem_closeConnection(t *testing.T) {
+	ctx := context.Background()
+
+	type args struct {
+		connectionName string
+	}
+	tests := []struct {
+		name                string
+		setup               func(*System)
+		args                args
+		wantErr             bool
+		expectConnectionDel bool
+	}{
+		{
+			name: "close existing connection with supported driver",
+			setup: func(s *System) {
+				s.connectionToDriver["conn1"] = dapr.Name
+				SupportedDrivers[dapr.Name] = dapr.FakeConn
+				_ = dapr.FakeConn.CreateConnection(ctx, "conn1", map[string]interface{}{"component": "pubsub"})
+			},
+			args:                args{connectionName: "conn1"},
+			wantErr:             false,
+			expectConnectionDel: true,
+		},
+		{
+			name: "close connection with unsupported driver",
+			setup: func(s *System) {
+				s.connectionToDriver["conn2"] = "unsupported"
+				// Do not add to SupportedDrivers
+			},
+			args:                args{connectionName: "conn2"},
+			wantErr:             false,
+			expectConnectionDel: true,
+		},
+		{
+			name: "close connection returns error from driver",
+			setup: func(s *System) {
+				s.connectionToDriver["conn3"] = testdriver.ErrName
+				SupportedDrivers[testdriver.ErrName] = testdriver.FakeErrConn
+				_ = SupportedDrivers[testdriver.ErrName].CreateConnection(ctx, "conn3", "config3")
+			},
+			args:                args{connectionName: "conn3"},
+			wantErr:             true,
+			expectConnectionDel: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewSystem()
+			if tt.setup != nil {
+				tt.setup(s)
+			}
+			err := s.closeConnection(tt.args.connectionName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("closeConnection() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			_, exists := s.connectionToDriver[tt.args.connectionName]
+			if tt.expectConnectionDel && exists {
+				t.Errorf("connection %s should have been deleted from map", tt.args.connectionName)
+			}
+		})
+	}
+}
