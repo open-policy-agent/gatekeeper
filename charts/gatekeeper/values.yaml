@@ -298,3 +298,4 @@ externalCertInjection:
 serviceAccount:
   gatekeeperAdmin:
     create: true
+extraObjects: []
