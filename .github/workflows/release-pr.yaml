@@ -106,8 +106,8 @@ jobs:
             ### Pre-Release Dependencies Check
             - [ ] **Dependabot PRs**: All open [Dependabot PRs](https://github.com/open-policy-agent/gatekeeper/pulls?q=is%3Apr+author%3Aapp%2Fdependabot) have been reviewed and merged
             - [ ] **OPA**: Updated to latest stable version from [OPA releases](https://github.com/open-policy-agent/opa/releases)
-            - [ ] **cert-controller**: Updated to latest stable version from [cert-controller releases](https://github.com/open-policy-agent/cert-controller/releases)
-            - [ ] **Constraint Framework**: Updated to latest stable version from [frameworks releases](https://github.com/open-policy-agent/frameworks/releases)
+            - [ ] **cert-controller**: Updated to latest commit from [cert-controller](https://github.com/open-policy-agent/cert-controller/)
+            - [ ] **Constraint Framework**: Updated to latest commit from [frameworks releases](https://github.com/open-policy-agent/frameworks/)
 
             ### Security Check
             - [ ] **Trivy Scan**: [Latest vulnerability scan](https://github.com/open-policy-agent/gatekeeper/actions/workflows/scan-vulns.yaml?query=branch%3Amaster) passes with no detected vulnerabilities
