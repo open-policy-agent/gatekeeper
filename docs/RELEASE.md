@@ -74,7 +74,7 @@ Before creating a release pull request, ensure the following steps are completed
    - Ensure all [Dependabot PRs](https://github.com/open-policy-agent/gatekeeper/pulls?q=is%3Apr+author%3Aapp%2Fdependabot) are reviewed and merged. This keeps dependencies up to date and secure.
 
 2. **Dependency Updates**
-   - Confirm that the following dependencies are updated to their latest stable versions:
+   - Confirm that the following dependencies are updated to their latest stable versions or commits:
      - [OPA](https://github.com/open-policy-agent/opa)
      - [cert-controller](https://github.com/open-policy-agent/cert-controller)
      - [Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/master/constraint)
