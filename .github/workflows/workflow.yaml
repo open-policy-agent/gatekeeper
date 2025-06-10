@@ -215,7 +215,7 @@ jobs:
           logs-*.json
 
   e2e_test_with_OwnerReferencesPermissionEnforcement_admission_plugin:
-    name: "Build and Test"
+    name: "[E2E] Test with OwnerReferencesPermissionEnforcement admission plugin"
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
