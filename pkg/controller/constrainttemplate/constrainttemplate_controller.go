@@ -49,6 +49,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -772,9 +773,19 @@ func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1bet
 	}
 	var err error
 	// We add the annotation as a follow-on update to be sure the timestamp is set relative to a time after the CRD is successfully created. Creating the CRD with a delay timestamp already set would not account for request latency.
-	*requeueAfter, err = r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, ct)
-	if err != nil {
-		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, err)
+	var duration time.Duration
+	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Fetch the latest version of the ConstraintTemplate before updating
+		latestCT := &v1beta1.ConstraintTemplate{}
+		if getErr := r.Get(ctx, types.NamespacedName{Name: ct.GetName()}, latestCT); getErr != nil {
+			return getErr
+		}
+		duration, err = r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, latestCT)
+		return err
+	})
+	*requeueAfter = duration
+	if retryErr != nil {
+		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, retryErr)
 	}
 	return err
 }
@@ -893,17 +904,9 @@ func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnot
 	if ct.Annotations != nil && ct.Annotations[constraint.VAPBGenerationAnnotation] == constraint.VAPBGenerationUnblocked {
 		return noRequeue, nil
 	}
-	latestCT := &v1beta1.ConstraintTemplate{}
-	err := r.Get(ctx, types.NamespacedName{Name: ct.GetName()}, latestCT)
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return time.Duration(time.Millisecond), err
-		}
-		return noRequeue, nil
-	}
 	currentTime := time.Now()
-	if latestCT.Annotations != nil && latestCT.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] != "" {
-		until := latestCT.Annotations[constraint.BlockVAPBGenerationUntilAnnotation]
+	if ct.Annotations != nil && ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] != "" {
+		until := ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation]
 		t, err := time.Parse(time.RFC3339, until)
 		if err != nil {
 			return noRequeue, err
@@ -912,16 +915,16 @@ func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnot
 		// otherwise update the annotation with the current time + wait time. This prevents clock skew from preventing generation on task reschedule.
 		if t.Before(currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second)) {
 			if t.Before(currentTime) {
-				latestCT.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationUnblocked
-				return noRequeue, r.Update(ctx, latestCT)
+				ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationUnblocked
+				return noRequeue, r.Update(ctx, ct)
 			}
 			return t.Sub(currentTime), nil
 		}
 	}
-	if latestCT.Annotations == nil {
-		latestCT.Annotations = make(map[string]string)
+	if ct.Annotations == nil {
+		ct.Annotations = make(map[string]string)
 	}
-	latestCT.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
-	latestCT.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationBlocked
-	return time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second, r.Update(ctx, latestCT)
+	ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
+	ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationBlocked
+	return time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second, r.Update(ctx, ct)
 }
