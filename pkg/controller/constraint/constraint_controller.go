@@ -76,9 +76,9 @@ const (
 var (
 	log                          = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
 	discoveryErr                 *apiutil.ErrResourceDiscoveryFailed
-	DefaultGenerateVAPB          = flag.Bool("default-create-vap-binding-for-constraints", false, "(alpha) Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
-	DefaultGenerateVAP           = flag.Bool("default-create-vap-for-templates", false, "(alpha) Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
-	DefaultWaitForVAPBGeneration = flag.Int("default-wait-for-vapb-generation", 30, "(alpha) Wait time in seconds before generating a ValidatingAdmissionPolicyBinding after a constraint CRD is created.")
+	DefaultGenerateVAPB          = flag.Bool("default-create-vap-binding-for-constraints", true, "(beta) Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
+	DefaultGenerateVAP           = flag.Bool("default-create-vap-for-templates", true, "(beta) Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
+	DefaultWaitForVAPBGeneration = flag.Int("default-wait-for-vapb-generation", 30, "(beta) Wait time in seconds before generating a ValidatingAdmissionPolicyBinding after a constraint CRD is created.")
 )
 
 var (
@@ -376,7 +376,6 @@ func shouldGenerateVAPB(defaultGenerateVAPB bool, enforcementAction util.Enforce
 		VAPEnforcementActions, err = util.ScopedActionForEP(util.VAPEnforcementPoint, instance)
 	default:
 		if defaultGenerateVAPB {
-			log.Info("Warning: Alpha flag default-create-vap-binding-for-constraints is set to true. This flag may change in the future.")
 			VAPEnforcementActions = []string{string(enforcementAction)}
 		}
 	}
@@ -423,9 +422,6 @@ func ShouldGenerateVAP(ct *templates.ConstraintTemplate) (bool, error) {
 		return false, err
 	}
 	if source.GenerateVAP == nil {
-		if *DefaultGenerateVAP {
-			log.Info("Warning: Alpha flag default-create-vap-for-templates is set to true. This flag may change in the future.")
-		}
 		return *DefaultGenerateVAP, nil
 	}
 	return *source.GenerateVAP, nil
