@@ -114,10 +114,6 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_MUTATION_STATUS_ENABLED_ARG": `{{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}`,
 
-	"- HELMSUBST_DEPLOYMENT_AUDIT_DEFAULT_WAIT_VAPB_GENERATION": `{{ if hasKey .Values "defaultWaitForVAPBGeneration"}}
-        - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
-        {{- end }}`,
-
 	"- HELMSUBST_DEPLOYMENT_AUDIT_VIOLATION_EXPORT_ARGS": `{{ if hasKey .Values "enableViolationExport" }}
         - --enable-violation-export={{ .Values.enableViolationExport }}
         {{- end }}
@@ -326,5 +322,10 @@ var replacements = map[string]string{
 	"- HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS": `
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
+        {{- end }}`,
+
+  "- HELMSUBST_DEPLOYMENT_DEFAULT_WAIT_VAPB_GENERATION": `
+        {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
+        - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}`,
 }
