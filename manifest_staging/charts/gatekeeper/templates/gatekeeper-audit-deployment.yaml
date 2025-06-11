@@ -105,7 +105,8 @@ spec:
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}
-        {{ if hasKey .Values "defaultWaitForVAPBGeneration"}}
+        
+        {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
         - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}
         command:

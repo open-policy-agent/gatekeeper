@@ -76,14 +76,14 @@ const (
 var (
 	log                          = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
 	discoveryErr                 *apiutil.ErrResourceDiscoveryFailed
-	DefaultGenerateVAPB          = flag.Bool("default-create-vap-binding-for-constraints", false, "(alpha) Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
-	DefaultGenerateVAP           = flag.Bool("default-create-vap-for-templates", false, "(alpha) Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
-	DefaultWaitForVAPBGeneration = flag.Int("default-wait-for-vapb-generation", 30, "(alpha) Wait time in seconds before generating a ValidatingAdmissionPolicyBinding after a constraint CRD is created.")
+	DefaultGenerateVAPB          = flag.Bool("default-create-vap-binding-for-constraints", true, "(beta) Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
+	DefaultGenerateVAP           = flag.Bool("default-create-vap-for-templates", true, "(beta) Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
+	DefaultWaitForVAPBGeneration = flag.Int("default-wait-for-vapb-generation", 30, "(beta) Wait time in seconds before generating a ValidatingAdmissionPolicyBinding after a constraint CRD is created.")
 )
 
 var (
-	ErrValidatingAdmissionPolicyAPIDisabled = errors.New("ValidatingAdmissionPolicy API is not enabled")
-	ErrVAPConditionsNotSatisfied            = errors.New("Conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
+	ErrValidatingAdmissionPolicyAPIDisabled = errors.New("validatingAdmissionPolicy API is not enabled")
+	ErrVAPConditionsNotSatisfied            = errors.New("conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
 )
 
 type Adder struct {
@@ -256,8 +256,8 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		deleted = true
 		instance = &unstructured.Unstructured{}
 		instance.SetGroupVersionKind(gvk)
-		instance.SetNamespace(unpackedRequest.NamespacedName.Namespace)
-		instance.SetName(unpackedRequest.NamespacedName.Name)
+		instance.SetNamespace(unpackedRequest.Namespace)
+		instance.SetName(unpackedRequest.Name)
 	}
 
 	deleted = deleted || !instance.GetDeletionTimestamp().IsZero()
@@ -376,7 +376,6 @@ func shouldGenerateVAPB(defaultGenerateVAPB bool, enforcementAction util.Enforce
 		VAPEnforcementActions, err = util.ScopedActionForEP(util.VAPEnforcementPoint, instance)
 	default:
 		if defaultGenerateVAPB {
-			log.Info("Warning: Alpha flag default-create-vap-binding-for-constraints is set to true. This flag may change in the future.")
 			VAPEnforcementActions = []string{string(enforcementAction)}
 		}
 	}
@@ -423,9 +422,6 @@ func ShouldGenerateVAP(ct *templates.ConstraintTemplate) (bool, error) {
 		return false, err
 	}
 	if source.GenerateVAP == nil {
-		if *DefaultGenerateVAP {
-			log.Info("Warning: Alpha flag default-create-vap-for-templates is set to true. This flag may change in the future.")
-		}
 		return *DefaultGenerateVAP, nil
 	}
 	return *source.GenerateVAP, nil
@@ -687,7 +683,7 @@ func getRunTimeVAPBinding(gvk *schema.GroupVersion, transformedVapBinding *admis
 	if gvk.Version == "v1" {
 		v1CurrentVAPBinding, ok := currentVapBinding.(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
 		if !ok {
-			return nil, errors.New("Unable to convert to v1 VAP")
+			return nil, errors.New("unable to convert to v1 VAP")
 		}
 		v1CurrentVAPBinding = v1CurrentVAPBinding.DeepCopy()
 		tempVAPBinding, err := v1beta1ToV1(transformedVapBinding)
@@ -699,7 +695,7 @@ func getRunTimeVAPBinding(gvk *schema.GroupVersion, transformedVapBinding *admis
 	}
 	v1beta1VAPBinding, ok := currentVapBinding.(*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding)
 	if !ok {
-		return nil, errors.New("Unable to convert to v1beta1 VAP")
+		return nil, errors.New("unable to convert to v1beta1 VAP")
 	}
 	v1beta1VAPBinding.Spec = transformedVapBinding.Spec
 	return v1beta1VAPBinding.DeepCopy(), nil
