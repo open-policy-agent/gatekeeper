@@ -61,7 +61,7 @@ func (f *fakeCacheInformer) AddEventHandlerWithResyncPeriod(h kcache.ResourceEve
 }
 
 func (f *fakeCacheInformer) AddEventHandlerWithOptions(h kcache.ResourceEventHandler, _ kcache.HandlerOptions) (kcache.ResourceEventHandlerRegistration, error) {
-    return f.AddEventHandler(h)
+	return f.AddEventHandler(h)
 }
 
 func (f *fakeCacheInformer) AddIndexers(_ kcache.Indexers) error {
