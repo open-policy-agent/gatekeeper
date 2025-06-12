@@ -11,8 +11,6 @@ import (
 	"github.com/open-policy-agent/opa/v1/ast"
 )
 
-var configStringTerm = ast.StringTerm("config")
-
 var nothingResolver ast.Resolver = illegalResolver{}
 
 func builtinOPARuntime(bctx BuiltinContext, _ []*ast.Term, iter func(*ast.Term) error) error {
@@ -21,14 +19,14 @@ func builtinOPARuntime(bctx BuiltinContext, _ []*ast.Term, iter func(*ast.Term) 
 		return iter(ast.InternedEmptyObject)
 	}
 
-	if bctx.Runtime.Get(configStringTerm) != nil {
+	if bctx.Runtime.Get(ast.InternedStringTerm("config")) != nil {
 		iface, err := ast.ValueToInterface(bctx.Runtime.Value, nothingResolver)
 		if err != nil {
 			return err
 		}
-		if object, ok := iface.(map[string]interface{}); ok {
+		if object, ok := iface.(map[string]any); ok {
 			if cfgRaw, ok := object["config"]; ok {
-				if config, ok := cfgRaw.(map[string]interface{}); ok {
+				if config, ok := cfgRaw.(map[string]any); ok {
 					configPurged, err := activeConfig(config)
 					if err != nil {
 						return err
@@ -51,7 +49,7 @@ func init() {
 	RegisterBuiltinFunc(ast.OPARuntime.Name, builtinOPARuntime)
 }
 
-func activeConfig(config map[string]interface{}) (interface{}, error) {
+func activeConfig(config map[string]any) (any, error) {
 
 	if config["services"] != nil {
 		err := removeServiceCredentials(config["services"])
@@ -70,10 +68,10 @@ func activeConfig(config map[string]interface{}) (interface{}, error) {
 	return config, nil
 }
 
-func removeServiceCredentials(x interface{}) error {
+func removeServiceCredentials(x any) error {
 
 	switch x := x.(type) {
-	case []interface{}:
+	case []any:
 		for _, v := range x {
 			err := removeKey(v, "credentials")
 			if err != nil {
@@ -81,7 +79,7 @@ func removeServiceCredentials(x interface{}) error {
 			}
 		}
 
-	case map[string]interface{}:
+	case map[string]any:
 		for _, v := range x {
 			err := removeKey(v, "credentials")
 			if err != nil {
@@ -95,10 +93,10 @@ func removeServiceCredentials(x interface{}) error {
 	return nil
 }
 
-func removeCryptoKeys(x interface{}) error {
+func removeCryptoKeys(x any) error {
 
 	switch x := x.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		for _, v := range x {
 			err := removeKey(v, "key", "private_key")
 			if err != nil {
@@ -112,8 +110,8 @@ func removeCryptoKeys(x interface{}) error {
 	return nil
 }
 
-func removeKey(x interface{}, keys ...string) error {
-	val, ok := x.(map[string]interface{})
+func removeKey(x any, keys ...string) error {
+	val, ok := x.(map[string]any)
 	if !ok {
 		return errors.New("type assertion error")
 	}
@@ -127,6 +125,6 @@ func removeKey(x interface{}, keys ...string) error {
 
 type illegalResolver struct{}
 
-func (illegalResolver) Resolve(ref ast.Ref) (interface{}, error) {
+func (illegalResolver) Resolve(ref ast.Ref) (any, error) {
 	return nil, fmt.Errorf("illegal value: %v", ref)
 }
