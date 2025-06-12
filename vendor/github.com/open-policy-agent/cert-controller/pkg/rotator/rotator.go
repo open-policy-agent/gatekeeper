@@ -158,7 +158,7 @@ func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 	}
 
 	if cr.RotationCheckFrequency == time.Duration(0) {
-		cr.RotationCheckFrequency = defaultLookaheadInterval
+		cr.RotationCheckFrequency = defaultRotationCheckFrequency
 	}
 
 	if cr.ExtKeyUsages == nil {
@@ -176,6 +176,9 @@ func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 		needLeaderElection:          cr.RequireLeaderElection,
 		refreshCertIfNeededDelegate: cr.refreshCertIfNeeded,
 		fieldOwner:                  cr.FieldOwner,
+		certsMounted:                cr.certsMounted,
+		certsNotMounted:             cr.certsNotMounted,
+		enableReadinessCheck:        cr.EnableReadinessCheck,
 	}
 	if err := addController(mgr, reconciler, cr.controllerName); err != nil {
 		return err
@@ -250,6 +253,10 @@ type CertRotator struct {
 	// CertName and Keyname override certificate path
 	CertName string
 	KeyName  string
+
+	// EnableReadinessCheck if true, reconcilation loop will wait for controller-runtime's
+	// runnable to finish execution.
+	EnableReadinessCheck bool
 
 	certsMounted    chan struct{}
 	certsNotMounted chan struct{}
@@ -701,7 +708,7 @@ func reconcileSecretAndWebhookMapFunc(webhook WebhookInfo, r *ReconcileWH) func(
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func addController(mgr manager.Manager, r *ReconcileWH, controllerName string) error {
 	// Create a new controller
-	c, err := controller.NewUnmanaged(controllerName, mgr, controller.Options{Reconciler: r})
+	c, err := controller.NewUnmanaged(controllerName, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -743,6 +750,9 @@ type ReconcileWH struct {
 	needLeaderElection          bool
 	refreshCertIfNeededDelegate func() (bool, error)
 	fieldOwner                  string
+	certsMounted                chan struct{}
+	certsNotMounted             chan struct{}
+	enableReadinessCheck        bool
 }
 
 // Reconcile reads that state of the cluster for a validatingwebhookconfiguration
@@ -750,6 +760,19 @@ type ReconcileWH struct {
 func (r *ReconcileWH) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	if request.NamespacedName != r.secretKey {
 		return reconcile.Result{}, nil
+	}
+
+	if r.enableReadinessCheck {
+		select {
+		case <-r.certsMounted:
+			// Continue with reconciliation
+		case <-ctx.Done():
+			// controller-runtime will requeue with backoff strategy when this error is returned
+			return reconcile.Result{}, fmt.Errorf("context done, retrying reconciliation: %w", ctx.Err())
+		case <-r.certsNotMounted:
+			// controller-runtime will requeue with backoff strategy when this error is returned
+			return reconcile.Result{}, errors.New("certs not mounted, retrying reconciliation")
+		}
 	}
 
 	if !r.cache.WaitForCacheSync(ctx) {

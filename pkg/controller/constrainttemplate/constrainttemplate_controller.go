@@ -286,7 +286,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 				return reconcile.Result{}, err
 			}
-			if !result.Requeue {
+			if result.RequeueAfter == 0 {
 				logAction(ct, deletedAction)
 				r.metrics.registry.remove(request.NamespacedName)
 			}
@@ -381,7 +381,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return result, err
 	}
-	if !result.Requeue {
+	if result.RequeueAfter == 0 {
 		logAction(ct, action)
 		r.metrics.registry.add(request.NamespacedName, metrics.ActiveStatus)
 	}
