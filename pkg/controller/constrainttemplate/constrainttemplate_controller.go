@@ -49,6 +49,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -774,9 +775,19 @@ func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1bet
 	}
 	var err error
 	// We add the annotation as a follow-on update to be sure the timestamp is set relative to a time after the CRD is successfully created. Creating the CRD with a delay timestamp already set would not account for request latency.
-	*requeueAfter, err = r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, ct)
-	if err != nil {
-		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, err)
+	var duration time.Duration
+	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Fetch the latest version of the ConstraintTemplate before updating
+		latestCT := &v1beta1.ConstraintTemplate{}
+		if getErr := r.Get(ctx, types.NamespacedName{Name: ct.GetName()}, latestCT); getErr != nil {
+			return getErr
+		}
+		duration, err = r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, latestCT)
+		return err
+	})
+	*requeueAfter = duration
+	if retryErr != nil {
+		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, retryErr)
 	}
 	return err
 }
