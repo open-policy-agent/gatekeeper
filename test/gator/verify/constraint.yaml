@@ -6,6 +6,6 @@ spec:
   match:
     kinds:
       - apiGroups: [""]
-        kinds: ["Foo"]
+        kinds: ["Foo", "Bar"]
   parameters:
     foo: "bar"
