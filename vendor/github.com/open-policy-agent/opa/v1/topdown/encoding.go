@@ -128,7 +128,7 @@ func builtinJSONUnmarshal(_ BuiltinContext, operands []*ast.Term, iter func(*ast
 		return err
 	}
 
-	var x interface{}
+	var x any
 
 	if err := util.UnmarshalJSON([]byte(str), &x); err != nil {
 		return err
@@ -169,7 +169,7 @@ func builtinBase64Decode(_ BuiltinContext, operands []*ast.Term, iter func(*ast.
 	if err != nil {
 		return err
 	}
-	return iter(ast.NewTerm(ast.String(result)))
+	return iter(ast.StringTerm(string(result)))
 }
 
 func builtinBase64IsValid(_ BuiltinContext, operands []*ast.Term, iter func(*ast.Term) error) error {
@@ -224,7 +224,7 @@ func builtinBase64UrlDecode(_ BuiltinContext, operands []*ast.Term, iter func(*a
 	if err != nil {
 		return err
 	}
-	return iter(ast.NewTerm(ast.String(result)))
+	return iter(ast.StringTerm(string(result)))
 }
 
 func builtinURLQueryEncode(_ BuiltinContext, operands []*ast.Term, iter func(*ast.Term) error) error {
@@ -255,7 +255,7 @@ func builtinURLQueryEncodeObject(_ BuiltinContext, operands []*ast.Term, iter fu
 		return err
 	}
 
-	inputs, ok := asJSON.(map[string]interface{})
+	inputs, ok := asJSON.(map[string]any)
 	if !ok {
 		return builtins.NewOperandTypeErr(1, operands[0].Value, "object")
 	}
@@ -266,7 +266,7 @@ func builtinURLQueryEncodeObject(_ BuiltinContext, operands []*ast.Term, iter fu
 		switch vv := v.(type) {
 		case string:
 			query.Set(k, vv)
-		case []interface{}:
+		case []any:
 			for _, val := range vv {
 				strVal, ok := val.(string)
 				if !ok {
@@ -340,7 +340,7 @@ func builtinYAMLUnmarshal(_ BuiltinContext, operands []*ast.Term, iter func(*ast
 
 	buf := bytes.NewBuffer(bs)
 	decoder := util.NewJSONDecoder(buf)
-	var val interface{}
+	var val any
 	err = decoder.Decode(&val)
 	if err != nil {
 		return err
@@ -358,7 +358,7 @@ func builtinYAMLIsValid(_ BuiltinContext, operands []*ast.Term, iter func(*ast.T
 		return iter(ast.InternedBooleanTerm(false))
 	}
 
-	var x interface{}
+	var x any
 	err = yaml.Unmarshal([]byte(str), &x)
 	return iter(ast.InternedBooleanTerm(err == nil))
 }
@@ -380,7 +380,7 @@ func builtinHexDecode(_ BuiltinContext, operands []*ast.Term, iter func(*ast.Ter
 	if err != nil {
 		return err
 	}
-	return iter(ast.NewTerm(ast.String(val)))
+	return iter(ast.StringTerm(string(val)))
 }
 
 func init() {
