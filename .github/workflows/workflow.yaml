@@ -213,3 +213,60 @@ jobs:
         name: generatorexpansion-logs
         path: |
           logs-*.json
+
+  e2e_test_with_OwnerReferencesPermissionEnforcement_admission_plugin:
+    name: "[E2E] Test with OwnerReferencesPermissionEnforcement admission plugin"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: "1.24"
+          check-latest: true
+
+      - name: Bootstrap e2e
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+          make e2e-bootstrap KIND_CLUSTER_FILE=test/bats/tests/kindcluster.yml
+
+      - name: Run e2e
+        run: |
+          make docker-buildx \
+            IMG=gatekeeper-e2e:latest
+
+          make e2e-build-load-externaldata-image
+
+          kind load docker-image --name kind \
+            gatekeeper-e2e:latest
+
+          make deploy \
+            IMG=gatekeeper-e2e:latest \
+            USE_LOCAL_IMG=true \
+            GENERATE_VAP=true \
+            GENERATE_VAPBINDING=true
+
+          make test-e2e-owner-ref
+
+      - name: Save logs
+        if: ${{ always() }}
+        run: |
+          kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-controller.json
+          kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ always() }}
+        with:
+          name: logs-${{ matrix.KUBERNETES_VERSION }}
+          path: |
+            logs-*.json
