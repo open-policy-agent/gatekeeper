@@ -17,7 +17,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/gomega v1.37.0
 	github.com/open-policy-agent/cert-controller v0.13.1-0.20250604223059-239911156644
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20250519192110-ca0eb7929d25
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20250612181134-b8f48aa119d0
 	github.com/open-policy-agent/opa v1.5.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.22.0
@@ -162,5 +162,3 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 )
-
-replace github.com/open-policy-agent/frameworks/constraint => /mount/d/go/src/github.com/open-policy-agent/frameworks/constraint
