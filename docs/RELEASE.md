@@ -5,6 +5,7 @@
 The release process consists of three phases: versioning, building, and publishing.
 
 Versioning involves maintaining the following files:
+
 - **Makefile** - the Makefile contains a VERSION variable that defines the version of the project.
 - **manager.yaml** - the controller-manager deployment yaml contains the latest release tag image of the project.
 - **gatekeeper.yaml** - the gatekeeper.yaml contains all gatekeeper resources to be deployed to a cluster including the latest release tag image of the project.
@@ -20,6 +21,7 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 There is an optional script for cherry-picking PRs that should make the process easier.
 
 Prerequisites:
+
 - `hub` binary is installed. If not, `hub` can be installed by `go get github.com/github/hub`.
 - Set GitHub username with `export GITHUB_USER=<your GitHub username>`
 - Set fork remote with `export FORK_REMOTE=<your fork remote name, by default it is "origin">`
@@ -64,16 +66,34 @@ Before we cut a release, we need to create a release pull request against the HE
 
 During the workflow, it will create the release manifests, promote the manifests from `manifest_staging/charts` and `manifest_staging/deploy` to `charts` and `deploy` folders respectively, and create the release pull request on behalf of the release author.
 
+## Additional Pre-Release Checklist
+
+Before creating a release pull request, ensure the following steps are completed:
+
+1. **Dependabot PRs**
+   - Ensure all [Dependabot PRs](https://github.com/open-policy-agent/gatekeeper/pulls?q=is%3Apr+author%3Aapp%2Fdependabot) are reviewed and merged. This keeps dependencies up to date and secure.
+
+2. **Dependency Updates**
+   - Confirm that the following dependencies are updated to their latest stable versions or commits:
+     - [OPA](https://github.com/open-policy-agent/opa)
+     - [cert-controller](https://github.com/open-policy-agent/cert-controller)
+     - [Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/master/constraint)
+   - Reference the relevant repositories and check for new releases.
+
+3. **Vulnerability Scanning**
+   - Ensure [Trivy](https://github.com/aquasecurity/trivy) scans are passing and no vulnerabilities are detected in the latest CI run.
+   - Review the [latest Trivy scan results](https://github.com/open-policy-agent/gatekeeper/actions/workflows/scan-vulns.yaml?query=branch%3Amaster) before proceeding.
+
 ## Building and releasing
 
 1. Once the release pull request is merged to `master` or `release` branch (`<BRANCH NAME>` below), tag that commit with release version and push tags to remote repository.
 
-	```
-	git checkout <BRANCH NAME>
-	git pull origin <BRANCH NAME>
-	git tag -a <NEW VERSION> -m '<NEW VERSION>'
-	git push origin <NEW VERSION>
-	```
+```shell
+git checkout <BRANCH NAME>
+git pull origin <BRANCH NAME>
+git tag -a <NEW VERSION> -m '<NEW VERSION>'
+git push origin <NEW VERSION>
+```
 
 1. Pushing the release tag will trigger GitHub Actions to trigger `tagged-release` job.
 This will build the `openpolicyagent/gatekeeper` image automatically, then publish the new release image tag and the `latest` image tag to the `openpolicyagent/gatekeeper` repository. Finally, verify step will run e2e tests to verify the newly released tag.
