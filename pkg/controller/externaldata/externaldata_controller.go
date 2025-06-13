@@ -111,7 +111,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		deleted = true
 		provider = &externaldatav1beta1.Provider{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: request.NamespacedName.Name,
+				Name: request.Name,
 			},
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Provider",

@@ -82,8 +82,8 @@ var (
 )
 
 var (
-	ErrValidatingAdmissionPolicyAPIDisabled = errors.New("ValidatingAdmissionPolicy API is not enabled")
-	ErrVAPConditionsNotSatisfied            = errors.New("Conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
+	ErrValidatingAdmissionPolicyAPIDisabled = errors.New("validatingAdmissionPolicy API is not enabled")
+	ErrVAPConditionsNotSatisfied            = errors.New("conditions are not satisfied to generate ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding")
 )
 
 type Adder struct {
@@ -256,8 +256,8 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		deleted = true
 		instance = &unstructured.Unstructured{}
 		instance.SetGroupVersionKind(gvk)
-		instance.SetNamespace(unpackedRequest.NamespacedName.Namespace)
-		instance.SetName(unpackedRequest.NamespacedName.Name)
+		instance.SetNamespace(unpackedRequest.Namespace)
+		instance.SetName(unpackedRequest.Name)
 	}
 
 	deleted = deleted || !instance.GetDeletionTimestamp().IsZero()
@@ -687,7 +687,7 @@ func getRunTimeVAPBinding(gvk *schema.GroupVersion, transformedVapBinding *admis
 	if gvk.Version == "v1" {
 		v1CurrentVAPBinding, ok := currentVapBinding.(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
 		if !ok {
-			return nil, errors.New("Unable to convert to v1 VAP")
+			return nil, errors.New("unable to convert to v1 VAP")
 		}
 		v1CurrentVAPBinding = v1CurrentVAPBinding.DeepCopy()
 		tempVAPBinding, err := v1beta1ToV1(transformedVapBinding)
@@ -699,7 +699,7 @@ func getRunTimeVAPBinding(gvk *schema.GroupVersion, transformedVapBinding *admis
 	}
 	v1beta1VAPBinding, ok := currentVapBinding.(*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding)
 	if !ok {
-		return nil, errors.New("Unable to convert to v1beta1 VAP")
+		return nil, errors.New("unable to convert to v1beta1 VAP")
 	}
 	v1beta1VAPBinding.Spec = transformedVapBinding.Spec
 	return v1beta1VAPBinding.DeepCopy(), nil

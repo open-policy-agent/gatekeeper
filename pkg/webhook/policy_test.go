@@ -14,7 +14,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -1022,11 +1021,11 @@ func TestValidateConfigResource(t *testing.T) {
 			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Name: tt.rName,
-					Kind: metav1.GroupVersionKind(configv1alpha1.GroupVersion.WithKind("Config")),
+					Kind: metav1.GroupVersionKind(v1alpha1.GroupVersion.WithKind("Config")),
 				},
 			}
 			if tt.deleteOp {
-				req.AdmissionRequest.Operation = admissionv1.Delete
+				req.Operation = admissionv1.Delete
 			}
 
 			_, err := handler.validateGatekeeperResources(context.Background(), req)

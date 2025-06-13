@@ -108,7 +108,7 @@ func Test_ObjectTracker_Terminated_Expect(t *testing.T) {
 	ot := newObjTracker(schema.GroupVersionKind{}, nil)
 	ct := makeCT("test-ct")
 	now := metav1.Now()
-	ct.ObjectMeta.DeletionTimestamp = &now
+	ct.DeletionTimestamp = &now
 	ot.Expect(ct)
 	ot.ExpectationsDone()
 	if !ot.Satisfied() {

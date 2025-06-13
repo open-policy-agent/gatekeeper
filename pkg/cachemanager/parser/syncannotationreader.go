@@ -38,8 +38,8 @@ type GVKClause struct {
 // ReadSyncRequirements parses the sync requirements from a
 // constraint template.
 func ReadSyncRequirements(t *templates.ConstraintTemplate) (SyncRequirements, error) {
-	if t.ObjectMeta.Annotations != nil {
-		if annotation, exists := t.ObjectMeta.Annotations[SyncAnnotationName]; exists {
+	if t.Annotations != nil {
+		if annotation, exists := t.Annotations[SyncAnnotationName]; exists {
 			annotation = strings.Trim(annotation, "\n\"")
 			compactSyncRequirements := CompactSyncRequirements{}
 			decoder := json.NewDecoder(strings.NewReader(annotation))
