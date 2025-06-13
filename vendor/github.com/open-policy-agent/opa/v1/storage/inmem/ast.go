@@ -28,7 +28,7 @@ func (u *updateAST) Remove() bool {
 	return u.remove
 }
 
-func (u *updateAST) Set(v interface{}) {
+func (u *updateAST) Set(v any) {
 	if v, ok := v.(ast.Value); ok {
 		u.value = v
 	} else {
@@ -36,7 +36,7 @@ func (u *updateAST) Set(v interface{}) {
 	}
 }
 
-func (u *updateAST) Value() interface{} {
+func (u *updateAST) Value() any {
 	return u.value
 }
 
@@ -46,7 +46,7 @@ func (u *updateAST) Relative(path storage.Path) dataUpdate {
 	return &cpy
 }
 
-func (u *updateAST) Apply(v interface{}) interface{} {
+func (u *updateAST) Apply(v any) any {
 	if len(u.path) == 0 {
 		return u.value
 	}
@@ -72,7 +72,7 @@ func (u *updateAST) Apply(v interface{}) interface{} {
 	return newV
 }
 
-func newUpdateAST(data interface{}, op storage.PatchOp, path storage.Path, idx int, value ast.Value) (*updateAST, error) {
+func newUpdateAST(data any, op storage.PatchOp, path storage.Path, idx int, value ast.Value) (*updateAST, error) {
 
 	switch data.(type) {
 	case ast.Null, ast.Boolean, ast.Number, ast.String:
@@ -154,7 +154,7 @@ func newUpdateArrayAST(data *ast.Array, op storage.PatchOp, path storage.Path, i
 }
 
 func newUpdateObjectAST(data ast.Object, op storage.PatchOp, path storage.Path, idx int, value ast.Value) (*updateAST, error) {
-	key := ast.StringTerm(path[idx])
+	key := ast.InternedStringTerm(path[idx])
 	val := data.Get(key)
 
 	if idx == len(path)-1 {
@@ -174,7 +174,7 @@ func newUpdateObjectAST(data ast.Object, op storage.PatchOp, path storage.Path, 
 	return nil, errors.NewNotFoundError(path)
 }
 
-func interfaceToValue(v interface{}) (ast.Value, error) {
+func interfaceToValue(v any) (ast.Value, error) {
 	if v, ok := v.(ast.Value); ok {
 		return v, nil
 	}
@@ -200,7 +200,7 @@ func setInAst(data ast.Value, path storage.Path, value ast.Value) (ast.Value, er
 }
 
 func setInAstObject(obj ast.Object, path storage.Path, value ast.Value) (ast.Value, error) {
-	key := ast.StringTerm(path[0])
+	key := ast.InternedStringTerm(path[0])
 
 	if len(path) == 1 {
 		obj.Insert(key, ast.NewTerm(value))
@@ -256,7 +256,7 @@ func removeInAst(value ast.Value, path storage.Path) (ast.Value, error) {
 }
 
 func removeInAstObject(obj ast.Object, path storage.Path) (ast.Value, error) {
-	key := ast.StringTerm(path[0])
+	key := ast.InternedStringTerm(path[0])
 
 	if len(path) == 1 {
 		var items [][2]*ast.Term
