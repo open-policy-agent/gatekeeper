@@ -104,7 +104,7 @@ patchesJson6902:
       group: apiextensions.k8s.io
       version: v1
       kind: CustomResourceDefinition
-      name: configpodstatuses.status.gatekeeper.sh
+      name: connectionpodstatuses.status.gatekeeper.sh
     path: labels_patch.yaml
   # these are defined in the chart values rather than hard-coded
   - target:
