@@ -39,7 +39,7 @@ func TestReconcile_E2E(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	mgr, _ := testutils.SetupManager(t, cfg)
 	k8sClient := testclient.NewRetryClient(mgr.GetClient())
-	getPod := func(ctx context.Context) (*corev1.Pod, error) {
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
 		pod := fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod"))
 		return pod, nil
 	}
@@ -73,7 +73,7 @@ func TestReconcile_E2E(t *testing.T) {
 
 		// Cleanup the Connection object if it exists at the end
 		defer func() {
-			k8sClient.Delete(ctx, &connObj)
+			k8sClient.Delete(ctx, &connObj) // nolint:errcheck
 		}()
 
 		// Connection object should not exist at the beginning of the test
@@ -174,7 +174,7 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 	defer cancelFunc()
 	g := gomega.NewGomegaWithT(t)
 	mgr, _ := testutils.SetupManager(t, cfg)
-	getPod := func(ctx context.Context) (*corev1.Pod, error) {
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
 		pod := fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod"))
 		return pod, nil
 	}
@@ -214,16 +214,18 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 			getPod: getPod,
 		}
 
-		// Test setup Create the connection object
-		g.Expect(directK8sClient.Create(ctx, &connObj)).Should(gomega.Succeed())
 		// Cleanup the Connection object if it exists at the end
 		defer func() {
-			directK8sClient.Delete(ctx, &connObj)
+			directK8sClient.Delete(ctx, &connObj) // nolint:errcheck
 		}()
+
+		// Test setup Create the connection object
+		g.Expect(directK8sClient.Create(ctx, &connObj)).Should(gomega.Succeed())
+
 		// Call Reconcile directly to assert the behavior on failures without having controller go through requeues
 		result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeConnectionNamespacedName})
 		// The system upsert error causes a requeue but the error doesn't get returned only the status update errors do
-		g.Expect(result.Requeue).Should(gomega.Equal(true), "Reconcile should requeue after an error")
+		g.Expect(result.Requeue).Should(gomega.Equal(true), "Reconcile should requeue after an error") // nolint:staticcheck
 		g.Expect(err).Should(gomega.BeNil(), "Reconcile should not return an error on initial creation")
 
 		// Assert the ConnectionPodStatus - Errors should be present after unsuccessful upsert
@@ -260,14 +262,14 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 		reconciler.system = fakeExportSystem
 		result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeConnectionNamespacedName})
 		// The system connection error causes a requeue but the error doesn't get returned only the status update errors do
-		g.Expect(result.Requeue).Should(gomega.Equal(true), "Reconcile should requeue after an error")
+		g.Expect(result.Requeue).Should(gomega.Equal(true), "Reconcile should requeue after an error") // nolint:staticcheck
 		g.Expect(err).Should(gomega.BeNil(), "Reconcile should not return an error on initial creation")
 		g.Expect(fakeExportSystem.UpsertConnectionCalledCount).Should(gomega.Equal(0), "UpsertConnection count")
 		g.Expect(fakeExportSystem.CloseConnectionCalledCount).Should(gomega.Equal(1), "CloseConnection count")
 		g.Expect(fakeExportSystem.PublishCalledCount).Should(gomega.Equal(0), "Publish count")
 
 		// Assert the Connection object
-		g.Eventually(func(g gomega.Gomega) bool {
+		g.Eventually(func() bool {
 			err := directK8sClient.Get(ctx, typeConnectionNamespacedName, &connObj)
 			if err != nil && apierrors.IsNotFound(err) {
 				return true
@@ -276,7 +278,7 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 		}).WithTimeout(timeout).Should(gomega.Equal(true), "Resource should not exist after deletion")
 
 		// Assert the ConnectionPodStatus object
-		g.Eventually(func(g gomega.Gomega) bool {
+		g.Eventually(func() bool {
 			err := directK8sClient.Get(ctx, typeConnectionNamespacedName, &connPodStatusObj)
 			if err != nil && apierrors.IsNotFound(err) {
 				return true
@@ -294,7 +296,7 @@ func TestReconcile_Client_Failures(t *testing.T) {
 	defer cancelFunc()
 	g := gomega.NewGomegaWithT(t)
 	mgr, _ := testutils.SetupManager(t, cfg)
-	getPod := func(ctx context.Context) (*corev1.Pod, error) {
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
 		pod := fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod"))
 		return pod, nil
 	}
@@ -339,22 +341,17 @@ func TestReconcile_Client_Failures(t *testing.T) {
 			getPod: getPod,
 		}
 
-		// Test setup - delete Connection object to ensure not already exist at the beginning of the test
-		directK8sClient.Delete(ctx, &connObj)
-		g.Eventually(func(g gomega.Gomega) bool {
-			err := directK8sClient.Get(ctx, typeConnectionNamespacedName, &connObj)
-			if err != nil && apierrors.IsNotFound(err) {
-				return true
-			}
-			return false
-		}).WithTimeout(timeout).Should(gomega.Equal(true), "Resource should not exist before creation")
+		// Cleanup the Connection object if it exists at the end
+		defer func() {
+			directK8sClient.Delete(ctx, &connObj) // nolint:errcheck
+		}()
 
 		// Test setup Create the Connection object
 		g.Expect(directK8sClient.Create(ctx, &connObj)).Should(gomega.Succeed())
 
 		// Call Reconcile directly to assert the behavior on failures without having controller go through requeues
 		result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeConnectionNamespacedName})
-		g.Expect(result.Requeue).Should(gomega.Equal(false), "Reconcile should not requeue after the GET error")
+		g.Expect(result.Requeue).Should(gomega.Equal(false), "Reconcile should not requeue after the GET error") // nolint:staticcheck
 		g.Expect(err).Should(gomega.Equal(mockErr), "Reconcile should return an error")
 	})
 }
@@ -421,7 +418,7 @@ func (f *FakeExportSystem) UpsertConnection(ctx context.Context, config interfac
 	return nil
 }
 
-func (f *FakeExportSystem) CloseConnection(connectionName string) error {
+func (f *FakeExportSystem) CloseConnection(_ string) error {
 	f.CloseConnectionCalledCount++
 	if f.CloseConnectionError != nil {
 		return f.CloseConnectionError

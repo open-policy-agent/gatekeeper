@@ -676,7 +676,7 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+		t.Run(test.name, func(_ *testing.T) {
 			if err := apis.AddToScheme(scheme.Scheme); err != nil {
 				g.Expect(err).ToNot(gomega.HaveOccurred(), "Failed to add scheme")
 			}
@@ -702,7 +702,8 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 					}},
 				},
 			}
-			client.Create(context.Background(), &connObj)
+
+			g.Expect(client.Create(context.Background(), &connObj)).Should(gomega.Succeed(), "Failed to create Connection object")
 
 			// Validate the operation is idempotent by re-running
 			for i := 0; i < 2; i++ {
@@ -722,7 +723,7 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 				g.Expect(connPodStatus.Status.Active).To(gomega.Equal(test.wantActiveConn), "Active status unexpected")
 				g.Expect(len(connPodStatus.Status.Errors)).To(gomega.Equal(len(test.errorsMap)), "Length of errors unexpected")
 				expected := make([]*statusv1beta1.ConnectionError, 0, len(test.errorsMap))
-				for key, _ := range test.errorsMap {
+				for key := range test.errorsMap {
 					expected = append(expected, &statusv1beta1.ConnectionError{
 						Type:    statusv1beta1.PublishError,
 						Message: key,

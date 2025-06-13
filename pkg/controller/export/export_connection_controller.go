@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/connectionstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
@@ -15,7 +14,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -122,19 +120,19 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	err = c.Watch(
 		source.Kind(
-			mgr.GetCache(), &v1beta1.ConnectionPodStatus{},
+			mgr.GetCache(), &statusv1beta1.ConnectionPodStatus{},
 			handler.TypedEnqueueRequestsFromMapFunc(connectionstatus.PodStatusToConnectionMapper(true)),
-			predicate.TypedFuncs[*v1beta1.ConnectionPodStatus]{
-				CreateFunc: func(e event.TypedCreateEvent[*v1beta1.ConnectionPodStatus]) bool {
+			predicate.TypedFuncs[*statusv1beta1.ConnectionPodStatus]{
+				CreateFunc: func(e event.TypedCreateEvent[*statusv1beta1.ConnectionPodStatus]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				UpdateFunc: func(e event.TypedUpdateEvent[*v1beta1.ConnectionPodStatus]) bool {
+				UpdateFunc: func(e event.TypedUpdateEvent[*statusv1beta1.ConnectionPodStatus]) bool {
 					return e.ObjectNew.GetNamespace() == util.GetNamespace()
 				},
-				DeleteFunc: func(e event.TypedDeleteEvent[*v1beta1.ConnectionPodStatus]) bool {
+				DeleteFunc: func(e event.TypedDeleteEvent[*statusv1beta1.ConnectionPodStatus]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				GenericFunc: func(e event.TypedGenericEvent[*v1beta1.ConnectionPodStatus]) bool {
+				GenericFunc: func(e event.TypedGenericEvent[*statusv1beta1.ConnectionPodStatus]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
 			},
@@ -162,7 +160,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	connObj := &connectionv1alpha1.Connection{}
 	err := r.reader.Get(ctx, request.NamespacedName, connObj)
 	if err != nil {
-		if !k8serrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
 		deleted = true
@@ -171,10 +169,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if deleted {
 		err := r.system.CloseConnection(request.Name)
 		if err != nil {
-			return reconcile.Result{Requeue: true}, deleteStatus(ctx, r.reader, r.writer, request.Namespace, request.Name, r.getPod)
+			return reconcile.Result{Requeue: true}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
 		}
 		log.Info("removed connection", "name", request.Name)
-		return reconcile.Result{}, deleteStatus(ctx, r.reader, r.writer, request.Namespace, request.Name, r.getPod)
+		return reconcile.Result{}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
 	}
 
 	err = r.system.UpsertConnection(ctx, connObj.Spec.Config.Value, request.Name, connObj.Spec.Driver)
@@ -260,7 +258,6 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 }
 
 func deleteStatus(ctx context.Context,
-	reader client.Reader,
 	writer client.Writer,
 	connectionNamespace string,
 	connectionName string,

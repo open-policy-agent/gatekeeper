@@ -79,7 +79,7 @@ func PodStatusToConnectionMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.Co
 		labels := obj.GetLabels()
 		connObjName, ok := labels[v1beta1.ConnectionNameLabel]
 		if !ok {
-			log.Error(fmt.Errorf("Connection status resource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a connection status resource")
+			log.Error(fmt.Errorf("connection status resource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a connection status resource")
 			return nil
 		}
 		if selfOnly {
