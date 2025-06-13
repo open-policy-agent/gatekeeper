@@ -31,7 +31,7 @@ func TestReconcile_E2E_Success(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	mgr, _ := testutils.SetupManager(t, cfg)
 	k8sClient := testclient.NewRetryClient(mgr.GetClient())
-	getPod := func(ctx context.Context) (*corev1.Pod, error) {
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
 		pod := fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod"))
 		return pod, nil
 	}
@@ -69,7 +69,7 @@ func TestReconcile_E2E_Success(t *testing.T) {
 		g.Expect(k8sClient.Create(ctx, &connObj)).Should(gomega.Succeed())
 
 		// Await for the reconcile request to finish
-		g.Eventually(func(g gomega.Gomega) bool {
+		g.Eventually(func() bool {
 			// Use the Connection object for Reconcile request because of the Connection mapper
 			expectedReq := reconcile.Request{NamespacedName: typeConnectionNamespacedName}
 			_, finished := requests.Load(expectedReq)
@@ -110,7 +110,7 @@ func TestReconcile_E2E_Success(t *testing.T) {
 		g.Expect(k8sClient.Create(ctx, &connPodStatusObj)).Should(gomega.Succeed(), "Creating the connection pod status object should succeed")
 
 		// Await for the reconcile request to finish
-		g.Eventually(func(g gomega.Gomega) bool {
+		g.Eventually(func() bool {
 			// Use the Connection object for Reconcile request because of the Connection mapper
 			expectedReq := reconcile.Request{NamespacedName: typeConnectionNamespacedName}
 			_, finished := requests.Load(expectedReq)
@@ -153,7 +153,7 @@ func TestReconcile_E2E_Success(t *testing.T) {
 		g.Expect(k8sClient.Update(ctx, &connPodStatusObj)).Should(gomega.Succeed(), "Updating the ConnectionPodStatus object should succeed")
 
 		// Await for the reconcile request to finish
-		g.Eventually(func(g gomega.Gomega) bool {
+		g.Eventually(func() bool {
 			expectedReq := reconcile.Request{NamespacedName: typeConnectionNamespacedName}
 			_, finished := requests.Load(expectedReq)
 			return finished
@@ -174,7 +174,7 @@ func TestReconcile_E2E_Success(t *testing.T) {
 		// Test Delete of the Connection object
 		g.Expect(k8sClient.Delete(ctx, &connObj)).Should(gomega.Succeed(), "Deleting the connection object should succeed")
 		// If Connection object deleted the pod status not necessarily deleted it wil persist
-		g.Eventually(func(g gomega.Gomega) bool {
+		g.Eventually(func() bool {
 			err := k8sClient.Get(ctx, typeConnectionPodStatusNamespacedName, &connPodStatusObj)
 			if err != nil && apierrors.IsNotFound(err) {
 				return true

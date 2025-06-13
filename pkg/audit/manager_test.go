@@ -631,7 +631,7 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 	// Setup
 	require.NoError(t, flag.CommandLine.Parse([]string{"--enable-violation-export", "true"}))
 	g := gomega.NewGomegaWithT(t)
-	getPod := func(ctx context.Context) (*corev1.Pod, error) {
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
 		pod := fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod"))
 		return pod, nil
 	}

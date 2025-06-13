@@ -402,7 +402,7 @@ type FakeExportSystem struct {
 	CloseConnectionError        error
 }
 
-func (f *FakeExportSystem) Publish(ctx context.Context, connectionName string, subject string, msg interface{}) error {
+func (f *FakeExportSystem) Publish(_ context.Context, _ string, _ string, _ interface{}) error {
 	f.PublishCalledCount++
 	if f.PublishError != nil {
 		return f.PublishError
@@ -410,7 +410,7 @@ func (f *FakeExportSystem) Publish(ctx context.Context, connectionName string, s
 	return nil
 }
 
-func (f *FakeExportSystem) UpsertConnection(ctx context.Context, config interface{}, connectionName string, newDriver string) error {
+func (f *FakeExportSystem) UpsertConnection(_ context.Context, _ interface{}, _ string, _ string) error {
 	f.UpsertConnectionCalledCount++
 	if f.UpsertConnectionError != nil {
 		return f.UpsertConnectionError
