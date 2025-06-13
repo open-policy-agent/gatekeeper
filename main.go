@@ -36,6 +36,7 @@ import (
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	api "github.com/open-policy-agent/gatekeeper/v3/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
 	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
 	expansionv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1beta1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1alpha1"
@@ -130,6 +131,7 @@ func init() {
 	_ = mutationsv1beta1.AddToScheme(scheme)
 	_ = expansionv1alpha1.AddToScheme(scheme)
 	_ = expansionv1beta1.AddToScheme(scheme)
+	_ = connectionv1alpha1.AddToScheme(scheme)
 
 	// +kubebuilder:scaffold:scheme
 	flag.Var(disabledBuiltins, "disable-opa-builtin", "disable opa built-in function, this flag can be declared more than once.")
@@ -547,6 +549,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 			CacheLister:     auditCache,
 			ExpansionSystem: expansionSystem,
 			ExportSystem:    exportSystem,
+			GetPod:          opts.GetPod,
 		}
 		if err := audit.AddToManager(mgr, &auditDeps); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")

@@ -1,0 +1,10 @@
+apiVersion: connection.gatekeeper.sh/v1alpha1
+kind: Connection
+metadata:
+  name: audit-connection
+  namespace: gatekeeper-system
+spec:
+  driver: "disk"
+  config:
+    path: "/tmp/violations"
+    maxAuditResults: 3
