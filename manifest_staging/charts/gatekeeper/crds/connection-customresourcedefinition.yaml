@@ -5,11 +5,7 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
     gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
   name: connections.connection.gatekeeper.sh
 spec:
   group: connection.gatekeeper.sh
