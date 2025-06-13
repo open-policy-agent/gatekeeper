@@ -14,6 +14,8 @@ resources:
 - bases/mutations.gatekeeper.sh_assignmetadata.yaml
 - bases/mutations.gatekeeper.sh_modifyset.yaml
 - bases/expansion.gatekeeper.sh_expansiontemplate.yaml
+- bases/status.gatekeeper.sh_connectionpodstatuses.yaml
+- bases/connection.gatekeeper.sh_connections.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 bases:
@@ -76,6 +78,9 @@ patchesStrategicMerge:
 #- patches/webhook_in_constrainttemplatepodstatuses.yaml
 #- patches/webhook_in_assignmetadata.yaml
 #- patches/webhook_in_assign.yaml
+#- patches/webhook_in_connections.yaml
+#- patches/webhook_in_connectionpodstatusstatuses.yaml
+#- patches/webhook_in_connectionpodstatuses.yaml
 # +kubebuilder:scaffold:crdkustomizewebhookpatch
 
 # [CERTMANAGER] To enable webhook, uncomment all the sections with [CERTMANAGER] prefix.
@@ -85,6 +90,9 @@ patchesStrategicMerge:
 #- patches/cainjection_in_constrainttemplatepodstatuses.yaml
 #- patches/cainjection_in_assignmetadata.yaml
 #- patches/cainjection_in_assign.yaml
+#- patches/cainjection_in_connections.yaml
+#- patches/cainjection_in_connectionpodstatusstatuses.yaml
+#- patches/cainjection_in_connectionpodstatuses.yaml
 # +kubebuilder:scaffold:crdkustomizecainjectionpatch
 
 # the following config is for teaching kustomize how to do kustomization for CRDs.

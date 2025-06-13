@@ -1,0 +1,24 @@
+# permissions for end users to edit connections.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: connection-editor-role
+rules:
+- apiGroups:
+  - connection.gatekeeper.sh
+  resources:
+  - connections
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - connection.gatekeeper.sh
+  resources:
+  - connections/status
+  verbs:
+  - get
