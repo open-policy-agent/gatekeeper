@@ -176,7 +176,7 @@ func dial(ctx context.Context, fn func(context.Context, string) (net.Conn, error
 		return fn(ctx, address)
 	}
 	if !ok {
-		networkType, address = ParseDialTarget(address)
+		networkType, address = parseDialTarget(address)
 	}
 	if opts, present := proxyattributes.Get(addr); present {
 		return proxyDial(ctx, addr, grpcUA, opts)
@@ -1390,8 +1390,7 @@ func (t *http2Client) handleGoAway(f *http2.GoAwayFrame) error {
 // the caller.
 func (t *http2Client) setGoAwayReason(f *http2.GoAwayFrame) {
 	t.goAwayReason = GoAwayNoReason
-	switch f.ErrCode {
-	case http2.ErrCodeEnhanceYourCalm:
+	if f.ErrCode == http2.ErrCodeEnhanceYourCalm {
 		if string(f.DebugData()) == "too_many_pings" {
 			t.goAwayReason = GoAwayTooManyPings
 		}
