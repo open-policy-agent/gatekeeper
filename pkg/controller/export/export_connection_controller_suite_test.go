@@ -64,7 +64,9 @@ func TestMain(m *testing.M) {
 		stdlog.Printf("creating namespace: %v", err)
 	}
 
-	flag.CommandLine.Parse([]string{"--enable-violation-export", "true"})
+	if err := flag.CommandLine.Parse([]string{"--enable-violation-export", "true"}); err != nil {
+		stdlog.Fatal(err)
+	}
 
 	code := m.Run()
 	if err = testEnv.Stop(); err != nil {

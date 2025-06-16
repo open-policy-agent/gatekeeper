@@ -39,7 +39,7 @@ func TestReconcile_E2E(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-1"
 	auditConnectionNameFlag := fmt.Sprintf("--audit-connection=%s", auditConnectionName)
-	flag.CommandLine.Parse([]string{"--enable-violation-export=true", auditConnectionNameFlag})
+	require.NoError(t, flag.CommandLine.Parse([]string{"--enable-violation-export=true", auditConnectionNameFlag}), "parsing flags")
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
@@ -58,7 +58,7 @@ func TestReconcile_E2E(t *testing.T) {
 	// Start the manager and let it run in the background
 	testutils.StartManager(ctx, t, mgr)
 
-	t.Run("Reconcile called for new Connection create, then update, and finally delete, all with expected operations and ConnectionPodStatus updates", func(t *testing.T) {
+	t.Run("Reconcile called for new Connection create, then update, and finally delete, all with expected operations and ConnectionPodStatus updates", func(_ *testing.T) {
 		connObj := connectionv1alpha1.Connection{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      auditConnectionName,
@@ -181,7 +181,7 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-2"
 	auditConnectionNameFlag := fmt.Sprintf("--audit-connection=%s", auditConnectionName)
-	flag.CommandLine.Parse([]string{"--enable-violation-export=true", auditConnectionNameFlag})
+	require.NoError(t, flag.CommandLine.Parse([]string{"--enable-violation-export=true", auditConnectionNameFlag}), "parsing flags")
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
@@ -308,7 +308,7 @@ func TestReconcile_Client_Failures(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-3"
 	auditConnectionNameFlag := fmt.Sprintf("--audit-connection=%s", auditConnectionName)
-	flag.CommandLine.Parse([]string{"--enable-violation-export=true", auditConnectionNameFlag})
+	require.NoError(t, flag.CommandLine.Parse([]string{"--enable-violation-export=true", auditConnectionNameFlag}), "parsing flags")
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
@@ -379,14 +379,14 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-4"
 	auditConnectionNameFlag := fmt.Sprintf("--audit-connection=%s", auditConnectionName)
-	flag.CommandLine.Parse([]string{"--enable-violation-export=true", auditConnectionNameFlag})
+	require.NoError(t, flag.CommandLine.Parse([]string{"--enable-violation-export=true", auditConnectionNameFlag}), "parsing flags")
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
 	g := gomega.NewGomegaWithT(t)
 	mgr, _ := testutils.SetupManager(t, cfg)
 	k8sClient := testclient.NewRetryClient(mgr.GetClient())
-	getPod := func(ctx context.Context) (*corev1.Pod, error) {
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
 		pod := fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod"))
 		return pod, nil
 	}
@@ -401,7 +401,7 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 	// Start the manager and let it run in the background
 	testutils.StartManager(ctx, t, mgr)
 
-	t.Run("Reconcile called when ConnectionPodStatus updated on the side and reconciled back to expected state", func(t *testing.T) {
+	t.Run("Reconcile called when ConnectionPodStatus updated on the side and reconciled back to expected state", func(_ *testing.T) {
 		connObj := connectionv1alpha1.Connection{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      auditConnectionName,
