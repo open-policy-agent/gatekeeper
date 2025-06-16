@@ -16,6 +16,7 @@ limitations under the License.
 package export
 
 import (
+	"flag"
 	stdlog "log"
 	"os"
 	"path/filepath"
@@ -62,6 +63,8 @@ func TestMain(m *testing.M) {
 	if err := testutils.CreateGatekeeperNamespace(cfg); err != nil {
 		stdlog.Printf("creating namespace: %v", err)
 	}
+
+	flag.CommandLine.Parse([]string{"--enable-violation-export", "true"})
 
 	code := m.Run()
 	if err = testEnv.Stop(); err != nil {

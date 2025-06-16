@@ -46,7 +46,7 @@ type Adder struct {
 }
 
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.ExportSystem, a.GetPod)
+	r := newReconciler(mgr, a.ExportSystem, *AuditConnection, a.GetPod)
 	if r == nil {
 		log.Info("Export functionality is disabled, skipping export connection controller setup")
 		return nil
@@ -65,14 +65,15 @@ func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, erro
 }
 
 type Reconciler struct {
-	reader client.Reader
-	writer client.Writer
-	scheme *runtime.Scheme
-	system export.Exporter
-	getPod func(context.Context) (*corev1.Pod, error)
+	reader              client.Reader
+	writer              client.Writer
+	scheme              *runtime.Scheme
+	system              export.Exporter
+	auditConnectionName string
+	getPod              func(context.Context) (*corev1.Pod, error)
 }
 
-func newReconciler(mgr manager.Manager, system export.Exporter, getPod func(context.Context) (*corev1.Pod, error)) *Reconciler {
+func newReconciler(mgr manager.Manager, system export.Exporter, auditConnectionName string, getPod func(context.Context) (*corev1.Pod, error)) *Reconciler {
 	if !*ExportEnabled {
 		log.Info("Export is disabled via flag")
 		return nil
@@ -81,11 +82,12 @@ func newReconciler(mgr manager.Manager, system export.Exporter, getPod func(cont
 	log.Info("Warning: Alpha flag enable-violation-export is set to true. This flag may change in the future.")
 
 	return &Reconciler{
-		reader: mgr.GetCache(),
-		writer: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
-		system: system,
-		getPod: getPod,
+		reader:              mgr.GetCache(),
+		writer:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		system:              system,
+		auditConnectionName: auditConnectionName,
+		getPod:              getPod,
 	}
 }
 
@@ -150,8 +152,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
 
-	if request.Name != *AuditConnection {
-		msg := fmt.Sprintf("Ignoring unsupported connection name %s. Connection name should align with flag --audit-connection set or defaulted to %s", request.Name, *AuditConnection)
+	if request.Name != r.auditConnectionName {
+		msg := fmt.Sprintf("Ignoring unsupported connection name %s. Connection name should align with flag --audit-connection set or defaulted to %s", request.Name, r.auditConnectionName)
 		log.Info(msg, "namespace", request.Namespace)
 		return reconcile.Result{}, nil
 	}
@@ -177,11 +179,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	err = r.system.UpsertConnection(ctx, connObj.Spec.Config.Value, request.Name, connObj.Spec.Driver)
 	if err != nil {
-		return reconcile.Result{Requeue: true}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1beta1.ConnectionError{{Type: statusv1beta1.UpsertConnectionError, Message: err.Error()}}, false, r.getPod)
+		// Reset the active connection status to false if UpsertConnection fails
+		activeConnection := false
+		return reconcile.Result{Requeue: true}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1beta1.ConnectionError{{Type: statusv1beta1.UpsertConnectionError, Message: err.Error()}}, &activeConnection, r.getPod)
 	}
 
 	log.Info("Connection upsert successful", "name", request.Name, "driver", connObj.Spec.Driver)
-	return reconcile.Result{}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1beta1.ConnectionError{}, false, r.getPod)
+	return reconcile.Result{}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1beta1.ConnectionError{}, nil, r.getPod)
 }
 
 func UpdateOrCreateConnectionPodStatus(
@@ -191,7 +195,7 @@ func UpdateOrCreateConnectionPodStatus(
 	scheme *runtime.Scheme,
 	connObjName string,
 	exportErrors []*statusv1beta1.ConnectionError,
-	activeConnection bool,
+	activeConnection *bool,
 	getPod func(context.Context) (*corev1.Pod, error)) error {
 
 	// Since the caller from Audit won't have an incoming request
@@ -214,7 +218,7 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	scheme *runtime.Scheme,
 	connObj *connectionv1alpha1.Connection,
 	exportErrors []*statusv1beta1.ConnectionError,
-	activeConnection bool,
+	activeConnection *bool,
 	getPod func(context.Context) (*corev1.Pod, error)) error {
 
 	pod, err := getPod(ctx)
@@ -232,9 +236,13 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	connPodStatusObj := &statusv1beta1.ConnectionPodStatus{}
 
 	err = reader.Get(ctx, types.NamespacedName{Namespace: statusNS, Name: statusName}, connPodStatusObj)
+
+	existingActiveConnection := false
 	switch {
 	case err == nil:
 		shouldCreate = false
+		// ConnectionPodStatus object exists so get the existing active state
+		existingActiveConnection = connPodStatusObj.Status.Active
 	case apierrors.IsNotFound(err):
 		if connPodStatusObj, err = newConnectionPodStatus(scheme, pod, connObj); err != nil {
 			return fmt.Errorf("creating new connection connPodStatusObj: %w", err)
@@ -243,11 +251,16 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 		return fmt.Errorf("getting connection object status in name %s, namespace %s: %w", connObj.GetName(), connObj.GetNamespace(), err)
 	}
 
+	// Caller decides if the Connection is active depending on if it's Publishing or Upserting
+	// nil indicates active Connection state is unknown by caller, therefore we'll use either the default value or existing value on the object
+	// Since active can only be true when Publish succeeds, we trust the existing object, otherwise we would cause thrashing resetting active between every Audit
+	if activeConnection == nil {
+		activeConnection = &existingActiveConnection
+	}
+	connPodStatusObj.Status.Active = *activeConnection
+
 	// ObservedGeneration is used to track the generation of the connection object
 	connPodStatusObj.Status.ObservedGeneration = connObj.GetGeneration()
-
-	// Let the caller decide if the connection is active depending on if it's publishing or upserting
-	connPodStatusObj.Status.Active = activeConnection
 
 	setStatusErrors(connPodStatusObj, exportErrors)
 

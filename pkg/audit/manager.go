@@ -1304,10 +1304,11 @@ func reportExportConnectionErrors(
 			Type:    statusv1beta1.PublishError,
 			Message: staticErrMsg})
 	}
+
 	// Connection is considered active if there were any successful publishes
 	activeConnection := auditExportPublishingState.SuccessCount > 0
 
-	if err := exportController.UpdateOrCreateConnectionPodStatus(ctx, client, client, scheme, *exportController.AuditConnection, exportErrors, activeConnection, getPod); err != nil {
+	if err := exportController.UpdateOrCreateConnectionPodStatus(ctx, client, client, scheme, *exportController.AuditConnection, exportErrors, &activeConnection, getPod); err != nil {
 		logger.Error(err, "failed to write export errors to the connection pod status")
 	}
 }

@@ -23,7 +23,7 @@ import (
 )
 
 // Test operations on Connection and ConnectionPodStatus handled by controller and reflected on Connection status
-func TestReconcile_E2E_Success(t *testing.T) {
+func TestReconcile_E2E(t *testing.T) {
 	// Setup
 	const timeout = time.Second * 20
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -181,5 +181,11 @@ func TestReconcile_E2E_Success(t *testing.T) {
 			}
 			return false
 		}).WithTimeout(timeout).Should(gomega.Equal(false), "Connection pod status object still exists even after Connection object deleted")
+
+		// Cleanup the Connection and ConnectionPodStatus objects if they exist at the end
+		defer func() {
+			k8sClient.Delete(ctx, &connObj)          // nolint:errcheck
+			k8sClient.Delete(ctx, &connPodStatusObj) // nolint:errcheck
+		}()
 	})
 }
