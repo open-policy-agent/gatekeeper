@@ -47,14 +47,14 @@ enableK8sNativeValidation: true
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.19.1
+  release: v3.19.2
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.19.1
+      tag: v3.19.2
 postUpgrade:
   labelNamespace:
     serviceAccount:
@@ -63,7 +63,7 @@ postUpgrade:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.19.1
+      tag: v3.19.2
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -97,7 +97,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.19.1
+      tag: v3.19.2
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -141,7 +141,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.19.1
+      tag: v3.19.2
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""
