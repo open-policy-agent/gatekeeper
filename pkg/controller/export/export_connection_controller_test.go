@@ -10,6 +10,7 @@ import (
 
 	"github.com/onsi/gomega"
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
@@ -91,9 +92,9 @@ func TestReconcile_E2E(t *testing.T) {
 		}).WithTimeout(timeout).Should(gomega.BeTrue())
 
 		// Assert ConnectionPodStatus
-		connPodStatusObj := statusv1beta1.ConnectionPodStatus{}
+		connPodStatusObj := statusv1alpha1.ConnectionPodStatus{}
 		pod, _ := getPod(ctx)
-		connPodStatusName, _ := statusv1beta1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
+		connPodStatusName, _ := statusv1alpha1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
 		typeStatusNamespacedName := types.NamespacedName{
 			Name:      connPodStatusName,
 			Namespace: util.GetNamespace(),
@@ -238,9 +239,9 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 		g.Expect(err).Should(gomega.BeNil(), "Reconcile should not return an error on initial creation")
 
 		// Assert the ConnectionPodStatus - Errors should be present after unsuccessful upsert
-		connPodStatusObj := statusv1beta1.ConnectionPodStatus{}
+		connPodStatusObj := statusv1alpha1.ConnectionPodStatus{}
 		pod, _ := getPod(ctx)
-		connPodStatusName, _ := statusv1beta1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
+		connPodStatusName, _ := statusv1alpha1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
 		typeConnPodStatusNamespacedName := types.NamespacedName{
 			Name:      connPodStatusName,
 			Namespace: util.GetNamespace(),
@@ -250,7 +251,7 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 			g.Expect(err).Should(gomega.Succeed(), "Status should exist after creation")
 			g.Expect(connPodStatusObj.GetLabels()).Should(gomega.HaveKeyWithValue(statusv1beta1.ConnectionNameLabel, connObj.Name), "Status should have the correct connection name label")
 			g.Expect(connPodStatusObj.Status.Errors[0].Message).Should(gomega.Equal(mockErrStr), "Status should have an error with expected message after creation")
-			g.Expect(connPodStatusObj.Status.Errors[0].Type).Should(gomega.Equal(statusv1beta1.UpsertConnectionError), "Status should have an error with expected type after creation")
+			g.Expect(connPodStatusObj.Status.Errors[0].Type).Should(gomega.Equal(statusv1alpha1.UpsertConnectionError), "Status should have an error with expected type after creation")
 			g.Expect(connPodStatusObj.Status.ObservedGeneration).Should(gomega.Equal(connObj.GetGeneration()), "Observed generation should match the connection object generation")
 			g.Expect(connPodStatusObj.Status.ID).Should(gomega.Equal(pod.Name), "ID should match the pod name")
 			g.Expect(connPodStatusObj.Status.ConnectionUID).Should(gomega.Equal(connObj.GetUID()), "ConnectionPodStatus UID should match the connection object UID")
@@ -434,9 +435,9 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 		}).WithTimeout(timeout).Should(gomega.BeTrue())
 
 		// Assert the ConnectionPodStatus
-		connPodStatusObj := statusv1beta1.ConnectionPodStatus{}
+		connPodStatusObj := statusv1alpha1.ConnectionPodStatus{}
 		pod, _ := getPod(ctx)
-		connPodStatusName, _ := statusv1beta1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
+		connPodStatusName, _ := statusv1alpha1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
 		typeStatusNamespacedName := types.NamespacedName{
 			Name:      connPodStatusName,
 			Namespace: util.GetNamespace(),
@@ -448,9 +449,9 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 		}).WithTimeout(timeout).Should(gomega.Succeed())
 
 		// Update on the side to force the reconcile to be called
-		connPodStatusObj.Status.Errors = []*statusv1beta1.ConnectionError{
+		connPodStatusObj.Status.Errors = []*statusv1alpha1.ConnectionError{
 			{
-				Type:    statusv1beta1.UpsertConnectionError,
+				Type:    statusv1alpha1.UpsertConnectionError,
 				Message: "Mock error for testing",
 			},
 		}

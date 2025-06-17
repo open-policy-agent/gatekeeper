@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
-	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/connectionstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -122,19 +122,19 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	err = c.Watch(
 		source.Kind(
-			mgr.GetCache(), &statusv1beta1.ConnectionPodStatus{},
+			mgr.GetCache(), &statusv1alpha1.ConnectionPodStatus{},
 			handler.TypedEnqueueRequestsFromMapFunc(connectionstatus.PodStatusToConnectionMapper(true)),
-			predicate.TypedFuncs[*statusv1beta1.ConnectionPodStatus]{
-				CreateFunc: func(e event.TypedCreateEvent[*statusv1beta1.ConnectionPodStatus]) bool {
+			predicate.TypedFuncs[*statusv1alpha1.ConnectionPodStatus]{
+				CreateFunc: func(e event.TypedCreateEvent[*statusv1alpha1.ConnectionPodStatus]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				UpdateFunc: func(e event.TypedUpdateEvent[*statusv1beta1.ConnectionPodStatus]) bool {
+				UpdateFunc: func(e event.TypedUpdateEvent[*statusv1alpha1.ConnectionPodStatus]) bool {
 					return e.ObjectNew.GetNamespace() == util.GetNamespace()
 				},
-				DeleteFunc: func(e event.TypedDeleteEvent[*statusv1beta1.ConnectionPodStatus]) bool {
+				DeleteFunc: func(e event.TypedDeleteEvent[*statusv1alpha1.ConnectionPodStatus]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				GenericFunc: func(e event.TypedGenericEvent[*statusv1beta1.ConnectionPodStatus]) bool {
+				GenericFunc: func(e event.TypedGenericEvent[*statusv1alpha1.ConnectionPodStatus]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
 			},
@@ -181,11 +181,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil {
 		// Reset the active connection status to false if UpsertConnection fails
 		activeConnection := false
-		return reconcile.Result{Requeue: true}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1beta1.ConnectionError{{Type: statusv1beta1.UpsertConnectionError, Message: err.Error()}}, &activeConnection, r.getPod)
+		return reconcile.Result{Requeue: true}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}, &activeConnection, r.getPod)
 	}
 
 	log.Info("Connection upsert successful", "name", request.Name, "driver", connObj.Spec.Driver)
-	return reconcile.Result{}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1beta1.ConnectionError{}, nil, r.getPod)
+	return reconcile.Result{}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1alpha1.ConnectionError{}, nil, r.getPod)
 }
 
 func UpdateOrCreateConnectionPodStatus(
@@ -194,7 +194,7 @@ func UpdateOrCreateConnectionPodStatus(
 	writer client.Writer,
 	scheme *runtime.Scheme,
 	connObjName string,
-	exportErrors []*statusv1beta1.ConnectionError,
+	exportErrors []*statusv1alpha1.ConnectionError,
 	activeConnection *bool,
 	getPod func(context.Context) (*corev1.Pod, error)) error {
 
@@ -217,7 +217,7 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	writer client.Writer,
 	scheme *runtime.Scheme,
 	connObj *connectionv1alpha1.Connection,
-	exportErrors []*statusv1beta1.ConnectionError,
+	exportErrors []*statusv1alpha1.ConnectionError,
 	activeConnection *bool,
 	getPod func(context.Context) (*corev1.Pod, error)) error {
 
@@ -228,12 +228,12 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 
 	// Check if it exists already
 	statusNS := pod.Namespace
-	statusName, err := statusv1beta1.KeyForConnection(pod.Name, connObj.GetNamespace(), connObj.GetName())
+	statusName, err := statusv1alpha1.KeyForConnection(pod.Name, connObj.GetNamespace(), connObj.GetName())
 	if err != nil {
 		return fmt.Errorf("getting key for connection: %w", err)
 	}
 	shouldCreate := true
-	connPodStatusObj := &statusv1beta1.ConnectionPodStatus{}
+	connPodStatusObj := &statusv1alpha1.ConnectionPodStatus{}
 
 	err = reader.Get(ctx, types.NamespacedName{Namespace: statusNS, Name: statusName}, connPodStatusObj)
 
@@ -275,12 +275,12 @@ func deleteStatus(ctx context.Context,
 	connectionNamespace string,
 	connectionName string,
 	getPod func(context.Context) (*corev1.Pod, error)) error {
-	connPodStatusObj := &statusv1beta1.ConnectionPodStatus{}
+	connPodStatusObj := &statusv1alpha1.ConnectionPodStatus{}
 	pod, err := getPod(ctx)
 	if err != nil {
 		return fmt.Errorf("getting reconciler pod: %w", err)
 	}
-	sName, err := statusv1beta1.KeyForConnection(pod.Name, connectionNamespace, connectionName)
+	sName, err := statusv1alpha1.KeyForConnection(pod.Name, connectionNamespace, connectionName)
 	if err != nil {
 		return fmt.Errorf("getting key for connection: %w", err)
 	}
@@ -294,8 +294,8 @@ func deleteStatus(ctx context.Context,
 
 func newConnectionPodStatus(scheme *runtime.Scheme,
 	pod *corev1.Pod,
-	connObj *connectionv1alpha1.Connection) (*statusv1beta1.ConnectionPodStatus, error) {
-	connPodStatusObj, err := statusv1beta1.NewConnectionStatusForPod(pod, connObj.GetNamespace(), connObj.GetName(), scheme)
+	connObj *connectionv1alpha1.Connection) (*statusv1alpha1.ConnectionPodStatus, error) {
+	connPodStatusObj, err := statusv1alpha1.NewConnectionStatusForPod(pod, connObj.GetNamespace(), connObj.GetName(), scheme)
 	if err != nil {
 		return nil, fmt.Errorf("creating status for pod: %w", err)
 	}
@@ -305,8 +305,8 @@ func newConnectionPodStatus(scheme *runtime.Scheme,
 }
 
 func setStatusErrors(
-	connPodStatusObj *statusv1beta1.ConnectionPodStatus,
-	exportErrors []*statusv1beta1.ConnectionError) {
+	connPodStatusObj *statusv1alpha1.ConnectionPodStatus,
+	exportErrors []*statusv1alpha1.ConnectionError) {
 	if len(exportErrors) == 0 {
 		connPodStatusObj.Status.Errors = nil
 		return

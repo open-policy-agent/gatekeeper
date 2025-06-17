@@ -1,9 +1,10 @@
-package v1beta1_test
+package v1alpha1_test
 
 import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
@@ -37,7 +38,7 @@ func TestNewConnectionStatusForPod(t *testing.T) {
 		fakes.WithName(podName),
 	)
 
-	expectedStatus := &v1beta1.ConnectionPodStatus{}
+	expectedStatus := &v1alpha1.ConnectionPodStatus{}
 	expectedStatus.SetName("some--gk--pod-a--gk--ns-audit")
 	expectedStatus.SetNamespace(podNS)
 	expectedStatus.Status.ID = podName
@@ -52,14 +53,14 @@ func TestNewConnectionStatusForPod(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status, err := v1beta1.NewConnectionStatusForPod(pod, connectionNamespace, connectionName, scheme)
+	status, err := v1alpha1.NewConnectionStatusForPod(pod, connectionNamespace, connectionName, scheme)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if diff := cmp.Diff(expectedStatus, status); diff != "" {
 		t.Fatal(diff)
 	}
-	n, err := v1beta1.KeyForConnection(podName, connectionNamespace, connectionName)
+	n, err := v1alpha1.KeyForConnection(podName, connectionNamespace, connectionName)
 	if err != nil {
 		t.Fatal(err)
 	}

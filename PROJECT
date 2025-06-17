@@ -19,7 +19,7 @@ resources:
   version: v1alpha1
 - group: status
   kind: ConnectionPodStatus
-  version: v1beta1
+  version: v1alpha1
 - group: connection
   kind: Connection
   version: v1alpha1

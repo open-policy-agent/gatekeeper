@@ -16,7 +16,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	status "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -37,7 +37,7 @@ type ConnectionSpec struct {
 
 // ConnectionStatus defines the observed state of Connection
 type ConnectionStatus struct {
-	ByPod []status.ConnectionPodStatusStatus `json:"byPod,omitempty"`
+	ByPod []statusv1alpha1.ConnectionPodStatusStatus `json:"byPod,omitempty"`
 }
 
 // +kubebuilder:resource:scope=Namespaced

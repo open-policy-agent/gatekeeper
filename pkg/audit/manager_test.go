@@ -16,7 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
-	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	exportController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
@@ -710,8 +710,8 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 				reportExportConnectionErrors(context.Background(), auditExportPublishingState, logr.Logger{}, client, scheme.Scheme, getPod)
 
 				// Await the ConnectionPodStatus
-				connPodStatusName, _ := statusv1beta1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
-				var connPodStatus statusv1beta1.ConnectionPodStatus
+				connPodStatusName, _ := statusv1alpha1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
+				var connPodStatus statusv1alpha1.ConnectionPodStatus
 				g.Eventually(func(g gomega.Gomega) {
 					g.Expect(client.Get(context.Background(), types.NamespacedName{
 						Namespace: util.GetNamespace(),
@@ -722,10 +722,10 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 				// Assert the ConnectionPodStatus expected
 				g.Expect(connPodStatus.Status.Active).To(gomega.Equal(test.wantActiveConn), "Active status unexpected")
 				g.Expect(len(connPodStatus.Status.Errors)).To(gomega.Equal(len(test.errorsMap)), "Length of errors unexpected")
-				expected := make([]*statusv1beta1.ConnectionError, 0, len(test.errorsMap))
+				expected := make([]*statusv1alpha1.ConnectionError, 0, len(test.errorsMap))
 				for key := range test.errorsMap {
-					expected = append(expected, &statusv1beta1.ConnectionError{
-						Type:    statusv1beta1.PublishError,
+					expected = append(expected, &statusv1alpha1.ConnectionError{
+						Type:    statusv1alpha1.PublishError,
 						Message: key,
 					})
 				}

@@ -17,7 +17,7 @@ import (
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
-	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	exportController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
@@ -1297,11 +1297,11 @@ func reportExportConnectionErrors(
 	scheme *runtime.Scheme,
 	getPod func(context.Context) (*corev1.Pod, error)) {
 
-	exportErrors := []*statusv1beta1.ConnectionError{}
+	exportErrors := []*statusv1alpha1.ConnectionError{}
 	for staticErrMsg, v := range auditExportPublishingState.Errors {
 		logger.Error(v, "failed to export audit violation")
-		exportErrors = append(exportErrors, &statusv1beta1.ConnectionError{
-			Type:    statusv1beta1.PublishError,
+		exportErrors = append(exportErrors, &statusv1alpha1.ConnectionError{
+			Type:    statusv1alpha1.PublishError,
 			Message: staticErrMsg})
 	}
 

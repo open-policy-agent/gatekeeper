@@ -22,7 +22,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
@@ -74,16 +75,16 @@ func newReconciler(mgr manager.Manager) *ReconcileConnectionStatus {
 
 // PodStatusToConnectionMapper correlates a ConnectionPodStatus with its corresponding Connection.
 // `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
-func PodStatusToConnectionMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.ConnectionPodStatus, reconcile.Request] {
-	return func(_ context.Context, obj *v1beta1.ConnectionPodStatus) []reconcile.Request {
+func PodStatusToConnectionMapper(selfOnly bool) handler.TypedMapFunc[*statusv1alpha1.ConnectionPodStatus, reconcile.Request] {
+	return func(_ context.Context, obj *statusv1alpha1.ConnectionPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
-		connObjName, ok := labels[v1beta1.ConnectionNameLabel]
+		connObjName, ok := labels[statusv1beta1.ConnectionNameLabel]
 		if !ok {
 			log.Error(fmt.Errorf("connection status resource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a connection status resource")
 			return nil
 		}
 		if selfOnly {
-			pod, ok := labels[v1beta1.PodLabel]
+			pod, ok := labels[statusv1beta1.PodLabel]
 			if !ok {
 				log.Error(fmt.Errorf("connection status resource with no pod label: %s", obj.GetName()), "missing label while attempting to map a connection status resource")
 			}
@@ -110,19 +111,19 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	err = c.Watch(
 		source.Kind(
-			mgr.GetCache(), &v1beta1.ConnectionPodStatus{},
+			mgr.GetCache(), &statusv1alpha1.ConnectionPodStatus{},
 			handler.TypedEnqueueRequestsFromMapFunc(PodStatusToConnectionMapper(false)),
-			predicate.TypedFuncs[*v1beta1.ConnectionPodStatus]{
-				CreateFunc: func(e event.TypedCreateEvent[*v1beta1.ConnectionPodStatus]) bool {
+			predicate.TypedFuncs[*statusv1alpha1.ConnectionPodStatus]{
+				CreateFunc: func(e event.TypedCreateEvent[*statusv1alpha1.ConnectionPodStatus]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				UpdateFunc: func(e event.TypedUpdateEvent[*v1beta1.ConnectionPodStatus]) bool {
+				UpdateFunc: func(e event.TypedUpdateEvent[*statusv1alpha1.ConnectionPodStatus]) bool {
 					return e.ObjectNew.GetNamespace() == util.GetNamespace()
 				},
-				DeleteFunc: func(e event.TypedDeleteEvent[*v1beta1.ConnectionPodStatus]) bool {
+				DeleteFunc: func(e event.TypedDeleteEvent[*statusv1alpha1.ConnectionPodStatus]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				GenericFunc: func(e event.TypedGenericEvent[*v1beta1.ConnectionPodStatus]) bool {
+				GenericFunc: func(e event.TypedGenericEvent[*statusv1alpha1.ConnectionPodStatus]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
 			},
@@ -188,11 +189,11 @@ func (r *ReconcileConnectionStatus) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	sObjs := &v1beta1.ConnectionPodStatusList{}
+	sObjs := &statusv1alpha1.ConnectionPodStatusList{}
 	if err := r.reader.List(
 		ctx,
 		sObjs,
-		client.MatchingLabels{v1beta1.ConnectionNameLabel: request.Name},
+		client.MatchingLabels{statusv1beta1.ConnectionNameLabel: request.Name},
 		client.InNamespace(util.GetNamespace()),
 	); err != nil {
 		return reconcile.Result{}, err
@@ -201,7 +202,7 @@ func (r *ReconcileConnectionStatus) Reconcile(ctx context.Context, request recon
 	copy(statusObjs, sObjs.Items)
 	sort.Sort(statusObjs)
 
-	var s []v1beta1.ConnectionPodStatusStatus
+	var s []statusv1alpha1.ConnectionPodStatusStatus
 
 	for i := range statusObjs {
 		// Don't report status if it's not for the correct object. This can happen
@@ -221,7 +222,7 @@ func (r *ReconcileConnectionStatus) Reconcile(ctx context.Context, request recon
 	return reconcile.Result{}, nil
 }
 
-type sortableStatuses []v1beta1.ConnectionPodStatus
+type sortableStatuses []statusv1alpha1.ConnectionPodStatus
 
 func (s sortableStatuses) Len() int {
 	return len(s)

@@ -13,9 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1alpha1
 
 import (
+	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -83,8 +84,8 @@ func NewConnectionStatusForPod(pod *corev1.Pod, connectionNamespace, connectionN
 	obj.Status.ID = pod.Name
 	obj.Status.Operations = operations.AssignedStringList()
 	obj.SetLabels(map[string]string{
-		ConnectionNameLabel: connectionName,
-		PodLabel:            pod.Name,
+		v1beta1.ConnectionNameLabel: connectionName,
+		v1beta1.PodLabel:            pod.Name,
 	})
 
 	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
@@ -96,7 +97,7 @@ func NewConnectionStatusForPod(pod *corev1.Pod, connectionNamespace, connectionN
 
 // KeyForConnection returns a unique status object name given the Pod ID and a connection object.
 func KeyForConnection(id string, connectionNamespace string, connectionName string) (string, error) {
-	return DashPacker(id, connectionNamespace, connectionName)
+	return v1beta1.DashPacker(id, connectionNamespace, connectionName)
 }
 
 func init() {

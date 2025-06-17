@@ -17,7 +17,7 @@ spec:
   preserveUnknownFields: false
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - name: v1alpha1
     schema:
       openAPIV3Schema:
         description: ConnectionPodStatus is the Schema for the connectionpodstatuses API

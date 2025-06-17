@@ -7,6 +7,7 @@ import (
 
 	"github.com/onsi/gomega"
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -84,12 +85,12 @@ func TestReconcile_E2E(t *testing.T) {
 		}).WithTimeout(timeout).Should(gomega.Succeed(), "Connection object should exist after creation")
 
 		// Next create the ConnectionPodStatus object which should trigger the reconcile request
-		connPodStatusObjName, _ := statusv1beta1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
+		connPodStatusObjName, _ := statusv1alpha1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
 		typeConnectionPodStatusNamespacedName := types.NamespacedName{
 			Name:      connPodStatusObjName,
 			Namespace: util.GetNamespace(),
 		}
-		connPodStatusObj := statusv1beta1.ConnectionPodStatus{
+		connPodStatusObj := statusv1alpha1.ConnectionPodStatus{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      connPodStatusObjName,
 				Namespace: util.GetNamespace(),
@@ -97,9 +98,9 @@ func TestReconcile_E2E(t *testing.T) {
 					statusv1beta1.ConnectionNameLabel: connObj.Name,
 				},
 			},
-			Status: statusv1beta1.ConnectionPodStatusStatus{
+			Status: statusv1alpha1.ConnectionPodStatusStatus{
 				Active:             false,
-				Errors:             []*statusv1beta1.ConnectionError{},
+				Errors:             []*statusv1alpha1.ConnectionError{},
 				ObservedGeneration: connObj.GetGeneration(),
 				ConnectionUID:      connObj.GetUID(),
 				ID:                 pod.Name,
