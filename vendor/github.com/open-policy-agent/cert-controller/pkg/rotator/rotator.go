@@ -708,7 +708,7 @@ func reconcileSecretAndWebhookMapFunc(webhook WebhookInfo, r *ReconcileWH) func(
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func addController(mgr manager.Manager, r *ReconcileWH, controllerName string) error {
 	// Create a new controller
-	c, err := controller.NewUnmanaged(controllerName, mgr, controller.Options{Reconciler: r})
+	c, err := controller.NewUnmanaged(controllerName, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
