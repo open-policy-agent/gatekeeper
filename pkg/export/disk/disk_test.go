@@ -10,8 +10,11 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 )
 
 func TestCreateConnection(t *testing.T) {
@@ -238,19 +241,35 @@ func TestUpdateConnection(t *testing.T) {
 func TestCloseConnection(t *testing.T) {
 	// Add to check clean up
 	writer := &Writer{
-		openConnections: make(map[string]Connection),
+		openConnections:   make(map[string]Connection),
+		closedConnections: make(map[string]FailedConnection),
+		cleanupDone:       make(chan struct{}),
+		closeAndRemoveFilesWithRetry: func(conn Connection) error {
+			return wait.ExponentialBackoff(retry.DefaultBackoff, func() (bool, error) {
+				if conn.File != nil {
+					if err := conn.unlockAndCloseFile(); err != nil {
+						return false, fmt.Errorf("error closing file: %w", err)
+					}
+				}
+				if err := os.RemoveAll(conn.Path); err != nil {
+					return false, fmt.Errorf("error deleting violations stored at old path: %w", err)
+				}
+				return true, nil
+			})
+		},
 	}
 
 	tests := []struct {
-		name           string
-		connectionName string
-		setup          func() error
-		expectError    bool
+		name              string
+		connectionName    string
+		setup             func(writer *Writer) error
+		expectError       bool
+		expectClosedEntry bool
 	}{
 		{
 			name:           "Valid close",
 			connectionName: "conn1",
-			setup: func() error {
+			setup: func(writer *Writer) error {
 				// Pre-create a connection to close
 				writer.openConnections["conn1"] = Connection{
 					Path:            t.TempDir(),
@@ -258,18 +277,20 @@ func TestCloseConnection(t *testing.T) {
 				}
 				return nil
 			},
-			expectError: false,
+			expectError:       false,
+			expectClosedEntry: false,
 		},
 		{
-			name:           "Connection not found",
-			connectionName: "conn2",
-			setup:          nil,
-			expectError:    true,
+			name:              "Connection not found",
+			connectionName:    "conn2",
+			setup:             nil,
+			expectError:       true,
+			expectClosedEntry: false,
 		},
 		{
 			name:           "Valid close with open and locked file",
 			connectionName: "conn3",
-			setup: func() error {
+			setup: func(writer *Writer) error {
 				// Pre-create a connection to close
 				d := t.TempDir()
 				if err := os.MkdirAll(d, 0o755); err != nil {
@@ -286,14 +307,31 @@ func TestCloseConnection(t *testing.T) {
 				}
 				return syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
 			},
-			expectError: false,
+			expectError:       false,
+			expectClosedEntry: false,
+		},
+		{
+			name:           "Close connection with failing closeAndRemoveFilesWithRetry",
+			connectionName: "failing-conn",
+			setup: func(writer *Writer) error {
+				tmpDir := t.TempDir()
+				writer.openConnections["failing-conn"] = Connection{
+					Path: tmpDir,
+				}
+				writer.closeAndRemoveFilesWithRetry = func(_ Connection) error {
+					return fmt.Errorf("forced failure")
+				}
+				return nil
+			},
+			expectError:       true,
+			expectClosedEntry: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setup != nil {
-				if err := tt.setup(); err != nil {
+				if err := tt.setup(writer); err != nil {
 					t.Errorf("Setup failed: %v", err)
 				}
 			}
@@ -305,6 +343,20 @@ func TestCloseConnection(t *testing.T) {
 				_, exists := writer.openConnections[tt.connectionName]
 				if exists {
 					t.Errorf("Connection %s was not closed", tt.connectionName)
+				}
+			}
+
+			if _, exists := writer.openConnections[tt.connectionName]; exists {
+				t.Errorf("connection %s still exists in openConnections after CloseConnection", tt.connectionName)
+			}
+
+			if tt.expectClosedEntry {
+				if _, exists := writer.closedConnections[tt.connectionName]; !exists {
+					t.Errorf("expected connection %s to be in closedConnections, but it was not", tt.connectionName)
+				}
+			} else {
+				if _, exists := writer.closedConnections[tt.connectionName]; exists {
+					t.Errorf("did not expect connection %s to be in closedConnections, but it was", tt.connectionName)
 				}
 			}
 		})
@@ -998,6 +1050,99 @@ func TestUnmarshalConfig(t *testing.T) {
 				if maxResults != tt.expectedMax {
 					t.Errorf("Expected maxAuditResults %f, got %f", tt.expectedMax, maxResults)
 				}
+			}
+		})
+	}
+}
+
+func TestRetryFailedConnections(t *testing.T) {
+	tests := []struct {
+		name                   string
+		setup                  func(writer *Writer)
+		expectedClosedConnsLen int
+	}{
+		{
+			name: "Successfully retry and remove connection",
+			setup: func(writer *Writer) {
+				writer.closedConnections["conn1"] = FailedConnection{
+					Connection:  Connection{Path: t.TempDir()},
+					FailedAt:    time.Now().Add(-1 * time.Minute),
+					RetryCount:  0,
+					NextRetryAt: time.Now().Add(-1 * time.Second),
+				}
+				writer.closeAndRemoveFilesWithRetry = func(_ Connection) error {
+					return nil
+				}
+			},
+			expectedClosedConnsLen: 0,
+		},
+		{
+			name: "Retry fails, increment retry count",
+			setup: func(writer *Writer) {
+				writer.closedConnections["conn2"] = FailedConnection{
+					Connection:  Connection{Path: t.TempDir()},
+					FailedAt:    time.Now().Add(-1 * time.Minute),
+					RetryCount:  1,
+					NextRetryAt: time.Now().Add(-1 * time.Second),
+				}
+				writer.closeAndRemoveFilesWithRetry = func(_ Connection) error {
+					return fmt.Errorf("forced failure")
+				}
+			},
+			expectedClosedConnsLen: 1,
+		},
+		{
+			name: "Remove connection exceeding max retry attempts",
+			setup: func(writer *Writer) {
+				writer.closedConnections["conn3"] = FailedConnection{
+					Connection:  Connection{Path: t.TempDir()},
+					FailedAt:    time.Now().Add(-1 * time.Minute),
+					RetryCount:  maxRetryAttempts,
+					NextRetryAt: time.Now().Add(-1 * time.Second),
+				}
+			},
+			expectedClosedConnsLen: 0,
+		},
+		{
+			name: "Remove expired connection",
+			setup: func(writer *Writer) {
+				writer.closedConnections["conn4"] = FailedConnection{
+					Connection:  Connection{Path: t.TempDir()},
+					FailedAt:    time.Now().Add(-maxConnectionAge - time.Minute),
+					RetryCount:  0,
+					NextRetryAt: time.Now().Add(-1 * time.Second),
+				}
+			},
+			expectedClosedConnsLen: 0,
+		},
+		{
+			name: "Skip retry if NextRetryAt is in future",
+			setup: func(writer *Writer) {
+				writer.closedConnections["conn5"] = FailedConnection{
+					Connection:  Connection{Path: t.TempDir()},
+					FailedAt:    time.Now().Add(-1 * time.Minute),
+					RetryCount:  0,
+					NextRetryAt: time.Now().Add(1 * time.Minute),
+				}
+			},
+			expectedClosedConnsLen: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := &Writer{
+				closedConnections: make(map[string]FailedConnection),
+				closeAndRemoveFilesWithRetry: func(_ Connection) error {
+					return nil
+				},
+			}
+			tt.setup(writer)
+
+			writer.retryFailedConnections()
+
+			if len(writer.closedConnections) != tt.expectedClosedConnsLen {
+				t.Errorf("expected %d closed connections, got %d", tt.expectedClosedConnsLen, len(writer.closedConnections))
 			}
 		})
 	}
