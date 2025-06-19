@@ -253,7 +253,7 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 
 	// nil indicates expected active Connection state is unknown by caller during Upsert
 	if activeConnection == nil && connPodStatusObj.Status.ObservedGeneration != connObj.GetGeneration() {
-		// Reset the active connection state when there any updates to the Connection object to ensure the active state is only true when the Publish succeeds for the current Connection
+		// Reset the active connection state when there are updates to the Connection object to ensure the active state is only true when the Publish succeeds for the current Connection
 		resetActiveConnection := false
 		activeConnection = &resetActiveConnection
 	} else if activeConnection == nil {
