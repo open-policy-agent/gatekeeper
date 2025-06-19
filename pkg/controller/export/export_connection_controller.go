@@ -251,22 +251,27 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 		return fmt.Errorf("getting connection object status in name %s, namespace %s: %w", connObj.GetName(), connObj.GetNamespace(), err)
 	}
 
-	// Caller decides if the Connection is active depending on if it's Publishing or Upserting
-	// nil indicates active Connection state is unknown by caller, therefore we'll use either the default value or existing value on the object
-	// Since active can only be true when Publish succeeds, we trust the existing object, otherwise we would cause thrashing resetting active between every Audit
-	if activeConnection == nil {
+	// nil indicates expected active Connection state is unknown by caller during Upsert
+	if activeConnection == nil && connPodStatusObj.Status.ObservedGeneration != connObj.GetGeneration() {
+		// Reset the active connection state when there any updates to the Connection object to ensure the active state is only true when the Publish succeeds for the current Connection
+		resetActiveConnection := false
+		activeConnection = &resetActiveConnection
+	} else if activeConnection == nil {
+		// Trust the existing object when the Connection hasn't change - since active can only be true when Publish succeeds, we don't want to potentially reset active state between every Audit causing thrashing
 		activeConnection = &existingActiveConnection
 	}
 	connPodStatusObj.Status.Active = *activeConnection
 
-	// ObservedGeneration is used to track the generation of the connection object
+	// ObservedGeneration is used to track the generation of the Connection object
 	connPodStatusObj.Status.ObservedGeneration = connObj.GetGeneration()
 
 	setStatusErrors(connPodStatusObj, exportErrors)
 
 	if shouldCreate {
+		log.Info("Creating new ConnectionPodStatus object", "name", connPodStatusObj.GetName(), "active", connPodStatusObj.Status.Active)
 		return writer.Create(ctx, connPodStatusObj)
 	}
+	log.Info("Updating existing ConnectionPodStatus object", "name", connPodStatusObj.GetName(), "active", connPodStatusObj.Status.Active)
 	return writer.Update(ctx, connPodStatusObj)
 }
 

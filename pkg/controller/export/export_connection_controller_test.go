@@ -117,6 +117,8 @@ func TestReconcile_E2E(t *testing.T) {
 			"path":            "new-value",
 			"maxAuditResults": float64(3),
 		}
+		// Set the status to active to simulate an update to the Connection when a Publish operation was already performed marking active true
+		connPodStatusObj.Status.Active = true
 		g.Expect(k8sClient.Update(ctx, &connObj)).Should(gomega.Succeed(), "Updating the connection object should succeed")
 
 		// Await for the reconcile request to finish
@@ -146,7 +148,7 @@ func TestReconcile_E2E(t *testing.T) {
 			g.Expect(connPodStatusObj.Status.ObservedGeneration).ShouldNot(gomega.Equal(generationOnCreate), "Observed generation should have changed after update")
 			g.Expect(connPodStatusObj.Status.ID).Should(gomega.Equal(pod.Name), "ID should still match the pod name after update")
 			g.Expect(connPodStatusObj.Status.ConnectionUID).Should(gomega.Equal(connObj.GetUID()), "ConnectionPodStatus UID should still match the Connection object UID after update")
-			g.Expect(connPodStatusObj.Status.Active).Should(gomega.BeFalse(), "No publish operations have been performed yet, so active status should be false")
+			g.Expect(connPodStatusObj.Status.Active).Should(gomega.BeFalse(), "Active status should be false after the connection was updated, as no new publish operations were performed for this connection observedGeneration")
 		}).WithTimeout(timeout).Should(gomega.Succeed())
 
 		// Clear the previous request with the same name to avoid false positives now only load the latest
