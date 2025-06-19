@@ -10,12 +10,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/apimachinery/pkg/util/wait"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -32,7 +34,8 @@ type Connection struct {
 }
 
 type Writer struct {
-	openConnections map[string]Connection
+	openConnections   map[string]Connection
+	closedConnections map[string]Connection
 }
 
 const (
@@ -44,6 +47,7 @@ const (
 
 var Connections = &Writer{
 	openConnections: make(map[string]Connection),
+	closedConnections: make(map[string]Connection),
 }
 
 var log = logf.Log.WithName("disk-driver").WithValues(logging.Process, "export")
@@ -73,13 +77,8 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	}
 
 	if conn.Path != path {
-		if conn.File != nil {
-			if err := conn.unlockAndCloseFile(); err != nil {
-				return fmt.Errorf("error updating connection %s, error closing file: %w", connectionName, err)
-			}
-		}
-		if err := os.RemoveAll(conn.Path); err != nil {
-			return fmt.Errorf("error updating connection %s, error deleting violations stored at old path: %w", connectionName, err)
+		if err := r.closeAndRemoveFilesWithRetry(conn); err != nil {
+			return fmt.Errorf("error updating connection %s, %w", connectionName, err)
 		}
 		conn.Path = path
 		conn.File = nil
@@ -96,13 +95,11 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	if !ok {
 		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
-	delete(r.openConnections, connectionName)
-	if conn.File != nil {
-		if err := conn.unlockAndCloseFile(); err != nil {
-			return fmt.Errorf("connection is closed without removing respective violations. error closing file: %w", err)
-		}
+	defer delete(r.openConnections, connectionName)
+	err := r.closeAndRemoveFilesWithRetry(conn)
+	if err != nil {
+		r.closedConnections[connectionName] = conn
 	}
-	err := os.RemoveAll(conn.Path)
 	return err
 }
 
@@ -236,6 +233,20 @@ func (conn *Connection) cleanupOldAuditFiles(topic string) error {
 	return errors.Join(errs...)
 }
 
+func (r *Writer) closeAndRemoveFilesWithRetry(conn Connection) error {
+	return wait.ExponentialBackoff(retry.DefaultBackoff, func() (bool, error) {
+		if conn.File != nil {
+			if err := conn.unlockAndCloseFile(); err != nil {
+				return false, fmt.Errorf("error closing file: %w", err)
+			}
+		}
+		if err := os.RemoveAll(conn.Path); err != nil {
+			return false, fmt.Errorf("error deleting violations stored at old path: %w", err)
+		}
+		return true, nil
+	})
+}
+
 func getFilesSortedByModTimeAsc(dirPath string) ([]string, error) {
 	type fileInfo struct {
 		path    string
@@ -278,7 +289,7 @@ func validatePath(path string) error {
 		return fmt.Errorf("path cannot be empty")
 	}
 	if strings.Contains(path, "..") {
-		return fmt.Errorf("path must not contain '..', dir traversal is not allowed")
+		return fmt.Errorf("path cannot contain '..' (directory traversal not allowed)")
 	}
 	// validate if the path is writable
 	if err := os.MkdirAll(path, 0o777); err != nil {
@@ -290,7 +301,7 @@ func validatePath(path string) error {
 func unmarshalConfig(config interface{}) (string, float64, error) {
 	cfg, ok := config.(map[string]interface{})
 	if !ok {
-		return "", 0.0, fmt.Errorf("invalid config format")
+		return "", 0.0, fmt.Errorf("invalid config format, expected map[string]interface{}")
 	}
 
 	path, pathOk := cfg[violationPath].(string)
