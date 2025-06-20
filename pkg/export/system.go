@@ -15,6 +15,12 @@ var SupportedDrivers = map[string]driver.Driver{
 	disk.Name: disk.Connections,
 }
 
+type Exporter interface {
+	Publish(ctx context.Context, connectionName string, subject string, msg interface{}) error
+	UpsertConnection(ctx context.Context, config interface{}, connectionName string, newDriver string) error
+	CloseConnection(connectionName string) error
+}
+
 type System struct {
 	mux                sync.RWMutex
 	connectionToDriver map[string]string

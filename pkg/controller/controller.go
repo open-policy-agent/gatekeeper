@@ -57,7 +57,7 @@ type GetPodInjector interface {
 }
 
 type ExportInjector interface {
-	InjectExportSystem(exportSystem *export.System)
+	InjectExportSystem(exportSystem export.Exporter)
 }
 
 type DataClientInjector interface {
