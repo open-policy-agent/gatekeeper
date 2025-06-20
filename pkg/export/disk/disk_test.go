@@ -44,7 +44,7 @@ func TestCreateConnection(t *testing.T) {
 			config: map[int]interface{}{
 				1: "test",
 			},
-			err:         fmt.Errorf("error creating connection conn2: invalid config format"),
+			err:         fmt.Errorf("error creating connection conn2: invalid config format, expected map[string]interface{}"),
 			expectError: true,
 		},
 		{
@@ -116,7 +116,22 @@ func TestCreateConnection(t *testing.T) {
 
 func TestUpdateConnection(t *testing.T) {
 	writer := &Writer{
-		openConnections: make(map[string]Connection),
+		openConnections:   make(map[string]Connection),
+		closedConnections: make(map[string]FailedConnection),
+		cleanupDone:       make(chan struct{}),
+		closeAndRemoveFilesWithRetry: func(conn Connection) error {
+			return wait.ExponentialBackoff(retry.DefaultBackoff, func() (bool, error) {
+				if conn.File != nil {
+					if err := conn.unlockAndCloseFile(); err != nil {
+						return false, fmt.Errorf("error closing file: %w", err)
+					}
+				}
+				if err := os.RemoveAll(conn.Path); err != nil {
+					return false, fmt.Errorf("error deleting violations stored at old path: %w", err)
+				}
+				return true, nil
+			})
+		},
 	}
 	tmpPath := t.TempDir()
 	file, err := os.CreateTemp(tmpPath, "testfile")
@@ -159,7 +174,7 @@ func TestUpdateConnection(t *testing.T) {
 				1: "test",
 			},
 			expectError: true,
-			err:         fmt.Errorf("error updating connection conn1: invalid config format"),
+			err:         fmt.Errorf("error updating connection conn1: invalid config format, expected map[string]interface{}"),
 		},
 		{
 			name:           "Connection not found",
