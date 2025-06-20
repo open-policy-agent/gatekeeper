@@ -10,11 +10,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -31,8 +33,21 @@ type Connection struct {
 	currentAuditRun string
 }
 
+// FailedConnection wraps a Connection with retry metadata.
+type FailedConnection struct {
+	Connection
+	FailedAt    time.Time
+	RetryCount  int
+	NextRetryAt time.Time
+}
+
 type Writer struct {
-	openConnections map[string]Connection
+	mu                           sync.RWMutex
+	openConnections              map[string]Connection
+	closedConnections            map[string]FailedConnection
+	cleanupDone                  chan struct{}
+	cleanupOnce                  sync.Once
+	closeAndRemoveFilesWithRetry func(conn Connection) error
 }
 
 const (
@@ -40,15 +55,40 @@ const (
 	maxAllowedAuditRuns = 5
 	maxAuditResults     = "maxAuditResults"
 	violationPath       = "path"
+	// Connection cleanup constants.
+	cleanupInterval  = 5 * time.Minute
+	maxRetryAttempts = 10
+	maxConnectionAge = 30 * time.Minute
+	baseRetryDelay   = 15 * time.Second
 )
 
 var Connections = &Writer{
-	openConnections: make(map[string]Connection),
+	openConnections:   make(map[string]Connection),
+	closedConnections: make(map[string]FailedConnection),
+	cleanupDone:       make(chan struct{}),
+	closeAndRemoveFilesWithRetry: func(conn Connection) error {
+		return wait.ExponentialBackoff(retry.DefaultBackoff, func() (bool, error) {
+			if conn.File != nil {
+				if err := conn.unlockAndCloseFile(); err != nil {
+					return false, fmt.Errorf("error closing file: %w", err)
+				}
+			}
+			if err := os.RemoveAll(conn.Path); err != nil {
+				return false, fmt.Errorf("error deleting violations stored at old path: %w", err)
+			}
+			return true, nil
+		})
+	},
 }
 
 var log = logf.Log.WithName("disk-driver").WithValues(logging.Process, "export")
 
 func (r *Writer) CreateConnection(_ context.Context, connectionName string, config interface{}) error {
+	// Start cleanup goroutine on first connection
+	r.cleanupOnce.Do(func() {
+		go r.backgroundCleanup()
+	})
+
 	path, maxResults, err := unmarshalConfig(config)
 	if err != nil {
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
@@ -73,13 +113,8 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	}
 
 	if conn.Path != path {
-		if conn.File != nil {
-			if err := conn.unlockAndCloseFile(); err != nil {
-				return fmt.Errorf("error updating connection %s, error closing file: %w", connectionName, err)
-			}
-		}
-		if err := os.RemoveAll(conn.Path); err != nil {
-			return fmt.Errorf("error updating connection %s, error deleting violations stored at old path: %w", connectionName, err)
+		if err := r.closeAndRemoveFilesWithRetry(conn); err != nil {
+			return fmt.Errorf("error updating connection %s, %w", connectionName, err)
 		}
 		conn.Path = path
 		conn.File = nil
@@ -96,13 +131,17 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	if !ok {
 		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
-	delete(r.openConnections, connectionName)
-	if conn.File != nil {
-		if err := conn.unlockAndCloseFile(); err != nil {
-			return fmt.Errorf("connection is closed without removing respective violations. error closing file: %w", err)
+	defer delete(r.openConnections, connectionName)
+	err := r.closeAndRemoveFilesWithRetry(conn)
+	if err != nil {
+		now := time.Now()
+		r.closedConnections[connectionName] = FailedConnection{
+			Connection:  conn,
+			FailedAt:    now,
+			RetryCount:  0,
+			NextRetryAt: now.Add(baseRetryDelay),
 		}
 	}
-	err := os.RemoveAll(conn.Path)
 	return err
 }
 
@@ -290,7 +329,7 @@ func validatePath(path string) error {
 func unmarshalConfig(config interface{}) (string, float64, error) {
 	cfg, ok := config.(map[string]interface{})
 	if !ok {
-		return "", 0.0, fmt.Errorf("invalid config format")
+		return "", 0.0, fmt.Errorf("invalid config format, expected map[string]interface{}")
 	}
 
 	path, pathOk := cfg[violationPath].(string)
@@ -308,4 +347,71 @@ func unmarshalConfig(config interface{}) (string, float64, error) {
 		return "", 0.0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
 	}
 	return path, maxResults, nil
+}
+
+// backgroundCleanup runs periodically to retry closing failed connections.
+func (r *Writer) backgroundCleanup() {
+	ticker := time.NewTicker(cleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			r.retryFailedConnections()
+		case <-r.cleanupDone:
+			log.Info("Background cleanup stopped")
+			return
+		}
+	}
+}
+
+// retryFailedConnections attempts to close connections that previously failed to close.
+func (r *Writer) retryFailedConnections() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now()
+	var toRemove []string
+
+	for name, failedConn := range r.closedConnections {
+		if now.Sub(failedConn.FailedAt) > maxConnectionAge {
+			log.Info("Removing expired failed connection", "connection", name, "age", now.Sub(failedConn.FailedAt))
+			toRemove = append(toRemove, name)
+			continue
+		}
+
+		if now.Before(failedConn.NextRetryAt) {
+			continue
+		}
+
+		if failedConn.RetryCount >= maxRetryAttempts {
+			log.Info("Max retry attempts exceeded for failed connection", "connection", name, "attempts", failedConn.RetryCount)
+			toRemove = append(toRemove, name)
+			continue
+		}
+
+		log.Info("Retrying close for failed connection", "connection", name, "attempt", failedConn.RetryCount+1)
+		err := r.closeAndRemoveFilesWithRetry(failedConn.Connection)
+		if err == nil {
+			log.Info("Successfully closed previously failed connection", "connection", name)
+			toRemove = append(toRemove, name)
+		} else {
+			log.Info("Failed to close connection on retry", "connection", name, "error", err, "attempt", failedConn.RetryCount+1)
+			failedConn.RetryCount++
+			delay := time.Duration(failedConn.RetryCount) * baseRetryDelay
+			if delay > time.Minute {
+				delay = time.Minute
+			}
+			failedConn.NextRetryAt = now.Add(delay)
+			r.closedConnections[name] = failedConn
+		}
+	}
+
+	for _, name := range toRemove {
+		delete(r.closedConnections, name)
+	}
+
+	if len(r.closedConnections) > 0 {
+		log.Info("Failed connections remaining", "count", len(r.closedConnections))
+	}
 }
