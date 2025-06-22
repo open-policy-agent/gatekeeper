@@ -120,24 +120,9 @@ var replacements = map[string]string{
         {{- end }}
         {{- if not .Values.controllerManager.disableGenerateOperation }}
         - --operation=generate
-        {{- end }}
-        {{- if not .Values.controllerManager.disableAuditOperation }}
-        - --operation=audit
-        {{- end }}
-        {{- if not .Values.controllerManager.disableStatusOperation }}
-        - --operation=status
-        {{- end }}
-        {{- if not .Values.controllerManager.disableMutationStatusOperation }}
-        - --operation=mutation-status
-        {{- end }}
-        {{- if not .Values.controllerManager.disableMutationControllerOperation }}
-        - --operation=mutation-controller
         {{- end }}`,
 
 	"- HELMSUBST_AUDIT_OPERATIONS": `
-        {{- if not .Values.audit.disableWebhookOperation }}
-        - --operation=webhook
-        {{- end }}
         {{- if hasKey .Values.audit "disableGenerateOperation" }}
         {{- if not .Values.audit.disableGenerateOperation }}
         - --operation=generate
@@ -147,16 +132,6 @@ var replacements = map[string]string{
         {{- end }}
         {{- if not .Values.audit.disableStatusOperation }}
         - --operation=status
-        {{- end }}
-        {{- if not .Values.audit.disableMutationStatusOperation }}
-        - --operation=mutation-status
-        {{- end }}
-        {{- if not .Values.audit.disableMutationControllerOperation }}
-        - --operation=mutation-controller
-        {{- end }}`,
-
-	"- HELMSUBST_DEPLOYMENT_AUDIT_DEFAULT_WAIT_VAPB_GENERATION": `{{ if hasKey .Values "defaultWaitForVAPBGeneration"}}
-        - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}`,
 
 	"- HELMSUBST_DEPLOYMENT_AUDIT_VIOLATION_EXPORT_ARGS": `{{ if hasKey .Values "enableViolationExport" }}

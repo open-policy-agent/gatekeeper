@@ -76,18 +76,6 @@ spec:
         {{- if not .Values.controllerManager.disableGenerateOperation }}
         - --operation=generate
         {{- end }}
-        {{- if not .Values.controllerManager.disableAuditOperation }}
-        - --operation=audit
-        {{- end }}
-        {{- if not .Values.controllerManager.disableStatusOperation }}
-        - --operation=status
-        {{- end }}
-        {{- if not .Values.controllerManager.disableMutationStatusOperation }}
-        - --operation=mutation-status
-        {{- end }}
-        {{- if not .Values.controllerManager.disableMutationControllerOperation }}
-        - --operation=mutation-controller
-        {{- end }}
         - --enable-external-data={{ .Values.enableExternalData }}
         - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
         - --log-mutations={{ .Values.logMutations }}

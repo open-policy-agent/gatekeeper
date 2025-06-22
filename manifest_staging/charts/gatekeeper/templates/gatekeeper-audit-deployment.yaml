@@ -69,9 +69,6 @@ spec:
         {{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}
         - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
         
-        {{- if not .Values.audit.disableWebhookOperation }}
-        - --operation=webhook
-        {{- end }}
         {{- if hasKey .Values.audit "disableGenerateOperation" }}
         {{- if not .Values.audit.disableGenerateOperation }}
         - --operation=generate
@@ -81,12 +78,6 @@ spec:
         {{- end }}
         {{- if not .Values.audit.disableStatusOperation }}
         - --operation=status
-        {{- end }}
-        {{- if not .Values.audit.disableMutationStatusOperation }}
-        - --operation=mutation-status
-        {{- end }}
-        {{- if not .Values.audit.disableMutationControllerOperation }}
-        - --operation=mutation-controller
         {{- end }}
         {{ if hasKey .Values "enableViolationExport" }}
         - --enable-violation-export={{ .Values.enableViolationExport }}
