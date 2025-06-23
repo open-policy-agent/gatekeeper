@@ -49,6 +49,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -247,6 +248,8 @@ type ReconcileConstraintTemplate struct {
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=externaldata.gatekeeper.sh,resources=providers,verbs=get;list;watch;create;update;patch;delete
+// update permission on finalizers is needed to access metadata.ownerReferences[x].blockOwnerDeletion for OwnerReferencesPermissionEnforcement admission plugin - https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#ownerreferencespermissionenforcement.
+// +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/finalizers,verbs=update
 
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
 // and what is in the ConstraintTemplate.Spec.
@@ -286,7 +289,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 				return reconcile.Result{}, err
 			}
-			if !result.Requeue {
+			if result.RequeueAfter == 0 {
 				logAction(ct, deletedAction)
 				r.metrics.registry.remove(request.NamespacedName)
 			}
@@ -381,7 +384,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		return result, err
 	}
-	if !result.Requeue {
+	if result.RequeueAfter == 0 {
 		logAction(ct, action)
 		r.metrics.registry.add(request.NamespacedName, metrics.ActiveStatus)
 	}
@@ -772,9 +775,19 @@ func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1bet
 	}
 	var err error
 	// We add the annotation as a follow-on update to be sure the timestamp is set relative to a time after the CRD is successfully created. Creating the CRD with a delay timestamp already set would not account for request latency.
-	*requeueAfter, err = r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, ct)
-	if err != nil {
-		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, err)
+	var duration time.Duration
+	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Fetch the latest version of the ConstraintTemplate before updating
+		latestCT := &v1beta1.ConstraintTemplate{}
+		if getErr := r.Get(ctx, types.NamespacedName{Name: ct.GetName()}, latestCT); getErr != nil {
+			return getErr
+		}
+		duration, err = r.updateTemplateWithBlockVAPBGenerationAnnotations(ctx, latestCT)
+		return err
+	})
+	*requeueAfter = duration
+	if retryErr != nil {
+		err = r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not annotate with timestamp to block VAPB generation", status, retryErr)
 	}
 	return err
 }

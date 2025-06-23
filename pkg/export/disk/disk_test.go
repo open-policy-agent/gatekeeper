@@ -923,12 +923,12 @@ func TestUnmarshalConfig(t *testing.T) {
 	tmpPath := t.TempDir()
 
 	tests := []struct {
-		name        string
-		config      interface{}
+		name         string
+		config       interface{}
 		expectedPath string
-		expectedMax float64
-		expectError bool
-		expectedErr string
+		expectedMax  float64
+		expectError  bool
+		expectedErr  string
 	}{
 		{
 			name: "Valid config",
@@ -1002,5 +1002,3 @@ func TestUnmarshalConfig(t *testing.T) {
 		})
 	}
 }
-
-

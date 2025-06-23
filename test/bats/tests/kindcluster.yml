@@ -1,6 +1,8 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-featureGates:
-  ValidatingAdmissionPolicy: true
-runtimeConfig:
-  admissionregistration.k8s.io/v1beta1: true
+kubeadmConfigPatches:
+- |
+  kind: ClusterConfiguration
+  apiServer:
+    extraArgs:
+      enable-admission-plugins: NodeRestriction,OwnerReferencesPermissionEnforcement

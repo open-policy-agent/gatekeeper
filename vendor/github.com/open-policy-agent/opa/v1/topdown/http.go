@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -88,22 +89,13 @@ var cacheableHTTPStatusCodes = [...]int{
 }
 
 var (
-	codeTerm       = ast.StringTerm("code")
-	messageTerm    = ast.StringTerm("message")
-	statusCodeTerm = ast.StringTerm("status_code")
-	errorTerm      = ast.StringTerm("error")
-	methodTerm     = ast.StringTerm("method")
-	urlTerm        = ast.StringTerm("url")
-
 	httpSendNetworkErrTerm  = ast.StringTerm(HTTPSendNetworkErr)
 	httpSendInternalErrTerm = ast.StringTerm(HTTPSendInternalErr)
-)
 
-var (
 	allowedKeys                 = ast.NewSet()
 	keyCache                    = make(map[string]*ast.Term, len(allowedKeyNames))
 	cacheableCodes              = ast.NewSet()
-	requiredKeys                = ast.NewSet(methodTerm, urlTerm)
+	requiredKeys                = ast.NewSet(ast.InternedStringTerm("method"), ast.InternedStringTerm("url"))
 	httpSendLatencyMetricKey    = "rego_builtin_http_send"
 	httpSendInterQueryCacheHits = httpSendLatencyMetricKey + "_interquery_cache_hits"
 )
@@ -169,20 +161,20 @@ func generateRaiseErrorResult(err error) *ast.Term {
 	switch err.(type) {
 	case *url.Error:
 		errObj = ast.NewObject(
-			ast.Item(codeTerm, httpSendNetworkErrTerm),
-			ast.Item(messageTerm, ast.StringTerm(err.Error())),
+			ast.Item(ast.InternedStringTerm("code"), httpSendNetworkErrTerm),
+			ast.Item(ast.InternedStringTerm("message"), ast.StringTerm(err.Error())),
 		)
 	default:
 		errObj = ast.NewObject(
-			ast.Item(codeTerm, httpSendInternalErrTerm),
-			ast.Item(messageTerm, ast.StringTerm(err.Error())),
+			ast.Item(ast.InternedStringTerm("code"), httpSendInternalErrTerm),
+			ast.Item(ast.InternedStringTerm("message"), ast.StringTerm(err.Error())),
 		)
 	}
 
-	return ast.NewTerm(ast.NewObject(
-		ast.Item(statusCodeTerm, ast.InternedIntNumberTerm(0)),
-		ast.Item(errorTerm, ast.NewTerm(errObj)),
-	))
+	return ast.ObjectTerm(
+		ast.Item(ast.InternedStringTerm("status_code"), ast.InternedIntNumberTerm(0)),
+		ast.Item(ast.InternedStringTerm("error"), ast.NewTerm(errObj)),
+	)
 }
 
 func getHTTPResponse(bctx BuiltinContext, req ast.Object) (*ast.Term, error) {
@@ -242,7 +234,7 @@ func getKeyFromRequest(req ast.Object) (ast.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	var allHeaders map[string]interface{}
+	var allHeaders map[string]any
 	err = ast.As(allHeadersTerm.Value, &allHeaders)
 	if err != nil {
 		return nil, err
@@ -325,8 +317,8 @@ func validateHTTPRequestOperand(term *ast.Term, pos int) (ast.Object, error) {
 
 // canonicalizeHeaders returns a copy of the headers where the keys are in
 // canonical HTTP form.
-func canonicalizeHeaders(headers map[string]interface{}) map[string]interface{} {
-	canonicalized := map[string]interface{}{}
+func canonicalizeHeaders(headers map[string]any) map[string]any {
+	canonicalized := map[string]any{}
 
 	for k, v := range headers {
 		canonicalized[http.CanonicalHeaderKey(k)] = v
@@ -379,10 +371,8 @@ func verifyHost(bctx BuiltinContext, host string) error {
 		return nil
 	}
 
-	for _, allowed := range bctx.Capabilities.AllowNet {
-		if allowed == host {
-			return nil
-		}
+	if slices.Contains(bctx.Capabilities.AllowNet, host) {
+		return nil
 	}
 
 	return fmt.Errorf("unallowed host: %s", host)
@@ -420,7 +410,7 @@ func createHTTPRequest(bctx BuiltinContext, obj ast.Object) (*http.Request, *htt
 		enableRedirect, tlsInsecureSkipVerify bool
 		tlsUseSystemCerts                     *bool
 		tlsConfig                             tls.Config
-		customHeaders                         map[string]interface{}
+		customHeaders                         map[string]any
 	)
 
 	timeout := defaultHTTPRequestTimeout
@@ -518,7 +508,7 @@ func createHTTPRequest(bctx BuiltinContext, obj ast.Object) (*http.Request, *htt
 				return nil, nil, err
 			}
 			var ok bool
-			customHeaders, ok = headersValInterface.(map[string]interface{})
+			customHeaders, ok = headersValInterface.(map[string]any)
 			if !ok {
 				return nil, nil, errors.New("invalid type for headers key")
 			}
@@ -1387,7 +1377,7 @@ func formatHTTPResponseToAST(resp *http.Response, forceJSONDecode, forceYAMLDeco
 }
 
 func prepareASTResult(headers http.Header, forceJSONDecode, forceYAMLDecode bool, body []byte, status string, statusCode int) (ast.Value, error) {
-	var resultBody interface{}
+	var resultBody any
 
 	// If the response body cannot be JSON/YAML decoded,
 	// an error will not be returned. Instead, the "body" field
@@ -1399,7 +1389,7 @@ func prepareASTResult(headers http.Header, forceJSONDecode, forceYAMLDecode bool
 		_ = util.Unmarshal(body, &resultBody)
 	}
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	result["status"] = status
 	result["status_code"] = statusCode
 	result["body"] = resultBody
@@ -1414,10 +1404,10 @@ func prepareASTResult(headers http.Header, forceJSONDecode, forceYAMLDecode bool
 	return resultObj, nil
 }
 
-func getResponseHeaders(headers http.Header) map[string]interface{} {
-	respHeaders := map[string]interface{}{}
+func getResponseHeaders(headers http.Header) map[string]any {
+	respHeaders := map[string]any{}
 	for headerName, values := range headers {
-		var respValues []interface{}
+		var respValues []any
 		for _, v := range values {
 			respValues = append(respValues, v)
 		}

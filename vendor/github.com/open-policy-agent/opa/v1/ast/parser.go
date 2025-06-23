@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,7 +28,15 @@ import (
 	"github.com/open-policy-agent/opa/v1/ast/location"
 )
 
-var RegoV1CompatibleRef = Ref{VarTerm("rego"), StringTerm("v1")}
+// DefaultMaxParsingRecursionDepth is the default maximum recursion
+// depth for the parser
+const DefaultMaxParsingRecursionDepth = 100000
+
+// ErrMaxParsingRecursionDepthExceeded is returned when the parser
+// recursion exceeds the maximum allowed depth
+var ErrMaxParsingRecursionDepthExceeded = errors.New("max parsing recursion depth exceeded")
+
+var RegoV1CompatibleRef = Ref{VarTerm("rego"), InternedStringTerm("v1")}
 
 // RegoVersion defines the Rego syntax requirements for a module.
 type RegoVersion int
@@ -112,10 +122,12 @@ func (s *state) Text(offset, end int) []byte {
 
 // Parser is used to parse Rego statements.
 type Parser struct {
-	r     io.Reader
-	s     *state
-	po    ParserOptions
-	cache parsedTermCache
+	r                 io.Reader
+	s                 *state
+	po                ParserOptions
+	cache             parsedTermCache
+	recursionDepth    int
+	maxRecursionDepth int
 }
 
 type parsedTermCacheItem struct {
@@ -167,9 +179,16 @@ func (po *ParserOptions) EffectiveRegoVersion() RegoVersion {
 // NewParser creates and initializes a Parser.
 func NewParser() *Parser {
 	p := &Parser{
-		s:  &state{},
-		po: ParserOptions{},
+		s:                 &state{},
+		po:                ParserOptions{},
+		maxRecursionDepth: DefaultMaxParsingRecursionDepth,
 	}
+	return p
+}
+
+// WithMaxRecursionDepth sets the maximum recursion depth for the parser.
+func (p *Parser) WithMaxRecursionDepth(depth int) *Parser {
+	p.maxRecursionDepth = depth
 	return p
 }
 
@@ -330,9 +349,7 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 		}
 
 		// rego-v1 includes all v0 future keywords in the default language definition
-		for k, v := range futureKeywordsV0 {
-			allowedFutureKeywords[k] = v
-		}
+		maps.Copy(allowedFutureKeywords, futureKeywordsV0)
 
 		for _, kw := range p.po.Capabilities.FutureKeywords {
 			if tok, ok := futureKeywords[kw]; ok {
@@ -380,9 +397,7 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 
 		if p.po.Capabilities.ContainsFeature(FeatureRegoV1) {
 			// rego-v1 includes all v0 future keywords in the default language definition
-			for k, v := range futureKeywordsV0 {
-				allowedFutureKeywords[k] = v
-			}
+			maps.Copy(allowedFutureKeywords, futureKeywordsV0)
 		}
 	}
 
@@ -400,9 +415,7 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 
 	selected := map[string]tokens.Token{}
 	if p.po.AllFutureKeywords || p.po.EffectiveRegoVersion() == RegoV1 {
-		for kw, tok := range allowedFutureKeywords {
-			selected[kw] = tok
-		}
+		maps.Copy(selected, allowedFutureKeywords)
 	} else {
 		for _, kw := range p.po.FutureKeywords {
 			tok, ok := allowedFutureKeywords[kw]
@@ -979,7 +992,7 @@ func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 			ref = y
 		}
 		head = RefHead(ref)
-		head.Args = append([]*Term{}, args...)
+		head.Args = slices.Clone[[]*Term](args)
 
 	default:
 		return nil, false
@@ -1035,6 +1048,10 @@ func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 }
 
 func (p *Parser) parseBody(end tokens.Token) Body {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
 	return p.parseQuery(false, end)
 }
 
@@ -1360,10 +1377,20 @@ func (p *Parser) parseExpr() *Expr {
 // other binary operators (|, &, arithmetics), it constitutes the binding
 // precedence.
 func (p *Parser) parseTermInfixCall() *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	return p.parseTermIn(nil, true, p.s.loc.Offset)
 }
 
 func (p *Parser) parseTermInfixCallInList() *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	return p.parseTermIn(nil, false, p.s.loc.Offset)
 }
 
@@ -1373,6 +1400,11 @@ var memberWithKeyRef = MemberWithKey.Ref()
 var memberRef = Member.Ref()
 
 func (p *Parser) parseTermIn(lhs *Term, keyVal bool, offset int) *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	// NOTE(sr): `in` is a bit special: besides `lhs in rhs`, it also
 	// supports `key, val in rhs`, so it can have an optional second lhs.
 	// `keyVal` triggers if we attempt to parse a second lhs argument (`mhs`).
@@ -1415,6 +1447,11 @@ func (p *Parser) parseTermIn(lhs *Term, keyVal bool, offset int) *Term {
 }
 
 func (p *Parser) parseTermRelation(lhs *Term, offset int) *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	if lhs == nil {
 		lhs = p.parseTermOr(nil, offset)
 	}
@@ -1435,6 +1472,11 @@ func (p *Parser) parseTermRelation(lhs *Term, offset int) *Term {
 }
 
 func (p *Parser) parseTermOr(lhs *Term, offset int) *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	if lhs == nil {
 		lhs = p.parseTermAnd(nil, offset)
 	}
@@ -1456,6 +1498,11 @@ func (p *Parser) parseTermOr(lhs *Term, offset int) *Term {
 }
 
 func (p *Parser) parseTermAnd(lhs *Term, offset int) *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	if lhs == nil {
 		lhs = p.parseTermArith(nil, offset)
 	}
@@ -1477,6 +1524,11 @@ func (p *Parser) parseTermAnd(lhs *Term, offset int) *Term {
 }
 
 func (p *Parser) parseTermArith(lhs *Term, offset int) *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	if lhs == nil {
 		lhs = p.parseTermFactor(nil, offset)
 	}
@@ -1497,6 +1549,11 @@ func (p *Parser) parseTermArith(lhs *Term, offset int) *Term {
 }
 
 func (p *Parser) parseTermFactor(lhs *Term, offset int) *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	if lhs == nil {
 		lhs = p.parseTerm()
 	}
@@ -1517,6 +1574,11 @@ func (p *Parser) parseTermFactor(lhs *Term, offset int) *Term {
 }
 
 func (p *Parser) parseTerm() *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	if term, s := p.parsedTermCacheLookup(); s != nil {
 		p.restore(s)
 		return term
@@ -1669,6 +1731,10 @@ func (p *Parser) parseRawString() *Term {
 var setConstructor = RefTerm(VarTerm("set"))
 
 func (p *Parser) parseCall(operator *Term, offset int) (term *Term) {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
 
 	loc := operator.Location
 	var end int
@@ -1698,6 +1764,10 @@ func (p *Parser) parseCall(operator *Term, offset int) (term *Term) {
 }
 
 func (p *Parser) parseRef(head *Term, offset int) (term *Term) {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
 
 	loc := head.Location
 	var end int
@@ -1763,6 +1833,10 @@ func (p *Parser) parseRef(head *Term, offset int) (term *Term) {
 }
 
 func (p *Parser) parseArray() (term *Term) {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
 
 	loc := p.s.Loc()
 	offset := p.s.loc.Offset
@@ -1808,7 +1882,7 @@ func (p *Parser) parseArray() (term *Term) {
 	case tokens.Comma:
 		p.scan()
 		if terms := p.parseTermList(tokens.RBrack, []*Term{head}); terms != nil {
-			return NewTerm(NewArray(terms...))
+			return ArrayTerm(terms...)
 		}
 		return nil
 	case tokens.Or:
@@ -1828,12 +1902,17 @@ func (p *Parser) parseArray() (term *Term) {
 	p.restore(s)
 
 	if terms := p.parseTermList(tokens.RBrack, nil); terms != nil {
-		return NewTerm(NewArray(terms...))
+		return ArrayTerm(terms...)
 	}
 	return nil
 }
 
 func (p *Parser) parseSetOrObject() (term *Term) {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	loc := p.s.Loc()
 	offset := p.s.loc.Offset
 
@@ -1900,6 +1979,11 @@ func (p *Parser) parseSetOrObject() (term *Term) {
 }
 
 func (p *Parser) parseSet(s *state, head *Term, potentialComprehension bool) *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	switch p.s.tok {
 	case tokens.RBrace:
 		return SetTerm(head)
@@ -1929,6 +2013,11 @@ func (p *Parser) parseSet(s *state, head *Term, potentialComprehension bool) *Te
 }
 
 func (p *Parser) parseObject(k *Term, potentialComprehension bool) *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	// NOTE(tsandall): Assumption: this function is called after parsing the key
 	// of the head element and then receiving a colon token from the scanner.
 	// Advance beyond the colon and attempt to parse an object.
@@ -1982,6 +2071,11 @@ func (p *Parser) parseObject(k *Term, potentialComprehension bool) *Term {
 }
 
 func (p *Parser) parseObjectFinish(key, val *Term, potentialComprehension bool) *Term {
+	if !p.enter() {
+		return nil
+	}
+	defer p.leave()
+
 	switch p.s.tok {
 	case tokens.RBrace:
 		return ObjectTerm([2]*Term{key, val})
@@ -2065,28 +2159,24 @@ func (p *Parser) parseTermPairList(end tokens.Token, r [][2]*Term) [][2]*Term {
 }
 
 func (p *Parser) parseTermOp(values ...tokens.Token) *Term {
-	for i := range values {
-		if p.s.tok == values[i] {
-			r := RefTerm(VarTerm(p.s.tok.String()).SetLocation(p.s.Loc())).SetLocation(p.s.Loc())
-			p.scan()
-			return r
-		}
+	if slices.Contains(values, p.s.tok) {
+		r := RefTerm(VarTerm(p.s.tok.String()).SetLocation(p.s.Loc())).SetLocation(p.s.Loc())
+		p.scan()
+		return r
 	}
 	return nil
 }
 
 func (p *Parser) parseTermOpName(ref Ref, values ...tokens.Token) *Term {
-	for i := range values {
-		if p.s.tok == values[i] {
-			cp := ref.Copy()
-			for _, r := range cp {
-				r.SetLocation(p.s.Loc())
-			}
-			t := RefTerm(cp...)
-			t.SetLocation(p.s.Loc())
-			p.scan()
-			return t
+	if slices.Contains(values, p.s.tok) {
+		cp := ref.Copy()
+		for _, r := range cp {
+			r.SetLocation(p.s.Loc())
 		}
+		t := RefTerm(cp...)
+		t.SetLocation(p.s.Loc())
+		p.scan()
+		return t
 	}
 	return nil
 }
@@ -2115,7 +2205,7 @@ func (p *Parser) error(loc *location.Location, reason string) {
 	p.errorf(loc, reason) //nolint:govet
 }
 
-func (p *Parser) errorf(loc *location.Location, f string, a ...interface{}) {
+func (p *Parser) errorf(loc *location.Location, f string, a ...any) {
 	msg := strings.Builder{}
 	msg.WriteString(fmt.Sprintf(f, a...))
 
@@ -2145,11 +2235,11 @@ func (p *Parser) errorf(loc *location.Location, f string, a ...interface{}) {
 	p.s.hints = nil
 }
 
-func (p *Parser) hint(f string, a ...interface{}) {
+func (p *Parser) hint(f string, a ...any) {
 	p.s.hints = append(p.s.hints, fmt.Sprintf(f, a...))
 }
 
-func (p *Parser) illegal(note string, a ...interface{}) {
+func (p *Parser) illegal(note string, a ...any) {
 	tok := p.s.tok.String()
 
 	if p.s.tok == tokens.Illegal {
@@ -2251,8 +2341,8 @@ func (p *Parser) restore(s *state) {
 	p.s = s
 }
 
-func setLocRecursive(x interface{}, loc *location.Location) {
-	NewGenericVisitor(func(x interface{}) bool {
+func setLocRecursive(x any, loc *location.Location) {
+	NewGenericVisitor(func(x any) bool {
 		if node, ok := x.(Node); ok {
 			node.SetLoc(loc)
 		}
@@ -2276,7 +2366,7 @@ func (p *Parser) validateDefaultRuleValue(rule *Rule) bool {
 	}
 
 	valid := true
-	vis := NewGenericVisitor(func(x interface{}) bool {
+	vis := NewGenericVisitor(func(x any) bool {
 		switch x.(type) {
 		case *ArrayComprehension, *ObjectComprehension, *SetComprehension: // skip closures
 			return true
@@ -2297,7 +2387,7 @@ func (p *Parser) validateDefaultRuleArgs(rule *Rule) bool {
 	valid := true
 	vars := NewVarSet()
 
-	vis := NewGenericVisitor(func(x interface{}) bool {
+	vis := NewGenericVisitor(func(x any) bool {
 		switch x := x.(type) {
 		case Var:
 			if vars.Contains(x) {
@@ -2327,15 +2417,15 @@ func (p *Parser) validateDefaultRuleArgs(rule *Rule) bool {
 // We explicitly use yaml unmarshalling, to accommodate for the '_' in 'related_resources',
 // which isn't handled properly by json for some reason.
 type rawAnnotation struct {
-	Scope            string                 `yaml:"scope"`
-	Title            string                 `yaml:"title"`
-	Entrypoint       bool                   `yaml:"entrypoint"`
-	Description      string                 `yaml:"description"`
-	Organizations    []string               `yaml:"organizations"`
-	RelatedResources []interface{}          `yaml:"related_resources"`
-	Authors          []interface{}          `yaml:"authors"`
-	Schemas          []map[string]any       `yaml:"schemas"`
-	Custom           map[string]interface{} `yaml:"custom"`
+	Scope            string           `yaml:"scope"`
+	Title            string           `yaml:"title"`
+	Entrypoint       bool             `yaml:"entrypoint"`
+	Description      string           `yaml:"description"`
+	Organizations    []string         `yaml:"organizations"`
+	RelatedResources []any            `yaml:"related_resources"`
+	Authors          []any            `yaml:"authors"`
+	Schemas          []map[string]any `yaml:"schemas"`
+	Custom           map[string]any   `yaml:"custom"`
 }
 
 type metadataParser struct {
@@ -2440,7 +2530,7 @@ func (b *metadataParser) Parse() (*Annotations, error) {
 		result.Authors = append(result.Authors, author)
 	}
 
-	result.Custom = make(map[string]interface{})
+	result.Custom = make(map[string]any)
 	for k, v := range raw.Custom {
 		val, err := convertYAMLMapKeyTypes(v, nil)
 		if err != nil {
@@ -2503,7 +2593,7 @@ func augmentYamlError(err error, comments []*Comment) error {
 	return err
 }
 
-func unwrapPair(pair map[string]interface{}) (string, interface{}) {
+func unwrapPair(pair map[string]any) (string, any) {
 	for k, v := range pair {
 		return k, v
 	}
@@ -2534,7 +2624,7 @@ func parseSchemaRef(s string) (Ref, error) {
 	return nil, errInvalidSchemaRef
 }
 
-func parseRelatedResource(rr interface{}) (*RelatedResourceAnnotation, error) {
+func parseRelatedResource(rr any) (*RelatedResourceAnnotation, error) {
 	rr, err := convertYAMLMapKeyTypes(rr, nil)
 	if err != nil {
 		return nil, err
@@ -2550,7 +2640,7 @@ func parseRelatedResource(rr interface{}) (*RelatedResourceAnnotation, error) {
 			return &RelatedResourceAnnotation{Ref: *u}, nil
 		}
 		return nil, errors.New("ref URL may not be empty string")
-	case map[string]interface{}:
+	case map[string]any:
 		description := strings.TrimSpace(getSafeString(rr, "description"))
 		ref := strings.TrimSpace(getSafeString(rr, "ref"))
 		if len(ref) > 0 {
@@ -2566,7 +2656,7 @@ func parseRelatedResource(rr interface{}) (*RelatedResourceAnnotation, error) {
 	return nil, errors.New("invalid value type, must be string or map")
 }
 
-func parseAuthor(a interface{}) (*AuthorAnnotation, error) {
+func parseAuthor(a any) (*AuthorAnnotation, error) {
 	a, err := convertYAMLMapKeyTypes(a, nil)
 	if err != nil {
 		return nil, err
@@ -2575,7 +2665,7 @@ func parseAuthor(a interface{}) (*AuthorAnnotation, error) {
 	switch a := a.(type) {
 	case string:
 		return parseAuthorString(a)
-	case map[string]interface{}:
+	case map[string]any:
 		name := strings.TrimSpace(getSafeString(a, "name"))
 		email := strings.TrimSpace(getSafeString(a, "email"))
 		if len(name) > 0 || len(email) > 0 {
@@ -2587,7 +2677,7 @@ func parseAuthor(a interface{}) (*AuthorAnnotation, error) {
 	return nil, errors.New("invalid value type, must be string or map")
 }
 
-func getSafeString(m map[string]interface{}, k string) string {
+func getSafeString(m map[string]any, k string) string {
 	if v, found := m[k]; found {
 		if s, ok := v.(string); ok {
 			return s
@@ -2688,7 +2778,7 @@ func IsFutureKeywordForRegoVersion(s string, v RegoVersion) bool {
 func (p *Parser) futureImport(imp *Import, allowedFutureKeywords map[string]tokens.Token) {
 	path := imp.Path.Value.(Ref)
 
-	if len(path) == 1 || !path[1].Equal(keywordsTerm) {
+	if len(path) == 1 || !path[1].Equal(InternedStringTerm("keywords")) {
 		p.errorf(imp.Path.Location, "invalid import, must be `future.keywords`")
 		return
 	}
@@ -2764,10 +2854,24 @@ func (p *Parser) regoV1Import(imp *Import) {
 
 func init() {
 	allFutureKeywords = map[string]tokens.Token{}
-	for k, v := range futureKeywords {
-		allFutureKeywords[k] = v
+	maps.Copy(allFutureKeywords, futureKeywords)
+	maps.Copy(allFutureKeywords, futureKeywordsV0)
+}
+
+// enter increments the recursion depth counter and checks if it exceeds the maximum.
+// Returns false if the maximum is exceeded, true otherwise.
+// If p.maxRecursionDepth is 0 or negative, the check is effectively disabled.
+func (p *Parser) enter() bool {
+	p.recursionDepth++
+	if p.maxRecursionDepth > 0 && p.recursionDepth > p.maxRecursionDepth {
+		p.error(p.s.Loc(), ErrMaxParsingRecursionDepthExceeded.Error())
+		p.recursionDepth--
+		return false
 	}
-	for k, v := range futureKeywordsV0 {
-		allFutureKeywords[k] = v
-	}
+	return true
+}
+
+// leave decrements the recursion depth counter.
+func (p *Parser) leave() {
+	p.recursionDepth--
 }

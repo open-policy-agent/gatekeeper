@@ -25,7 +25,7 @@ GENERATE_VAPBINDING ?= false
 VERSION := v3.20.0-beta.0
 
 KIND_VERSION ?= 0.27.0
-KIND_CLUSTER_FILE ?= test/bats/tests/kindcluster.yml
+KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.30.0
 KUSTOMIZE_VERSION ?= 3.8.9
@@ -196,6 +196,9 @@ test: __test-image
 test-e2e:
 	bats -t ${BATS_TESTS_FILE}
 
+test-e2e-owner-ref:
+	@bash test/with-admission-plugin/test-e2e-owner-ref.sh
+
 .PHONY: test-gator
 test-gator: gator test-gator-verify test-gator-test test-gator-expand
 
@@ -234,8 +237,11 @@ e2e-bootstrap: e2e-dependencies
 	if [ $$(${GITHUB_WORKSPACE}/bin/kind get clusters) ]; then ${GITHUB_WORKSPACE}/bin/kind delete cluster; fi
 
 	# Create a new kind cluster
-	# Only enabling VAP beta apis for 1.28, 1.29
-	if [ $$(echo $(KUBERNETES_VERSION) | cut -d'.' -f2) -lt 28 ] || [ $$(echo $(KUBERNETES_VERSION) | cut -d'.' -f2) -gt 29 ]; then ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m; else ${GITHUB_WORKSPACE}/bin/kind create cluster --config $(KIND_CLUSTER_FILE) --image $(KIND_NODE_VERSION) --wait 5m; fi
+	if [ ! -f $(KIND_CLUSTER_FILE) ]; then \
+		${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m; \
+	else \
+		${GITHUB_WORKSPACE}/bin/kind create cluster --config $(KIND_CLUSTER_FILE) --image $(KIND_NODE_VERSION) --wait 5m; \
+	fi
 
 e2e-build-load-image: docker-buildx e2e-build-load-externaldata-image
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
