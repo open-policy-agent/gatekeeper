@@ -2,6 +2,8 @@ name: create_tag
 on: 
   pull_request:
     types: [closed]
+    branches:
+      - release-*
 
 permissions:
   contents: write
@@ -9,7 +11,7 @@ permissions:
 jobs:
   create_tag:
     name: "Create tag"
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release-pr') && startsWith(github.event.pull_request.title, format('chore{0} Prepare', ':'))
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release-pr') && startsWith(github.event.pull_request.title, format('chore{0} Prepare', ':')) && startsWith(github.event.pull_request.base.ref, 'release-')
     runs-on: ubuntu-22.04
     steps:
     - name: "Set release tag"
