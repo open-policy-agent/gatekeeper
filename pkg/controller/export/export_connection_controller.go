@@ -145,12 +145,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
 
-	if request.Name != r.auditConnectionName {
-		msg := fmt.Sprintf("Ignoring unsupported connection name %s. Connection name should align with flag --audit-connection set or defaulted to %s", request.Name, r.auditConnectionName)
-		log.Info(msg, "namespace", request.Namespace)
-		return reconcile.Result{}, nil
-	}
-
 	deleted := false
 	connObj := &connectionv1alpha1.Connection{}
 	err := r.reader.Get(ctx, request.NamespacedName, connObj)
@@ -168,6 +162,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 		log.Info("removed connection", "name", request.Name)
 		return reconcile.Result{}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
+	}
+
+	if request.Name != r.auditConnectionName {
+		err := fmt.Errorf("error unsupported connection name %s. Connection name should align with flag --audit-connection set or defaulted to '%s'", request.Name, r.auditConnectionName)
+		log.Error(err, "unsupported connection", "namespace", request.Namespace)
+		exportErrors := []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}
+		resetActiveConnection := false
+		return reconcile.Result{}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, exportErrors, &resetActiveConnection, r.getPod)
 	}
 
 	err = r.system.UpsertConnection(ctx, connObj.Spec.Config.Value, request.Name, connObj.Spec.Driver)
