@@ -26,7 +26,9 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/go-logr/zapr"
@@ -118,6 +120,7 @@ var (
 	enableK8sCel                         = flag.Bool("enable-k8s-native-validation", true, "enable the validating admission policy driver")
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
 	enableReferential                    = flag.Bool("enable-referential-rules", true, "Enable referential rules. This flag defaults to true. Set this value to false if you want to disallow referential constraints. Because referential constraints read objects other than the object-under-test, they may be subject to race conditions. Users concerned about this may want to disable referential rules")
+	shutdownDelay                        = flag.Int("shutdown-delay", 10, "Time in seconds the controller runtime shutdown gets delayed after receiving a pod termination event. Prevents failing webhooks on pod shutdown. default: 10")
 )
 
 func init() {
@@ -312,9 +315,39 @@ func innerMain() int {
 		}
 	}
 
+	// Always enable downstream checking for the webhooks, if enabled.
+	if len(webhooks) > 0 {
+		tlsChecker := webhook.NewTLSChecker(*certDir, *port)
+		setupLog.Info("setting up TLS readiness probe")
+		if err := mgr.AddReadyzCheck("tls-check", tlsChecker); err != nil {
+			setupLog.Error(err, "unable to create tls readiness check")
+			return 1
+		}
+	}
+
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
 	setupErr := make(chan error)
-	ctx := ctrl.SetupSignalHandler()
+
+	// Setup termination with grace period. Required to give K8s Services time to disconnect the Pod endpoint on termination.
+	// Derived from how the controller-runtime sets up a signal handler with ctrl.SetupSignalHandler()
+	// controller-runtime upstream issue: https://github.com/kubernetes-sigs/controller-runtime/issues/3113
+	ctx, cancel := context.WithCancel(context.Background())
+
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, []os.Signal{os.Interrupt, syscall.SIGTERM}...)
+	go func() {
+		<-c
+		setupLog.Info(fmt.Sprintf("Shutting Down, waiting for %ds", *shutdownDelay))
+		go func() {
+			time.Sleep(time.Duration(*shutdownDelay) * time.Second)
+			setupLog.Info("Shutdown grace period finished")
+			cancel()
+		}()
+		<-c
+		setupLog.Info("Second signal received, killing now")
+		os.Exit(1) // second signal. Exit directly.
+	}()
+
 	go func() {
 		setupErr <- setupControllers(ctx, mgr, tracker, setupFinished)
 	}()
