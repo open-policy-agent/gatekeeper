@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	dirPath := "/tmp/violations/"
+	dirPath := "/tmp/violations/topics"
 	info, err := os.Stat(dirPath)
 	if err != nil {
 		log.Fatalf("failed to stat path: %v", err)

@@ -146,7 +146,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
 
 	if request.Name != r.auditConnectionName {
-		msg := fmt.Sprintf("Ignoring unsupported connection name %s. Connection name should align with flag --audit-connection set or defaulted to %s", request.Name, r.auditConnectionName)
+		msg := fmt.Sprintf("Ignoring unsupported connection name %s. Connection name should align with flag --audit-connection set or defaulted to '%s'", request.Name, r.auditConnectionName)
 		log.Info(msg, "namespace", request.Namespace)
 		return reconcile.Result{}, nil
 	}
@@ -164,6 +164,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if deleted {
 		err := r.system.CloseConnection(request.Name)
 		if err != nil {
+			log.Error(err, "failed to close connection", "name", request.Name)
 			return reconcile.Result{Requeue: true}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
 		}
 		log.Info("removed connection", "name", request.Name)
@@ -172,6 +173,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	err = r.system.UpsertConnection(ctx, connObj.Spec.Config.Value, request.Name, connObj.Spec.Driver)
 	if err != nil {
+		log.Error(err, "failed to upsert connection", "name", request.Name)
 		// Reset the active connection status to false if UpsertConnection fails
 		activeConnection := false
 		return reconcile.Result{Requeue: true}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}, &activeConnection, r.getPod)

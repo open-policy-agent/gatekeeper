@@ -8,6 +8,6 @@ metadata:
 spec:
   driver: '{{ .Values.exportBackend }}'
   config:
-    path: "{{ .Values.audit.exportVolumeMount.path }}"
-    maxAuditResults: {{ .Values.audit.exportConfig.maxAuditResults }}
+    path: "{{ .Values.audit.exportConnection.path }}"
+    maxAuditResults: {{ .Values.audit.exportConnection.maxAuditResults }}
 {{- end }}

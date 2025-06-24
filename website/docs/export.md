@@ -31,11 +31,11 @@ metadata:
   namespace: gatekeeper-system
 spec:
   driver: "dapr"
-  config: |
+  config:
     component: "pubsub"
 ```
 - `driver` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`, `disk`
-- `config` field is a json object that configures how the connection is made. E.g. which queue messages should be sent to.
+- `config` field is an object that configures how the connection is made. E.g. which queue messages should be sent to.
 
 #### Available drivers
 
@@ -57,8 +57,8 @@ spec:
     component: "pubsub"
 status:
   byPod:
-    ID: ""
-    ConnectionUID: ""
+    ID: "pod-id"
+    ConnectionUID: "connection-id"
     Active: {true | false}
     Errors:
       - Type: UpsertConnection
@@ -224,7 +224,7 @@ The following table describes each property in the `status.byPod` section:
     EOF
     ```
 
-    **Note:** Name of the `Connection` custom resource must match the value of `--audit-connection` for it to be used by audit to export violation. At the moment, only one connection config can exists for audit.
+    **Note:** Name of the `Connection` custom resource must match the value of `--audit-connection` for it to be used by audit to export violation. At the moment, only one connection can exist for audit.
 
 4. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
 
@@ -286,7 +286,8 @@ The following table describes each property in the `status.byPod` section:
     --set enableViolationExport=true \
     --set audit.connection=audit-connection \
     --set audit.channel=audit-channel \
-    --set audit.exportConfig.maxAuditResults=3 \
+    --set audit.exportConnection.path=tmp/violations/topics \
+    --set audit.exportConnection.maxAuditResults=3 \
     --set exportBackend=disk \
     ```
 

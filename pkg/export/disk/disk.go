@@ -103,7 +103,11 @@ func (r *Writer) CloseConnection(connectionName string) error {
 		}
 	}
 	err := os.RemoveAll(conn.Path)
-	return err
+	if err != nil {
+		log.Error(err, "error removing path", "path", conn.Path)
+		return err
+	}
+	return nil
 }
 
 func (r *Writer) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
