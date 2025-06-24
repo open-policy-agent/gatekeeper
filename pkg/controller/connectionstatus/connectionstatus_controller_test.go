@@ -10,6 +10,7 @@ import (
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	anythingtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -39,10 +40,9 @@ func TestReconcile_E2E(t *testing.T) {
 	pod, _ := getPod(ctx)
 
 	t.Run("Reconcile called and updates Connection status", func(t *testing.T) {
-		resourceName := "audit-connection"
 		connObj := connectionv1alpha1.Connection{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      resourceName,
+				Name:      *exportutil.AuditConnection,
 				Namespace: util.GetNamespace(),
 			},
 			Spec: connectionv1alpha1.ConnectionSpec{
@@ -54,12 +54,12 @@ func TestReconcile_E2E(t *testing.T) {
 			},
 		}
 		typeConnectionNamespacedName := types.NamespacedName{
-			Name:      resourceName,
+			Name:      *exportutil.AuditConnection,
 			Namespace: util.GetNamespace(),
 		}
 
 		// Wrap the controller Reconciler so it writes each request to a map when it is finished reconciling
-		originalReconciler := newReconciler(mgr)
+		originalReconciler := newReconciler(mgr, *exportutil.AuditConnection)
 		wrappedReconciler, requests := testutils.SetupTestReconcile(originalReconciler)
 		// Register the controller with the manager
 		require.NoError(t, add(mgr, wrappedReconciler))

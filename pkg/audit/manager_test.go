@@ -18,8 +18,8 @@ import (
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
-	exportController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	anythingtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -691,7 +691,7 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 			// Create Connection object for setup
 			connObj := connectionv1alpha1.Connection{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      *exportController.AuditConnection,
+					Name:      *exportutil.AuditConnection,
 					Namespace: util.GetNamespace(),
 				},
 				Spec: connectionv1alpha1.ConnectionSpec{

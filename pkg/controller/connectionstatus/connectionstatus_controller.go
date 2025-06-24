@@ -24,6 +24,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
@@ -57,19 +58,20 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.IsAssigned(operations.Status) {
 		return nil
 	}
-	r := newReconciler(mgr)
+	r := newReconciler(mgr, *exportutil.AuditConnection)
 	return add(mgr, r)
 }
 
 // newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager) *ReconcileConnectionStatus {
+func newReconciler(mgr manager.Manager, auditConnectionName string) *ReconcileConnectionStatus {
 	return &ReconcileConnectionStatus{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
-		writer:       mgr.GetClient(),
-		statusClient: mgr.GetClient(),
-		reader:       mgr.GetCache(),
-		scheme:       mgr.GetScheme(),
-		log:          log,
+		writer:              mgr.GetClient(),
+		statusClient:        mgr.GetClient(),
+		reader:              mgr.GetCache(),
+		scheme:              mgr.GetScheme(),
+		log:                 log,
+		auditConnectionName: auditConnectionName,
 	}
 }
 
@@ -170,6 +172,9 @@ type ReconcileConnectionStatus struct {
 
 	scheme *runtime.Scheme
 	log    logr.Logger
+
+	// TODO: Refactor this once multiple connections are supported, for now this helps with injecting dependency for tests
+	auditConnectionName string
 }
 
 // +kubebuilder:rbac:groups=connection.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -178,6 +183,12 @@ type ReconcileConnectionStatus struct {
 // Reconcile reads the state of the cluster for a Connection object and makes changes based on the ConnectionPodStatuses
 func (r *ReconcileConnectionStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
+
+	if request.Name != r.auditConnectionName {
+		msg := fmt.Sprintf("Ignoring unsupported connection name %s. Connection name should align with flag --audit-connection set or defaulted to %s", request.Name, r.auditConnectionName)
+		log.Info(msg, "namespace", request.Namespace)
+		return reconcile.Result{}, nil
+	}
 
 	connObj := &v1alpha1.Connection{}
 	err := r.reader.Get(ctx, request.NamespacedName, connObj)
@@ -217,7 +228,7 @@ func (r *ReconcileConnectionStatus) Reconcile(ctx context.Context, request recon
 
 	// Update the status of the Connection resource
 	if err := r.statusClient.Status().Update(ctx, connObj); err != nil {
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
 }

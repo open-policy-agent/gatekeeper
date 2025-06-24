@@ -2,13 +2,13 @@ package export
 
 import (
 	"context"
-	"flag"
 	"fmt"
 
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/connectionstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -27,16 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const (
-	defaultConnection = "audit-connection"
-	defaultChannel    = "audit-channel"
-)
-
 var (
-	ExportEnabled   = flag.Bool("enable-violation-export", false, "(alpha) Enable exporting violations to external systems")
-	AuditConnection = flag.String("audit-connection", defaultConnection, "(alpha) Connection name for exporting audit violation messages. Defaults to audit-connection")
-	AuditChannel    = flag.String("audit-channel", defaultChannel, "(alpha) Channel name for exporting audit violation messages. Defaults to audit-channel")
-	log             = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
+	log = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
 )
 
 type Adder struct {
@@ -46,7 +38,7 @@ type Adder struct {
 }
 
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.ExportSystem, *AuditConnection, a.GetPod)
+	r := newReconciler(mgr, a.ExportSystem, *exportutil.AuditConnection, a.GetPod)
 	if r == nil {
 		log.Info("Export functionality is disabled, skipping export connection controller setup")
 		return nil
@@ -65,16 +57,17 @@ func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, erro
 }
 
 type Reconciler struct {
-	reader              client.Reader
-	writer              client.Writer
-	scheme              *runtime.Scheme
-	system              export.Exporter
+	reader client.Reader
+	writer client.Writer
+	scheme *runtime.Scheme
+	system export.Exporter
+	// TODO: Refactor this once multiple connections are supported, for now this helps with injecting dependency for tests
 	auditConnectionName string
 	getPod              func(context.Context) (*corev1.Pod, error)
 }
 
 func newReconciler(mgr manager.Manager, system export.Exporter, auditConnectionName string, getPod func(context.Context) (*corev1.Pod, error)) *Reconciler {
-	if !*ExportEnabled {
+	if !*exportutil.ExportEnabled {
 		log.Info("Export is disabled via flag")
 		return nil
 	}

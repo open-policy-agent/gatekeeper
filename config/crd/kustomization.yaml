@@ -79,7 +79,6 @@ patchesStrategicMerge:
 #- patches/webhook_in_assignmetadata.yaml
 #- patches/webhook_in_assign.yaml
 #- patches/webhook_in_connections.yaml
-#- patches/webhook_in_connectionpodstatusstatuses.yaml
 #- patches/webhook_in_connectionpodstatuses.yaml
 # +kubebuilder:scaffold:crdkustomizewebhookpatch
 
@@ -91,7 +90,6 @@ patchesStrategicMerge:
 #- patches/cainjection_in_assignmetadata.yaml
 #- patches/cainjection_in_assign.yaml
 #- patches/cainjection_in_connections.yaml
-#- patches/cainjection_in_connectionpodstatusstatuses.yaml
 #- patches/cainjection_in_connectionpodstatuses.yaml
 # +kubebuilder:scaffold:crdkustomizecainjectionpatch
 

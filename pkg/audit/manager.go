@@ -264,8 +264,8 @@ func (am *Manager) audit(ctx context.Context) error {
 		SuccessCount: 0,
 		Errors:       make(map[string]error),
 	}
-	if *exportController.ExportEnabled {
-		if err := am.exportSystem.Publish(context.Background(), *exportController.AuditConnection, *exportController.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
+	if *exportutil.ExportEnabled {
+		if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
 			am.log.Error(err, "failed to export audit start message")
 			auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
 		} else {
@@ -283,8 +283,8 @@ func (am *Manager) audit(ctx context.Context) error {
 		if err := am.reporter.reportRunEnd(endTime); err != nil {
 			am.log.Error(err, "failed to report run end time")
 		}
-		if *exportController.ExportEnabled {
-			if err := am.exportSystem.Publish(context.Background(), *exportController.AuditConnection, *exportController.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
+		if *exportutil.ExportEnabled {
+			if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
 				am.log.Error(err, "failed to export audit end message")
 				auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
 			} else {
@@ -907,8 +907,8 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		details := r.Metadata["details"]
 		labels := r.obj.GetLabels()
 		logViolation(am.log, constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels)
-		if *exportController.ExportEnabled {
-			if err := am.exportSystem.Publish(context.Background(), *exportController.AuditConnection, *exportController.AuditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp)); err != nil {
+		if *exportutil.ExportEnabled {
+			if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp)); err != nil {
 				auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
 			} else {
 				auditExportPublishingState.SuccessCount++
@@ -1308,7 +1308,7 @@ func reportExportConnectionErrors(
 	// Connection is considered active if there were any successful publishes
 	activeConnection := auditExportPublishingState.SuccessCount > 0
 
-	if err := exportController.UpdateOrCreateConnectionPodStatus(ctx, client, client, scheme, *exportController.AuditConnection, exportErrors, &activeConnection, getPod); err != nil {
+	if err := exportController.UpdateOrCreateConnectionPodStatus(ctx, client, client, scheme, *exportutil.AuditConnection, exportErrors, &activeConnection, getPod); err != nil {
 		logger.Error(err, "failed to write export errors to the connection pod status")
 	}
 }
