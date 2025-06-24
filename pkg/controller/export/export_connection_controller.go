@@ -27,9 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var (
-	log = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
-)
+var log = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
 
 type Adder struct {
 	ExportSystem export.Exporter
@@ -191,8 +189,8 @@ func UpdateOrCreateConnectionPodStatus(
 	connObjName string,
 	exportErrors []*statusv1alpha1.ConnectionError,
 	activeConnection *bool,
-	getPod func(context.Context) (*corev1.Pod, error)) error {
-
+	getPod func(context.Context) (*corev1.Pod, error),
+) error {
 	// Since the caller from Audit won't have an incoming request
 	// use the connection name from the audit connection flag as the predetermined connection name
 	request := types.NamespacedName{
@@ -214,8 +212,8 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	connObj *connectionv1alpha1.Connection,
 	exportErrors []*statusv1alpha1.ConnectionError,
 	activeConnection *bool,
-	getPod func(context.Context) (*corev1.Pod, error)) error {
-
+	getPod func(context.Context) (*corev1.Pod, error),
+) error {
 	pod, err := getPod(ctx)
 	if err != nil {
 		return fmt.Errorf("getting reconciler pod: %w", err)
@@ -274,7 +272,8 @@ func deleteStatus(ctx context.Context,
 	writer client.Writer,
 	connectionNamespace string,
 	connectionName string,
-	getPod func(context.Context) (*corev1.Pod, error)) error {
+	getPod func(context.Context) (*corev1.Pod, error),
+) error {
 	connPodStatusObj := &statusv1alpha1.ConnectionPodStatus{}
 	pod, err := getPod(ctx)
 	if err != nil {
@@ -294,7 +293,8 @@ func deleteStatus(ctx context.Context,
 
 func newConnectionPodStatus(scheme *runtime.Scheme,
 	pod *corev1.Pod,
-	connObj *connectionv1alpha1.Connection) (*statusv1alpha1.ConnectionPodStatus, error) {
+	connObj *connectionv1alpha1.Connection,
+) (*statusv1alpha1.ConnectionPodStatus, error) {
 	connPodStatusObj, err := statusv1alpha1.NewConnectionStatusForPod(pod, connObj.GetNamespace(), connObj.GetName(), scheme)
 	if err != nil {
 		return nil, fmt.Errorf("creating status for pod: %w", err)
@@ -306,7 +306,8 @@ func newConnectionPodStatus(scheme *runtime.Scheme,
 
 func setStatusErrors(
 	connPodStatusObj *statusv1alpha1.ConnectionPodStatus,
-	exportErrors []*statusv1alpha1.ConnectionError) {
+	exportErrors []*statusv1alpha1.ConnectionError,
+) {
 	if len(exportErrors) == 0 {
 		connPodStatusObj.Status.Errors = nil
 		return

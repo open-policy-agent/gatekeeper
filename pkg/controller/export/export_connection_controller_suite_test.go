@@ -30,9 +30,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var (
-	cfg *rest.Config
-)
+var cfg *rest.Config
 
 func TestMain(m *testing.M) {
 	testEnv := &envtest.Environment{

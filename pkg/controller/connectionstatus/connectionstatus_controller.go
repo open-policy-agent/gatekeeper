@@ -170,15 +170,12 @@ type ReconcileConnectionStatus struct {
 
 	scheme *runtime.Scheme
 	log    logr.Logger
-
-	// TODO: Refactor this once multiple connections are supported, for now this helps with injecting dependency for tests
-	auditConnectionName string
 }
 
 // +kubebuilder:rbac:groups=connection.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=status.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile reads the state of the cluster for a Connection object and makes changes based on the ConnectionPodStatuses
+// Reconcile reads the state of the cluster for a Connection object and makes changes based on the ConnectionPodStatuses.
 func (r *ReconcileConnectionStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
 
