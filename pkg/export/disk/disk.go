@@ -47,6 +47,7 @@ type Writer struct {
 	closedConnections            map[string]FailedConnection
 	cleanupDone                  chan struct{}
 	cleanupOnce                  sync.Once
+	cleanupStopped               bool
 	closeAndRemoveFilesWithRetry func(conn Connection) error
 }
 
@@ -55,11 +56,10 @@ const (
 	maxAllowedAuditRuns = 5
 	maxAuditResults     = "maxAuditResults"
 	violationPath       = "path"
-	// Connection cleanup constants.
-	cleanupInterval  = 5 * time.Minute
-	maxRetryAttempts = 10
-	maxConnectionAge = 30 * time.Minute
-	baseRetryDelay   = 15 * time.Second
+	cleanupInterval     = 2 * time.Minute
+	maxRetryAttempts    = 10
+	maxConnectionAge    = 30 * time.Minute
+	baseRetryDelay      = 15 * time.Second
 )
 
 var Connections = &Writer{
@@ -84,11 +84,6 @@ var Connections = &Writer{
 var log = logf.Log.WithName("disk-driver").WithValues(logging.Process, "export")
 
 func (r *Writer) CreateConnection(_ context.Context, connectionName string, config interface{}) error {
-	// Start cleanup goroutine on first connection
-	r.cleanupOnce.Do(func() {
-		go r.backgroundCleanup()
-	})
-
 	path, maxResults, err := unmarshalConfig(config)
 	if err != nil {
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
@@ -141,6 +136,14 @@ func (r *Writer) CloseConnection(connectionName string) error {
 			RetryCount:  0,
 			NextRetryAt: now.Add(baseRetryDelay),
 		}
+		if r.cleanupStopped {
+			r.cleanupOnce = sync.Once{}
+			r.cleanupDone = make(chan struct{})
+			r.cleanupStopped = false
+		}
+		r.cleanupOnce.Do(func() {
+			go r.backgroundCleanup()
+		})
 	}
 	return err
 }
@@ -390,7 +393,6 @@ func (r *Writer) retryFailedConnections() {
 			continue
 		}
 
-		log.Info("Retrying close for failed connection", "connection", name, "attempt", failedConn.RetryCount+1)
 		err := r.closeAndRemoveFilesWithRetry(failedConn.Connection)
 		if err == nil {
 			log.Info("Successfully closed previously failed connection", "connection", name)
@@ -399,9 +401,6 @@ func (r *Writer) retryFailedConnections() {
 			log.Info("Failed to close connection on retry", "connection", name, "error", err, "attempt", failedConn.RetryCount+1)
 			failedConn.RetryCount++
 			delay := time.Duration(failedConn.RetryCount) * baseRetryDelay
-			if delay > time.Minute {
-				delay = time.Minute
-			}
 			failedConn.NextRetryAt = now.Add(delay)
 			r.closedConnections[name] = failedConn
 		}
@@ -413,5 +412,9 @@ func (r *Writer) retryFailedConnections() {
 
 	if len(r.closedConnections) > 0 {
 		log.Info("Failed connections remaining", "count", len(r.closedConnections))
+	} else {
+		log.Info("No failed connections remaining, cleanup done")
+		r.cleanupStopped = true
+		close(r.cleanupDone)
 	}
 }
