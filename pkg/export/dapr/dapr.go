@@ -51,8 +51,8 @@ func (r *Dapr) CloseConnection(connectionName string) error {
 	if !ok {
 		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
+	defer delete(r.openConnections, connectionName)
 	conn.client.Close()
-	delete(r.openConnections, connectionName)
 	return nil
 }
 

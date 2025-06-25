@@ -364,8 +364,8 @@ func TestCloseConnection(t *testing.T) {
 			}
 
 			if tt.expectClosedEntry {
-				if _, exists := writer.closedConnections[tt.connectionName]; !exists {
-					t.Errorf("expected connection %s to be in closedConnections, but it was not", tt.connectionName)
+				if len(writer.closedConnections) == 0 {
+					t.Errorf("expected a failed connection to be in closedConnections, but it was not")
 				}
 			} else {
 				if _, exists := writer.closedConnections[tt.connectionName]; exists {

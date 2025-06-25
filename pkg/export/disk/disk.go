@@ -58,7 +58,7 @@ const (
 	violationPath       = "path"
 	cleanupInterval     = 2 * time.Minute
 	maxRetryAttempts    = 10
-	maxConnectionAge    = 30 * time.Minute
+	maxConnectionAge    = 10 * time.Minute
 	baseRetryDelay      = 15 * time.Second
 )
 
@@ -130,7 +130,7 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	err := r.closeAndRemoveFilesWithRetry(conn)
 	if err != nil {
 		now := time.Now()
-		r.closedConnections[connectionName] = FailedConnection{
+		r.closedConnections[connectionName + time.Now().String()] = FailedConnection{
 			Connection:  conn,
 			FailedAt:    now,
 			RetryCount:  0,
