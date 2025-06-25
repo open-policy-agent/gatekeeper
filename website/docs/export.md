@@ -304,7 +304,7 @@ The following table describes each property in the `status.byPod` section:
         path: "/tmp/violations"
         maxAuditResults: 3
     ```
-| Parameter       | Description                                                                                                                         | Default           |
+| Property       | Description                                                                                                                         | Default           |
 |:----------------|:------------------------------------------------------------------------------------------------------------------------------------|:------------------|
 | path            | (alpha) Path for audit-pod-manager container to export violations and sidecar container to read from.                               | "/tmp/violations" |
 | maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
