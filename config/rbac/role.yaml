@@ -89,6 +89,18 @@ rules:
   - patch
   - update
 - apiGroups:
+  - connection.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - constraints.gatekeeper.sh
   resources:
   - '*'

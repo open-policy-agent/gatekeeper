@@ -3,15 +3,24 @@ package audit
 import (
 	"container/heap"
 	"context"
+	"flag"
 	"os"
 	"reflect"
 	"testing"
 
+	"github.com/go-logr/logr"
+	"github.com/onsi/gomega"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	anythingtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
@@ -22,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -614,4 +624,113 @@ func Test_readUnstructured(t *testing.T) {
 			t.Errorf("Expected name to be 'my-namespace', got %s", u.GetName())
 		}
 	})
+}
+
+func Test_reportExportConnectionErrors(t *testing.T) {
+	// Setup
+	require.NoError(t, flag.CommandLine.Parse([]string{"--enable-violation-export", "true"}))
+	g := gomega.NewGomegaWithT(t)
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
+		pod := fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod"))
+		return pod, nil
+	}
+	pod, _ := getPod(context.Background())
+
+	tests := []struct {
+		name           string
+		successCount   int
+		errorsMap      map[string]error
+		wantActiveConn bool
+		wantLogMsgs    []string
+	}{
+		{
+			name:           "no errors, no successes",
+			successCount:   0,
+			errorsMap:      map[string]error{},
+			wantActiveConn: false,
+		},
+		{
+			name:         "some errors, no successes",
+			successCount: 0,
+			errorsMap: map[string]error{
+				"static err 1": errors.New("export error thrown 1"),
+				"static err 2": errors.New("export error thrown 2"),
+			},
+			wantActiveConn: false,
+		},
+		{
+			name:         "some errors, some successes",
+			successCount: 2,
+			errorsMap: map[string]error{
+				"static err 1": errors.New("export error thrown 1"),
+			},
+			wantActiveConn: true,
+		},
+		{
+			name:           "no errors, some successes",
+			successCount:   1,
+			errorsMap:      map[string]error{},
+			wantActiveConn: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(_ *testing.T) {
+			if err := apis.AddToScheme(scheme.Scheme); err != nil {
+				g.Expect(err).ToNot(gomega.HaveOccurred(), "Failed to add scheme")
+			}
+
+			auditExportPublishingState := auditExportPublishingState{
+				SuccessCount: test.successCount,
+				Errors:       test.errorsMap,
+			}
+
+			client := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
+
+			// Create Connection object for setup
+			connObj := connectionv1alpha1.Connection{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      *exportutil.AuditConnection,
+					Namespace: util.GetNamespace(),
+				},
+				Spec: connectionv1alpha1.ConnectionSpec{
+					Driver: disk.Name,
+					Config: &anythingtypes.Anything{Value: map[string]interface{}{
+						"path":            "value",
+						"maxAuditResults": float64(3),
+					}},
+				},
+			}
+
+			g.Expect(client.Create(context.Background(), &connObj)).Should(gomega.Succeed(), "Failed to create Connection object")
+
+			// Validate the operation is idempotent by re-running
+			for i := 0; i < 2; i++ {
+				reportExportConnectionErrors(context.Background(), auditExportPublishingState, logr.Logger{}, client, scheme.Scheme, getPod)
+
+				// Await the ConnectionPodStatus
+				connPodStatusName, _ := statusv1alpha1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
+				var connPodStatus statusv1alpha1.ConnectionPodStatus
+				g.Eventually(func(g gomega.Gomega) {
+					g.Expect(client.Get(context.Background(), types.NamespacedName{
+						Namespace: util.GetNamespace(),
+						Name:      connPodStatusName,
+					}, &connPodStatus)).Should(gomega.Succeed(), "Status should exist after creation")
+				}).Should(gomega.Succeed())
+
+				// Assert the ConnectionPodStatus expected
+				g.Expect(connPodStatus.Status.Active).To(gomega.Equal(test.wantActiveConn), "Active status unexpected")
+				g.Expect(len(connPodStatus.Status.Errors)).To(gomega.Equal(len(test.errorsMap)), "Length of errors unexpected")
+				expected := make([]*statusv1alpha1.ConnectionError, 0, len(test.errorsMap))
+				for key := range test.errorsMap {
+					expected = append(expected, &statusv1alpha1.ConnectionError{
+						Type:    statusv1alpha1.PublishError,
+						Message: key,
+					})
+				}
+
+				g.Expect(connPodStatus.Status.Errors).To(gomega.ConsistOf(expected), "Error slice unexpected")
+			}
+		})
+	}
 }
