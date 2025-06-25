@@ -123,7 +123,6 @@ var replacements = map[string]string{
         {{- end }}`,
 
 	"- HELMSUBST_AUDIT_OPERATIONS": `
-        {{- if hasKey .Values.audit "disableGenerateOperation" }}
         {{- if not .Values.audit.disableGenerateOperation }}
         - --operation=generate
         {{- end }}

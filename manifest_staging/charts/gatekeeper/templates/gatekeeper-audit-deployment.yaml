@@ -69,7 +69,6 @@ spec:
         {{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}
         - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
         
-        {{- if hasKey .Values.audit "disableGenerateOperation" }}
         {{- if not .Values.audit.disableGenerateOperation }}
         - --operation=generate
         {{- end }}
