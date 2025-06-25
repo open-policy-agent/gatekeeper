@@ -130,7 +130,8 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	err := r.closeAndRemoveFilesWithRetry(conn)
 	if err != nil {
 		now := time.Now()
-		r.closedConnections[connectionName + time.Now().String()] = FailedConnection{
+		// Store the failed connection with retry metadata with a unique key to avoid conflicts.
+		r.closedConnections[connectionName + now.String()] = FailedConnection{
 			Connection:  conn,
 			FailedAt:    now,
 			RetryCount:  0,
