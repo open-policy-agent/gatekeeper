@@ -21,29 +21,62 @@ Install prerequisites such as a pubsub tool, a message broker etc.
 
 In the audit deployment, set the `--enable-violation-export` flag to `true` to export audit violations. Additionally, use `--audit-connection` (defaults to `audit-connection`) and `--audit-channel`(defaults to `audit-channel`) flags to allow audit to export violations using desired connection onto desired channel. `--audit-connection` must be set to the name of the connection config, and `--audit-channel` must be set to name of the channel where violations should get published.
 
-A ConfigMap that contains `driver` and `config` fields in `data` is required to establish connection for sending violations over the channel. Following is an example ConfigMap to establish a connection that uses Dapr to export messages:
+A `Connection` custom resource with `spec` that contains `driver` and `config` fields are required to establish connection for sending violations over the channel. Following is an example to establish a connection that uses Dapr to export messages:
 
 ```yaml
-apiVersion: v1
-kind: ConfigMap
+apiVersion: connection.gatekeeper.sh/v1alpha1
+kind: Connection
 metadata:
   name: audit-connection
   namespace: gatekeeper-system
-data:
+spec:
   driver: "dapr"
-  config: |
-    {
-      "component": "pubsub"
-    }
+  config:
+    component: "pubsub"
 ```
-
-- `driver` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`
-- `config` field is a json object that configures how the connection is made. E.g. which queue messages should be sent to.
+- `driver` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`, `disk`
+- `config` field is an object that configures how the connection is made. E.g. which queue messages should be sent to.
 
 #### Available drivers
 
 - Dapr: Export violations using pubsub model provided with [Dapr](https://dapr.io/)
 - Disk: Export violations to file system.
+
+#### Status
+Upon controller ingestion, the `Connection` will reflect the state of the export connection on its `status` sub resource.
+
+```yaml
+apiVersion: connection.gatekeeper.sh/v1alpha1
+kind: Connection
+metadata:
+  name: audit-connection
+  namespace: gatekeeper-system
+spec:
+  driver: "dapr"
+  config:
+    component: "pubsub"
+status:
+  byPod:
+    ID: "pod-id"
+    ConnectionUID: "connection-id"
+    Active: {true | false}
+    Errors:
+      - Type: UpsertConnection
+        Message: "Error message"
+      - Type: Publish
+        Message: "Error message"
+```
+
+The following table describes each property in the `status.byPod` section:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ID` | string | Unique identifier for the pod handling the connection |
+| `ConnectionUID` | string | Unique identifier for the specific connection instance |
+| `Active` | boolean | Indicates whether the connection had at least one successful publishing and is currently active and operational (`true`) or inactive (`false`) |
+| `Errors` | array | List of error objects containing information about any issues with the connection |
+| `Errors[].Type` | string | Type of error encountered (e.g., `UpsertConnection`, `PublishingError`) |
+| `Errors[].Message` | string | Human-readable description of the error |
 
 ### Quick start with exporting violations using Dapr and Redis
 
@@ -179,21 +212,19 @@ data:
 
     ```shell
     kubectl apply -f - <<EOF
-    apiVersion: v1
-    kind: ConfigMap
+    apiVersion: connection.gatekeeper.sh/v1alpha1
+    kind: Connection
     metadata:
       name: audit-connection
       namespace: gatekeeper-system
-    data:
+    spec:
       driver: "dapr"
-      config: |
-        {
-          "component": "pubsub"
-        }
+      config:
+        component: "pubsub"
     EOF
     ```
 
-    **Note:** Name of the connection configMap must match the value of `--audit-connection` for it to be used by audit to export violation. At the moment, only one connection config can exists for audit.
+    **Note:** Name of the `Connection` custom resource must match the value of `--audit-connection` for it to be used by audit to export violation. At the moment, only one connection can exist for audit.
 
 4. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
 
@@ -258,6 +289,25 @@ data:
     --set audit.exportConfig.maxAuditResults=3 \
     --set exportBackend=disk \
     ```
+    
+    As part of the command above, the `Connection` resource is installed with the following values and defaults:
+
+    ```yaml
+    apiVersion: connection.gatekeeper.sh/v1alpha1
+    kind: Connection
+    metadata:
+      name: "audit-connection"
+      namespace: "gatekeeper-system"
+    spec:
+      driver: "disk"
+      config:
+        path: "/tmp/violations"
+        maxAuditResults: 3
+    ```
+| Property       | Description                                                                                                                         | Default           |
+|:----------------|:------------------------------------------------------------------------------------------------------------------------------------|:------------------|
+| path            | (alpha) Path for audit-pod-manager container to export violations and sidecar container to read from.                               | "/tmp/violations" |
+| maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
 

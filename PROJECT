@@ -17,4 +17,10 @@ resources:
 - group: mutations
   kind: Assign
   version: v1alpha1
+- group: status
+  kind: ConnectionPodStatus
+  version: v1alpha1
+- group: connection
+  kind: Connection
+  version: v1alpha1
 version: "2"

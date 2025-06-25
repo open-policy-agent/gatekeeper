@@ -1,5 +1,18 @@
 package util
 
+import "flag"
+
+const (
+	defaultConnection = "audit-connection"
+	defaultChannel    = "audit-channel"
+)
+
+var (
+	ExportEnabled   = flag.Bool("enable-violation-export", false, "(alpha) Enable exporting violations to external systems")
+	AuditConnection = flag.String("audit-connection", defaultConnection, "(alpha) Connection name for exporting audit violation messages. Defaults to audit-connection")
+	AuditChannel    = flag.String("audit-channel", defaultChannel, "(alpha) Channel name for exporting audit violation messages. Defaults to audit-channel")
+)
+
 // ExportMsg represents export message for each violation.
 type ExportMsg struct {
 	ID                    string            `json:"id,omitempty"`
