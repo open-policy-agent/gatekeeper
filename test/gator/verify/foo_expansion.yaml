@@ -9,7 +9,6 @@ spec:
     versions: [ "v1" ]
   templateSource: "spec.template"
   generatedGVK:
-    kind: "FooIsBar"
+    kind: "Foo"
     group: ""
     version: "v1"
-
