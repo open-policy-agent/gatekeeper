@@ -229,8 +229,6 @@ controllerManager:
       # - from:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
-  disableWebhookOperation: false
-  disableGenerateOperation: true
 exportBackend: ""
 audit:
   exportConfig:
@@ -294,9 +292,6 @@ audit:
       - 999
   writeToRAMDisk: false
   extraRules: []
-  disableGenerateOperation: false
-  disableAuditOperation: false
-  disableStatusOperation: false
 crds:
   affinity: {}
   tolerations: []
