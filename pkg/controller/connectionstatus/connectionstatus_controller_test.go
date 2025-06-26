@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// Test operations on Connection and ConnectionPodStatus handled by controller and reflected on Connection status
+// Test operations on Connection and ConnectionPodStatus handled by controller and reflected on Connection status.
 func TestReconcile_E2E(t *testing.T) {
 	// Setup
 	const timeout = time.Second * 20

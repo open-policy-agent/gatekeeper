@@ -131,7 +131,7 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	if err != nil {
 		now := time.Now()
 		// Store the failed connection with retry metadata with a unique key to avoid conflicts.
-		r.closedConnections[connectionName + now.String()] = FailedConnection{
+		r.closedConnections[connectionName+now.String()] = FailedConnection{
 			Connection:  conn,
 			FailedAt:    now,
 			RetryCount:  0,

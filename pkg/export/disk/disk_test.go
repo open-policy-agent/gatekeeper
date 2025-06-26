@@ -1454,11 +1454,7 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 		}
 
-		writer.mu.RLock()
-		_, exists := writer.closedConnections["test-conn-2"]
-		writer.mu.RUnlock()
-
-		if !exists {
+		if !closedConnectionExists(writer, "test-conn-2") {
 			t.Error("Second connection should be in closedConnections due to simulated failure")
 		}
 
@@ -1495,11 +1491,10 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 		}
 
 		writer.mu.RLock()
-		_, existsInClosed := writer.closedConnections["failing-conn"]
 		_, existsInOpen := writer.openConnections["failing-conn"]
 		writer.mu.RUnlock()
 
-		if !existsInClosed {
+		if !closedConnectionExists(writer, "failing-conn") {
 			t.Error("Expected connection to be in closedConnections")
 		}
 
@@ -1507,20 +1502,20 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			t.Error("Connection should have been removed from openConnections")
 		}
 
-		writer.mu.RLock()
-		failedConn := writer.closedConnections["failing-conn"]
-		writer.mu.RUnlock()
+		failedConns := getClosedConnections(writer, "failing-conn")
 
-		if failedConn.RetryCount != 0 {
-			t.Errorf("Expected initial RetryCount to be 0, got %d", failedConn.RetryCount)
-		}
+		for _, conn := range failedConns {
+			if conn.RetryCount != 0 {
+				t.Errorf("Expected initial RetryCount to be 0, got %d", conn.RetryCount)
+			}
 
-		if failedConn.FailedAt.IsZero() {
-			t.Error("Expected FailedAt to be set")
-		}
+			if conn.FailedAt.IsZero() {
+				t.Error("Expected FailedAt to be set")
+			}
 
-		if failedConn.NextRetryAt.IsZero() {
-			t.Error("Expected NextRetryAt to be set")
+			if conn.NextRetryAt.IsZero() {
+				t.Error("Expected NextRetryAt to be set")
+			}
 		}
 	})
 
@@ -1679,4 +1674,27 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			t.Error("Expired connection should have been removed")
 		}
 	})
+}
+
+func closedConnectionExists(writer *Writer, connName string) bool {
+	writer.mu.RLock()
+	defer writer.mu.RUnlock()
+	for name := range writer.closedConnections {
+		if strings.Contains(name, connName) {
+			return true
+		}
+	}
+	return false
+}
+
+func getClosedConnections(writer *Writer, connName string) []FailedConnection {
+	writer.mu.RLock()
+	defer writer.mu.RUnlock()
+	var conns []FailedConnection
+	for name := range writer.closedConnections {
+		if strings.Contains(name, connName) {
+			conns = append(conns, writer.closedConnections[name])
+		}
+	}
+	return conns
 }

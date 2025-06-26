@@ -179,7 +179,7 @@ func TestReconcile_E2E(t *testing.T) {
 	})
 }
 
-// Mocks ExportSystem to simulate the export system behavior failures and impact on the controller
+// Mocks ExportSystem to simulate the export system behavior failures and impact on the controller.
 func TestReconcile_ExportSystem_Failures(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-2"
@@ -306,7 +306,7 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 	})
 }
 
-// Mock K8s client to simulate the client failures and impact on the controller
+// Mock K8s client to simulate the client failures and impact on the controller.
 func TestReconcile_Client_Failures(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-3"
