@@ -232,7 +232,7 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 				},
 			}
 
-			obj, err := TemplateToPolicyDefinition(template)
+			obj, err := TemplateToPolicyDefinition(template, ptr.To(false))
 			if !errors.Is(err, test.expectedErr) {
 				t.Errorf("unexpected error. got %v; wanted %v", err, test.expectedErr)
 			}
