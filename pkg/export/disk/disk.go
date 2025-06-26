@@ -26,6 +26,8 @@ type Connection struct {
 	Path string `json:"path,omitempty"`
 	// max number of audit results to store
 	MaxAuditResults int `json:"maxAuditResults,omitempty"`
+	// ttl for the connection after which it will be removed from retry queue to close connection
+	ClosedConnectionTTL time.Duration `json:"closedConnectionTTL,omitempty"`
 	// File to write audit logs
 	File *os.File
 
@@ -84,7 +86,7 @@ var Connections = &Writer{
 var log = logf.Log.WithName("disk-driver").WithValues(logging.Process, "export")
 
 func (r *Writer) CreateConnection(_ context.Context, connectionName string, config interface{}) error {
-	path, maxResults, err := unmarshalConfig(config)
+	path, maxResults, ttl, err := unmarshalConfig(config)
 	if err != nil {
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
 	}
@@ -92,6 +94,7 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	r.openConnections[connectionName] = Connection{
 		Path:            path,
 		MaxAuditResults: int(maxResults),
+		ClosedConnectionTTL: time.Duration(ttl) * time.Second,
 	}
 	return nil
 }
@@ -102,7 +105,7 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("connection %s for disk driver not found", connectionName)
 	}
 
-	path, maxResults, err := unmarshalConfig(config)
+	path, maxResults, ttl, err := unmarshalConfig(config)
 	if err != nil {
 		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
 	}
@@ -116,6 +119,7 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	}
 
 	conn.MaxAuditResults = int(maxResults)
+	conn.ClosedConnectionTTL = time.Duration(ttl) * time.Second
 
 	r.openConnections[connectionName] = conn
 	return nil
@@ -330,27 +334,31 @@ func validatePath(path string) error {
 	return nil
 }
 
-func unmarshalConfig(config interface{}) (string, float64, error) {
+func unmarshalConfig(config interface{}) (string, float64, int64, error) {
 	cfg, ok := config.(map[string]interface{})
 	if !ok {
-		return "", 0.0, fmt.Errorf("invalid config format, expected map[string]interface{}")
+		return "", 0.0, 0, fmt.Errorf("invalid config format, expected map[string]interface{}")
 	}
 
 	path, pathOk := cfg[violationPath].(string)
 	if !pathOk {
-		return "", 0.0, fmt.Errorf("missing or invalid 'path'")
+		return "", 0.0, 0, fmt.Errorf("missing or invalid 'path'")
 	}
 	if err := validatePath(path); err != nil {
-		return "", 0.0, fmt.Errorf("invalid path: %w", err)
+		return "", 0.0, 0, fmt.Errorf("invalid path: %w", err)
 	}
 	maxResults, maxResultsOk := cfg[maxAuditResults].(float64)
 	if !maxResultsOk {
-		return "", 0.0, fmt.Errorf("missing or invalid 'maxAuditResults'")
+		return "", 0.0, 0, fmt.Errorf("missing or invalid 'maxAuditResults'")
 	}
 	if maxResults > maxAllowedAuditRuns {
-		return "", 0.0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
+		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
 	}
-	return path, maxResults, nil
+	ttl, ttlOk := cfg["ttl"].(int64) 
+	if !ttlOk {
+		ttl = int64(maxConnectionAge.Seconds())
+	}
+	return path, maxResults, ttl, nil
 }
 
 // backgroundCleanup runs periodically to retry closing failed connections.
