@@ -26,7 +26,9 @@ type Connection struct {
 	Path string `json:"path,omitempty"`
 	// max number of audit results to store
 	MaxAuditResults int `json:"maxAuditResults,omitempty"`
-	// ttl for the connection after which it will be removed from retry queue to close connection
+	// ClosedConnectionTTL specifies how long a failed connection remains 
+	// in the cleanup queue before being permanently removed (not retried).
+	// This prevents memory leaks from accumulating failed connections.
 	ClosedConnectionTTL time.Duration `json:"closedConnectionTTL,omitempty"`
 	// File to write audit logs
 	File *os.File
@@ -61,6 +63,7 @@ const (
 	cleanupInterval     = 2 * time.Minute
 	maxRetryAttempts    = 10
 	maxConnectionAge    = 10 * time.Minute
+	minConnectionAge    = 1 * time.Minute
 	baseRetryDelay      = 15 * time.Second
 )
 
@@ -357,14 +360,16 @@ func unmarshalConfig(config interface{}) (string, float64, time.Duration, error)
 	ttl := maxConnectionAge
 	if ttlStr, ok := cfg["closedConnectionTTL"].(string); ok {
 		if duration, err := time.ParseDuration(ttlStr); err != nil {
-			log.Info("Invalid ttl format, using default", "ttl", ttlStr, "default", maxConnectionAge, "error", err)
+			return "", 0.0, 0, fmt.Errorf("Invalid ttl format: %w", err)
 		} else {
 			ttl = duration
 		}
 	}
-	if ttl < time.Minute {
-		// making sure ttl is not too short and can be used for retries
-		ttl = time.Minute
+	if ttl > maxConnectionAge {
+		return "", 0.0, 0, fmt.Errorf("closedConnectionTTL %s exceeds maximum allowed: %s", ttl, maxConnectionAge)
+	}
+	if ttl < minConnectionAge {
+		return "", 0.0, 0, fmt.Errorf("closedConnectionTTL %s is too short, must be at least 1 minute", ttl)
 	}
 	return path, maxResults, ttl, nil
 }

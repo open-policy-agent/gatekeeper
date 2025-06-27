@@ -1058,9 +1058,9 @@ func TestUnmarshalConfig(t *testing.T) {
 				"maxAuditResults":     3.0,
 				"closedConnectionTTL": "invalid",
 			},
-			expectError:  false,
-			expectedErr:  "",
-			expectedTTL:  maxConnectionAge,
+			expectError:  true,
+			expectedErr:  "Invalid ttl format: time:",
+			expectedTTL:  0,
 			expectedMax:  3.0,
 			expectedPath: tmpPath,
 		},
@@ -1748,8 +1748,8 @@ func TestConnectionTTL(t *testing.T) {
 				"maxAuditResults":     5.0,
 				"closedConnectionTTL": "invalid",
 			},
-			expectedTTL: maxConnectionAge,
-			expectError: false,
+			expectedTTL: 0,
+			expectError: true,
 		},
 		{
 			name: "No TTL specified",
@@ -1775,10 +1775,30 @@ func TestConnectionTTL(t *testing.T) {
 			config: map[string]interface{}{
 				"path":                t.TempDir(),
 				"maxAuditResults":     5.0,
-				"closedConnectionTTL": "1h30m45s",
+				"closedConnectionTTL": "2m5s",
 			},
-			expectedTTL: 1*time.Hour + 30*time.Minute + 45*time.Second,
+			expectedTTL: 2*time.Minute + 5*time.Second,
 			expectError: false,
+		},
+		{
+			name: "TTL too long",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": "2h5m",
+			},
+			expectedTTL: 0,
+			expectError: true,
+		},
+		{
+			name: "TTL too short",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": "1s",
+			},
+			expectedTTL: 0,
+			expectError: true,
 		},
 	}
 
@@ -1888,13 +1908,18 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 		config := map[string]interface{}{
 			"path":                t.TempDir(),
 			"maxAuditResults":     5.0,
-			"closedConnectionTTL": "10s",
+			"closedConnectionTTL": "1m",
 		}
 
 		err := writer.CreateConnection(context.Background(), "long-ttl-conn", config)
 		if err != nil {
 			t.Fatalf("Failed to create connection: %v", err)
 		}
+		writer.mu.RLock()
+		conn := writer.openConnections["long-ttl-conn"]
+		conn.ClosedConnectionTTL = 10 * time.Second
+		writer.openConnections["long-ttl-conn"] = conn
+		writer.mu.RUnlock()
 
 		err = writer.CloseConnection("long-ttl-conn")
 		if err == nil {
