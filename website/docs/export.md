@@ -302,13 +302,13 @@ The following table describes each property in the `status.byPod` section:
     spec:
       driver: "disk"
       config:
-        path: "/tmp/violations"
+        path: "/tmp/violations/topics"
         maxAuditResults: 3
     ```
-| Property       | Description                                                                                                                         | Default           |
-|:----------------|:------------------------------------------------------------------------------------------------------------------------------------|:------------------|
-| path            | (alpha) Path for audit-pod-manager container to export violations and sidecar container to read from.                               | "/tmp/violations" |
-| maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
+    | Property        | Description                                                                                                                                                            | Default                  |
+    |:----------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |:-------------------------|
+    | path            | (alpha) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "/tmp/violations/topics" |
+    | maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                                                         | 3                        |
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
 

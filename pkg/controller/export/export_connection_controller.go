@@ -173,8 +173,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	err = r.system.UpsertConnection(ctx, connObj.Spec.Config.Value, request.Name, connObj.Spec.Driver)
 	if err != nil {
-        log.Error(err, "failed to upsert connection", "name", request.Name)
-        // Reset the active connection status to false if UpsertConnection fails
+		log.Error(err, "failed to upsert connection", "name", request.Name)
+		// Reset the active connection status to false if UpsertConnection fails
 		activeConnection := false
 		return reconcile.Result{Requeue: true}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}, &activeConnection, r.getPod)
 	}
