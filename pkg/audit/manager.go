@@ -1288,21 +1288,22 @@ type auditExportPublishingState struct {
 	Errors       map[string]error
 }
 
-// Write the export errors to the ConnectionPodStatus
+// Write the export errors to the ConnectionPodStatus.
 func reportExportConnectionErrors(
 	ctx context.Context,
 	auditExportPublishingState auditExportPublishingState,
 	logger logr.Logger,
 	client client.Client,
 	scheme *runtime.Scheme,
-	getPod func(context.Context) (*corev1.Pod, error)) {
-
+	getPod func(context.Context) (*corev1.Pod, error),
+) {
 	exportErrors := []*statusv1alpha1.ConnectionError{}
 	for staticErrMsg, v := range auditExportPublishingState.Errors {
 		logger.Error(v, "failed to export audit violation")
 		exportErrors = append(exportErrors, &statusv1alpha1.ConnectionError{
 			Type:    statusv1alpha1.PublishError,
-			Message: staticErrMsg})
+			Message: staticErrMsg,
+		})
 	}
 
 	// Connection is considered active if there were any successful publishes

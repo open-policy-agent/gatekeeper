@@ -179,7 +179,7 @@ func TestReconcile_E2E(t *testing.T) {
 	})
 }
 
-// Mocks ExportSystem to simulate the export system behavior failures and impact on the controller
+// Mocks ExportSystem to simulate the export system behavior failures and impact on the controller.
 func TestReconcile_ExportSystem_Failures(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-2"
@@ -306,7 +306,7 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 	})
 }
 
-// Mock K8s client to simulate the client failures and impact on the controller
+// Mock K8s client to simulate the client failures and impact on the controller.
 func TestReconcile_Client_Failures(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-3"
@@ -486,6 +486,182 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 		defer func() {
 			k8sClient.Delete(ctx, &connPodStatusObj) // nolint:errcheck
 			k8sClient.Delete(ctx, &connObj)          // nolint:errcheck
+		}()
+	})
+}
+
+func TestReconcile_UnsupportedConnectionName(t *testing.T) {
+	// Setup
+	auditConnectionNameGood := "audit-connection-good"
+	auditConnectionNameFlag := fmt.Sprintf("--audit-connection=%s", auditConnectionNameGood)
+	require.NoError(t, flag.CommandLine.Parse([]string{"--enable-violation-export=true", auditConnectionNameFlag}), "parsing flags")
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	g := gomega.NewGomegaWithT(t)
+	mgr, _ := testutils.SetupManager(t, cfg)
+	k8sClient := testclient.NewRetryClient(mgr.GetClient())
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
+		pod := fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod"))
+		return pod, nil
+	}
+	// Wrap the controller Reconciler so it writes each request to a map when it is finished reconciling
+	originalReconciler := newReconciler(mgr, export.NewSystem(), auditConnectionNameGood, getPod)
+	wrappedReconciler, requests := testutils.SetupTestReconcile(originalReconciler)
+	// Register the controller with the manager
+	require.NoError(t, add(mgr, wrappedReconciler))
+	// Start the manager and let it run in the background
+	testutils.StartManager(ctx, t, mgr)
+
+	t.Run("Reconcile called for new Connection create for an unsupported connection name and the ConnectionPodStatus has an UpsertError and doesn't impact Create for a valid Connection object", func(_ *testing.T) {
+		auditConnectionNameBad := "audit-connection-bad"
+
+		connObjBad := connectionv1alpha1.Connection{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      auditConnectionNameBad,
+				Namespace: util.GetNamespace(),
+			},
+			Spec: connectionv1alpha1.ConnectionSpec{
+				Driver: disk.Name,
+				Config: &anythingtypes.Anything{Value: map[string]interface{}{
+					"path":            "value",
+					"maxAuditResults": float64(3),
+				}},
+			},
+		}
+		typeConnectionNamespacedName := types.NamespacedName{
+			Name:      auditConnectionNameBad,
+			Namespace: util.GetNamespace(),
+		}
+
+		// Connection object should not exist at the beginning of the test
+		g.Expect(k8sClient.Get(ctx, typeConnectionNamespacedName, &connObjBad)).ShouldNot(gomega.Succeed(), "Resource should not exist before creation")
+
+		// Test setup create the Connection object
+		g.Expect(k8sClient.Create(ctx, &connObjBad)).Should(gomega.Succeed())
+
+		// Await for the reconcile request to finish
+		g.Eventually(func() bool {
+			expectedReq := reconcile.Request{NamespacedName: typeConnectionNamespacedName}
+			_, finished := requests.Load(expectedReq)
+			return finished
+		}).WithTimeout(timeout).Should(gomega.BeTrue())
+
+		// Assert ConnectionPodStatus
+		connPodStatusObjBad := statusv1alpha1.ConnectionPodStatus{}
+		pod, _ := getPod(ctx)
+		connPodStatusNameBad, _ := statusv1alpha1.KeyForConnection(pod.Name, connObjBad.Namespace, connObjBad.Name)
+		typeStatusNamespacedNameBad := types.NamespacedName{
+			Name:      connPodStatusNameBad,
+			Namespace: util.GetNamespace(),
+		}
+		g.Eventually(func(g gomega.Gomega) {
+			err := k8sClient.Get(ctx, typeStatusNamespacedNameBad, &connPodStatusObjBad)
+			g.Expect(err).Should(gomega.Succeed(), "Status should exist after creation")
+			g.Expect(connPodStatusObjBad.GetLabels()).Should(gomega.HaveKeyWithValue(statusv1beta1.ConnectionNameLabel, connObjBad.Name), "Status should have the correct connection name label")
+			g.Expect(connPodStatusObjBad.Status.Errors).ShouldNot(gomega.BeEmpty(), "Status should have an error after creation for unsupported connection name")
+			g.Expect(connPodStatusObjBad.Status.Errors[0].Message).Should(gomega.ContainSubstring("unsupported"), "Status should have an error with expected message for unsupported connection name")
+			g.Expect(connPodStatusObjBad.Status.Errors[0].Type).Should(gomega.Equal(statusv1alpha1.UpsertConnectionError), "Status should have an error with expected type for unsupported connection name")
+			g.Expect(connPodStatusObjBad.Status.ObservedGeneration).Should(gomega.Equal(connObjBad.GetGeneration()), "Observed generation should match the connection object generation")
+			g.Expect(connPodStatusObjBad.Status.ID).Should(gomega.Equal(pod.Name), "ID should match the pod name")
+			g.Expect(connPodStatusObjBad.Status.ConnectionUID).Should(gomega.Equal(connObjBad.GetUID()), "ConnectionPodStatus UID should match the connection object UID")
+			g.Expect(connPodStatusObjBad.Status.Active).Should(gomega.BeFalse(), "No publish operations have been performed yet, so active status should be false")
+		}).WithTimeout(timeout).Should(gomega.Succeed())
+
+		// Test Delete of the connection object
+		g.Expect(k8sClient.Delete(ctx, &connObjBad)).Should(gomega.Succeed(), "Deleting the connection object should succeed")
+		// Await for the reconcile request to finish
+		g.Eventually(func() bool {
+			expectedReq := reconcile.Request{NamespacedName: typeConnectionNamespacedName}
+			_, finished := requests.Load(expectedReq)
+			return finished
+		}).WithTimeout(timeout).Should(gomega.BeTrue(), "Reconcile request should finish after deleting the connection object")
+
+		// Assert the Connection and ConnectionPodStatus object after deleting the Connection object
+		g.Eventually(func(g gomega.Gomega) {
+			err := k8sClient.Get(ctx, typeStatusNamespacedNameBad, &connObjBad)
+			g.Expect(err).ShouldNot(gomega.Succeed(), "Connection obj cleaned up after deleting the connection object")
+			err = k8sClient.Get(ctx, typeStatusNamespacedNameBad, &connPodStatusObjBad)
+			g.Expect(err).ShouldNot(gomega.Succeed(), "Connection pod status should get cleaned up after deleting the connection object")
+		}).WithTimeout(timeout)
+
+		// Clear the previous request to avoid false positives now only load the latest
+		requests.Clear()
+
+		// Create a valid Connection object to ensure the controller can handle both valid and invalid connection names
+		connObjGood := connectionv1alpha1.Connection{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      auditConnectionNameGood,
+				Namespace: util.GetNamespace(),
+			},
+			Spec: connectionv1alpha1.ConnectionSpec{
+				Driver: disk.Name,
+				Config: &anythingtypes.Anything{Value: map[string]interface{}{
+					"path":            "value",
+					"maxAuditResults": float64(3),
+				}},
+			},
+		}
+
+		typeConnectionNamespacedNameGood := types.NamespacedName{
+			Name:      auditConnectionNameGood,
+			Namespace: util.GetNamespace(),
+		}
+
+		// Connection object should not exist at the beginning of the test
+		g.Expect(k8sClient.Get(ctx, typeConnectionNamespacedNameGood, &connObjGood)).ShouldNot(gomega.Succeed(), "Resource should not exist before creation")
+
+		// Test setup create the Connection object
+		g.Expect(k8sClient.Create(ctx, &connObjGood)).Should(gomega.Succeed())
+
+		// Await for the reconcile request to finish
+		g.Eventually(func() bool {
+			expectedReq := reconcile.Request{NamespacedName: typeConnectionNamespacedName}
+			_, finished := requests.Load(expectedReq)
+			return finished
+		}).WithTimeout(timeout).Should(gomega.BeTrue())
+
+		// Assert ConnectionPodStatus
+		connPodStatusObjGood := statusv1alpha1.ConnectionPodStatus{}
+		connPodStatusNameGood, _ := statusv1alpha1.KeyForConnection(pod.Name, connObjGood.Namespace, connObjGood.Name)
+		typeStatusNamespacedName := types.NamespacedName{
+			Name:      connPodStatusNameGood,
+			Namespace: util.GetNamespace(),
+		}
+		g.Eventually(func(g gomega.Gomega) {
+			err := k8sClient.Get(ctx, typeStatusNamespacedName, &connPodStatusObjGood)
+			g.Expect(err).Should(gomega.Succeed(), "Status should exist after creation")
+			g.Expect(connPodStatusObjGood.GetLabels()).Should(gomega.HaveKeyWithValue(statusv1beta1.ConnectionNameLabel, connObjGood.Name), "Status should have the correct connection name label")
+			g.Expect(connPodStatusObjGood.Status.Errors).Should(gomega.BeEmpty(), "Status should not have an error after creation for supported connection name")
+			g.Expect(connPodStatusObjGood.Status.ObservedGeneration).Should(gomega.Equal(connObjGood.GetGeneration()), "Observed generation should match the connection object generation")
+			g.Expect(connPodStatusObjGood.Status.ID).Should(gomega.Equal(pod.Name), "ID should match the pod name")
+			g.Expect(connPodStatusObjGood.Status.ConnectionUID).Should(gomega.Equal(connObjGood.GetUID()), "ConnectionPodStatus UID should match the connection object UID")
+			g.Expect(connPodStatusObjGood.Status.Active).Should(gomega.BeFalse(), "No publish operations have been performed yet, so active status should be false")
+		}).WithTimeout(timeout).Should(gomega.Succeed())
+
+		// Test Delete of the connection object
+		g.Expect(k8sClient.Delete(ctx, &connObjGood)).Should(gomega.Succeed(), "Deleting the connection object should succeed")
+		// Await for the reconcile request to finish
+		g.Eventually(func() bool {
+			expectedReq := reconcile.Request{NamespacedName: typeConnectionNamespacedName}
+			_, finished := requests.Load(expectedReq)
+			return finished
+		}).WithTimeout(timeout).Should(gomega.BeTrue(), "Reconcile request should finish after deleting the connection object")
+
+		// Assert the Connection and ConnectionPodStatus object after deleting the Connection object
+		g.Eventually(func(g gomega.Gomega) {
+			err := k8sClient.Get(ctx, typeStatusNamespacedName, &connObjGood)
+			g.Expect(err).ShouldNot(gomega.Succeed(), "Connection obj cleaned up after deleting the connection object")
+			err = k8sClient.Get(ctx, typeStatusNamespacedName, &connPodStatusObjGood)
+			g.Expect(err).ShouldNot(gomega.Succeed(), "Connection pod status should get cleaned up after deleting the connection object")
+		}).WithTimeout(timeout)
+
+		// Cleanup the Connection related objects if they exists at the end
+		defer func() {
+			k8sClient.Delete(ctx, &connObjBad)           // nolint:errcheck
+			k8sClient.Delete(ctx, &connObjGood)          // nolint:errcheck
+			k8sClient.Delete(ctx, &connPodStatusObjBad)  // nolint:errcheck
+			k8sClient.Delete(ctx, &connPodStatusObjGood) // nolint:errcheck
 		}()
 	})
 }

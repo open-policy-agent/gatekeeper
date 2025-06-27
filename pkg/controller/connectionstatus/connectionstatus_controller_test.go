@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// Test operations on Connection and ConnectionPodStatus handled by controller and reflected on Connection status
+// Test operations on Connection and ConnectionPodStatus handled by controller and reflected on Connection status.
 func TestReconcile_E2E(t *testing.T) {
 	// Setup
 	const timeout = time.Second * 20
@@ -59,7 +59,7 @@ func TestReconcile_E2E(t *testing.T) {
 		}
 
 		// Wrap the controller Reconciler so it writes each request to a map when it is finished reconciling
-		originalReconciler := newReconciler(mgr, *exportutil.AuditConnection)
+		originalReconciler := newReconciler(mgr)
 		wrappedReconciler, requests := testutils.SetupTestReconcile(originalReconciler)
 		// Register the controller with the manager
 		require.NoError(t, add(mgr, wrappedReconciler))

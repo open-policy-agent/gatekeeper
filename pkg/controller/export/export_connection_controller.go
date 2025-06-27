@@ -27,9 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var (
-	log = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
-)
+var log = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
 
 type Adder struct {
 	ExportSystem export.Exporter
@@ -145,12 +143,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
 
-	if request.Name != r.auditConnectionName {
-		msg := fmt.Sprintf("Ignoring unsupported connection name %s. Connection name should align with flag --audit-connection set or defaulted to '%s'", request.Name, r.auditConnectionName)
-		log.Info(msg, "namespace", request.Namespace)
-		return reconcile.Result{}, nil
-	}
-
 	deleted := false
 	connObj := &connectionv1alpha1.Connection{}
 	err := r.reader.Get(ctx, request.NamespacedName, connObj)
@@ -171,10 +163,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
 	}
 
+	if request.Name != r.auditConnectionName {
+		err := fmt.Errorf("error unsupported connection name %s. Connection name should align with flag --audit-connection set or defaulted to '%s'", request.Name, r.auditConnectionName)
+		log.Error(err, "unsupported connection", "namespace", request.Namespace)
+		exportErrors := []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}
+		resetActiveConnection := false
+		return reconcile.Result{}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, exportErrors, &resetActiveConnection, r.getPod)
+	}
+
 	err = r.system.UpsertConnection(ctx, connObj.Spec.Config.Value, request.Name, connObj.Spec.Driver)
 	if err != nil {
-		log.Error(err, "failed to upsert connection", "name", request.Name)
-		// Reset the active connection status to false if UpsertConnection fails
+        log.Error(err, "failed to upsert connection", "name", request.Name)
+        // Reset the active connection status to false if UpsertConnection fails
 		activeConnection := false
 		return reconcile.Result{Requeue: true}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}, &activeConnection, r.getPod)
 	}
@@ -191,8 +191,8 @@ func UpdateOrCreateConnectionPodStatus(
 	connObjName string,
 	exportErrors []*statusv1alpha1.ConnectionError,
 	activeConnection *bool,
-	getPod func(context.Context) (*corev1.Pod, error)) error {
-
+	getPod func(context.Context) (*corev1.Pod, error),
+) error {
 	// Since the caller from Audit won't have an incoming request
 	// use the connection name from the audit connection flag as the predetermined connection name
 	request := types.NamespacedName{
@@ -214,8 +214,8 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	connObj *connectionv1alpha1.Connection,
 	exportErrors []*statusv1alpha1.ConnectionError,
 	activeConnection *bool,
-	getPod func(context.Context) (*corev1.Pod, error)) error {
-
+	getPod func(context.Context) (*corev1.Pod, error),
+) error {
 	pod, err := getPod(ctx)
 	if err != nil {
 		return fmt.Errorf("getting reconciler pod: %w", err)
@@ -274,7 +274,8 @@ func deleteStatus(ctx context.Context,
 	writer client.Writer,
 	connectionNamespace string,
 	connectionName string,
-	getPod func(context.Context) (*corev1.Pod, error)) error {
+	getPod func(context.Context) (*corev1.Pod, error),
+) error {
 	connPodStatusObj := &statusv1alpha1.ConnectionPodStatus{}
 	pod, err := getPod(ctx)
 	if err != nil {
@@ -294,7 +295,8 @@ func deleteStatus(ctx context.Context,
 
 func newConnectionPodStatus(scheme *runtime.Scheme,
 	pod *corev1.Pod,
-	connObj *connectionv1alpha1.Connection) (*statusv1alpha1.ConnectionPodStatus, error) {
+	connObj *connectionv1alpha1.Connection,
+) (*statusv1alpha1.ConnectionPodStatus, error) {
 	connPodStatusObj, err := statusv1alpha1.NewConnectionStatusForPod(pod, connObj.GetNamespace(), connObj.GetName(), scheme)
 	if err != nil {
 		return nil, fmt.Errorf("creating status for pod: %w", err)
@@ -306,7 +308,8 @@ func newConnectionPodStatus(scheme *runtime.Scheme,
 
 func setStatusErrors(
 	connPodStatusObj *statusv1alpha1.ConnectionPodStatus,
-	exportErrors []*statusv1alpha1.ConnectionError) {
+	exportErrors []*statusv1alpha1.ConnectionError,
+) {
 	if len(exportErrors) == 0 {
 		connPodStatusObj.Status.Errors = nil
 		return

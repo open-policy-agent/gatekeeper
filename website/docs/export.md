@@ -290,6 +290,25 @@ The following table describes each property in the `status.byPod` section:
     --set audit.exportConnection.maxAuditResults=3 \
     --set exportBackend=disk \
     ```
+    
+    As part of the command above, the `Connection` resource is installed with the following values and defaults:
+
+    ```yaml
+    apiVersion: connection.gatekeeper.sh/v1alpha1
+    kind: Connection
+    metadata:
+      name: "audit-connection"
+      namespace: "gatekeeper-system"
+    spec:
+      driver: "disk"
+      config:
+        path: "/tmp/violations"
+        maxAuditResults: 3
+    ```
+| Property       | Description                                                                                                                         | Default           |
+|:----------------|:------------------------------------------------------------------------------------------------------------------------------------|:------------------|
+| path            | (alpha) Path for audit-pod-manager container to export violations and sidecar container to read from.                               | "/tmp/violations" |
+| maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
 
