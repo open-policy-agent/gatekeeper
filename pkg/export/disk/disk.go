@@ -94,7 +94,7 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	r.openConnections[connectionName] = Connection{
 		Path:            path,
 		MaxAuditResults: int(maxResults),
-		ClosedConnectionTTL: time.Duration(ttl) * time.Second,
+		ClosedConnectionTTL: ttl,
 	}
 	return nil
 }
@@ -119,7 +119,7 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	}
 
 	conn.MaxAuditResults = int(maxResults)
-	conn.ClosedConnectionTTL = time.Duration(ttl) * time.Second
+	conn.ClosedConnectionTTL = ttl
 
 	r.openConnections[connectionName] = conn
 	return nil
@@ -334,7 +334,7 @@ func validatePath(path string) error {
 	return nil
 }
 
-func unmarshalConfig(config interface{}) (string, float64, int64, error) {
+func unmarshalConfig(config interface{}) (string, float64, time.Duration, error) {
 	cfg, ok := config.(map[string]interface{})
 	if !ok {
 		return "", 0.0, 0, fmt.Errorf("invalid config format, expected map[string]interface{}")
@@ -354,9 +354,17 @@ func unmarshalConfig(config interface{}) (string, float64, int64, error) {
 	if maxResults > maxAllowedAuditRuns {
 		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
 	}
-	ttl, ttlOk := cfg["ttl"].(int64) 
-	if !ttlOk {
-		ttl = int64(maxConnectionAge.Seconds())
+	ttl := maxConnectionAge
+    if ttlStr, ok := cfg["closedConnectionTTL"].(string); ok {
+        if duration, err := time.ParseDuration(ttlStr); err != nil {
+            log.Info("Invalid ttl format, using default", "ttl", ttlStr, "default", maxConnectionAge, "error", err)
+        } else {
+            ttl = duration
+        }
+    }
+	if ttl < time.Minute {
+		// making sure ttl is not too short and can be used for retries
+		ttl = time.Minute
 	}
 	return path, maxResults, ttl, nil
 }
@@ -386,7 +394,7 @@ func (r *Writer) retryFailedConnections() {
 	var toRemove []string
 
 	for name, failedConn := range r.closedConnections {
-		if now.Sub(failedConn.FailedAt) > maxConnectionAge {
+		if now.Sub(failedConn.FailedAt) > failedConn.ClosedConnectionTTL {
 			log.Info("Removing expired failed connection", "connection", name, "age", now.Sub(failedConn.FailedAt))
 			toRemove = append(toRemove, name)
 			continue
