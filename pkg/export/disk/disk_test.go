@@ -990,21 +990,21 @@ func TestUnmarshalConfig(t *testing.T) {
 		config       interface{}
 		expectedPath string
 		expectedMax  float64
-		expectedTTL time.Duration
+		expectedTTL  time.Duration
 		expectError  bool
 		expectedErr  string
 	}{
 		{
 			name: "Valid config",
 			config: map[string]interface{}{
-				"path":            tmpPath,
-				"maxAuditResults": 3.0,
+				"path":                tmpPath,
+				"maxAuditResults":     3.0,
 				"closedConnectionTTL": "1m",
 			},
 			expectedPath: tmpPath,
 			expectedMax:  3.0,
 			expectError:  false,
-			expectedTTL: 1 * time.Minute,
+			expectedTTL:  1 * time.Minute,
 		},
 		{
 			name:        "Invalid config format",
@@ -1054,14 +1054,14 @@ func TestUnmarshalConfig(t *testing.T) {
 		{
 			name: "Invalid closedConnectionTTL",
 			config: map[string]interface{}{
-				"path":                  tmpPath,
-				"maxAuditResults":      3.0,
+				"path":                tmpPath,
+				"maxAuditResults":     3.0,
 				"closedConnectionTTL": "invalid",
 			},
-			expectError: false,
-			expectedErr: "",
-			expectedTTL: maxConnectionAge,
-			expectedMax: 3.0,
+			expectError:  false,
+			expectedErr:  "",
+			expectedTTL:  maxConnectionAge,
+			expectedMax:  3.0,
 			expectedPath: tmpPath,
 		},
 	}
@@ -1564,8 +1564,8 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 
 		writer.closedConnections["retry-conn"] = FailedConnection{
 			Connection: Connection{
-				Path:            tmpDir,
-				MaxAuditResults: 5,
+				Path:                tmpDir,
+				MaxAuditResults:     5,
 				ClosedConnectionTTL: 2 * time.Minute,
 			},
 			FailedAt:    now.Add(-1 * time.Minute),
@@ -1725,230 +1725,218 @@ func getClosedConnections(writer *Writer, connName string) []FailedConnection {
 }
 
 func TestConnectionTTL(t *testing.T) {
-    tests := []struct {
-        name           string
-        config         map[string]interface{}
-        expectedTTL    time.Duration
-        expectError    bool
-    }{
-        {
-            name: "Valid TTL string",
-            config: map[string]interface{}{
-                "path":            t.TempDir(),
-                "maxAuditResults": 5.0,
-                "closedConnectionTTL":             "5m",
-            },
-            expectedTTL: 5 * time.Minute,
-            expectError: false,
-        },
-        {
-            name: "Invalid TTL string",
-            config: map[string]interface{}{
-                "path":            t.TempDir(),
-                "maxAuditResults": 5.0,
-                "closedConnectionTTL":             "invalid",
-            },
-            expectedTTL: maxConnectionAge, // Should fallback to default
-            expectError: false,
-        },
-        {
-            name: "No TTL specified",
-            config: map[string]interface{}{
-                "path":            t.TempDir(),
-                "maxAuditResults": 5.0,
-            },
-            expectedTTL: maxConnectionAge, // Should use default
-            expectError: false,
-        },
-        {
-            name: "TTL as non-string",
-            config: map[string]interface{}{
-                "path":            t.TempDir(),
-                "maxAuditResults": 5.0,
-                "closedConnectionTTL":             123, // Wrong type
-            },
-            expectedTTL: maxConnectionAge, // Should use default
-            expectError: false,
-        },
-        {
-            name: "Complex TTL format",
-            config: map[string]interface{}{
-                "path":            t.TempDir(),
-                "maxAuditResults": 5.0,
-                "closedConnectionTTL":             "1h30m45s",
-            },
-            expectedTTL: 1*time.Hour + 30*time.Minute + 45*time.Second,
-            expectError: false,
-        },
-    }
+	tests := []struct {
+		name        string
+		config      map[string]interface{}
+		expectedTTL time.Duration
+		expectError bool
+	}{
+		{
+			name: "Valid TTL string",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": "5m",
+			},
+			expectedTTL: 5 * time.Minute,
+			expectError: false,
+		},
+		{
+			name: "Invalid TTL string",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": "invalid",
+			},
+			expectedTTL: maxConnectionAge,
+			expectError: false,
+		},
+		{
+			name: "No TTL specified",
+			config: map[string]interface{}{
+				"path":            t.TempDir(),
+				"maxAuditResults": 5.0,
+			},
+			expectedTTL: maxConnectionAge,
+			expectError: false,
+		},
+		{
+			name: "TTL as non-string",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": 123,
+			},
+			expectedTTL: maxConnectionAge,
+			expectError: false,
+		},
+		{
+			name: "Complex TTL format",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": "1h30m45s",
+			},
+			expectedTTL: 1*time.Hour + 30*time.Minute + 45*time.Second,
+			expectError: false,
+		},
+	}
 
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            writer := &Writer{
-                mu:                sync.RWMutex{},
-                openConnections:   make(map[string]Connection),
-                closedConnections: make(map[string]FailedConnection),
-                cleanupDone:       make(chan struct{}),
-                closeAndRemoveFilesWithRetry: func(_ Connection) error {
-                    return nil
-                },
-            }
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := &Writer{
+				mu:                sync.RWMutex{},
+				openConnections:   make(map[string]Connection),
+				closedConnections: make(map[string]FailedConnection),
+				cleanupDone:       make(chan struct{}),
+				closeAndRemoveFilesWithRetry: func(_ Connection) error {
+					return nil
+				},
+			}
 
-            err := writer.CreateConnection(context.Background(), "test-conn", tt.config)
-            
-            if tt.expectError && err == nil {
-                t.Error("Expected error but got none")
-            }
-            if !tt.expectError && err != nil {
-                t.Errorf("Unexpected error: %v", err)
-            }
+			err := writer.CreateConnection(context.Background(), "test-conn", tt.config)
 
-            if !tt.expectError {
-                // Verify TTL was set correctly
-                writer.mu.RLock()
-                conn, exists := writer.openConnections["test-conn"]
-                writer.mu.RUnlock()
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
 
-                if !exists {
-                    t.Fatal("Connection was not created")
-                }
+			if !tt.expectError {
+				writer.mu.RLock()
+				conn, exists := writer.openConnections["test-conn"]
+				writer.mu.RUnlock()
 
-                if conn.ClosedConnectionTTL != tt.expectedTTL {
-                    t.Errorf("Expected TTL %v, got %v", tt.expectedTTL, conn.ClosedConnectionTTL)
-                }
-            }
-        })
-    }
+				if !exists {
+					t.Fatal("Connection was not created")
+				}
+
+				if conn.ClosedConnectionTTL != tt.expectedTTL {
+					t.Errorf("Expected TTL %v, got %v", tt.expectedTTL, conn.ClosedConnectionTTL)
+				}
+			}
+		})
+	}
 }
 
 func TestTTLBasedConnectionRemoval(t *testing.T) {
-    t.Run("Connection removed after custom TTL expires", func(t *testing.T) {
-        writer := &Writer{
-            mu:                sync.RWMutex{},
-            openConnections:   make(map[string]Connection),
-            closedConnections: make(map[string]FailedConnection),
-            cleanupDone:       make(chan struct{}),
-            closeAndRemoveFilesWithRetry: func(_ Connection) error {
-                return fmt.Errorf("always fail") // Force connection to fail
-            },
-        }
+	t.Run("Connection removed after custom TTL expires", func(t *testing.T) {
+		writer := &Writer{
+			mu:                sync.RWMutex{},
+			openConnections:   make(map[string]Connection),
+			closedConnections: make(map[string]FailedConnection),
+			cleanupDone:       make(chan struct{}),
+			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+				return fmt.Errorf("always fail")
+			},
+		}
 
-        // Create connection with short TTL
-        config := map[string]interface{}{
-            "path":            t.TempDir(),
-            "maxAuditResults": 5.0,
-        }
-
-        err := writer.CreateConnection(context.Background(), "short-ttl-conn", config)
-        if err != nil {
-            t.Fatalf("Failed to create connection: %v", err)
-        }
-
-        writer.mu.RLock()
-        conn := writer.openConnections["short-ttl-conn"]
-        writer.mu.RUnlock()
-
-		conn.ClosedConnectionTTL = 100 * time.Millisecond // Set TTL for testing
-
-        if conn.ClosedConnectionTTL != 100*time.Millisecond {
-            t.Errorf("Expected TTL 100ms, got %v", conn.ClosedConnectionTTL)
-        }
-
-        // Close connection (should fail and go to closedConnections)
-        err = writer.CloseConnection("short-ttl-conn")
-        if err == nil {
-            t.Error("Expected CloseConnection to fail")
-        }
-
-        if !closedConnectionExists(writer, "short-ttl-conn") {
-            t.Fatal("Connection should be in closedConnections")
-        }
-
-        // Wait for TTL to expire
-        time.Sleep(150 * time.Millisecond)
-
-        // Run retry logic - should remove expired connection
-        writer.retryFailedConnections()
-
-        // Verify connection was removed
-        writer.mu.RLock()
-        _, stillExists := writer.closedConnections["short-ttl-conn"]
-        writer.mu.RUnlock()
-
-        if stillExists {
-            t.Error("Connection should have been removed after TTL expiration")
-        }
-    })
-
-    t.Run("Connection with longer TTL remains in queue", func(t *testing.T) {
-        writer := &Writer{
-            mu:                sync.RWMutex{},
-            openConnections:   make(map[string]Connection),
-            closedConnections: make(map[string]FailedConnection),
-            cleanupDone:       make(chan struct{}),
-            closeAndRemoveFilesWithRetry: func(_ Connection) error {
-                return fmt.Errorf("always fail")
-            },
-        }
-
-        // Create connection with longer TTL
-        config := map[string]interface{}{
-            "path":            t.TempDir(),
-            "maxAuditResults": 5.0,
-            "closedConnectionTTL":             "10s", // Long TTL
-        }
-
-        err := writer.CreateConnection(context.Background(), "long-ttl-conn", config)
-        if err != nil {
-            t.Fatalf("Failed to create connection: %v", err)
-        }
-
-        // Close connection (should fail and go to closedConnections)
-        err = writer.CloseConnection("long-ttl-conn")
-        if err == nil {
-            t.Error("Expected CloseConnection to fail")
-        }
-
-        // Wait a short time (much less than TTL)
-        time.Sleep(100 * time.Millisecond)
-
-        // Run retry logic - should NOT remove connection (TTL not expired)
-        writer.retryFailedConnections()
-
-        if !closedConnectionExists(writer, "long-ttl-conn") {
-            t.Error("Connection should still exist (TTL not expired)")
-        }
-    })
-
-    t.Run("Multiple connections with different TTLs", func(t *testing.T) {
-        writer := &Writer{
-            mu:                sync.RWMutex{},
-            openConnections:   make(map[string]Connection),
-            closedConnections: make(map[string]FailedConnection),
-            cleanupDone:       make(chan struct{}),
-            closeAndRemoveFilesWithRetry: func(_ Connection) error {
-                return fmt.Errorf("always fail")
-            },
-        }
-
-        // Create connection with short TTL
-        shortConfig := map[string]interface{}{
-            "path":            t.TempDir(),
-            "maxAuditResults": 5.0,
-        }
-        err := writer.CreateConnection(context.Background(), "short-conn", shortConfig)
-        if err != nil {
-            t.Fatalf("Failed to create short connection: %v", err)
-        }
-        // Create connection with long TTL
-        longConfig := map[string]interface{}{
+		config := map[string]interface{}{
 			"path":            t.TempDir(),
-            "maxAuditResults": 5.0,
-        }
-        err = writer.CreateConnection(context.Background(), "long-conn", longConfig)
-        if err != nil {
+			"maxAuditResults": 5.0,
+		}
+
+		err := writer.CreateConnection(context.Background(), "short-ttl-conn", config)
+		if err != nil {
+			t.Fatalf("Failed to create connection: %v", err)
+		}
+
+		writer.mu.RLock()
+		conn := writer.openConnections["short-ttl-conn"]
+		writer.mu.RUnlock()
+
+		conn.ClosedConnectionTTL = 100 * time.Millisecond
+
+		if conn.ClosedConnectionTTL != 100*time.Millisecond {
+			t.Errorf("Expected TTL 100ms, got %v", conn.ClosedConnectionTTL)
+		}
+
+		err = writer.CloseConnection("short-ttl-conn")
+		if err == nil {
+			t.Error("Expected CloseConnection to fail")
+		}
+
+		if !closedConnectionExists(writer, "short-ttl-conn") {
+			t.Fatal("Connection should be in closedConnections")
+		}
+
+		time.Sleep(150 * time.Millisecond)
+
+		writer.retryFailedConnections()
+
+		writer.mu.RLock()
+		_, stillExists := writer.closedConnections["short-ttl-conn"]
+		writer.mu.RUnlock()
+
+		if stillExists {
+			t.Error("Connection should have been removed after TTL expiration")
+		}
+	})
+
+	t.Run("Connection with longer TTL remains in queue", func(t *testing.T) {
+		writer := &Writer{
+			mu:                sync.RWMutex{},
+			openConnections:   make(map[string]Connection),
+			closedConnections: make(map[string]FailedConnection),
+			cleanupDone:       make(chan struct{}),
+			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+				return fmt.Errorf("always fail")
+			},
+		}
+
+		config := map[string]interface{}{
+			"path":                t.TempDir(),
+			"maxAuditResults":     5.0,
+			"closedConnectionTTL": "10s",
+		}
+
+		err := writer.CreateConnection(context.Background(), "long-ttl-conn", config)
+		if err != nil {
+			t.Fatalf("Failed to create connection: %v", err)
+		}
+
+		err = writer.CloseConnection("long-ttl-conn")
+		if err == nil {
+			t.Error("Expected CloseConnection to fail")
+		}
+
+		time.Sleep(100 * time.Millisecond)
+
+		writer.retryFailedConnections()
+
+		if !closedConnectionExists(writer, "long-ttl-conn") {
+			t.Error("Connection should still exist (TTL not expired)")
+		}
+	})
+
+	t.Run("Multiple connections with different TTLs", func(t *testing.T) {
+		writer := &Writer{
+			mu:                sync.RWMutex{},
+			openConnections:   make(map[string]Connection),
+			closedConnections: make(map[string]FailedConnection),
+			cleanupDone:       make(chan struct{}),
+			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+				return fmt.Errorf("always fail")
+			},
+		}
+
+		shortConfig := map[string]interface{}{
+			"path":            t.TempDir(),
+			"maxAuditResults": 5.0,
+		}
+		err := writer.CreateConnection(context.Background(), "short-conn", shortConfig)
+		if err != nil {
+			t.Fatalf("Failed to create short connection: %v", err)
+		}
+		longConfig := map[string]interface{}{
+			"path":            t.TempDir(),
+			"maxAuditResults": 5.0,
+		}
+		err = writer.CreateConnection(context.Background(), "long-conn", longConfig)
+		if err != nil {
 			t.Fatalf("Failed to create long connection: %v", err)
-        }
+		}
 		writer.mu.Lock()
 		conn := writer.openConnections["short-conn"]
 		conn.ClosedConnectionTTL = 100 * time.Millisecond
@@ -1958,38 +1946,32 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 		writer.openConnections["long-conn"] = conn
 		writer.mu.Unlock()
 
-        // Close both connections (should fail and go to closedConnections)
-        _ = writer.CloseConnection("short-conn")
-        _ = writer.CloseConnection("long-conn")
+		_ = writer.CloseConnection("short-conn")
+		_ = writer.CloseConnection("long-conn")
 
-        // Verify both are in closedConnections
-        writer.mu.RLock()
-        shortCount := len(writer.closedConnections)
-        writer.mu.RUnlock()
+		writer.mu.RLock()
+		shortCount := len(writer.closedConnections)
+		writer.mu.RUnlock()
 
-        if shortCount != 2 {
-            t.Errorf("Expected 2 connections in closedConnections, got %d", shortCount)
-        }
+		if shortCount != 2 {
+			t.Errorf("Expected 2 connections in closedConnections, got %d", shortCount)
+		}
 
-        // Wait for short TTL to expire
-        time.Sleep(100 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
-        // Run retry logic
-        writer.retryFailedConnections()
+		writer.retryFailedConnections()
+		writer.mu.RLock()
+		finalCount := len(writer.closedConnections)
+		writer.mu.RUnlock()
 
-        // Verify only short TTL connection was removed
-        writer.mu.RLock()
-        finalCount := len(writer.closedConnections)
-        writer.mu.RUnlock()
-
-        if closedConnectionExists(writer, "short-conn") {
-            t.Error("Short TTL connection should have been removed")
-        }
-        if !closedConnectionExists(writer, "long-conn") {
-            t.Error("Long TTL connection should still exist")
-        }
-        if finalCount != 1 {
-            t.Errorf("Expected 1 connection remaining, got %d", finalCount)
-        }
-    })
+		if closedConnectionExists(writer, "short-conn") {
+			t.Error("Short TTL connection should have been removed")
+		}
+		if !closedConnectionExists(writer, "long-conn") {
+			t.Error("Long TTL connection should still exist")
+		}
+		if finalCount != 1 {
+			t.Errorf("Expected 1 connection remaining, got %d", finalCount)
+		}
+	})
 }

@@ -92,8 +92,8 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	}
 
 	r.openConnections[connectionName] = Connection{
-		Path:            path,
-		MaxAuditResults: int(maxResults),
+		Path:                path,
+		MaxAuditResults:     int(maxResults),
 		ClosedConnectionTTL: ttl,
 	}
 	return nil
@@ -355,13 +355,13 @@ func unmarshalConfig(config interface{}) (string, float64, time.Duration, error)
 		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
 	}
 	ttl := maxConnectionAge
-    if ttlStr, ok := cfg["closedConnectionTTL"].(string); ok {
-        if duration, err := time.ParseDuration(ttlStr); err != nil {
-            log.Info("Invalid ttl format, using default", "ttl", ttlStr, "default", maxConnectionAge, "error", err)
-        } else {
-            ttl = duration
-        }
-    }
+	if ttlStr, ok := cfg["closedConnectionTTL"].(string); ok {
+		if duration, err := time.ParseDuration(ttlStr); err != nil {
+			log.Info("Invalid ttl format, using default", "ttl", ttlStr, "default", maxConnectionAge, "error", err)
+		} else {
+			ttl = duration
+		}
+	}
 	if ttl < time.Minute {
 		// making sure ttl is not too short and can be used for retries
 		ttl = time.Minute
