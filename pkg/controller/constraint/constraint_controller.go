@@ -370,6 +370,9 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			}
 			hasVAP, err := ShouldGenerateVAP(unversionedCT)
 			if err != nil {
+				if errors.Is(err, celSchema.ErrCELEngineMissing) {
+					return reconcile.Result{}, nil
+				}
 				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, statusObj, err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy")
 			}
 			shouldGenerateVAPB, _, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
