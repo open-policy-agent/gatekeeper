@@ -356,11 +356,33 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			if err != nil {
 				return reconcile.Result{}, err
 			}
-			vapBindingName := getVAPBindingName(instance.GetName())
-			currentVapBinding.SetName(vapBindingName)
-			if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
-				if !apierrors.IsNotFound(err) {
-					return reconcile.Result{}, err
+			ct := &v1beta1.ConstraintTemplate{}
+			err = r.reader.Get(ctx, types.NamespacedName{Name: strings.ToLower(instance.GetKind())}, ct)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					return reconcile.Result{}, nil
+				}
+				return reconcile.Result{}, err
+			}
+			unversionedCT := &templates.ConstraintTemplate{}
+			if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
+				return reconcile.Result{}, err
+			}
+			hasVAP, err := ShouldGenerateVAP(unversionedCT)
+			if err != nil {
+				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, statusObj, err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy")
+			}
+			shouldGenerateVAPB, _, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
+			if err != nil {
+				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, statusObj, err, "could not determine if ValidatingAdmissionPolicyBinding should be deleted")
+			}
+			if hasVAP && shouldGenerateVAPB {
+				vapBindingName := getVAPBindingName(instance.GetName())
+				currentVapBinding.SetName(vapBindingName)
+				if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
+					if !apierrors.IsNotFound(err) {
+						return reconcile.Result{}, err
+					}
 				}
 			}
 		}
