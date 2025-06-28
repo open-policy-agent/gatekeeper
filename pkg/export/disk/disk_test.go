@@ -1059,7 +1059,7 @@ func TestUnmarshalConfig(t *testing.T) {
 				"closedConnectionTTL": "invalid",
 			},
 			expectError:  true,
-			expectedErr:  "Invalid ttl format: time:",
+			expectedErr:  "invalid ttl format: time:",
 			expectedTTL:  0,
 			expectedMax:  3.0,
 			expectedPath: tmpPath,
