@@ -26,6 +26,10 @@ type Connection struct {
 	Path string `json:"path,omitempty"`
 	// max number of audit results to store
 	MaxAuditResults int `json:"maxAuditResults,omitempty"`
+	// ClosedConnectionTTL specifies how long a failed connection remains
+	// in the cleanup queue before being permanently removed (not retried).
+	// This prevents memory leaks from accumulating failed connections.
+	ClosedConnectionTTL time.Duration `json:"closedConnectionTTL,omitempty"`
 	// File to write audit logs
 	File *os.File
 
@@ -59,6 +63,7 @@ const (
 	cleanupInterval     = 2 * time.Minute
 	maxRetryAttempts    = 10
 	maxConnectionAge    = 10 * time.Minute
+	minConnectionAge    = 1 * time.Minute
 	baseRetryDelay      = 15 * time.Second
 )
 
@@ -84,14 +89,15 @@ var Connections = &Writer{
 var log = logf.Log.WithName("disk-driver").WithValues(logging.Process, "export")
 
 func (r *Writer) CreateConnection(_ context.Context, connectionName string, config interface{}) error {
-	path, maxResults, err := unmarshalConfig(config)
+	path, maxResults, ttl, err := unmarshalConfig(config)
 	if err != nil {
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
 	}
 
 	r.openConnections[connectionName] = Connection{
-		Path:            path,
-		MaxAuditResults: int(maxResults),
+		Path:                path,
+		MaxAuditResults:     int(maxResults),
+		ClosedConnectionTTL: ttl,
 	}
 	return nil
 }
@@ -102,7 +108,7 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("connection %s for disk driver not found", connectionName)
 	}
 
-	path, maxResults, err := unmarshalConfig(config)
+	path, maxResults, ttl, err := unmarshalConfig(config)
 	if err != nil {
 		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
 	}
@@ -116,6 +122,7 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	}
 
 	conn.MaxAuditResults = int(maxResults)
+	conn.ClosedConnectionTTL = ttl
 
 	r.openConnections[connectionName] = conn
 	return nil
@@ -330,27 +337,41 @@ func validatePath(path string) error {
 	return nil
 }
 
-func unmarshalConfig(config interface{}) (string, float64, error) {
+func unmarshalConfig(config interface{}) (string, float64, time.Duration, error) {
 	cfg, ok := config.(map[string]interface{})
 	if !ok {
-		return "", 0.0, fmt.Errorf("invalid config format, expected map[string]interface{}")
+		return "", 0.0, 0, fmt.Errorf("invalid config format, expected map[string]interface{}")
 	}
 
 	path, pathOk := cfg[violationPath].(string)
 	if !pathOk {
-		return "", 0.0, fmt.Errorf("missing or invalid 'path'")
+		return "", 0.0, 0, fmt.Errorf("missing or invalid 'path'")
 	}
 	if err := validatePath(path); err != nil {
-		return "", 0.0, fmt.Errorf("invalid path: %w", err)
+		return "", 0.0, 0, fmt.Errorf("invalid path: %w", err)
 	}
 	maxResults, maxResultsOk := cfg[maxAuditResults].(float64)
 	if !maxResultsOk {
-		return "", 0.0, fmt.Errorf("missing or invalid 'maxAuditResults'")
+		return "", 0.0, 0, fmt.Errorf("missing or invalid 'maxAuditResults'")
 	}
 	if maxResults > maxAllowedAuditRuns {
-		return "", 0.0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
+		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
 	}
-	return path, maxResults, nil
+	ttl := maxConnectionAge
+	if ttlStr, ok := cfg["closedConnectionTTL"].(string); ok {
+		duration, err := time.ParseDuration(ttlStr)
+		if err != nil {
+			return "", 0.0, 0, fmt.Errorf("invalid ttl format: %w", err)
+		}
+		ttl = duration
+	}
+	if ttl > maxConnectionAge {
+		return "", 0.0, 0, fmt.Errorf("closedConnectionTTL %s exceeds maximum allowed: %s", ttl, maxConnectionAge)
+	}
+	if ttl < minConnectionAge {
+		return "", 0.0, 0, fmt.Errorf("closedConnectionTTL %s is too short, must be at least 1 minute", ttl)
+	}
+	return path, maxResults, ttl, nil
 }
 
 // backgroundCleanup runs periodically to retry closing failed connections.
@@ -378,7 +399,7 @@ func (r *Writer) retryFailedConnections() {
 	var toRemove []string
 
 	for name, failedConn := range r.closedConnections {
-		if now.Sub(failedConn.FailedAt) > maxConnectionAge {
+		if now.Sub(failedConn.FailedAt) > failedConn.ClosedConnectionTTL {
 			log.Info("Removing expired failed connection", "connection", name, "age", now.Sub(failedConn.FailedAt))
 			toRemove = append(toRemove, name)
 			continue
