@@ -373,11 +373,11 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				if errors.Is(err, celSchema.ErrCELEngineMissing) {
 					return reconcile.Result{}, nil
 				}
-				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, statusObj, err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy")
+				return reconcile.Result{}, err
 			}
 			shouldGenerateVAPB, _, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
 			if err != nil {
-				return reconcile.Result{}, r.reportErrorOnConstraintStatus(ctx, statusObj, err, "could not determine if ValidatingAdmissionPolicyBinding should be deleted")
+				return reconcile.Result{}, err
 			}
 			if hasVAP && shouldGenerateVAPB {
 				vapBindingName := getVAPBindingName(instance.GetName())
