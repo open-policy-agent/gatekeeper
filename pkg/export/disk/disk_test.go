@@ -990,24 +990,28 @@ func TestUnmarshalConfig(t *testing.T) {
 		config       interface{}
 		expectedPath string
 		expectedMax  float64
+		expectedTTL  time.Duration
 		expectError  bool
 		expectedErr  string
 	}{
 		{
 			name: "Valid config",
 			config: map[string]interface{}{
-				"path":            tmpPath,
-				"maxAuditResults": 3.0,
+				"path":                tmpPath,
+				"maxAuditResults":     3.0,
+				"closedConnectionTTL": "1m",
 			},
 			expectedPath: tmpPath,
 			expectedMax:  3.0,
 			expectError:  false,
+			expectedTTL:  1 * time.Minute,
 		},
 		{
 			name:        "Invalid config format",
 			config:      map[int]interface{}{1: "test"},
 			expectError: true,
 			expectedErr: "invalid config format",
+			expectedTTL: 0,
 		},
 		{
 			name: "Missing path",
@@ -1016,6 +1020,7 @@ func TestUnmarshalConfig(t *testing.T) {
 			},
 			expectError: true,
 			expectedErr: "missing or invalid 'path'",
+			expectedTTL: 0,
 		},
 		{
 			name: "Invalid path",
@@ -1025,6 +1030,7 @@ func TestUnmarshalConfig(t *testing.T) {
 			},
 			expectError: true,
 			expectedErr: "invalid path",
+			expectedTTL: 0,
 		},
 		{
 			name: "Missing maxAuditResults",
@@ -1033,6 +1039,7 @@ func TestUnmarshalConfig(t *testing.T) {
 			},
 			expectError: true,
 			expectedErr: "missing or invalid 'maxAuditResults'",
+			expectedTTL: 0,
 		},
 		{
 			name: "Exceeding maxAuditResults",
@@ -1042,12 +1049,26 @@ func TestUnmarshalConfig(t *testing.T) {
 			},
 			expectError: true,
 			expectedErr: "maxAuditResults cannot be greater than the maximum allowed audit runs",
+			expectedTTL: 0,
+		},
+		{
+			name: "Invalid closedConnectionTTL",
+			config: map[string]interface{}{
+				"path":                tmpPath,
+				"maxAuditResults":     3.0,
+				"closedConnectionTTL": "invalid",
+			},
+			expectError:  true,
+			expectedErr:  "invalid ttl format: time:",
+			expectedTTL:  0,
+			expectedMax:  3.0,
+			expectedPath: tmpPath,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			path, maxResults, err := unmarshalConfig(tt.config)
+			path, maxResults, ttl, err := unmarshalConfig(tt.config)
 			if (err != nil) != tt.expectError {
 				t.Errorf("unmarshalConfig() error = %v, expectError %v", err, tt.expectError)
 			}
@@ -1061,6 +1082,9 @@ func TestUnmarshalConfig(t *testing.T) {
 				if maxResults != tt.expectedMax {
 					t.Errorf("Expected maxAuditResults %f, got %f", tt.expectedMax, maxResults)
 				}
+			}
+			if ttl != tt.expectedTTL {
+				t.Errorf("Expected closedConnectionTTL %v, got %v", tt.expectedTTL, ttl)
 			}
 		})
 	}
@@ -1077,7 +1101,7 @@ func TestRetryFailedConnections(t *testing.T) {
 			name: "Successfully retry and remove connection",
 			setup: func(writer *Writer) {
 				writer.closedConnections["conn1"] = FailedConnection{
-					Connection:  Connection{Path: t.TempDir()},
+					Connection:  Connection{Path: t.TempDir(), ClosedConnectionTTL: maxConnectionAge},
 					FailedAt:    time.Now().Add(-1 * time.Minute),
 					RetryCount:  0,
 					NextRetryAt: time.Now().Add(-1 * time.Second),
@@ -1097,7 +1121,7 @@ func TestRetryFailedConnections(t *testing.T) {
 			name: "Retry fails, increment retry count",
 			setup: func(writer *Writer) {
 				writer.closedConnections["conn2"] = FailedConnection{
-					Connection:  Connection{Path: t.TempDir()},
+					Connection:  Connection{Path: t.TempDir(), ClosedConnectionTTL: maxConnectionAge},
 					FailedAt:    time.Now().Add(-1 * time.Minute),
 					RetryCount:  1,
 					NextRetryAt: time.Now().Add(-1 * time.Second),
@@ -1124,7 +1148,7 @@ func TestRetryFailedConnections(t *testing.T) {
 			name: "Remove connection exceeding max retry attempts",
 			setup: func(writer *Writer) {
 				writer.closedConnections["conn3"] = FailedConnection{
-					Connection:  Connection{Path: t.TempDir()},
+					Connection:  Connection{Path: t.TempDir(), ClosedConnectionTTL: maxConnectionAge},
 					FailedAt:    time.Now().Add(-1 * time.Minute),
 					RetryCount:  maxRetryAttempts,
 					NextRetryAt: time.Now().Add(-1 * time.Second),
@@ -1145,7 +1169,7 @@ func TestRetryFailedConnections(t *testing.T) {
 			name: "Remove expired connection",
 			setup: func(writer *Writer) {
 				writer.closedConnections["conn4"] = FailedConnection{
-					Connection:  Connection{Path: t.TempDir()},
+					Connection:  Connection{Path: t.TempDir(), ClosedConnectionTTL: maxConnectionAge},
 					FailedAt:    time.Now().Add(-maxConnectionAge - time.Minute),
 					RetryCount:  0,
 					NextRetryAt: time.Now().Add(-1 * time.Second),
@@ -1166,7 +1190,7 @@ func TestRetryFailedConnections(t *testing.T) {
 			name: "Skip retry if NextRetryAt is in future",
 			setup: func(writer *Writer) {
 				writer.closedConnections["conn5"] = FailedConnection{
-					Connection:  Connection{Path: t.TempDir()},
+					Connection:  Connection{Path: t.TempDir(), ClosedConnectionTTL: maxConnectionAge},
 					FailedAt:    time.Now().Add(-1 * time.Minute),
 					RetryCount:  0,
 					NextRetryAt: time.Now().Add(1 * time.Minute),
@@ -1195,19 +1219,19 @@ func TestRetryFailedConnections(t *testing.T) {
 			setup: func(writer *Writer) {
 				now := time.Now()
 				writer.closedConnections["success"] = FailedConnection{
-					Connection:  Connection{Path: t.TempDir() + "/success"},
+					Connection:  Connection{Path: t.TempDir() + "/success", ClosedConnectionTTL: maxConnectionAge},
 					FailedAt:    now.Add(-1 * time.Minute),
 					RetryCount:  0,
 					NextRetryAt: now.Add(-1 * time.Second),
 				}
 				writer.closedConnections["fail"] = FailedConnection{
-					Connection:  Connection{Path: t.TempDir()},
+					Connection:  Connection{Path: t.TempDir(), ClosedConnectionTTL: maxConnectionAge},
 					FailedAt:    now.Add(-1 * time.Minute),
 					RetryCount:  0,
 					NextRetryAt: now.Add(-1 * time.Second),
 				}
 				writer.closedConnections["not-ready"] = FailedConnection{
-					Connection:  Connection{Path: t.TempDir()},
+					Connection:  Connection{Path: t.TempDir(), ClosedConnectionTTL: maxConnectionAge},
 					FailedAt:    now.Add(-1 * time.Minute),
 					RetryCount:  0,
 					NextRetryAt: now.Add(1 * time.Minute),
@@ -1540,8 +1564,9 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 
 		writer.closedConnections["retry-conn"] = FailedConnection{
 			Connection: Connection{
-				Path:            tmpDir,
-				MaxAuditResults: 5,
+				Path:                tmpDir,
+				MaxAuditResults:     5,
+				ClosedConnectionTTL: 2 * time.Minute,
 			},
 			FailedAt:    now.Add(-1 * time.Minute),
 			RetryCount:  0,
@@ -1697,4 +1722,281 @@ func getClosedConnections(writer *Writer, connName string) []FailedConnection {
 		}
 	}
 	return conns
+}
+
+func TestConnectionTTL(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      map[string]interface{}
+		expectedTTL time.Duration
+		expectError bool
+	}{
+		{
+			name: "Valid TTL string",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": "5m",
+			},
+			expectedTTL: 5 * time.Minute,
+			expectError: false,
+		},
+		{
+			name: "Invalid TTL string",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": "invalid",
+			},
+			expectedTTL: 0,
+			expectError: true,
+		},
+		{
+			name: "No TTL specified",
+			config: map[string]interface{}{
+				"path":            t.TempDir(),
+				"maxAuditResults": 5.0,
+			},
+			expectedTTL: maxConnectionAge,
+			expectError: false,
+		},
+		{
+			name: "TTL as non-string",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": 123,
+			},
+			expectedTTL: maxConnectionAge,
+			expectError: false,
+		},
+		{
+			name: "Complex TTL format",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": "2m5s",
+			},
+			expectedTTL: 2*time.Minute + 5*time.Second,
+			expectError: false,
+		},
+		{
+			name: "TTL too long",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": "2h5m",
+			},
+			expectedTTL: 0,
+			expectError: true,
+		},
+		{
+			name: "TTL too short",
+			config: map[string]interface{}{
+				"path":                t.TempDir(),
+				"maxAuditResults":     5.0,
+				"closedConnectionTTL": "1s",
+			},
+			expectedTTL: 0,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := &Writer{
+				mu:                sync.RWMutex{},
+				openConnections:   make(map[string]Connection),
+				closedConnections: make(map[string]FailedConnection),
+				cleanupDone:       make(chan struct{}),
+				closeAndRemoveFilesWithRetry: func(_ Connection) error {
+					return nil
+				},
+			}
+
+			err := writer.CreateConnection(context.Background(), "test-conn", tt.config)
+
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			if !tt.expectError {
+				writer.mu.RLock()
+				conn, exists := writer.openConnections["test-conn"]
+				writer.mu.RUnlock()
+
+				if !exists {
+					t.Fatal("Connection was not created")
+				}
+
+				if conn.ClosedConnectionTTL != tt.expectedTTL {
+					t.Errorf("Expected TTL %v, got %v", tt.expectedTTL, conn.ClosedConnectionTTL)
+				}
+			}
+		})
+	}
+}
+
+func TestTTLBasedConnectionRemoval(t *testing.T) {
+	t.Run("Connection removed after custom TTL expires", func(t *testing.T) {
+		writer := &Writer{
+			mu:                sync.RWMutex{},
+			openConnections:   make(map[string]Connection),
+			closedConnections: make(map[string]FailedConnection),
+			cleanupDone:       make(chan struct{}),
+			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+				return fmt.Errorf("always fail")
+			},
+		}
+
+		config := map[string]interface{}{
+			"path":            t.TempDir(),
+			"maxAuditResults": 5.0,
+		}
+
+		err := writer.CreateConnection(context.Background(), "short-ttl-conn", config)
+		if err != nil {
+			t.Fatalf("Failed to create connection: %v", err)
+		}
+
+		writer.mu.RLock()
+		conn := writer.openConnections["short-ttl-conn"]
+		writer.mu.RUnlock()
+
+		conn.ClosedConnectionTTL = 100 * time.Millisecond
+
+		if conn.ClosedConnectionTTL != 100*time.Millisecond {
+			t.Errorf("Expected TTL 100ms, got %v", conn.ClosedConnectionTTL)
+		}
+
+		err = writer.CloseConnection("short-ttl-conn")
+		if err == nil {
+			t.Error("Expected CloseConnection to fail")
+		}
+
+		if !closedConnectionExists(writer, "short-ttl-conn") {
+			t.Fatal("Connection should be in closedConnections")
+		}
+
+		time.Sleep(150 * time.Millisecond)
+
+		writer.retryFailedConnections()
+
+		writer.mu.RLock()
+		_, stillExists := writer.closedConnections["short-ttl-conn"]
+		writer.mu.RUnlock()
+
+		if stillExists {
+			t.Error("Connection should have been removed after TTL expiration")
+		}
+	})
+
+	t.Run("Connection with longer TTL remains in queue", func(t *testing.T) {
+		writer := &Writer{
+			mu:                sync.RWMutex{},
+			openConnections:   make(map[string]Connection),
+			closedConnections: make(map[string]FailedConnection),
+			cleanupDone:       make(chan struct{}),
+			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+				return fmt.Errorf("always fail")
+			},
+		}
+
+		config := map[string]interface{}{
+			"path":                t.TempDir(),
+			"maxAuditResults":     5.0,
+			"closedConnectionTTL": "1m",
+		}
+
+		err := writer.CreateConnection(context.Background(), "long-ttl-conn", config)
+		if err != nil {
+			t.Fatalf("Failed to create connection: %v", err)
+		}
+		writer.mu.RLock()
+		conn := writer.openConnections["long-ttl-conn"]
+		conn.ClosedConnectionTTL = 10 * time.Second
+		writer.openConnections["long-ttl-conn"] = conn
+		writer.mu.RUnlock()
+
+		err = writer.CloseConnection("long-ttl-conn")
+		if err == nil {
+			t.Error("Expected CloseConnection to fail")
+		}
+
+		time.Sleep(100 * time.Millisecond)
+
+		writer.retryFailedConnections()
+
+		if !closedConnectionExists(writer, "long-ttl-conn") {
+			t.Error("Connection should still exist (TTL not expired)")
+		}
+	})
+
+	t.Run("Multiple connections with different TTLs", func(t *testing.T) {
+		writer := &Writer{
+			mu:                sync.RWMutex{},
+			openConnections:   make(map[string]Connection),
+			closedConnections: make(map[string]FailedConnection),
+			cleanupDone:       make(chan struct{}),
+			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+				return fmt.Errorf("always fail")
+			},
+		}
+
+		shortConfig := map[string]interface{}{
+			"path":            t.TempDir(),
+			"maxAuditResults": 5.0,
+		}
+		err := writer.CreateConnection(context.Background(), "short-conn", shortConfig)
+		if err != nil {
+			t.Fatalf("Failed to create short connection: %v", err)
+		}
+		longConfig := map[string]interface{}{
+			"path":            t.TempDir(),
+			"maxAuditResults": 5.0,
+		}
+		err = writer.CreateConnection(context.Background(), "long-conn", longConfig)
+		if err != nil {
+			t.Fatalf("Failed to create long connection: %v", err)
+		}
+		writer.mu.Lock()
+		conn := writer.openConnections["short-conn"]
+		conn.ClosedConnectionTTL = 100 * time.Millisecond
+		writer.openConnections["short-conn"] = conn
+		conn = writer.openConnections["long-conn"]
+		conn.ClosedConnectionTTL = 10 * time.Second
+		writer.openConnections["long-conn"] = conn
+		writer.mu.Unlock()
+
+		_ = writer.CloseConnection("short-conn")
+		_ = writer.CloseConnection("long-conn")
+
+		writer.mu.RLock()
+		shortCount := len(writer.closedConnections)
+		writer.mu.RUnlock()
+
+		if shortCount != 2 {
+			t.Errorf("Expected 2 connections in closedConnections, got %d", shortCount)
+		}
+
+		time.Sleep(100 * time.Millisecond)
+
+		writer.retryFailedConnections()
+		writer.mu.RLock()
+		finalCount := len(writer.closedConnections)
+		writer.mu.RUnlock()
+
+		if closedConnectionExists(writer, "short-conn") {
+			t.Error("Short TTL connection should have been removed")
+		}
+		if !closedConnectionExists(writer, "long-conn") {
+			t.Error("Long TTL connection should still exist")
+		}
+		if finalCount != 1 {
+			t.Errorf("Expected 1 connection remaining, got %d", finalCount)
+		}
+	})
 }
