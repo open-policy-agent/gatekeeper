@@ -352,7 +352,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 		isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
 		if isAPIEnabled {
-			currentVapBinding, err := vapBindingForVersion(*groupVersion)
+			shouldGenerateVAPB, _, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -375,12 +375,12 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				}
 				return reconcile.Result{}, err
 			}
-			shouldGenerateVAPB, _, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
 			if hasVAP && shouldGenerateVAPB {
 				vapBindingName := getVAPBindingName(instance.GetName())
+				currentVapBinding, err := vapBindingForVersion(*groupVersion)
+				if err != nil {
+					return reconcile.Result{}, err
+				}
 				currentVapBinding.SetName(vapBindingName)
 				if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
 					if !apierrors.IsNotFound(err) {
