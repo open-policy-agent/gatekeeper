@@ -8,3 +8,4 @@ spec:
   config:
     path: "/tmp/violations/topics"
     maxAuditResults: 3
+    closedConnectionTTL: "1m"

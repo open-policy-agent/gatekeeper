@@ -304,11 +304,14 @@ The following table describes each property in the `status.byPod` section:
       config:
         path: "/tmp/violations/topics"
         maxAuditResults: 3
+        closedConnectionTTL: 600
     ```
+
     | Property        | Description                                                                                                                                                            | Default                  |
     |:----------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |:-------------------------|
     | path            | (alpha) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "/tmp/violations/topics" |
-    | maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                                                         | 3                        |
+    | maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
+    | closedConnectionTTL | (alpha) TTL in seconds for connection to be in the retry queue after it is closed/deleted in case of failure.                                                   | 600                 |
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
 
