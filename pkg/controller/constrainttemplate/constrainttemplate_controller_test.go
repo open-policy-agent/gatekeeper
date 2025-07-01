@@ -41,6 +41,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -59,7 +60,6 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"github.com/stretchr/testify/require"
 )
 
 const (
