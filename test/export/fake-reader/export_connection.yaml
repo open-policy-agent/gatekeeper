@@ -6,6 +6,6 @@ metadata:
 spec:
   driver: "disk"
   config:
-    path: "/tmp/violations"
+    path: "/tmp/violations/topics"
     maxAuditResults: 3
     closedConnectionTTL: "1m"

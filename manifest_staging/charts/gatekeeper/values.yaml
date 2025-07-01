@@ -233,7 +233,8 @@ controllerManager:
   disableGenerateOperation: true
 exportBackend: ""
 audit:
-  exportConfig:
+  exportConnection:
+    path: /tmp/violations/topics
     maxAuditResults: 3
   exportVolumeMount:
     path: /tmp/violations
