@@ -1,0 +1,29 @@
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-foo
+spec:
+  applyTo:
+    - groups: [ "apps" ]
+      kinds: [ "FooBarTemplate" ]
+      versions: [ "v1" ]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Foo"
+    group: ""
+    version: "v1"
+---
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-bar
+spec:
+  applyTo:
+    - groups: [ "apps" ]
+      kinds: [ "FooBarTemplate" ]
+      versions: [ "v1" ]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Bar"
+    group: ""
+    version: "v1"
