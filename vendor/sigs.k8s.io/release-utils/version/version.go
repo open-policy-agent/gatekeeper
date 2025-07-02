@@ -192,14 +192,14 @@ func (i *Info) String() string {
 		}
 		_, _ = fmt.Fprint(w, "\n\n")
 	}
-
-	_, _ = fmt.Fprintf(w, "GitVersion:\t%s\n", i.GitVersion)
-	_, _ = fmt.Fprintf(w, "GitCommit:\t%s\n", i.GitCommit)
-	_, _ = fmt.Fprintf(w, "GitTreeState:\t%s\n", i.GitTreeState)
-	_, _ = fmt.Fprintf(w, "BuildDate:\t%s\n", i.BuildDate)
-	_, _ = fmt.Fprintf(w, "GoVersion:\t%s\n", i.GoVersion)
-	_, _ = fmt.Fprintf(w, "Compiler:\t%s\n", i.Compiler)
-	_, _ = fmt.Fprintf(w, "Platform:\t%s\n", i.Platform)
+	_, _ = fmt.Fprint(w, "Version Summary:\t\n", "")
+	_, _ = fmt.Fprintf(w, "   GitVersion:\t%s\n", i.GitVersion)
+	_, _ = fmt.Fprintf(w, "   GitCommit:\t%s\n", i.GitCommit)
+	_, _ = fmt.Fprintf(w, "   GitTreeState:\t%s\n", i.GitTreeState)
+	_, _ = fmt.Fprintf(w, "   BuildDate:\t%s\n", i.BuildDate)
+	_, _ = fmt.Fprintf(w, "   GoVersion:\t%s\n", i.GoVersion)
+	_, _ = fmt.Fprintf(w, "   Compiler:\t%s\n", i.Compiler)
+	_, _ = fmt.Fprintf(w, "   Platform:\t%s\n", i.Platform)
 
 	_ = w.Flush()
 	return b.String()
