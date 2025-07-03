@@ -58,6 +58,9 @@ type Source struct {
 
 	// GenerateVAP enables/disables VAP generation and enforcement for policy.
 	GenerateVAP *bool `json:"generateVAP,omitempty"`
+
+	// ResourceOperations maps to ValidatingAdmissionPolicy's `spec.matchConstraints.resourceRules.operations` when enable generateVAP.
+	ResourceOperations []string `json:"resourceOperations,omitempty"`
 }
 
 func (in *Source) Validate() error {
@@ -232,6 +235,34 @@ func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType
 	}
 
 	return &out, nil
+}
+
+func (in *Source) GetResourceOperations(enableDeleteOpsInVwhc *bool) ([]admissionv1beta1.OperationType, error) {
+	var out []admissionv1beta1.OperationType
+	if len(in.ResourceOperations) == 0 {
+		if enableDeleteOpsInVwhc == nil || !*enableDeleteOpsInVwhc {
+			return []admissionv1beta1.OperationType{admissionv1beta1.Create, admissionv1beta1.Update}, nil
+		}
+		return []admissionv1beta1.OperationType{admissionv1beta1.Create, admissionv1beta1.Update, admissionv1beta1.Delete}, nil
+	}
+
+	for _, op := range in.ResourceOperations {
+		switch op {
+		case string(admissionv1.Create):
+			out = append(out, admissionv1beta1.Create)
+		case string(admissionv1.Update):
+			out = append(out, admissionv1beta1.Update)
+		case string(admissionv1.Delete):
+			out = append(out, admissionv1beta1.Delete)
+		case string(admissionv1.Connect):
+			out = append(out, admissionv1beta1.Connect)
+		case string(admissionv1.OperationAll):
+			return []admissionv1beta1.OperationType{admissionv1.OperationAll}, nil
+		default:
+			return nil, fmt.Errorf("%w: unrecognized resource operation: %s", ErrBadResourceOperation, op)
+		}
+	}
+	return out, nil
 }
 
 // MustToUnstructured() is a convenience method for converting to unstructured.
