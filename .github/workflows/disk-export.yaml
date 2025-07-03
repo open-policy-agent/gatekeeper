@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 15
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@002fdce3c6a235733a90a27c80493a3241e56863 # v2.12.1
+      uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
       with:
         egress-policy: audit
 
@@ -40,9 +40,9 @@ jobs:
         make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest
         kind load docker-image --name kind gatekeeper-e2e:latest fake-reader:latest gatekeeper-crds:latest
         kubectl create ns gatekeeper-system
-        
-        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG EXPORT_BACKEND=disk FAKE_READER_IMAGE_PULL_POLICY=Never AUDIT_CONNECTION=audit-connection AUDIT_CHANNEL=audit-channel EXPORT_DISK_PATH=/tmp/violations MAX_AUDIT_RESULTS=3 FAKE_READER_IMAGE=fake-reader:latest
-        
+
+        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG EXPORT_BACKEND=disk FAKE_READER_IMAGE_PULL_POLICY=Never AUDIT_CONNECTION=audit-connection AUDIT_CHANNEL=audit-channel EXPORT_DISK_MOUNT=/tmp/violations EXPORT_DISK_PATH=/tmp/violations/topics MAX_AUDIT_RESULTS=3 FAKE_READER_IMAGE=fake-reader:latest
+
         make test-e2e ENABLE_EXPORT_TESTS=1 EXPORT_BACKEND=disk
 
     - name: Save logs

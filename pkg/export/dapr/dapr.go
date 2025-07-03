@@ -47,7 +47,12 @@ func (r *Dapr) Publish(_ context.Context, connectionName string, data interface{
 }
 
 func (r *Dapr) CloseConnection(connectionName string) error {
-	delete(r.openConnections, connectionName)
+	conn, ok := r.openConnections[connectionName]
+	if !ok {
+		return fmt.Errorf("connection %s not found for disk driver", connectionName)
+	}
+	defer delete(r.openConnections, connectionName)
+	conn.client.Close()
 	return nil
 }
 
