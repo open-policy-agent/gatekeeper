@@ -17,7 +17,7 @@ var commands = []*cobra.Command{
 	test.Cmd,
 	expand.Cmd,
 	sync.Cmd,
-	k8sVersion.WithFont("alligator2"),
+	k8sVersion.WithFont("dotmatrix"),
 }
 
 func init() {
@@ -28,6 +28,15 @@ func init() {
 var rootCmd = &cobra.Command{
 	Use:   "gator subcommand",
 	Short: "gator is a suite of authorship tools for Gatekeeper",
+	Long: `
+Gator is a suite of authorship tools designed to improve the developer experience when working with Gatekeeper.
+It supports:
+  - Validating Kubernetes manifests against constraints
+  - Expanding Rego-based constraints for debugging
+  - Running policy tests locally
+  - Verifying ConstraintTemplates and Constraints before deploying
+
+Use it to catch issues early, test policies offline, and ensure compliance.`,
 }
 
 func main() {
