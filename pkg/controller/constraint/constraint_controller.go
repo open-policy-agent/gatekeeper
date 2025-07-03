@@ -352,15 +352,42 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 		isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
 		if isAPIEnabled {
-			currentVapBinding, err := vapBindingForVersion(*groupVersion)
+			shouldGenerateVAPB, _, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
-			vapBindingName := getVAPBindingName(instance.GetName())
-			currentVapBinding.SetName(vapBindingName)
-			if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
-				if !apierrors.IsNotFound(err) {
+			if shouldGenerateVAPB {
+				ct := &v1beta1.ConstraintTemplate{}
+				err = r.reader.Get(ctx, types.NamespacedName{Name: strings.ToLower(instance.GetKind())}, ct)
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						return reconcile.Result{}, nil
+					}
 					return reconcile.Result{}, err
+				}
+				unversionedCT := &templates.ConstraintTemplate{}
+				if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
+					return reconcile.Result{}, err
+				}
+				hasVAP, err := ShouldGenerateVAP(unversionedCT)
+				if err != nil {
+					if errors.Is(err, celSchema.ErrCELEngineMissing) {
+						return reconcile.Result{}, nil
+					}
+					return reconcile.Result{}, err
+				}
+				if hasVAP {
+					vapBindingName := getVAPBindingName(instance.GetName())
+					currentVapBinding, err := vapBindingForVersion(*groupVersion)
+					if err != nil {
+						return reconcile.Result{}, err
+					}
+					currentVapBinding.SetName(vapBindingName)
+					if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
+						if !apierrors.IsNotFound(err) {
+							return reconcile.Result{}, err
+						}
+					}
 				}
 			}
 		}
