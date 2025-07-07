@@ -13,10 +13,13 @@ limitations under the License.
 package audit
 
 import (
+	"context"
+
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -26,6 +29,7 @@ type Dependencies struct {
 	CacheLister     *CacheLister
 	ExpansionSystem *expansion.System
 	ExportSystem    *export.System
+	GetPod          func(context.Context) (*corev1.Pod, error)
 }
 
 // AddToManager adds audit manager to the Manager.

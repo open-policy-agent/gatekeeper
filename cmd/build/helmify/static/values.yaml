@@ -229,9 +229,12 @@ controllerManager:
       # - from:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
+  disableWebhookOperation: false
+  disableGenerateOperation: true
 exportBackend: ""
 audit:
-  exportConfig:
+  exportConnection:
+    path: /tmp/violations/topics
     maxAuditResults: 3
   exportVolumeMount:
     path: /tmp/violations
@@ -292,6 +295,9 @@ audit:
       - 999
   writeToRAMDisk: false
   extraRules: []
+  disableGenerateOperation: false
+  disableAuditOperation: false
+  disableStatusOperation: false
 crds:
   affinity: {}
   tolerations: []

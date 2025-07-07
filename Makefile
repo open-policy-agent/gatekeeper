@@ -41,8 +41,9 @@ HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true
 	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
 
-HELM_DISK_EXPORT_ARGS := --set audit.exportVolumeMount.path=${EXPORT_DISK_PATH} \
-	--set audit.exportConfig.maxAuditResults=${MAX_AUDIT_RESULTS} \
+HELM_DISK_EXPORT_ARGS := --set audit.exportVolumeMount.path=${EXPORT_DISK_MOUNT} \
+	--set audit.exportConnection.path=${EXPORT_DISK_PATH} \
+	--set audit.exportConnection.maxAuditResults=${MAX_AUDIT_RESULTS} \
 	--set audit.exportSidecar.image=${FAKE_READER_IMAGE} \
 	--set audit.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
 
