@@ -30,6 +30,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplatestatus"
+	vmhc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/vwhc"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -688,16 +689,16 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 		APIVersion: v1beta1Obj.Spec.ParamKind.APIVersion,
 		Kind:       v1beta1Obj.Spec.ParamKind.Kind,
 	}
-	obj.Spec.MatchConstraints = &admissionregistrationv1.MatchResources{
-		ResourceRules: []admissionregistrationv1.NamedRuleWithOperations{
-			{
-				RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
-					/// TODO(jgabani): default for now until we can safely expose these to users
-					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
-					Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
-				},
+	obj.Spec.MatchConstraints = &admissionregistrationv1.MatchResources{}
+
+	for i := range v1beta1Obj.Spec.MatchConstraints.ResourceRules {
+		rule := &v1beta1Obj.Spec.MatchConstraints.ResourceRules[i]
+		obj.Spec.MatchConstraints.ResourceRules = append(obj.Spec.MatchConstraints.ResourceRules, admissionregistrationv1.NamedRuleWithOperations{
+			RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
+				Operations: rule.Operations,
+				Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
 			},
-		},
+		})
 	}
 
 	obj.Spec.MatchConditions = []admissionregistrationv1.MatchCondition{}
@@ -828,7 +829,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 			currentVap = nil
 		}
 		logger.Info("get VAP", "vapName", vapName, "currentVap", currentVap)
-		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
+		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT, vmhc.EnableDeleteOpsInVwhc)
 		if err != nil {
 			logger.Error(err, "transform to VAP error", "vapName", vapName)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to VAP object", status, err)
