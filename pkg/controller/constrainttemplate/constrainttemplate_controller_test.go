@@ -18,6 +18,7 @@ package constrainttemplate
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"strings"
 	"testing"
@@ -40,6 +41,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -271,7 +273,7 @@ func TestReconcile(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	transform.VapAPIEnabled = ptr.To[bool](true)
-	transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+	transform.SetGroupVersionForVAP(&admissionregistrationv1beta1.SchemeGroupVersion)
 
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
@@ -377,7 +379,6 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldNotBeCreatedForRegoOnlyTemplate"
 
 		logger.Info("Running test: Vap should not be created for rego only template")
-		constraint.DefaultGenerateVAP = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -500,11 +501,18 @@ func TestReconcile(t *testing.T) {
 	t.Run("Vap should be created without generateVAP field", func(t *testing.T) {
 		suffix := "VapShouldBeCreatedWithoutGenerateVAP"
 		logger.Info("Running test: Vap should be created without generateVAP field")
-		constraint.DefaultGenerateVAP = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+		testFlagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+		testFlag := testFlagSet.Bool("default-create-vap-for-templates", true, "test flag")
+		require.NoError(t, testFlagSet.Parse([]string{"--default-create-vap-for-templates", "true"}))
+		originalValue := *constraint.DefaultGenerateVAP
+		*constraint.DefaultGenerateVAP = *testFlag
 
+		t.Cleanup(func() {
+			*constraint.DefaultGenerateVAP = originalValue
+		})
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -547,7 +555,6 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should not be created", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreated"
 		logger.Info("Running test: VapBinding should not be created")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](false)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -583,7 +590,6 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should not be created with missing CEL", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreatedMissingCEL"
 		logger.Info("Running test: VapBinding should not be created with missing CEL")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -619,10 +625,8 @@ func TestReconcile(t *testing.T) {
 	t.Run("Error should be present on constraint when VAP generation is off and VAPB generation is on for CEL templates", func(t *testing.T) {
 		suffix := "ErrorShouldBePresentOnConstraint"
 		logger.Info("Running test: Error should be present on constraint when VAP generation is off and VAPB generation is on")
-		constraint.DefaultGenerateVAP = ptr.To[bool](false)
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, nil)
-		cstr := newDenyAllCstr(suffix)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To(false))
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -636,7 +640,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := isConstraintStatuErrorAsExpected(ctx, c, suffix, true, "Conditions are not satisfied")
+		err := isConstraintStatuErrorAsExpected(ctx, c, suffix, true, constraint.ErrVAPConditionsNotSatisfied.Error())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -645,8 +649,6 @@ func TestReconcile(t *testing.T) {
 	t.Run("Error should not be present on constraint when VAP generation if off and VAPB generation is on for templates without CEL", func(t *testing.T) {
 		suffix := "ErrorShouldNotBePresentOnConstraint"
 		logger.Info("Running test: Error should not be present on constraint when VAP generation is off and VAPB generation is on for templates wihout CEL")
-		constraint.DefaultGenerateVAP = ptr.To[bool](false)
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -669,9 +671,8 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should not be created without generateVap intent in CT", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreatedWithoutGenerateVapIntent"
 		logger.Info("Running test: VapBinding should not be created without generateVap intent in CT")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false))
-		cstr := newDenyAllCstr(suffix)
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -760,7 +761,6 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should not be created without VAP enforcement Point", func(t *testing.T) {
 		suffix := "VapBShouldNotBeCreatedWithoutVAPEP"
 		logger.Info("Running test: VapBinding should not be created without VAP enforcement point")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		cstr := newDenyAllCstrWithScopedEA(suffix, util.AuditEnforcementPoint)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -797,7 +797,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreatedV1"
 
 		logger.Info("Running test: Vap should be created with v1")
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersionForVAP(&admissionregistrationv1.SchemeGroupVersion)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -841,10 +841,9 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should be created with v1 with some delay after constraint CRD is available", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedV1"
 		logger.Info("Running test: VapBinding should be created with v1 with some delay after constraint CRD is available")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
-		cstr := newDenyAllCstr(suffix)
+		transform.SetGroupVersionForVAP(&admissionregistrationv1.SchemeGroupVersion)
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To(true))
+		cstr := newDenyAllCstrWithScopedEA(suffix, util.VAPEnforcementPoint)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
@@ -899,8 +898,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should be created with v1 without warnings in enforcementPointsStatus", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedV1EnforcementPointsStatus"
 		logger.Info("Running test: VapBinding should be created with v1 without warnings in enforcementPointsStatus")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersionForVAP(&admissionregistrationv1.SchemeGroupVersion)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -1612,7 +1610,7 @@ func isConstraintStatuErrorAsExpected(ctx context.Context, c client.Client, suff
 
 		switch {
 		case wantErr && len(status.Errors) == 0:
-			return fmt.Errorf("expected error not found in status")
+			return fmt.Errorf("expected error not found in status, no errors present")
 		case !wantErr && len(status.Errors) > 0:
 			return fmt.Errorf("unexpected error found in status")
 		case wantErr:
