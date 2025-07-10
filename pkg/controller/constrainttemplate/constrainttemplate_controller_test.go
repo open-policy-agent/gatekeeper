@@ -513,10 +513,6 @@ func TestReconcile(t *testing.T) {
 		t.Cleanup(func() {
 			*constraint.DefaultGenerateVAP = originalValue
 		})
-		// require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-for-templates", "true"}))
-		// t.Cleanup(func() {
-		// 	require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-for-templates", "false"}))
-		// })
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
