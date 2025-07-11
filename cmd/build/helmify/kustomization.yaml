@@ -8,7 +8,7 @@ bases:
   - "../../../config/default"
 patchesStrategicMerge:
   - kustomize-for-helm.yaml
-  - delete-ports.yaml
+  - delete-merge-values.yaml
 patchesJson6902:
   - target:
       group: apiextensions.k8s.io
