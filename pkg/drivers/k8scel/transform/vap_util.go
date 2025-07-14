@@ -77,3 +77,9 @@ func IsVapAPIEnabled(log *logr.Logger) (bool, *schema.GroupVersion) {
 	*VapAPIEnabled = false
 	return false, nil
 }
+
+func SetGroupVersionForVAP(gv *schema.GroupVersion) {
+	vapMux.Lock()
+	defer vapMux.Unlock()
+	GroupVersion = gv
+}
