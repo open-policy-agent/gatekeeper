@@ -18,6 +18,10 @@ validatingWebhookMatchConditions: []
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 validatingWebhookURL: null
+disableValidatingGlobalWebhook: true
+validatingGlobalWebhookTimeoutSeconds: 3
+validatingGlobalWebhookFailurePolicy: Ignore
+validatingGlobalWebhookCustomRules: {}
 enableDeleteOperations: false
 enableConnectOperations: false
 enableExternalData: true
@@ -67,23 +71,26 @@ postUpgrade:
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
-    podSecurity: ["pod-security.kubernetes.io/audit=restricted",
-      "pod-security.kubernetes.io/audit-version=latest",
-      "pod-security.kubernetes.io/warn=restricted",
-      "pod-security.kubernetes.io/warn-version=latest",
-      "pod-security.kubernetes.io/enforce=restricted",
-      "pod-security.kubernetes.io/enforce-version=v1.24"]
+    podSecurity:
+      [
+        "pod-security.kubernetes.io/audit=restricted",
+        "pod-security.kubernetes.io/audit-version=latest",
+        "pod-security.kubernetes.io/warn=restricted",
+        "pod-security.kubernetes.io/warn-version=latest",
+        "pod-security.kubernetes.io/enforce=restricted",
+        "pod-security.kubernetes.io/enforce-version=v1.24",
+      ]
     extraAnnotations: {}
     priorityClassName: ""
   affinity: {}
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -101,12 +108,15 @@ postInstall:
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
-    podSecurity: ["pod-security.kubernetes.io/audit=restricted",
-      "pod-security.kubernetes.io/audit-version=latest",
-      "pod-security.kubernetes.io/warn=restricted",
-      "pod-security.kubernetes.io/warn-version=latest",
-      "pod-security.kubernetes.io/enforce=restricted",
-      "pod-security.kubernetes.io/enforce-version=v1.24"]
+    podSecurity:
+      [
+        "pod-security.kubernetes.io/audit=restricted",
+        "pod-security.kubernetes.io/audit-version=latest",
+        "pod-security.kubernetes.io/warn=restricted",
+        "pod-security.kubernetes.io/warn-version=latest",
+        "pod-security.kubernetes.io/enforce=restricted",
+        "pod-security.kubernetes.io/enforce-version=v1.24",
+      ]
     extraAnnotations: {}
     priorityClassName: ""
   probeWebhook:
@@ -122,12 +132,12 @@ postInstall:
     priorityClassName: ""
   affinity: {}
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -147,13 +157,13 @@ preUninstall:
     priorityClassName: ""
   affinity: {}
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -198,7 +208,7 @@ controllerManager:
           weight: 100
   topologySpreadConstraints: []
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   resources:
     limits:
       memory: 512Mi
@@ -209,7 +219,7 @@ controllerManager:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -221,7 +231,8 @@ controllerManager:
   extraRules: []
   networkPolicy:
     enabled: false
-    ingress: []
+    ingress:
+      []
       # - from:
       #   - ipBlock:
       #       cidr: 0.0.0.0/0
@@ -240,7 +251,7 @@ audit:
   podLabels: {}
   affinity: {}
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   resources:
     limits:
       memory: 512Mi
@@ -251,7 +262,7 @@ audit:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -265,13 +276,13 @@ audit:
 crds:
   affinity: {}
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 65532
     runAsNonRoot: true

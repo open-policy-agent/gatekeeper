@@ -119,12 +119,12 @@ webhooks:
     - namespaces
   sideEffects: None
   timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
-{{- if not .Values.disableGlobalValidatingWebhook }}
+{{- if not .Values.disableValidatingGlobalWebhook }}
 - admissionReviewVersions:
   - v1
   - v1beta1
   clientConfig:
-    {{- if .Values.validatingGlobalWebhookURL }}
+    {{- if .Values.validatingWebhookURL }}
     url: https://{{ .Values.validatingWebhookURL }}/v1/admit
     {{- else }}
     service:
