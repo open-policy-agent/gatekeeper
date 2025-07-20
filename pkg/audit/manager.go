@@ -17,6 +17,7 @@ import (
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	exportController "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
@@ -55,8 +56,6 @@ const (
 	defaultConstraintViolationsLimit = 20
 	defaultListLimit                 = 500
 	defaultAPICacheDir               = "/tmp/audit"
-	defaultConnection                = "audit-connection"
-	defaultChannel                   = "audit-channel"
 )
 
 var (
@@ -68,8 +67,6 @@ var (
 	auditEventsInvolvedNamespace = flag.Bool("audit-events-involved-namespace", false, "emit audit events for each violation in the involved objects namespace, the default (false) generates events in the namespace Gatekeeper is installed in. Audit events from cluster-scoped resources will still follow the default behavior")
 	auditMatchKindOnly           = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	apiCacheDir                  = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
-	auditConnection              = flag.String("audit-connection", defaultConnection, "(alpha) Connection name for exporting audit violation messages. Defaults to audit-connection")
-	auditChannel                 = flag.String("audit-channel", defaultChannel, "(alpha) Channel name for exporting audit violation messages. Defaults to audit-channel")
 	emptyAuditResults            = newLimitQueue(0)
 	logStatsAudit                = flag.Bool("log-stats-audit", false, "(alpha) log stats metrics for the audit run")
 )
@@ -93,6 +90,9 @@ type Manager struct {
 
 	expansionSystem *expansion.System
 	exportSystem    *export.System
+
+	// returns the running pod injected by the main controller
+	getPod func(context.Context) (*corev1.Pod, error)
 }
 
 // StatusViolation represents each violation under status.
@@ -249,6 +249,7 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 		auditCache:      deps.CacheLister,
 		expansionSystem: deps.ExpansionSystem,
 		exportSystem:    deps.ExportSystem,
+		getPod:          deps.GetPod,
 	}
 	return am, nil
 }
@@ -259,11 +260,16 @@ func (am *Manager) audit(ctx context.Context) error {
 	timestamp := startTime.UTC().Format(time.RFC3339)
 	am.log = log.WithValues(logging.AuditID, timestamp)
 	logStart(am.log)
-	exportErrorMap := make(map[string]error)
-	if *exportController.ExportEnabled {
-		if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
+	auditExportPublishingState := auditExportPublishingState{
+		SuccessCount: 0,
+		Errors:       make(map[string]error),
+	}
+	if *exportutil.ExportEnabled {
+		if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
 			am.log.Error(err, "failed to export audit start message")
-			exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
+			auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
+		} else {
+			auditExportPublishingState.SuccessCount++
 		}
 	}
 	// record audit latency
@@ -277,13 +283,15 @@ func (am *Manager) audit(ctx context.Context) error {
 		if err := am.reporter.reportRunEnd(endTime); err != nil {
 			am.log.Error(err, "failed to report run end time")
 		}
-		if *exportController.ExportEnabled {
-			if err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
-				exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
+		if *exportutil.ExportEnabled {
+			if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
+				am.log.Error(err, "failed to export audit end message")
+				auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
+			} else {
+				auditExportPublishingState.SuccessCount++
 			}
-		}
-		for _, v := range exportErrorMap {
-			am.log.Error(v, "failed to export audit violation")
+			// At the end of the Audit update the Connection status with any errors collected during publishing
+			reportExportConnectionErrors(ctx, auditExportPublishingState, am.log, am.mgr.GetClient(), am.mgr.GetScheme(), am.getPod)
 		}
 	}()
 
@@ -328,10 +336,10 @@ func (am *Manager) audit(ctx context.Context) error {
 			am.log.Error(err, "Auditing")
 		}
 
-		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
+		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
 	} else {
 		am.log.Info("Auditing via discovery client")
-		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
+		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
 		if err != nil {
 			return err
 		}
@@ -365,7 +373,7 @@ func (am *Manager) auditResources(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	exportErrorMap map[string]error,
+	auditExportPublishingState auditExportPublishingState,
 ) error {
 	// delete all from cache dir before starting audit
 	err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
@@ -553,7 +561,7 @@ func (am *Manager) auditResources(
 			}
 			// Loop through all subDirs to review all files for this kind.
 			am.log.V(logging.DebugLevel).Info("Reviewing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
-			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
+			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -655,7 +663,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	exportErrorMap map[string]error,
+	auditExportPublishingState auditExportPublishingState,
 ) error {
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
@@ -740,7 +748,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 
 			if len(resp.Results()) > 0 {
 				results := ToResults(&augmentedObj.Object, resp)
-				am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, exportErrorMap)
+				am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
 			}
 		}
 	}
@@ -860,7 +868,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	exportErrorMap map[string]error,
+	auditExportPublishingState auditExportPublishingState,
 ) {
 	for _, r := range res {
 		constraint := r.Constraint
@@ -899,10 +907,11 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		details := r.Metadata["details"]
 		labels := r.obj.GetLabels()
 		logViolation(am.log, constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels)
-		if *exportController.ExportEnabled {
-			err := am.exportSystem.Publish(context.Background(), *auditConnection, *auditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
-			if err != nil {
-				exportErrorMap[strings.Split(err.Error(), ":")[0]] = err
+		if *exportutil.ExportEnabled {
+			if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp)); err != nil {
+				auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
+			} else {
+				auditExportPublishingState.SuccessCount++
 			}
 		}
 		if *emitAuditEvents {
@@ -1272,4 +1281,35 @@ func mergeErrors(errs []error) error {
 		sb.WriteString(err.Error())
 	}
 	return errors.New(sb.String())
+}
+
+type auditExportPublishingState struct {
+	SuccessCount int
+	Errors       map[string]error
+}
+
+// Write the export errors to the ConnectionPodStatus.
+func reportExportConnectionErrors(
+	ctx context.Context,
+	auditExportPublishingState auditExportPublishingState,
+	logger logr.Logger,
+	client client.Client,
+	scheme *runtime.Scheme,
+	getPod func(context.Context) (*corev1.Pod, error),
+) {
+	exportErrors := []*statusv1alpha1.ConnectionError{}
+	for staticErrMsg, v := range auditExportPublishingState.Errors {
+		logger.Error(v, "failed to export audit violation")
+		exportErrors = append(exportErrors, &statusv1alpha1.ConnectionError{
+			Type:    statusv1alpha1.PublishError,
+			Message: staticErrMsg,
+		})
+	}
+
+	// Connection is considered active if there were any successful publishes
+	activeConnection := auditExportPublishingState.SuccessCount > 0
+
+	if err := exportController.UpdateOrCreateConnectionPodStatus(ctx, client, client, scheme, *exportutil.AuditConnection, exportErrors, &activeConnection, getPod); err != nil {
+		logger.Error(err, "failed to write export errors to the connection pod status")
+	}
 }

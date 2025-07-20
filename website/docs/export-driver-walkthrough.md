@@ -55,7 +55,7 @@ func (r *Foo) Publish(ctx context.Context, connectionName string, data interface
   ...
 }
 
-func (r *Foo) loseConnection(connectionName string) error {
+func (r *Foo) CloseConnection(connectionName string) error {
   ...
 }
 
@@ -77,24 +77,22 @@ var SupportedDrivers = map[string]driver.Driver{
 }
 ```
 
-And thats it! Exporter system will take the newly added driver into account and whenever a configMap to establish connection to export message is created.
+And thats it! Exporter system will take the newly added driver into account and a `Connection` custom resource to establish connection to export message is created.
 
 ### How to establish connections to different backend
 
-To enable audit to use this driver to publish messages, a connection configMap with appropriate `config` and `driver` is needed. For example,
+To enable audit to use this driver to publish messages, a `Connection` custom resource with appropriate `config` and `driver` is needed. For example,
 
 ```yaml
-apiVersion: v1
-kind: ConfigMap
+apiVersion: connection.gatekeeper.sh/v1alpha1
+kind: Connection
 metadata:
-  name: audit
+  name: audit-connection
   namespace: gatekeeper-system
-data:
+spec:
   driver: "foo"
-  config: |
-    {
-      <config needed for foo connection>
-    }
+  config:
+    key: value
 ```
 
-> The `data.driver` field must exist and must match one of the keys of the `SupportedDrivers` map that was defined earlier to use the corresponding driver. The `data.config` field in the configuration can vary depending on the driver being used. For dapr driver, `data.config` must be `{"component": "pubsub"}`.
+> The `data.driver` field must exist and must match one of the keys of the `SupportedDrivers` map that was defined earlier to use the corresponding driver. The `data.config` field in the configuration can vary depending on the driver being used. For dapr driver, `data.config` must be `component: "pubsub"`.

@@ -72,9 +72,16 @@ spec:
         {{ if hasKey .Values "emitAuditEvents" }}- --emit-audit-events={{ .Values.emitAuditEvents }}{{- end }}
         {{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}
         - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
-        - --operation=audit
-        - --operation=status
+        
+        {{- if not .Values.audit.disableGenerateOperation }}
         - --operation=generate
+        {{- end }}
+        {{- if not .Values.audit.disableAuditOperation }}
+        - --operation=audit
+        {{- end }}
+        {{- if not .Values.audit.disableStatusOperation }}
+        - --operation=status
+        {{- end }}
         {{ if hasKey .Values "enableViolationExport" }}
         - --enable-violation-export={{ .Values.enableViolationExport }}
         {{- end }}

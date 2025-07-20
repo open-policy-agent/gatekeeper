@@ -73,7 +73,13 @@ spec:
         - --log-level-encoder={{ (.Values.controllerManager.logLevelEncoder | empty | not) | ternary .Values.controllerManager.logLevelEncoder .Values.logLevelEncoder }}
         - --cert-dir={{ .Values.certDir }}
         - --exempt-namespace={{ .Release.Namespace }}
+        
+        {{- if not .Values.controllerManager.disableWebhookOperation }}
         - --operation=webhook
+        {{- end }}
+        {{- if not .Values.controllerManager.disableGenerateOperation }}
+        - --operation=generate
+        {{- end }}
         - --enable-external-data={{ .Values.enableExternalData }}
         - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
         - --log-mutations={{ .Values.logMutations }}

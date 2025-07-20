@@ -2,11 +2,11 @@ name: create_release_pull_request
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.0' # run this workflow when a new minor version is published
+      - "v[0-9]+.[0-9]+.0" # run this workflow when a new minor version is published
   workflow_dispatch:
     inputs:
       release_version:
-        description: 'Which version are we creating a release pull request for?'
+        description: "Which version are we creating a release pull request for?"
         required: true
 
 permissions:
@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
         with:
           egress-policy: audit
 
@@ -98,6 +98,23 @@ jobs:
           branch: "release-${{ env.NEWVERSION }}"
           base: "${{ env.TARGET_BRANCH }}"
           signoff: true
+          body: |
+            ## Release Preparation Checklist
+
+            Before merging this PR, please ensure the following items are completed:
+
+            ### Pre-Release Dependencies Check
+            - [ ] **Dependabot PRs**: All open [Dependabot PRs](https://github.com/open-policy-agent/gatekeeper/pulls?q=is%3Apr+author%3Aapp%2Fdependabot) have been reviewed and merged
+            - [ ] **OPA**: Updated to latest stable version from [OPA releases](https://github.com/open-policy-agent/opa/releases)
+            - [ ] **cert-controller**: Updated to latest commit from [cert-controller](https://github.com/open-policy-agent/cert-controller/)
+            - [ ] **Constraint Framework**: Updated to latest commit from [frameworks releases](https://github.com/open-policy-agent/frameworks/)
+
+            ### Security Check
+            - [ ] **Trivy Scan**: [Latest vulnerability scan](https://github.com/open-policy-agent/gatekeeper/actions/workflows/scan-vulns.yaml?query=branch%3Amaster) passes with no detected vulnerabilities
+
+            ---
+
+            This PR prepares release ${{ env.NEWVERSION }}. All automated checks must pass before merging.
           labels: |
             release-pr
             ${{ github.event.inputs.release_version }}

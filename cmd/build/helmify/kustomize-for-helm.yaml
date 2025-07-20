@@ -90,7 +90,7 @@ spec:
             - --log-level-encoder={{ (.Values.controllerManager.logLevelEncoder | empty | not) | ternary .Values.controllerManager.logLevelEncoder .Values.logLevelEncoder }}
             - --cert-dir={{ .Values.certDir }}
             - --exempt-namespace={{ .Release.Namespace }}
-            - --operation=webhook
+            - HELMSUBST_CONTROLLER_MANAGER_OPERATIONS
             - --enable-external-data={{ .Values.enableExternalData }}
             - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - --log-mutations={{ .Values.logMutations }}
@@ -199,9 +199,7 @@ spec:
             - HELMSUBST_DEPLOYMENT_AUDIT_EMIT_EVENTS
             - HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION
             - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
-            - --operation=audit
-            - --operation=status
-            - --operation=generate
+            - HELMSUBST_AUDIT_OPERATIONS
             - HELMSUBST_DEPLOYMENT_AUDIT_VIOLATION_EXPORT_ARGS
             - HELMSUBST_MUTATION_STATUS_ENABLED_ARG
             - --logtostderr

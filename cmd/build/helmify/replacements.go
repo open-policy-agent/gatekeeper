@@ -116,6 +116,25 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_MUTATION_STATUS_ENABLED_ARG": `{{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}`,
 
+	"- HELMSUBST_CONTROLLER_MANAGER_OPERATIONS": `
+        {{- if not .Values.controllerManager.disableWebhookOperation }}
+        - --operation=webhook
+        {{- end }}
+        {{- if not .Values.controllerManager.disableGenerateOperation }}
+        - --operation=generate
+        {{- end }}`,
+
+	"- HELMSUBST_AUDIT_OPERATIONS": `
+        {{- if not .Values.audit.disableGenerateOperation }}
+        - --operation=generate
+        {{- end }}
+        {{- if not .Values.audit.disableAuditOperation }}
+        - --operation=audit
+        {{- end }}
+        {{- if not .Values.audit.disableStatusOperation }}
+        - --operation=status
+        {{- end }}`,
+
 	"- HELMSUBST_DEPLOYMENT_AUDIT_VIOLATION_EXPORT_ARGS": `{{ if hasKey .Values "enableViolationExport" }}
         - --enable-violation-export={{ .Values.enableViolationExport }}
         {{- end }}
@@ -326,7 +345,7 @@ var replacements = map[string]string{
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}`,
 
-  "- HELMSUBST_DEPLOYMENT_DEFAULT_WAIT_VAPB_GENERATION": `
+	"- HELMSUBST_DEPLOYMENT_DEFAULT_WAIT_VAPB_GENERATION": `
         {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
         - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}`,
