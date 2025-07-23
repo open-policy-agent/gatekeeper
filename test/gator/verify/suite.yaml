@@ -6,11 +6,11 @@ tests:
   constraint: constraint.yaml
   cases:
   - name: foo-bar
-    object: allow.yaml
+    object: allow_foo.yaml
     assertions:
     - violations: no
   - name: foo-not-bar
-    object: deny.yaml
+    object: deny_foo.yaml
     assertions:
     - violations: yes
 - name: foo-is-bar-with-scopedEA
@@ -18,11 +18,11 @@ tests:
   constraint: constraint_with_scopedEA.yaml
   cases:
   - name: foo-bar
-    object: allow.yaml
+    object: allow_foo.yaml
     assertions:
     - violations: no
   - name: foo-not-bar
-    object: deny.yaml
+    object: deny_foo.yaml
     assertions:
     - violations: yes
 - name: foo-is-bar-with-scopedEA-without-gator-EP
@@ -30,24 +30,32 @@ tests:
   constraint: constraint_with_scopedEA_without_gator_ep.yaml
   cases:
   - name: foo-bar
-    object: allow.yaml
+    object: allow_foo.yaml
     assertions:
     - violations: no
   - name: foo-not-bar
-    object: deny.yaml
+    object: deny_foo.yaml
     assertions:
     - violations: no
-- name: foo-is-bar-expansion
+- name: foo-template-to-foo-expansion
   template: template.yaml
   constraint: constraint.yaml
-  expansion: expansion.yaml
+  expansion: foo_expansion.yaml
   cases:
   - name: foo-bar
-    object: allow_expansion.yaml
+    object: allow_foo_expansion.yaml
     assertions:
     - violations: no
   - name: foo-not-bar
-    object: deny_expansion.yaml
+    object: deny_foo_expansion.yaml
     assertions:
     - violations: yes
-
+- name: foobar-template-to-foo-and-bar-expansion
+  template: template.yaml
+  constraint: constraint.yaml
+  expansion: foobar_expansion.yaml
+  cases:
+    - name: foo-and-bar-not-bar
+      object: deny_foobar_expansion.yaml
+      assertions:
+        - violations: 2

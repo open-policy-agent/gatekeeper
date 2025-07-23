@@ -1,8 +1,7 @@
 apiVersion: apps/v1
-kind: FooTemplate
+kind: FooBarTemplate
 metadata:
-  name: foo-template
+  name: foobar-template
 spec:
   template:
     foo: bar
-

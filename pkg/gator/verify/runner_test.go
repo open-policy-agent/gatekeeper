@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
+
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -1178,12 +1179,12 @@ func TestRunner_Run(t *testing.T) {
 						Name:       "check custom field with expansion system",
 						Template:   "template.yaml",
 						Constraint: "constraint.yaml",
-						Expansion:  "expansion.yaml",
+						Expansion:  "foo-expansion.yaml",
 						Cases: []*Case{
 							{
 								Name:       "Foo Template object",
 								Object:     "foo-template.yaml",
-								Assertions: []Assertion{{Message: ptr.To[string]("foo object has restricted custom field")}},
+								Assertions: []Assertion{{Message: ptr.To[string]("Foo object has restricted custom field")}},
 							},
 						},
 					},
@@ -1199,6 +1200,26 @@ func TestRunner_Run(t *testing.T) {
 							},
 						},
 					},
+					{
+						Name:       "check custom field with multiple expansions",
+						Template:   "template.yaml",
+						Constraint: "constraint.yaml",
+						Expansion:  "foobar-expansion.yaml",
+						Cases: []*Case{
+							{
+								Name:   "FooBar Template object",
+								Object: "foobar-template.yaml",
+								Assertions: []Assertion{
+									{
+										Message: ptr.To[string]("Foo object has restricted custom field"),
+									},
+									{
+										Message: ptr.To[string]("Bar object has restricted custom field"),
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 			f: fstest.MapFS{
@@ -1211,8 +1232,14 @@ func TestRunner_Run(t *testing.T) {
 				"foo-template.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.ObjectFooTemplate),
 				},
-				"expansion.yaml": &fstest.MapFile{
+				"foobar-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ObjectFooBarTemplate),
+				},
+				"foo-expansion.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.ExpansionRestrictCustomField),
+				},
+				"foobar-expansion.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ExpansionsFooBarTemplateToFooAndBar),
 				},
 			},
 			want: SuiteResult{
@@ -1227,6 +1254,12 @@ func TestRunner_Run(t *testing.T) {
 						Name: "check custom field without expansion system",
 						CaseResults: []CaseResult{
 							{Name: "Foo Template object"},
+						},
+					},
+					{
+						Name: "check custom field with multiple expansions",
+						CaseResults: []CaseResult{
+							{Name: "FooBar Template object"},
 						},
 					},
 				},
