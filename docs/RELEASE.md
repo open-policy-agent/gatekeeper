@@ -95,6 +95,9 @@ git tag -a <NEW VERSION> -m '<NEW VERSION>'
 git push origin <NEW VERSION>
 ```
 
+⚠️ **Warning:** Alternatively, you can use the [tag and push script](scripts/tag_and_push.sh) to push the release tag. This script is still under development so it could be flaky and the code to push tag is commented by default to prevent pushing tags by mistake. You must verify the tag generated with this script is accurate before pushing it.
+
+
 1. Pushing the release tag will trigger GitHub Actions to trigger `tagged-release` job.
 This will build the `openpolicyagent/gatekeeper` image automatically, then publish the new release image tag and the `latest` image tag to the `openpolicyagent/gatekeeper` repository. Finally, verify step will run e2e tests to verify the newly released tag.
 
