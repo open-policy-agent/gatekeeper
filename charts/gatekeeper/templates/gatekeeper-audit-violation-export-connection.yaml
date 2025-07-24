@@ -1,0 +1,13 @@
+---
+{{- if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") }}
+apiVersion: connection.gatekeeper.sh/v1alpha1
+kind: Connection
+metadata:
+  name: '{{ .Values.audit.connection }}'
+  namespace: '{{ .Release.Namespace }}'
+spec:
+  driver: '{{ .Values.exportBackend }}'
+  config:
+    path: "{{ .Values.audit.exportConnection.path }}"
+    maxAuditResults: {{ .Values.audit.exportConnection.maxAuditResults }}
+{{- end }}

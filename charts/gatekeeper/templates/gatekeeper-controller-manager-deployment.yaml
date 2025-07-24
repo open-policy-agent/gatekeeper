@@ -69,7 +69,13 @@ spec:
         - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
         - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
         - --exempt-namespace={{ .Release.Namespace }}
+        
+        {{- if not .Values.controllerManager.disableWebhookOperation }}
         - --operation=webhook
+        {{- end }}
+        {{- if not .Values.controllerManager.disableGenerateOperation }}
+        - --operation=generate
+        {{- end }}
         - --enable-external-data={{ .Values.enableExternalData }}
         - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
         - --log-mutations={{ .Values.logMutations }}
@@ -115,6 +121,10 @@ spec:
         
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
+        {{- end }}
+        
+        {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
+        - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}
         command:
         - /manager
