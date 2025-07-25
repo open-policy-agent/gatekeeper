@@ -5476,7 +5476,6 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
-  minAvailable: 1
   selector:
     matchLabels:
       control-plane: controller-manager
