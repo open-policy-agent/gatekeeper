@@ -16,7 +16,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+func TemplateToPolicyDefinition(template *templates.ConstraintTemplate, enableDeleteOpsInVwhc *bool) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	source, err := schema.GetSourceFromTemplate(template)
 	if err != nil {
 		return nil, err
@@ -46,6 +46,11 @@ func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admiss
 		return nil, err
 	}
 
+	operations, err := source.GetResourceOperations(enableDeleteOpsInVwhc)
+	if err != nil {
+		return nil, err
+	}
+
 	policy := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("gatekeeper-%s", template.GetName()),
@@ -59,8 +64,7 @@ func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admiss
 				ResourceRules: []admissionregistrationv1beta1.NamedRuleWithOperations{
 					{
 						RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
-							/// TODO(ritazh): default for now until we can safely expose these to users
-							Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+							Operations: operations,
 							Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
 						},
 					},
