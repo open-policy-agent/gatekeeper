@@ -46,7 +46,12 @@ func version(fontName string) *cobra.Command {
 	var outputJSON bool
 	cmd := &cobra.Command{
 		Use:   "version",
-		Short: "Prints the version",
+		Short: "Show detailed build info (commit, Go version, platform). Use -v for summary.",
+		Long: `
+Displays internal build metadata about this gator binary, including:
+	- Git commit, tree state, and build date
+	- Go compiler and platform info
+	- Git tag version if available (shows 'devel' for development builds)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v := GetVersionInfo()
 			v.Name = cmd.Root().Name()
@@ -66,6 +71,8 @@ func version(fontName string) *cobra.Command {
 				cmd.Println(out)
 			} else {
 				cmd.Println(v.String())
+				cmd.Println("\nTip: Use 'gator -v' for a concise version summary.")
+				cmd.Println("     Use 'gator version --json' for JSON format output.")
 			}
 			return nil
 		},
