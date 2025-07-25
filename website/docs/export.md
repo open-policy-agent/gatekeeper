@@ -3,9 +3,9 @@ id: export
 title: Exporting violations
 ---
 
-`Feature State`: Gatekeeper version v3.13+ (alpha)
+`Feature State`: Gatekeeper version v3.13+ (beta)
 
-> ❗ This feature is alpha, subject to change (feedback is welcome!). This feature was previously known as "Consuming violations using Pubsub".
+> ❗ This feature is beta, subject to change (feedback is welcome!). This feature was previously known as "Consuming violations using Pubsub".
 
 ## Description
 
@@ -309,9 +309,9 @@ The following table describes each property in the `status.byPod` section:
 
     | Property        | Description                                                                                                                                                            | Default                  |
     |:----------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |:-------------------------|
-    | path            | (alpha) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "/tmp/violations/topics" |
-    | maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
-    | closedConnectionTTL | (alpha) TTL in seconds for connection to be in the retry queue after it is closed/deleted in case of failure.                                                   | 600                 |
+    | path            | (beta) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "/tmp/violations/topics" |
+    | maxAuditResults | (beta) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
+    | closedConnectionTTL | (beta) TTL in seconds for connection to be in the retry queue after it is closed/deleted in case of failure.                                                   | 600                 |
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
 
