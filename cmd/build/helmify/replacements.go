@@ -284,6 +284,12 @@ var replacements = map[string]string{
     {{- if .Values.service.loadBalancerIP }}
   loadBalancerIP: {{ .Values.service.loadBalancerIP }}
     {{- end }}
+    {{- if .Values.service.ipFamilyPolicy }}
+  ipFamilyPolicy: {{ .Values.service.ipFamilyPolicy }}
+    {{- end }}
+    {{- if .Values.service.ipFamilies }}
+  ipFamilies: {{ toYaml .Values.service.ipFamilies | nindent 4 }}
+    {{- end }}
   {{- end }}`,
 
 	`HELMSUBST_SERVICE_HEALTHZ: ""`: `
