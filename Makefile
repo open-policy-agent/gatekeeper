@@ -27,7 +27,7 @@ VERSION := v3.21.0-beta.0
 KIND_VERSION ?= 0.29.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.33.2
+KUBERNETES_VERSION ?= 1.33.0
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.12.0
 ORAS_VERSION ?= 1.2.3
@@ -580,7 +580,7 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
-	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20230118154835-9241bceb3098
+	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20250729155826-ada80794ea8f
 
 .PHONY: vendor
 vendor:
