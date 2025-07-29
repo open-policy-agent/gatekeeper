@@ -24,7 +24,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// ConnectionSpec defines the desired state of Connection
+// ConnectionSpec defines the desired state of Connection.
 type ConnectionSpec struct {
 	// +kubebuilder:validation:Required
 	// Driver is the name of one of the expected drivers i.e. dapr, disk
@@ -35,7 +35,7 @@ type ConnectionSpec struct {
 	Config *types.Anything `json:"config"`
 }
 
-// ConnectionStatus defines the observed state of Connection
+// ConnectionStatus defines the observed state of Connection.
 type ConnectionStatus struct {
 	ByPod []statusv1alpha1.ConnectionPodStatusStatus `json:"byPod,omitempty"`
 }
@@ -44,7 +44,7 @@ type ConnectionStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
-// Connection is the Schema for the connections API
+// Connection is the Schema for the connections API.
 type Connection struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -55,7 +55,7 @@ type Connection struct {
 
 // +kubebuilder:object:root=true
 
-// ConnectionList contains a list of Connection
+// ConnectionList contains a list of Connection.
 type ConnectionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
