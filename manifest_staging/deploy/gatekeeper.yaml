@@ -2630,7 +2630,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ConnectionPodStatus is the Schema for the connectionpodstatuses API
+        description: ConnectionPodStatus is the Schema for the connectionpodstatuses API.
         properties:
           apiVersion:
             description: |-
@@ -2709,7 +2709,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Connection is the Schema for the connections API
+        description: Connection is the Schema for the connections API.
         properties:
           apiVersion:
             description: |-
@@ -2729,7 +2729,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConnectionSpec defines the desired state of Connection
+            description: ConnectionSpec defines the desired state of Connection.
             properties:
               config:
                 x-kubernetes-preserve-unknown-fields: true
@@ -2741,11 +2741,11 @@ spec:
             - driver
             type: object
           status:
-            description: ConnectionStatus defines the observed state of Connection
+            description: ConnectionStatus defines the observed state of Connection.
             properties:
               byPod:
                 items:
-                  description: ConnectionPodStatusStatus defines the observed state of ConnectionPodStatus
+                  description: ConnectionPodStatusStatus defines the observed state of ConnectionPodStatus.
                   properties:
                     active:
                       description: Indicator for alive connection with at least one successful publish
