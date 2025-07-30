@@ -511,7 +511,7 @@ ignored. `gator` does not enforce any file schema in the artifacts; it only
 requires that all files of the support extensions describe valid Kubernetes
 resources.
 
-We recommend using the [Oras CLI](https://oras.land/cli/) to create OCI
+We recommend using the [Oras CLI](https://oras.land/docs/installation) to create OCI
 artifacts. For example, to push a bundle containing the 2 local directories
 `constraints` and `template_library`:
 
