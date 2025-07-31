@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 		},
 		ErrorIfCRDPathMissing: true,
 	}
-	///TODO(ritazh): remove when vap is GAed in k/k
+	// Enabling all apis to make sure VAP v1beta1 tests passes
 	args := t.ControlPlane.GetAPIServer().Configure()
 	args.Append("runtime-config", "api/all=true")
 
