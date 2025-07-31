@@ -182,7 +182,7 @@ spec:
           got := input.review.object.spec.customField
           expected := input.parameters.expectedCustomField
           got == expected
-          msg := sprintf("foo object has restricted custom field value of %v", [expected])
+          msg := sprintf("%v object has restricted custom field value of %v", [input.review.object.kind, expected])
         }
 `
 
@@ -299,7 +299,7 @@ spec:
   match:
     kinds:
       - apiGroups: [""]
-        kinds: ["Foo"]
+        kinds: ["Foo", "Bar"]
     namespaces:
       - "default"
   parameters:
@@ -377,6 +377,16 @@ apiVersion: apps/v1
 kind: FooTemplate
 metadata:
   name: foo-template
+spec:
+  template:
+    spec:
+      customField: true
+`
+	ObjectFooBarTemplate = `
+apiVersion: apps/v1
+kind: FooBarTemplate
+metadata:
+  name: foobar-template
 spec:
   template:
     spec:
@@ -751,6 +761,37 @@ spec:
   templateSource: "spec.template"
   generatedGVK:
     kind: "Foo"
+    group: ""
+    version: "v1"
+`
+	ExpansionsFooBarTemplateToFooAndBar = `
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-foobar-to-foo
+spec:
+  applyTo:
+  - groups: [ "apps" ]
+    kinds: [ "FooBarTemplate" ]
+    versions: [ "v1" ]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Foo"
+    group: ""
+    version: "v1"
+---
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-foobar-to-bar
+spec:
+  applyTo:
+  - groups: [ "apps" ]
+    kinds: [ "FooBarTemplate" ]
+    versions: [ "v1" ]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Bar"
     group: ""
     version: "v1"
 `

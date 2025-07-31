@@ -11,6 +11,13 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+
+	admissionv1 "k8s.io/api/admission/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
@@ -19,11 +26,6 @@ import (
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	admissionv1 "k8s.io/api/admission/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // Runner defines logic independent of how tests are run and the results are
@@ -238,12 +240,12 @@ func (r *Runner) makeTestExpander(suiteDir string, t *Test) (*expand.Expander, e
 		return nil, nil
 	}
 
-	et, err := reader.ReadExpansion(r.filesystem, path.Join(suiteDir, expansionPath))
+	expansionTemplates, err := reader.ReadExpansions(r.filesystem, path.Join(suiteDir, expansionPath))
 	if err != nil {
 		return nil, err
 	}
 
-	er, err := expand.NewExpander([]*unstructured.Unstructured{et})
+	er, err := expand.NewExpander(expansionTemplates)
 	return er, err
 }
 
