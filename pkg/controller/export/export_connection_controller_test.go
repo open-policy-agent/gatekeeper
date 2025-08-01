@@ -35,7 +35,7 @@ const timeout = time.Second * 20
 
 // Note: For this test we check the ConnectionPodStatus resource that is created
 // by the controller, and not the Connection status itself, to isolate test boundaries
-// since updating the Connection status is handled by a separate controller
+// since updating the Connection status is handled by a separate controller.
 func TestReconcile_E2E(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-1"

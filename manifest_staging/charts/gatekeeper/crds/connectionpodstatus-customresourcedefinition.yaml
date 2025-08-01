@@ -20,7 +20,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ConnectionPodStatus is the Schema for the connectionpodstatuses API
+        description: ConnectionPodStatus is the Schema for the connectionpodstatuses API.
         properties:
           apiVersion:
             description: |-

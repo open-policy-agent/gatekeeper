@@ -38,6 +38,10 @@ linters:
       line-length: 200
     misspell:
       locale: US
+    revive:
+      rules:
+        - name: var-naming
+          disabled: true
   exclusions:
     generated: lax
     presets:

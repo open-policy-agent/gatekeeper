@@ -138,7 +138,6 @@ func StartControlPlane(m *testing.M, cfg **rest.Config, testerDepth int) {
 	///TODO(ritazh): remove when vap is GAed in k/k
 	args := t.ControlPlane.GetAPIServer().Configure()
 	args.Append("runtime-config", "api/all=true")
-	args.Append("feature-gates", "ValidatingAdmissionPolicy=true")
 
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		log.Fatal(err)

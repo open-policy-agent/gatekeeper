@@ -18,7 +18,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: ConnectionPodStatus is the Schema for the connectionpodstatuses
-          API
+          API.
         properties:
           apiVersion:
             description: |-

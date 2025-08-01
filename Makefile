@@ -24,17 +24,17 @@ GENERATE_VAPBINDING ?= false
 
 VERSION := v3.21.0-beta.0
 
-KIND_VERSION ?= 0.27.0
+KIND_VERSION ?= 0.29.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.30.0
+KUBERNETES_VERSION ?= 1.33.0
 KUSTOMIZE_VERSION ?= 3.8.9
-BATS_VERSION ?= 1.8.2
-ORAS_VERSION ?= 0.16.0
+BATS_VERSION ?= 1.12.0
+ORAS_VERSION ?= 1.2.3
 BATS_TESTS_FILE ?= test/bats/test.bats
-HELM_VERSION ?= 3.7.2
-NODE_VERSION ?= 16-bullseye-slim
-YQ_VERSION ?= 4.30.6
+HELM_VERSION ?= 3.17.4
+NODE_VERSION ?= 24-bullseye-slim
+YQ_VERSION ?= 4.35.2
 
 HELM_ARGS ?=
 HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
@@ -74,7 +74,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v2.0.2
+GOLANGCI_LINT_VERSION := v2.3.0
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -580,7 +580,7 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
-	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20230118154835-9241bceb3098
+	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20250729155826-ada80794ea8f
 
 .PHONY: vendor
 vendor:
