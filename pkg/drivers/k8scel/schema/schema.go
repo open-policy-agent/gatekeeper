@@ -58,6 +58,25 @@ type Source struct {
 
 	// GenerateVAP enables/disables VAP generation and enforcement for policy.
 	GenerateVAP *bool `json:"generateVAP,omitempty"`
+
+	// ResourceOperations maps to ValidatingAdmissionPolicy's `spec.matchConstraints.resourceRules.operations` when enable generateVAP.
+	ResourceOperations []admissionv1.OperationType `json:"resourceOperations,omitempty"`
+}
+
+type OpsInVwhc struct {
+	EnableDeleteOpsInVwhc *bool
+	EnableConectOpsInVwhc *bool
+}
+
+func (o *OpsInVwhc) HasDiff(ops OpsInVwhc) (bool, bool) {
+	var deleteChanged, connectChanged bool
+	if *ops.EnableConectOpsInVwhc != *o.EnableConectOpsInVwhc {
+		connectChanged = true
+	}
+	if *ops.EnableDeleteOpsInVwhc != *o.EnableDeleteOpsInVwhc {
+		deleteChanged = true
+	}
+	return deleteChanged, connectChanged
 }
 
 func (in *Source) Validate() error {
@@ -234,6 +253,73 @@ func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType
 	return &out, nil
 }
 
+func (in *Source) GetResourceOperations(opsInVwhc OpsInVwhc) ([]admissionv1.OperationType, error) {
+	var out []admissionv1.OperationType
+	deleteInVwhc := opsInVwhc.EnableDeleteOpsInVwhc != nil && *opsInVwhc.EnableDeleteOpsInVwhc
+	connectInVwhc := opsInVwhc.EnableConectOpsInVwhc != nil && *opsInVwhc.EnableConectOpsInVwhc
+
+	if len(in.ResourceOperations) == 0 {
+		return []admissionv1.OperationType{admissionv1.Create, admissionv1.Update}, nil
+	}
+
+	for _, op := range in.ResourceOperations {
+		switch op {
+		case admissionv1.Create:
+			out = append(out, admissionv1.Create)
+		case admissionv1.Update:
+			out = append(out, admissionv1.Update)
+		case admissionv1.Delete:
+			if deleteInVwhc {
+				out = append(out, admissionv1.Delete)
+			}
+		case admissionv1.Connect:
+			if connectInVwhc {
+				out = append(out, admissionv1.Connect)
+			}
+		case admissionv1.OperationAll:
+			if deleteInVwhc && connectInVwhc {
+				return []admissionv1.OperationType{admissionv1.OperationAll}, nil
+			}
+		default:
+			return nil, fmt.Errorf("%w: unrecognized resource operation: %s", ErrBadResourceOperation, op)
+		}
+	}
+	return out, nil
+}
+
+// GetResourceOperationsWhenVwhcChange return vap resource operations based on new vwhc changes
+// deleteChanged: DELETE ops changed in vwhc
+// connectChanged: CONNECT ops changed in vwhc
+// vwhcOps: current vwhc operations
+// vapOps: current vpa operations
+func (in *Source) GetResourceOperationsWhenVwhcChange(deleteChanged, connectChanged bool, vwhcOps OpsInVwhc, vapOps []admissionv1.OperationType) []admissionv1beta1.OperationType {
+	if deleteChanged {
+		if *vwhcOps.EnableDeleteOpsInVwhc && !containsOpsType(vapOps, admissionv1.Delete) {
+			// only insert vap ops when the mapping constrainttemplate define delete operation in source resourceOperations
+			if containsOpsType(in.ResourceOperations, admissionv1.Delete) {
+				vapOps = append(vapOps, admissionv1.Delete)
+			}
+		}
+		if !*vwhcOps.EnableDeleteOpsInVwhc {
+			// directly remove ops from vap if existing
+			vapOps = removeOpsType(vapOps, admissionv1.Delete)
+		}
+	}
+	if connectChanged {
+		if *vwhcOps.EnableConectOpsInVwhc && !containsOpsType(vapOps, admissionv1.Connect) {
+			// only insert vap ops when the mapping constrainttemplate define connect operation in source resourceOperations
+			if containsOpsType(in.ResourceOperations, admissionv1.Connect) {
+				vapOps = append(vapOps, admissionv1.Connect)
+			}
+		}
+		if !*vwhcOps.EnableConectOpsInVwhc {
+			// directly remove ops from vap if existing
+			vapOps = removeOpsType(vapOps, admissionv1.Connect)
+		}
+	}
+	return vapOps
+}
+
 // MustToUnstructured() is a convenience method for converting to unstructured.
 // Intended for testing. It will panic on error.
 func (in *Source) MustToUnstructured() map[string]interface{} {
@@ -267,6 +353,25 @@ func GetSource(code templates.Code) (*Source, error) {
 	}
 
 	return out, nil
+}
+
+func containsOpsType(ops []admissionv1.OperationType, opsType admissionv1.OperationType) bool {
+	for _, op := range ops {
+		if op == opsType {
+			return true
+		}
+	}
+	return false
+}
+
+func removeOpsType(ops []admissionv1.OperationType, opsType admissionv1.OperationType) []admissionv1.OperationType {
+	var result []admissionv1.OperationType
+	for _, o := range ops {
+		if o != opsType {
+			result = append(result, o)
+		}
+	}
+	return result
 }
 
 func GetSourceFromTemplate(ct *templates.ConstraintTemplate) (*Source, error) {
