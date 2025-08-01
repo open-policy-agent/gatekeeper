@@ -3,12 +3,11 @@ package schema
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"testing"
 
-	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
-
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	admissionv1 "k8s.io/api/admissionregistration/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/ptr"
 )
 
@@ -186,116 +185,193 @@ func TestValidationErrors(t *testing.T) {
 }
 
 func TestSource_GetResourceOperations(t *testing.T) {
-	type fields struct {
-		Validations        []Validation
-		FailurePolicy      *string
-		MatchConditions    []MatchCondition
-		Variables          []Variable
-		GenerateVAP        *bool
-		ResourceOperations []string
-	}
-	type args struct {
-		enableDeleteOpsInVwhc *bool
-	}
+	truePtr := func() *bool { b := true; return &b }()
+	falsePtr := func() *bool { b := false; return &b }()
+
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    []admissionv1beta1.OperationType
-		wantErr error
+		name        string
+		source      *Source
+		opsInVwhc   OpsInVwhc
+		expectedOps []admissionv1.OperationType
+		expectError bool
 	}{
 		{
-			name: "Valid ResourceOperations",
-			fields: fields{
-				ResourceOperations: []string{"CREATE", "UPDATE"},
-			},
-			args: args{
-				enableDeleteOpsInVwhc: ptr.To(true),
-			},
-			want: []admissionv1beta1.OperationType{
-				admissionv1beta1.Create,
-				admissionv1beta1.Update,
-			},
-			wantErr: nil,
+			name:        "empty resource operations",
+			source:      &Source{ResourceOperations: []admissionv1.OperationType{}},
+			opsInVwhc:   OpsInVwhc{},
+			expectedOps: []admissionv1.OperationType{admissionv1.Create, admissionv1.Update},
+			expectError: false,
 		},
 		{
-			name: "Valid Delete ResourceOperations",
-			fields: fields{
-				ResourceOperations: []string{"DELETE"},
-			},
-			args: args{
-				enableDeleteOpsInVwhc: ptr.To(true),
-			},
-			want: []admissionv1beta1.OperationType{
-				admissionv1beta1.Delete,
-			},
-			wantErr: nil,
+			name:        "create operation",
+			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Create}},
+			opsInVwhc:   OpsInVwhc{},
+			expectedOps: []admissionv1.OperationType{admissionv1.Create},
+			expectError: false,
 		},
 		{
-			name: "OperationAll ResourceOperations",
-			fields: fields{
-				ResourceOperations: []string{"CREATE", "*"},
-			},
-			args: args{
-				enableDeleteOpsInVwhc: ptr.To(true),
-			},
-			want: []admissionv1beta1.OperationType{
-				admissionv1beta1.OperationAll,
-			},
-			wantErr: nil,
+			name:        "update operation",
+			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Update}},
+			opsInVwhc:   OpsInVwhc{},
+			expectedOps: []admissionv1.OperationType{admissionv1.Update},
+			expectError: false,
 		},
 		{
-			name: "InValid ResourceOperations",
-			fields: fields{
-				ResourceOperations: []string{"CREATE", "Invalid"},
-			},
-			args: args{
-				enableDeleteOpsInVwhc: ptr.To(false),
-			},
-			want:    nil,
-			wantErr: ErrBadResourceOperation,
+			name:        "delete operation disabled",
+			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Delete}},
+			opsInVwhc:   OpsInVwhc{EnableDeleteOpsInVwhc: falsePtr},
+			expectedOps: []admissionv1.OperationType{},
+			expectError: false,
 		},
 		{
-			name: "Without ResourceOperations and enableDeleteOpsInVwhc",
-			fields: fields{
-				ResourceOperations: []string{},
-			},
-			args: args{
-				enableDeleteOpsInVwhc: nil,
-			},
-			want: []admissionv1beta1.OperationType{
-				admissionv1beta1.Create,
-				admissionv1beta1.Update,
-			},
-			wantErr: nil,
+			name:        "delete operation enabled",
+			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Delete}},
+			opsInVwhc:   OpsInVwhc{EnableDeleteOpsInVwhc: truePtr},
+			expectedOps: []admissionv1.OperationType{admissionv1.Delete},
+			expectError: false,
 		},
 		{
-			name: "Without ResourceOperations but enableDeleteOpsInVwhc",
-			fields: fields{
-				ResourceOperations: []string{},
-			},
-			args: args{
-				enableDeleteOpsInVwhc: ptr.To(true),
-			},
-			want: []admissionv1beta1.OperationType{
-				admissionv1beta1.Create,
-				admissionv1beta1.Update,
-				admissionv1beta1.Delete,
-			},
-			wantErr: nil,
+			name:        "connect operation disabled",
+			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Connect}},
+			opsInVwhc:   OpsInVwhc{EnableConectOpsInVwhc: falsePtr},
+			expectedOps: []admissionv1.OperationType{},
+			expectError: false,
+		},
+		{
+			name:        "connect operation enabled",
+			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Connect}},
+			opsInVwhc:   OpsInVwhc{EnableConectOpsInVwhc: truePtr},
+			expectedOps: []admissionv1.OperationType{admissionv1.Connect},
+			expectError: false,
+		},
+		{
+			name:        "operation all with both enabled",
+			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.OperationAll}},
+			opsInVwhc:   OpsInVwhc{EnableDeleteOpsInVwhc: truePtr, EnableConectOpsInVwhc: truePtr},
+			expectedOps: []admissionv1.OperationType{admissionv1.OperationAll},
+			expectError: false,
+		},
+		{
+			name:        "operation all with delete disabled",
+			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.OperationAll}},
+			opsInVwhc:   OpsInVwhc{EnableDeleteOpsInVwhc: falsePtr, EnableConectOpsInVwhc: truePtr},
+			expectedOps: []admissionv1.OperationType{},
+			expectError: false,
+		},
+		{
+			name:        "unknown operation",
+			source:      &Source{ResourceOperations: []admissionv1.OperationType{"Unknown"}},
+			opsInVwhc:   OpsInVwhc{},
+			expectedOps: nil,
+			expectError: true,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			in := &Source{
-				ResourceOperations: tt.fields.ResourceOperations,
+			got, err := tt.source.GetResourceOperations(tt.opsInVwhc)
+
+			if (err != nil) != tt.expectError {
+				t.Errorf("GetResourceOperations() error = %v, expectError %v", err, tt.expectError)
+				return
 			}
-			got, err := in.GetResourceOperations(tt.args.enableDeleteOpsInVwhc)
-			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("got %v; wanted %v", err, tt.wantErr)
+
+			if !sets.NewString(stringSliceFromOps(got)...).Equal(sets.NewString(stringSliceFromOps(tt.expectedOps)...)) {
+				t.Errorf("GetResourceOperations() = %v, want %v", got, tt.expectedOps)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetResourceOperations() got = %v, want %v", got, tt.want)
+		})
+	}
+}
+
+// Helper function to convert v1 operation types to strings for comparison
+func stringSliceFromOps(ops []admissionv1.OperationType) []string {
+	result := make([]string, len(ops))
+	for i, op := range ops {
+		result[i] = string(op)
+	}
+	return result
+}
+
+func TestSource_GetResourceOperationsWhenVwhcChange(t *testing.T) {
+	truePtr := func() *bool { b := true; return &b }()
+	falsePtr := func() *bool { b := false; return &b }()
+
+	tests := []struct {
+		name           string
+		source         *Source
+		deleteChanged  bool
+		connectChanged bool
+		vwhcOps        OpsInVwhc
+		vapOps         []admissionv1.OperationType
+		expectedOps    []admissionv1.OperationType
+	}{
+		{
+			name:           "delete changed and enabled with source support",
+			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Delete}},
+			deleteChanged:  true,
+			connectChanged: false,
+			vwhcOps:        OpsInVwhc{EnableDeleteOpsInVwhc: truePtr},
+			vapOps:         []admissionv1.OperationType{},
+			expectedOps:    []admissionv1.OperationType{admissionv1.Delete},
+		},
+		{
+			name:           "delete changed and disabled",
+			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Delete}},
+			deleteChanged:  true,
+			connectChanged: false,
+			vwhcOps:        OpsInVwhc{EnableDeleteOpsInVwhc: falsePtr},
+			vapOps:         []admissionv1.OperationType{admissionv1.Delete},
+			expectedOps:    []admissionv1.OperationType{},
+		},
+		{
+			name:           "connect changed and enabled with source support",
+			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Connect}},
+			deleteChanged:  false,
+			connectChanged: true,
+			vwhcOps:        OpsInVwhc{EnableConectOpsInVwhc: truePtr},
+			vapOps:         []admissionv1.OperationType{},
+			expectedOps:    []admissionv1.OperationType{admissionv1.Connect},
+		},
+		{
+			name:           "connect changed and disabled",
+			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Connect}},
+			deleteChanged:  false,
+			connectChanged: true,
+			vwhcOps:        OpsInVwhc{EnableConectOpsInVwhc: falsePtr},
+			vapOps:         []admissionv1.OperationType{admissionv1.Connect},
+			expectedOps:    []admissionv1.OperationType{},
+		},
+		{
+			name:           "delete enabled but source does not support",
+			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Create}},
+			deleteChanged:  true,
+			connectChanged: false,
+			vwhcOps:        OpsInVwhc{EnableDeleteOpsInVwhc: truePtr},
+			vapOps:         []admissionv1.OperationType{},
+			expectedOps:    []admissionv1.OperationType{},
+		},
+		{
+			name:           "connect enabled but source does not support",
+			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Create}},
+			deleteChanged:  false,
+			connectChanged: true,
+			vwhcOps:        OpsInVwhc{EnableConectOpsInVwhc: truePtr},
+			vapOps:         []admissionv1.OperationType{},
+			expectedOps:    []admissionv1.OperationType{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.source.GetResourceOperationsWhenVwhcChange(
+				tt.deleteChanged,
+				tt.connectChanged,
+				tt.vwhcOps,
+				tt.vapOps,
+			)
+
+			if !sets.NewString(stringSliceFromOps(got)...).Equal(sets.NewString(stringSliceFromOps(tt.expectedOps)...)) {
+				t.Errorf("GetResourceOperationsWhenVwhcChange() = %v, want %v", got, tt.expectedOps)
 			}
 		})
 	}

@@ -18,11 +18,15 @@ package vwhc
 import (
 	"context"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -34,11 +38,12 @@ import (
 
 const (
 	GatekeeperWebhookLabel = "gatekeeper.sh/system"
+	GatekeeperAPIVersion   = "templates.gatekeeper.sh/v1beta1"
 )
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "ValidatingWebhookConfiguration")
 
-var EnableDeleteOpsInVwhc *bool
+var PolicyOpsInVwhc = celSchema.OpsInVwhc{ptr.To(false), ptr.To(false)}
 
 type Adder struct{}
 
@@ -53,6 +58,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcileVWHC{
 		reader: mgr.GetCache(),
 		scheme: mgr.GetScheme(),
+		writer: mgr.GetClient(),
 	}
 }
 
@@ -75,6 +81,7 @@ var _ reconcile.Reconciler = &ReconcileVWHC{}
 // ReconcileWH reconciles a validatingwebhookconfiguration.
 type ReconcileVWHC struct {
 	reader client.Reader
+	writer client.Writer
 	scheme *runtime.Scheme
 }
 
@@ -91,20 +98,40 @@ func (r *ReconcileVWHC) Reconcile(ctx context.Context, request reconcile.Request
 		// Error reading the object - requeue the request.
 		return reconcile.Result{Requeue: true}, err
 	}
+
+	originOps := celSchema.OpsInVwhc{
+		PolicyOpsInVwhc.EnableConectOpsInVwhc,
+		PolicyOpsInVwhc.EnableDeleteOpsInVwhc,
+	}
+
+	PolicyOpsInVwhc.EnableDeleteOpsInVwhc = ptr.To(false)
+	PolicyOpsInVwhc.EnableConectOpsInVwhc = ptr.To(false)
 	for i := range vwhc.Webhooks {
 		webhook := &vwhc.Webhooks[i]
 		for _, rule := range webhook.Rules {
-			if containsDelete(rule.Operations) {
-				log.Info("delete operation enabled in gatekeeper vwhc")
-				EnableDeleteOpsInVwhc = new(bool)
-				*EnableDeleteOpsInVwhc = true
-				return reconcile.Result{}, nil
+			if !*PolicyOpsInVwhc.EnableDeleteOpsInVwhc {
+				if containsOpsType(rule.Operations, admissionregistrationv1.Delete) {
+					log.Info("delete operation enabled in gatekeeper vwhc")
+					PolicyOpsInVwhc.EnableDeleteOpsInVwhc = ptr.To[bool](true)
+				}
+			}
+			if !*PolicyOpsInVwhc.EnableConectOpsInVwhc {
+				if containsOpsType(rule.Operations, admissionregistrationv1.Connect) {
+					log.Info("connect operation enabled in gatekeeper vwhc")
+					PolicyOpsInVwhc.EnableConectOpsInVwhc = ptr.To[bool](true)
+				}
 			}
 		}
 	}
-	log.Info("delete operation not enabled in gatekeeper vwhc")
-	EnableDeleteOpsInVwhc = new(bool)
-	*EnableDeleteOpsInVwhc = false
+	//check if delete/connect operation con
+	deleteChanged, connectChanged := originOps.HasDiff(PolicyOpsInVwhc)
+	if deleteChanged || connectChanged {
+		err := r.updateAllVAPOperations(ctx, deleteChanged, connectChanged)
+		if err != nil {
+			return reconcile.Result{Requeue: true}, err
+		}
+	}
+
 	return reconcile.Result{}, nil
 }
 
@@ -134,11 +161,75 @@ func reconcileWebhookMapFunc() func(ctx context.Context, object *admissionregist
 	}
 }
 
-func containsDelete(ops []admissionregistrationv1.OperationType) bool {
+func containsOpsType(ops []admissionregistrationv1.OperationType, opsType admissionregistrationv1.OperationType) bool {
 	for _, op := range ops {
-		if op == admissionregistrationv1.Delete {
+		if op == opsType {
 			return true
 		}
 	}
 	return false
+}
+
+func (r *ReconcileVWHC) updateAllVAPOperations(ctx context.Context, deleteChanged, connectChanged bool) error {
+	vObjs := &admissionregistrationv1.ValidatingAdmissionPolicyList{}
+	err := r.reader.List(ctx, vObjs)
+	if err != nil {
+		log.Error(err, "failed to list vap when vwhc updating")
+		return err
+	}
+
+	for i := range vObjs.Items {
+		vap := &vObjs.Items[i]
+		for j := range vap.ObjectMeta.OwnerReferences {
+			ownerRef := &vap.ObjectMeta.OwnerReferences[j]
+			if ownerRef.APIVersion == GatekeeperAPIVersion && ownerRef.Kind == "ConstraintTemplate" {
+				log.Info("begin to update vap operations", "vap", vap.Name)
+				rrs := vap.Spec.MatchConstraints.ResourceRules
+				refCTName := ownerRef.Name
+				newVap := vap.DeepCopy()
+				var newResourceRules = make([]admissionregistrationv1.NamedRuleWithOperations, 0)
+				for k := range rrs {
+					rr := &rrs[k]
+					ops, err := r.getResourceRuleOps(ctx, refCTName, deleteChanged, connectChanged, rr.Operations)
+					if err != nil {
+						log.Error(err, "failed to get operations in vap resourceRules", "vap", vap.Name)
+						return err
+					}
+					if len(ops) > 0 {
+						rr.Operations = ops
+					}
+					newResourceRules = append(newResourceRules, *rr)
+				}
+				newVap.Spec.MatchConstraints.ResourceRules = newResourceRules
+				if err := r.writer.Update(ctx, newVap); err != nil {
+					log.Error(err, "failed to update vap", "vap", vap.Name)
+					return err
+				}
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func (r *ReconcileVWHC) getResourceRuleOps(ctx context.Context, ctName string, deleteChanged, connectChanged bool, vapOps []admissionregistrationv1.OperationType) ([]admissionregistrationv1.OperationType, error) {
+	ct := &v1beta1.ConstraintTemplate{}
+	err := r.reader.Get(ctx, types.NamespacedName{Name: ctName}, ct)
+	if err != nil {
+		return nil, err
+	}
+
+	unversionedCT := &templates.ConstraintTemplate{}
+	if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
+		return nil, err
+	}
+
+	source, err := celSchema.GetSourceFromTemplate(unversionedCT)
+	if err != nil {
+		return nil, err
+	}
+	if source.GenerateVAP == nil {
+		return nil, nil
+	}
+	return source.GetResourceOperationsWhenVwhcChange(deleteChanged, connectChanged, PolicyOpsInVwhc, vapOps), nil
 }

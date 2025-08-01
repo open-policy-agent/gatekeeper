@@ -17,70 +17,65 @@ package vwhc
 
 import (
 	"context"
-	"errors"
 	"testing"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const (
-	MockGatekeeperVWHCName = "gatekeeper-validating-webhook-configuration"
-)
+// TestReconcileVWHC_Reconcile test Reconcile
+func TestReconcileVWHC_Reconcile(t *testing.T) {
+	originalVwhName := webhook.VwhName
+	webhook.VwhName = ptr.To("gatekeeper-webhook")
+	defer func() {
+		webhook.VwhName = originalVwhName
+	}()
 
-func resetGlobal() {
-	EnableDeleteOpsInVwhc = nil
-}
+	scheme := runtime.NewScheme()
+	_ = admissionregistrationv1.AddToScheme(scheme)
+	_ = v1beta1.AddToScheme(scheme)
 
-func mustInitializeScheme(scheme *runtime.Scheme) *runtime.Scheme {
-	if err := admissionregistrationv1.AddToScheme(scheme); err != nil {
-		panic(err)
-	}
-
-	return scheme
-}
-
-func TestReconcile(t *testing.T) {
-
-	ctx := context.TODO()
-	req := reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name: MockGatekeeperVWHCName,
-		},
-	}
-	EnableDeleteOpsInVwhc = ptr.To[bool](false)
 	tests := []struct {
-		name             string
-		existingVWHC     *admissionregistrationv1.ValidatingWebhookConfiguration
-		getError         error
-		expectedResult   reconcile.Result
-		expectedRequeue  bool
-		expectedEnable   bool
-		expectLogContain string
+		name            string
+		vwhc            *admissionregistrationv1.ValidatingWebhookConfiguration
+		existingObjects []client.Object
+		wantRequeue     bool
+		wantErr         bool
 	}{
 		{
-			name:           "not found",
-			expectedResult: reconcile.Result{},
-			expectedEnable: false,
+			name: "non-existent vwhc",
+			vwhc: &admissionregistrationv1.ValidatingWebhookConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "non-existent",
+					Namespace: "default",
+				},
+			},
+			wantRequeue: false,
+			wantErr:     false,
 		},
 		{
-			name: "without delete operations",
-			existingVWHC: &admissionregistrationv1.ValidatingWebhookConfiguration{
+			name: "no changes",
+			vwhc: &admissionregistrationv1.ValidatingWebhookConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: MockGatekeeperVWHCName,
-				},
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "ValidatingWebhookConfiguration",
-					APIVersion: "admissionregistration.k8s.io/v1",
+					Name:      "gatekeeper-webhook",
+					Namespace: "default",
+					Labels: map[string]string{
+						GatekeeperWebhookLabel: "yes",
+					},
 				},
 				Webhooks: []admissionregistrationv1.ValidatingWebhook{
 					{
+						Name: "webhook1",
 						Rules: []admissionregistrationv1.RuleWithOperations{
 							{
 								Operations: []admissionregistrationv1.OperationType{
@@ -92,20 +87,50 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedResult: reconcile.Result{},
-			expectedEnable: false,
+			existingObjects: []client.Object{
+				&admissionregistrationv1.ValidatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gatekeeper-webhook",
+						Namespace: "default",
+						Labels: map[string]string{
+							GatekeeperWebhookLabel: "yes",
+						},
+					},
+					Webhooks: []admissionregistrationv1.ValidatingWebhook{
+						{
+							Name: "webhook1",
+							Rules: []admissionregistrationv1.RuleWithOperations{
+								{
+									Operations: []admissionregistrationv1.OperationType{
+										admissionregistrationv1.Create,
+										admissionregistrationv1.Update,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantRequeue: false,
+			wantErr:     false,
 		},
 		{
-			name: "with delete operation",
-			existingVWHC: &admissionregistrationv1.ValidatingWebhookConfiguration{
+			name: "DELETE change",
+			vwhc: &admissionregistrationv1.ValidatingWebhookConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: MockGatekeeperVWHCName,
+					Name:      "gatekeeper-webhook",
+					Namespace: "default",
+					Labels: map[string]string{
+						GatekeeperWebhookLabel: "yes",
+					},
 				},
 				Webhooks: []admissionregistrationv1.ValidatingWebhook{
 					{
+						Name: "webhook1",
 						Rules: []admissionregistrationv1.RuleWithOperations{
 							{
 								Operations: []admissionregistrationv1.OperationType{
+									admissionregistrationv1.Create,
 									admissionregistrationv1.Delete,
 								},
 							},
@@ -113,119 +138,372 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedResult: reconcile.Result{},
-			expectedEnable: true,
+			existingObjects: []client.Object{
+				&admissionregistrationv1.ValidatingWebhookConfiguration{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gatekeeper-webhook",
+						Namespace: "default",
+						Labels: map[string]string{
+							GatekeeperWebhookLabel: "yes",
+						},
+					},
+					Webhooks: []admissionregistrationv1.ValidatingWebhook{
+						{
+							Name: "webhook1",
+							Rules: []admissionregistrationv1.RuleWithOperations{
+								{
+									Operations: []admissionregistrationv1.OperationType{
+										admissionregistrationv1.Create,
+										admissionregistrationv1.Delete,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantRequeue: false,
+			wantErr:     false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer resetGlobal()
-
-			var initObjs []runtime.Object
-			if tt.existingVWHC != nil {
-				initObjs = append(initObjs, tt.existingVWHC)
+			clientBuilder := fake.NewClientBuilder().WithScheme(scheme)
+			if tt.existingObjects != nil {
+				clientBuilder = clientBuilder.WithObjects(tt.existingObjects...)
 			}
 
-			fakeClient := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(initObjs...).Build()
+			fakeClient := clientBuilder.Build()
 
 			r := &ReconcileVWHC{
 				reader: fakeClient,
+				writer: fakeClient,
+				scheme: scheme,
 			}
+			_, err := r.Reconcile(context.Background(), reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      tt.vwhc.Name,
+					Namespace: tt.vwhc.Namespace,
+				},
+			})
 
-			result, err := r.Reconcile(ctx, req)
-
-			if tt.getError != nil && !errors.Is(err, tt.getError) {
-				t.Errorf("expected error %v, got %v", tt.getError, err)
-			}
-
-			if result != tt.expectedResult {
-				t.Errorf("expected result %+v, got %+v", tt.expectedResult, result)
-			}
-
-			if EnableDeleteOpsInVwhc == nil {
-				t.Errorf("EnableDeleteOpsInVwhc should not be nil")
-			} else if *EnableDeleteOpsInVwhc != tt.expectedEnable {
-				t.Errorf("expected EnableDeleteOpsInVwhc=%v, got %v", tt.expectedEnable, *EnableDeleteOpsInVwhc)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Reconcile() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
 		})
 	}
 }
 
+// TestReconcileWebhookMapFunc test reconcileWebhookMapFunc
 func TestReconcileWebhookMapFunc(t *testing.T) {
+	originalVwhName := webhook.VwhName
+	webhook.VwhName = ptr.To("gatekeeper-webhook")
+	defer func() {
+		webhook.VwhName = originalVwhName
+	}()
+
 	tests := []struct {
-		name     string
-		obj      *admissionregistrationv1.ValidatingWebhookConfiguration
-		expected []reconcile.Request
+		name    string
+		object  *admissionregistrationv1.ValidatingWebhookConfiguration
+		wantLen int
 	}{
 		{
-			name: "name not match",
-			obj: &admissionregistrationv1.ValidatingWebhookConfiguration{
+			name: "name not matching",
+			object: &admissionregistrationv1.ValidatingWebhookConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "wrong-name",
+					Name: "other-webhook",
 				},
 			},
-			expected: nil,
+			wantLen: 0,
 		},
 		{
-			name: "no gatekeeper label",
-			obj: &admissionregistrationv1.ValidatingWebhookConfiguration{
+			name: "missing label",
+			object: &admissionregistrationv1.ValidatingWebhookConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:   *webhook.VwhName,
-					Labels: map[string]string{},
+					Name: "gatekeeper-webhook",
 				},
 			},
-			expected: nil,
+			wantLen: 0,
 		},
 		{
-			name: "label value not yes",
-			obj: &admissionregistrationv1.ValidatingWebhookConfiguration{
+			name: "invalid label",
+			object: &admissionregistrationv1.ValidatingWebhookConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: *webhook.VwhName,
+					Name: "gatekeeper-webhook",
 					Labels: map[string]string{
 						GatekeeperWebhookLabel: "no",
 					},
 				},
 			},
-			expected: nil,
+			wantLen: 0,
 		},
 		{
-			name: "valid gatekeeper webhook config",
-			obj: &admissionregistrationv1.ValidatingWebhookConfiguration{
+			name: "valid Gatekeeper webhook",
+			object: &admissionregistrationv1.ValidatingWebhookConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      *webhook.VwhName,
-					Namespace: "gatekeeper-system",
+					Name: "gatekeeper-webhook",
 					Labels: map[string]string{
 						GatekeeperWebhookLabel: "yes",
 					},
 				},
 			},
-			expected: []reconcile.Request{
+			wantLen: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fn := reconcileWebhookMapFunc()
+			result := fn(context.Background(), tt.object)
+
+			if len(result) != tt.wantLen {
+				t.Errorf("reconcileWebhookMapFunc() = %v, want %v", len(result), tt.wantLen)
+			}
+		})
+	}
+}
+
+// TestContainsOpsType test containsOpsType
+func TestContainsOpsType(t *testing.T) {
+	tests := []struct {
+		name    string
+		ops     []admissionregistrationv1.OperationType
+		opsType admissionregistrationv1.OperationType
+		want    bool
+	}{
+		{
+			name:    "contain delete",
+			ops:     []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Delete},
+			opsType: admissionregistrationv1.Delete,
+			want:    true,
+		},
+		{
+			name:    "not contain delete",
+			ops:     []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
+			opsType: admissionregistrationv1.Delete,
+			want:    false,
+		},
+		{
+			name:    "empty ops list",
+			ops:     []admissionregistrationv1.OperationType{},
+			opsType: admissionregistrationv1.Delete,
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := containsOpsType(tt.ops, tt.opsType); got != tt.want {
+				t.Errorf("containsOpsType() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestOpsInVwhcHasDiff test OpsInVwhc.HasDiff
+func TestOpsInVwhcHasDiff(t *testing.T) {
+	tests := []struct {
+		name        string
+		origin      celSchema.OpsInVwhc
+		current     celSchema.OpsInVwhc
+		wantDelete  bool
+		wantConnect bool
+	}{
+		{
+			name: "no changes",
+			origin: celSchema.OpsInVwhc{
+				EnableDeleteOpsInVwhc: ptr.To(false),
+				EnableConectOpsInVwhc: ptr.To(false),
+			},
+			current: celSchema.OpsInVwhc{
+				EnableDeleteOpsInVwhc: ptr.To(false),
+				EnableConectOpsInVwhc: ptr.To(false),
+			},
+			wantDelete:  false,
+			wantConnect: false,
+		},
+		{
+			name: "Delete change",
+			origin: celSchema.OpsInVwhc{
+				EnableDeleteOpsInVwhc: ptr.To(false),
+				EnableConectOpsInVwhc: ptr.To(false),
+			},
+			current: celSchema.OpsInVwhc{
+				EnableDeleteOpsInVwhc: ptr.To(true),
+				EnableConectOpsInVwhc: ptr.To(false),
+			},
+			wantDelete:  true,
+			wantConnect: false,
+		},
+		{
+			name: "Connect change",
+			origin: celSchema.OpsInVwhc{
+				EnableDeleteOpsInVwhc: ptr.To(false),
+				EnableConectOpsInVwhc: ptr.To(false),
+			},
+			current: celSchema.OpsInVwhc{
+				EnableDeleteOpsInVwhc: ptr.To(false),
+				EnableConectOpsInVwhc: ptr.To(true),
+			},
+			wantDelete:  false,
+			wantConnect: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotDelete, gotConnect := tt.origin.HasDiff(tt.current)
+			if gotDelete != tt.wantDelete {
+				t.Errorf("HasDiff() gotDelete = %v, want %v", gotDelete, tt.wantDelete)
+			}
+			if gotConnect != tt.wantConnect {
+				t.Errorf("HasDiff() gotConnect = %v, want %v", gotConnect, tt.wantConnect)
+			}
+		})
+	}
+}
+
+// TestReconcileVWHC_updateAllVAPOperations test updateAllVAPOperations
+func TestReconcileVWHC_updateAllVAPOperations(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = admissionregistrationv1.AddToScheme(scheme)
+	_ = v1beta1.AddToScheme(scheme)
+
+	tests := []struct {
+		name            string
+		existingObjects []client.Object
+		deleteChanged   bool
+		connectChanged  bool
+		wantErr         bool
+	}{
+		{
+			name: "no matching VAP",
+			existingObjects: []client.Object{
+				&admissionregistrationv1.ValidatingAdmissionPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-vap",
+					},
+				},
+			},
+			deleteChanged:  true,
+			connectChanged: false,
+			wantErr:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientBuilder := fake.NewClientBuilder().WithScheme(scheme)
+			if tt.existingObjects != nil {
+				clientBuilder = clientBuilder.WithObjects(tt.existingObjects...)
+			}
+
+			fakeClient := clientBuilder.Build()
+			r := &ReconcileVWHC{
+				reader: fakeClient,
+				writer: fakeClient,
+				scheme: scheme,
+			}
+
+			err := r.updateAllVAPOperations(context.Background(), tt.deleteChanged, tt.connectChanged)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("updateAllVAPOperations() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestReconcileVWHC_getResourceRuleOps test getResourceRuleOps
+func TestReconcileVWHC_getResourceRuleOps(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = admissionregistrationv1.AddToScheme(scheme)
+	_ = v1beta1.AddToScheme(scheme)
+
+	source := &celSchema.Source{}
+	source.GenerateVAP = ptr.To(true)
+	source.ResourceOperations = []admissionregistrationv1.OperationType{
+		admissionregistrationv1.Create,
+		admissionregistrationv1.Update,
+		admissionregistrationv1.Delete,
+	}
+
+	ct := &v1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-template",
+		},
+		Spec: v1beta1.ConstraintTemplateSpec{
+			CRD: v1beta1.CRD{
+				Spec: v1beta1.CRDSpec{
+					Names: v1beta1.Names{
+						Kind: "TestConstraint",
+					},
+				},
+			},
+			Targets: []v1beta1.Target{
 				{
-					NamespacedName: types.NamespacedName{
-						Namespace: "gatekeeper-system",
-						Name:      *webhook.VwhName,
+					Target: "admission.k8s.gatekeeper.sh",
+					Rego:   "package test",
+					Code: []v1beta1.Code{
+						{
+							"K8sNativeValidation",
+							&templates.Anything{
+								Value: source.MustToUnstructured(),
+							},
+						},
 					},
 				},
 			},
 		},
 	}
 
+	unversionedCT := &templates.ConstraintTemplate{}
+	_ = scheme.Convert(ct, unversionedCT, nil)
+
+	tests := []struct {
+		name            string
+		ctName          string
+		existingObjects []client.Object
+		deleteChanged   bool
+		connectChanged  bool
+		vapOps          []admissionregistrationv1.OperationType
+		wantErr         bool
+	}{
+		{
+			name:            "non-existent CT",
+			ctName:          "non-existent",
+			existingObjects: []client.Object{},
+			wantErr:         true,
+		},
+		{
+			name:            "get resource rule ops",
+			ctName:          "test-template",
+			existingObjects: []client.Object{ct},
+			deleteChanged:   false,
+			connectChanged:  false,
+			vapOps:          []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+			wantErr:         false,
+		},
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.TODO()
-			mapper := reconcileWebhookMapFunc()
-			reqs := mapper(ctx, tt.obj)
-
-			if len(reqs) != len(tt.expected) {
-				t.Errorf("expected %d requests, got %d", len(tt.expected), len(reqs))
-				return
+			clientBuilder := fake.NewClientBuilder().WithScheme(scheme)
+			if tt.existingObjects != nil {
+				clientBuilder = clientBuilder.WithObjects(tt.existingObjects...)
 			}
 
-			for i := range reqs {
-				if reqs[i].NamespacedName != tt.expected[i].NamespacedName {
-					t.Errorf("expected request %v, got %v", tt.expected[i].NamespacedName, reqs[i].NamespacedName)
-				}
+			fakeClient := clientBuilder.Build()
+			r := &ReconcileVWHC{
+				reader: fakeClient,
+				writer: fakeClient,
+				scheme: scheme,
+			}
+			// run tests
+			_, err := r.getResourceRuleOps(context.Background(), tt.ctName, tt.deleteChanged, tt.connectChanged, tt.vapOps)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getResourceRuleOps() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
