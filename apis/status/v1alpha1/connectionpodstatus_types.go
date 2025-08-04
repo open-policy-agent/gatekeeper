@@ -29,7 +29,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// ConnectionPodStatusStatus defines the observed state of ConnectionPodStatus
+// ConnectionPodStatusStatus defines the observed state of ConnectionPodStatus.
 type ConnectionPodStatusStatus struct {
 	// ID is the unique identifier for the pod that wrote the status
 	ID                 string    `json:"id,omitempty"`
@@ -54,7 +54,7 @@ const (
 )
 
 // +kubebuilder:object:root=true
-// ConnectionPodStatus is the Schema for the connectionpodstatuses API
+// ConnectionPodStatus is the Schema for the connectionpodstatuses API.
 type ConnectionPodStatus struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -63,7 +63,7 @@ type ConnectionPodStatus struct {
 }
 
 // +kubebuilder:object:root=true
-// ConnectionPodStatusList contains a list of ConnectionPodStatus
+// ConnectionPodStatusList contains a list of ConnectionPodStatus.
 type ConnectionPodStatusList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

@@ -142,9 +142,7 @@ violation[{"msg": "denied!"}] {
 
 func makeReconcileConstraintTemplateForVap(suffix string, generateVAP *bool) *v1beta1.ConstraintTemplate {
 	source := &celSchema.Source{
-		// FailurePolicy: ptr.To[string]("Fail"),
-		// TODO(ritazh): enable fail when VAP reduces 30s discovery of CRDs
-		// due to discovery mechanism to pickup the change to the CRD list
+		FailurePolicy: ptr.To[string]("Fail"),
 		MatchConditions: []celSchema.MatchCondition{
 			{
 				Name:       "must_match_something",
@@ -330,6 +328,7 @@ func TestReconcile(t *testing.T) {
 		logger.Info("Running test: Vap should be created with v1beta1")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
