@@ -29,12 +29,12 @@ KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.33.0
 KUSTOMIZE_VERSION ?= 3.8.9
-BATS_VERSION ?= 1.12.0
+BATS_VERSION ?= 1.12.1
 ORAS_VERSION ?= 1.2.3
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.17.4
 NODE_VERSION ?= 24-bullseye-slim
-YQ_VERSION ?= 4.35.2
+YQ_VERSION ?= 4.44.6
 
 HELM_ARGS ?=
 HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
