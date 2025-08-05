@@ -24,7 +24,7 @@ jobs:
     - name: Set up Helm
       uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
       with:
-        version: "3.14.1"
+        version: "3.17.4"
       id: install
     
     - name: Lint Helm charts
