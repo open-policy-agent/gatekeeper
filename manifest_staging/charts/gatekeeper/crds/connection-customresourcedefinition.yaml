@@ -45,7 +45,8 @@ spec:
               config:
                 x-kubernetes-preserve-unknown-fields: true
               driver:
-                description: Driver is the name of one of the expected drivers i.e. dapr, disk
+                description: Driver is the name of one of the expected drivers i.e.
+                  dapr, disk
                 type: string
             required:
             - config
@@ -56,10 +57,12 @@ spec:
             properties:
               byPod:
                 items:
-                  description: ConnectionPodStatusStatus defines the observed state of ConnectionPodStatus.
+                  description: ConnectionPodStatusStatus defines the observed state
+                    of ConnectionPodStatus.
                   properties:
                     active:
-                      description: Indicator for alive connection with at least one successful publish
+                      description: Indicator for alive connection with at least one
+                        successful publish
                       type: boolean
                     connectionUID:
                       description: |-
@@ -80,7 +83,8 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: ID is the unique identifier for the pod that wrote the status
+                      description: ID is the unique identifier for the pod that wrote
+                        the status
                       type: string
                     observedGeneration:
                       format: int64

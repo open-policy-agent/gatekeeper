@@ -46,7 +46,8 @@ spec:
                 type: boolean
               errors:
                 items:
-                  description: MutatorError represents a single error caught while adding a mutator to a system.
+                  description: MutatorError represents a single error caught while
+                    adding a mutator to a system.
                   properties:
                     message:
                       type: string
