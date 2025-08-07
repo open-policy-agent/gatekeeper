@@ -185,6 +185,8 @@ make deploy               # Deploy to Kubernetes cluster
 
 ### Development Guidelines & Patterns
 
+Make sure that there is a new line at the end of any file you edit. This is a common convention in Go and many other programming languages.
+
 **CRD Development:**
 1. **API Definitions** (`apis/` directory): Use controller-gen markers, follow Kubernetes conventions
 2. **Controller Implementation** (`pkg/controller/` directory): Use controller-runtime patterns with reconciliation loops
