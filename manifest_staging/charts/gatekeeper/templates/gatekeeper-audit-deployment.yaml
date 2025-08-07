@@ -58,16 +58,19 @@ spec:
         {{- end }}
         args:
         - --audit-interval={{ .Values.auditInterval }}
-        - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
+        - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel
+          .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName
+          }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         {{ if hasKey .Values "auditChunkSize" }}- --audit-chunk-size={{ .Values.auditChunkSize }}{{- end }}
         - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
         {{ if hasKey .Values "emitAuditEvents" }}- --emit-audit-events={{ .Values.emitAuditEvents }}{{- end }}
         {{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}
-        - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
+        - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace
+          }}
         
         {{- if not .Values.audit.disableGenerateOperation }}
         - --operation=generate
@@ -92,7 +95,8 @@ spec:
         - --health-addr=:{{ .Values.audit.healthPort }}
         - --prometheus-port={{ .Values.audit.metricsPort }}
         - --enable-external-data={{ .Values.enableExternalData }}
-        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
+        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion
+          }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
@@ -101,8 +105,10 @@ spec:
         {{- if .Values.audit.logFile}}
         - --log-file={{ .Values.audit.logFile }}
         {{- end }}
-        - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
-        - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
+        - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled
+          }}
+        - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL
+          }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
         
         {{- if hasKey .Values "defaultCreateVAPForTemplates"}}
@@ -149,6 +155,12 @@ spec:
           name: metrics
           protocol: TCP
         - containerPort: {{ .Values.audit.healthPort }}
+          name: healthz
+          protocol: TCP
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        - containerPort: 9090
           name: healthz
           protocol: TCP
         readinessProbe:
