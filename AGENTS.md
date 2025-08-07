@@ -1,7 +1,7 @@
 # Agent Instructions for OPA Gatekeeper
 
 ## Project Overview
-Gatekeeper is a Kubernetes admission controller that provides policy-based governance for Kubernetes clusters using Open Policy Agent (OPA). It extends Kubernetes with **validation**, and **mutation** capabilities through custom resources and webhooks. **Performance and security are the highest priorities** - admission controllers must minimize latency while maintaining strict security boundaries to protect cluster operations.
+Gatekeeper is a Kubernetes admission controller that provides policy-based governance for Kubernetes clusters using Open Policy Agent (OPA). It extends Kubernetes with **validation** and **mutation** capabilities through custom resources and webhooks. **Performance and security are the highest priorities** - admission controllers must minimize latency while maintaining strict security boundaries to protect cluster operations.
 
 ## Architecture & Repository Overview
 
