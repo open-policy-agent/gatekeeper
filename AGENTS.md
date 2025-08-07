@@ -16,75 +16,75 @@ Gatekeeper consists of several core components:
 
 ### Project Structure
 ```
-├── apis/                    # Kubernetes API definitions (CRDs)
-│   ├── config/             # Configuration CRDs (Config, Provider)
-│   ├── connection/         # Connection CRDs for exporting violations
-│   ├── expansion/          # Expansion template CRDs
-│   ├── gvkmanifest/        # GVK manifest CRDs
-│   ├── mutations/          # Mutation CRDs (Assign, AssignMetadata, ModifySet)
-│   ├── status/             # Status tracking CRDs
-│   └── syncset/           # Data synchronization CRDs
-├── cmd/                    # Command line tools
-│   ├── build/helmify/    # Helm chart generation tool
-│   └── gator/            # Gator CLI tool for policy testing
-├── main.go               # main entry point
-├── pkg/                   # Core business logic
-│   ├── audit/            # Audit functionality and violation tracking
-│   ├── cachemanager/     # Cache management for constraint evaluation
-│   ├── controller/       # Kubernetes controllers
-│   │   ├── config/       # Config controller
-│   │   ├── configstatus/ # Config status controller
-│   │   ├── connectionstatus/ # Connection status controller
-│   │   ├── constraint/   # Constraint controller
-│   │   ├── constraintstatus/ # Constraint status controller
-│   │   ├── constrainttemplate/ # ConstraintTemplate controller
-│   │   ├── constrainttemplatestatus/ # ConstraintTemplate status controller
-│   │   ├── expansion/    # Expansion controller
-│   │   ├── expansionstatus/ # Expansion status controller
-│   │   ├── export/       # Export controller
-│   │   ├── externaldata/ # External data controller
-│   │   ├── mutators/     # Mutators controller
-│   │   ├── mutatorstatus/ # Mutator status controller
-│   │   ├── sync/         # Sync controller
-│   │   └── syncset/      # Syncset controller
-│   ├── drivers/          # Policy engine drivers (CEL)
-│   ├── expansion/        # Template expansion engine
-│   ├── export/           # Violation export functionality
-│   ├── externaldata/     # External data provider integration
-│   ├── gator/           # CLI implementation and testing utilities
-│   ├── instrumentation/ # Metrics and observability
-│   ├── logging/         # Structured logging utilities
-│   ├── metrics/         # Prometheus metrics
-│   ├── mutation/        # Mutation engine and mutators
-│   ├── operations/      # Administrative operations
-│   ├── readiness/       # Health and readiness checks
-│   ├── syncutil/        # Data synchronization utilities
-│   ├── target/          # Target resource management
-│   ├── upgrade/         # Version upgrade logic
-│   ├── util/           # Shared utilities
-│   ├── version/        # Version information
-│   ├── watch/          # Resource watching utilities
-│   ├── webhook/        # Admission webhook handlers
-│   │   ├── admission/  # Main admission logic
-│   │   └── mutation/   # Mutation webhook logic
-│   └── wildcard/       # Wildcard matching utilities
-├── charts/               # Helm charts for deployment
-├── config/              # Kubernetes manifests and configuration
-│   ├── certmanager/     # Certificate manager configuration
-│   ├── default/         # Default deployment configuration
-│   ├── manager/         # Manager deployment configuration
-│   └── webhook/         # Webhook configuration
-├── deploy/              # Deployment configurations and scripts
-├── docs/                # Documentation and examples
-├── example/             # Example policies and configurations
-├── hack/                # Development scripts and utilities
-├── test/                # Integration and e2e tests
-│   ├── bats/           # BATS test scripts
-│   ├── externaldata/   # External data provider tests
-│   └── testutils/      # Test utilities and helpers
-├── third_party/         # Third-party dependencies
-├── vendor/              # Go vendor dependencies
-└── website/             # Documentation website source
+├── apis/                              # Kubernetes API definitions (CRDs)
+│   ├── config/                        # Configuration CRDs (Config, Provider)
+│   ├── connection/                    # Connection CRDs for exporting violations
+│   ├── expansion/                     # Expansion template CRDs
+│   ├── gvkmanifest/                   # GVK manifest CRDs
+│   ├── mutations/                     # Mutation CRDs (Assign, AssignMetadata, ModifySet)
+│   ├── status/                        # Status tracking CRDs
+│   └── syncset/                       # Data synchronization CRDs
+├── cmd/                               # Command line tools
+│   ├── build/helmify/                 # Helm chart generation tool
+│   └── gator/                         # Gator CLI tool for policy testing
+├── main.go                            # main entry point
+├── pkg/                               # Core business logic
+│   ├── audit/                         # Audit functionality and violation tracking
+│   ├── cachemanager/                  # Cache management for constraint evaluation
+│   ├── controller/                    # Kubernetes controllers
+│   │   ├── config/                    # Config controller
+│   │   ├── configstatus/              # Config status controller
+│   │   ├── connectionstatus/          # Connection status controller
+│   │   ├── constraint/                # Constraint controller
+│   │   ├── constraintstatus/          # Constraint status controller
+│   │   ├── constrainttemplate/        # ConstraintTemplate controller
+│   │   ├── constrainttemplatestatus/  # ConstraintTemplate status controller
+│   │   ├── expansion/                 # Expansion controller
+│   │   ├── expansionstatus/           # Expansion status controller
+│   │   ├── export/                    # Export controller
+│   │   ├── externaldata/              # External data controller
+│   │   ├── mutators/                  # Mutators controller
+│   │   ├── mutatorstatus/             # Mutator status controller
+│   │   ├── sync/                      # Sync controller
+│   │   └── syncset/                   # Syncset controller
+│   ├── drivers/                       # Policy engine drivers (CEL)
+│   ├── expansion/                     # Template expansion engine
+│   ├── export/                        # Violation export functionality
+│   ├── externaldata/                  # External data provider integration
+│   ├── gator/                         # CLI implementation and testing utilities
+│   ├── instrumentation/               # Metrics and observability
+│   ├── logging/                       # Structured logging utilities
+│   ├── metrics/                       # Prometheus metrics
+│   ├── mutation/                      # Mutation engine and mutators
+│   ├── operations/                    # Administrative operations
+│   ├── readiness/                     # Health and readiness checks
+│   ├── syncutil/                      # Data synchronization utilities
+│   ├── target/                        # Target resource management
+│   ├── upgrade/                       # Version upgrade logic
+│   ├── util/                          # Shared utilities
+│   ├── version/                       # Version information
+│   ├── watch/                         # Resource watching utilities
+│   ├── webhook/                       # Admission webhook handlers
+│   │   ├── admission/                 # Main admission logic
+│   │   └── mutation/                  # Mutation webhook logic
+│   └── wildcard/                      # Wildcard matching utilities
+├── charts/                            # Helm charts for deployment
+├── config/                            # Kubernetes manifests and configuration
+│   ├── certmanager/                   # Certificate manager configuration
+│   ├── default/                       # Default deployment configuration
+│   ├── manager/                       # Manager deployment configuration
+│   └── webhook/                       # Webhook configuration
+├── deploy/                            # Deployment configurations and scripts
+├── docs/                              # Documentation and examples
+├── example/                           # Example policies and configurations
+├── hack/                              # Development scripts and utilities
+├── test/                              # Integration and e2e tests
+│   ├── bats/                          # BATS test scripts
+│   ├── externaldata/                  # External data provider tests
+│   └── testutils/                     # Test utilities and helpers
+├── third_party/                       # Third-party dependencies
+├── vendor/                            # Go vendor dependencies
+└── website/                           # Documentation website source
 ```
 
 ### Build Commands
