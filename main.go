@@ -315,16 +315,6 @@ func innerMain() int {
 		}
 	}
 
-	// Always enable downstream checking for the webhooks, if enabled.
-	if len(webhooks) > 0 {
-		tlsChecker := webhook.NewTLSChecker(*certDir, *port)
-		setupLog.Info("setting up TLS readiness probe")
-		if err := mgr.AddReadyzCheck("tls-check", tlsChecker); err != nil {
-			setupLog.Error(err, "unable to create tls readiness check")
-			return 1
-		}
-	}
-
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
 	setupErr := make(chan error)
 
