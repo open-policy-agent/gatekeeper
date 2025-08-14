@@ -11,14 +11,13 @@ import (
 	"fmt"
 	"maps"
 	mr "math/rand"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/open-policy-agent/opa/internal/report"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/sdk/trace"
-
-	"github.com/gorilla/mux"
 
 	bundleUtils "github.com/open-policy-agent/opa/internal/bundle"
 	cfg "github.com/open-policy-agent/opa/internal/config"
@@ -207,7 +206,7 @@ type Manager struct {
 	serverInitializedOnce        sync.Once
 	printHook                    print.Hook
 	enablePrintStatements        bool
-	router                       *mux.Router
+	router                       *http.ServeMux
 	prometheusRegister           prometheus.Registerer
 	tracerProvider               *trace.TracerProvider
 	distributedTacingOpts        tracing.Options
@@ -216,10 +215,14 @@ type Manager struct {
 	bootstrapConfigLabels        map[string]string
 	hooks                        hooks.Hooks
 	enableTelemetry              bool
-	reporter                     *report.Reporter
+	reporter                     report.Reporter
 	opaReportNotifyCh            chan struct{}
 	stop                         chan chan struct{}
 	parserOptions                ast.ParserOptions
+	extraRoutes                  map[string]ExtraRoute
+	extraMiddlewares             []func(http.Handler) http.Handler
+	extraAuthorizerRoutes        []func(string, []any) bool
+	bundleActivatorPlugin        string
 }
 
 type managerContextKey string
@@ -370,7 +373,7 @@ func PrintHook(h print.Hook) func(*Manager) {
 	}
 }
 
-func WithRouter(r *mux.Router) func(*Manager) {
+func WithRouter(r *http.ServeMux) func(*Manager) {
 	return func(m *Manager) {
 		m.router = r
 	}
@@ -426,6 +429,13 @@ func WithTelemetryGatherers(gs map[string]report.Gatherer) func(*Manager) {
 	}
 }
 
+// WithBundleActivatorPlugin sets the name of the activator plugin to load bundles into the store
+func WithBundleActivatorPlugin(bundleActivatorPlugin string) func(*Manager) {
+	return func(m *Manager) {
+		m.bundleActivatorPlugin = bundleActivatorPlugin
+	}
+}
+
 // New creates a new Manager using config.
 func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*Manager, error) {
 
@@ -443,6 +453,7 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 		maxErrors:             -1,
 		serverInitialized:     make(chan struct{}),
 		bootstrapConfigLabels: parsedConfig.Labels,
+		extraRoutes:           map[string]ExtraRoute{},
 	}
 
 	for _, f := range opts {
@@ -494,7 +505,7 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 	}
 
 	if m.enableTelemetry {
-		reporter, err := report.New(id, report.Options{Logger: m.logger})
+		reporter, err := report.New(report.Options{Logger: m.logger})
 		if err != nil {
 			return nil, err
 		}
@@ -546,6 +557,7 @@ func (m *Manager) Init(ctx context.Context) error {
 			MaxErrors:             m.maxErrors,
 			EnablePrintStatements: m.enablePrintStatements,
 			ParserOptions:         m.parserOptions,
+			BundleActivatorPlugin: m.bundleActivatorPlugin,
 		})
 
 		if err != nil {
@@ -654,8 +666,61 @@ func (m *Manager) setCompiler(compiler *ast.Compiler) {
 	m.compiler = compiler
 }
 
+type ExtraRoute struct {
+	PromName    string // name is for prometheus metrics
+	HandlerFunc http.HandlerFunc
+}
+
+func (m *Manager) ExtraRoutes() map[string]ExtraRoute {
+	return m.extraRoutes
+}
+
+func (m *Manager) ExtraMiddlewares() []func(http.Handler) http.Handler {
+	return m.extraMiddlewares
+}
+
+func (m *Manager) ExtraAuthorizerRoutes() []func(string, []any) bool {
+	return m.extraAuthorizerRoutes
+}
+
+// ExtraRoute registers an extra route to be served by the HTTP
+// server later. Using this instead of directly registering routes
+// with GetRouter() lets the server apply its handler wrapping for
+// Prometheus and OpenTelemetry.
+// Caution: This cannot be used to dynamically register and un-
+// register HTTP handlers. It's meant as a late-stage set up helper,
+// to be called from a plugin's init methods.
+func (m *Manager) ExtraRoute(path, name string, hf http.HandlerFunc) {
+	if _, ok := m.extraRoutes[path]; ok {
+		panic("extra route already registered: " + path)
+	}
+	m.extraRoutes[path] = ExtraRoute{
+		PromName:    name,
+		HandlerFunc: hf,
+	}
+}
+
+// ExtraMiddleware registers extra middlewares (`func(http.Handler) http.Handler`)
+// to be injected into the HTTP handler chain in the server later.
+// Caution: This cannot be used to dynamically register and un-
+// register middlewares. It's meant as a late-stage set up helper,
+// to be called from a plugin's init methods.
+func (m *Manager) ExtraMiddleware(mw ...func(http.Handler) http.Handler) {
+	m.extraMiddlewares = append(m.extraMiddlewares, mw...)
+}
+
+// ExtraAuthorizerRoute registers an extra URL path validator function for use
+// in the server authorizer. These functions designate specific methods and URL
+// prefixes or paths where the authorizer should allow request body parsing.
+// Caution: This cannot be used to dynamically register and un-
+// register path validator functions. It's meant as a late-stage
+// set up helper, to be called from a plugin's init methods.
+func (m *Manager) ExtraAuthorizerRoute(validatorFunc func(string, []any) bool) {
+	m.extraAuthorizerRoutes = append(m.extraAuthorizerRoutes, validatorFunc)
+}
+
 // GetRouter returns the managers router if set
-func (m *Manager) GetRouter() *mux.Router {
+func (m *Manager) GetRouter() *http.ServeMux {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 	return m.router
