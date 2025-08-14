@@ -55,6 +55,25 @@ const FeatureRefHeadStringPrefixes = "rule_head_ref_string_prefixes"
 const FeatureRefHeads = "rule_head_refs"
 const FeatureRegoV1 = "rego_v1"
 const FeatureRegoV1Import = "rego_v1_import"
+const FeatureKeywordsInRefs = "keywords_in_refs"
+
+// Features carries the default features supported by this version of OPA.
+// Use RegisterFeatures to add to them.
+var Features = []string{
+	FeatureRegoV1,
+	FeatureKeywordsInRefs,
+}
+
+// RegisterFeatures lets applications wrapping OPA register features, to be
+// included in `ast.CapabilitiesForThisVersion()`.
+func RegisterFeatures(fs ...string) {
+	for i := range fs {
+		if slices.Contains(Features, fs[i]) {
+			continue
+		}
+		Features = append(Features, fs[i])
+	}
+}
 
 // Capabilities defines a structure containing data that describes the capabilities
 // or features supported by a particular version of OPA.
@@ -133,15 +152,15 @@ func CapabilitiesForThisVersion(opts ...CapabilitiesOption) *Capabilities {
 			FeatureRefHeads,
 			FeatureRegoV1Import,
 			FeatureRegoV1, // Included in v0 capabilities to allow v1 bundles in --v0-compatible mode
+			FeatureKeywordsInRefs,
 		}
 	default:
 		for kw := range futureKeywords {
 			f.FutureKeywords = append(f.FutureKeywords, kw)
 		}
 
-		f.Features = []string{
-			FeatureRegoV1,
-		}
+		f.Features = make([]string, len(Features))
+		copy(f.Features, Features)
 	}
 
 	sort.Strings(f.FutureKeywords)
