@@ -9,6 +9,7 @@ const (
 	ConstraintTemplateNameLabel = "internal.gatekeeper.sh/constrainttemplate-name"
 	MutatorNameLabel            = "internal.gatekeeper.sh/mutator-name"
 	MutatorKindLabel            = "internal.gatekeeper.sh/mutator-kind"
+	ProviderNameLabel           = "internal.gatekeeper.sh/provider-name"
 	PodLabel                    = "internal.gatekeeper.sh/pod"
 	ConnectionNameLabel         = "internal.gatekeeper.sh/connection-name"
 )
