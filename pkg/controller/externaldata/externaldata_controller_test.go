@@ -15,9 +15,11 @@ import (
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
+	corev1 "k8s.io/api/core/v1"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/prometheus/client_golang/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -100,7 +102,12 @@ func TestReconcile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := newReconciler(mgr, cfClient, pc, tracker)
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
+
+	rec := newReconciler(mgr, cfClient, pc, tracker, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 
 	recFn, requests := SetupTestReconcile(rec)
 	err = add(mgr, recFn)

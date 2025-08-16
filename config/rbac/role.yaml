@@ -127,6 +127,18 @@ rules:
 - apiGroups:
   - externaldata.gatekeeper.sh
   resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - externaldata.gatekeeper.sh
+  resources:
   - providers
   verbs:
   - create

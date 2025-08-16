@@ -17,8 +17,7 @@ spec:
   - name: v1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplate is the Schema for the constrainttemplates
-          API
+        description: ConstraintTemplate is the Schema for the constrainttemplates API
         properties:
           apiVersion:
             description: |-
@@ -76,8 +75,7 @@ spec:
                       items:
                         properties:
                           engine:
-                            description: 'The engine used to evaluate the code. Example:
-                              "Rego". Required.'
+                            description: 'The engine used to evaluate the code. Example: "Rego". Required.'
                             type: string
                           source:
                             description: The source code for the template. Required.
@@ -112,8 +110,7 @@ spec:
                   properties:
                     errors:
                       items:
-                        description: CreateCRDError represents a single error caught
-                          during parsing, compiling, etc.
+                        description: CreateCRDError represents a single error caught during parsing, compiling, etc.
                         properties:
                           code:
                             type: string
@@ -127,8 +124,7 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: a unique identifier for the pod that wrote the
-                        status
+                      description: a unique identifier for the pod that wrote the status
                       type: string
                     observedGeneration:
                       format: int64
@@ -147,8 +143,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplate is the Schema for the constrainttemplates
-          API
+        description: ConstraintTemplate is the Schema for the constrainttemplates API
         properties:
           apiVersion:
             description: |-
@@ -206,8 +201,7 @@ spec:
                       items:
                         properties:
                           engine:
-                            description: 'The engine used to evaluate the code. Example:
-                              "Rego". Required.'
+                            description: 'The engine used to evaluate the code. Example: "Rego". Required.'
                             type: string
                           source:
                             description: The source code for the template. Required.
@@ -242,8 +236,7 @@ spec:
                   properties:
                     errors:
                       items:
-                        description: CreateCRDError represents a single error caught
-                          during parsing, compiling, etc.
+                        description: CreateCRDError represents a single error caught during parsing, compiling, etc.
                         properties:
                           code:
                             type: string
@@ -257,8 +250,7 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: a unique identifier for the pod that wrote the
-                        status
+                      description: a unique identifier for the pod that wrote the status
                       type: string
                     observedGeneration:
                       format: int64
@@ -277,8 +269,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplate is the Schema for the constrainttemplates
-          API
+        description: ConstraintTemplate is the Schema for the constrainttemplates API
         properties:
           apiVersion:
             description: |-
@@ -336,8 +327,7 @@ spec:
                       items:
                         properties:
                           engine:
-                            description: 'The engine used to evaluate the code. Example:
-                              "Rego". Required.'
+                            description: 'The engine used to evaluate the code. Example: "Rego". Required.'
                             type: string
                           source:
                             description: The source code for the template. Required.
@@ -372,8 +362,7 @@ spec:
                   properties:
                     errors:
                       items:
-                        description: CreateCRDError represents a single error caught
-                          during parsing, compiling, etc.
+                        description: CreateCRDError represents a single error caught during parsing, compiling, etc.
                         properties:
                           code:
                             type: string
@@ -387,8 +376,7 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: a unique identifier for the pod that wrote the
-                        status
+                      description: a unique identifier for the pod that wrote the status
                       type: string
                     observedGeneration:
                       format: int64
@@ -421,8 +409,7 @@ spec:
   scope: Cluster
   versions:
   - deprecated: true
-    deprecationWarning: externaldata.gatekeeper.sh/v1alpha1 is deprecated. Use externaldata.gatekeeper.sh/v1beta1
-      instead.
+    deprecationWarning: externaldata.gatekeeper.sh/v1alpha1 is deprecated. Use externaldata.gatekeeper.sh/v1beta1 instead.
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -457,9 +444,61 @@ spec:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the url for the provider. URL is prefixed with
-                  https://.
+                description: URL is the url for the provider. URL is prefixed with https://.
                 type: string
+            type: object
+          status:
+            description: ProviderStatus defines the observed state of Provider.
+            properties:
+              byPod:
+                description: ByPod is the status of the provider by pod
+                items:
+                  description: ProviderPodStatusStatus defines the observed state of ProviderPodStatus.
+                  properties:
+                    errors:
+                      description: Active              bool            `json:"active,omitempty"`
+                      items:
+                        description: ProviderError represents a single error caught while managing providers.
+                        properties:
+                          errorTimestamp:
+                            format: date-time
+                            type: string
+                          message:
+                            type: string
+                          retryable:
+                            type: boolean
+                          type:
+                            description: |-
+                              Type indicates a specific class of error for use by controller code.
+                              If not present, the error should be treated as not matching any known type.
+                            type: string
+                        required:
+                        - message
+                        type: object
+                      type: array
+                    id:
+                      type: string
+                    lastCacheUpdateTime:
+                      format: date-time
+                      type: string
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    operations:
+                      items:
+                        type: string
+                      type: array
+                    providerUID:
+                      description: |-
+                        Storing the provider UID allows us to detect drift, such as
+                        when a provider has been recreated after its CRD was deleted
+                        out from under it, interrupting the watch
+                      type: string
+                  type: object
+                type: array
             type: object
         type: object
     served: true
@@ -498,9 +537,61 @@ spec:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the url for the provider. URL is prefixed with
-                  https://.
+                description: URL is the url for the provider. URL is prefixed with https://.
                 type: string
+            type: object
+          status:
+            description: ProviderStatus defines the observed state of Provider.
+            properties:
+              byPod:
+                description: ByPod is the status of the provider by pod
+                items:
+                  description: ProviderPodStatusStatus defines the observed state of ProviderPodStatus.
+                  properties:
+                    errors:
+                      description: Active              bool            `json:"active,omitempty"`
+                      items:
+                        description: ProviderError represents a single error caught while managing providers.
+                        properties:
+                          errorTimestamp:
+                            format: date-time
+                            type: string
+                          message:
+                            type: string
+                          retryable:
+                            type: boolean
+                          type:
+                            description: |-
+                              Type indicates a specific class of error for use by controller code.
+                              If not present, the error should be treated as not matching any known type.
+                            type: string
+                        required:
+                        - message
+                        type: object
+                      type: array
+                    id:
+                      type: string
+                    lastCacheUpdateTime:
+                      format: date-time
+                      type: string
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    operations:
+                      items:
+                        type: string
+                      type: array
+                    providerUID:
+                      description: |-
+                        Storing the provider UID allows us to detect drift, such as
+                        when a provider has been recreated after its CRD was deleted
+                        out from under it, interrupting the watch
+                      type: string
+                  type: object
+                type: array
             type: object
         type: object
     served: true
