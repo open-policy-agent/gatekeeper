@@ -116,7 +116,7 @@ func (e *templateClient) AddConstraint(constraint *unstructured.Unstructured, en
 	// Compare with the already-existing Constraint.
 	// If identical, exit early.
 	cached, found := e.constraints[constraint.GetName()]
-	if found && constraintlib.SemanticEqual(cached.constraint, constraint) {
+	if found && constraintlib.SemanticEqualWithLabelsAndAnnotations(cached.constraint, constraint) {
 		return false, nil
 	}
 
