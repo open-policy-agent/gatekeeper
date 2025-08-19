@@ -72,9 +72,9 @@ type ProviderErrorType string
 
 const (
 	// ConversionError indicates an error converting provider configuration.
-	ConversionError ProviderErrorType = "conversion_error"
+	ConversionError ProviderErrorType = "Conversion"
 	// UpsertCacheError indicates an error updating the provider cache.
-	UpsertCacheError ProviderErrorType = "upsert_cache_error"
+	UpsertCacheError ProviderErrorType = "UpsertCache"
 )
 
 // +genclient
@@ -82,6 +82,8 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:storageversion
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +k8s:conversion-gen-external-types=github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata
 // Provider is the Schema for the providers API
 // +k8s:openapi-gen=true

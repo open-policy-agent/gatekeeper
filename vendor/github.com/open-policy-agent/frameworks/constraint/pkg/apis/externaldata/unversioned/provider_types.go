@@ -74,15 +74,16 @@ type ProviderErrorType string
 
 const (
 	// ConversionError indicates an error converting provider configuration.
-	ConversionError ProviderErrorType = "conversion_error"
+	ConversionError ProviderErrorType = "Conversion"
 	// UpsertCacheError indicates an error updating the provider cache.
-	UpsertCacheError ProviderErrorType = "upsert_cache_error"
+	UpsertCacheError ProviderErrorType = "UpsertCache"
 )
 
 // +genclient
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:skip
+// +kubebuilder:object:root=true
 
 // Provider is the Schema for the providers API
 // +k8s:openapi-gen=true
@@ -96,6 +97,7 @@ type Provider struct {
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
 
 // ProviderList contains a list of Provider.
 type ProviderList struct {

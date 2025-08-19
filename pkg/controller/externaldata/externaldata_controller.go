@@ -246,9 +246,7 @@ func (r *Reconciler) deleteStatus(ctx context.Context, providerName string) erro
 		if !errors.IsNotFound(err) {
 			return err
 		} 
-		log.Info("provider status not found, nothing to delete", "name", providerName, "namespace", util.GetNamespace(), "statusName", sName)
 	}
-	log.Info("provider status deleted")
 	return nil
 }
 

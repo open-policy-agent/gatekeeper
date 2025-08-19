@@ -160,11 +160,7 @@ func (r *ReconcileProviderStatus) Reconcile(ctx context.Context, request reconci
 	); err != nil {
 		return reconcile.Result{}, err
 	}
-	log.Info("Found ProviderPodStatuses", "count", len(sObjs.Items), "provider", request.Name)
-	for _, status := range sObjs.Items {
-		log.Info("Found ProviderPodStatus", "name", status.Name, "namespace", status.Namespace)
-	}
-	
+
 	statusObjs := make(sortableStatuses, len(sObjs.Items))
 	copy(statusObjs, sObjs.Items)
 	sort.Sort(statusObjs)
