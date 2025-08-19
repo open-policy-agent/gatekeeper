@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller").WithValues(logging.Process, "provider_status_controller")
+var log = logf.Log.WithName("controller").WithValues(logging.Process, "externaldata_status_controller")
 
 type Adder struct {
 	WatchManager *watch.Manager
@@ -75,9 +75,9 @@ func newReconciler(mgr manager.Manager) *ReconcileProviderStatus {
 func PodStatusToProviderMapper(selfOnly bool) handler.TypedMapFunc[*statusv1beta1.ProviderPodStatus, reconcile.Request] {
 	return func(_ context.Context, obj *statusv1beta1.ProviderPodStatus) []reconcile.Request {
 		labels := obj.GetLabels()
-		connObjName, ok := labels[statusv1beta1.ProviderNameLabel]
+		name, ok := labels[statusv1beta1.ProviderNameLabel]
 		if !ok {
-			log.Error(fmt.Errorf("provider status resource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a provider status resource")
+			log.Error(fmt.Errorf("provider status reskource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a provider status resource")
 			return nil
 		}
 		if selfOnly {
@@ -91,10 +91,7 @@ func PodStatusToProviderMapper(selfOnly bool) handler.TypedMapFunc[*statusv1beta
 			}
 		}
 
-		return []reconcile.Request{{NamespacedName: types.NamespacedName{
-			Name:      connObjName,
-			Namespace: obj.Namespace,
-		}}}
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: name}}}
 	}
 }
 
@@ -144,8 +141,8 @@ type ReconcileProviderStatus struct {
 func (r *ReconcileProviderStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
 
-	connObj := &externaldatav1beta1.Provider{}
-	err := r.reader.Get(ctx, request.NamespacedName, connObj)
+	providerObj := &externaldatav1beta1.Provider{}
+	err := r.reader.Get(ctx, request.NamespacedName, providerObj)
 	if err != nil {
 		// If the Provider does not exist then we are done
 		if errors.IsNotFound(err) {
@@ -163,6 +160,11 @@ func (r *ReconcileProviderStatus) Reconcile(ctx context.Context, request reconci
 	); err != nil {
 		return reconcile.Result{}, err
 	}
+	log.Info("Found ProviderPodStatuses", "count", len(sObjs.Items), "provider", request.Name)
+	for _, status := range sObjs.Items {
+		log.Info("Found ProviderPodStatus", "name", status.Name, "namespace", status.Namespace)
+	}
+	
 	statusObjs := make(sortableStatuses, len(sObjs.Items))
 	copy(statusObjs, sObjs.Items)
 	sort.Sort(statusObjs)
@@ -172,17 +174,18 @@ func (r *ReconcileProviderStatus) Reconcile(ctx context.Context, request reconci
 	for i := range statusObjs {
 		// Don't report status if it's not for the correct object. This can happen
 		// if a watch gets interrupted, causing the status to be deleted out from underneath it
-		if statusObjs[i].Status.ProviderUID != connObj.GetUID() {
+		if statusObjs[i].Status.ProviderUID != providerObj.GetUID() {
 			continue
 		}
 		s = append(s, toProviderPodStatusStatus(statusObjs[i].Status))
 	}
 
-	connObj.Status.ByPod = s
+	providerObj.Status.ByPod = s
 
 	// Update the status of the Provider resource
-	if err := r.statusClient.Status().Update(ctx, connObj); err != nil {
-		return reconcile.Result{}, err
+	if err := r.statusClient.Status().Update(ctx, providerObj); err != nil {
+		log.Error(err, "failed to update provider status")
+		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{}, nil
 }

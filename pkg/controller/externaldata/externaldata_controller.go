@@ -12,6 +12,7 @@ import (
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/externaldatastatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	corev1 "k8s.io/api/core/v1"
@@ -172,12 +173,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, provider, providerErrors)
 		}
 		tracker.Observe(provider)
-	} else {
-		r.providerCache.Remove(provider.Name)
-		tracker.CancelExpect(provider)
+		return ctrl.Result{}, r.updateOrCreatePodStatus(ctx, provider, nil)
 	}
-
-	return ctrl.Result{}, nil
+	r.providerCache.Remove(provider.Name)
+	tracker.CancelExpect(provider)
+	return ctrl.Result{}, r.deleteStatus(ctx, request.Name)
 }
 
 func (r *Reconciler) updateOrCreatePodStatus(ctx context.Context, provider *externaldatav1beta1.Provider, providerErrors []*statusv1beta1.ProviderError) error {
@@ -228,6 +228,28 @@ func (r *Reconciler) newProviderStatus(pod *corev1.Pod, provider *externaldatav1
 	status.Status.ProviderUID = provider.GetUID()
 
 	return status, nil
+}
+
+func (r *Reconciler) deleteStatus(ctx context.Context, providerName string) error {
+	status := &statusv1beta1.ProviderPodStatus{}
+	pod, err := r.getPod(ctx)
+	if err != nil {
+		return fmt.Errorf("getting reconciler pod: %w", err)
+	}
+	sName, err := statusv1beta1.KeyForProvider(pod.Name, providerName)
+	if err != nil {
+		return fmt.Errorf("getting key for provider: %w", err)
+	}
+	status.SetName(sName)
+	status.SetNamespace(util.GetNamespace())
+	if err := r.Delete(ctx, status); err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		} 
+		log.Info("provider status not found, nothing to delete", "name", providerName, "namespace", util.GetNamespace(), "statusName", sName)
+	}
+	log.Info("provider status deleted")
+	return nil
 }
 
 func setStatus(status *statusv1beta1.ProviderPodStatus, providerErrors []*statusv1beta1.ProviderError) {
