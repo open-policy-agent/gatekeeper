@@ -40,7 +40,9 @@ func (r *reporter) observeProviderMetric(_ context.Context, o metric.Int64Observ
 // newStatsReporter creates a reporter for external data provider metrics.
 func newStatsReporter() *reporter {
 	var err error
-	r := &reporter{}
+	r := &reporter{
+		cache: make(map[types.NamespacedName]metrics.Status),
+	}
 	meter := otel.GetMeterProvider().Meter("gatekeeper")
 
 	// Register the gatekeeper_providers gauge metric

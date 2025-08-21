@@ -213,7 +213,7 @@ func toProviderPodStatusStatus(status statusv1beta1.ProviderPodStatusStatus) ext
 	convertedStatus := externaldatav1beta1.ProviderPodStatusStatus{
             ID:                  status.ID,
             ProviderUID:         status.ProviderUID,
-            // Active:              status.Active,
+            Active:              status.Active,
             Errors:              errs,
             Operations:          status.Operations,
             LastTransitionTime:  status.LastTransitionTime,

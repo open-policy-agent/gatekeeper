@@ -16,68 +16,14 @@ limitations under the License.
 package externaldatastatus
 
 import (
-	stdlog "log"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var cfg *rest.Config
 
 func TestMain(m *testing.M) {
-	testEnv := &envtest.Environment{
-		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "..", "config", "crd", "bases"),
-		},
-		ErrorIfCRDPathMissing: true,
-	}
-	// TODO(ritazh): remove when vap is GAed in k/k
-	args := testEnv.ControlPlane.GetAPIServer().Configure()
-	args.Append("runtime-config", "api/all=true")
-
-	if err := apis.AddToScheme(scheme.Scheme); err != nil {
-		stdlog.Fatal(err)
-	}
-
-	// Retrieve the first found binary directory to allow debugging tests from VS Code
-	if getFirstFoundEnvTestBinaryDir() != "" {
-		testEnv.BinaryAssetsDirectory = getFirstFoundEnvTestBinaryDir()
-	}
-
-	var err error
-	if cfg, err = testEnv.Start(); err != nil {
-		stdlog.Fatal(err)
-	}
-
-	if err := testutils.CreateGatekeeperNamespace(cfg); err != nil {
-		stdlog.Printf("creating namespace: %v", err)
-	}
-
-	code := m.Run()
-	if err = testEnv.Stop(); err != nil {
-		stdlog.Printf("error while trying to stop server: %v", err)
-	}
-	os.Exit(code)
-}
-
-func getFirstFoundEnvTestBinaryDir() string {
-	basePath := filepath.Join("..", "..", "..", ".tmp", "bin", "k8s")
-	entries, err := os.ReadDir(basePath)
-	if err != nil {
-		logf.Log.Error(err, "Failed to read directory", "path", basePath)
-		return ""
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			return filepath.Join(basePath, entry.Name())
-		}
-	}
-	return ""
+	testutils.StartControlPlane(m, &cfg, 3)
 }

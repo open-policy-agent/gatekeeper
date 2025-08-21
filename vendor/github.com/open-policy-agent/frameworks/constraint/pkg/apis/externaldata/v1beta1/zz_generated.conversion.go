@@ -183,6 +183,7 @@ func autoConvert_v1beta1_ProviderPodStatusStatus_To_unversioned_ProviderPodStatu
 	out.ID = in.ID
 	out.ProviderUID = types.UID(in.ProviderUID)
 	out.Operations = *(*[]string)(unsafe.Pointer(&in.Operations))
+	out.Active = in.Active
 	out.Errors = *(*[]unversioned.ProviderError)(unsafe.Pointer(&in.Errors))
 	out.ObservedGeneration = in.ObservedGeneration
 	out.LastTransitionTime = (*v1.Time)(unsafe.Pointer(in.LastTransitionTime))
@@ -199,6 +200,7 @@ func autoConvert_unversioned_ProviderPodStatusStatus_To_v1beta1_ProviderPodStatu
 	out.ID = in.ID
 	out.ProviderUID = types.UID(in.ProviderUID)
 	out.Operations = *(*[]string)(unsafe.Pointer(&in.Operations))
+	out.Active = in.Active
 	out.Errors = *(*[]ProviderError)(unsafe.Pointer(&in.Errors))
 	out.ObservedGeneration = in.ObservedGeneration
 	out.LastTransitionTime = (*v1.Time)(unsafe.Pointer(in.LastTransitionTime))

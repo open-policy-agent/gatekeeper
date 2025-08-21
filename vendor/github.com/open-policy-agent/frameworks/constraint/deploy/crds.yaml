@@ -455,8 +455,9 @@ spec:
                 items:
                   description: ProviderPodStatusStatus defines the observed state of ProviderPodStatus.
                   properties:
+                    active:
+                      type: boolean
                     errors:
-                      description: Active              bool            `json:"active,omitempty"`
                       items:
                         description: ProviderError represents a single error caught while managing providers.
                         properties:
@@ -550,8 +551,9 @@ spec:
                 items:
                   description: ProviderPodStatusStatus defines the observed state of ProviderPodStatus.
                   properties:
+                    active:
+                      type: boolean
                     errors:
-                      description: Active              bool            `json:"active,omitempty"`
                       items:
                         description: ProviderError represents a single error caught while managing providers.
                         properties:

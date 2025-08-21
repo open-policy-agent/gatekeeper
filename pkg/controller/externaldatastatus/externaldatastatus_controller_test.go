@@ -15,6 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -42,6 +43,17 @@ func TestReconcile_E2E(t *testing.T) {
 	require.NoError(t, add(mgr, wrappedReconciler))
 	// Start the manager and let it run in the background
 	testutils.StartManager(ctx, t, mgr)
+
+	// Create the gatekeeper-system namespace that the controller expects
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-system",
+		},
+	}
+	err := k8sClient.Create(ctx, ns)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		t.Fatal(err)
+	}
 
 	t.Run("Reconcile called and updates Provider status", func(t *testing.T) {
 		providerObj := externaldatav1beta1.Provider{
@@ -92,7 +104,7 @@ func TestReconcile_E2E(t *testing.T) {
 				},
 			},
 			Status: statusv1beta1.ProviderPodStatusStatus{
-				// Active:              true,
+				Active:              true,
 				Errors:              []*statusv1beta1.ProviderError{},
 				ObservedGeneration:  providerObj.GetGeneration(),
 				ProviderUID:         providerObj.GetUID(),
@@ -124,7 +136,7 @@ func TestReconcile_E2E(t *testing.T) {
 			g.Expect(providerPodStatusObj.Status.ObservedGeneration).Should(gomega.Equal(providerObj.GetGeneration()), "Observed generation should match the provider object generation")
 			g.Expect(providerPodStatusObj.Status.ID).Should(gomega.Equal(pod.Name), "ID should match the pod name")
 			g.Expect(providerPodStatusObj.Status.ProviderUID).Should(gomega.Equal(providerObj.GetUID()), "ProviderPodStatus UID should match the provider object UID")
-			// g.Expect(providerPodStatusObj.Status.Active).Should(gomega.BeTrue(), "Provider should be active")
+			g.Expect(providerPodStatusObj.Status.Active).Should(gomega.BeTrue(), "Provider should be active")
 		}).WithTimeout(timeout).Should(gomega.Succeed())
 
 		// Assert Provider object and its status
@@ -136,7 +148,7 @@ func TestReconcile_E2E(t *testing.T) {
 			g.Expect(providerObj.Status.ByPod[0].ObservedGeneration).Should(gomega.Equal(providerObj.GetGeneration()), "Observed generation should get updated to match the latest provider object generation after update")
 			g.Expect(providerObj.Status.ByPod[0].ID).Should(gomega.Equal(pod.Name), "ID should still match the pod name after update")
 			g.Expect(providerObj.Status.ByPod[0].ProviderUID).Should(gomega.Equal(providerObj.GetUID()), "ProviderPodStatus UID should still match the provider object UID after update")
-			// g.Expect(providerObj.Status.ByPod[0].Active).Should(gomega.BeTrue(), "Provider should still be active")
+			g.Expect(providerObj.Status.ByPod[0].Active).Should(gomega.BeTrue(), "Provider should still be active")
 		}).WithTimeout(timeout).Should(gomega.Succeed())
 
 		// Test Update of the Provider object
@@ -184,7 +196,7 @@ func TestReconcile_E2E(t *testing.T) {
 		podNames := []string{"pod-1", "pod-2", "pod-3"}
 		var providerPodStatusObjs []statusv1beta1.ProviderPodStatus
 
-		for _, podName := range podNames {
+		for i, podName := range podNames {
 			providerPodStatusObjName, _ := statusv1beta1.KeyForProvider(podName, providerObj.Name)
 			providerPodStatusObj := statusv1beta1.ProviderPodStatus{
 				ObjectMeta: metav1.ObjectMeta{
@@ -196,7 +208,7 @@ func TestReconcile_E2E(t *testing.T) {
 					},
 				},
 				Status: statusv1beta1.ProviderPodStatusStatus{
-					// Active:              i%2 == 0, // Alternate active status
+					Active:              i%2 == 0, // Alternate active status
 					Errors:              []*statusv1beta1.ProviderError{},
 					ObservedGeneration:  providerObj.GetGeneration(),
 					ProviderUID:         providerObj.GetUID(),
@@ -266,7 +278,7 @@ func TestReconcile_E2E(t *testing.T) {
 				},
 			},
 			Status: statusv1beta1.ProviderPodStatusStatus{
-				// Active: false,
+				Active: false,
 				Errors: []*statusv1beta1.ProviderError{
 					{
 						Type:           statusv1beta1.ConversionError,
@@ -305,7 +317,7 @@ func TestReconcile_E2E(t *testing.T) {
 			g.Expect(err).Should(gomega.Succeed())
 			g.Expect(len(providerObj.Status.ByPod)).Should(gomega.Equal(1), "Provider should have one pod status")
 			g.Expect(len(providerObj.Status.ByPod[0].Errors)).Should(gomega.Equal(2), "Provider status should have two errors")
-			// g.Expect(providerObj.Status.ByPod[0].Active).Should(gomega.BeFalse(), "Provider should not be active due to errors")
+			g.Expect(providerObj.Status.ByPod[0].Active).Should(gomega.BeFalse(), "Provider should not be active due to errors")
 			
 			// Check error details
 			errors := providerObj.Status.ByPod[0].Errors
@@ -354,7 +366,7 @@ func TestReconcile_E2E(t *testing.T) {
 				},
 			},
 			Status: statusv1beta1.ProviderPodStatusStatus{
-				// Active:              true,
+				Active:              true,
 				Errors:              []*statusv1beta1.ProviderError{},
 				ObservedGeneration:  providerObj.GetGeneration(),
 				ProviderUID:         "wrong-uid-123", // Wrong UID
@@ -409,7 +421,7 @@ func TestToProviderPodStatusStatus(t *testing.T) {
 	input := statusv1beta1.ProviderPodStatusStatus{
 		ID:          "test-pod",
 		ProviderUID: "test-provider-uid",
-		// Active:      true,
+		Active:      false,
 		Errors: []*statusv1beta1.ProviderError{
 			{
 				Type:           statusv1beta1.ConversionError,
@@ -420,7 +432,7 @@ func TestToProviderPodStatusStatus(t *testing.T) {
 			{
 				Type:           statusv1beta1.UpsertCacheError,
 				Message:        "Upsert failed",
-				Retryable:      false,
+				Retryable:      true,
 				ErrorTimestamp: &now,
 			},
 		},
@@ -435,7 +447,7 @@ func TestToProviderPodStatusStatus(t *testing.T) {
 	// Verify basic fields
 	require.Equal(t, input.ID, result.ID)
 	require.Equal(t, input.ProviderUID, result.ProviderUID)
-	// require.Equal(t, input.Active, result.Active)
+	require.Equal(t, input.Active, result.Active)
 	require.Equal(t, input.Operations, result.Operations)
 	require.Equal(t, input.LastTransitionTime, result.LastTransitionTime)
 	require.Equal(t, input.LastCacheUpdateTime, result.LastCacheUpdateTime)

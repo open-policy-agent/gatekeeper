@@ -263,13 +263,13 @@ func (r *Reconciler) deleteStatus(ctx context.Context, providerName string) erro
 func setStatus(status *statusv1beta1.ProviderPodStatus, providerErrors []*statusv1beta1.ProviderError) {
 	if len(providerErrors) == 0 {
 		status.Status.Errors = nil
-		// status.Status.Active = true
+		status.Status.Active = true
 		status.Status.LastCacheUpdateTime = &metav1.Time{Time: time.Now()}
 		return
 	}
 
 	status.Status.Errors = providerErrors
-	// status.Status.Active = false
+	status.Status.Active = false
 }
 
 func errorChanged(oldErrors, newErrors []*statusv1beta1.ProviderError) bool {

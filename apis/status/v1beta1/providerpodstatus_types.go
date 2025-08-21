@@ -38,7 +38,7 @@ type ProviderPodStatusStatus struct {
 	// out from under it, interrupting the watch
 	ProviderUID         types.UID       `json:"providerUID,omitempty"`
 	Operations          []string        `json:"operations,omitempty"`
-	// Active              bool            `json:"active,omitempty"`
+	Active              bool            `json:"active,omitempty"`
 	Errors              []*ProviderError `json:"errors,omitempty"`
 	ObservedGeneration  int64           `json:"observedGeneration,omitempty"`
 	LastTransitionTime  *metav1.Time    `json:"lastTransitionTime,omitempty"`

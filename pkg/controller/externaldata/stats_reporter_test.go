@@ -68,13 +68,13 @@ func TestReporter_add(t *testing.T) {
 
 func TestReporter_remove(t *testing.T) {
 	r := &reporter{
-		cache: map[types.NamespacedName]metrics.Status{{Name: "test", Namespace: "default"}: metrics.ActiveStatus},
+		cache: map[types.NamespacedName]metrics.Status{{Name: "test"}: metrics.ActiveStatus},
 		dirty: true,
 	}
 
 	// Test removing an existing key
-	r.remove(types.NamespacedName{Name: "test", Namespace: "default"})
-	if _, exists := r.cache[types.NamespacedName{Name: "test", Namespace: "default"}]; exists {
+	r.remove(types.NamespacedName{Name: "test"})
+	if _, exists := r.cache[types.NamespacedName{Name: "test"}]; exists {
 		t.Error("Expected key to be removed from cache")
 	}
 	if r.dirty != true {
@@ -82,7 +82,7 @@ func TestReporter_remove(t *testing.T) {
 	}
 
 	// Test removing a non-existing key
-	r.remove(types.NamespacedName{Name: "non-existing", Namespace: "default"})
+	r.remove(types.NamespacedName{Name: "non-existing"})
 	if r.dirty != true {
 		t.Error("Expected dirty flag to remain true")
 	}
@@ -105,9 +105,9 @@ func TestReport(t *testing.T) {
 			r: &reporter{
 				dirty: true,
 				cache: map[types.NamespacedName]metrics.Status{
-					{Name: "test1", Namespace: "default"}: metrics.ActiveStatus,
-					{Name: "test2", Namespace: "default"}: metrics.ErrorStatus,
-					{Name: "test3", Namespace: "default"}: metrics.ActiveStatus,
+					{Name: "test1"}: metrics.ActiveStatus,
+					{Name: "test2"}: metrics.ErrorStatus,
+					{Name: "test3"}: metrics.ActiveStatus,
 				},
 			},
 			want: metricdata.Metrics{
@@ -160,7 +160,7 @@ func TestReportProviderErrors(t *testing.T) {
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.DataPoint[int64]{
-				{Attributes: attribute.NewSet(), Value: 2}, // No attributes since reportProviderError doesn't add any
+				{Attributes: attribute.NewSet(), Value: 2},
 			},
 			IsMonotonic: true,
 		},
