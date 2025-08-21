@@ -12,9 +12,10 @@ import (
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/externaldatastatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,6 +80,7 @@ type Reconciler struct {
 	providerCache *frameworksexternaldata.ProviderCache
 	tracker       *readiness.Tracker
 	scheme        *runtime.Scheme
+	metrics *reporter
 
 	getPod func(context.Context) (*corev1.Pod, error)
 }
@@ -86,12 +88,13 @@ type Reconciler struct {
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(mgr manager.Manager, client *constraintclient.Client, providerCache *frameworksexternaldata.ProviderCache, tracker *readiness.Tracker, getPod func(ctx context.Context) (*corev1.Pod, error)) *Reconciler {
 	r := &Reconciler{
-		cfClient:      client,
-		providerCache: providerCache,
-		Client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		tracker:       tracker,
-		getPod:       getPod,
+		cfClient:        client,
+		providerCache:   providerCache,
+		Client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		tracker:         tracker,
+		getPod:          getPod,
+		metrics: newStatsReporter(),
 	}
 	return r
 }
@@ -124,7 +127,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	log.Info("Reconcile", "request", request)
+	defer r.metrics.report(ctx)
+	log.V(logging.DebugLevel).Info("Reconcile", "request", request)
 
 	deleted := false
 	provider := &externaldatav1beta1.Provider{}
@@ -157,6 +161,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			Retryable: true,
 			ErrorTimestamp: &metav1.Time{Time: time.Now()},
 		}}
+		r.metrics.reportProviderError(ctx)
+		r.metrics.add(request.NamespacedName, metrics.ErrorStatus)
 		return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, provider, providerErrors)
 	}
 
@@ -170,13 +176,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				Retryable: true,
 				ErrorTimestamp: &metav1.Time{Time: time.Now()},
 			}}
+			r.metrics.reportProviderError(ctx)
+			r.metrics.add(request.NamespacedName, metrics.ErrorStatus)
 			return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, provider, providerErrors)
 		}
 		tracker.Observe(provider)
+		r.metrics.add(request.NamespacedName, metrics.ActiveStatus)
 		return ctrl.Result{}, r.updateOrCreatePodStatus(ctx, provider, nil)
 	}
 	r.providerCache.Remove(provider.Name)
 	tracker.CancelExpect(provider)
+	r.metrics.remove(request.NamespacedName)
 	return ctrl.Result{}, r.deleteStatus(ctx, request.Name)
 }
 

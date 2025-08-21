@@ -14,14 +14,14 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
-	corev1 "k8s.io/api/core/v1"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/prometheus/client_golang/prometheus"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -117,6 +117,18 @@ func TestReconcile(t *testing.T) {
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	testutils.StartManager(ctx, t, mgr)
+
+	// Create the gatekeeper-system namespace that the controller expects
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-system",
+		},
+	}
+	err = c.Create(ctx, ns)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
@@ -183,6 +195,9 @@ func TestReconcile(t *testing.T) {
 		_, err = pc.Get("my-provider")
 		// TODO(willbeason): Make an error in frameworks for this test to check against
 		//  so we don't rely on exact string matching.
+		if err == nil {
+			t.Fatal("expected error when getting deleted provider from cache, but got nil")
+		}
 		wantErr := "key is not found in provider cache"
 		if err.Error() != wantErr {
 			t.Fatalf("got error %v, want %v", err.Error(), wantErr)
