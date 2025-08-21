@@ -9,10 +9,10 @@ import (
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -58,7 +58,7 @@ func TestReconcile_E2E(t *testing.T) {
 	t.Run("Reconcile called and updates Provider status", func(t *testing.T) {
 		providerObj := externaldatav1beta1.Provider{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-provider",
+				Name: "test-provider",
 			},
 			Spec: externaldatav1beta1.ProviderSpec{
 				URL:      "http://test-provider:8080",
@@ -67,7 +67,7 @@ func TestReconcile_E2E(t *testing.T) {
 			},
 		}
 		typeProviderNamespacedName := types.NamespacedName{
-			Name:      "test-provider",
+			Name: "test-provider",
 		}
 
 		// Test setup - Create the provider object
@@ -177,7 +177,7 @@ func TestReconcile_E2E(t *testing.T) {
 	t.Run("Reconcile with multiple pod statuses", func(t *testing.T) {
 		providerObj := externaldatav1beta1.Provider{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "multi-pod-provider",
+				Name: "multi-pod-provider",
 			},
 			Spec: externaldatav1beta1.ProviderSpec{
 				URL:      "http://multi-pod-provider:8080",
@@ -186,7 +186,7 @@ func TestReconcile_E2E(t *testing.T) {
 			},
 		}
 		typeProviderNamespacedName := types.NamespacedName{
-			Name:      "multi-pod-provider",
+			Name: "multi-pod-provider",
 		}
 
 		// Create the provider object
@@ -234,7 +234,7 @@ func TestReconcile_E2E(t *testing.T) {
 			err := k8sClient.Get(ctx, typeProviderNamespacedName, &providerObj)
 			g.Expect(err).Should(gomega.Succeed())
 			g.Expect(len(providerObj.Status.ByPod)).Should(gomega.Equal(3), "Provider should have status for all three pods")
-			
+
 			// Verify statuses are sorted by ID
 			for i := 0; i < len(providerObj.Status.ByPod)-1; i++ {
 				g.Expect(providerObj.Status.ByPod[i].ID < providerObj.Status.ByPod[i+1].ID).Should(gomega.BeTrue(), "Pod statuses should be sorted by ID")
@@ -251,7 +251,7 @@ func TestReconcile_E2E(t *testing.T) {
 	t.Run("Reconcile with status errors", func(t *testing.T) {
 		providerObj := externaldatav1beta1.Provider{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "error-provider",
+				Name: "error-provider",
 			},
 			Spec: externaldatav1beta1.ProviderSpec{
 				URL:      "http://error-provider:8080",
@@ -260,7 +260,7 @@ func TestReconcile_E2E(t *testing.T) {
 			},
 		}
 		typeProviderNamespacedName := types.NamespacedName{
-			Name:      "error-provider",
+			Name: "error-provider",
 		}
 
 		// Create the provider object
@@ -318,13 +318,13 @@ func TestReconcile_E2E(t *testing.T) {
 			g.Expect(len(providerObj.Status.ByPod)).Should(gomega.Equal(1), "Provider should have one pod status")
 			g.Expect(len(providerObj.Status.ByPod[0].Errors)).Should(gomega.Equal(2), "Provider status should have two errors")
 			g.Expect(providerObj.Status.ByPod[0].Active).Should(gomega.BeFalse(), "Provider should not be active due to errors")
-			
+
 			// Check error details
 			errors := providerObj.Status.ByPod[0].Errors
 			g.Expect(string(errors[0].Type)).Should(gomega.Equal(string(statusv1beta1.ConversionError)), "First error should be connection error")
 			g.Expect(errors[0].Message).Should(gomega.Equal("Failed to convert to unversioned external data provider"))
 			g.Expect(errors[0].Retryable).Should(gomega.BeTrue())
-			
+
 			g.Expect(string(errors[1].Type)).Should(gomega.Equal(string(statusv1beta1.UpsertCacheError)), "Second error should be query error")
 			g.Expect(errors[1].Message).Should(gomega.Equal("Failed to update external data provider cache"))
 			g.Expect(errors[1].Retryable).Should(gomega.BeFalse())
@@ -338,7 +338,7 @@ func TestReconcile_E2E(t *testing.T) {
 	t.Run("Reconcile ignores status with wrong ProviderUID", func(t *testing.T) {
 		providerObj := externaldatav1beta1.Provider{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "uid-test-provider",
+				Name: "uid-test-provider",
 			},
 			Spec: externaldatav1beta1.ProviderSpec{
 				URL:      "http://uid-test-provider:8080",
@@ -347,7 +347,7 @@ func TestReconcile_E2E(t *testing.T) {
 			},
 		}
 		typeProviderNamespacedName := types.NamespacedName{
-			Name:      "uid-test-provider",
+			Name: "uid-test-provider",
 		}
 
 		// Create the provider object
@@ -400,7 +400,7 @@ func TestReconcile_E2E(t *testing.T) {
 
 	t.Run("Reconcile with non-existent Provider", func(t *testing.T) {
 		reconciler := newReconciler(mgr)
-		
+
 		// Try to reconcile a non-existent provider
 		nonExistentRequest := reconcile.Request{
 			NamespacedName: types.NamespacedName{
@@ -417,7 +417,7 @@ func TestReconcile_E2E(t *testing.T) {
 
 func TestToProviderPodStatusStatus(t *testing.T) {
 	now := metav1.Now()
-	
+
 	input := statusv1beta1.ProviderPodStatusStatus{
 		ID:          "test-pod",
 		ProviderUID: "test-provider-uid",
@@ -436,13 +436,13 @@ func TestToProviderPodStatusStatus(t *testing.T) {
 				ErrorTimestamp: &now,
 			},
 		},
-		Operations: []string{"operation1", "operation2"},
+		Operations:          []string{"operation1", "operation2"},
 		LastTransitionTime:  &now,
 		LastCacheUpdateTime: &now,
 		ObservedGeneration:  int64(1),
 	}
 
-	result := toProviderPodStatusStatus(input)
+	result := toProviderPodStatusStatus(&input)
 
 	// Verify basic fields
 	require.Equal(t, input.ID, result.ID)
@@ -472,7 +472,7 @@ func TestSortableStatuses(t *testing.T) {
 	}
 
 	require.Equal(t, 3, statuses.Len())
-	require.True(t, statuses.Less(1, 0)) // "pod-a" < "pod-c"
+	require.True(t, statuses.Less(1, 0))  // "pod-a" < "pod-c"
 	require.False(t, statuses.Less(0, 1)) // "pod-c" > "pod-a"
 
 	// Test swap

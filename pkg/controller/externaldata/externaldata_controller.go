@@ -80,7 +80,7 @@ type Reconciler struct {
 	providerCache *frameworksexternaldata.ProviderCache
 	tracker       *readiness.Tracker
 	scheme        *runtime.Scheme
-	metrics *reporter
+	metrics       *reporter
 
 	getPod func(context.Context) (*corev1.Pod, error)
 }
@@ -88,13 +88,13 @@ type Reconciler struct {
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(mgr manager.Manager, client *constraintclient.Client, providerCache *frameworksexternaldata.ProviderCache, tracker *readiness.Tracker, getPod func(ctx context.Context) (*corev1.Pod, error)) *Reconciler {
 	r := &Reconciler{
-		cfClient:        client,
-		providerCache:   providerCache,
-		Client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		tracker:         tracker,
-		getPod:          getPod,
-		metrics: newStatsReporter(),
+		cfClient:      client,
+		providerCache: providerCache,
+		Client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		tracker:       tracker,
+		getPod:        getPod,
+		metrics:       newStatsReporter(),
 	}
 	return r
 }
@@ -156,9 +156,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err := r.scheme.Convert(provider, unversionedProvider, nil); err != nil {
 		log.Error(err, "conversion error")
 		providerErrors := []*statusv1beta1.ProviderError{{
-			Message: err.Error(),
-			Type:   statusv1beta1.ConversionError,
-			Retryable: true,
+			Message:        err.Error(),
+			Type:           statusv1beta1.ConversionError,
+			Retryable:      true,
 			ErrorTimestamp: &metav1.Time{Time: time.Now()},
 		}}
 		r.metrics.reportProviderError(ctx)
@@ -171,9 +171,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			log.Error(err, "Upsert failed", "resource", request.NamespacedName)
 			tracker.TryCancelExpect(provider)
 			providerErrors := []*statusv1beta1.ProviderError{{
-				Message: err.Error(),
-				Type:   statusv1beta1.UpsertCacheError,
-				Retryable: true,
+				Message:        err.Error(),
+				Type:           statusv1beta1.UpsertCacheError,
+				Retryable:      true,
 				ErrorTimestamp: &metav1.Time{Time: time.Now()},
 			}}
 			r.metrics.reportProviderError(ctx)
@@ -255,7 +255,7 @@ func (r *Reconciler) deleteStatus(ctx context.Context, providerName string) erro
 	if err := r.Delete(ctx, status); err != nil {
 		if !errors.IsNotFound(err) {
 			return err
-		} 
+		}
 	}
 	return nil
 }
@@ -276,14 +276,14 @@ func errorChanged(oldErrors, newErrors []*statusv1beta1.ProviderError) bool {
 	if len(oldErrors) != len(newErrors) {
 		return true
 	}
-	
+
 	// Check errors without considering order
 	oldErrorMap := make(map[string]bool)
 	for _, err := range oldErrors {
 		key := fmt.Sprintf("%s:%s", err.Type, err.Message)
 		oldErrorMap[key] = true
 	}
-	
+
 	for _, err := range newErrors {
 		key := fmt.Sprintf("%s:%s", err.Type, err.Message)
 		if !oldErrorMap[key] {
@@ -291,7 +291,7 @@ func errorChanged(oldErrors, newErrors []*statusv1beta1.ProviderError) bool {
 		}
 		delete(oldErrorMap, key)
 	}
-	
+
 	// If any old errors remain, they weren't found in new errors
 	return len(oldErrorMap) > 0
 }

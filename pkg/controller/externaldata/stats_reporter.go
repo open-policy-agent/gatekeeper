@@ -12,17 +12,15 @@ import (
 )
 
 const (
-	providerMetricName      = "providers"
-	providerErrorCountName  = "provider_error_count"
+	providerMetricName     = "providers"
+	providerErrorCountName = "provider_error_count"
 	statusKey              = "status"
 
 	providerDesc      = "Number of external data providers by status"
 	providerErrorDesc = "Incremental counter for all provider errors occurring over time"
 )
 
-var (
-	providerErrorCountM metric.Int64Counter
-)
+var providerErrorCountM metric.Int64Counter
 
 func (r *reporter) observeProviderMetric(_ context.Context, o metric.Int64Observer) error {
 	r.mu.RLock()

@@ -36,13 +36,13 @@ type ProviderPodStatusStatus struct {
 	// Storing the provider UID allows us to detect drift, such as
 	// when a provider has been recreated after its CRD was deleted
 	// out from under it, interrupting the watch
-	ProviderUID         types.UID       `json:"providerUID,omitempty"`
-	Operations          []string        `json:"operations,omitempty"`
-	Active              bool            `json:"active,omitempty"`
+	ProviderUID         types.UID        `json:"providerUID,omitempty"`
+	Operations          []string         `json:"operations,omitempty"`
+	Active              bool             `json:"active,omitempty"`
 	Errors              []*ProviderError `json:"errors,omitempty"`
-	ObservedGeneration  int64           `json:"observedGeneration,omitempty"`
-	LastTransitionTime  *metav1.Time    `json:"lastTransitionTime,omitempty"`
-	LastCacheUpdateTime *metav1.Time    `json:"lastCacheUpdateTime,omitempty"`
+	ObservedGeneration  int64            `json:"observedGeneration,omitempty"`
+	LastTransitionTime  *metav1.Time     `json:"lastTransitionTime,omitempty"`
+	LastCacheUpdateTime *metav1.Time     `json:"lastCacheUpdateTime,omitempty"`
 }
 
 // ProviderError represents a single error caught while managing providers.
@@ -64,7 +64,6 @@ const (
 	// UpsertCacheError indicates an error updating the provider cache.
 	UpsertCacheError providerErrorType = "UpsertCache"
 )
-
 
 // +kubebuilder:object:root=true
 // ProviderPodStatus is the Schema for the providerpodstatuses API.
@@ -98,7 +97,7 @@ func NewProviderStatusForPod(pod *corev1.Pod, providerName string, scheme *runti
 	obj.Status.Operations = operations.AssignedStringList()
 	obj.SetLabels(map[string]string{
 		ProviderNameLabel: providerName,
-		PodLabel:            pod.Name,
+		PodLabel:          pod.Name,
 	})
 
 	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {

@@ -21,8 +21,8 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
-	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
@@ -173,7 +173,7 @@ func (r *ReconcileProviderStatus) Reconcile(ctx context.Context, request reconci
 		if statusObjs[i].Status.ProviderUID != providerObj.GetUID() {
 			continue
 		}
-		s = append(s, toProviderPodStatusStatus(statusObjs[i].Status))
+		s = append(s, toProviderPodStatusStatus(&statusObjs[i].Status))
 	}
 
 	providerObj.Status.ByPod = s
@@ -200,25 +200,25 @@ func (s sortableStatuses) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-func toProviderPodStatusStatus(status statusv1beta1.ProviderPodStatusStatus) externaldatav1beta1.ProviderPodStatusStatus {
+func toProviderPodStatusStatus(status *statusv1beta1.ProviderPodStatusStatus) externaldatav1beta1.ProviderPodStatusStatus {
 	errs := make([]externaldatav1beta1.ProviderError, len(status.Errors))
-    for i, err := range status.Errors {
-        errs[i] = externaldatav1beta1.ProviderError{
-            Type:           externaldatav1beta1.ProviderErrorType(err.Type),
-            Message:        err.Message,
-            Retryable:      err.Retryable,
-            ErrorTimestamp: err.ErrorTimestamp,
-        }
-    }
+	for i, err := range status.Errors {
+		errs[i] = externaldatav1beta1.ProviderError{
+			Type:           externaldatav1beta1.ProviderErrorType(err.Type),
+			Message:        err.Message,
+			Retryable:      err.Retryable,
+			ErrorTimestamp: err.ErrorTimestamp,
+		}
+	}
 	convertedStatus := externaldatav1beta1.ProviderPodStatusStatus{
-            ID:                  status.ID,
-            ProviderUID:         status.ProviderUID,
-            Active:              status.Active,
-            Errors:              errs,
-            Operations:          status.Operations,
-            LastTransitionTime:  status.LastTransitionTime,
-            LastCacheUpdateTime: status.LastCacheUpdateTime,
-            ObservedGeneration:  status.ObservedGeneration,
-        }
+		ID:                  status.ID,
+		ProviderUID:         status.ProviderUID,
+		Active:              status.Active,
+		Errors:              errs,
+		Operations:          status.Operations,
+		LastTransitionTime:  status.LastTransitionTime,
+		LastCacheUpdateTime: status.LastCacheUpdateTime,
+		ObservedGeneration:  status.ObservedGeneration,
+	}
 	return convertedStatus
 }

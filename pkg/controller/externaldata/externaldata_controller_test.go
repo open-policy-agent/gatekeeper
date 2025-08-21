@@ -41,14 +41,10 @@ import (
 
 const timeout = time.Second * 20
 
-// generateUniqueName creates a unique resource name for testing to avoid race conditions
+// generateUniqueName creates a unique resource name for testing to avoid race conditions.
 func generateUniqueName(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
 }
-
-var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
-	Name: "my-provider", // This will be dynamically updated in tests
-}}
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) manager.Manager {
@@ -72,10 +68,10 @@ func setupManager(t *testing.T) manager.Manager {
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	
+
 	// Generate unique names for this test run to avoid race conditions
 	providerName := generateUniqueName("my-provider")
-	
+
 	instance := &externaldatav1beta1.Provider{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "externaldata.gatekeeper.sh/v1beta1",

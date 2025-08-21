@@ -43,7 +43,7 @@ func TestNewProviderStatusForPod(t *testing.T) {
 	expectedStatus.Status.Operations = operations.AssignedStringList()
 	expectedStatus.SetLabels(map[string]string{
 		v1beta1.ProviderNameLabel: providerName,
-		v1beta1.PodLabel:        podName,
+		v1beta1.PodLabel:          podName,
 	})
 
 	err = controllerutil.SetOwnerReference(pod, expectedStatus, scheme)
