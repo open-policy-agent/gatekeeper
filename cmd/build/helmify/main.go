@@ -170,7 +170,6 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-manager-role" && kind == "ClusterRole" {
-				obj = strings.Replace(obj, "- apiGroups:\n  - policy\n  resourceNames:\n  - gatekeeper-admin\n  resources:\n  - podsecuritypolicies\n  verbs:\n  - use\n", "{{- if and .Values.psp.enabled (.Capabilities.APIVersions.Has \"policy/v1beta1/PodSecurityPolicy\") }}\n- apiGroups:\n  - policy\n  resourceNames:\n  - gatekeeper-admin\n  resources:\n  - podsecuritypolicies\n  verbs:\n  - use\n{{- end }}\n", 1)
 				obj = strings.Replace(obj, "- gatekeeper-validating-webhook-configuration\n", "- {{ .Values.validatingWebhookName }}\n", 1)
 				obj = strings.Replace(obj, "- gatekeeper-mutating-webhook-configuration\n", "- {{ .Values.mutatingWebhookName }}\n", 1)
 			}
