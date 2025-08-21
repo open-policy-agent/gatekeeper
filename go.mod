@@ -4,6 +4,8 @@ go 1.24.0
 
 toolchain go1.24.2
 
+replace github.com/open-policy-agent/frameworks/constraint => /mount/d/go/src/github.com/open-policy-agent/frameworks/constraint
+
 require (
 	cloud.google.com/go/trace v1.10.11
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.44.0
