@@ -77,7 +77,7 @@ func PodStatusToProviderMapper(selfOnly bool) handler.TypedMapFunc[*statusv1beta
 		labels := obj.GetLabels()
 		name, ok := labels[statusv1beta1.ProviderNameLabel]
 		if !ok {
-			log.Error(fmt.Errorf("provider status reskource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a provider status resource")
+			log.Error(fmt.Errorf("provider status resource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a provider status resource")
 			return nil
 		}
 		if selfOnly {
