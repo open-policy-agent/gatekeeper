@@ -15,6 +15,7 @@ resources:
 - bases/mutations.gatekeeper.sh_modifyset.yaml
 - bases/expansion.gatekeeper.sh_expansiontemplate.yaml
 - bases/status.gatekeeper.sh_connectionpodstatuses.yaml
+- bases/status.gatekeeper.sh_providerpodstatuses.yaml
 - bases/connection.gatekeeper.sh_connections.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
