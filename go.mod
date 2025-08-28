@@ -4,7 +4,7 @@ go 1.24.0
 
 toolchain go1.24.2
 
-replace github.com/open-policy-agent/frameworks/constraint => /mount/d/go/src/github.com/open-policy-agent/frameworks/constraint
+replace github.com/open-policy-agent/frameworks/constraint => github.com/JaydipGabani/frameworks/constraint v0.0.0-20250821185440-b4ad9bd7ec22
 
 require (
 	cloud.google.com/go/trace v1.10.11
