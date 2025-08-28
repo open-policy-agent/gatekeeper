@@ -3,8 +3,11 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  {{- $commonAnnotations := include "gatekeeper.commonAnnotations" . | trim }}
+  {{- if $commonAnnotations }}
   annotations:
-    {{- include "gatekeeper.commonAnnotations" . | nindent 4 }}
+    {{- $commonAnnotations | nindent 4 }}
+  {{- end }}
   labels:
     {{- include "gatekeeper.commonLabels" . | nindent 4 }}
     app: '{{ template "gatekeeper.name" . }}'
