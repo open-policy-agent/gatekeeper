@@ -150,3 +150,21 @@ Output post install webhook probe volume entry
   secret:
     secretName: {{ .Values.externalCertInjection.secretName }}
 {{- end -}}
+
+{{/*
+Extra volume mounts for audit and controller-manager pods
+*/}}
+{{- define "gatekeeper.extraVolumeMounts" -}}
+{{- if .Values.extraVolumeMounts }}
+{{- toYaml .Values.extraVolumeMounts }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Extra volume mounts for audit and controller-manager pods
+*/}}
+{{- define "gatekeeper.extraVolumes" -}}
+{{- if .Values.extraVolumes }}
+{{- toYaml .Values.extraVolumes }}
+{{- end -}}
+{{- end -}}

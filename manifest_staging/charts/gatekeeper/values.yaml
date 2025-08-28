@@ -49,6 +49,8 @@ resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
 enableK8sNativeValidation: true
 commonAnnotations: {}
+extraVolumeMounts: []
+extraVolumes: []
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds

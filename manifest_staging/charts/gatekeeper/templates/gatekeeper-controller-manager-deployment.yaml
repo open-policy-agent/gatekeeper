@@ -183,6 +183,7 @@ spec:
           {{- end }}
           {{- toYaml .Values.controllerManager.securityContext | nindent 10}}
         volumeMounts:
+        {{- include "gatekeeper.extraVolumeMounts" . | nindent 8 }}
         - mountPath: /certs
           name: cert
           readOnly: true
@@ -204,6 +205,7 @@ spec:
       topologySpreadConstraints:
         {{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}
       volumes:
+      {{- include "gatekeeper.extraVolumes" . | nindent 6 }}
       - name: cert
         secret:
           defaultMode: 420
