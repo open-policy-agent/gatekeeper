@@ -15,7 +15,7 @@ require (
 	github.com/golang/protobuf v1.5.4
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/onsi/gomega v1.38.0
+	github.com/onsi/gomega v1.38.2
 	github.com/open-policy-agent/cert-controller v0.13.1-0.20250623175543-15df24dbbee4
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20250812234806-1e1e2926f82f
 	github.com/open-policy-agent/opa v1.7.1
@@ -145,6 +145,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
+	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f // indirect
 	golang.org/x/sys v0.35.0 // indirect
