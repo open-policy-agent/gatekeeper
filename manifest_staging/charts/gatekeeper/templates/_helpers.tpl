@@ -88,8 +88,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Common annotations
 */}}
-{{- define "gatekeeper.commonAnnotations" -}}
-{{- if .Values.commonAnnotations }}
+{{- if and .Values.commonAnnotations (gt (len .Values.commonAnnotations) 0) }}
 {{ toYaml .Values.commonAnnotations }}
 {{- end }}
 {{- end }}
