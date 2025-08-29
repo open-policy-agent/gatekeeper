@@ -1,14 +1,13 @@
 package transform
 
 import (
-	"sync"
-
 	"github.com/go-logr/logr"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
-	rest "k8s.io/client-go/rest"
+	"k8s.io/client-go/rest"
+	"sync"
 )
 
 var vapMux sync.RWMutex
@@ -46,30 +45,27 @@ func IsVapAPIEnabled(log *logr.Logger) (bool, *schema.GroupVersion) {
 		return false, nil
 	}
 
-	groupVersion := admissionregistrationv1.SchemeGroupVersion
-	resList, err := clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
-	if err == nil {
-		for i := 0; i < len(resList.APIResources); i++ {
-			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
-				VapAPIEnabled = new(bool)
-				*VapAPIEnabled = true
-				GroupVersion = &groupVersion
-				return true, GroupVersion
+	checkGroupVersion := func(gv schema.GroupVersion) (bool, *schema.GroupVersion) {
+		resList, err := clientset.Discovery().ServerResourcesForGroupVersion(gv.String())
+		if err == nil {
+			for i := 0; i < len(resList.APIResources); i++ {
+				if resList.APIResources[i].Name == "validatingadmissionpolicies" {
+					VapAPIEnabled = new(bool)
+					*VapAPIEnabled = true
+					GroupVersion = &gv
+					return true, GroupVersion
+				}
 			}
 		}
+		return false, nil
 	}
 
-	groupVersion = admissionregistrationv1beta1.SchemeGroupVersion
-	resList, err = clientset.Discovery().ServerResourcesForGroupVersion(groupVersion.String())
-	if err == nil {
-		for i := 0; i < len(resList.APIResources); i++ {
-			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
-				VapAPIEnabled = new(bool)
-				*VapAPIEnabled = true
-				GroupVersion = &groupVersion
-				return true, GroupVersion
-			}
-		}
+	if ok, gvk := checkGroupVersion(admissionregistrationv1.SchemeGroupVersion); ok {
+		return true, gvk
+	}
+
+	if ok, gvk := checkGroupVersion(admissionregistrationv1beta1.SchemeGroupVersion); ok {
+		return true, gvk
 	}
 
 	log.Error(err, "error checking VAP API availability", "IsVapAPIEnabled", "false")
