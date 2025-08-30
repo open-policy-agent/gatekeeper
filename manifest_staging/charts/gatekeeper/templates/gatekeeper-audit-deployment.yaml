@@ -3,6 +3,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  annotations:
+    {{- include "gatekeeper.commonAnnotations" . | nindent 4 }}
   labels:
     {{- include "gatekeeper.commonLabels" . | nindent 4 }}
     app: '{{ template "gatekeeper.name" . }}'
@@ -49,7 +51,7 @@ spec:
     spec:
       affinity:
         {{- toYaml .Values.audit.affinity | nindent 8 }}
-      automountServiceAccountToken: true
+      automountServiceAccountToken: {{ .Values.audit.serviceAccount.automountServiceAccountToken }}
       containers:
       - {{- if .Values.image.release }}
         image: {{ .Values.image.repository }}:{{ .Values.image.release }}
@@ -165,6 +167,7 @@ spec:
           {{- end }}
           {{- toYaml .Values.audit.securityContext | nindent 10}}
         volumeMounts:
+        {{- include "gatekeeper.extraVolumeMounts" . | nindent 8 }}
         - mountPath: /certs
           name: cert
           readOnly: true
@@ -193,6 +196,7 @@ spec:
       tolerations:
         {{- toYaml .Values.audit.tolerations | nindent 8 }}
       volumes:
+      {{- include "gatekeeper.extraVolumes" . | nindent 6 }}
       - name: cert
         secret:
           defaultMode: 420

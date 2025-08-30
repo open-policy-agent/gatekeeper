@@ -86,6 +86,15 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{/*
+Common annotations
+*/}}
+{{- define "gatekeeper.commonAnnotations" -}}
+{{- if .Values.commonAnnotations }}
+{{ toYaml .Values.commonAnnotations }}
+{{- end }}
+{{- end }}
+
+{{/*
 Selector labels
 */}}
 {{- define "gatekeeper.selectorLabels" -}}
@@ -141,4 +150,22 @@ Output post install webhook probe volume entry
 - name: cert
   secret:
     secretName: {{ .Values.externalCertInjection.secretName }}
+{{- end -}}
+
+{{/*
+Extra volume mounts for audit and controller-manager pods
+*/}}
+{{- define "gatekeeper.extraVolumeMounts" -}}
+{{- if .Values.extraVolumeMounts }}
+{{- toYaml .Values.extraVolumeMounts }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Extra volume mounts for audit and controller-manager pods
+*/}}
+{{- define "gatekeeper.extraVolumes" -}}
+{{- if .Values.extraVolumes }}
+{{- toYaml .Values.extraVolumes }}
+{{- end -}}
 {{- end -}}
