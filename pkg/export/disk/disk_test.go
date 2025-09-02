@@ -1317,6 +1317,104 @@ func TestRetryFailedConnections(t *testing.T) {
 	}
 }
 
+func TestExponentialBackoffRetryDelay(t *testing.T) {
+	tests := []struct {
+		name                string
+		retryCount          int
+		expectedDelay       time.Duration
+		tolerance           time.Duration
+		shouldCapAtMaxDelay bool
+	}{
+		{
+			name:          "First retry (count=1)",
+			retryCount:    1,
+			expectedDelay: 15 * time.Second, // baseRetryDelay * 2^0
+			tolerance:     100 * time.Millisecond,
+		},
+		{
+			name:          "Second retry (count=2)",
+			retryCount:    2,
+			expectedDelay: 30 * time.Second, // baseRetryDelay * 2^1
+			tolerance:     100 * time.Millisecond,
+		},
+		{
+			name:          "Third retry (count=3)",
+			retryCount:    3,
+			expectedDelay: 60 * time.Second, // baseRetryDelay * 2^2
+			tolerance:     100 * time.Millisecond,
+		},
+		{
+			name:          "Fourth retry (count=4)",
+			retryCount:    4,
+			expectedDelay: 120 * time.Second, // baseRetryDelay * 2^3
+			tolerance:     100 * time.Millisecond,
+		},
+		{
+			name:                "High retry count should cap at maxRetryDelay",
+			retryCount:          10,
+			expectedDelay:       maxRetryDelay,
+			tolerance:           100 * time.Millisecond,
+			shouldCapAtMaxDelay: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := &Writer{
+				mu:                sync.RWMutex{},
+				openConnections:   make(map[string]Connection),
+				closedConnections: make(map[string]FailedConnection),
+				cleanupDone:       make(chan struct{}),
+				cleanupStopped:    false,
+				closeAndRemoveFilesWithRetry: func(_ Connection) error {
+					return fmt.Errorf("forced failure to test retry delay")
+				},
+			}
+
+			now := time.Now()
+			writer.closedConnections["test-conn"] = FailedConnection{
+				Connection:  Connection{Path: t.TempDir(), ClosedConnectionTTL: maxConnectionAge},
+				FailedAt:    now.Add(-1 * time.Minute),
+				RetryCount:  tt.retryCount - 1, // Will be incremented to retryCount during retry
+				NextRetryAt: now.Add(-1 * time.Second),
+			}
+
+			writer.retryFailedConnections()
+
+			conn, exists := writer.closedConnections["test-conn"]
+			if !exists {
+				t.Fatal("Connection should still exist after failed retry")
+			}
+
+			if conn.RetryCount != tt.retryCount {
+				t.Errorf("Expected RetryCount to be %d, got %d", tt.retryCount, conn.RetryCount)
+			}
+
+			actualDelay := conn.NextRetryAt.Sub(now)
+			minExpected := tt.expectedDelay - tt.tolerance
+			maxExpected := tt.expectedDelay + tt.tolerance
+
+			if actualDelay < minExpected || actualDelay > maxExpected {
+				t.Errorf("Expected delay between %v and %v, got %v", minExpected, maxExpected, actualDelay)
+			}
+
+			// Verify exponential behavior for non-capped cases
+			if !tt.shouldCapAtMaxDelay && tt.retryCount > 1 {
+				// Verify it's longer than linear progression would be
+				linearDelay := time.Duration(tt.retryCount) * baseRetryDelay
+				if actualDelay < linearDelay {
+					t.Errorf("Expected exponential delay (%v) to be greater than or equal to linear delay (%v)", actualDelay, linearDelay)
+				}
+			}
+
+			// Verify max delay cap is respected (with tolerance)
+			if actualDelay > maxRetryDelay+tt.tolerance {
+				t.Errorf("Delay (%v) should not exceed maximum retry delay (%v) plus tolerance (%v)", actualDelay, maxRetryDelay, tt.tolerance)
+			}
+		})
+	}
+}
+
 func TestBackgroundCleanupLifecycle(t *testing.T) {
 	t.Run("Background cleanup starts on first CreateConnection", func(t *testing.T) {
 		writer := &Writer{

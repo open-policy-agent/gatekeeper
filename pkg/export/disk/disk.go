@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -65,6 +66,8 @@ const (
 	maxConnectionAge    = 10 * time.Minute
 	minConnectionAge    = 1 * time.Minute
 	baseRetryDelay      = 15 * time.Second
+	retryBackoffFactor  = 2.0
+	maxRetryDelay       = 10 * time.Minute
 )
 
 var Connections = &Writer{
@@ -422,8 +425,12 @@ func (r *Writer) retryFailedConnections() {
 		} else {
 			log.Info("Failed to close connection on retry", "connection", name, "error", err, "attempt", failedConn.RetryCount+1)
 			failedConn.RetryCount++
-			delay := time.Duration(failedConn.RetryCount) * baseRetryDelay
-			failedConn.NextRetryAt = now.Add(delay)
+			// Calculate exponential backoff delay with a maximum cap
+			exponentialDelay := time.Duration(float64(baseRetryDelay) * math.Pow(retryBackoffFactor, float64(failedConn.RetryCount-1)))
+			if exponentialDelay > maxRetryDelay {
+				exponentialDelay = maxRetryDelay
+			}
+			failedConn.NextRetryAt = now.Add(exponentialDelay)
 			r.closedConnections[name] = failedConn
 		}
 	}
