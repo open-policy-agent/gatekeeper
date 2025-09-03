@@ -110,8 +110,8 @@ func TestReconcile_E2E(t *testing.T) {
 				ProviderUID:         providerObj.GetUID(),
 				ID:                  pod.Name,
 				Operations:          []string{},
-				LastTransitionTime:  &metav1.Time{Time: time.Now()},
-				LastCacheUpdateTime: &metav1.Time{Time: time.Now()},
+				LastTransitionTime:  util.Now(),
+				LastCacheUpdateTime: util.Now(),
 			},
 		}
 
@@ -214,8 +214,8 @@ func TestReconcile_E2E(t *testing.T) {
 					ProviderUID:         providerObj.GetUID(),
 					ID:                  podName,
 					Operations:          []string{},
-					LastTransitionTime:  &metav1.Time{Time: time.Now()},
-					LastCacheUpdateTime: &metav1.Time{Time: time.Now()},
+					LastTransitionTime:  util.Now(),
+					LastCacheUpdateTime: util.Now(),
 				},
 			}
 			providerPodStatusObjs = append(providerPodStatusObjs, providerPodStatusObj)
@@ -284,21 +284,21 @@ func TestReconcile_E2E(t *testing.T) {
 						Type:           statusv1beta1.ConversionError,
 						Message:        "Failed to convert to unversioned external data provider",
 						Retryable:      true,
-						ErrorTimestamp: &metav1.Time{Time: time.Now()},
+						ErrorTimestamp: util.Now(),
 					},
 					{
 						Type:           statusv1beta1.UpsertCacheError,
 						Message:        "Failed to update external data provider cache",
 						Retryable:      false,
-						ErrorTimestamp: &metav1.Time{Time: time.Now()},
+						ErrorTimestamp: util.Now(),
 					},
 				},
 				ObservedGeneration:  providerObj.GetGeneration(),
 				ProviderUID:         providerObj.GetUID(),
 				ID:                  pod.Name,
 				Operations:          []string{},
-				LastTransitionTime:  &metav1.Time{Time: time.Now()},
-				LastCacheUpdateTime: &metav1.Time{Time: time.Now()},
+				LastTransitionTime:  util.Now(),
+				LastCacheUpdateTime: util.Now(),
 			},
 		}
 
@@ -412,6 +412,209 @@ func TestReconcile_E2E(t *testing.T) {
 		result, err := reconciler.Reconcile(ctx, nonExistentRequest)
 		g.Expect(err).Should(gomega.BeNil(), "Reconciling non-existent provider should not return an error")
 		g.Expect(result).Should(gomega.Equal(reconcile.Result{}), "Result should be empty for non-existent provider")
+	})
+
+	t.Run("Reconcile with status errors and recover", func(t *testing.T) {
+		providerObj := externaldatav1beta1.Provider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "error-provider-then-recover",
+			},
+			Spec: externaldatav1beta1.ProviderSpec{
+				URL:      "http://error-provider:8080",
+				Timeout:  10,
+				CABundle: "",
+			},
+		}
+		typeProviderNamespacedName := types.NamespacedName{
+			Name: "error-provider-then-recover",
+		}
+
+		// Create the provider object
+		g.Expect(k8sClient.Create(ctx, &providerObj)).Should(gomega.Succeed())
+
+		// Create ProviderPodStatus with errors
+		providerPodStatusObjName, _ := statusv1beta1.KeyForProvider(pod.Name, providerObj.Name)
+		providerPodStatusObj := statusv1beta1.ProviderPodStatus{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      providerPodStatusObjName,
+				Namespace: util.GetNamespace(),
+				Labels: map[string]string{
+					statusv1beta1.ProviderNameLabel: providerObj.Name,
+					statusv1beta1.PodLabel:          pod.Name,
+				},
+			},
+			Status: statusv1beta1.ProviderPodStatusStatus{
+				Active: false,
+				Errors: []*statusv1beta1.ProviderError{
+					{
+						Type:           statusv1beta1.ConversionError,
+						Message:        "Failed to convert to unversioned external data provider",
+						Retryable:      true,
+						ErrorTimestamp: util.Now(),
+					},
+					{
+						Type:           statusv1beta1.UpsertCacheError,
+						Message:        "Failed to update external data provider cache",
+						Retryable:      false,
+						ErrorTimestamp: util.Now(),
+					},
+				},
+				ObservedGeneration:  providerObj.GetGeneration(),
+				ProviderUID:         providerObj.GetUID(),
+				ID:                  pod.Name,
+				Operations:          []string{},
+				LastTransitionTime:  util.Now(),
+				LastCacheUpdateTime: util.Now(),
+			},
+		}
+
+		g.Expect(k8sClient.Create(ctx, &providerPodStatusObj)).Should(gomega.Succeed())
+
+		// Await for reconciliation
+		g.Eventually(func() bool {
+			expectedReq := reconcile.Request{NamespacedName: typeProviderNamespacedName}
+			_, finished := requests.Load(expectedReq)
+			return finished
+		}).WithTimeout(timeout).Should(gomega.BeTrue())
+
+		// Check that errors are properly reflected in provider status
+		g.Eventually(func(g gomega.Gomega) {
+			err := k8sClient.Get(ctx, typeProviderNamespacedName, &providerObj)
+			g.Expect(err).Should(gomega.Succeed())
+			g.Expect(len(providerObj.Status.ByPod)).Should(gomega.Equal(1), "Provider should have one pod status")
+			g.Expect(len(providerObj.Status.ByPod[0].Errors)).Should(gomega.Equal(2), "Provider status should have two errors")
+			g.Expect(providerObj.Status.ByPod[0].Active).Should(gomega.BeFalse(), "Provider should not be active due to errors")
+
+			// Check error details
+			errors := providerObj.Status.ByPod[0].Errors
+			g.Expect(string(errors[0].Type)).Should(gomega.Equal(string(statusv1beta1.ConversionError)), "First error should be connection error")
+			g.Expect(errors[0].Message).Should(gomega.Equal("Failed to convert to unversioned external data provider"))
+			g.Expect(errors[0].Retryable).Should(gomega.BeTrue())
+
+			g.Expect(string(errors[1].Type)).Should(gomega.Equal(string(statusv1beta1.UpsertCacheError)), "Second error should be query error")
+			g.Expect(errors[1].Message).Should(gomega.Equal("Failed to update external data provider cache"))
+			g.Expect(errors[1].Retryable).Should(gomega.BeFalse())
+		}).WithTimeout(timeout).Should(gomega.Succeed())
+
+		// transition from two errors to one error
+		providerPodStatusObj.Status = statusv1beta1.ProviderPodStatusStatus{
+			Active: false,
+			Errors: []*statusv1beta1.ProviderError{
+				{
+					Type:           statusv1beta1.ConversionError,
+					Message:        "Failed to convert to unversioned external data provider",
+					Retryable:      true,
+					ErrorTimestamp: util.Now(),
+				},
+			},
+			ObservedGeneration:  providerObj.GetGeneration(),
+			ProviderUID:         providerObj.GetUID(),
+			ID:                  pod.Name,
+			Operations:          []string{},
+			LastTransitionTime:  util.Now(),
+			LastCacheUpdateTime: util.Now(),
+		}
+
+		g.Expect(k8sClient.Update(ctx, &providerPodStatusObj)).Should(gomega.Succeed())
+
+		// Await for reconciliation
+		g.Eventually(func() bool {
+			expectedReq := reconcile.Request{NamespacedName: typeProviderNamespacedName}
+			_, finished := requests.Load(expectedReq)
+			return finished
+		}).WithTimeout(timeout).Should(gomega.BeTrue())
+
+		// Check that errors are properly reflected in provider status
+		g.Eventually(func(g gomega.Gomega) {
+			err := k8sClient.Get(ctx, typeProviderNamespacedName, &providerObj)
+			g.Expect(err).Should(gomega.Succeed())
+			g.Expect(len(providerObj.Status.ByPod)).Should(gomega.Equal(1), "Provider should have one pod status")
+			g.Expect(len(providerObj.Status.ByPod[0].Errors)).Should(gomega.Equal(1), "Provider status should have one error")
+			g.Expect(providerObj.Status.ByPod[0].Active).Should(gomega.BeFalse(), "Provider should not be active due to error")
+
+			// Check error details
+			errors := providerObj.Status.ByPod[0].Errors
+			g.Expect(string(errors[0].Type)).Should(gomega.Equal(string(statusv1beta1.ConversionError)), "First error should be connection error")
+			g.Expect(errors[0].Message).Should(gomega.Equal("Failed to convert to unversioned external data provider"))
+			g.Expect(errors[0].Retryable).Should(gomega.BeTrue())
+		}).WithTimeout(timeout).Should(gomega.Succeed())
+
+		// transition between types of error
+		providerPodStatusObj.Status = statusv1beta1.ProviderPodStatusStatus{
+			Active: false,
+			Errors: []*statusv1beta1.ProviderError{
+				{
+					Type:           statusv1beta1.UpsertCacheError,
+					Message:        "Failed to update external data provider cache",
+					Retryable:      false,
+					ErrorTimestamp: util.Now(),
+				},
+			},
+			ObservedGeneration:  providerObj.GetGeneration(),
+			ProviderUID:         providerObj.GetUID(),
+			ID:                  pod.Name,
+			Operations:          []string{},
+			LastTransitionTime:  util.Now(),
+			LastCacheUpdateTime: util.Now(),
+		}
+
+		g.Expect(k8sClient.Update(ctx, &providerPodStatusObj)).Should(gomega.Succeed())
+
+		// Await for reconciliation
+		g.Eventually(func() bool {
+			expectedReq := reconcile.Request{NamespacedName: typeProviderNamespacedName}
+			_, finished := requests.Load(expectedReq)
+			return finished
+		}).WithTimeout(timeout).Should(gomega.BeTrue())
+
+		// Check that errors are properly reflected in provider status
+		g.Eventually(func(g gomega.Gomega) {
+			err := k8sClient.Get(ctx, typeProviderNamespacedName, &providerObj)
+			g.Expect(err).Should(gomega.Succeed())
+			g.Expect(len(providerObj.Status.ByPod)).Should(gomega.Equal(1), "Provider should have one pod status")
+			g.Expect(len(providerObj.Status.ByPod[0].Errors)).Should(gomega.Equal(1), "Provider status should have one error")
+			g.Expect(providerObj.Status.ByPod[0].Active).Should(gomega.BeFalse(), "Provider should not be active due to error")
+
+			// Check error details
+			errors := providerObj.Status.ByPod[0].Errors
+			g.Expect(string(errors[0].Type)).Should(gomega.Equal(string(statusv1beta1.UpsertCacheError)), "Second error should be query error")
+			g.Expect(errors[0].Message).Should(gomega.Equal("Failed to update external data provider cache"))
+			g.Expect(errors[0].Retryable).Should(gomega.BeFalse())
+		}).WithTimeout(timeout).Should(gomega.Succeed())
+
+		// transition to no error
+		providerPodStatusObj.Status = statusv1beta1.ProviderPodStatusStatus{
+			Active:              true,
+			Errors:              []*statusv1beta1.ProviderError{},
+			ObservedGeneration:  providerObj.GetGeneration(),
+			ProviderUID:         providerObj.GetUID(),
+			ID:                  pod.Name,
+			Operations:          []string{},
+			LastTransitionTime:  util.Now(),
+			LastCacheUpdateTime: util.Now(),
+		}
+
+		g.Expect(k8sClient.Update(ctx, &providerPodStatusObj)).Should(gomega.Succeed())
+
+		// Await for reconciliation
+		g.Eventually(func() bool {
+			expectedReq := reconcile.Request{NamespacedName: typeProviderNamespacedName}
+			_, finished := requests.Load(expectedReq)
+			return finished
+		}).WithTimeout(timeout).Should(gomega.BeTrue())
+
+		// Check that errors are properly reflected in provider status
+		g.Eventually(func(g gomega.Gomega) {
+			err := k8sClient.Get(ctx, typeProviderNamespacedName, &providerObj)
+			g.Expect(err).Should(gomega.Succeed())
+			g.Expect(len(providerObj.Status.ByPod)).Should(gomega.Equal(1), "Provider should have one pod status")
+			g.Expect(len(providerObj.Status.ByPod[0].Errors)).Should(gomega.Equal(0), "Provider status should have no errors")
+			g.Expect(providerObj.Status.ByPod[0].Active).Should(gomega.BeTrue(), "Provider should be active due to no errors")
+		}).WithTimeout(timeout).Should(gomega.Succeed())
+
+		// Cleanup
+		g.Expect(k8sClient.Delete(ctx, &providerPodStatusObj)).Should(gomega.Succeed())
+		g.Expect(k8sClient.Delete(ctx, &providerObj)).Should(gomega.Succeed())
 	})
 }
 

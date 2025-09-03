@@ -48,7 +48,7 @@ type Adder struct {
 
 func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 
-// Add creates a new provider Status Controller and adds it to the Manager. The Manager will set fields on the Controller
+// Add creates a new ProviderPodStatus Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.IsAssigned(operations.Status) {
@@ -77,13 +77,13 @@ func PodStatusToProviderMapper(selfOnly bool) handler.TypedMapFunc[*statusv1beta
 		labels := obj.GetLabels()
 		name, ok := labels[statusv1beta1.ProviderNameLabel]
 		if !ok {
-			log.Error(fmt.Errorf("provider status resource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a provider status resource")
+			log.Error(fmt.Errorf("ProviderPodStatus resource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a ProviderPodStatus resource")
 			return nil
 		}
 		if selfOnly {
 			pod, ok := labels[statusv1beta1.PodLabel]
 			if !ok {
-				log.Error(fmt.Errorf("provider status resource with no pod label: %s", obj.GetName()), "missing label while attempting to map a provider status resource")
+				log.Error(fmt.Errorf("ProviderPodStatus resource with no pod label: %s", obj.GetName()), "missing label while attempting to map a ProviderPodStatus resource")
 			}
 			// Do not attempt to reconcile the resource when other pods have changed their status
 			if pod != util.GetPodName() {
@@ -134,7 +134,7 @@ type ReconcileProviderStatus struct {
 	log    logr.Logger
 }
 
-// +kubebuilder:rbac:groups=externaldata.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=externaldata.gatekeeper.sh,resources=providers/status,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=status.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reads the state of the cluster for a Provider object and makes changes based on the ProviderPodStatuses.

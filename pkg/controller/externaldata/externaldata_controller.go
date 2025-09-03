@@ -3,7 +3,6 @@ package externaldata
 import (
 	"context"
 	"fmt"
-	"time"
 
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
@@ -128,7 +127,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	defer r.metrics.report(ctx)
-	log.V(logging.DebugLevel).Info("Reconcile", "request", request)
+	log.Info("Reconcile", "request", request)
 
 	deleted := false
 	provider := &externaldatav1beta1.Provider{}
@@ -159,7 +158,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			Message:        err.Error(),
 			Type:           statusv1beta1.ConversionError,
 			Retryable:      true,
-			ErrorTimestamp: &metav1.Time{Time: time.Now()},
+			ErrorTimestamp: util.Now(),
 		}}
 		r.metrics.reportProviderError(ctx)
 		r.metrics.add(request.NamespacedName, metrics.ErrorStatus)
@@ -174,7 +173,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				Message:        err.Error(),
 				Type:           statusv1beta1.UpsertCacheError,
 				Retryable:      true,
-				ErrorTimestamp: &metav1.Time{Time: time.Now()},
+				ErrorTimestamp: util.Now(),
 			}}
 			r.metrics.reportProviderError(ctx)
 			r.metrics.add(request.NamespacedName, metrics.ErrorStatus)
@@ -211,14 +210,14 @@ func (r *Reconciler) updateOrCreatePodStatus(ctx context.Context, provider *exte
 		shouldCreate = false
 	case errors.IsNotFound(err):
 		if status, err = r.newProviderStatus(pod, provider); err != nil {
-			return fmt.Errorf("creating new provider status: %w", err)
+			return fmt.Errorf("creating new ProviderPodStatus: %w", err)
 		}
 	default:
-		return fmt.Errorf("getting provider status in name %s, namespace %s: %w", provider.GetName(), provider.GetNamespace(), err)
+		return fmt.Errorf("getting ProviderPodStatus in name %s, namespace %s: %w", provider.GetName(), provider.GetNamespace(), err)
 	}
 
 	if errorChanged(status.Status.Errors, providerErrors) {
-		status.Status.LastTransitionTime = &metav1.Time{Time: time.Now()}
+		status.Status.LastTransitionTime = util.Now()
 	}
 
 	setStatus(status, providerErrors)
@@ -264,7 +263,7 @@ func setStatus(status *statusv1beta1.ProviderPodStatus, providerErrors []*status
 	if len(providerErrors) == 0 {
 		status.Status.Errors = nil
 		status.Status.Active = true
-		status.Status.LastCacheUpdateTime = &metav1.Time{Time: time.Now()}
+		status.Status.LastCacheUpdateTime = util.Now()
 		return
 	}
 

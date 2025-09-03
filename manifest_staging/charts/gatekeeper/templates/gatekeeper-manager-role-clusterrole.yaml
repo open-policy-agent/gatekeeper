@@ -134,7 +134,7 @@ rules:
 - apiGroups:
   - externaldata.gatekeeper.sh
   resources:
-  - '*'
+  - providers
   verbs:
   - create
   - delete
@@ -146,10 +146,8 @@ rules:
 - apiGroups:
   - externaldata.gatekeeper.sh
   resources:
-  - providers
+  - providers/status
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch

@@ -82,9 +82,9 @@ type ProviderPodStatusList struct {
 	Items           []ProviderPodStatus `json:"items"`
 }
 
-// NewProviderStatusForPod returns a provider status object
+// NewProviderStatusForPod returns a ProviderPodStatus object
 // that has been initialized with the bare minimum of fields to make it functional
-// with the provider status controller.
+// with the ProviderPodStatus controller.
 func NewProviderStatusForPod(pod *corev1.Pod, providerName string, scheme *runtime.Scheme) (*ProviderPodStatus, error) {
 	obj := &ProviderPodStatus{}
 	name, err := KeyForProvider(pod.Name, providerName)
