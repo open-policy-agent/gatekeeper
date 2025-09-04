@@ -112,7 +112,7 @@ func runE(cmd *cobra.Command, args []string) error {
 func runSuites(ctx context.Context, fileSystem fs.FS, suites []*verify.Suite, filter verify.Filter) error {
 	isFailure := false
 
-	runner, err := verify.NewRunner(fileSystem, gator.NewOPAClient, verify.IncludeTrace(includeTrace), verify.UseK8sCEL(flagEnableK8sCel))
+	runner, err := verify.NewRunner(fileSystem, gator.NewOPAClient, verify.IncludeTrace(includeTrace), verify.EnablePrint(verbose), verify.UseK8sCEL(flagEnableK8sCel))
 	if err != nil {
 		return err
 	}
