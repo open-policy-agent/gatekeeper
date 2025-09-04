@@ -225,6 +225,32 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
+	// Watch for changes to ValidatingAdmissionPolicy v1 resources
+	err = c.Watch(
+		source.Kind(mgr.GetCache(), &admissionregistrationv1.ValidatingAdmissionPolicy{},
+			handler.TypedEnqueueRequestForOwner[*admissionregistrationv1.ValidatingAdmissionPolicy](
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&v1beta1.ConstraintTemplate{},
+				handler.OnlyControllerOwner(),
+			)))
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to ValidatingAdmissionPolicy v1beta1 resources
+	err = c.Watch(
+		source.Kind(mgr.GetCache(), &admissionregistrationv1beta1.ValidatingAdmissionPolicy{},
+			handler.TypedEnqueueRequestForOwner[*admissionregistrationv1beta1.ValidatingAdmissionPolicy](
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&v1beta1.ConstraintTemplate{},
+				handler.OnlyControllerOwner(),
+			)))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

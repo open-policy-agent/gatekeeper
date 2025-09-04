@@ -194,6 +194,33 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	if err != nil {
 		return err
 	}
+
+	// Watch for changes to ValidatingAdmissionPolicyBinding v1 resources
+	err = c.Watch(
+		source.Kind(mgr.GetCache(), &admissionregistrationv1.ValidatingAdmissionPolicyBinding{},
+			handler.TypedEnqueueRequestForOwner[*admissionregistrationv1.ValidatingAdmissionPolicyBinding](
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&unstructured.Unstructured{},
+				handler.OnlyControllerOwner(),
+			)))
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to ValidatingAdmissionPolicyBinding v1beta1 resources
+	err = c.Watch(
+		source.Kind(mgr.GetCache(), &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{},
+			handler.TypedEnqueueRequestForOwner[*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding](
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&unstructured.Unstructured{},
+				handler.OnlyControllerOwner(),
+			)))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
