@@ -27,6 +27,7 @@ import (
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
+	vwhc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/vwhc"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -189,6 +190,12 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(m); err != nil {
 		return fmt.Errorf("registering sync controller: %w", err)
+	}
+
+	// Create subordinate vwhc controller for watching operations configuration
+	vmhcAdder := vwhc.Adder{}
+	if err := vmhcAdder.Add(m); err != nil {
+		return fmt.Errorf("registering vmhc controller: %w", err)
 	}
 
 	for _, a := range Injectors {
