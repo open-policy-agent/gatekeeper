@@ -1,0 +1,103 @@
+# Example 1: CREATE-only mutation
+# This addresses the common issue where mutations on UPDATE operations
+# fail due to immutable field constraints (e.g., Pod env variables)
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: assign-otel-protocol-create-only
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+    operations: ["CREATE"]  # Only apply on CREATE operations
+  match:
+    scope: Namespaced
+    namespaces:
+      - "*"
+    excludedNamespaces:
+      - "kube-system"
+  location: "spec.containers[name:*].env[name:OTEL_EXPORTER_OTLP_PROTOCOL].value"
+  parameters:
+    assign:
+      value: "grpc"
+
+---
+# Example 2: Explicit CREATE and UPDATE mutation
+# Shows how to explicitly specify the default behavior
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: assign-security-context-create-update
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+    operations: ["CREATE", "UPDATE"]  # Apply on both CREATE and UPDATE
+  match:
+    scope: Namespaced
+  location: "spec.securityContext.runAsNonRoot"
+  parameters:
+    assign:
+      value: true
+
+---
+# Example 3: Legacy mutation (backward compatibility)
+# Demonstrates that existing mutations without operations field continue to work
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: assign-legacy-without-operations
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+    # No operations field - defaults to CREATE and UPDATE for backward compatibility
+  match:
+    scope: Namespaced
+  location: "metadata.labels.legacy-mutator"
+  parameters:
+    assign:
+      value: "true"
+
+---
+# Example 4: DELETE operation mutation (advanced use case)
+# Use with caution - most mutations don't need to run on DELETE
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: assign-delete-example
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+    operations: ["DELETE"]  # Example: Apply only on DELETE operations (if you have a use case)
+  match:
+    scope: Namespaced
+  location: "metadata.labels.deletion-timestamp"
+  parameters:
+    assign:
+      value: "processing"
+
+---
+# Example 5: All operations mutation
+# Demonstrates applying mutations on all possible operations
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: assign-all-operations
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+    operations: ["CREATE", "UPDATE", "DELETE"]  # Apply on all operations
+  match:
+    scope: Namespaced
+  location: "metadata.labels.lifecycle-stage"
+  parameters:
+    assign:
+      value: "managed"
