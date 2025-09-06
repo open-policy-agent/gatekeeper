@@ -709,10 +709,18 @@ func getViolationRef(gkNamespace, rkind, rname, rnamespace, rrv string, ruid typ
 
 func AppendValidationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
 	if operations.IsAssigned(operations.Webhook) {
-		return append(webhooks, rotator.WebhookInfo{
+		webhooks = append(webhooks, rotator.WebhookInfo{
 			Name: *VwhName,
 			Type: rotator.Validating,
 		})
+		for _, addlVwh := range strings.Split(*AdditionalVwhNamesToRotateCerts, ",") {
+			if addlVwh != *VwhName && addlVwh != "" {
+				webhooks = append(webhooks, rotator.WebhookInfo{
+					Name: addlVwh,
+					Type: rotator.Validating,
+				})
+			}
+		}
 	}
 	return webhooks
 }
