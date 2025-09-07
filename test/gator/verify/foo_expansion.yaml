@@ -1,0 +1,14 @@
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-foo
+spec:
+  applyTo:
+  - groups: [ "apps" ]
+    kinds: [ "FooTemplate" ]
+    versions: [ "v1" ]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Foo"
+    group: ""
+    version: "v1"

@@ -62,6 +62,8 @@ metadata:
   namespace: gatekeeper-system
   labels:
     HELMSUBST_DEPLOYMENT_LABELS: ""
+  annotations:
+    HELMSUBST_DEPLOYMENT_ANNOTATIONS: ""
 spec:
   replicas: HELMSUBST_DEPLOYMENT_REPLICAS
   revisionHistoryLimit: HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT
@@ -73,6 +75,7 @@ spec:
       annotations:
         HELMSUBST_ANNOTATIONS: ""
     spec:
+      automountServiceAccountToken: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SERVICE_ACCOUNT_AUTOMOUNT_TOKEN
       containers:
         - name: manager
           args:
@@ -173,6 +176,8 @@ metadata:
   namespace: gatekeeper-system
   labels:
     HELMSUBST_DEPLOYMENT_LABELS: ""
+  annotations:
+    HELMSUBST_DEPLOYMENT_ANNOTATIONS: ""
 spec:
   revisionHistoryLimit: HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT
   template:
@@ -181,6 +186,7 @@ spec:
         HELMSUBST_ANNOTATIONS: ""
         HELMSUBST_AUDIT_POD_ANNOTATIONS: ""
     spec:
+      automountServiceAccountToken: HELMSUBST_DEPLOYMENT_AUDIT_SERVICE_ACCOUNT_AUTOMOUNT_TOKEN
       containers:
         - name: manager
           args:

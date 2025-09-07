@@ -135,14 +135,22 @@ func (ks *kindSet) Write() error {
 			if name == "gatekeeper-controller-manager" && kind == DeploymentKind {
 				obj = strings.Replace(obj, "      labels:", "      labels:\n        {{- include \"gatekeeper.podLabels\" . | nindent 8 }}\n        {{- include \"controllerManager.podLabels\" . | nindent 8 }}\n        {{- include \"gatekeeper.commonLabels\" . | nindent 8 }}", 1)
 				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.controllerManager.priorityClassName }}\n      priorityClassName:  {{ .Values.controllerManager.priorityClassName }}\n      {{- end }}", 1)
+				// Inject extra volume mounts at the start of the volumeMounts section for stability
+				obj = strings.Replace(obj, "        volumeMounts:", "        volumeMounts:\n        {{- include \"gatekeeper.extraVolumeMounts\" . | nindent 8 }}", 1)
+				// Inject extra volumes at the start of the volumes section for stability
+				obj = strings.Replace(obj, "      volumes:", "      volumes:\n      {{- include \"gatekeeper.extraVolumes\" . | nindent 6 }}", 1)
 			}
 
 			if name == "gatekeeper-audit" && kind == DeploymentKind {
 				obj = "{{- if not .Values.disableAudit }}\n" + obj + "{{- end }}\n"
 				obj = strings.Replace(obj, "      labels:", "      labels:\n        {{- include \"gatekeeper.podLabels\" . | nindent 8 }}\n        {{- include \"audit.podLabels\" . | nindent 8 }}\n        {{- include \"gatekeeper.commonLabels\" . | nindent 8 }}", 1)
 				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.audit.priorityClassName }}\n      priorityClassName:  {{ .Values.audit.priorityClassName }}\n      {{- end }}", 1)
+				// Inject export-related volume mount and possible export sidecar
 				obj = strings.Replace(obj, "          name: tmp-volume", "          name: tmp-volume\n        {{- if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default \"\" | lower) \"disk\") }}\n        - mountPath: {{ .Values.audit.exportVolumeMount.path }}\n          name: {{ .Values.audit.exportVolume.name }}\n        {{- end }}\n      {{ if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default \"\" | lower) \"disk\") }}\n      - {{ toYaml .Values.audit.exportSidecar | nindent 8 }}\n      {{- end }}", 1)
 				obj = strings.Replace(obj, "      - emptyDir: {}", "      {{- if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default \"\" | lower) \"disk\") }}\n      - {{- toYaml .Values.audit.exportVolume | nindent 8 }}\n      {{- end }}\n      {{- if .Values.audit.writeToRAMDisk }}\n      - emptyDir:\n          medium: Memory\n      {{ else }}\n      - emptyDir: {}\n      {{- end }}", 1)
+				// Inject extra mounts/volumes at the headers for stability
+				obj = strings.Replace(obj, "        volumeMounts:", "        volumeMounts:\n        {{- include \"gatekeeper.extraVolumeMounts\" . | nindent 8 }}", 1)
+				obj = strings.Replace(obj, "      volumes:", "      volumes:\n      {{- include \"gatekeeper.extraVolumes\" . | nindent 6 }}", 1)
 			}
 
 			if name == "gatekeeper-manager-role" && kind == "Role" {

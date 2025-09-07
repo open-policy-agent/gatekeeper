@@ -1,0 +1,3 @@
+kind: Foo
+apiVersion: v1
+foo: bar

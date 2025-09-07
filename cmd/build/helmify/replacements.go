@@ -31,7 +31,11 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SERVICE_ACCOUNT_NAME": `{{ .Values.controllerManager.serviceAccount.name }}`,
 
+	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SERVICE_ACCOUNT_AUTOMOUNT_TOKEN": `{{ .Values.controllerManager.serviceAccount.automountServiceAccountToken }}`,
+
 	"HELMSUBST_DEPLOYMENT_AUDIT_SERVICE_ACCOUNT_NAME": `{{ .Values.audit.serviceAccount.name }}`,
+
+	"HELMSUBST_DEPLOYMENT_AUDIT_SERVICE_ACCOUNT_AUTOMOUNT_TOKEN": `{{ .Values.audit.serviceAccount.automountServiceAccountToken }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT": `{{ .Values.audit.healthPort }}`,
 
@@ -91,6 +95,8 @@ var replacements = map[string]string{
 	`HELMSUBST_DEPLOYMENT_LABELS: ""`: `{{- include "gatekeeper.commonLabels" . | nindent 4 }}`,
 
 	"HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT": `{{ .Values.revisionHistoryLimit }}`,
+
+	`HELMSUBST_DEPLOYMENT_ANNOTATIONS: ""`: `{{- include "gatekeeper.commonAnnotations" . | nindent 4 }}`,
 
 	`HELMSUBST_ANNOTATIONS: ""`: `{{- if .Values.podAnnotations }}
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
@@ -285,6 +291,12 @@ var replacements = map[string]string{
   type: {{ .Values.service.type | default "ClusterIP" }}
     {{- if .Values.service.loadBalancerIP }}
   loadBalancerIP: {{ .Values.service.loadBalancerIP }}
+    {{- end }}
+    {{- if .Values.service.ipFamilyPolicy }}
+  ipFamilyPolicy: {{ .Values.service.ipFamilyPolicy }}
+    {{- end }}
+    {{- if .Values.service.ipFamilies }}
+  ipFamilies: {{ toYaml .Values.service.ipFamilies | nindent 4 }}
     {{- end }}
   {{- end }}`,
 
