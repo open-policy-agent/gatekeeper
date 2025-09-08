@@ -264,7 +264,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&v1beta1.ConstraintTemplate{},
-				handler.OnlyControllerOwner(),
 			),
 			isOwnedByConstraintTemplate[*admissionregistrationv1.ValidatingAdmissionPolicy](),
 		))
@@ -279,7 +278,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&v1beta1.ConstraintTemplate{},
-				handler.OnlyControllerOwner(),
 			),
 			isOwnedByConstraintTemplate[*admissionregistrationv1beta1.ValidatingAdmissionPolicy](),
 		))

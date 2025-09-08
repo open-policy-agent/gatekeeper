@@ -233,7 +233,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&unstructured.Unstructured{},
-				handler.OnlyControllerOwner(),
 			),
 			isOwnedByConstraint[*admissionregistrationv1.ValidatingAdmissionPolicyBinding](),
 		))
@@ -248,7 +247,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&unstructured.Unstructured{},
-				handler.OnlyControllerOwner(),
 			),
 			isOwnedByConstraint[*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding](),
 		))
