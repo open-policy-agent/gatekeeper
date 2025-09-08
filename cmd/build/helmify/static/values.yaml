@@ -50,6 +50,9 @@ auditEventsInvolvedNamespace: false
 resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
 enableK8sNativeValidation: true
+commonAnnotations: {}
+extraVolumeMounts: []
+extraVolumes: []
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
@@ -173,6 +176,7 @@ enableRuntimeDefaultSeccompProfile: true
 controllerManager:
   serviceAccount:
     name: gatekeeper-admin
+    automountServiceAccountToken: true
   containerName: manager
   exemptNamespaces: []
   exemptNamespacePrefixes: []
@@ -263,6 +267,7 @@ audit:
       name: tmp-violations
   serviceAccount:
     name: gatekeeper-admin
+    automountServiceAccountToken: true
   containerName: manager
   hostNetwork: false
   dnsPolicy: ClusterFirst
