@@ -98,9 +98,9 @@ spec:
             - --max-serving-threads={{ .Values.maxServingThreads }}
             - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
             - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
-            - --additional-validating-webhook-configs-to-rotate-certs={{ .Values.additionalValidatingWebhookConfigsToRotateCerts }}
+            - --additional-validating-webhook-configs-to-rotate-certs={{ .Values.additionalValidatingWebhookConfigsToRotateCerts | join "," }}
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
-            - --additional-mutating-webhook-configs-to-rotate-certs={{ .Values.additionalMutatingWebhookConfigsToRotateCerts }}
+            - --additional-mutating-webhook-configs-to-rotate-certs={{ .Values.additionalMutatingWebhookConfigsToRotateCerts | join "," }}
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
