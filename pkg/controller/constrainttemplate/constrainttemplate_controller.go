@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -58,6 +59,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -190,6 +192,36 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 	return reconciler, nil
 }
 
+// isOwnedByConstraintTemplate returns a predicate that filters for resources owned by ConstraintTemplate CRDs.
+func isOwnedByConstraintTemplate[T client.Object]() predicate.TypedPredicate[T] {
+	return predicate.TypedFuncs[T]{
+		CreateFunc: func(e event.TypedCreateEvent[T]) bool {
+			return isConstraintTemplateOwned(e.Object)
+		},
+		UpdateFunc: func(e event.TypedUpdateEvent[T]) bool {
+			return isConstraintTemplateOwned(e.ObjectNew)
+		},
+		DeleteFunc: func(e event.TypedDeleteEvent[T]) bool {
+			return isConstraintTemplateOwned(e.Object)
+		},
+		GenericFunc: func(e event.TypedGenericEvent[T]) bool {
+			return isConstraintTemplateOwned(e.Object)
+		},
+	}
+}
+
+// isConstraintTemplateOwned checks if an object is owned by a ConstraintTemplate CRD.
+func isConstraintTemplateOwned(obj client.Object) bool {
+	for _, owner := range obj.GetOwnerReferences() {
+		// Check if owner is a controller and from the templates.gatekeeper.sh group
+		if owner.Controller != nil && *owner.Controller &&
+			strings.HasPrefix(owner.APIVersion, "templates.gatekeeper.sh/") {
+			return true
+		}
+	}
+	return false
+}
+
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
@@ -233,7 +265,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 				mgr.GetRESTMapper(),
 				&v1beta1.ConstraintTemplate{},
 				handler.OnlyControllerOwner(),
-			)))
+			),
+			isOwnedByConstraintTemplate[*admissionregistrationv1.ValidatingAdmissionPolicy](),
+		))
 	if err != nil {
 		return err
 	}
@@ -246,7 +280,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 				mgr.GetRESTMapper(),
 				&v1beta1.ConstraintTemplate{},
 				handler.OnlyControllerOwner(),
-			)))
+			),
+			isOwnedByConstraintTemplate[*admissionregistrationv1beta1.ValidatingAdmissionPolicy](),
+		))
 	if err != nil {
 		return err
 	}

@@ -12,6 +12,7 @@ go.work.sum
 *.dylib
 bin
 _dist
+manager
 
 # Test binary, build with `go test -c`
 *.test
