@@ -323,7 +323,7 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
-  minAvailable: HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE
+  HELMSUBST_PDB_CONTROLLER_MANAGER: ""
   selector:
     matchLabels:
       control-plane: controller-manager
