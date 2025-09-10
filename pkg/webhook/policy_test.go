@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	externadatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -1151,6 +1152,75 @@ func TestGetReqObject(t *testing.T) {
 			if !bytes.Equal(result, tt.expectedOutput) {
 				t.Errorf("getAnyObject() = %s, want %s", string(result), string(tt.expectedOutput))
 			}
+		})
+	}
+}
+
+func TestAppendValidationWebhookIfEnabled(t *testing.T) {
+	tests := []struct {
+		name               string
+		vwhName            string
+		additionalVwhNames string
+		input              []rotator.WebhookInfo
+		expectedWebhooks   []rotator.WebhookInfo
+	}{
+		{
+			name:               "adding to empty list",
+			vwhName:            "test-validation-webhook",
+			additionalVwhNames: "additional-validation-webhook-1,additional-validation-webhook-2",
+			input:              []rotator.WebhookInfo{},
+			expectedWebhooks: []rotator.WebhookInfo{
+				// default webhook info type is validating
+				{Name: "test-validation-webhook"},
+				{Name: "additional-validation-webhook-1"},
+				{Name: "additional-validation-webhook-2"},
+			},
+		},
+		{
+			name:               "adding only one webhook",
+			vwhName:            "test-validation-webhook",
+			additionalVwhNames: "",
+			input:              []rotator.WebhookInfo{},
+			expectedWebhooks: []rotator.WebhookInfo{
+				{Name: "test-validation-webhook"},
+			},
+		},
+		{
+			name:               "adding to existing webhooks",
+			vwhName:            "test-validation-webhook",
+			additionalVwhNames: "additional-validation-webhook-1,additional-validation-webhook-2",
+			input: []rotator.WebhookInfo{
+				{Name: "existing-webhook"},
+			},
+			expectedWebhooks: []rotator.WebhookInfo{
+				{Name: "existing-webhook"},
+				{Name: "test-validation-webhook"},
+				{Name: "additional-validation-webhook-1"},
+				{Name: "additional-validation-webhook-2"},
+			},
+		},
+		{
+			name:               "deduplicate vwhName and additionalVwhNames",
+			vwhName:            "test-validation-webhook",
+			additionalVwhNames: "test-validation-webhook,additional-validation-webhook-1,additional-validation-webhook-2",
+			input: []rotator.WebhookInfo{
+				{Name: "existing-webhook"},
+			},
+			expectedWebhooks: []rotator.WebhookInfo{
+				{Name: "existing-webhook"},
+				{Name: "test-validation-webhook"},
+				{Name: "additional-validation-webhook-1"},
+				{Name: "additional-validation-webhook-2"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			VwhName = &tt.vwhName
+			AdditionalVwhNamesToRotateCerts = &tt.additionalVwhNames
+			actualWebhooks := AppendValidationWebhookIfEnabled(tt.input)
+			require.Equal(t, tt.expectedWebhooks, actualWebhooks)
 		})
 	}
 }
