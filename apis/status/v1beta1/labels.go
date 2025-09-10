@@ -11,4 +11,5 @@ const (
 	MutatorKindLabel            = "internal.gatekeeper.sh/mutator-kind"
 	PodLabel                    = "internal.gatekeeper.sh/pod"
 	ConnectionNameLabel         = "internal.gatekeeper.sh/connection-name"
+	ProviderNameLabel           = "internal.gatekeeper.sh/provider-name"
 )
