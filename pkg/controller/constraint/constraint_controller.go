@@ -59,6 +59,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -172,6 +173,36 @@ func newReconciler(
 	return r
 }
 
+// isOwnedByConstraint returns a predicate that filters for resources owned by Constraint CRDs.
+func isOwnedByConstraint[T client.Object]() predicate.TypedPredicate[T] {
+	return predicate.TypedFuncs[T]{
+		CreateFunc: func(e event.TypedCreateEvent[T]) bool {
+			return isConstraintOwned(e.Object)
+		},
+		UpdateFunc: func(e event.TypedUpdateEvent[T]) bool {
+			return isConstraintOwned(e.ObjectNew)
+		},
+		DeleteFunc: func(e event.TypedDeleteEvent[T]) bool {
+			return isConstraintOwned(e.Object)
+		},
+		GenericFunc: func(e event.TypedGenericEvent[T]) bool {
+			return isConstraintOwned(e.Object)
+		},
+	}
+}
+
+// isConstraintOwned checks if an object is owned by a Constraint CRD.
+func isConstraintOwned(obj client.Object) bool {
+	for _, owner := range obj.GetOwnerReferences() {
+		// Check if owner is a controller and from the constraints.gatekeeper.sh group
+		if owner.Controller != nil && *owner.Controller &&
+			strings.HasPrefix(owner.APIVersion, "constraints.gatekeeper.sh/") {
+			return true
+		}
+	}
+	return false
+}
+
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.GenericEvent) error {
 	// Create a new controller
@@ -194,6 +225,35 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	if err != nil {
 		return err
 	}
+
+	// Watch for changes to ValidatingAdmissionPolicyBinding v1 resources
+	err = c.Watch(
+		source.Kind(mgr.GetCache(), &admissionregistrationv1.ValidatingAdmissionPolicyBinding{},
+			handler.TypedEnqueueRequestForOwner[*admissionregistrationv1.ValidatingAdmissionPolicyBinding](
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&unstructured.Unstructured{},
+			),
+			isOwnedByConstraint[*admissionregistrationv1.ValidatingAdmissionPolicyBinding](),
+		))
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to ValidatingAdmissionPolicyBinding v1beta1 resources
+	err = c.Watch(
+		source.Kind(mgr.GetCache(), &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{},
+			handler.TypedEnqueueRequestForOwner[*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding](
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&unstructured.Unstructured{},
+			),
+			isOwnedByConstraint[*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding](),
+		))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
