@@ -28,7 +28,7 @@ permissions: read-all
 jobs:
   gator_test:
     name: "Test Gator"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
       fail-fast: false

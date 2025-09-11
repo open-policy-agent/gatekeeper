@@ -28,7 +28,7 @@ permissions: read-all
 jobs:
   check_manifest:
     name: "Check codegen and manifest"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Harden Runner
