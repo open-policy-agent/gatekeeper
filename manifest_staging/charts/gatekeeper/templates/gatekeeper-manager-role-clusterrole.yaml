@@ -30,6 +30,9 @@ rules:
   - admissionregistration.k8s.io
   resourceNames:
   - {{ .Values.mutatingWebhookName }}
+  {{- range $additionalMutatingWebhookConfig := .Values.additionalMutatingWebhookConfigsToRotateCerts }}
+  - {{ $additionalMutatingWebhookConfig }}
+  {{- end }}
   resources:
   - mutatingwebhookconfigurations
   verbs:
@@ -207,6 +210,9 @@ rules:
   - admissionregistration.k8s.io
   resourceNames:
   - {{ .Values.validatingWebhookName }}
+  {{- range $additionalValidatingWebhookConfig := .Values.additionalValidatingWebhookConfigsToRotateCerts }}
+  - {{ $additionalValidatingWebhookConfig }}
+  {{- end }}
   resources:
   - validatingwebhookconfigurations
   verbs:

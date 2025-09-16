@@ -20,7 +20,6 @@ validatingWebhookCustomRules: {}
 validatingWebhookSubResources: ['pods/ephemeralcontainers', 'pods/exec', 'pods/log', 'pods/eviction', 'pods/portforward', 'pods/proxy', 'pods/attach', 'pods/binding', 'pods/resize', 'deployments/scale', 'replicasets/scale', 'statefulsets/scale', 'replicationcontrollers/scale', 'services/proxy', 'nodes/proxy', 'services/status']
 validatingWebhookURL: null
 validatingWebhookScope: '*'
-additionalValidatingWebhookConfigsToRotateCerts: []
 enableDeleteOperations: false
 enableConnectOperations: false
 enableExternalData: true
@@ -39,7 +38,6 @@ mutatingWebhookCustomRules: {}
 mutatingWebhookSubResources: ['pods/ephemeralcontainers', 'pods/exec', 'pods/log', 'pods/eviction', 'pods/portforward', 'pods/proxy', 'pods/attach', 'pods/binding', 'deployments/scale', 'replicasets/scale', 'statefulsets/scale', 'replicationcontrollers/scale', 'services/proxy', 'nodes/proxy', 'services/status']
 mutatingWebhookURL: null
 mutatingWebhookScope: '*'
-additionalMutatingWebhookConfigsToRotateCerts: []
 mutationAnnotations: false
 auditChunkSize: 500
 logLevel: INFO
