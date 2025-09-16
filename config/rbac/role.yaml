@@ -149,14 +149,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - policy
-  resourceNames:
-  - gatekeeper-admin
-  resources:
-  - podsecuritypolicies
-  verbs:
-  - use
-- apiGroups:
   - status.gatekeeper.sh
   resources:
   - '*'
