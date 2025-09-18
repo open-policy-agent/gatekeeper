@@ -145,7 +145,10 @@ func (c *CIReadinessChecker) verifyStableReadiness(ctx context.Context) error {
 	defer cancel()
 
 	checkInterval := c.stabilityWindow / 10 // Check 10 times during stability window
-	if checkInterval < time.Second {
+	if checkInterval < 100*time.Millisecond {
+		checkInterval = 100 * time.Millisecond
+	}
+	if checkInterval > time.Second {
 		checkInterval = time.Second
 	}
 

@@ -48,7 +48,7 @@ func AddPerformanceOptimizedPolicyWebhook(mgr manager.Manager, deps Dependencies
 	}
 
 	log := log.WithValues("hookType", "validation-optimized")
-	
+
 	// Create standard validation handler first
 	if err := AddPolicyWebhook(mgr, deps); err != nil {
 		return err
@@ -71,7 +71,7 @@ func AddPerformanceOptimizedPolicyWebhook(mgr manager.Manager, deps Dependencies
 		performanceTracker: performanceTracker,
 		memoryOptimizer:    memoryOptimizer,
 		maxConcurrency:     maxConcurrency,
-		log:               log,
+		log:                log,
 	}
 
 	// Register enhanced webhook
@@ -131,9 +131,9 @@ func (evh *EnhancedValidationHandler) Handle(ctx context.Context, req admission.
 
 // WebhookPerformanceMonitor provides monitoring and alerting for webhook performance
 type WebhookPerformanceMonitor struct {
-	tracker           *PerformanceTracker
-	log               logr.Logger
-	alertThresholds   *PerformanceAlertThresholds
+	tracker         *PerformanceTracker
+	log             logr.Logger
+	alertThresholds *PerformanceAlertThresholds
 }
 
 // PerformanceAlertThresholds defines thresholds for performance alerts
@@ -162,7 +162,7 @@ func NewWebhookPerformanceMonitor(tracker *PerformanceTracker, log logr.Logger, 
 
 	return &WebhookPerformanceMonitor{
 		tracker:         tracker,
-		log:            log.WithName("performance-monitor"),
+		log:             log.WithName("performance-monitor"),
 		alertThresholds: thresholds,
 	}
 }
@@ -181,16 +181,16 @@ func (wpm *WebhookPerformanceMonitor) CheckAlerts() {
 	}
 
 	// Check memory usage
-	if metrics.memoryUsage > wpm.alertThresholds.MaxMemoryUsage {
+	if metrics.MemoryUsage > wpm.alertThresholds.MaxMemoryUsage {
 		wpm.log.Info("ALERT: webhook memory usage exceeded threshold",
-			"memoryUsageMB", metrics.memoryUsage/(1024*1024),
+			"memoryUsageMB", metrics.MemoryUsage/(1024*1024),
 			"thresholdMB", wpm.alertThresholds.MaxMemoryUsage/(1024*1024))
 	}
 
 	// Check requests per second
-	if metrics.requestsPerSecond < wpm.alertThresholds.MinRequestsPerSecond && metrics.totalRequests > 10 {
+	if metrics.RequestsPerSecond < wpm.alertThresholds.MinRequestsPerSecond && metrics.TotalRequests > 10 {
 		wpm.log.Info("ALERT: webhook requests per second below threshold",
-			"requestsPerSecond", metrics.requestsPerSecond,
+			"requestsPerSecond", metrics.RequestsPerSecond,
 			"threshold", wpm.alertThresholds.MinRequestsPerSecond)
 	}
 
@@ -208,19 +208,19 @@ func (wpm *WebhookPerformanceMonitor) GetPerformanceReport() map[string]interfac
 	avgDuration := wpm.tracker.GetAverageDuration()
 
 	return map[string]interface{}{
-		"totalRequests":      metrics.totalRequests,
-		"averageLatency":     avgDuration.String(),
-		"maxLatency":         metrics.maxDuration.String(),
-		"minLatency":         metrics.minDuration.String(),
-		"requestsPerSecond":  metrics.requestsPerSecond,
-		"memoryUsageMB":      metrics.memoryUsage / (1024 * 1024),
-		"goroutineCount":     runtime.NumGoroutine(),
-		"lastCleanupTime":    metrics.lastCleanupTime,
+		"totalRequests":     metrics.TotalRequests,
+		"averageLatency":    avgDuration.String(),
+		"maxLatency":        metrics.MaxDuration.String(),
+		"minLatency":        metrics.MinDuration.String(),
+		"requestsPerSecond": metrics.RequestsPerSecond,
+		"memoryUsageMB":     metrics.MemoryUsage / (1024 * 1024),
+		"goroutineCount":    runtime.NumGoroutine(),
+		"lastCleanupTime":   metrics.LastCleanupTime,
 		"performanceAlerts": map[string]bool{
-			"highLatency":     avgDuration > wpm.alertThresholds.MaxAverageLatency,
-			"highMemory":      metrics.memoryUsage > wpm.alertThresholds.MaxMemoryUsage,
-			"lowThroughput":   metrics.requestsPerSecond < wpm.alertThresholds.MinRequestsPerSecond,
-			"highGoroutines":  runtime.NumGoroutine() > wpm.alertThresholds.MaxGoroutines,
+			"highLatency":    avgDuration > wpm.alertThresholds.MaxAverageLatency,
+			"highMemory":     metrics.MemoryUsage > wpm.alertThresholds.MaxMemoryUsage,
+			"lowThroughput":  metrics.RequestsPerSecond < wpm.alertThresholds.MinRequestsPerSecond,
+			"highGoroutines": runtime.NumGoroutine() > wpm.alertThresholds.MaxGoroutines,
 		},
 	}
 }
