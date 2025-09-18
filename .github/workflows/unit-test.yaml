@@ -28,7 +28,7 @@ permissions: read-all
 jobs:
   test:
     name: "Unit test"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest-8-cores
     timeout-minutes: 20
     steps:
       - name: Harden Runner
