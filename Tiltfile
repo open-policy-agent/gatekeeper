@@ -65,6 +65,7 @@ def build_crds():
         deps=[".tiltbuild/charts/gatekeeper/crds"],
         labels=["staging"],
     )
+
     docker_build(
         ref="openpolicyagent/gatekeeper-crds",
         dockerfile="./crd.Dockerfile",
@@ -80,15 +81,21 @@ def build_crds():
 # deploy_gatekeeper defines the deploy process for the gatekeeper chart from manifest_staging/charts/gatekeeper.
 def deploy_gatekeeper():
     local("kubectl create namespace gatekeeper-system || true")
-
+    
+    local_resource(
+        name="generate-helm-values",
+        cmd="cat tilt-settings.json | jq '.helm_values' > .tiltbuild/helm_values.generated.yaml",
+        deps=["tilt-settings.json"],
+        labels=["helm"],
+    )
+    
     helm_values = settings.get("helm_values", {})
+
     k8s_yaml(helm(
         ".tiltbuild/charts/gatekeeper",
         name="gatekeeper",
         namespace="gatekeeper-system",
-        values=[".tiltbuild/charts/gatekeeper/values.yaml"],
-        set=["{}={}".format(k, str(v).lower())
-             for k, v in helm_values.items()],
+        values=[".tiltbuild/charts/gatekeeper/values.yaml", ".tiltbuild/helm_values.generated.yaml"],
     ))
 
     # add label to resources

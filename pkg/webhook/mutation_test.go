@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
@@ -14,6 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assign"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	"github.com/stretchr/testify/require"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -156,5 +158,73 @@ func TestWebhookAssignMetadata(t *testing.T) {
 
 	if !reflect.DeepEqual(resp, expected) {
 		t.Errorf("unexpected response: %+v\n\nexpected: %+v", resp, expected)
+	}
+}
+
+func TestAppendMutationWebhookIfEnabled(t *testing.T) {
+	tests := []struct {
+		name               string
+		mwhName            string
+		additionalMwhNames string
+		input              []rotator.WebhookInfo
+		expectedWebhooks   []rotator.WebhookInfo
+	}{
+		{
+			name:               "adding to empty list",
+			mwhName:            "test-mutation-webhook",
+			additionalMwhNames: "additional-mutation-webhook-1,additional-mutation-webhook-2",
+			input:              []rotator.WebhookInfo{},
+			expectedWebhooks: []rotator.WebhookInfo{
+				{Name: "test-mutation-webhook", Type: rotator.Mutating},
+				{Name: "additional-mutation-webhook-1", Type: rotator.Mutating},
+				{Name: "additional-mutation-webhook-2", Type: rotator.Mutating},
+			},
+		},
+		{
+			name:               "adding only one webhook",
+			mwhName:            "test-mutation-webhook",
+			additionalMwhNames: "",
+			input:              []rotator.WebhookInfo{},
+			expectedWebhooks: []rotator.WebhookInfo{
+				{Name: "test-mutation-webhook", Type: rotator.Mutating},
+			},
+		},
+		{
+			name:               "adding to existing webhooks",
+			mwhName:            "test-mutation-webhook",
+			additionalMwhNames: "additional-mutation-webhook-1,additional-mutation-webhook-2",
+			input: []rotator.WebhookInfo{
+				{Name: "existing-webhook"},
+			},
+			expectedWebhooks: []rotator.WebhookInfo{
+				{Name: "existing-webhook"},
+				{Name: "test-mutation-webhook", Type: rotator.Mutating},
+				{Name: "additional-mutation-webhook-1", Type: rotator.Mutating},
+				{Name: "additional-mutation-webhook-2", Type: rotator.Mutating},
+			},
+		},
+		{
+			name:               "deduplicate mwhName and additionalMwhNames",
+			mwhName:            "test-mutation-webhook",
+			additionalMwhNames: "test-mutation-webhook,additional-mutation-webhook-1,additional-mutation-webhook-2",
+			input: []rotator.WebhookInfo{
+				{Name: "existing-webhook"},
+			},
+			expectedWebhooks: []rotator.WebhookInfo{
+				{Name: "existing-webhook"},
+				{Name: "test-mutation-webhook", Type: rotator.Mutating},
+				{Name: "additional-mutation-webhook-1", Type: rotator.Mutating},
+				{Name: "additional-mutation-webhook-2", Type: rotator.Mutating},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			MwhName = &tt.mwhName
+			AdditionalMwhNamesToRotateCerts = &tt.additionalMwhNames
+			actualWebhooks := AppendMutationWebhookIfEnabled(tt.input)
+			require.Equal(t, tt.expectedWebhooks, actualWebhooks)
+		})
 	}
 }
