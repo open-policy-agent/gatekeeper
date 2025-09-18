@@ -1,15 +1,27 @@
 name: disk-export
 on:
   push:
-    paths:
-      - "pkg/export/dapr"
-      - "pkg/export/disk"
-      - "test/export/**"
+    paths-ignore:
+      - ".github/workflows/website.yaml"
+      - "docs/**"
+      - "library/**"
+      - "demo/**"
+      - "deprecated/**"
+      - "example/**"
+      - "website/**"
+      - "**.md"
+      - "!cmd/build/helmify/static/README.md"
   pull_request:
-    paths:
-      - "pkg/export/dapr"
-      - "pkg/export/disk"
-      - "test/export/**"
+    paths-ignore:
+      - ".github/workflows/website.yaml"
+      - "docs/**"
+      - "library/**"
+      - "demo/**"
+      - "deprecated/**"
+      - "example/**"
+      - "website/**"
+      - "**.md"
+      - "!cmd/build/helmify/static/README.md"
 permissions: read-all
 
 jobs:

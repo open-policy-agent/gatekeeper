@@ -1,19 +1,33 @@
 name: dapr-export
 on:
   push:
-    paths:
-      - "pkg/export/dapr"
-      - "test/export/**"
+    paths-ignore:
+      - ".github/workflows/website.yaml"
+      - "docs/**"
+      - "library/**"
+      - "demo/**"
+      - "deprecated/**"
+      - "example/**"
+      - "website/**"
+      - "**.md"
+      - "!cmd/build/helmify/static/README.md"
   pull_request:
-    paths:
-      - "pkg/export/dapr"
-      - "test/export/**"
+    paths-ignore:
+      - ".github/workflows/website.yaml"
+      - "docs/**"
+      - "library/**"
+      - "demo/**"
+      - "deprecated/**"
+      - "example/**"
+      - "website/**"
+      - "**.md"
+      - "!cmd/build/helmify/static/README.md"
 permissions: read-all
 
 jobs:
   dapr_test:
     name: "Dapr export test"
-    runs-on: ubuntu-latest-8-cores
+    runs-on: ubuntu-latest-8
     timeout-minutes: 15
     strategy:
       matrix:
