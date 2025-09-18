@@ -27,8 +27,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-// PerformanceMetrics tracks webhook performance statistics
+// PerformanceMetrics tracks webhook performance statistics (data only, no mutex)
 type PerformanceMetrics struct {
+	TotalRequests     int64         `json:"totalRequests"`
+	TotalDuration     time.Duration `json:"totalDuration"`
+	MaxDuration       time.Duration `json:"maxDuration"`
+	MinDuration       time.Duration `json:"minDuration"`
+	GoroutineCount    int64         `json:"goroutineCount"`
+	MemoryUsage       uint64        `json:"memoryUsage"`
+	LastCleanupTime   time.Time     `json:"lastCleanupTime"`
+	RequestsPerSecond float64       `json:"requestsPerSecond"`
+}
+
+// performanceData holds the actual metrics with mutex protection
+type performanceData struct {
 	mu                sync.RWMutex
 	totalRequests     int64
 	totalDuration     time.Duration
@@ -37,12 +49,11 @@ type PerformanceMetrics struct {
 	goroutineCount    int64
 	memoryUsage       uint64
 	lastCleanupTime   time.Time
-	requestsPerSecond float64
 }
 
 // PerformanceTracker provides webhook performance monitoring and optimization
 type PerformanceTracker struct {
-	metrics       *PerformanceMetrics
+	metrics       *performanceData
 	log           logr.Logger
 	enabled       bool
 	cleanupTicker *time.Ticker
@@ -51,7 +62,7 @@ type PerformanceTracker struct {
 // NewPerformanceTracker creates a new performance tracker for webhook optimization
 func NewPerformanceTracker(log logr.Logger, enabled bool) *PerformanceTracker {
 	tracker := &PerformanceTracker{
-		metrics: &PerformanceMetrics{
+		metrics: &performanceData{
 			minDuration:     time.Hour, // Initialize with a high value
 			lastCleanupTime: time.Now(),
 		},
@@ -77,16 +88,16 @@ func (pt *PerformanceTracker) TrackRequest(ctx context.Context, req admission.Re
 
 	startTime := time.Now()
 	startGoroutines := runtime.NumGoroutine()
-	
+
 	// Execute the request
 	response := handler(ctx, req)
-	
+
 	// Record metrics
 	duration := time.Since(startTime)
 	endGoroutines := runtime.NumGoroutine()
-	
+
 	pt.recordMetrics(duration, int64(endGoroutines-startGoroutines))
-	
+
 	// Log slow requests
 	if duration > 500*time.Millisecond {
 		pt.log.Info("slow webhook request detected",
@@ -105,19 +116,19 @@ func (pt *PerformanceTracker) TrackRequest(ctx context.Context, req admission.Re
 func (pt *PerformanceTracker) recordMetrics(duration time.Duration, goroutineDelta int64) {
 	pt.metrics.mu.Lock()
 	defer pt.metrics.mu.Unlock()
-	
+
 	pt.metrics.totalRequests++
 	pt.metrics.totalDuration += duration
 	pt.metrics.goroutineCount += goroutineDelta
-	
+
 	if duration > pt.metrics.maxDuration {
 		pt.metrics.maxDuration = duration
 	}
-	
+
 	if duration < pt.metrics.minDuration {
 		pt.metrics.minDuration = duration
 	}
-	
+
 	// Update memory usage
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -128,14 +139,23 @@ func (pt *PerformanceTracker) recordMetrics(duration time.Duration, goroutineDel
 func (pt *PerformanceTracker) GetMetrics() PerformanceMetrics {
 	pt.metrics.mu.RLock()
 	defer pt.metrics.mu.RUnlock()
-	
-	metrics := *pt.metrics
-	
+
+	// Create a safe copy without the mutex
+	metrics := PerformanceMetrics{
+		TotalRequests:   pt.metrics.totalRequests,
+		TotalDuration:   pt.metrics.totalDuration,
+		MaxDuration:     pt.metrics.maxDuration,
+		MinDuration:     pt.metrics.minDuration,
+		GoroutineCount:  pt.metrics.goroutineCount,
+		MemoryUsage:     pt.metrics.memoryUsage,
+		LastCleanupTime: pt.metrics.lastCleanupTime,
+	}
+
 	// Calculate requests per second
 	if pt.metrics.totalDuration > 0 {
-		metrics.requestsPerSecond = float64(pt.metrics.totalRequests) / pt.metrics.totalDuration.Seconds()
+		metrics.RequestsPerSecond = float64(pt.metrics.totalRequests) / pt.metrics.totalDuration.Seconds()
 	}
-	
+
 	return metrics
 }
 
@@ -143,11 +163,11 @@ func (pt *PerformanceTracker) GetMetrics() PerformanceMetrics {
 func (pt *PerformanceTracker) GetAverageDuration() time.Duration {
 	pt.metrics.mu.RLock()
 	defer pt.metrics.mu.RUnlock()
-	
+
 	if pt.metrics.totalRequests == 0 {
 		return 0
 	}
-	
+
 	return pt.metrics.totalDuration / time.Duration(pt.metrics.totalRequests)
 }
 
@@ -161,32 +181,32 @@ func (pt *PerformanceTracker) periodicCleanup() {
 // performCleanup executes maintenance tasks to optimize performance
 func (pt *PerformanceTracker) performCleanup() {
 	startTime := time.Now()
-	
+
 	// Force garbage collection if memory usage is high
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	
+
 	// If allocated memory > 100MB, trigger GC
 	if m.Alloc > 100*1024*1024 {
 		pt.log.V(1).Info("triggering garbage collection due to high memory usage",
 			"allocatedMB", m.Alloc/(1024*1024))
 		runtime.GC()
 	}
-	
+
 	// Log performance statistics
 	metrics := pt.GetMetrics()
 	avgDuration := pt.GetAverageDuration()
-	
+
 	pt.log.V(1).Info("webhook performance metrics",
-		"totalRequests", metrics.totalRequests,
+		"totalRequests", metrics.TotalRequests,
 		"averageDuration", avgDuration,
-		"maxDuration", metrics.maxDuration,
-		"minDuration", metrics.minDuration,
-		"requestsPerSecond", fmt.Sprintf("%.2f", metrics.requestsPerSecond),
-		"memoryUsageMB", metrics.memoryUsage/(1024*1024),
+		"maxDuration", metrics.MaxDuration,
+		"minDuration", metrics.MinDuration,
+		"requestsPerSecond", fmt.Sprintf("%.2f", metrics.RequestsPerSecond),
+		"memoryUsageMB", metrics.MemoryUsage/(1024*1024),
 		"goroutines", runtime.NumGoroutine(),
 	)
-	
+
 	pt.metrics.mu.Lock()
 	pt.metrics.lastCleanupTime = startTime
 	pt.metrics.mu.Unlock()
@@ -215,13 +235,13 @@ func NewOptimizedRequestHandler(handler admission.Handler, tracker *PerformanceT
 		tracker: tracker,
 		log:     log.WithName("optimized-handler"),
 	}
-	
+
 	// Set up semaphore for concurrency control
 	if maxConcurrency > 0 {
 		optimizedHandler.semaphore = make(chan struct{}, maxConcurrency)
 		optimizedHandler.log.Info("webhook concurrency control enabled", "maxConcurrency", maxConcurrency)
 	}
-	
+
 	return optimizedHandler
 }
 
@@ -233,20 +253,20 @@ func (orh *OptimizedRequestHandler) Handle(ctx context.Context, req admission.Re
 		case orh.semaphore <- struct{}{}:
 			defer func() { <-orh.semaphore }()
 		case <-ctx.Done():
-			return admission.Errored(http.StatusTooManyRequests, 
+			return admission.Errored(http.StatusTooManyRequests,
 				fmt.Errorf("webhook request cancelled due to concurrency limit"))
 		}
 	}
-	
+
 	// Track performance metrics
 	return orh.tracker.TrackRequest(ctx, req, orh.handler.Handle)
 }
 
 // WebhookPerformanceConfig configures webhook performance optimizations
 type WebhookPerformanceConfig struct {
-	EnableMetrics     bool
-	MaxConcurrency    int
-	GCMemoryThreshold uint64 // Memory threshold in bytes to trigger GC
+	EnableMetrics        bool
+	MaxConcurrency       int
+	GCMemoryThreshold    uint64 // Memory threshold in bytes to trigger GC
 	SlowRequestThreshold time.Duration
 }
 
@@ -262,10 +282,10 @@ func DefaultWebhookPerformanceConfig() *WebhookPerformanceConfig {
 
 // MemoryOptimizer provides memory optimization utilities for webhooks
 type MemoryOptimizer struct {
-	log              logr.Logger
-	gcThreshold      uint64
-	lastGCTime       time.Time
-	minGCInterval    time.Duration
+	log           logr.Logger
+	gcThreshold   uint64
+	lastGCTime    time.Time
+	minGCInterval time.Duration
 }
 
 // NewMemoryOptimizer creates a new memory optimizer
@@ -282,17 +302,17 @@ func NewMemoryOptimizer(log logr.Logger, gcThreshold uint64) *MemoryOptimizer {
 func (mo *MemoryOptimizer) CheckAndOptimize() {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	
+
 	// Check if we should trigger GC
 	if m.Alloc > mo.gcThreshold && time.Since(mo.lastGCTime) > mo.minGCInterval {
 		mo.log.V(1).Info("triggering garbage collection for memory optimization",
 			"allocatedBytes", m.Alloc,
 			"thresholdBytes", mo.gcThreshold,
 			"timeSinceLastGC", time.Since(mo.lastGCTime))
-		
+
 		runtime.GC()
 		mo.lastGCTime = time.Now()
-		
+
 		// Read stats again to log improvement
 		runtime.ReadMemStats(&m)
 		mo.log.V(1).Info("garbage collection completed",

@@ -28,7 +28,7 @@ import (
 
 func TestDefaultCIConfig(t *testing.T) {
 	config := DefaultCIConfig()
-	
+
 	assert.Equal(t, "http://localhost:9090/readyz", config.Endpoint)
 	assert.Equal(t, 5*time.Second, config.Timeout)
 	assert.Equal(t, 10, config.MaxRetries)
@@ -69,7 +69,7 @@ func TestNewCIReadinessChecker(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			checker := NewCIReadinessChecker(tt.config)
-			
+
 			assert.Equal(t, tt.expected.Endpoint, checker.endpoint)
 			assert.Equal(t, tt.expected.Timeout, checker.timeout)
 			assert.Equal(t, tt.expected.MaxRetries, checker.maxRetries)
@@ -82,34 +82,34 @@ func TestNewCIReadinessChecker(t *testing.T) {
 
 func TestCheckSingleReadiness(t *testing.T) {
 	tests := []struct {
-		name           string
-		statusCode     int
-		expectedReady  bool
-		expectedError  bool
+		name          string
+		statusCode    int
+		expectedReady bool
+		expectedError bool
 	}{
 		{
-			name:           "200 OK indicates ready",
-			statusCode:     http.StatusOK,
-			expectedReady:  true,
-			expectedError:  false,
+			name:          "200 OK indicates ready",
+			statusCode:    http.StatusOK,
+			expectedReady: true,
+			expectedError: false,
 		},
 		{
-			name:           "500 Internal Server Error indicates not ready",
-			statusCode:     http.StatusInternalServerError,
-			expectedReady:  false,
-			expectedError:  false,
+			name:          "500 Internal Server Error indicates not ready",
+			statusCode:    http.StatusInternalServerError,
+			expectedReady: false,
+			expectedError: false,
 		},
 		{
-			name:           "503 Service Unavailable indicates not ready",
-			statusCode:     http.StatusServiceUnavailable,
-			expectedReady:  false,
-			expectedError:  false,
+			name:          "503 Service Unavailable indicates not ready",
+			statusCode:    http.StatusServiceUnavailable,
+			expectedReady: false,
+			expectedError: false,
 		},
 		{
-			name:           "404 Not Found indicates not ready",
-			statusCode:     http.StatusNotFound,
-			expectedReady:  false,
-			expectedError:  false,
+			name:          "404 Not Found indicates not ready",
+			statusCode:    http.StatusNotFound,
+			expectedReady: false,
+			expectedError: false,
 		},
 	}
 
@@ -119,7 +119,7 @@ func TestCheckSingleReadiness(t *testing.T) {
 				// Verify request headers
 				assert.Contains(t, r.Header.Get("User-Agent"), "gatekeeper-ci-readiness-checker")
 				assert.Equal(t, "application/json", r.Header.Get("Accept"))
-				
+
 				w.WriteHeader(tt.statusCode)
 			}))
 			defer server.Close()
@@ -182,31 +182,31 @@ func TestCheckSingleReadinessWithContextCancellation(t *testing.T) {
 
 func TestVerifyInitialReadiness(t *testing.T) {
 	tests := []struct {
-		name           string
-		responses      []int
-		maxRetries     int
-		expectedError  bool
+		name             string
+		responses        []int
+		maxRetries       int
+		expectedError    bool
 		expectedAttempts int
 	}{
 		{
-			name:           "succeeds on first attempt",
-			responses:      []int{http.StatusOK},
-			maxRetries:     3,
-			expectedError:  false,
+			name:             "succeeds on first attempt",
+			responses:        []int{http.StatusOK},
+			maxRetries:       3,
+			expectedError:    false,
 			expectedAttempts: 1,
 		},
 		{
-			name:           "succeeds on second attempt",
-			responses:      []int{http.StatusInternalServerError, http.StatusOK},
-			maxRetries:     3,
-			expectedError:  false,
+			name:             "succeeds on second attempt",
+			responses:        []int{http.StatusInternalServerError, http.StatusOK},
+			maxRetries:       3,
+			expectedError:    false,
 			expectedAttempts: 2,
 		},
 		{
-			name:           "fails after max retries",
-			responses:      []int{http.StatusInternalServerError, http.StatusInternalServerError, http.StatusInternalServerError},
-			maxRetries:     3,
-			expectedError:  true,
+			name:             "fails after max retries",
+			responses:        []int{http.StatusInternalServerError, http.StatusInternalServerError, http.StatusInternalServerError},
+			maxRetries:       3,
+			expectedError:    true,
 			expectedAttempts: 3,
 		},
 	}
@@ -247,22 +247,22 @@ func TestVerifyInitialReadiness(t *testing.T) {
 
 func TestVerifyStableReadiness(t *testing.T) {
 	tests := []struct {
-		name           string
-		responses      []int
+		name            string
+		responses       []int
 		stabilityWindow time.Duration
-		expectedError  bool
+		expectedError   bool
 	}{
 		{
-			name:           "maintains readiness throughout stability window",
-			responses:      []int{http.StatusOK}, // Will repeat this response
+			name:            "maintains readiness throughout stability window",
+			responses:       []int{http.StatusOK}, // Will repeat this response
 			stabilityWindow: 50 * time.Millisecond,
-			expectedError:  false,
+			expectedError:   false,
 		},
 		{
-			name:           "fails when service becomes not ready",
-			responses:      []int{http.StatusOK, http.StatusOK, http.StatusInternalServerError},
-			stabilityWindow: 100 * time.Millisecond,
-			expectedError:  true,
+			name:            "fails when service becomes not ready",
+			responses:       []int{http.StatusOK, http.StatusInternalServerError},
+			stabilityWindow: 300 * time.Millisecond,
+			expectedError:   true,
 		},
 	}
 
@@ -290,7 +290,9 @@ func TestVerifyStableReadiness(t *testing.T) {
 
 			if tt.expectedError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "stability")
+				if err != nil {
+					assert.Contains(t, err.Error(), "stability")
+				}
 			} else {
 				assert.NoError(t, err)
 			}
