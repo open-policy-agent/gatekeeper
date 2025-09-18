@@ -137,6 +137,7 @@ func (t *Tracker) CheckSatisfied(_ *http.Request) error {
 	return nil
 }
 
+
 // For returns Expectations for the requested resource kind.
 func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 	if t == nil {
