@@ -73,6 +73,67 @@ jobs:
 
           make test-e2e KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} ENABLE_VAP_TESTS=1
 
+      - name: Verify Readiness Probe Status
+        run: |
+          echo "🔍 Verifying Gatekeeper readiness probe status before completing CI..."
+          
+          # Build readiness checker
+          go build -o bin/readiness-check ./cmd/readiness-check
+          chmod +x bin/readiness-check
+          
+          # Verify controller readiness
+          CONTROLLER_POD=$(kubectl get pods -n gatekeeper-system \
+            -l control-plane=controller-manager \
+            -o jsonpath='{.items[0].metadata.name}')
+          
+          echo "📍 Checking controller pod: $CONTROLLER_POD"
+          kubectl port-forward -n gatekeeper-system pod/$CONTROLLER_POD 9090:9090 &
+          PF_PID=$!
+          sleep 3
+          
+          # Run readiness verification
+          ./bin/readiness-check \
+            --endpoint=http://localhost:9090/readyz \
+            --total-timeout=2m \
+            --max-retries=10 \
+            --stability-window=30s \
+            --verbose || {
+              echo "❌ Controller readiness verification failed"
+              kill $PF_PID 2>/dev/null || true
+              exit 1
+            }
+          
+          kill $PF_PID 2>/dev/null || true
+          echo "✅ Controller readiness verification passed"
+          
+          # Verify audit readiness if present
+          AUDIT_POD=$(kubectl get pods -n gatekeeper-system \
+            -l control-plane=audit-controller \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          
+          if [[ -n "$AUDIT_POD" ]]; then
+            echo "📍 Checking audit pod: $AUDIT_POD"
+            kubectl port-forward -n gatekeeper-system pod/$AUDIT_POD 9091:9090 &
+            PF_PID=$!
+            sleep 3
+            
+            ./bin/readiness-check \
+              --endpoint=http://localhost:9091/readyz \
+              --total-timeout=2m \
+              --max-retries=10 \
+              --stability-window=30s \
+              --verbose || {
+                echo "❌ Audit readiness verification failed"
+                kill $PF_PID 2>/dev/null || true
+                exit 1
+              }
+            
+            kill $PF_PID 2>/dev/null || true
+            echo "✅ Audit readiness verification passed"
+          fi
+          
+          echo "🎉 All readiness probe verifications completed successfully!"
+
       - name: Save logs
         if: ${{ always() }}
         run: |
@@ -141,6 +202,67 @@ jobs:
           make test-e2e \
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
             ENABLE_VAP_TESTS=1
+
+      - name: Verify Helm Readiness Probe Status
+        run: |
+          echo "🔍 Verifying Gatekeeper readiness probe status for Helm deployment..."
+          
+          # Build readiness checker
+          go build -o bin/readiness-check ./cmd/readiness-check
+          chmod +x bin/readiness-check
+          
+          # Verify controller readiness
+          CONTROLLER_POD=$(kubectl get pods -n ${{ matrix.GATEKEEPER_NAMESPACE }} \
+            -l control-plane=controller-manager \
+            -o jsonpath='{.items[0].metadata.name}')
+          
+          echo "📍 Checking controller pod: $CONTROLLER_POD in namespace ${{ matrix.GATEKEEPER_NAMESPACE }}"
+          kubectl port-forward -n ${{ matrix.GATEKEEPER_NAMESPACE }} pod/$CONTROLLER_POD 9090:9090 &
+          PF_PID=$!
+          sleep 3
+          
+          # Run readiness verification
+          ./bin/readiness-check \
+            --endpoint=http://localhost:9090/readyz \
+            --total-timeout=2m \
+            --max-retries=10 \
+            --stability-window=30s \
+            --verbose || {
+              echo "❌ Helm controller readiness verification failed"
+              kill $PF_PID 2>/dev/null || true
+              exit 1
+            }
+          
+          kill $PF_PID 2>/dev/null || true
+          echo "✅ Helm controller readiness verification passed"
+          
+          # Verify audit readiness if present
+          AUDIT_POD=$(kubectl get pods -n ${{ matrix.GATEKEEPER_NAMESPACE }} \
+            -l control-plane=audit-controller \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          
+          if [[ -n "$AUDIT_POD" ]]; then
+            echo "📍 Checking audit pod: $AUDIT_POD in namespace ${{ matrix.GATEKEEPER_NAMESPACE }}"
+            kubectl port-forward -n ${{ matrix.GATEKEEPER_NAMESPACE }} pod/$AUDIT_POD 9091:9090 &
+            PF_PID=$!
+            sleep 3
+            
+            ./bin/readiness-check \
+              --endpoint=http://localhost:9091/readyz \
+              --total-timeout=2m \
+              --max-retries=10 \
+              --stability-window=30s \
+              --verbose || {
+                echo "❌ Helm audit readiness verification failed"
+                kill $PF_PID 2>/dev/null || true
+                exit 1
+              }
+            
+            kill $PF_PID 2>/dev/null || true
+            echo "✅ Helm audit readiness verification passed"
+          fi
+          
+          echo "🎉 All Helm readiness probe verifications completed successfully!"
 
       - name: Save logs
         if: ${{ always() }}
