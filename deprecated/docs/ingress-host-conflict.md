@@ -55,7 +55,7 @@ EOF
 kubectl -n opa create configmap kubernetes-matches --from-file=./matches.rego
 ```
 
-### 4. enable webhook confuguration
+### 4. enable webhook configuration
 
 ```bash
 cat > ./validating-webhook-configuration.yaml <<EOF
@@ -156,4 +156,4 @@ Error from server: error when creating "ingress-host.yaml": admission webhook "v
 
 ## Summary
 
-If you have reached this stage you have succesfully created a policy for your cluster using `gatekeeper`.
+If you have reached this stage you have successfully created a policy for your cluster using `gatekeeper`.
