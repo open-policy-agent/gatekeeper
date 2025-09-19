@@ -226,7 +226,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to ValidatingAdmissionPolicy v1 resources
-	// Only watching v1 since VAP is stable since last two k8s versions (1.32+)
+	// Only watching v1 since VAP is stable since Kubernetes 1.30+
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &admissionregistrationv1.ValidatingAdmissionPolicy{},
 			handler.TypedEnqueueRequestForOwner[*admissionregistrationv1.ValidatingAdmissionPolicy](
