@@ -723,6 +723,50 @@ func TestV1beta1ToV1(t *testing.T) {
 	}
 }
 
+func TestEventPackerMapFuncFromOwnerRefs_ValidOwner(t *testing.T) {
+	mf := eventPackerMapFuncFromOwnerRefs()
+	obj := &unstructured.Unstructured{}
+	obj.SetOwnerReferences([]metav1.OwnerReference{{
+		APIVersion: "constraints.gatekeeper.sh/v1beta1",
+		Kind:       "MyConstraint",
+		Name:       "example-constraint",
+		Controller: ptrBool(true),
+	}})
+
+	got := mf(context.Background(), obj)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(got))
+	}
+	// Expect packed name format: gvk:Kind.Version.Group:Name
+	expectedPrefix := "gvk:MyConstraint.v1beta1.constraints.gatekeeper.sh:"
+	if got[0].NamespacedName.Name[:len(expectedPrefix)] != expectedPrefix {
+		t.Fatalf("packed name not as expected: %s", got[0].NamespacedName.Name)
+	}
+	// Unpack validation via util.UnpackRequest is exercised elsewhere; ensure namespace empty
+	if got[0].NamespacedName.Namespace != "" {
+		t.Fatalf("expected cluster-scoped owner to produce empty namespace, got %q", got[0].NamespacedName.Namespace)
+	}
+}
+
+func TestEventPackerMapFuncFromOwnerRefs_IgnoredOwner(t *testing.T) {
+	mf := eventPackerMapFuncFromOwnerRefs()
+	obj := &unstructured.Unstructured{}
+	obj.SetOwnerReferences([]metav1.OwnerReference{{
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
+		Name:       "my-deploy",
+		Controller: ptrBool(true),
+	}})
+
+	got := mf(context.Background(), obj)
+	if len(got) != 0 {
+		t.Fatalf("expected 0 requests for non-constraint owner, got %d", len(got))
+	}
+}
+
+// ptrBool returns a pointer to the provided bool.
+func ptrBool(b bool) *bool { return &b }
+
 type fakeWriter struct {
 	updateErr error
 }
@@ -745,4 +789,75 @@ func (f *fakeWriter) Patch(_ context.Context, _ client.Object, _ client.Patch, _
 
 func (f *fakeWriter) DeleteAllOf(_ context.Context, _ client.Object, _ ...client.DeleteAllOfOption) error {
 	return nil
+}
+
+func TestEventPackerMapFuncFromOwnerRefs_SingleOwner(t *testing.T) {
+	mf := eventPackerMapFuncFromOwnerRefs()
+	obj := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+	// cluster-scoped object
+	obj.SetName("vap-binding-test")
+	obj.SetNamespace("")
+	// set owner reference to a constraint kind in constraints.gatekeeper.sh group
+	obj.SetOwnerReferences([]metav1.OwnerReference{{
+		APIVersion: "constraints.gatekeeper.sh/v1beta1",
+		Kind:       "MyConstraint",
+		Name:       "my-constraint-name",
+		Controller: func(b bool) *bool { return &b }(true),
+	}})
+
+	reqs := mf(context.Background(), obj)
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
+	}
+	gvk, unpacked, err := util.UnpackRequest(reqs[0])
+	if err != nil {
+		t.Fatalf("unpack request failed: %v", err)
+	}
+	if gvk.Group != "constraints.gatekeeper.sh" {
+		t.Fatalf("unexpected group: %s", gvk.Group)
+	}
+	if gvk.Version != "v1beta1" {
+		t.Fatalf("unexpected version: %s", gvk.Version)
+	}
+	if gvk.Kind != "MyConstraint" {
+		t.Fatalf("unexpected kind: %s", gvk.Kind)
+	}
+	if unpacked.NamespacedName.Name != "my-constraint-name" {
+		t.Fatalf("unexpected name: %s", unpacked.NamespacedName.Name)
+	}
+}
+
+func TestEventPackerMapFuncFromOwnerRefs_MultipleOwners(t *testing.T) {
+	mf := eventPackerMapFuncFromOwnerRefs()
+	obj := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+	obj.SetName("vap-binding-multi")
+	obj.SetOwnerReferences([]metav1.OwnerReference{
+		{
+			APIVersion: "other.group/v1",
+			Kind:       "OtherKind",
+			Name:       "other-name",
+			Controller: func(b bool) *bool { return &b }(true),
+		},
+		{
+			APIVersion: "constraints.gatekeeper.sh/v1beta1",
+			Kind:       "FooConstraint",
+			Name:       "foo-name",
+			Controller: func(b bool) *bool { return &b }(true),
+		},
+	})
+
+	reqs := mf(context.Background(), obj)
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request for the matching owner, got %d", len(reqs))
+	}
+	gvk, unpacked, err := util.UnpackRequest(reqs[0])
+	if err != nil {
+		t.Fatalf("unpack request failed: %v", err)
+	}
+	if gvk.Kind != "FooConstraint" || gvk.Group != "constraints.gatekeeper.sh" {
+		t.Fatalf("unexpected gvk: %v", gvk)
+	}
+	if unpacked.NamespacedName.Name != "foo-name" {
+		t.Fatalf("unexpected name: %s", unpacked.NamespacedName.Name)
+	}
 }
