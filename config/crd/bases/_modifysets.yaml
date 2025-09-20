@@ -4,20 +4,22 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: assignimage.mutations.gatekeeper.sh
+  name: modifysets.
 spec:
-  group: mutations.gatekeeper.sh
+  group: ""
   names:
-    kind: AssignImage
-    listKind: AssignImageList
-    plural: assignimage
-    singular: assignimage
-  scope: Cluster
+    kind: ModifySet
+    listKind: ModifySetList
+    plural: modifysets
+    singular: modifyset
+  scope: Namespaced
   versions:
-  - name: v1alpha1
+  - name: ""
     schema:
       openAPIV3Schema:
-        description: AssignImage is the Schema for the assignimage API.
+        description: |-
+          ModifySet allows the user to modify non-keyed lists, such as
+          the list of arguments to a container.
         properties:
           apiVersion:
             description: |-
@@ -37,7 +39,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: AssignImageSpec defines the desired state of AssignImage.
+            description: ModifySetSpec defines the desired state of ModifySet.
             properties:
               applyTo:
                 description: |-
@@ -65,7 +67,7 @@ spec:
                 type: array
               location:
                 description: 'Location describes the path to be mutated, for example:
-                  `spec.containers[name: main].image`.'
+                  `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: |-
@@ -253,21 +255,18 @@ spec:
               parameters:
                 description: Parameters define the behavior of the mutator.
                 properties:
-                  assignDomain:
-                    description: |-
-                      AssignDomain sets the domain component on an image string. The trailing
-                      slash should not be included.
-                    type: string
-                  assignPath:
-                    description: AssignPath sets the domain component on an image
-                      string.
-                    type: string
-                  assignTag:
-                    description: |-
-                      AssignImage sets the image component on an image string. It must start
-                      with a `:` or `@`.
+                  operation:
+                    default: merge
+                    description: Operation describes whether values should be merged
+                      in ("merge"), or pruned ("prune"). Default value is "merge"
+                    enum:
+                    - merge
+                    - prune
                     type: string
                   pathTests:
+                    description: |-
+                      PathTests are a series of existence tests that can be checked
+                      before a mutation is applied
                     items:
                       description: |-
                         PathTest allows the user to customize how the mutation works if parent
@@ -292,10 +291,15 @@ spec:
                           type: string
                       type: object
                     type: array
+                  values:
+                    description: Values describes the values provided to the operation
+                      as `values.fromList`.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
                 type: object
             type: object
           status:
-            description: AssignImageStatus defines the observed state of AssignImage.
+            description: ModifySetStatus defines the observed state of ModifySet.
             properties:
               byPod:
                 items:
@@ -341,5 +345,3 @@ spec:
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}

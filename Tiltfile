@@ -17,7 +17,7 @@ if settings.get("trigger_mode", "auto").lower() == "manual":
     trigger_mode(TRIGGER_MODE_MANUAL)
 
 TILT_DOCKERFILE = """
-FROM golang:1.23-bookworm as tilt-helper
+FROM golang:1.25-trixie as tilt-helper
 # Support live reloading with Tilt
 RUN wget --output-document /restart.sh --quiet https://raw.githubusercontent.com/tilt-dev/rerun-process-wrapper/60eaa572cdf825c646008e1ea28b635f83cefb38/restart.sh && \
     wget --output-document /start.sh --quiet https://raw.githubusercontent.com/tilt-dev/rerun-process-wrapper/60eaa572cdf825c646008e1ea28b635f83cefb38/start.sh && \

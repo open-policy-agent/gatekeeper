@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: assignimage.mutations.gatekeeper.sh
+  name: assignimages.
 spec:
-  group: mutations.gatekeeper.sh
+  group: ""
   names:
     kind: AssignImage
     listKind: AssignImageList
-    plural: assignimage
+    plural: assignimages
     singular: assignimage
-  scope: Cluster
+  scope: Namespaced
   versions:
-  - name: v1alpha1
+  - name: ""
     schema:
       openAPIV3Schema:
-        description: AssignImage is the Schema for the assignimage API.
+        description: AssignImage is the Schema for the assign API.
         properties:
           apiVersion:
             description: |-
@@ -341,5 +341,3 @@ spec:
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
