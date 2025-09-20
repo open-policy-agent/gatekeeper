@@ -194,6 +194,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	if err != nil {
 		return err
 	}
+
+	// Only watching v1 since VAP is stable since Kubernetes 1.30+
+	if err = c.Watch(source.Kind(mgr.GetCache(), &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *admissionregistrationv1.ValidatingAdmissionPolicyBinding) []reconcile.Request {
+		return eventPackerMapFuncFromOwnerRefs()(ctx, obj)
+	}))); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -788,4 +795,27 @@ func cleanEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodSt
 
 func getVAPBindingName(constraintName string) string {
 	return fmt.Sprintf("gatekeeper-%s", constraintName)
+}
+
+func eventPackerMapFuncFromOwnerRefs() handler.MapFunc {
+	mf := util.EventPackerMapFunc()
+	return func(ctx context.Context, o client.Object) []reconcile.Request {
+		var out []reconcile.Request
+		for _, owner := range o.GetOwnerReferences() {
+			if owner.Controller != nil && *owner.Controller && strings.HasPrefix(owner.APIVersion, "constraints.gatekeeper.sh/") {
+				// APIVersion may be "group/version"; split into group and version
+				group := ""
+				version := owner.APIVersion
+				if parts := strings.SplitN(owner.APIVersion, "/", 2); len(parts) == 2 {
+					group = parts[0]
+					version = parts[1]
+				}
+				u := &unstructured.Unstructured{}
+				u.SetGroupVersionKind(schema.GroupVersionKind{Group: group, Version: version, Kind: owner.Kind})
+				u.SetName(owner.Name)
+				out = append(out, mf(ctx, u)...)
+			}
+		}
+		return out
+	}
 }
