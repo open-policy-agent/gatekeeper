@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -229,12 +230,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Only watching v1 since VAP is stable since Kubernetes 1.30+
 	err = c.Watch(
 		source.Kind(mgr.GetCache(), &admissionregistrationv1.ValidatingAdmissionPolicy{},
-			handler.TypedEnqueueRequestForOwner[*admissionregistrationv1.ValidatingAdmissionPolicy](
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&v1beta1.ConstraintTemplate{},
-				handler.OnlyControllerOwner(),
-			)))
+			handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *admissionregistrationv1.ValidatingAdmissionPolicy) []reconcile.Request {
+				var out []reconcile.Request
+				for _, owner := range obj.GetOwnerReferences() {
+					if owner.Controller != nil && *owner.Controller && strings.HasPrefix(owner.APIVersion, v1beta1.SchemeGroupVersion.Group+"/") {
+						out = append(out, reconcile.Request{NamespacedName: types.NamespacedName{Name: owner.Name}})
+					}
+				}
+				return out
+			})))
 	if err != nil {
 		return err
 	}

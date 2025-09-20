@@ -739,12 +739,12 @@ func TestEventPackerMapFuncFromOwnerRefs_ValidOwner(t *testing.T) {
 	}
 	// Expect packed name format: gvk:Kind.Version.Group:Name
 	expectedPrefix := "gvk:MyConstraint.v1beta1.constraints.gatekeeper.sh:"
-	if got[0].NamespacedName.Name[:len(expectedPrefix)] != expectedPrefix {
-		t.Fatalf("packed name not as expected: %s", got[0].NamespacedName.Name)
+	if got[0].Name[:len(expectedPrefix)] != expectedPrefix {
+		t.Fatalf("packed name not as expected: %s", got[0].Name)
 	}
 	// Unpack validation via util.UnpackRequest is exercised elsewhere; ensure namespace empty
-	if got[0].NamespacedName.Namespace != "" {
-		t.Fatalf("expected cluster-scoped owner to produce empty namespace, got %q", got[0].NamespacedName.Namespace)
+	if got[0].Namespace != "" {
+		t.Fatalf("expected cluster-scoped owner to produce empty namespace, got %q", got[0].Namespace)
 	}
 }
 
@@ -822,8 +822,8 @@ func TestEventPackerMapFuncFromOwnerRefs_SingleOwner(t *testing.T) {
 	if gvk.Kind != "MyConstraint" {
 		t.Fatalf("unexpected kind: %s", gvk.Kind)
 	}
-	if unpacked.NamespacedName.Name != "my-constraint-name" {
-		t.Fatalf("unexpected name: %s", unpacked.NamespacedName.Name)
+	if unpacked.Name != "my-constraint-name" {
+		t.Fatalf("unexpected name: %s", unpacked.Name)
 	}
 }
 
@@ -857,7 +857,7 @@ func TestEventPackerMapFuncFromOwnerRefs_MultipleOwners(t *testing.T) {
 	if gvk.Kind != "FooConstraint" || gvk.Group != "constraints.gatekeeper.sh" {
 		t.Fatalf("unexpected gvk: %v", gvk)
 	}
-	if unpacked.NamespacedName.Name != "foo-name" {
-		t.Fatalf("unexpected name: %s", unpacked.NamespacedName.Name)
+	if unpacked.Name != "foo-name" {
+		t.Fatalf("unexpected name: %s", unpacked.Name)
 	}
 }
