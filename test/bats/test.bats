@@ -684,9 +684,8 @@ __expansion_audit_test() {
 
 @test "rego v1 tests" {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_regov1.yaml"
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabels -ojson | jq -r -e '.status.byPod[0]'"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -ojson | jq -r -e '.status.byPod[0]'"
 
-  kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -oyaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided.yaml"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
