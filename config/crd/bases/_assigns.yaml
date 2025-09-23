@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: assignimage.mutations.gatekeeper.sh
+  name: assigns.
 spec:
-  group: mutations.gatekeeper.sh
+  group: ""
   names:
-    kind: AssignImage
-    listKind: AssignImageList
-    plural: assignimage
-    singular: assignimage
-  scope: Cluster
+    kind: Assign
+    listKind: AssignList
+    plural: assigns
+    singular: assign
+  scope: Namespaced
   versions:
-  - name: v1alpha1
+  - name: ""
     schema:
       openAPIV3Schema:
-        description: AssignImage is the Schema for the assignimage API.
+        description: Assign is the Schema for the assign API.
         properties:
           apiVersion:
             description: |-
@@ -37,7 +37,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: AssignImageSpec defines the desired state of AssignImage.
+            description: AssignSpec defines the desired state of Assign.
             properties:
               applyTo:
                 description: |-
@@ -65,7 +65,7 @@ spec:
                 type: array
               location:
                 description: 'Location describes the path to be mutated, for example:
-                  `spec.containers[name: main].image`.'
+                  `spec.containers[name: main]`.'
                 type: string
               match:
                 description: |-
@@ -253,20 +253,59 @@ spec:
               parameters:
                 description: Parameters define the behavior of the mutator.
                 properties:
-                  assignDomain:
-                    description: |-
-                      AssignDomain sets the domain component on an image string. The trailing
-                      slash should not be included.
-                    type: string
-                  assignPath:
-                    description: AssignPath sets the domain component on an image
-                      string.
-                    type: string
-                  assignTag:
-                    description: |-
-                      AssignImage sets the image component on an image string. It must start
-                      with a `:` or `@`.
-                    type: string
+                  assign:
+                    description: Assign.value holds the value to be assigned
+                    properties:
+                      externalData:
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
+                        properties:
+                          dataSource:
+                            default: ValueAtLocation
+                            description: |-
+                              DataSource specifies where to extract the data that will be sent
+                              to the external data provider as parameters.
+                            enum:
+                            - ValueAtLocation
+                            - Username
+                            type: string
+                          default:
+                            description: |-
+                              Default specifies the default value to use when the external data
+                              provider returns an error and the failure policy is set to "UseDefault".
+                            type: string
+                          failurePolicy:
+                            default: Fail
+                            description: |-
+                              FailurePolicy specifies the policy to apply when the external data
+                              provider returns an error.
+                            enum:
+                            - UseDefault
+                            - Ignore
+                            - Fail
+                            type: string
+                          provider:
+                            description: Provider is the name of the external data
+                              provider.
+                            type: string
+                        required:
+                        - provider
+                        type: object
+                      fromMetadata:
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
+                        properties:
+                          field:
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
+                            type: string
+                        type: object
+                      value:
+                        description: Value is a constant value that will be assigned
+                          to `location`
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
                   pathTests:
                     items:
                       description: |-
@@ -295,7 +334,7 @@ spec:
                 type: object
             type: object
           status:
-            description: AssignImageStatus defines the observed state of AssignImage.
+            description: AssignStatus defines the observed state of Assign.
             properties:
               byPod:
                 items:
@@ -341,5 +380,3 @@ spec:
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
