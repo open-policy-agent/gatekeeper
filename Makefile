@@ -27,14 +27,14 @@ VERSION := v3.21.0-beta.0
 KIND_VERSION ?= 0.29.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.33.0
-KUSTOMIZE_VERSION ?= 3.8.9
+KUBERNETES_VERSION ?= 1.33.2
+KUSTOMIZE_VERSION ?= 4.5.7
 BATS_VERSION ?= 1.12.0
 ORAS_VERSION ?= 1.2.3
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.17.4
 NODE_VERSION ?= 24-bullseye-slim
-YQ_VERSION ?= 4.35.2
+YQ_VERSION ?= 4.44.6
 
 HELM_ARGS ?=
 HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
@@ -370,7 +370,7 @@ manifests: __controller-gen
 		/gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
 	docker run --rm -v $(shell pwd):/gatekeeper \
 		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-		--load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
+		--load-restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.
