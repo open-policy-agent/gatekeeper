@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: assignimage.mutations.gatekeeper.sh
+  name: assignmetadata.
 spec:
-  group: mutations.gatekeeper.sh
+  group: ""
   names:
-    kind: AssignImage
-    listKind: AssignImageList
-    plural: assignimage
-    singular: assignimage
-  scope: Cluster
+    kind: AssignMetadata
+    listKind: AssignMetadataList
+    plural: assignmetadata
+    singular: assignmetadata
+  scope: Namespaced
   versions:
-  - name: v1alpha1
+  - name: ""
     schema:
       openAPIV3Schema:
-        description: AssignImage is the Schema for the assignimage API.
+        description: AssignMetadata is the Schema for the assignmetadata API.
         properties:
           apiVersion:
             description: |-
@@ -37,41 +37,12 @@ spec:
           metadata:
             type: object
           spec:
-            description: AssignImageSpec defines the desired state of AssignImage.
+            description: AssignMetadataSpec defines the desired state of AssignMetadata.
             properties:
-              applyTo:
-                description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
-                  This is necessary because every mutation implies part of an object schema and object
-                  schemas are associated with specific GVKs.
-                items:
-                  description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
-                    Globs are not allowed.
-                  properties:
-                    groups:
-                      items:
-                        type: string
-                      type: array
-                    kinds:
-                      items:
-                        type: string
-                      type: array
-                    versions:
-                      items:
-                        type: string
-                      type: array
-                  type: object
-                type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
-                  `spec.containers[name: main].image`.'
                 type: string
               match:
-                description: |-
-                  Match allows the user to limit which resources get mutated.
-                  Individual match criteria are AND-ed together. An undefined
-                  match criteria matches everything.
+                description: Match selects which objects are in scope.
                 properties:
                   excludedNamespaces:
                     description: |-
@@ -251,53 +222,69 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
                 properties:
-                  assignDomain:
-                    description: |-
-                      AssignDomain sets the domain component on an image string. The trailing
-                      slash should not be included.
-                    type: string
-                  assignPath:
-                    description: AssignPath sets the domain component on an image
-                      string.
-                    type: string
-                  assignTag:
-                    description: |-
-                      AssignImage sets the image component on an image string. It must start
-                      with a `:` or `@`.
-                    type: string
-                  pathTests:
-                    items:
-                      description: |-
-                        PathTest allows the user to customize how the mutation works if parent
-                        paths are missing. It traverses the list in order. All sub paths are
-                        tested against the provided condition, if the test fails, the mutation is
-                        not applied. All `subPath` entries must be a prefix of `location`. Any
-                        glob characters will take on the same value as was used to
-                        expand the matching glob in `location`.
-
-                        Available Tests:
-                        * MustExist    - the path must exist or do not mutate
-                        * MustNotExist - the path must not exist or do not mutate.
-                      properties:
-                        condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
-                          enum:
-                          - MustExist
-                          - MustNotExist
-                          type: string
-                        subPath:
-                          type: string
-                      type: object
-                    type: array
+                  assign:
+                    description: Assign.value holds the value to be assigned
+                    properties:
+                      externalData:
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
+                        properties:
+                          dataSource:
+                            default: ValueAtLocation
+                            description: |-
+                              DataSource specifies where to extract the data that will be sent
+                              to the external data provider as parameters.
+                            enum:
+                            - ValueAtLocation
+                            - Username
+                            type: string
+                          default:
+                            description: |-
+                              Default specifies the default value to use when the external data
+                              provider returns an error and the failure policy is set to "UseDefault".
+                            type: string
+                          failurePolicy:
+                            default: Fail
+                            description: |-
+                              FailurePolicy specifies the policy to apply when the external data
+                              provider returns an error.
+                            enum:
+                            - UseDefault
+                            - Ignore
+                            - Fail
+                            type: string
+                          provider:
+                            description: Provider is the name of the external data
+                              provider.
+                            type: string
+                        required:
+                        - provider
+                        type: object
+                      fromMetadata:
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
+                        properties:
+                          field:
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
+                            type: string
+                        type: object
+                      value:
+                        description: Value is a constant value that will be assigned
+                          to `location`
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
                 type: object
             type: object
           status:
-            description: AssignImageStatus defines the observed state of AssignImage.
+            description: AssignMetadataStatus defines the observed state of AssignMetadata.
             properties:
               byPod:
+                description: |-
+                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+                  Important: Run "make" to regenerate code after modifying this file
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
@@ -341,5 +328,3 @@ spec:
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
