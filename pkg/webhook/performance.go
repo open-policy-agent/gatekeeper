@@ -41,14 +41,14 @@ type PerformanceMetrics struct {
 
 // performanceData holds the actual metrics with mutex protection
 type performanceData struct {
-	mu                sync.RWMutex
-	totalRequests     int64
-	totalDuration     time.Duration
-	maxDuration       time.Duration
-	minDuration       time.Duration
-	goroutineCount    int64
-	memoryUsage       uint64
-	lastCleanupTime   time.Time
+	mu              sync.RWMutex
+	totalRequests   int64
+	totalDuration   time.Duration
+	maxDuration     time.Duration
+	minDuration     time.Duration
+	goroutineCount  int64
+	memoryUsage     uint64
+	lastCleanupTime time.Time
 }
 
 // PerformanceTracker provides webhook performance monitoring and optimization

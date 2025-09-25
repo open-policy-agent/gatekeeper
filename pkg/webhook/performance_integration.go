@@ -32,14 +32,6 @@ var (
 	webhookGCThreshold               = flag.Uint64("webhook-gc-threshold", 100*1024*1024, "memory threshold in bytes to trigger garbage collection")
 )
 
-// PerformanceOptimizedPolicyWebhook extends the policy webhook with performance optimizations
-type PerformanceOptimizedPolicyWebhook struct {
-	*validationHandler
-	performanceTracker *PerformanceTracker
-	memoryOptimizer    *MemoryOptimizer
-	optimizedHandler   *OptimizedRequestHandler
-}
-
 // AddPerformanceOptimizedPolicyWebhook registers an enhanced policy webhook with performance optimizations
 func AddPerformanceOptimizedPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 	if !*enableWebhookPerformanceTracking {
