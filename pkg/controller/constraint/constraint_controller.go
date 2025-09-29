@@ -195,11 +195,17 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 		return err
 	}
 
-	// Only watching v1 since VAP is stable since Kubernetes 1.30+
-	if err = c.Watch(source.Kind(mgr.GetCache(), &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *admissionregistrationv1.ValidatingAdmissionPolicyBinding) []reconcile.Request {
-		return eventPackerMapFuncFromOwnerRefs()(ctx, obj)
-	}))); err != nil {
-		return err
+	isVapAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
+	if isVapAPIEnabled {
+		obj, err := vapBindingForVersion(*groupVersion)
+		if err != nil {
+			return err
+		}
+		if err = c.Watch(source.Kind(mgr.GetCache(), obj, handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+			return eventPackerMapFuncFromOwnerRefs()(ctx, obj)
+		}))); err != nil {
+			return err
+		}
 	}
 	return nil
 }

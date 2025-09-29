@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 env:
-  BASE_RELEASE: 3.16.3
-  BASE_BRANCH: release-3.16
+  BASE_RELEASE: 3.9.2
+  BASE_BRANCH: release-3.9
 
 jobs:
   helm_upgrade:
@@ -39,7 +39,7 @@ jobs:
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
           make e2e-bootstrap KUBERNETES_VERSION=${{ env.KUBERNETES_VERSION }}
         env:
-          KUBERNETES_VERSION: 1.30.13
+          KUBERNETES_VERSION: 1.24.4
 
       - name: Deploy Helm release
         run: |

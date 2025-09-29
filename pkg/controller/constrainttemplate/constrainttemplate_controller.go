@@ -226,21 +226,26 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to ValidatingAdmissionPolicy v1 resources
-	// Only watching v1 since VAP is stable since Kubernetes 1.30+
-	err = c.Watch(
-		source.Kind(mgr.GetCache(), &admissionregistrationv1.ValidatingAdmissionPolicy{},
-			handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *admissionregistrationv1.ValidatingAdmissionPolicy) []reconcile.Request {
-				var out []reconcile.Request
-				for _, owner := range obj.GetOwnerReferences() {
-					if owner.Controller != nil && *owner.Controller && strings.HasPrefix(owner.APIVersion, v1beta1.SchemeGroupVersion.Group+"/") {
-						out = append(out, reconcile.Request{NamespacedName: types.NamespacedName{Name: owner.Name}})
+	isVapAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&logger)
+	if isVapAPIEnabled {
+		obj, err := vapForVersion(groupVersion)
+		if err != nil {
+			return err
+		}
+		err = c.Watch(
+			source.Kind(mgr.GetCache(), obj,
+				handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+					var out []reconcile.Request
+					for _, owner := range obj.GetOwnerReferences() {
+						if owner.Controller != nil && *owner.Controller && strings.HasPrefix(owner.APIVersion, v1beta1.SchemeGroupVersion.Group+"/") {
+							out = append(out, reconcile.Request{NamespacedName: types.NamespacedName{Name: owner.Name}})
+						}
 					}
-				}
-				return out
-			})))
-	if err != nil {
-		return err
+					return out
+				})))
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
