@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -216,10 +217,18 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 
 func AppendMutationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
 	if operations.IsAssigned(operations.MutationWebhook) {
-		return append(webhooks, rotator.WebhookInfo{
+		webhooks = append(webhooks, rotator.WebhookInfo{
 			Name: *MwhName,
 			Type: rotator.Mutating,
 		})
+		for _, addlMwh := range strings.Split(*AdditionalMwhNamesToRotateCerts, ",") {
+			if addlMwh != *MwhName && addlMwh != "" {
+				webhooks = append(webhooks, rotator.WebhookInfo{
+					Name: addlMwh,
+					Type: rotator.Mutating,
+				})
+			}
+		}
 	}
 	return webhooks
 }
