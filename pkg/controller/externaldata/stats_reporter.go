@@ -91,11 +91,12 @@ func (r *reporter) remove(key types.NamespacedName) {
 }
 
 func (r *reporter) report(_ context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	
 	if !r.dirty {
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	if r.statusReport == nil {
 		r.statusReport = make(map[metrics.Status]int64)
