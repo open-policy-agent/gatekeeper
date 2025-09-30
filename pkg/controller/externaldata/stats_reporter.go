@@ -25,13 +25,9 @@ var providerErrorCountM metric.Int64Counter
 func (r *reporter) observeProviderMetric(_ context.Context, o metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if !r.dirty {
-		return nil
-	}
 	for status, count := range r.statusReport {
 		o.Observe(count, metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
-	r.dirty = false
 	return nil
 }
 
@@ -113,4 +109,6 @@ func (r *reporter) report(_ context.Context) {
 	for _, s := range metrics.AllStatuses {
 		r.statusReport[s] = totals[s]
 	}
+
+	r.dirty = false
 }
