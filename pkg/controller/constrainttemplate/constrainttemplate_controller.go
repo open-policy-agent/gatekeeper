@@ -227,7 +227,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	isVapAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&logger)
-	if isVapAPIEnabled {
+	if isVapAPIEnabled && operations.IsAssigned(operations.Generate) {
 		obj, err := vapForVersion(groupVersion)
 		if err != nil {
 			return err

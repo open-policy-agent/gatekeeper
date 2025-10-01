@@ -196,7 +196,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	}
 
 	isVapAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
-	if isVapAPIEnabled {
+	if isVapAPIEnabled && operations.IsAssigned(operations.Generate) {
 		obj, err := vapBindingForVersion(*groupVersion)
 		if err != nil {
 			return err
