@@ -314,6 +314,8 @@ crds:
     runAsUser: 65532
 pdb:
   controllerManager:
+    # If set, overrides minAvailable in PDB templates
+    # maxUnavailable: 1
     minAvailable: 1
 service: {}
 disabledBuiltins: ["{http.send}"]
