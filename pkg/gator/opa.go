@@ -6,9 +6,10 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"os"
 )
 
-func NewOPAClient(includeTrace bool, k8sCEL bool) (Client, error) {
+func NewOPAClient(includeTrace bool, printEnabled bool, k8sCEL bool) (Client, error) {
 	args := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 
 	if k8sCEL {
@@ -19,7 +20,18 @@ func NewOPAClient(includeTrace bool, k8sCEL bool) (Client, error) {
 		args = append(args, constraintclient.Driver(k8sDriver))
 	}
 
-	driver, err := rego.New(rego.Tracing(includeTrace))
+	driverArgs := []rego.Arg{
+		rego.Tracing(includeTrace),
+	}
+
+	if printEnabled {
+		driverArgs = append(driverArgs,
+			rego.PrintEnabled(printEnabled),
+			rego.PrintHook(NewPrintHook(os.Stdout)),
+		)
+	}
+
+	driver, err := rego.New(driverArgs...)
 	if err != nil {
 		return nil, err
 	}

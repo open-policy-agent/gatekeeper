@@ -50,6 +50,7 @@ var (
 	flagTempDir      string
 	flagEnableK8sCel bool
 	flagDenyOnly     bool
+	flagVerbose	 bool
 )
 
 const (
@@ -57,6 +58,7 @@ const (
 	flagNameOutput   = "output"
 	flagNameImage    = "image"
 	flagNameTempDir  = "tempdir"
+	flagNameVerbose  = "verbose"
 
 	stringJSON          = "json"
 	stringYAML          = "yaml"
@@ -74,6 +76,7 @@ func init() {
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 	Cmd.Flags().BoolVarP(&flagDenyOnly, "deny-only", "", false, "output only denied constraints")
+	Cmd.Flags().BoolVarP(&flagVerbose, flagNameVerbose, "v", false, "print extended test output")
 }
 
 func run(_ *cobra.Command, _ []string) {
@@ -85,7 +88,12 @@ func run(_ *cobra.Command, _ []string) {
 		cmdutils.ErrFatalf("no input data identified")
 	}
 
-	responses, err := test.Test(unstrucs, test.Opts{IncludeTrace: flagIncludeTrace, GatherStats: flagGatherStats, UseK8sCEL: flagEnableK8sCel})
+	responses, err := test.Test(unstrucs, test.Opts{
+		IncludeTrace: flagIncludeTrace,
+		GatherStats: flagGatherStats,
+		UseK8sCEL: flagEnableK8sCel,
+		Verbose: flagVerbose,
+	})
 	if err != nil {
 		cmdutils.ErrFatalf("auditing objects: %v", err)
 	}
