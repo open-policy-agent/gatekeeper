@@ -40,6 +40,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
 	errorpkg "github.com/pkg/errors"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -307,26 +308,14 @@ type ReconcileConstraintTemplate struct {
 // and what is in the ConstraintTemplate.Spec.
 func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	logger := logger.WithValues("template_name", request.Name)
-	gvk, _, err := util.UnpackRequest(request)
-	if err != nil {
-		// Unrecoverable, do not retry.
-		logger.Error(err, "unpacking request", "request", request)
-		return reconcile.Result{}, nil
-	}
-
-	// Sanity - make sure it is a constraint resource.
-	if gvk.Group != v1beta1.SchemeGroupVersion.Group || gvk.Kind != "ConstraintTemplate" {
-		// Unrecoverable, do not retry.
-		logger.Error(err, "invalid constraintTemplate GroupKind", "gvk", gvk)
-		return reconcile.Result{}, nil
-	}
 
 	defer r.metrics.registry.report(ctx, r.metrics)
 
 	// Fetch the ConstraintTemplate instance
 	deleted := false
 	ct := &v1beta1.ConstraintTemplate{}
-	err = r.Get(ctx, request.NamespacedName, ct)
+	// TODO - validate that false reconcile requests are not happening, check that this reconciler is not getting triggered for events meant to be for constraint controller
+	err := r.Get(ctx, request.NamespacedName, ct)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			return reconcile.Result{}, err
@@ -926,10 +915,16 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		// Get webhook configuration from cache if available
 		var webhookConfig *webhookconfig.WebhookMatchingConfig
 		if r.webhookCache != nil {
-			config, exists := r.webhookCache.GetConfig("validation.gatekeeper.sh")
+			logger.Info("looking up webhook config in cache", "lookupKey", *webhook.VwhName)
+			config, exists := r.webhookCache.GetConfig(*webhook.VwhName)
 			if exists {
 				webhookConfig = &config
+				logger.Info("found webhook config in cache", "lookupKey", *webhook.VwhName, "hasNamespaceSelector", config.NamespaceSelector != nil)
+			} else {
+				logger.Info("webhook config not found in cache", "lookupKey", *webhook.VwhName)
 			}
+		} else {
+			logger.Info("webhook cache is nil")
 		}
 
 		var transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy

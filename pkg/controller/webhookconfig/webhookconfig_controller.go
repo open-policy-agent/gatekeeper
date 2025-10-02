@@ -72,9 +72,13 @@ func (w *WebhookConfigCache) UpdateConfig(webhookName string, newConfig WebhookM
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	logger := log.Log.WithName("webhook-config-cache")
+	logger.Info("storing webhook config in cache", "key", webhookName, "hasNamespaceSelector", newConfig.NamespaceSelector != nil)
+
 	oldConfig, exists := w.configs[webhookName]
 	if !exists || !reflect.DeepEqual(oldConfig, newConfig) {
 		w.configs[webhookName] = newConfig
+		logger.Info("webhook config stored/updated in cache", "key", webhookName, "cacheSize", len(w.configs))
 		return true
 	}
 	return false
@@ -91,7 +95,12 @@ func (w *WebhookConfigCache) RemoveConfig(webhookName string) {
 func (w *WebhookConfigCache) GetConfig(webhookName string) (WebhookMatchingConfig, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
+	
+	logger := log.Log.WithName("webhook-config-cache")
+	logger.Info("retrieving webhook config from cache", "key", webhookName, "cacheSize", len(w.configs))
+	
 	config, exists := w.configs[webhookName]
+	logger.Info("webhook config lookup result", "key", webhookName, "exists", exists)
 	return config, exists
 }
 
@@ -222,10 +231,10 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 
 	// Check if matching fields have changed
 	if r.cache.UpdateConfig(request.Name, newConfig) {
-		logger.Info("ValidatingWebhookConfiguration matching fields changed, triggering ConstraintTemplate reconciliation")
+		logger.Info("ValidatingWebhookConfiguration matching fields changed, triggering ConstraintTemplate reconciliation", "storedKey", request.Name)
 		r.cache.TriggerConstraintTemplateReconciliation(ctx, r.Client, request.Name)
 	} else {
-		logger.V(1).Info("ValidatingWebhookConfiguration updated but no matching field changes detected")
+		logger.V(1).Info("ValidatingWebhookConfiguration updated but no matching field changes detected", "storedKey", request.Name)
 	}
 
 	return reconcile.Result{}, nil
