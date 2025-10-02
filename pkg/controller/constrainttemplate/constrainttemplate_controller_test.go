@@ -255,14 +255,15 @@ func TestReconcile(t *testing.T) {
 		fakes.WithName("no-pod"),
 	)
 
-	// events will be used to receive events from dynamic watches registered
-	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, cfClient, wm, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	// constraintEvents for constraint controller, constraintTemplateEvents for webhook changes
+	constraintEvents := make(chan event.GenericEvent, 1024)
+	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, constraintEvents, func(context.Context) (*corev1.Pod, error) { return pod, nil }, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = add(mgr, rec)
+	err = add(mgr, rec, constraintTemplateEvents)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1772,14 +1773,15 @@ violation[{"msg": "denied!"}] {
 		fakes.WithName("no-pod"),
 	)
 
-	// events will be used to receive events from dynamic watches registered
-	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, cfClient, wm, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	// constraintEvents for constraint controller, constraintTemplateEvents for webhook changes
+	constraintEvents := make(chan event.GenericEvent, 1024)
+	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil }, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = add(mgr, rec)
+	err = add(mgr, rec, constraintTemplateEvents)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1812,7 +1814,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// set event channel to receive request for constraint
-	events <- event.GenericEvent{
+	constraintEvents <- event.GenericEvent{
 		Object: cstr,
 	}
 

@@ -7,6 +7,7 @@ import (
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -17,6 +18,10 @@ import (
 )
 
 func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil)
+}
+
+func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfig.WebhookMatchingConfig) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	source, err := schema.GetSourceFromTemplate(template)
 	if err != nil {
 		return nil, err
@@ -46,6 +51,60 @@ func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admiss
 		return nil, err
 	}
 
+	// Build match constraints from webhook config if available, otherwise use defaults
+	var matchConstraints *admissionregistrationv1beta1.MatchResources
+	if webhookConfig != nil {
+		// Use webhook configuration for matching criteria
+		resourceRules := make([]admissionregistrationv1beta1.NamedRuleWithOperations, 0, len(webhookConfig.Rules))
+		for _, rule := range webhookConfig.Rules {
+			// Convert operations from webhook format to VAP format
+			operations := make([]admissionregistrationv1beta1.OperationType, 0, len(rule.Operations))
+			operations = append(operations, rule.Operations...)
+
+			resourceRules = append(resourceRules, admissionregistrationv1beta1.NamedRuleWithOperations{
+				RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
+					Operations: operations,
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   rule.APIGroups,
+						APIVersions: rule.APIVersions,
+						Resources:   rule.Resources,
+						Scope:       rule.Scope,
+					},
+				},
+			})
+		}
+
+		matchConstraints = &admissionregistrationv1beta1.MatchResources{
+			NamespaceSelector: webhookConfig.NamespaceSelector,
+			ObjectSelector:    webhookConfig.ObjectSelector,
+			ResourceRules:     resourceRules,
+			MatchPolicy:       (*admissionregistrationv1beta1.MatchPolicyType)(webhookConfig.MatchPolicy),
+		}
+
+		// Add webhook match conditions to the policy match conditions
+		if len(webhookConfig.MatchConditions) > 0 {
+			for _, webhookCondition := range webhookConfig.MatchConditions {
+				matchConditions = append(matchConditions, admissionregistrationv1beta1.MatchCondition{
+					Name:       webhookCondition.Name,
+					Expression: webhookCondition.Expression,
+				})
+			}
+		}
+	} else {
+		// Default match constraints when no webhook config available
+		matchConstraints = &admissionregistrationv1beta1.MatchResources{
+			ResourceRules: []admissionregistrationv1beta1.NamedRuleWithOperations{
+				{
+					RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
+						/// TODO(ritazh): default for now until we can safely expose these to users
+						Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+						Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
+					},
+				},
+			},
+		}
+	}
+
 	policy := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("gatekeeper-%s", template.GetName()),
@@ -55,17 +114,7 @@ func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admiss
 				APIVersion: fmt.Sprintf("%s/%s", apiconstraints.Group, templatesv1beta1.SchemeGroupVersion.Version),
 				Kind:       template.Spec.CRD.Spec.Names.Kind,
 			},
-			MatchConstraints: &admissionregistrationv1beta1.MatchResources{
-				ResourceRules: []admissionregistrationv1beta1.NamedRuleWithOperations{
-					{
-						RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
-							/// TODO(ritazh): default for now until we can safely expose these to users
-							Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
-							Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
-						},
-					},
-				},
-			},
+			MatchConstraints: matchConstraints,
 			MatchConditions:  matchConditions,
 			Validations:      validations,
 			FailurePolicy:    failurePolicy,

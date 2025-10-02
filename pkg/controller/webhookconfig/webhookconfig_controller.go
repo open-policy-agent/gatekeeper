@@ -87,13 +87,21 @@ func (w *WebhookConfigCache) RemoveConfig(webhookName string) {
 	delete(w.configs, webhookName)
 }
 
+// GetConfig retrieves the current webhook configuration from cache.
+func (w *WebhookConfigCache) GetConfig(webhookName string) (WebhookMatchingConfig, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	config, exists := w.configs[webhookName]
+	return config, exists
+}
+
 // TriggerConstraintTemplateReconciliation sends events to trigger CT reconciliation.
 func (w *WebhookConfigCache) TriggerConstraintTemplateReconciliation(ctx context.Context, c client.Client, webhookName string) {
 	logger := logger.WithValues("webhook_name", webhookName)
 	logger.Info("Triggering ConstraintTemplate reconciliation due to webhook matching field changes")
 
 	// List all ConstraintTemplates
-	//TODO: optimize this by only triggerring reconciliation for VAP gen templates
+	// TODO: optimize this by only triggering reconciliation for VAP gen templates
 	templateList := &v1beta1.ConstraintTemplateList{}
 	if err := c.List(ctx, templateList); err != nil {
 		logger.Error(err, "failed to list ConstraintTemplates for webhook reconciliation")
@@ -127,10 +135,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	}
 
 	return add(mgr, r)
-}
-
-func (a *Adder) InjectCache(cache *WebhookConfigCache) {
-	a.Cache = cache
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
