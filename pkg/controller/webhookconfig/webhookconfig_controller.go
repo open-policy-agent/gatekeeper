@@ -53,20 +53,6 @@ func NewWebhookConfigCache(ctEvents chan<- event.GenericEvent) *WebhookConfigCac
 	}
 }
 
-// HasMatchingFieldsChanged checks if any matching-related fields have changed.
-func (w *WebhookConfigCache) HasMatchingFieldsChanged(webhookName string, newConfig WebhookMatchingConfig) bool {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	oldConfig, exists := w.configs[webhookName]
-	if !exists {
-		// First time seeing this webhook, consider it changed
-		return true
-	}
-
-	return !reflect.DeepEqual(oldConfig, newConfig)
-}
-
 // UpdateConfig updates the cached config and returns whether it changed.
 func (w *WebhookConfigCache) UpdateConfig(webhookName string, newConfig WebhookMatchingConfig) bool {
 	w.mu.Lock()
@@ -205,17 +191,16 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	// Extract the validation.gatekeeper.sh webhook specifically
 	var gatekeeperWebhook *admissionregistrationv1.ValidatingWebhook
 	for i := range webhookConfig.Webhooks {
-		if webhookConfig.Webhooks[i].Name == "validation.gatekeeper.sh" {
+		if webhookConfig.Webhooks[i].Name == webhook.ValidatingWebhookName {
 			gatekeeperWebhook = &webhookConfig.Webhooks[i]
 			break
 		}
 	}
 
 	if gatekeeperWebhook == nil {
-		logger.Info("validation.gatekeeper.sh webhook not found in configuration")
+		logger.Info("webhook not found in configuration", "name", webhook.ValidatingWebhookName)
 		// TODO: what happens if webhook is not found?
 		return reconcile.Result{}, nil
 	}
