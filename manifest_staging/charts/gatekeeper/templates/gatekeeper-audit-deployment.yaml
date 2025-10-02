@@ -61,12 +61,16 @@ spec:
         args:
         - --audit-interval={{ .Values.auditInterval }}
         - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
+        - --log-level-key={{ (.Values.audit.logLevelKey | empty | not) | ternary .Values.audit.logLevelKey .Values.logLevelKey }}
+        - --log-level-encoder={{ (.Values.audit.logLevelEncoder | empty | not) | ternary .Values.audit.logLevelEncoder .Values.logLevelEncoder }}
+        - --cert-dir={{ .Values.certDir }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         {{ if hasKey .Values "auditChunkSize" }}- --audit-chunk-size={{ .Values.auditChunkSize }}{{- end }}
         - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
+        - --api-cache-dir={{ .Values.apiCacheDir }}
         {{ if hasKey .Values "emitAuditEvents" }}- --emit-audit-events={{ .Values.emitAuditEvents }}{{- end }}
         {{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}
         - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
@@ -99,6 +103,10 @@ spec:
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
+        - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
+        - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
+        - --otlp-endpoint={{ .Values.otlpEndpoint }}
+        - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
         
         {{- if .Values.audit.logFile}}
         - --log-file={{ .Values.audit.logFile }}
@@ -168,7 +176,7 @@ spec:
           {{- toYaml .Values.audit.securityContext | nindent 10}}
         volumeMounts:
         {{- include "gatekeeper.extraVolumeMounts" . | nindent 8 }}
-        - mountPath: /certs
+        - mountPath: {{ .Values.certDir }}
           name: cert
           readOnly: true
         - mountPath: /tmp/audit
