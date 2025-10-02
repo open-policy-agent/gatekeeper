@@ -62,6 +62,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -271,6 +272,52 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 					}
 					return out
 				})))
+		if err != nil {
+			return err
+		}
+
+		// Watch for changes to ValidatingWebhookConfiguration
+		// When Gatekeeper's validating webhook configuration is updated,
+		// trigger reconciliation of all ConstraintTemplates
+		err = c.Watch(
+			source.Kind(mgr.GetCache(), &admissionregistrationv1.ValidatingWebhookConfiguration{},
+				handler.TypedEnqueueRequestsFromMapFunc[*admissionregistrationv1.ValidatingWebhookConfiguration](func(ctx context.Context, obj *admissionregistrationv1.ValidatingWebhookConfiguration) []reconcile.Request {
+					logger := logger.WithValues("webhook_config", obj.GetName())
+					logger.Info("ValidatingWebhookConfiguration updated, triggering ConstraintTemplate reconciliation")
+
+					// List all ConstraintTemplates and enqueue them for reconciliation
+					templateList := &v1beta1.ConstraintTemplateList{}
+					if err := mgr.GetClient().List(ctx, templateList); err != nil {
+						logger.Error(err, "failed to list ConstraintTemplates for webhook configuration update")
+						return nil
+					}
+
+					var requests []reconcile.Request
+					for i := range templateList.Items {
+						requests = append(requests, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name: templateList.Items[i].GetName(),
+							},
+						})
+					}
+
+					logger.Info("triggered reconciliation for ConstraintTemplates", "count", len(requests))
+					return requests
+				}),
+				predicate.TypedFuncs[*admissionregistrationv1.ValidatingWebhookConfiguration]{
+					CreateFunc: func(e event.TypedCreateEvent[*admissionregistrationv1.ValidatingWebhookConfiguration]) bool {
+						return e.Object.GetName() == *webhook.VwhName
+					},
+					UpdateFunc: func(e event.TypedUpdateEvent[*admissionregistrationv1.ValidatingWebhookConfiguration]) bool {
+						return e.ObjectNew.GetName() == *webhook.VwhName
+					},
+					DeleteFunc: func(e event.TypedDeleteEvent[*admissionregistrationv1.ValidatingWebhookConfiguration]) bool {
+						return e.Object.GetName() == *webhook.VwhName
+					},
+					GenericFunc: func(e event.TypedGenericEvent[*admissionregistrationv1.ValidatingWebhookConfiguration]) bool {
+						return e.Object.GetName() == *webhook.VwhName
+					},
+				}))
 		if err != nil {
 			return err
 		}
