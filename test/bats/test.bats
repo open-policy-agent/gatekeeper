@@ -90,6 +90,15 @@ teardown_file() {
     assert_match 'denied' "${output}"
     assert_failure
     kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/good_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml
