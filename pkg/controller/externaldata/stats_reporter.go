@@ -74,6 +74,8 @@ type reporter struct {
 }
 
 func (r *reporter) add(key types.NamespacedName, status metrics.Status) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	v, ok := r.cache[key]
 	if ok && v == status {
 		return
@@ -83,6 +85,8 @@ func (r *reporter) add(key types.NamespacedName, status metrics.Status) {
 }
 
 func (r *reporter) remove(key types.NamespacedName) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if _, exists := r.cache[key]; !exists {
 		return
 	}
