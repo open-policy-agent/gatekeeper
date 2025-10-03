@@ -84,6 +84,10 @@ type CacheManagerInjector interface {
 	InjectCacheManager(cm *cm.CacheManager)
 }
 
+type GetProcessExcluderInjector interface {
+	InjectProcessExcluder(processExcluder *process.Excluder)
+}
+
 // Injectors is a list of adder structs that need injection. We can convert this
 // to an interface once we create controllers for things like data sync.
 var Injectors []Injector
@@ -218,6 +222,9 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		if a2, ok := a.(CacheManagerInjector); ok {
 			// this is used by the config controller to sync
 			a2.InjectCacheManager(deps.CacheMgr)
+		}
+		if a2, ok := a.(GetProcessExcluderInjector); ok {
+			a2.InjectProcessExcluder(deps.ProcessExcluder)
 		}
 
 		if err := a.Add(m); err != nil {

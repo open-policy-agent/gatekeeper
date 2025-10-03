@@ -44,6 +44,8 @@ const (
 	namespaceKind      = "Namespace"
 )
 
+const ValidatingWebhookName = "validation.gatekeeper.sh"
+
 var (
 	runtimeScheme                      = k8sruntime.NewScheme()
 	codecs                             = serializer.NewCodecFactory(runtimeScheme)

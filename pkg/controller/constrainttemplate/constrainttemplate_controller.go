@@ -28,9 +28,11 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplatestatus"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -39,6 +41,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
 	errorpkg "github.com/pkg/errors"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -79,10 +82,11 @@ var gvkConstraintTemplate = schema.GroupVersionKind{
 }
 
 type Adder struct {
-	CFClient     *constraintclient.Client
-	WatchManager *watch.Manager
-	Tracker      *readiness.Tracker
-	GetPod       func(context.Context) (*corev1.Pod, error)
+	CFClient        *constraintclient.Client
+	WatchManager    *watch.Manager
+	Tracker         *readiness.Tracker
+	ProcessExcluder *process.Excluder
+	GetPod          func(context.Context) (*corev1.Pod, error)
 }
 
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -91,13 +95,30 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.HasValidationOperations() {
 		return nil
 	}
-	// events will be used to receive events from dynamic watches registered
-	events := make(chan event.GenericEvent, 1024)
-	r, err := newReconciler(mgr, a.CFClient, a.WatchManager, a.Tracker, events, events, a.GetPod)
+	// constraintEvents will be used to receive events from dynamic watches registered for constraint controller
+	constraintEvents := make(chan event.GenericEvent, 1024)
+
+	// constraintTemplateEvents will be used for webhook config changes that trigger ConstraintTemplate reconciliation
+	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
+
+	var webhookCache *webhookconfig.WebhookConfigCache
+	if operations.IsAssigned(operations.Generate) {
+		// Create webhook config cache and controller to monitor webhook changes
+		// This will send events to constraintTemplateEvents channel
+		webhookCache = webhookconfig.NewWebhookConfigCache(constraintTemplateEvents)
+		webhookConfigAdder := webhookconfig.Adder{
+			Cache: webhookCache,
+		}
+		if err := webhookConfigAdder.Add(mgr); err != nil {
+			return err
+		}
+	}
+
+	r, err := newReconciler(mgr, a.CFClient, a.WatchManager, a.Tracker, constraintEvents, constraintEvents, a.GetPod, webhookCache, a.ProcessExcluder)
 	if err != nil {
 		return err
 	}
-	return add(mgr, r)
+	return add(mgr, r, constraintTemplateEvents)
 }
 
 func (a *Adder) InjectCFClient(c *constraintclient.Client) {
@@ -116,11 +137,15 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 	a.GetPod = getPod
 }
 
+func (a *Adder) InjectProcessExcluder(m *process.Excluder) {
+	a.ProcessExcluder = m
+}
+
 // newReconciler returns a new reconcile.Reconciler
 // cstrEvents is the channel from which constraint controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
-func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
+func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error), webhookCache *webhookconfig.WebhookConfigCache, processExcluder *process.Excluder) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex and vap label
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -174,15 +199,17 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 
 	r := newStatsReporter()
 	reconciler := &ReconcileConstraintTemplate{
-		Client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		cfClient:      cfClient,
-		watcher:       w,
-		statusWatcher: statusW,
-		metrics:       r,
-		tracker:       tracker,
-		getPod:        getPod,
-		cstrEvents:    regEvents,
+		Client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		cfClient:        cfClient,
+		watcher:         w,
+		statusWatcher:   statusW,
+		metrics:         r,
+		tracker:         tracker,
+		getPod:          getPod,
+		cstrEvents:      regEvents,
+		webhookCache:    webhookCache,
+		processExcluder: processExcluder,
 	}
 
 	if getPod == nil {
@@ -192,7 +219,7 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.GenericEvent) error {
 	// Create a new controller
 	c, err := controller.New(ctrlName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -203,6 +230,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(source.Kind(mgr.GetCache(), &v1beta1.ConstraintTemplate{}, &handler.TypedEnqueueRequestForObject[*v1beta1.ConstraintTemplate]{}))
 	if err != nil {
 		return err
+	}
+
+	// Watch for webhook configuration change events (only if Generate operation is enabled)
+	if operations.IsAssigned(operations.Generate) && events != nil {
+		err = c.Watch(source.Channel(events, &handler.EnqueueRequestForObject{}))
+		if err != nil {
+			return err
+		}
 	}
 
 	// Watch for changes to ConstraintTemplateStatus
@@ -256,17 +291,20 @@ var _ reconcile.Reconciler = &ReconcileConstraintTemplate{}
 // ReconcileConstraintTemplate reconciles a ConstraintTemplate object.
 type ReconcileConstraintTemplate struct {
 	client.Client
-	scheme        *runtime.Scheme
-	watcher       *watch.Registrar
-	statusWatcher *watch.Registrar
-	cfClient      *constraintclient.Client
-	metrics       *reporter
-	tracker       *readiness.Tracker
-	getPod        func(context.Context) (*corev1.Pod, error)
-	cstrEvents    chan<- event.GenericEvent
+	scheme          *runtime.Scheme
+	watcher         *watch.Registrar
+	statusWatcher   *watch.Registrar
+	cfClient        *constraintclient.Client
+	metrics         *reporter
+	tracker         *readiness.Tracker
+	getPod          func(context.Context) (*corev1.Pod, error)
+	cstrEvents      chan<- event.GenericEvent
+	webhookCache    *webhookconfig.WebhookConfigCache
+	processExcluder *process.Excluder
 }
 
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingadmissionpolicies;validatingadmissionpolicybindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
@@ -284,6 +322,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	// Fetch the ConstraintTemplate instance
 	deleted := false
 	ct := &v1beta1.ConstraintTemplate{}
+	// TODO - validate that false reconcile requests are not happening, check that this reconciler is not getting triggered for events meant to be for constraint controller
 	err := r.Get(ctx, request.NamespacedName, ct)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -711,16 +750,45 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 		APIVersion: v1beta1Obj.Spec.ParamKind.APIVersion,
 		Kind:       v1beta1Obj.Spec.ParamKind.Kind,
 	}
-	obj.Spec.MatchConstraints = &admissionregistrationv1.MatchResources{
-		ResourceRules: []admissionregistrationv1.NamedRuleWithOperations{
-			{
+
+	// Convert MatchConstraints from v1beta1 to v1
+	if v1beta1Obj.Spec.MatchConstraints != nil {
+		matchConstraints := &admissionregistrationv1.MatchResources{}
+
+		if v1beta1Obj.Spec.MatchConstraints.NamespaceSelector != nil {
+			matchConstraints.NamespaceSelector = v1beta1Obj.Spec.MatchConstraints.NamespaceSelector
+		}
+
+		if v1beta1Obj.Spec.MatchConstraints.ObjectSelector != nil {
+			matchConstraints.ObjectSelector = v1beta1Obj.Spec.MatchConstraints.ObjectSelector
+		}
+
+		if v1beta1Obj.Spec.MatchConstraints.MatchPolicy != nil {
+			matchPolicy := admissionregistrationv1.MatchPolicyType(*v1beta1Obj.Spec.MatchConstraints.MatchPolicy)
+			matchConstraints.MatchPolicy = &matchPolicy
+		}
+
+		// Convert ResourceRules
+		for i := range v1beta1Obj.Spec.MatchConstraints.ResourceRules {
+			rule := &v1beta1Obj.Spec.MatchConstraints.ResourceRules[i]
+			// Convert operations
+			operations := make([]admissionregistrationv1.OperationType, 0, len(rule.Operations))
+			operations = append(operations, rule.Operations...)
+
+			v1Rule := admissionregistrationv1.NamedRuleWithOperations{
 				RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
-					/// TODO(jgabani): default for now until we can safely expose these to users
-					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
-					Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
+					Operations: operations,
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   rule.APIGroups,
+						APIVersions: rule.APIVersions,
+						Resources:   rule.Resources,
+					},
 				},
-			},
-		},
+			}
+			matchConstraints.ResourceRules = append(matchConstraints.ResourceRules, v1Rule)
+		}
+
+		obj.Spec.MatchConstraints = matchConstraints
 	}
 
 	obj.Spec.MatchConditions = []admissionregistrationv1.MatchCondition{}
@@ -851,7 +919,33 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 			currentVap = nil
 		}
 		logger.Info("get VAP", "vapName", vapName, "currentVap", currentVap)
-		transformedVap, err := transform.TemplateToPolicyDefinition(unversionedCT)
+
+		// Get webhook configuration from cache if available
+		var webhookConfig *webhookconfig.WebhookMatchingConfig
+		if r.webhookCache != nil {
+			logger.Info("looking up webhook config in cache", "lookupKey", *webhook.VwhName)
+			config, exists := r.webhookCache.GetConfig(*webhook.VwhName)
+			if exists {
+				webhookConfig = &config
+				logger.Info("found webhook config in cache", "lookupKey", *webhook.VwhName, "hasNamespaceSelector", config.NamespaceSelector != nil)
+			} else {
+				logger.Info("webhook config not found in cache", "lookupKey", *webhook.VwhName)
+			}
+		} else {
+			logger.Info("webhook cache is nil")
+		}
+
+		// TODO: use flag to decide how transformed vap is constructed instead of checking webhookconfig. based on flag to opt-in/opt-out - `match-vap-scope`
+		var transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy
+		excludedNamespaces := r.processExcluder.GetExcludedNamespaces(process.Webhook)
+		excludedNamespaces = append(excludedNamespaces, webhook.GetAllExemptedNamespacesWithWildcard()...)
+		if webhookConfig != nil {
+			logger.Info("using webhook configuration for VAP matching", "vapName", vapName)
+			transformedVap, err = transform.TemplateToPolicyDefinitionWithWebhookConfig(unversionedCT, webhookConfig, excludedNamespaces)
+		} else {
+			logger.Info("using default configuration for VAP matching", "vapName", vapName)
+			transformedVap, err = transform.TemplateToPolicyDefinition(unversionedCT)
+		}
 		if err != nil {
 			logger.Error(err, "transform to VAP error", "vapName", vapName)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to VAP object", status, err)

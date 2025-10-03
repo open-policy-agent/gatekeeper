@@ -30,7 +30,9 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
@@ -39,6 +41,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/require"
@@ -209,6 +212,15 @@ func expectedCRD(suffix string) *apiextensions.CustomResourceDefinition {
 	return crd
 }
 
+func getMatchEntryConfig() []configv1alpha1.MatchEntry {
+	return []configv1alpha1.MatchEntry{
+		{
+			ExcludedNamespaces: []wildcard.Wildcard{"foo"},
+			Processes:          []string{"*"},
+		},
+	}
+}
+
 func TestReconcile(t *testing.T) {
 	// Uncommenting the below enables logging of K8s internals like watch.
 	// fs := flag.NewFlagSet("", flag.PanicOnError)
@@ -255,14 +267,17 @@ func TestReconcile(t *testing.T) {
 		fakes.WithName("no-pod"),
 	)
 
-	// events will be used to receive events from dynamic watches registered
-	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, cfClient, wm, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	// constraintEvents for constraint controller, constraintTemplateEvents for webhook changes
+	constraintEvents := make(chan event.GenericEvent, 1024)
+	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
+	processExcluder := process.Get()
+	processExcluder.Add(getMatchEntryConfig())
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, constraintEvents, func(context.Context) (*corev1.Pod, error) { return pod, nil }, nil, processExcluder)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = add(mgr, rec)
+	err = add(mgr, rec, constraintTemplateEvents)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1772,14 +1787,17 @@ violation[{"msg": "denied!"}] {
 		fakes.WithName("no-pod"),
 	)
 
-	// events will be used to receive events from dynamic watches registered
-	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, cfClient, wm, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	// constraintEvents for constraint controller, constraintTemplateEvents for webhook changes
+	constraintEvents := make(chan event.GenericEvent, 1024)
+	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
+	processExcluder := process.Get()
+	processExcluder.Add(getMatchEntryConfig())
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil }, nil, processExcluder)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = add(mgr, rec)
+	err = add(mgr, rec, constraintTemplateEvents)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1812,7 +1830,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// set event channel to receive request for constraint
-	events <- event.GenericEvent{
+	constraintEvents <- event.GenericEvent{
 		Object: cstr,
 	}
 

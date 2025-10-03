@@ -86,3 +86,17 @@ func matchesSuffix(s string) bool {
 	}
 	return false
 }
+
+func GetAllExemptedNamespacesWithWildcard() []string {
+	var namespaces []string
+	for ns := range exemptNamespace {
+		namespaces = append(namespaces, string(ns))
+	}
+	for ns := range exemptNamespacePrefix {
+		namespaces = append(namespaces, string(ns)+"*")
+	}
+	for ns := range exemptNamespaceSuffix {
+		namespaces = append(namespaces, "*"+string(ns))
+	}
+	return namespaces
+}
