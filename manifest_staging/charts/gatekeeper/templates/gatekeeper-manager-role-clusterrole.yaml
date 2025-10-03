@@ -116,6 +116,16 @@ rules:
   - update
   - watch
 - apiGroups:
+  - externaldata.gatekeeper.sh
+  resources:
+  - providers/status
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - templates.gatekeeper.sh
   resources:
   - constrainttemplates
