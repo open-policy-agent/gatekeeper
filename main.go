@@ -64,7 +64,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/version"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
-	_ "go.uber.org/automaxprocs" // set GOMAXPROCS to the number of container cores, if known.
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
