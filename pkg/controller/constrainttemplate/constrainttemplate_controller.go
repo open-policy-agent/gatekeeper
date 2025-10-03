@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -223,6 +224,28 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			)))
 	if err != nil {
 		return err
+	}
+
+	isVapAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&logger)
+	if isVapAPIEnabled && operations.IsAssigned(operations.Generate) {
+		obj, err := vapForVersion(groupVersion)
+		if err != nil {
+			return err
+		}
+		err = c.Watch(
+			source.Kind(mgr.GetCache(), obj,
+				handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+					var out []reconcile.Request
+					for _, owner := range obj.GetOwnerReferences() {
+						if owner.Controller != nil && *owner.Controller && strings.HasPrefix(owner.APIVersion, v1beta1.SchemeGroupVersion.Group+"/") {
+							out = append(out, reconcile.Request{NamespacedName: types.NamespacedName{Name: owner.Name}})
+						}
+					}
+					return out
+				})))
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
