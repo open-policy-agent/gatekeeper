@@ -96,6 +96,19 @@ func (s *Excluder) IsNamespaceExcluded(process Process, obj client.Object) (bool
 	return exactOrWildcardMatch(s.excludedNamespaces[process], obj.GetNamespace()), nil
 }
 
+// GetExcludedNamespaces returns a list of excluded namespace patterns for the given process.
+func (s *Excluder) GetExcludedNamespaces(process Process) []string {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+
+	var excludedNamespaces []string
+	for ns := range s.excludedNamespaces[process] {
+		excludedNamespaces = append(excludedNamespaces, string(ns))
+	}
+
+	return excludedNamespaces
+}
+
 func exactOrWildcardMatch(boolMap map[wildcard.Wildcard]bool, ns string) bool {
 	for k := range boolMap {
 		if k.Matches(ns) {

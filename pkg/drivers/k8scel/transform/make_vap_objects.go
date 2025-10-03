@@ -18,10 +18,10 @@ import (
 )
 
 func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
-	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil)
+	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil)
 }
 
-func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfig.WebhookMatchingConfig) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfig.WebhookMatchingConfig, excludedNamespaces []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	source, err := schema.GetSourceFromTemplate(template)
 	if err != nil {
 		return nil, err
@@ -32,6 +32,15 @@ func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintT
 		return nil, err
 	}
 	matchConditions = append(matchConditions, AllMatchersV1Beta1()...)
+
+	if len(excludedNamespaces) > 0 {
+		// Quote each namespace for proper CEL syntax
+		quotedNamespaces := make([]string, len(excludedNamespaces))
+		for i, ns := range excludedNamespaces {
+			quotedNamespaces[i] = fmt.Sprintf(`"%s"`, ns)
+		}
+		matchConditions = append(matchConditions, MatchGlobalExcludedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
+	}
 
 	validations, err := source.GetV1Beta1Validatons()
 	if err != nil {

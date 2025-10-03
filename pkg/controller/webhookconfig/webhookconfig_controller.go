@@ -81,10 +81,10 @@ func (w *WebhookConfigCache) RemoveConfig(webhookName string) {
 func (w *WebhookConfigCache) GetConfig(webhookName string) (WebhookMatchingConfig, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	
+
 	logger := log.Log.WithName("webhook-config-cache")
 	logger.Info("retrieving webhook config from cache", "key", webhookName, "cacheSize", len(w.configs))
-	
+
 	config, exists := w.configs[webhookName]
 	logger.Info("webhook config lookup result", "key", webhookName, "exists", exists)
 	return config, exists
