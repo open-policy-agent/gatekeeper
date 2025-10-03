@@ -297,3 +297,21 @@ Below are the list of metrics provided by Gatekeeper:
     Description: `Total number of GroupVersionKinds with a registered watch intent`
 
     Aggregation: `LastValue`
+
+### External Data
+
+- Name: `gatekeeper_providers`
+
+    Description: `Number of external data providers by status`
+
+    Tags:
+
+    - `status`: [`active`, `error`]
+
+    Aggregation: `LastValue`
+
+- Name: `gatekeeper_provider_error_count`
+
+    Description: `Incremental counter for all provider errors occurring over time`
+
+    Aggregation: `Count`
