@@ -71,6 +71,6 @@ jobs:
 
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v3.5.2
 
-      - uses: crate-ci/typos@0c17dabcee8b8f1957fa917d17393a23e02e1583 # v1.36.3
+      - uses: crate-ci/typos@7436548694def3314aacd93ed06c721b1f91ea04 # v1.37.2
         with:
           files: ./website/docs ./website/versioned_docs
