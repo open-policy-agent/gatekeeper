@@ -958,6 +958,264 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
+	t.Run("VAP v1beta1 should be recreated when deleted", func(t *testing.T) {
+		suffix := "VapV1Beta1ShouldBeRecreated"
+
+		logger.Info("Running test: VAP v1beta1 should be recreated when deleted")
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+
+		// First, wait for VAP to be created
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Delete the VAP resource directly to simulate external deletion
+		vapToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+		err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = c.Delete(ctx, vapToDelete)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify the VAP is recreated by the watch
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+				return err
+			}
+			// Check that this is a new VAP instance (different UID)
+			if vap.UID == vapToDelete.UID {
+				return fmt.Errorf("VAP was not recreated, same UID found")
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("VAP v1 should be recreated when deleted", func(t *testing.T) {
+		suffix := "VapV1ShouldBeRecreated"
+
+		logger.Info("Running test: VAP v1 should be recreated when deleted")
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+
+		// First, wait for VAP to be created
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Delete the VAP resource directly to simulate external deletion
+		vapToDelete := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+		err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = c.Delete(ctx, vapToDelete)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify the VAP is recreated by the watch
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+				return err
+			}
+			// Check that this is a new VAP instance (different UID)
+			if vap.UID == vapToDelete.UID {
+				return fmt.Errorf("VAP was not recreated, same UID found")
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("VAPB v1beta1 should be recreated when deleted", func(t *testing.T) {
+		suffix := "VapbV1Beta1ShouldBeRecreated"
+
+		logger.Info("Running test: VAPB v1beta1 should be recreated when deleted")
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		// Create the constraint first
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		vapbName := fmt.Sprintf("gatekeeper-%s", cstr.GetName())
+
+		// First, wait for VAPB to be created
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Delete the VAPB resource directly to simulate external deletion
+		vapbToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+		err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = c.Delete(ctx, vapbToDelete)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify the VAPB is recreated by the watch
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
+				return err
+			}
+			// Check that this is a new VAPB instance (different UID)
+			if vapb.UID == vapbToDelete.UID {
+				return fmt.Errorf("VAPB was not recreated, same UID found")
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Clean up the constraint
+		err = c.Delete(ctx, cstr)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("VAPB v1 should be recreated when deleted", func(t *testing.T) {
+		suffix := "VapbV1ShouldBeRecreated"
+
+		logger.Info("Running test: VAPB v1 should be recreated when deleted")
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		cstr := newDenyAllCstr(suffix)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+		// Create the constraint first
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		vapbName := fmt.Sprintf("gatekeeper-%s", cstr.GetName())
+
+		// First, wait for VAPB to be created
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Delete the VAPB resource directly to simulate external deletion
+		vapbToDelete := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+		err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = c.Delete(ctx, vapbToDelete)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify the VAPB is recreated by the watch
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+			return true
+		}, func() error {
+			vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
+				return err
+			}
+			// Check that this is a new VAPB instance (different UID)
+			if vapb.UID == vapbToDelete.UID {
+				return fmt.Errorf("VAPB was not recreated, same UID found")
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Clean up the constraint
+		err = c.Delete(ctx, cstr)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("Constraint is marked as enforced", func(t *testing.T) {
 		suffix := "MarkedEnforced"
 

@@ -29,7 +29,11 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SERVICE_ACCOUNT_NAME": `{{ .Values.controllerManager.serviceAccount.name }}`,
 
+	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SERVICE_ACCOUNT_AUTOMOUNT_TOKEN": `{{ .Values.controllerManager.serviceAccount.automountServiceAccountToken }}`,
+
 	"HELMSUBST_DEPLOYMENT_AUDIT_SERVICE_ACCOUNT_NAME": `{{ .Values.audit.serviceAccount.name }}`,
+
+	"HELMSUBST_DEPLOYMENT_AUDIT_SERVICE_ACCOUNT_AUTOMOUNT_TOKEN": `{{ .Values.audit.serviceAccount.automountServiceAccountToken }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT": `{{ .Values.audit.healthPort }}`,
 
@@ -90,6 +94,8 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_REVISION_HISTORY_LIMIT": `{{ .Values.revisionHistoryLimit }}`,
 
+	`HELMSUBST_DEPLOYMENT_ANNOTATIONS: ""`: `{{- include "gatekeeper.commonAnnotations" . | nindent 4 }}`,
+
 	`HELMSUBST_ANNOTATIONS: ""`: `{{- if .Values.podAnnotations }}
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
         {{- end }}`,
@@ -107,6 +113,10 @@ var replacements = map[string]string{
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG": `{{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}`,
+
+	"- HELMSUBST_ADDITIONAL_VALIDATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS": `{{ if .Values.additionalValidatingWebhookConfigsToRotateCerts | empty | not }}- --additional-validating-webhook-configs-to-rotate-certs={{ .Values.additionalValidatingWebhookConfigsToRotateCerts | join "," }}{{- end }}`,
+
+	"- HELMSUBST_ADDITIONAL_MUTATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS": `{{ if .Values.additionalMutatingWebhookConfigsToRotateCerts | empty | not }}- --additional-mutating-webhook-configs-to-rotate-certs={{ .Values.additionalMutatingWebhookConfigsToRotateCerts | join "," }}{{- end }}`,
 
 	"- HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION": `{{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}`,
 

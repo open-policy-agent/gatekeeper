@@ -37,6 +37,8 @@ type Opts struct {
 	// DropV0Imports instructs the formatter to drop all v0 imports from the module; i.e. 'rego.v1' and 'future.keywords' imports.
 	// Imports are only removed if [Opts.RegoVersion] makes them redundant.
 	DropV0Imports bool
+
+	Capabilities *ast.Capabilities
 }
 
 func (o Opts) effectiveRegoVersion() ast.RegoVersion {
@@ -146,6 +148,10 @@ type fmtOpts struct {
 	regoV1         bool
 	regoV1Imported bool
 	futureKeywords []string
+
+	// If true, the formatter will retain keywords in refs, e.g. `p.not ` instead of `p["not"]`.
+	// The format of the original ref is preserved, so `p["not"]` will still be formatted as `p["not"]`.
+	allowKeywordsInRefs bool
 }
 
 func (o fmtOpts) keywords() []string {
@@ -178,6 +184,12 @@ func AstWithOpts(x any, opts Opts) ([]byte, error) {
 		o.ifs = true
 		o.contains = true
 	}
+
+	capabilities := opts.Capabilities
+	if capabilities == nil {
+		capabilities = ast.CapabilitiesForThisVersion(ast.CapabilitiesRegoVersion(opts.effectiveRegoVersion()))
+	}
+	o.allowKeywordsInRefs = capabilities.ContainsFeature(ast.FeatureKeywordsInRefs)
 
 	memberRef := ast.Member.Ref()
 	memberWithKeyRef := ast.MemberWithKey.Ref()
@@ -265,22 +277,22 @@ func AstWithOpts(x any, opts Opts) ([]byte, error) {
 		}
 		err := w.writeModule(x)
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 	case *ast.Package:
 		_, err := w.writePackage(x, nil)
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 	case *ast.Import:
 		_, err := w.writeImports([]*ast.Import{x}, nil)
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 	case *ast.Rule:
 		_, err := w.writeRule(x, false /* isElse */, nil)
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 	case *ast.Head:
 		_, err := w.writeHead(x,
@@ -288,7 +300,7 @@ func AstWithOpts(x any, opts Opts) ([]byte, error) {
 			false, // isExpandedConst
 			nil)
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 	case ast.Body:
 		_, err := w.writeBody(x, nil)
@@ -298,27 +310,27 @@ func AstWithOpts(x any, opts Opts) ([]byte, error) {
 	case *ast.Expr:
 		_, err := w.writeExpr(x, nil)
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 	case *ast.With:
 		_, err := w.writeWith(x, nil, false)
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 	case *ast.Term:
 		_, err := w.writeTerm(x, nil)
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 	case ast.Value:
 		_, err := w.writeTerm(&ast.Term{Value: x, Location: &ast.Location{}}, nil)
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 	case *ast.Comment:
 		err := w.writeComments([]*ast.Comment{x})
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 	default:
 		return nil, fmt.Errorf("not an ast element: %v", x)
@@ -406,7 +418,7 @@ func (w *writer) writeModule(module *ast.Module) error {
 	sort.Slice(comments, func(i, j int) bool {
 		l, err := locLess(comments[i], comments[j])
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 		return l
 	})
@@ -414,7 +426,7 @@ func (w *writer) writeModule(module *ast.Module) error {
 	sort.Slice(others, func(i, j int) bool {
 		l, err := locLess(others[i], others[j])
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 		return l
 	})
@@ -512,12 +524,12 @@ func (w *writer) writeRules(rules []*ast.Rule, comments []*ast.Comment) ([]*ast.
 		var err error
 		comments, err = w.insertComments(comments, rule.Location)
 		if err != nil && !errors.As(err, &unexpectedCommentError{}) {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 
 		comments, err = w.writeRule(rule, false, comments)
 		if err != nil && !errors.As(err, &unexpectedCommentError{}) {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 
 		if i < len(rules)-1 && w.groupableOneLiner(rule) {
@@ -533,7 +545,7 @@ func (w *writer) writeRules(rules []*ast.Rule, comments []*ast.Comment) ([]*ast.
 	return comments, nil
 }
 
-var expandedConst = ast.NewBody(ast.NewExpr(ast.InternedBooleanTerm(true)))
+var expandedConst = ast.NewBody(ast.NewExpr(ast.InternedTerm(true)))
 
 func (w *writer) groupableOneLiner(rule *ast.Rule) bool {
 	// Location required to determine if two rules are adjacent in the policy.
@@ -790,7 +802,7 @@ func (w *writer) writeHead(head *ast.Head, isDefault bool, isExpandedConst bool,
 	}
 
 	if head.Value != nil &&
-		(head.Key != nil || !ast.InternedBooleanTerm(true).Equal(head.Value) || isExpandedConst || isDefault) {
+		(head.Key != nil || !ast.InternedTerm(true).Equal(head.Value) || isExpandedConst || isDefault) {
 
 		// in rego v1, explicitly print value for ref-head constants that aren't partial set assignments, e.g.:
 		// * a -> parser error, won't reach here
@@ -801,7 +813,7 @@ func (w *writer) writeHead(head *ast.Head, isDefault bool, isExpandedConst bool,
 
 		if head.Location == head.Value.Location &&
 			head.Name != "else" &&
-			ast.InternedBooleanTerm(true).Equal(head.Value) &&
+			ast.InternedTerm(true).Equal(head.Value) &&
 			!isRegoV1RefConst {
 			// If the value location is the same as the location of the head,
 			// we know that the value is generated, i.e. f(1)
@@ -862,7 +874,7 @@ func (w *writer) writeBody(body ast.Body, comments []*ast.Comment) ([]*ast.Comme
 
 		comments, err = w.writeExpr(expr, comments)
 		if err != nil && !errors.As(err, &unexpectedCommentError{}) {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 		w.endLine()
 	}
@@ -1070,8 +1082,16 @@ func (w *writer) writeFunctionCall(expr *ast.Expr, comments []*ast.Comment) ([]*
 }
 
 func (w *writer) writeFunctionCallPlain(terms []*ast.Term, comments []*ast.Comment) ([]*ast.Comment, error) {
-	w.write(terms[0].String() + "(")
+	if r, ok := terms[0].Value.(ast.Ref); ok {
+		if c, err := w.writeRef(r, comments); err != nil {
+			return c, err
+		}
+	} else {
+		w.write(terms[0].String())
+	}
+	w.write("(")
 	defer w.write(")")
+
 	args := make([]any, len(terms)-1)
 	for i, t := range terms[1:] {
 		args[i] = t
@@ -1264,7 +1284,7 @@ func (w *writer) writeRef(x ast.Ref, comments []*ast.Comment) ([]*ast.Comment, e
 		for _, t := range path {
 			switch p := t.Value.(type) {
 			case ast.String:
-				w.writeRefStringPath(p)
+				w.writeRefStringPath(p, t.Location)
 			case ast.Var:
 				w.writeBracketed(w.formatVar(p))
 			default:
@@ -1292,13 +1312,31 @@ func (w *writer) writeBracketed(str string) {
 
 var varRegexp = regexp.MustCompile("^[[:alpha:]_][[:alpha:][:digit:]_]*$")
 
-func (w *writer) writeRefStringPath(s ast.String) {
+func (w *writer) writeRefStringPath(s ast.String, l *ast.Location) {
 	str := string(s)
-	if varRegexp.MatchString(str) && !ast.IsInKeywords(str, w.fmtOpts.keywords()) {
-		w.write("." + str)
-	} else {
+	if w.shouldBracketRefTerm(str, l) {
 		w.writeBracketed(s.String())
+	} else {
+		w.write("." + str)
 	}
+}
+
+func (w *writer) shouldBracketRefTerm(s string, l *ast.Location) bool {
+	if !varRegexp.MatchString(s) {
+		return true
+	}
+
+	if ast.IsInKeywords(s, w.fmtOpts.keywords()) {
+		if !w.fmtOpts.allowKeywordsInRefs {
+			return true
+		}
+
+		if l != nil && l.Text[0] == 34 { // If the original term text starts with '"', we preserve the brackets and quotes
+			return true
+		}
+	}
+
+	return false
 }
 
 func (*writer) formatVar(v ast.Var) string {
@@ -1525,7 +1563,7 @@ func (w *writer) writeComprehensionBody(openChar, closeChar byte, body ast.Body,
 		defer w.startLine()
 		defer func() {
 			if err := w.down(); err != nil {
-				w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+				w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 			}
 		}()
 
@@ -1589,7 +1627,7 @@ func (w *writer) writeImports(imports []*ast.Import, comments []*ast.Comment) ([
 func (w *writer) writeImport(imp *ast.Import) error {
 	path := imp.Path.Value.(ast.Ref)
 
-	buf := []string{"import"}
+	w.write("import ")
 
 	if _, ok := future.WhichFutureKeyword(imp); ok {
 		// We don't want to wrap future.keywords imports in parens, so we create a new writer that doesn't
@@ -1600,15 +1638,17 @@ func (w *writer) writeImport(imp *ast.Import) error {
 		if err != nil {
 			return err
 		}
-		buf = append(buf, w2.buf.String())
+		w.write(w2.buf.String())
 	} else {
-		buf = append(buf, path.String())
+		_, err := w.writeRef(path, nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	if len(imp.Alias) > 0 {
-		buf = append(buf, "as "+imp.Alias.String())
+		w.write(" as " + imp.Alias.String())
 	}
-	w.write(strings.Join(buf, " "))
 
 	return nil
 }
@@ -1760,7 +1800,7 @@ func (w *writer) groupIterable(elements []any, last *ast.Location) ([][]any, err
 	slices.SortFunc(elements, func(i, j any) int {
 		l, err := locCmp(i, j)
 		if err != nil {
-			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, err.Error()))
+			w.errs = append(w.errs, ast.NewError(ast.FormatErr, &ast.Location{}, "%s", err.Error()))
 		}
 		return l
 	})
@@ -2211,5 +2251,5 @@ func isRegoV1Compatible(imp *ast.Import) bool {
 	path := imp.Path.Value.(ast.Ref)
 	return len(path) == 2 &&
 		ast.RegoRootDocument.Equal(path[0]) &&
-		path[1].Equal(ast.InternedStringTerm("v1"))
+		path[1].Equal(ast.InternedTerm("v1"))
 }

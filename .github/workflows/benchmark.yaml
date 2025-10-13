@@ -17,7 +17,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
         with:
           egress-policy: audit
 
@@ -28,14 +28,14 @@ jobs:
           issue_number: ${{ github.event.issue.number }}
 
       - name: Update status
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         with:
           issue-number: ${{ github.event.issue.number }}
           body: |
             [Running benchmark here...](${{ github.server.url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
       - name: Check out base code into the Go module directory
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.5.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v3.5.2
         with:
           ref: ${{ github.base_ref }}
 
@@ -43,7 +43,7 @@ jobs:
         run: make benchmark-test BENCHMARK_FILE_NAME="../base_benchmarks.txt"
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.5.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v3.5.2
 
       - name: Run benchmark with incoming changes
         run: make benchmark-test BENCHMARK_FILE_NAME="pr_benchmarks.txt"
@@ -61,7 +61,7 @@ jobs:
           echo '$delimiter' >> $GITHUB_OUTPUT
 
       - name: Create commit comment
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         with:
           issue-number: ${{ github.event.issue.number }}
           body: |
