@@ -73,7 +73,8 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main].args`.'
+                description: 'Location describes the path to be mutated, for example:
+                  `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: |-
@@ -129,14 +130,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -182,14 +185,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -259,7 +264,8 @@ spec:
                 properties:
                   operation:
                     default: merge
-                    description: Operation describes whether values should be merged in ("merge"), or pruned ("prune"). Default value is "merge"
+                    description: Operation describes whether values should be merged
+                      in ("merge"), or pruned ("prune"). Default value is "merge"
                     enum:
                     - merge
                     - prune
@@ -282,7 +288,8 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either MustExist or MustNotExist in the original object
+                          description: Condition describes whether the path either
+                            MustExist or MustNotExist in the original object
                           enum:
                           - MustExist
                           - MustNotExist
@@ -292,7 +299,8 @@ spec:
                       type: object
                     type: array
                   values:
-                    description: Values describes the values provided to the operation as `values.fromList`.
+                    description: Values describes the values provided to the operation
+                      as `values.fromList`.
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                 type: object
@@ -302,13 +310,15 @@ spec:
             properties:
               byPod:
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -396,7 +406,8 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main].args`.'
+                description: 'Location describes the path to be mutated, for example:
+                  `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: |-
@@ -452,14 +463,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -505,14 +518,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -582,7 +597,8 @@ spec:
                 properties:
                   operation:
                     default: merge
-                    description: Operation describes whether values should be merged in ("merge"), or pruned ("prune"). Default value is "merge"
+                    description: Operation describes whether values should be merged
+                      in ("merge"), or pruned ("prune"). Default value is "merge"
                     enum:
                     - merge
                     - prune
@@ -605,7 +621,8 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either MustExist or MustNotExist in the original object
+                          description: Condition describes whether the path either
+                            MustExist or MustNotExist in the original object
                           enum:
                           - MustExist
                           - MustNotExist
@@ -615,7 +632,8 @@ spec:
                       type: object
                     type: array
                   values:
-                    description: Values describes the values provided to the operation as `values.fromList`.
+                    description: Values describes the values provided to the operation
+                      as `values.fromList`.
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                 type: object
@@ -625,13 +643,15 @@ spec:
             properties:
               byPod:
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -719,7 +739,8 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main].args`.'
+                description: 'Location describes the path to be mutated, for example:
+                  `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: |-
@@ -775,14 +796,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -828,14 +851,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -905,7 +930,8 @@ spec:
                 properties:
                   operation:
                     default: merge
-                    description: Operation describes whether values should be merged in ("merge"), or pruned ("prune"). Default value is "merge"
+                    description: Operation describes whether values should be merged
+                      in ("merge"), or pruned ("prune"). Default value is "merge"
                     enum:
                     - merge
                     - prune
@@ -928,7 +954,8 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either MustExist or MustNotExist in the original object
+                          description: Condition describes whether the path either
+                            MustExist or MustNotExist in the original object
                           enum:
                           - MustExist
                           - MustNotExist
@@ -938,7 +965,8 @@ spec:
                       type: object
                     type: array
                   values:
-                    description: Values describes the values provided to the operation as `values.fromList`.
+                    description: Values describes the values provided to the operation
+                      as `values.fromList`.
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                 type: object
@@ -948,13 +976,15 @@ spec:
             properties:
               byPod:
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
