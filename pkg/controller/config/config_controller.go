@@ -26,6 +26,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/configstatus"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
@@ -228,7 +229,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		r.tracker.DisableStats()
 	}
 
-	if operations.IsAssigned(operations.Generate) && r.cacheManager.ExcluderChangedForProcess(process.Webhook, newExcluder) {
+	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.cacheManager.ExcluderChangedForProcess(process.Webhook, newExcluder) && r.ctEvents != nil {
 		r.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
 	}
 

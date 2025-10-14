@@ -2,17 +2,18 @@ package webhookconfig
 
 import (
 	"context"
-	"reflect"
-	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -31,65 +32,6 @@ const (
 
 var logger = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ValidatingWebhookConfiguration", logging.Process, "webhook_config_controller")
 
-// WebhookMatchingConfig represents the fields that affect resource matching in a webhook.
-type WebhookMatchingConfig struct {
-	NamespaceSelector *metav1.LabelSelector                        `json:"namespaceSelector,omitempty"`
-	ObjectSelector    *metav1.LabelSelector                        `json:"objectSelector,omitempty"`
-	Rules             []admissionregistrationv1.RuleWithOperations `json:"rules,omitempty"`
-	MatchPolicy       *admissionregistrationv1.MatchPolicyType     `json:"matchPolicy,omitempty"`
-	MatchConditions   []admissionregistrationv1.MatchCondition     `json:"matchConditions,omitempty"`
-}
-
-// WebhookConfigCache maintains the current state of webhook configurations.
-type WebhookConfigCache struct {
-	mu      sync.RWMutex
-	configs map[string]WebhookMatchingConfig // webhook name -> config
-}
-
-// NewWebhookConfigCache creates a new webhook config cache.
-func NewWebhookConfigCache(ctEvents <-chan event.GenericEvent) *WebhookConfigCache {
-	return &WebhookConfigCache{
-		configs: make(map[string]WebhookMatchingConfig),
-	}
-}
-
-// UpdateConfig updates the cached config and returns whether it changed.
-func (w *WebhookConfigCache) UpdateConfig(webhookName string, newConfig WebhookMatchingConfig) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	logger := log.Log.WithName("webhook-config-cache")
-	logger.Info("storing webhook config in cache", "key", webhookName, "hasNamespaceSelector", newConfig.NamespaceSelector != nil)
-
-	oldConfig, exists := w.configs[webhookName]
-	if !exists || !reflect.DeepEqual(oldConfig, newConfig) {
-		w.configs[webhookName] = newConfig
-		logger.Info("webhook config stored/updated in cache", "key", webhookName, "cacheSize", len(w.configs))
-		return true
-	}
-	return false
-}
-
-// RemoveConfig removes a webhook config from cache.
-func (w *WebhookConfigCache) RemoveConfig(webhookName string) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	delete(w.configs, webhookName)
-}
-
-// GetConfig retrieves the current webhook configuration from cache.
-func (w *WebhookConfigCache) GetConfig(webhookName string) (WebhookMatchingConfig, bool) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	logger := log.Log.WithName("webhook-config-cache")
-	logger.Info("retrieving webhook config from cache", "key", webhookName, "cacheSize", len(w.configs))
-
-	config, exists := w.configs[webhookName]
-	logger.Info("webhook config lookup result", "key", webhookName, "exists", exists)
-	return config, exists
-}
-
 // TriggerConstraintTemplateReconciliation sends events to trigger CT reconciliation.
 func (r *ReconcileWebhookConfig) TriggerConstraintTemplateReconciliation(ctx context.Context, webhookName string) {
 	logger := logger.WithValues("webhook_name", webhookName)
@@ -105,6 +47,10 @@ func (r *ReconcileWebhookConfig) TriggerConstraintTemplateReconciliation(ctx con
 
 	// Send generic events for each constraint template
 	for i := range templateList.Items {
+		if !generateVap(&templateList.Items[i]) {
+			logger.Info("skipping reconcile for template", "template", templateList.Items[i].GetName())
+			continue
+		}
 		select {
 		case r.ctEvents <- event.GenericEvent{
 			Object: &templateList.Items[i],
@@ -118,13 +64,13 @@ func (r *ReconcileWebhookConfig) TriggerConstraintTemplateReconciliation(ctx con
 }
 
 type Adder struct {
-	Cache    *WebhookConfigCache
+	Cache    *webhookconfigcache.WebhookConfigCache
 	ctEvents chan<- event.GenericEvent // channel to send CT reconciliation events
 }
 
 func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 
-func (a *Adder) InjectWebhookConfigCache(webhookConfigCache *WebhookConfigCache) {
+func (a *Adder) InjectWebhookConfigCache(webhookConfigCache *webhookconfigcache.WebhookConfigCache) {
 	a.Cache = webhookConfigCache
 }
 
@@ -134,7 +80,7 @@ func (a *Adder) InjectConstraintTemplateEvent(ctEvents chan event.GenericEvent) 
 
 // Add creates a new webhook config controller and adds it to the Manager.
 func (a *Adder) Add(mgr manager.Manager) error {
-	if !operations.IsAssigned(operations.Generate) {
+	if !operations.IsAssigned(operations.Generate) || !*transform.SyncVAPScope {
 		return nil
 	}
 	r := &ReconcileWebhookConfig{
@@ -181,7 +127,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 type ReconcileWebhookConfig struct {
 	client.Client
 	scheme   *runtime.Scheme
-	cache    *WebhookConfigCache
+	cache    *webhookconfigcache.WebhookConfigCache
 	ctEvents chan<- event.GenericEvent
 }
 
@@ -222,7 +168,7 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Extract matching configuration
-	newConfig := WebhookMatchingConfig{
+	newConfig := webhookconfigcache.WebhookMatchingConfig{
 		NamespaceSelector: gatekeeperWebhook.NamespaceSelector,
 		ObjectSelector:    gatekeeperWebhook.ObjectSelector,
 		Rules:             gatekeeperWebhook.Rules,
@@ -244,4 +190,20 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 // isGatekeeperValidatingWebhook checks if this is a Gatekeeper validating webhook.
 func isGatekeeperValidatingWebhook(name string) bool {
 	return name == *webhook.VwhName
+}
+
+// generateVap determines whether a ConstraintTemplate should generate a ValidatingAdmissionPolicy.
+func generateVap(template *v1beta1.ConstraintTemplate) bool {
+	generateVAP := false
+	if len(template.Spec.Targets) != 1 {
+		return generateVAP
+	}
+	for _, code := range template.Spec.Targets[0].Code {
+		if code.Engine != schema.Name {
+			continue
+		}
+		// extract GenerateVAP field form the source
+		generateVAP = true
+	}
+	return generateVAP && *constraint.DefaultGenerateVAP
 }

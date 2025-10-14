@@ -32,7 +32,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplatestatus"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -73,8 +73,6 @@ const (
 var (
 	logger       = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
 	discoveryErr *apiutil.ErrResourceDiscoveryFailed
-	// constraintTemplateEvents will be used for webhook config changes that trigger ConstraintTemplate reconciliation
-	// constraintTemplateEvents = make(chan event.GenericEvent, 1024).
 )
 
 var gvkConstraintTemplate = schema.GroupVersionKind{
@@ -89,7 +87,7 @@ type Adder struct {
 	Tracker            *readiness.Tracker
 	ProcessExcluder    *process.Excluder
 	GetPod             func(context.Context) (*corev1.Pod, error)
-	WebhookConfigCache *webhookconfig.WebhookConfigCache
+	WebhookConfigCache *webhookconfigcache.WebhookConfigCache
 	CtEvents           <-chan event.GenericEvent
 }
 
@@ -128,7 +126,7 @@ func (a *Adder) InjectProcessExcluder(m *process.Excluder) {
 	a.ProcessExcluder = m
 }
 
-func (a *Adder) InjectWebhookConfigCache(wcc *webhookconfig.WebhookConfigCache) {
+func (a *Adder) InjectWebhookConfigCache(wcc *webhookconfigcache.WebhookConfigCache) {
 	a.WebhookConfigCache = wcc
 }
 
@@ -140,7 +138,7 @@ func (a *Adder) InjectConstraintTemplateEvent(ctEvents chan event.GenericEvent) 
 // cstrEvents is the channel from which constraint controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
-func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, tracker *readiness.Tracker, cstrEvents chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error), webhookCache *webhookconfig.WebhookConfigCache, processExcluder *process.Excluder) (*ReconcileConstraintTemplate, error) {
+func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, tracker *readiness.Tracker, cstrEvents chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error), webhookCache *webhookconfigcache.WebhookConfigCache, processExcluder *process.Excluder) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex and vap label
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -228,7 +226,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	}
 
 	// Watch for webhook configuration change events (only if Generate operation is enabled)
-	if operations.IsAssigned(operations.Generate) && events != nil {
+	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && events != nil {
 		err = c.Watch(source.Channel(events, &handler.EnqueueRequestForObject{}))
 		if err != nil {
 			return err
@@ -294,7 +292,7 @@ type ReconcileConstraintTemplate struct {
 	tracker         *readiness.Tracker
 	getPod          func(context.Context) (*corev1.Pod, error)
 	cstrEvents      chan<- event.GenericEvent
-	webhookCache    *webhookconfig.WebhookConfigCache
+	webhookCache    *webhookconfigcache.WebhookConfigCache
 	processExcluder *process.Excluder
 }
 
@@ -915,31 +913,28 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		}
 		logger.Info("get VAP", "vapName", vapName, "currentVap", currentVap)
 
-		// Get webhook configuration from cache if available
-		var webhookConfig *webhookconfig.WebhookMatchingConfig
-		if r.webhookCache != nil {
-			logger.Info("looking up webhook config in cache", "lookupKey", *webhook.VwhName)
-			config, exists := r.webhookCache.GetConfig(*webhook.VwhName)
-			if exists {
-				webhookConfig = &config
-				logger.Info("found webhook config in cache", "lookupKey", *webhook.VwhName, "hasNamespaceSelector", config.NamespaceSelector != nil)
-			} else {
-				logger.Info("webhook config not found in cache", "lookupKey", *webhook.VwhName)
-			}
-		} else {
-			logger.Info("webhook cache is nil")
-		}
-
-		// TODO: use flag to decide how transformed vap is constructed instead of checking webhookconfig. based on flag to opt-in/opt-out - `match-vap-scope`
 		var transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy
 		// TODO: handle excluded and exempted namespaces in a single place
-		var excludedNamespaces []string
-		if r.processExcluder != nil {
-			excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
-		}
-		excludedNamespaces = append(excludedNamespaces, webhook.GetAllExemptedNamespacesWithWildcard()...)
-		if webhookConfig != nil {
-			logger.Info("using webhook configuration for VAP matching", "vapName", vapName)
+		if *transform.SyncVAPScope {
+			var excludedNamespaces []string
+			if r.processExcluder != nil {
+				excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
+			}
+			excludedNamespaces = append(excludedNamespaces, webhook.GetAllExemptedNamespacesWithWildcard()...)
+			// Get webhook configuration from cache if available
+			var webhookConfig *webhookconfigcache.WebhookMatchingConfig
+			if r.webhookCache != nil {
+				logger.Info("looking up webhook config in cache", "lookupKey", *webhook.VwhName)
+				config, exists := r.webhookCache.GetConfig(*webhook.VwhName)
+				if exists {
+					webhookConfig = &config
+					logger.Info("using webhook configuration for VAP matching", "vapName", vapName)
+				} else {
+					logger.Info("webhook config not found in cache, VAP will be created with default constraints", "lookupKey", *webhook.VwhName)
+				}
+			} else {
+				logger.Info("webhook cache is nil, VAP will be created with default constraints")
+			}
 			transformedVap, err = transform.TemplateToPolicyDefinitionWithWebhookConfig(unversionedCT, webhookConfig, excludedNamespaces)
 		} else {
 			logger.Info("using default configuration for VAP matching", "vapName", vapName)
