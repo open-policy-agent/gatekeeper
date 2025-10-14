@@ -291,19 +291,3 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 func isGatekeeperValidatingWebhook(name string) bool {
 	return name == getVwhName()
 }
-
-// generateVap determines whether a ConstraintTemplate should generate a ValidatingAdmissionPolicy.
-func generateVap(template *v1beta1.ConstraintTemplate) bool {
-	generateVAP := false
-	if len(template.Spec.Targets) != 1 {
-		return generateVAP
-	}
-	for _, code := range template.Spec.Targets[0].Code {
-		if code.Engine != schema.Name {
-			continue
-		}
-		// extract GenerateVAP field form the source
-		generateVAP = true
-	}
-	return generateVAP && *constraint.DefaultGenerateVAP
-}
