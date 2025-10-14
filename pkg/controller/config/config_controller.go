@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
@@ -26,6 +27,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/configstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -51,9 +54,36 @@ var (
 	configGVK = configv1alpha1.GroupVersion.WithKind("Config")
 )
 
+// TriggerConstraintTemplateReconciliation sends events to trigger CT reconciliation.
+func (r *ReconcileConfig) TriggerConstraintTemplateReconciliation(ctx context.Context, processName process.Process) {
+	logger := logf.Log.WithValues("process", processName)
+	logger.Info("Triggering ConstraintTemplate reconciliation due to config exclusion changes")
+
+	// List all ConstraintTemplates
+	templateList := &v1beta1.ConstraintTemplateList{}
+	if err := r.reader.List(ctx, templateList); err != nil {
+		logger.Error(err, "failed to list ConstraintTemplates for config reconciliation")
+		return
+	}
+
+	// Send generic events for each constraint template
+	for i := range templateList.Items {
+		select {
+		case r.ctEvents <- event.GenericEvent{
+			Object: &templateList.Items[i],
+		}:
+		default:
+			logger.Info("constraint template event channel full, skipping", "template", templateList.Items[i].GetName())
+		}
+	}
+
+	logger.Info("triggered reconciliation for ConstraintTemplates", "count", len(templateList.Items))
+}
+
 type Adder struct {
 	Tracker      *readiness.Tracker
 	CacheManager *cm.CacheManager
+	CtEvents     chan<- event.GenericEvent
 	// GetPod returns an instance of the currently running Gatekeeper pod
 	GetPod func(context.Context) (*corev1.Pod, error)
 }
@@ -61,11 +91,10 @@ type Adder struct {
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.CacheManager, a.Tracker, a.GetPod)
+	r, err := newReconciler(mgr, a.CacheManager, a.Tracker, a.GetPod, a.CtEvents)
 	if err != nil {
 		return err
 	}
-	// TODO: create a channel with constraint template controller to trigger re-sync of all templates when config changes
 
 	return add(mgr, r)
 }
@@ -82,8 +111,12 @@ func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, erro
 	a.GetPod = getPod
 }
 
+func (a *Adder) InjectConstraintTemplateEvent(ctEvents chan event.GenericEvent) {
+	a.CtEvents = ctEvents
+}
+
 // newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, cm *cm.CacheManager, tracker *readiness.Tracker, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConfig, error) {
+func newReconciler(mgr manager.Manager, cm *cm.CacheManager, tracker *readiness.Tracker, getPod func(context.Context) (*corev1.Pod, error), ctEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
 	if cm == nil {
 		return nil, fmt.Errorf("cacheManager must be non-nil")
 	}
@@ -96,6 +129,7 @@ func newReconciler(mgr manager.Manager, cm *cm.CacheManager, tracker *readiness.
 		cacheManager: cm,
 		tracker:      tracker,
 		getPod:       getPod,
+		ctEvents:     ctEvents,
 	}, nil
 }
 
@@ -136,6 +170,8 @@ type ReconcileConfig struct {
 	tracker *readiness.Tracker
 
 	getPod func(context.Context) (*corev1.Pod, error)
+
+	ctEvents chan<- event.GenericEvent
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -190,6 +226,10 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	} else {
 		log.Info("disabling readiness stats")
 		r.tracker.DisableStats()
+	}
+
+	if operations.IsAssigned(operations.Generate) && r.cacheManager.ExcluderChangedForProcess(process.Webhook, newExcluder) {
+		r.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
 	}
 
 	r.cacheManager.ExcludeProcesses(newExcluder)

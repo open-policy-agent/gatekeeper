@@ -85,6 +85,12 @@ func (s *Excluder) Equals(new *Excluder) bool { // nolint:revive
 	return reflect.DeepEqual(s.excludedNamespaces, new.excludedNamespaces)
 }
 
+func (s *Excluder) EqualsForProcess(process Process, new *Excluder) bool { // nolint:revive
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+	return reflect.DeepEqual(s.excludedNamespaces[process], new.excludedNamespaces[process])
+}
+
 func (s *Excluder) IsNamespaceExcluded(process Process, obj client.Object) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()

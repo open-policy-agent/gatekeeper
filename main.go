@@ -48,6 +48,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
@@ -542,6 +543,11 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		ExpansionSystem: expansionSystem,
 		ProviderCache:   providerCache,
 		ExportSystem:    exportSystem,
+	}
+
+	if operations.IsAssigned(operations.Generate) {
+		opts.CtEvents = make(chan event.GenericEvent, 1024)
+		opts.WebhookConfigCache = webhookconfig.NewWebhookConfigCache(opts.CtEvents)
 	}
 
 	if err := controller.AddToManager(mgr, &opts); err != nil {

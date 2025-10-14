@@ -73,6 +73,8 @@ const (
 var (
 	logger       = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
 	discoveryErr *apiutil.ErrResourceDiscoveryFailed
+	// constraintTemplateEvents will be used for webhook config changes that trigger ConstraintTemplate reconciliation
+	// constraintTemplateEvents = make(chan event.GenericEvent, 1024).
 )
 
 var gvkConstraintTemplate = schema.GroupVersionKind{
@@ -82,11 +84,13 @@ var gvkConstraintTemplate = schema.GroupVersionKind{
 }
 
 type Adder struct {
-	CFClient        *constraintclient.Client
-	WatchManager    *watch.Manager
-	Tracker         *readiness.Tracker
-	ProcessExcluder *process.Excluder
-	GetPod          func(context.Context) (*corev1.Pod, error)
+	CFClient           *constraintclient.Client
+	WatchManager       *watch.Manager
+	Tracker            *readiness.Tracker
+	ProcessExcluder    *process.Excluder
+	GetPod             func(context.Context) (*corev1.Pod, error)
+	WebhookConfigCache *webhookconfig.WebhookConfigCache
+	CtEvents           <-chan event.GenericEvent
 }
 
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -97,28 +101,11 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	}
 	// constraintEvents will be used to receive events from dynamic watches registered for constraint controller
 	constraintEvents := make(chan event.GenericEvent, 1024)
-
-	// constraintTemplateEvents will be used for webhook config changes that trigger ConstraintTemplate reconciliation
-	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
-
-	var webhookCache *webhookconfig.WebhookConfigCache
-	if operations.IsAssigned(operations.Generate) {
-		// Create webhook config cache and controller to monitor webhook changes
-		// This will send events to constraintTemplateEvents channel
-		webhookCache = webhookconfig.NewWebhookConfigCache(constraintTemplateEvents)
-		webhookConfigAdder := webhookconfig.Adder{
-			Cache: webhookCache,
-		}
-		if err := webhookConfigAdder.Add(mgr); err != nil {
-			return err
-		}
-	}
-
-	r, err := newReconciler(mgr, a.CFClient, a.WatchManager, a.Tracker, constraintEvents, constraintEvents, a.GetPod, webhookCache, a.ProcessExcluder)
+	r, err := newReconciler(mgr, a.CFClient, a.WatchManager, a.Tracker, constraintEvents, constraintEvents, a.GetPod, a.WebhookConfigCache, a.ProcessExcluder)
 	if err != nil {
 		return err
 	}
-	return add(mgr, r, constraintTemplateEvents)
+	return add(mgr, r, a.CtEvents)
 }
 
 func (a *Adder) InjectCFClient(c *constraintclient.Client) {
@@ -141,11 +128,19 @@ func (a *Adder) InjectProcessExcluder(m *process.Excluder) {
 	a.ProcessExcluder = m
 }
 
+func (a *Adder) InjectWebhookConfigCache(wcc *webhookconfig.WebhookConfigCache) {
+	a.WebhookConfigCache = wcc
+}
+
+func (a *Adder) InjectConstraintTemplateEvent(ctEvents chan event.GenericEvent) {
+	a.CtEvents = ctEvents
+}
+
 // newReconciler returns a new reconcile.Reconciler
 // cstrEvents is the channel from which constraint controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
-func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error), webhookCache *webhookconfig.WebhookConfigCache, processExcluder *process.Excluder) (*ReconcileConstraintTemplate, error) {
+func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *watch.Manager, tracker *readiness.Tracker, cstrEvents chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error), webhookCache *webhookconfig.WebhookConfigCache, processExcluder *process.Excluder) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex and vap label
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -937,7 +932,11 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 
 		// TODO: use flag to decide how transformed vap is constructed instead of checking webhookconfig. based on flag to opt-in/opt-out - `match-vap-scope`
 		var transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy
-		excludedNamespaces := r.processExcluder.GetExcludedNamespaces(process.Webhook)
+		// TODO: handle excluded and exempted namespaces in a single place
+		var excludedNamespaces []string
+		if r.processExcluder != nil {
+			excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
+		}
 		excludedNamespaces = append(excludedNamespaces, webhook.GetAllExemptedNamespacesWithWildcard()...)
 		if webhookConfig != nil {
 			logger.Info("using webhook configuration for VAP matching", "vapName", vapName)

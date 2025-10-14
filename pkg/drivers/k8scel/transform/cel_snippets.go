@@ -85,14 +85,21 @@ const (
 	)
 	`
 
-	// TODO: fix this expression
+	// Expression to exclude objects in globally excluded namespaces and namespace objects themselves if they're in the exclusion list.
 	matchGlobalExcludedNamespacesGlob = `
 	[object, oldObject].exists(obj,
 		obj != null && (
-			// cluster-scoped objects always match
-			!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
+			// For namespace objects, check if the namespace name itself is in the exclusion list
+			(has(obj.kind) && obj.kind == "Namespace" && has(obj.metadata.name)) ? (
 				![%s].exists(nsMatcher,
-					(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+					(string(obj.metadata.name).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+				)
+			) : (
+				// cluster-scoped objects (non-namespace) always match
+				!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
+					![%s].exists(nsMatcher,
+						(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+					)
 				)
 			)
 		)
@@ -112,7 +119,7 @@ func MatchExcludedNamespacesGlobV1Beta1() admissionregistrationv1beta1.MatchCond
 func MatchGlobalExcludedNamespacesGlobV1Beta1(excludedNamespaces string) admissionregistrationv1beta1.MatchCondition {
 	return admissionregistrationv1beta1.MatchCondition{
 		Name:       "gatekeeper_internal_match_global_excluded_namespaces",
-		Expression: fmt.Sprintf(matchGlobalExcludedNamespacesGlob, excludedNamespaces),
+		Expression: fmt.Sprintf(matchGlobalExcludedNamespacesGlob, excludedNamespaces, excludedNamespaces),
 	}
 }
 

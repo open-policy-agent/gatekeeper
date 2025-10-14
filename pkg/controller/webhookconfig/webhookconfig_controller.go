@@ -7,6 +7,8 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -40,16 +42,14 @@ type WebhookMatchingConfig struct {
 
 // WebhookConfigCache maintains the current state of webhook configurations.
 type WebhookConfigCache struct {
-	mu       sync.RWMutex
-	configs  map[string]WebhookMatchingConfig // webhook name -> config
-	ctEvents chan<- event.GenericEvent        // channel to send CT reconciliation events
+	mu      sync.RWMutex
+	configs map[string]WebhookMatchingConfig // webhook name -> config
 }
 
 // NewWebhookConfigCache creates a new webhook config cache.
-func NewWebhookConfigCache(ctEvents chan<- event.GenericEvent) *WebhookConfigCache {
+func NewWebhookConfigCache(ctEvents <-chan event.GenericEvent) *WebhookConfigCache {
 	return &WebhookConfigCache{
-		configs:  make(map[string]WebhookMatchingConfig),
-		ctEvents: ctEvents,
+		configs: make(map[string]WebhookMatchingConfig),
 	}
 }
 
@@ -91,14 +91,14 @@ func (w *WebhookConfigCache) GetConfig(webhookName string) (WebhookMatchingConfi
 }
 
 // TriggerConstraintTemplateReconciliation sends events to trigger CT reconciliation.
-func (w *WebhookConfigCache) TriggerConstraintTemplateReconciliation(ctx context.Context, c client.Client, webhookName string) {
+func (r *ReconcileWebhookConfig) TriggerConstraintTemplateReconciliation(ctx context.Context, webhookName string) {
 	logger := logger.WithValues("webhook_name", webhookName)
 	logger.Info("Triggering ConstraintTemplate reconciliation due to webhook matching field changes")
 
 	// List all ConstraintTemplates
 	// TODO: optimize this by only triggering reconciliation for VAP gen templates
 	templateList := &v1beta1.ConstraintTemplateList{}
-	if err := c.List(ctx, templateList); err != nil {
+	if err := r.List(ctx, templateList); err != nil {
 		logger.Error(err, "failed to list ConstraintTemplates for webhook reconciliation")
 		return
 	}
@@ -106,7 +106,7 @@ func (w *WebhookConfigCache) TriggerConstraintTemplateReconciliation(ctx context
 	// Send generic events for each constraint template
 	for i := range templateList.Items {
 		select {
-		case w.ctEvents <- event.GenericEvent{
+		case r.ctEvents <- event.GenericEvent{
 			Object: &templateList.Items[i],
 		}:
 		default:
@@ -118,15 +118,30 @@ func (w *WebhookConfigCache) TriggerConstraintTemplateReconciliation(ctx context
 }
 
 type Adder struct {
-	Cache *WebhookConfigCache
+	Cache    *WebhookConfigCache
+	ctEvents chan<- event.GenericEvent // channel to send CT reconciliation events
+}
+
+func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
+
+func (a *Adder) InjectWebhookConfigCache(webhookConfigCache *WebhookConfigCache) {
+	a.Cache = webhookConfigCache
+}
+
+func (a *Adder) InjectConstraintTemplateEvent(ctEvents chan event.GenericEvent) {
+	a.ctEvents = ctEvents
 }
 
 // Add creates a new webhook config controller and adds it to the Manager.
 func (a *Adder) Add(mgr manager.Manager) error {
+	if !operations.IsAssigned(operations.Generate) {
+		return nil
+	}
 	r := &ReconcileWebhookConfig{
-		Client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
-		cache:  a.Cache,
+		Client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		cache:    a.Cache,
+		ctEvents: a.ctEvents,
 	}
 
 	return add(mgr, r)
@@ -165,8 +180,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 // ReconcileWebhookConfig reconciles ValidatingWebhookConfiguration changes.
 type ReconcileWebhookConfig struct {
 	client.Client
-	scheme *runtime.Scheme
-	cache  *WebhookConfigCache
+	scheme   *runtime.Scheme
+	cache    *WebhookConfigCache
+	ctEvents chan<- event.GenericEvent
 }
 
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch
@@ -185,7 +201,7 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 			// TODO: what happens if the webhook is deleted?
 			logger.Info("ValidatingWebhookConfiguration deleted, triggering ConstraintTemplate reconciliation")
 			r.cache.RemoveConfig(request.Name)
-			r.cache.TriggerConstraintTemplateReconciliation(ctx, r.Client, request.Name)
+			r.TriggerConstraintTemplateReconciliation(ctx, request.Name)
 			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{}, err
@@ -217,7 +233,7 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 	// Check if matching fields have changed
 	if r.cache.UpdateConfig(request.Name, newConfig) {
 		logger.Info("ValidatingWebhookConfiguration matching fields changed, triggering ConstraintTemplate reconciliation", "storedKey", request.Name)
-		r.cache.TriggerConstraintTemplateReconciliation(ctx, r.Client, request.Name)
+		r.TriggerConstraintTemplateReconciliation(ctx, request.Name)
 	} else {
 		logger.V(1).Info("ValidatingWebhookConfiguration updated but no matching field changes detected", "storedKey", request.Name)
 	}
