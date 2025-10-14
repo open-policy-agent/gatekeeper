@@ -4,9 +4,8 @@ import (
 	"context"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
@@ -37,8 +36,6 @@ func (r *ReconcileWebhookConfig) TriggerConstraintTemplateReconciliation(ctx con
 	logger := logger.WithValues("webhook_name", webhookName)
 	logger.Info("Triggering ConstraintTemplate reconciliation due to webhook matching field changes")
 
-	// List all ConstraintTemplates
-	// TODO: optimize this by only triggering reconciliation for VAP gen templates
 	templateList := &v1beta1.ConstraintTemplateList{}
 	if err := r.List(ctx, templateList); err != nil {
 		logger.Error(err, "failed to list ConstraintTemplates for webhook reconciliation")
@@ -47,7 +44,8 @@ func (r *ReconcileWebhookConfig) TriggerConstraintTemplateReconciliation(ctx con
 
 	// Send generic events for each constraint template
 	for i := range templateList.Items {
-		if !generateVap(&templateList.Items[i]) {
+		generateVap, err := constrainttemplate.ShouldGenerateVAPForVersionedCT(&templateList.Items[i], r.scheme)
+		if err != nil || !generateVap {
 			logger.Info("skipping reconcile for template", "template", templateList.Items[i].GetName())
 			continue
 		}
@@ -190,20 +188,4 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 // isGatekeeperValidatingWebhook checks if this is a Gatekeeper validating webhook.
 func isGatekeeperValidatingWebhook(name string) bool {
 	return name == *webhook.VwhName
-}
-
-// generateVap determines whether a ConstraintTemplate should generate a ValidatingAdmissionPolicy.
-func generateVap(template *v1beta1.ConstraintTemplate) bool {
-	generateVAP := false
-	if len(template.Spec.Targets) != 1 {
-		return generateVAP
-	}
-	for _, code := range template.Spec.Targets[0].Code {
-		if code.Engine != schema.Name {
-			continue
-		}
-		// extract GenerateVAP field form the source
-		generateVAP = true
-	}
-	return generateVAP && *constraint.DefaultGenerateVAP
 }

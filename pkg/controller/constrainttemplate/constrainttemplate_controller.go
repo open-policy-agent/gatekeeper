@@ -920,7 +920,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 			if r.processExcluder != nil {
 				excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
 			}
-			excludedNamespaces = append(excludedNamespaces, webhook.GetAllExemptedNamespacesWithWildcard()...)
+			exemptedNamespaces := webhook.GetAllExemptedNamespacesWithWildcard()
 			// Get webhook configuration from cache if available
 			var webhookConfig *webhookconfigcache.WebhookMatchingConfig
 			if r.webhookCache != nil {
@@ -935,7 +935,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 			} else {
 				logger.Info("webhook cache is nil, VAP will be created with default constraints")
 			}
-			transformedVap, err = transform.TemplateToPolicyDefinitionWithWebhookConfig(unversionedCT, webhookConfig, excludedNamespaces)
+			transformedVap, err = transform.TemplateToPolicyDefinitionWithWebhookConfig(unversionedCT, webhookConfig, excludedNamespaces, exemptedNamespaces)
 		} else {
 			logger.Info("using default configuration for VAP matching", "vapName", vapName)
 			transformedVap, err = transform.TemplateToPolicyDefinition(unversionedCT)
@@ -1040,4 +1040,13 @@ func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnot
 	ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
 	ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationBlocked
 	return time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second, r.Update(ctx, ct)
+}
+
+func ShouldGenerateVAPForVersionedCT(ct *v1beta1.ConstraintTemplate, scheme *runtime.Scheme) (bool, error) {
+	unversionedCT := &templates.ConstraintTemplate{}
+	if err := scheme.Convert(ct, unversionedCT, nil); err != nil {
+		logger.Error(err, "conversion error")
+		return false, err
+	}
+	return constraint.ShouldGenerateVAP(unversionedCT)
 }

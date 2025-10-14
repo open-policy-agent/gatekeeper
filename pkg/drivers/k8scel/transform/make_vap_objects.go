@@ -1,8 +1,8 @@
 package transform
 
 import (
-	"fmt"
 	"flag"
+	"fmt"
 	"strings"
 
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
@@ -21,10 +21,10 @@ import (
 var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", false, "(alpha) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration.")
 
 func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
-	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil)
+	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, nil)
 }
 
-func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string, exemptedNamespaces []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	source, err := schema.GetSourceFromTemplate(template)
 	if err != nil {
 		return nil, err
@@ -43,6 +43,15 @@ func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintT
 			quotedNamespaces[i] = fmt.Sprintf(`"%s"`, ns)
 		}
 		matchConditions = append(matchConditions, MatchGlobalExcludedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
+	}
+
+	if len(exemptedNamespaces) > 0 {
+		// Quote each namespace for proper CEL syntax
+		quotedNamespaces := make([]string, len(exemptedNamespaces))
+		for i, ns := range exemptedNamespaces {
+			quotedNamespaces[i] = fmt.Sprintf(`"%s"`, ns)
+		}
+		matchConditions = append(matchConditions, MatchGlobalExemptedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
 	}
 
 	validations, err := source.GetV1Beta1Validatons()

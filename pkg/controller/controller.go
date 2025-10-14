@@ -27,7 +27,7 @@ import (
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -94,7 +94,7 @@ type ConstraintTemplateEventInjector interface {
 }
 
 type WebhookConfigCacheInjector interface {
-	InjectWebhookConfigCache(webhookConfigCache *webhookconfig.WebhookConfigCache)
+	InjectWebhookConfigCache(webhookConfigCache *webhookconfigcache.WebhookConfigCache)
 }
 
 // Injectors is a list of adder structs that need injection. We can convert this
@@ -118,7 +118,7 @@ type Dependencies struct {
 	SyncEventsCh       chan event.GenericEvent
 	CacheMgr           *cm.CacheManager
 	CtEvents           chan event.GenericEvent
-	WebhookConfigCache *webhookconfig.WebhookConfigCache
+	WebhookConfigCache *webhookconfigcache.WebhookConfigCache
 }
 
 type defaultPodGetter struct {

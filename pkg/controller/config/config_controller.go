@@ -26,6 +26,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/configstatus"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
@@ -69,6 +70,11 @@ func (r *ReconcileConfig) TriggerConstraintTemplateReconciliation(ctx context.Co
 
 	// Send generic events for each constraint template
 	for i := range templateList.Items {
+		generateVap, err := constrainttemplate.ShouldGenerateVAPForVersionedCT(&templateList.Items[i], r.scheme)
+		if err != nil || !generateVap {
+			logger.Info("skipping reconcile for template", "template", templateList.Items[i].GetName())
+			continue
+		}
 		select {
 		case r.ctEvents <- event.GenericEvent{
 			Object: &templateList.Items[i],
