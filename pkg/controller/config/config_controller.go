@@ -166,7 +166,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if err != nil {
 		return err
 	}
-	// TODO: create a channel with constraint template controller to trigger re-sync of all templates when config changes
 
 	return add(mgr, r)
 }
