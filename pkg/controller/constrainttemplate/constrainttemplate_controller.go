@@ -73,8 +73,6 @@ const (
 var (
 	logger       = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
 	discoveryErr *apiutil.ErrResourceDiscoveryFailed
-	// constraintTemplateEvents will be used for webhook config changes that trigger ConstraintTemplate reconciliation
-	// constraintTemplateEvents = make(chan event.GenericEvent, 1024).
 )
 
 var gvkConstraintTemplate = schema.GroupVersionKind{
