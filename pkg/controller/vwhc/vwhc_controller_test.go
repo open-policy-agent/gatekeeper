@@ -177,9 +177,10 @@ func TestReconcileVWHC_Reconcile(t *testing.T) {
 			fakeClient := clientBuilder.Build()
 
 			r := &ReconcileVWHC{
-				reader: fakeClient,
-				writer: fakeClient,
-				scheme: scheme,
+				reader:   fakeClient,
+				writer:   fakeClient,
+				scheme:   scheme,
+				OpsCache: celSchema.NewWebhookOperationsCache(),
 			}
 			_, err := r.Reconcile(context.Background(), reconcile.Request{
 				NamespacedName: types.NamespacedName{
@@ -302,69 +303,6 @@ func TestContainsOpsType(t *testing.T) {
 	}
 }
 
-// TestOpsInVwhcHasDiff test OpsInVwhc.HasDiff
-func TestOpsInVwhcHasDiff(t *testing.T) {
-	tests := []struct {
-		name        string
-		origin      celSchema.OpsInVwhc
-		current     celSchema.OpsInVwhc
-		wantDelete  bool
-		wantConnect bool
-	}{
-		{
-			name: "no changes",
-			origin: celSchema.OpsInVwhc{
-				EnableDeleteOpsInVwhc: ptr.To(false),
-				EnableConectOpsInVwhc: ptr.To(false),
-			},
-			current: celSchema.OpsInVwhc{
-				EnableDeleteOpsInVwhc: ptr.To(false),
-				EnableConectOpsInVwhc: ptr.To(false),
-			},
-			wantDelete:  false,
-			wantConnect: false,
-		},
-		{
-			name: "Delete change",
-			origin: celSchema.OpsInVwhc{
-				EnableDeleteOpsInVwhc: ptr.To(false),
-				EnableConectOpsInVwhc: ptr.To(false),
-			},
-			current: celSchema.OpsInVwhc{
-				EnableDeleteOpsInVwhc: ptr.To(true),
-				EnableConectOpsInVwhc: ptr.To(false),
-			},
-			wantDelete:  true,
-			wantConnect: false,
-		},
-		{
-			name: "Connect change",
-			origin: celSchema.OpsInVwhc{
-				EnableDeleteOpsInVwhc: ptr.To(false),
-				EnableConectOpsInVwhc: ptr.To(false),
-			},
-			current: celSchema.OpsInVwhc{
-				EnableDeleteOpsInVwhc: ptr.To(false),
-				EnableConectOpsInVwhc: ptr.To(true),
-			},
-			wantDelete:  false,
-			wantConnect: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotDelete, gotConnect := tt.origin.HasDiff(tt.current)
-			if gotDelete != tt.wantDelete {
-				t.Errorf("HasDiff() gotDelete = %v, want %v", gotDelete, tt.wantDelete)
-			}
-			if gotConnect != tt.wantConnect {
-				t.Errorf("HasDiff() gotConnect = %v, want %v", gotConnect, tt.wantConnect)
-			}
-		})
-	}
-}
-
 // TestReconcileVWHC_updateAllVAPOperations test updateAllVAPOperations
 func TestReconcileVWHC_updateAllVAPOperations(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -374,8 +312,6 @@ func TestReconcileVWHC_updateAllVAPOperations(t *testing.T) {
 	tests := []struct {
 		name            string
 		existingObjects []client.Object
-		deleteChanged   bool
-		connectChanged  bool
 		wantErr         bool
 	}{
 		{
@@ -387,9 +323,7 @@ func TestReconcileVWHC_updateAllVAPOperations(t *testing.T) {
 					},
 				},
 			},
-			deleteChanged:  true,
-			connectChanged: false,
-			wantErr:        false,
+			wantErr: false,
 		},
 	}
 
@@ -402,12 +336,13 @@ func TestReconcileVWHC_updateAllVAPOperations(t *testing.T) {
 
 			fakeClient := clientBuilder.Build()
 			r := &ReconcileVWHC{
-				reader: fakeClient,
-				writer: fakeClient,
-				scheme: scheme,
+				reader:   fakeClient,
+				writer:   fakeClient,
+				scheme:   scheme,
+				OpsCache: celSchema.NewWebhookOperationsCache(),
 			}
 
-			err := r.updateAllVAPOperations(context.Background(), tt.deleteChanged, tt.connectChanged)
+			err := r.updateAllVAPOperations(context.Background())
 			if (err != nil) != tt.wantErr {
 				t.Errorf("updateAllVAPOperations() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -423,7 +358,7 @@ func TestReconcileVWHC_getResourceRuleOps(t *testing.T) {
 
 	source := &celSchema.Source{}
 	source.GenerateVAP = ptr.To(true)
-	source.ResourceOperations = []admissionregistrationv1.OperationType{
+	source.Operations = []admissionregistrationv1.OperationType{
 		admissionregistrationv1.Create,
 		admissionregistrationv1.Update,
 		admissionregistrationv1.Delete,
@@ -465,9 +400,6 @@ func TestReconcileVWHC_getResourceRuleOps(t *testing.T) {
 		name            string
 		ctName          string
 		existingObjects []client.Object
-		deleteChanged   bool
-		connectChanged  bool
-		vapOps          []admissionregistrationv1.OperationType
 		wantErr         bool
 	}{
 		{
@@ -480,9 +412,6 @@ func TestReconcileVWHC_getResourceRuleOps(t *testing.T) {
 			name:            "get resource rule ops",
 			ctName:          "test-template",
 			existingObjects: []client.Object{ct},
-			deleteChanged:   false,
-			connectChanged:  false,
-			vapOps:          []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
 			wantErr:         false,
 		},
 	}
@@ -495,13 +424,31 @@ func TestReconcileVWHC_getResourceRuleOps(t *testing.T) {
 			}
 
 			fakeClient := clientBuilder.Build()
+			opsCache := celSchema.NewWebhookOperationsCache()
+			// Populate OpsCache with some operations to avoid ErrEmptyOperation
+			opsCache.ExtractOperationsFromWebhookConfiguration(&admissionregistrationv1.ValidatingWebhookConfiguration{
+				Webhooks: []admissionregistrationv1.ValidatingWebhook{
+					{
+						Rules: []admissionregistrationv1.RuleWithOperations{
+							{
+								Operations: []admissionregistrationv1.OperationType{
+									admissionregistrationv1.Create,
+									admissionregistrationv1.Update,
+									admissionregistrationv1.Delete,
+								},
+							},
+						},
+					},
+				},
+			})
 			r := &ReconcileVWHC{
-				reader: fakeClient,
-				writer: fakeClient,
-				scheme: scheme,
+				reader:   fakeClient,
+				writer:   fakeClient,
+				scheme:   scheme,
+				OpsCache: opsCache,
 			}
 			// run tests
-			_, err := r.getResourceRuleOps(context.Background(), tt.ctName, tt.deleteChanged, tt.connectChanged, tt.vapOps)
+			_, err := r.getResourceRuleOps(context.Background(), tt.ctName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getResourceRuleOps() error = %v, wantErr %v", err, tt.wantErr)
 			}

@@ -17,6 +17,7 @@ package vwhc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -26,7 +27,7 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -43,7 +44,7 @@ const (
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "ValidatingWebhookConfiguration")
 
-var PolicyOpsInVwhc = celSchema.OpsInVwhc{ptr.To(false), ptr.To(false)}
+var VwhcOpsCache = celSchema.NewWebhookOperationsCache()
 
 type Adder struct{}
 
@@ -56,9 +57,10 @@ func (a *Adder) Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcileVWHC{
-		reader: mgr.GetCache(),
-		scheme: mgr.GetScheme(),
-		writer: mgr.GetClient(),
+		reader:   mgr.GetCache(),
+		scheme:   mgr.GetScheme(),
+		writer:   mgr.GetClient(),
+		OpsCache: VwhcOpsCache,
 	}
 }
 
@@ -80,9 +82,10 @@ var _ reconcile.Reconciler = &ReconcileVWHC{}
 
 // ReconcileWH reconciles a validatingwebhookconfiguration.
 type ReconcileVWHC struct {
-	reader client.Reader
-	writer client.Writer
-	scheme *runtime.Scheme
+	reader   client.Reader
+	writer   client.Writer
+	scheme   *runtime.Scheme
+	OpsCache *celSchema.WebhookOperationsCache
 }
 
 // Reconcile reads that state of the cluster for an object and makes changes based on the state read
@@ -98,35 +101,9 @@ func (r *ReconcileVWHC) Reconcile(ctx context.Context, request reconcile.Request
 		// Error reading the object - requeue the request.
 		return reconcile.Result{Requeue: true}, err
 	}
-
-	originOps := celSchema.OpsInVwhc{
-		PolicyOpsInVwhc.EnableConectOpsInVwhc,
-		PolicyOpsInVwhc.EnableDeleteOpsInVwhc,
-	}
-
-	PolicyOpsInVwhc.EnableDeleteOpsInVwhc = ptr.To(false)
-	PolicyOpsInVwhc.EnableConectOpsInVwhc = ptr.To(false)
-	for i := range vwhc.Webhooks {
-		webhook := &vwhc.Webhooks[i]
-		for _, rule := range webhook.Rules {
-			if !*PolicyOpsInVwhc.EnableDeleteOpsInVwhc {
-				if containsOpsType(rule.Operations, admissionregistrationv1.Delete) {
-					log.Info("delete operation enabled in gatekeeper vwhc")
-					PolicyOpsInVwhc.EnableDeleteOpsInVwhc = ptr.To[bool](true)
-				}
-			}
-			if !*PolicyOpsInVwhc.EnableConectOpsInVwhc {
-				if containsOpsType(rule.Operations, admissionregistrationv1.Connect) {
-					log.Info("connect operation enabled in gatekeeper vwhc")
-					PolicyOpsInVwhc.EnableConectOpsInVwhc = ptr.To[bool](true)
-				}
-			}
-		}
-	}
-	//check if delete/connect operation con
-	deleteChanged, connectChanged := originOps.HasDiff(PolicyOpsInVwhc)
-	if deleteChanged || connectChanged {
-		err := r.updateAllVAPOperations(ctx, deleteChanged, connectChanged)
+	//reconcile vap if extract operations from vwhc changed
+	if r.OpsCache.ExtractOperationsFromWebhookConfiguration(vwhc) {
+		err := r.updateAllVAPOperations(ctx)
 		if err != nil {
 			return reconcile.Result{Requeue: true}, err
 		}
@@ -170,7 +147,7 @@ func containsOpsType(ops []admissionregistrationv1.OperationType, opsType admiss
 	return false
 }
 
-func (r *ReconcileVWHC) updateAllVAPOperations(ctx context.Context, deleteChanged, connectChanged bool) error {
+func (r *ReconcileVWHC) updateAllVAPOperations(ctx context.Context) error {
 	vObjs := &admissionregistrationv1.ValidatingAdmissionPolicyList{}
 	err := r.reader.List(ctx, vObjs)
 	if err != nil {
@@ -188,10 +165,22 @@ func (r *ReconcileVWHC) updateAllVAPOperations(ctx context.Context, deleteChange
 				refCTName := ownerRef.Name
 				newVap := vap.DeepCopy()
 				var newResourceRules = make([]admissionregistrationv1.NamedRuleWithOperations, 0)
+				shouldDelete := false
+				//TODO mapping resource in vwhc
 				for k := range rrs {
 					rr := &rrs[k]
-					ops, err := r.getResourceRuleOps(ctx, refCTName, deleteChanged, connectChanged, rr.Operations)
+					ops, err := r.getResourceRuleOps(ctx, refCTName)
 					if err != nil {
+						// If there are no operations defined, delete the VAP instance
+						if errors.Is(err, celSchema.ErrEmptyOperation) {
+							log.Info("deleting vap due to empty operations", "vap", vap.Name)
+							if delErr := r.writer.Delete(ctx, vap); delErr != nil {
+								log.Error(delErr, "failed to delete vap", "vap", vap.Name)
+								return delErr
+							}
+							shouldDelete = true
+							break
+						}
 						log.Error(err, "failed to get operations in vap resourceRules", "vap", vap.Name)
 						return err
 					}
@@ -200,10 +189,22 @@ func (r *ReconcileVWHC) updateAllVAPOperations(ctx context.Context, deleteChange
 					}
 					newResourceRules = append(newResourceRules, *rr)
 				}
-				newVap.Spec.MatchConstraints.ResourceRules = newResourceRules
-				if err := r.writer.Update(ctx, newVap); err != nil {
-					log.Error(err, "failed to update vap", "vap", vap.Name)
-					return err
+				// Only update if we didn't delete the VAP
+				if !shouldDelete {
+					newVap.Spec.MatchConstraints.ResourceRules = newResourceRules
+					// retry here to avoid version conflicts
+					log.Info("begin to patch vap", "name", vap.Name, "newResourceRules", newResourceRules)
+					if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+						if err := r.reader.Get(ctx, client.ObjectKey{Name: vap.Name}, vap); err != nil {
+							log.Error(err, "failed to read vap when updating", "vap", vap.Name)
+							return err
+						}
+						newVap.SetResourceVersion(vap.GetResourceVersion())
+						return r.writer.Update(ctx, newVap)
+					}); err != nil {
+						log.Error(err, "failed to patch vap", "vap", vap.Name)
+						return err
+					}
 				}
 				break
 			}
@@ -212,7 +213,7 @@ func (r *ReconcileVWHC) updateAllVAPOperations(ctx context.Context, deleteChange
 	return nil
 }
 
-func (r *ReconcileVWHC) getResourceRuleOps(ctx context.Context, ctName string, deleteChanged, connectChanged bool, vapOps []admissionregistrationv1.OperationType) ([]admissionregistrationv1.OperationType, error) {
+func (r *ReconcileVWHC) getResourceRuleOps(ctx context.Context, ctName string) ([]admissionregistrationv1.OperationType, error) {
 	ct := &v1beta1.ConstraintTemplate{}
 	err := r.reader.Get(ctx, types.NamespacedName{Name: ctName}, ct)
 	if err != nil {
@@ -231,5 +232,5 @@ func (r *ReconcileVWHC) getResourceRuleOps(ctx context.Context, ctName string, d
 	if source.GenerateVAP == nil {
 		return nil, nil
 	}
-	return source.GetResourceOperationsWhenVwhcChange(deleteChanged, connectChanged, PolicyOpsInVwhc, vapOps), nil
+	return source.GetIntersectOperations(r.OpsCache)
 }

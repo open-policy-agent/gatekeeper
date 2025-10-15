@@ -184,84 +184,82 @@ func TestValidationErrors(t *testing.T) {
 	}
 }
 
-func TestSource_GetResourceOperations(t *testing.T) {
-	truePtr := func() *bool { b := true; return &b }()
-	falsePtr := func() *bool { b := false; return &b }()
-
+func TestSource_GetIntersectOperations(t *testing.T) {
 	tests := []struct {
 		name        string
 		source      *Source
-		opsInVwhc   OpsInVwhc
+		opsCache    *WebhookOperationsCache
 		expectedOps []admissionv1.OperationType
 		expectError bool
 	}{
 		{
-			name:        "empty resource operations",
-			source:      &Source{ResourceOperations: []admissionv1.OperationType{}},
-			opsInVwhc:   OpsInVwhc{},
+			name:   "empty operations with webhook ops",
+			source: &Source{Operations: []admissionv1.OperationType{}},
+			opsCache: func() *WebhookOperationsCache {
+				cache := NewWebhookOperationsCache()
+				cache.operations[admissionv1.Create] = true
+				cache.operations[admissionv1.Update] = true
+				return cache
+			}(),
 			expectedOps: []admissionv1.OperationType{admissionv1.Create, admissionv1.Update},
 			expectError: false,
 		},
 		{
-			name:        "create operation",
-			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Create}},
-			opsInVwhc:   OpsInVwhc{},
+			name:   "create operation",
+			source: &Source{Operations: []admissionv1.OperationType{admissionv1.Create}},
+			opsCache: func() *WebhookOperationsCache {
+				cache := NewWebhookOperationsCache()
+				cache.operations[admissionv1.Create] = true
+				cache.operations[admissionv1.Update] = true
+				return cache
+			}(),
 			expectedOps: []admissionv1.OperationType{admissionv1.Create},
 			expectError: false,
 		},
 		{
-			name:        "update operation",
-			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Update}},
-			opsInVwhc:   OpsInVwhc{},
-			expectedOps: []admissionv1.OperationType{admissionv1.Update},
-			expectError: false,
+			name:   "delete operation not in webhook",
+			source: &Source{Operations: []admissionv1.OperationType{admissionv1.Delete}},
+			opsCache: func() *WebhookOperationsCache {
+				cache := NewWebhookOperationsCache()
+				cache.operations[admissionv1.Create] = true
+				return cache
+			}(),
+			expectedOps: nil,
+			expectError: true,
 		},
 		{
-			name:        "delete operation disabled",
-			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Delete}},
-			opsInVwhc:   OpsInVwhc{EnableDeleteOpsInVwhc: falsePtr},
-			expectedOps: []admissionv1.OperationType{},
-			expectError: false,
-		},
-		{
-			name:        "delete operation enabled",
-			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Delete}},
-			opsInVwhc:   OpsInVwhc{EnableDeleteOpsInVwhc: truePtr},
+			name:   "delete operation in webhook",
+			source: &Source{Operations: []admissionv1.OperationType{admissionv1.Delete}},
+			opsCache: func() *WebhookOperationsCache {
+				cache := NewWebhookOperationsCache()
+				cache.operations[admissionv1.Delete] = true
+				return cache
+			}(),
 			expectedOps: []admissionv1.OperationType{admissionv1.Delete},
 			expectError: false,
 		},
 		{
-			name:        "connect operation disabled",
-			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Connect}},
-			opsInVwhc:   OpsInVwhc{EnableConectOpsInVwhc: falsePtr},
-			expectedOps: []admissionv1.OperationType{},
-			expectError: false,
-		},
-		{
-			name:        "connect operation enabled",
-			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Connect}},
-			opsInVwhc:   OpsInVwhc{EnableConectOpsInVwhc: truePtr},
-			expectedOps: []admissionv1.OperationType{admissionv1.Connect},
-			expectError: false,
-		},
-		{
-			name:        "operation all with both enabled",
-			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.OperationAll}},
-			opsInVwhc:   OpsInVwhc{EnableDeleteOpsInVwhc: truePtr, EnableConectOpsInVwhc: truePtr},
+			name:   "operation all",
+			source: &Source{Operations: []admissionv1.OperationType{admissionv1.OperationAll}},
+			opsCache: func() *WebhookOperationsCache {
+				cache := NewWebhookOperationsCache()
+				cache.operations[admissionv1.OperationAll] = true
+				return cache
+			}(),
 			expectedOps: []admissionv1.OperationType{admissionv1.OperationAll},
 			expectError: false,
 		},
 		{
-			name:        "operation all with delete disabled",
-			source:      &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.OperationAll}},
-			opsInVwhc:   OpsInVwhc{EnableDeleteOpsInVwhc: falsePtr, EnableConectOpsInVwhc: truePtr},
-			expectedOps: []admissionv1.OperationType{},
-			expectError: false,
+			name:        "empty cache and empty source",
+			source:      &Source{Operations: []admissionv1.OperationType{}},
+			opsCache:    NewWebhookOperationsCache(),
+			expectedOps: nil,
+			expectError: true,
 		},
 		{
 			name:        "unknown operation",
-			source:      &Source{ResourceOperations: []admissionv1.OperationType{"Unknown"}},
-			opsInVwhc:   OpsInVwhc{},
+			source:      &Source{Operations: []admissionv1.OperationType{"Unknown"}},
+			opsCache:    NewWebhookOperationsCache(),
 			expectedOps: nil,
 			expectError: true,
 		},
@@ -269,15 +267,15 @@ func TestSource_GetResourceOperations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.source.GetResourceOperations(tt.opsInVwhc)
+			got, err := tt.source.GetIntersectOperations(tt.opsCache)
 
 			if (err != nil) != tt.expectError {
-				t.Errorf("GetResourceOperations() error = %v, expectError %v", err, tt.expectError)
+				t.Errorf("GetIntersectOperations() error = %v, expectError %v", err, tt.expectError)
 				return
 			}
 
 			if !sets.NewString(stringSliceFromOps(got)...).Equal(sets.NewString(stringSliceFromOps(tt.expectedOps)...)) {
-				t.Errorf("GetResourceOperations() = %v, want %v", got, tt.expectedOps)
+				t.Errorf("GetIntersectOperations() = %v, want %v", got, tt.expectedOps)
 			}
 		})
 	}
@@ -290,89 +288,4 @@ func stringSliceFromOps(ops []admissionv1.OperationType) []string {
 		result[i] = string(op)
 	}
 	return result
-}
-
-func TestSource_GetResourceOperationsWhenVwhcChange(t *testing.T) {
-	truePtr := func() *bool { b := true; return &b }()
-	falsePtr := func() *bool { b := false; return &b }()
-
-	tests := []struct {
-		name           string
-		source         *Source
-		deleteChanged  bool
-		connectChanged bool
-		vwhcOps        OpsInVwhc
-		vapOps         []admissionv1.OperationType
-		expectedOps    []admissionv1.OperationType
-	}{
-		{
-			name:           "delete changed and enabled with source support",
-			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Delete}},
-			deleteChanged:  true,
-			connectChanged: false,
-			vwhcOps:        OpsInVwhc{EnableDeleteOpsInVwhc: truePtr},
-			vapOps:         []admissionv1.OperationType{},
-			expectedOps:    []admissionv1.OperationType{admissionv1.Delete},
-		},
-		{
-			name:           "delete changed and disabled",
-			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Delete}},
-			deleteChanged:  true,
-			connectChanged: false,
-			vwhcOps:        OpsInVwhc{EnableDeleteOpsInVwhc: falsePtr},
-			vapOps:         []admissionv1.OperationType{admissionv1.Delete},
-			expectedOps:    []admissionv1.OperationType{},
-		},
-		{
-			name:           "connect changed and enabled with source support",
-			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Connect}},
-			deleteChanged:  false,
-			connectChanged: true,
-			vwhcOps:        OpsInVwhc{EnableConectOpsInVwhc: truePtr},
-			vapOps:         []admissionv1.OperationType{},
-			expectedOps:    []admissionv1.OperationType{admissionv1.Connect},
-		},
-		{
-			name:           "connect changed and disabled",
-			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Connect}},
-			deleteChanged:  false,
-			connectChanged: true,
-			vwhcOps:        OpsInVwhc{EnableConectOpsInVwhc: falsePtr},
-			vapOps:         []admissionv1.OperationType{admissionv1.Connect},
-			expectedOps:    []admissionv1.OperationType{},
-		},
-		{
-			name:           "delete enabled but source does not support",
-			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Create}},
-			deleteChanged:  true,
-			connectChanged: false,
-			vwhcOps:        OpsInVwhc{EnableDeleteOpsInVwhc: truePtr},
-			vapOps:         []admissionv1.OperationType{},
-			expectedOps:    []admissionv1.OperationType{},
-		},
-		{
-			name:           "connect enabled but source does not support",
-			source:         &Source{ResourceOperations: []admissionv1.OperationType{admissionv1.Create}},
-			deleteChanged:  false,
-			connectChanged: true,
-			vwhcOps:        OpsInVwhc{EnableConectOpsInVwhc: truePtr},
-			vapOps:         []admissionv1.OperationType{},
-			expectedOps:    []admissionv1.OperationType{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.source.GetResourceOperationsWhenVwhcChange(
-				tt.deleteChanged,
-				tt.connectChanged,
-				tt.vwhcOps,
-				tt.vapOps,
-			)
-
-			if !sets.NewString(stringSliceFromOps(got)...).Equal(sets.NewString(stringSliceFromOps(tt.expectedOps)...)) {
-				t.Errorf("GetResourceOperationsWhenVwhcChange() = %v, want %v", got, tt.expectedOps)
-			}
-		})
-	}
 }

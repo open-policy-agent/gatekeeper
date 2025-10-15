@@ -176,8 +176,8 @@ func makeReconcileConstraintTemplateForVap(suffix string, generateVAP *bool, ops
 		},
 		GenerateVAP: generateVAP,
 	}
-	if ops!= nil{
-		source.ResourceOperations = ops
+	if ops != nil {
+		source.Operations = ops
 	}
 	return &v1beta1.ConstraintTemplate{
 		TypeMeta: metav1.TypeMeta{

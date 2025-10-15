@@ -59,24 +59,8 @@ type Source struct {
 	// GenerateVAP enables/disables VAP generation and enforcement for policy.
 	GenerateVAP *bool `json:"generateVAP,omitempty"`
 
-	// ResourceOperations maps to ValidatingAdmissionPolicy's `spec.matchConstraints.resourceRules.operations` when enable generateVAP.
-	ResourceOperations []admissionv1.OperationType `json:"resourceOperations,omitempty"`
-}
-
-type OpsInVwhc struct {
-	EnableDeleteOpsInVwhc *bool
-	EnableConectOpsInVwhc *bool
-}
-
-func (o *OpsInVwhc) HasDiff(ops OpsInVwhc) (bool, bool) {
-	var deleteChanged, connectChanged bool
-	if *ops.EnableConectOpsInVwhc != *o.EnableConectOpsInVwhc {
-		connectChanged = true
-	}
-	if *ops.EnableDeleteOpsInVwhc != *o.EnableDeleteOpsInVwhc {
-		deleteChanged = true
-	}
-	return deleteChanged, connectChanged
+	// Operations maps to ValidatingAdmissionPolicy's `spec.matchConstraints.resourceRules.operations` when enable generateVAP.
+	Operations []admissionv1.OperationType `json:"operations,omitempty"`
 }
 
 func (in *Source) Validate() error {
@@ -253,71 +237,38 @@ func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType
 	return &out, nil
 }
 
-func (in *Source) GetResourceOperations(opsInVwhc OpsInVwhc) ([]admissionv1.OperationType, error) {
+// GetIntersectOperations return intersection ops between vwhc and ct
+func (in *Source) GetIntersectOperations(opsInVwhc *WebhookOperationsCache) ([]admissionv1.OperationType, error) {
 	var out []admissionv1.OperationType
-	deleteInVwhc := opsInVwhc.EnableDeleteOpsInVwhc != nil && *opsInVwhc.EnableDeleteOpsInVwhc
-	connectInVwhc := opsInVwhc.EnableConectOpsInVwhc != nil && *opsInVwhc.EnableConectOpsInVwhc
 
-	if len(in.ResourceOperations) == 0 {
-		return []admissionv1.OperationType{admissionv1.Create, admissionv1.Update}, nil
+	if len(in.Operations) == 0 {
+		//If templateOperations is undefined, use all webhook operations
+		if len(opsInVwhc.operations) > 0 {
+			return opsInVwhc.GetAllOperations(), nil
+		}
+		//neither ops defined
+		return nil, ErrEmptyOperation
 	}
-
-	for _, op := range in.ResourceOperations {
+	for _, op := range in.Operations {
 		switch op {
-		case admissionv1.Create:
-			out = append(out, admissionv1.Create)
-		case admissionv1.Update:
-			out = append(out, admissionv1.Update)
-		case admissionv1.Delete:
-			if deleteInVwhc {
-				out = append(out, admissionv1.Delete)
-			}
-		case admissionv1.Connect:
-			if connectInVwhc {
-				out = append(out, admissionv1.Connect)
+		case admissionv1.Create, admissionv1.Update, admissionv1.Delete, admissionv1.Connect:
+			if opsInVwhc.HasOperation(op) {
+				out = append(out, op)
 			}
 		case admissionv1.OperationAll:
-			if deleteInVwhc && connectInVwhc {
+			if opsInVwhc.HasOperation(op) {
 				return []admissionv1.OperationType{admissionv1.OperationAll}, nil
 			}
 		default:
-			return nil, fmt.Errorf("%w: unrecognized resource operation: %s", ErrBadResourceOperation, op)
+			//Return validation error if template specifies unsupported operations in status
+			return nil, fmt.Errorf("%w: unrecognized resource operation: %s", ErrBadOperation, op)
 		}
+	}
+	// no intersection
+	if len(out) == 0 {
+		return nil, ErrEmptyOperation
 	}
 	return out, nil
-}
-
-// GetResourceOperationsWhenVwhcChange return vap resource operations based on new vwhc changes
-// deleteChanged: DELETE ops changed in vwhc
-// connectChanged: CONNECT ops changed in vwhc
-// vwhcOps: current vwhc operations
-// vapOps: current vpa operations
-func (in *Source) GetResourceOperationsWhenVwhcChange(deleteChanged, connectChanged bool, vwhcOps OpsInVwhc, vapOps []admissionv1.OperationType) []admissionv1beta1.OperationType {
-	if deleteChanged {
-		if *vwhcOps.EnableDeleteOpsInVwhc && !containsOpsType(vapOps, admissionv1.Delete) {
-			// only insert vap ops when the mapping constrainttemplate define delete operation in source resourceOperations
-			if containsOpsType(in.ResourceOperations, admissionv1.Delete) {
-				vapOps = append(vapOps, admissionv1.Delete)
-			}
-		}
-		if !*vwhcOps.EnableDeleteOpsInVwhc {
-			// directly remove ops from vap if existing
-			vapOps = removeOpsType(vapOps, admissionv1.Delete)
-		}
-	}
-	if connectChanged {
-		if *vwhcOps.EnableConectOpsInVwhc && !containsOpsType(vapOps, admissionv1.Connect) {
-			// only insert vap ops when the mapping constrainttemplate define connect operation in source resourceOperations
-			if containsOpsType(in.ResourceOperations, admissionv1.Connect) {
-				vapOps = append(vapOps, admissionv1.Connect)
-			}
-		}
-		if !*vwhcOps.EnableConectOpsInVwhc {
-			// directly remove ops from vap if existing
-			vapOps = removeOpsType(vapOps, admissionv1.Connect)
-		}
-	}
-	return vapOps
 }
 
 // MustToUnstructured() is a convenience method for converting to unstructured.
@@ -380,7 +331,8 @@ func GetSourceFromTemplate(ct *templates.ConstraintTemplate) (*Source, error) {
 	}
 
 	var source *Source
-	for _, code := range ct.Spec.Targets[0].Code {
+	var target = ct.Spec.Targets[0]
+	for _, code := range target.Code {
 		if code.Engine != Name {
 			continue
 		}
@@ -394,5 +346,10 @@ func GetSourceFromTemplate(ct *templates.ConstraintTemplate) (*Source, error) {
 	if source == nil {
 		return nil, ErrCELEngineMissing
 	}
+	//append operations if defined in ct target
+	if len(target.Operations) > 0 {
+		source.Operations = target.Operations
+	}
+
 	return source, nil
 }

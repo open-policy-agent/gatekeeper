@@ -20,6 +20,27 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Helper function to create a webhook operations cache with specified operations
+func createCacheWithOperations(ops ...admissionregistrationv1.OperationType) *schema.WebhookOperationsCache {
+	cache := schema.NewWebhookOperationsCache()
+	vwhc := &admissionregistrationv1.ValidatingWebhookConfiguration{
+		Webhooks: []admissionregistrationv1.ValidatingWebhook{
+			{
+				Rules: []admissionregistrationv1.RuleWithOperations{
+					{
+						Operations: ops,
+						Rule: admissionregistrationv1.Rule{
+							Resources: []string{"*"},
+						},
+					},
+				},
+			},
+		},
+	}
+	cache.ExtractOperationsFromWebhookConfiguration(vwhc)
+	return cache
+}
+
 func TestTemplateToPolicyDefinition(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -232,7 +253,9 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 				},
 			}
 
-			obj, err := TemplateToPolicyDefinition(template, schema.OpsInVwhc{EnableConectOpsInVwhc: ptr.To(false), EnableDeleteOpsInVwhc: ptr.To(false)})
+			// Create a cache with Create and Update operations
+			opsCache := createCacheWithOperations(admissionregistrationv1.Create, admissionregistrationv1.Update)
+			obj, err := TemplateToPolicyDefinition(template, opsCache)
 			if !errors.Is(err, test.expectedErr) {
 				t.Errorf("unexpected error. got %v; wanted %v", err, test.expectedErr)
 			}
