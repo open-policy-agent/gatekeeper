@@ -18,6 +18,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TODO: add helm variable for this and exempt namespace flags on audit pod
+// TODO: add e2e tests for all changes in this PR
+
 var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", false, "(alpha) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration.")
 
 func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {

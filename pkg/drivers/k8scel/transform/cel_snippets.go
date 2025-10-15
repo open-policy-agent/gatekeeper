@@ -112,7 +112,9 @@ const (
 			// For namespace objects, check if the namespace name itself is in the exemption list
 			(has(obj.kind) && obj.kind == "Namespace" && has(obj.metadata.name)) ? (
 				![%s].exists(nsMatcher,
-					(string(obj.metadata.name).matches("^" + string(nsMatcher).replace("*", ".*") + "$")) && has(obj.metadata.labels) && !("admission.gatekeeper.sh/ignore" in obj.metadata.labels)
+					(string(obj.metadata.name).matches("^" + string(nsMatcher).replace("*", ".*") + "$")) &&
+					has(obj.metadata.labels) &&
+					("admission.gatekeeper.sh/ignore" in obj.metadata.labels)
 				)
 			) : (
 				// cluster-scoped objects (non-namespace) always match
