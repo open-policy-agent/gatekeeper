@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -43,6 +44,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
@@ -71,6 +73,10 @@ const (
 	DenyAll = "DenyAll"
 	denyall = "denyall"
 )
+
+// webhookVAPTestMu serializes access to webhook.VwhName global variable
+// across Test_transformTemplateToVAP sub-tests to prevent race conditions.
+var webhookVAPTestMu sync.Mutex
 
 func makeReconcileConstraintTemplate(suffix string) *v1beta1.ConstraintTemplate {
 	return &v1beta1.ConstraintTemplate{
@@ -2146,5 +2152,232 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		require.NotNil(t, vap)
 		// The VAP name is derived from the template name
 		require.Equal(t, "gatekeeper-test-template", vap.Name)
+	})
+
+	t.Run("SyncVAPScope enabled with webhook config - adds match constraints and conditions", func(t *testing.T) {
+		// Serialize access to webhook.VwhName global variable
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		// Create webhook config cache with specific match constraints and conditions
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := "gatekeeper-validating-webhook-configuration"
+
+		// Set the global webhook name that getWebhookConfigFromCache will use
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		// Create webhook matching config with comprehensive match constraints
+		exactMatch := admissionregistrationv1.Exact
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			NamespaceSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"environment": "production",
+				},
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "tier",
+						Operator: metav1.LabelSelectorOpIn,
+						Values:   []string{"frontend", "backend"},
+					},
+				},
+			},
+			ObjectSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "critical",
+				},
+			},
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+						admissionregistrationv1.Update,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments", "statefulsets"},
+					},
+				},
+			},
+			MatchPolicy: &exactMatch,
+			MatchConditions: []admissionregistrationv1.MatchCondition{
+				{
+					Name:       "exclude-namespace",
+					Expression: `object.metadata.namespace != "kube-system"`,
+				},
+				{
+					Name:       "require-label",
+					Expression: `has(object.metadata.labels) && has(object.metadata.labels.team)`,
+				},
+			},
+		}
+
+		// Store webhook config in cache
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{
+			processExcluder: nil,
+			webhookCache:    cache,
+		}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-with-webhook-config", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		// Verify VAP has match constraints from webhook config
+		require.NotNil(t, vap.Spec.MatchConstraints, "MatchConstraints should not be nil")
+		require.NotNil(t, vap.Spec.MatchConstraints.NamespaceSelector, "NamespaceSelector should be synchronized from webhook")
+		require.NotNil(t, vap.Spec.MatchConstraints.ObjectSelector, "ObjectSelector should be synchronized from webhook")
+
+		// Verify namespace selector was copied correctly
+		require.Equal(t, "production", vap.Spec.MatchConstraints.NamespaceSelector.MatchLabels["environment"])
+		require.Len(t, vap.Spec.MatchConstraints.NamespaceSelector.MatchExpressions, 1)
+		require.Equal(t, "tier", vap.Spec.MatchConstraints.NamespaceSelector.MatchExpressions[0].Key)
+
+		// Verify object selector was copied correctly
+		require.Equal(t, "critical", vap.Spec.MatchConstraints.ObjectSelector.MatchLabels["app"])
+
+		// Verify resource rules were converted correctly
+		require.NotNil(t, vap.Spec.MatchConstraints.ResourceRules)
+		require.Len(t, vap.Spec.MatchConstraints.ResourceRules, 1)
+		require.Contains(t, vap.Spec.MatchConstraints.ResourceRules[0].Operations, admissionregistrationv1beta1.Create)
+		require.Contains(t, vap.Spec.MatchConstraints.ResourceRules[0].Operations, admissionregistrationv1beta1.Update)
+		require.Equal(t, []string{"apps"}, vap.Spec.MatchConstraints.ResourceRules[0].APIGroups)
+		require.Equal(t, []string{"v1"}, vap.Spec.MatchConstraints.ResourceRules[0].APIVersions)
+		require.Equal(t, []string{"deployments", "statefulsets"}, vap.Spec.MatchConstraints.ResourceRules[0].Resources)
+
+		// Verify match policy was copied
+		require.NotNil(t, vap.Spec.MatchConstraints.MatchPolicy)
+		exactMatchBeta := admissionregistrationv1beta1.Exact
+		require.Equal(t, &exactMatchBeta, vap.Spec.MatchConstraints.MatchPolicy)
+
+		// Verify webhook match conditions were appended to VAP match conditions
+		require.NotNil(t, vap.Spec.MatchConditions)
+		// Should have webhook conditions appended after any default/template conditions
+		webhookConditionsFound := 0
+		for _, cond := range vap.Spec.MatchConditions {
+			if cond.Name == "exclude-namespace" {
+				require.Equal(t, `object.metadata.namespace != "kube-system"`, cond.Expression)
+				webhookConditionsFound++
+			}
+			if cond.Name == "require-label" {
+				require.Equal(t, `has(object.metadata.labels) && has(object.metadata.labels.team)`, cond.Expression)
+				webhookConditionsFound++
+			}
+		}
+		require.Equal(t, 2, webhookConditionsFound, "Both webhook match conditions should be appended to VAP")
+	})
+
+	t.Run("SyncVAPScope enabled with excluded namespaces - adds to match conditions", func(t *testing.T) {
+		*transform.SyncVAPScope = true
+
+		// Create process excluder with excluded namespaces
+		processExcluder := process.Get()
+		processExcluder.Add([]configv1alpha1.MatchEntry{
+			{
+				ExcludedNamespaces: []wildcard.Wildcard{"kube-system", "gatekeeper-system"},
+				Processes:          []string{"webhook"},
+			},
+		})
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+
+		r := &ReconcileConstraintTemplate{
+			processExcluder: processExcluder,
+			webhookCache:    cache,
+		}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-with-excluded-ns", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		// Verify excluded namespaces were added to match conditions
+		require.NotNil(t, vap.Spec.MatchConditions)
+		hasExcludedNsCondition := false
+		for _, cond := range vap.Spec.MatchConditions {
+			if cond.Name == "gatekeeper_internal_match_global_excluded_namespaces" {
+				hasExcludedNsCondition = true
+				// Should contain CEL expression excluding the namespaces
+				require.Contains(t, cond.Expression, "kube-system")
+				require.Contains(t, cond.Expression, "gatekeeper-system")
+				break
+			}
+		}
+		require.True(t, hasExcludedNsCondition, "VAP should have match condition for excluded namespaces")
+	})
+
+	t.Run("SyncVAPScope enabled with webhook config and excluded namespaces - combines both", func(t *testing.T) {
+		// Serialize access to webhook.VwhName global variable
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		// Create process excluder with excluded namespaces
+		processExcluder := process.Get()
+		processExcluder.Add([]configv1alpha1.MatchEntry{
+			{
+				ExcludedNamespaces: []wildcard.Wildcard{"test-exclude"},
+				Processes:          []string{"webhook"},
+			},
+		})
+
+		// Create webhook config cache with match conditions
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := "gatekeeper-validating-webhook-configuration"
+
+		// Set the global webhook name that getWebhookConfigFromCache will use
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			NamespaceSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"monitored": "true",
+				},
+			},
+			MatchConditions: []admissionregistrationv1.MatchCondition{
+				{
+					Name:       "custom-condition",
+					Expression: `object.metadata.name.startsWith("prod-")`,
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{
+			processExcluder: processExcluder,
+			webhookCache:    cache,
+		}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-combined", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		// Verify both webhook match conditions and excluded namespace conditions are present
+		require.NotNil(t, vap.Spec.MatchConditions)
+		hasWebhookCondition := false
+		hasExcludedNsCondition := false
+		for _, cond := range vap.Spec.MatchConditions {
+			if cond.Name == "custom-condition" {
+				hasWebhookCondition = true
+				require.Equal(t, `object.metadata.name.startsWith("prod-")`, cond.Expression)
+			}
+			if cond.Name == "gatekeeper_internal_match_global_excluded_namespaces" {
+				hasExcludedNsCondition = true
+				require.Contains(t, cond.Expression, "test-exclude")
+			}
+		}
+		require.True(t, hasWebhookCondition, "VAP should have webhook match condition")
+		require.True(t, hasExcludedNsCondition, "VAP should have excluded namespace condition")
+
+		// Verify namespace selector from webhook config is present
+		require.NotNil(t, vap.Spec.MatchConstraints)
+		require.NotNil(t, vap.Spec.MatchConstraints.NamespaceSelector)
+		require.Equal(t, "true", vap.Spec.MatchConstraints.NamespaceSelector.MatchLabels["monitored"])
 	})
 }
