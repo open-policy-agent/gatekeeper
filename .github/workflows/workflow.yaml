@@ -69,6 +69,7 @@ jobs:
             IMG=gatekeeper-e2e:latest \
             USE_LOCAL_IMG=true \
             GENERATE_VAP=true \
+            SYNC_VAP_ENFORCEMENT_SCOPE=true \
             GENERATE_VAPBINDING=true
 
           make test-e2e KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} ENABLE_VAP_TESTS=1
@@ -254,6 +255,7 @@ jobs:
             IMG=gatekeeper-e2e:latest \
             USE_LOCAL_IMG=true \
             GENERATE_VAP=true \
+            SYNC_VAP_ENFORCEMENT_SCOPE=true \
             GENERATE_VAPBINDING=true
 
           make test-e2e-owner-ref
