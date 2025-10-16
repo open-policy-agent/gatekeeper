@@ -82,7 +82,7 @@ teardown_file() {
     local vap_json=$(kubectl get ValidatingAdmissionPolicy gatekeeper-k8srequiredlabelsvap -o json)
     
     # Check for gatekeeper_internal_match_global_excluded_namespaces in matchConditions
-    local match_condition_check=$(echo "${vap_json}" | jq -r '.spec.matchConditions[]? | select(.expression | contains("gatekeeper_internal_match_global_excluded_namespaces")) | .expression')
+    local match_condition_check=$(echo "${vap_json}" | jq -r '.spec.matchConditions[]? | select(.name | contains("gatekeeper_internal_match_global_excluded_namespaces")) | .name')
     if [[ -z "${match_condition_check}" ]]; then
       echo "ERROR: ValidatingAdmissionPolicy does not contain gatekeeper_internal_match_global_excluded_namespaces in matchConditions"
       sleep 10
