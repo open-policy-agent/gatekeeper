@@ -56,7 +56,7 @@ var (
 	configGVK = configv1alpha1.GroupVersion.WithKind("Config")
 )
 
-// TriggerConstraintTemplateReconciliation sends events to trigger CT reconciliation.
+// TriggerConstraintTemplateReconciliation triggers CT reconciliation for those that require VAP generation.
 func (r *ReconcileConfig) TriggerConstraintTemplateReconciliation(ctx context.Context, processName process.Process) {
 	logger := logf.Log.WithValues("process", processName)
 	logger.Info("Triggering ConstraintTemplate reconciliation due to config exclusion changes")

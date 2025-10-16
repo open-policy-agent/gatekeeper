@@ -9,11 +9,11 @@ import (
 )
 
 func TestUpdateConfigStoresAndRetrieves(t *testing.T) {
-	cache := NewWebhookConfigCache(nil)
+	cache := NewWebhookConfigCache()
 
 	config := sampleConfig()
 
-	if updated := cache.UpdateConfig("test-webhook", config); !updated {
+	if updated := cache.UpsertConfig("test-webhook", config); !updated {
 		t.Fatalf("expected first update to report a change")
 	}
 
@@ -28,12 +28,12 @@ func TestUpdateConfigStoresAndRetrieves(t *testing.T) {
 }
 
 func TestUpdateConfigDetectsChanges(t *testing.T) {
-	cache := NewWebhookConfigCache(nil)
+	cache := NewWebhookConfigCache()
 
 	config := sampleConfig()
-	cache.UpdateConfig("test-webhook", config)
+	cache.UpsertConfig("test-webhook", config)
 
-	if updated := cache.UpdateConfig("test-webhook", config); updated {
+	if updated := cache.UpsertConfig("test-webhook", config); updated {
 		t.Fatalf("expected identical config to not report a change")
 	}
 
@@ -45,7 +45,7 @@ func TestUpdateConfigDetectsChanges(t *testing.T) {
 		Expression: "request.operation == 'UPDATE'",
 	})
 
-	if updated := cache.UpdateConfig("test-webhook", modified); !updated {
+	if updated := cache.UpsertConfig("test-webhook", modified); !updated {
 		t.Fatalf("expected modified config to report a change")
 	}
 
@@ -60,9 +60,9 @@ func TestUpdateConfigDetectsChanges(t *testing.T) {
 }
 
 func TestRemoveConfig(t *testing.T) {
-	cache := NewWebhookConfigCache(nil)
+	cache := NewWebhookConfigCache()
 
-	cache.UpdateConfig("test-webhook", sampleConfig())
+	cache.UpsertConfig("test-webhook", sampleConfig())
 
 	cache.RemoveConfig("test-webhook")
 

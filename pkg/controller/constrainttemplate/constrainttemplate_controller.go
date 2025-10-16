@@ -315,7 +315,6 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	// Fetch the ConstraintTemplate instance
 	deleted := false
 	ct := &v1beta1.ConstraintTemplate{}
-	// TODO - validate that false reconcile requests are not happening, check that this reconciler is not getting triggered for events meant to be for constraint controller
 	err := r.Get(ctx, request.NamespacedName, ct)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {

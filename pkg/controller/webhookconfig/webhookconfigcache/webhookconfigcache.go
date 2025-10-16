@@ -6,7 +6,6 @@ import (
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -28,14 +27,14 @@ type WebhookConfigCache struct {
 }
 
 // NewWebhookConfigCache creates a new webhook config cache.
-func NewWebhookConfigCache(ctEvents <-chan event.GenericEvent) *WebhookConfigCache {
+func NewWebhookConfigCache() *WebhookConfigCache {
 	return &WebhookConfigCache{
 		configs: make(map[string]WebhookMatchingConfig),
 	}
 }
 
-// UpdateConfig updates the cached config and returns whether it changed.
-func (w *WebhookConfigCache) UpdateConfig(webhookName string, newConfig WebhookMatchingConfig) bool {
+// UpsertConfig updates the cached config and returns whether it changed.
+func (w *WebhookConfigCache) UpsertConfig(webhookName string, newConfig WebhookMatchingConfig) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

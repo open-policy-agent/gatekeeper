@@ -547,7 +547,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 
 	if operations.IsAssigned(operations.Generate) {
 		opts.CtEvents = make(chan event.GenericEvent, 1024)
-		opts.WebhookConfigCache = webhookconfigcache.NewWebhookConfigCache(opts.CtEvents)
+		opts.WebhookConfigCache = webhookconfigcache.NewWebhookConfigCache()
 	}
 
 	if err := controller.AddToManager(mgr, &opts); err != nil {

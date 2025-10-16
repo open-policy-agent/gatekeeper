@@ -75,7 +75,7 @@ func TestReconcile(t *testing.T) {
 
 	// Create event channels
 	ctEvents := make(chan event.GenericEvent, 1024)
-	cache := webhookconfigcache.NewWebhookConfigCache(nil)
+	cache := webhookconfigcache.NewWebhookConfigCache()
 
 	// Create adder and add controller
 	adder := &Adder{

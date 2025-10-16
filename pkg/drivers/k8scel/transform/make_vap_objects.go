@@ -18,116 +18,177 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TODO: add e2e tests for all changes in this PR
-
 var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", false, "(alpha) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag will be removed in future release.")
 
 func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, nil)
 }
 
+// quoteNamespaces wraps each namespace string in quotes for proper CEL syntax.
+func quoteNamespaces(namespaces []string) []string {
+	quoted := make([]string, len(namespaces))
+	for i, ns := range namespaces {
+		quoted[i] = fmt.Sprintf(`"%s"`, ns)
+	}
+	return quoted
+}
+
+// buildMatchConditions constructs the complete list of match conditions for the VAP policy.
+func buildMatchConditions(source *schema.Source, excludedNamespaces, exemptedNamespaces []string) ([]admissionregistrationv1beta1.MatchCondition, error) {
+	// Start with template-defined match conditions
+	matchConditions, err := source.GetV1Beta1MatchConditions()
+	if err != nil {
+		return nil, err
+	}
+
+	// Add standard matchers
+	matchConditions = append(matchConditions, AllMatchersV1Beta1()...)
+
+	// Add excluded namespaces condition if specified
+	if len(excludedNamespaces) > 0 {
+		quotedNamespaces := quoteNamespaces(excludedNamespaces)
+		matchConditions = append(matchConditions, 
+			MatchGlobalExcludedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
+	}
+
+	// Add exempted namespaces condition if specified
+	if len(exemptedNamespaces) > 0 {
+		quotedNamespaces := quoteNamespaces(exemptedNamespaces)
+		matchConditions = append(matchConditions, 
+			MatchGlobalExemptedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
+	}
+
+	return matchConditions, nil
+}
+
+// buildVariables constructs the complete list of variables for the VAP policy.
+func buildVariables(source *schema.Source) ([]admissionregistrationv1beta1.Variable, error) {
+	variables := AllVariablesV1Beta1()
+	userVariables, err := source.GetV1Beta1Variables()
+	if err != nil {
+		return nil, err
+	}
+
+	return append(variables, userVariables...), nil
+}
+
+// convertWebhookRulesToResourceRules converts webhook rules to VAP resource rules.
+func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.RuleWithOperations) []admissionregistrationv1beta1.NamedRuleWithOperations {
+	resourceRules := make([]admissionregistrationv1beta1.NamedRuleWithOperations, 0, len(rules))
+	
+	for _, rule := range rules {
+		// Convert operations from webhook format to VAP format
+		operations := make([]admissionregistrationv1beta1.OperationType, len(rule.Operations))
+		for i, op := range rule.Operations {
+			operations[i] = admissionregistrationv1beta1.OperationType(op)
+		}
+
+		resourceRules = append(resourceRules, admissionregistrationv1beta1.NamedRuleWithOperations{
+			RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
+				Operations: operations,
+				Rule: admissionregistrationv1beta1.Rule{
+					APIGroups:   rule.APIGroups,
+					APIVersions: rule.APIVersions,
+					Resources:   rule.Resources,
+					Scope:      rule.Scope,
+				},
+			},
+		})
+	}
+	
+	return resourceRules
+}
+
+// buildMatchConstraintsFromWebhookConfig creates MatchResources from webhook configuration.
+func buildMatchConstraintsFromWebhookConfig(webhookConfig *webhookconfigcache.WebhookMatchingConfig) *admissionregistrationv1beta1.MatchResources {
+	resourceRules := convertWebhookRulesToResourceRules(webhookConfig.Rules)
+
+	return &admissionregistrationv1beta1.MatchResources{
+		NamespaceSelector: webhookConfig.NamespaceSelector,
+		ObjectSelector:    webhookConfig.ObjectSelector,
+		ResourceRules:     resourceRules,
+		MatchPolicy:       (*admissionregistrationv1beta1.MatchPolicyType)(webhookConfig.MatchPolicy),
+	}
+}
+
+// buildDefaultMatchConstraints creates default MatchResources when no webhook config is provided.
+func buildDefaultMatchConstraints() *admissionregistrationv1beta1.MatchResources {
+	return &admissionregistrationv1beta1.MatchResources{
+		ResourceRules: []admissionregistrationv1beta1.NamedRuleWithOperations{
+			{
+				RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
+					Operations: []admissionregistrationv1beta1.OperationType{
+						admissionregistrationv1beta1.Create,
+						admissionregistrationv1beta1.Update,
+					},
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{"*"},
+						APIVersions: []string{"*"},
+						Resources:   []string{"*"},
+					},
+				},
+			},
+		},
+	}
+}
+
+// appendWebhookMatchConditions adds webhook-specific match conditions to the policy.
+func appendWebhookMatchConditions(matchConditions []admissionregistrationv1beta1.MatchCondition, webhookConfig *webhookconfigcache.WebhookMatchingConfig) []admissionregistrationv1beta1.MatchCondition {
+	if webhookConfig == nil || len(webhookConfig.MatchConditions) == 0 {
+		return matchConditions
+	}
+
+	for _, webhookCondition := range webhookConfig.MatchConditions {
+		matchConditions = append(matchConditions, admissionregistrationv1beta1.MatchCondition{
+			Name:       webhookCondition.Name,
+			Expression: webhookCondition.Expression,
+		})
+	}
+
+	return matchConditions
+}
+
 func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string, exemptedNamespaces []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+	// Extract CEL source from template
 	source, err := schema.GetSourceFromTemplate(template)
 	if err != nil {
 		return nil, err
 	}
 
-	matchConditions, err := source.GetV1Beta1MatchConditions()
+	// Build match conditions (includes template conditions + namespace exclusions/exemptions)
+	matchConditions, err := buildMatchConditions(source, excludedNamespaces, exemptedNamespaces)
 	if err != nil {
 		return nil, err
 	}
-	matchConditions = append(matchConditions, AllMatchersV1Beta1()...)
 
-	if len(excludedNamespaces) > 0 {
-		// Quote each namespace for proper CEL syntax
-		quotedNamespaces := make([]string, len(excludedNamespaces))
-		for i, ns := range excludedNamespaces {
-			quotedNamespaces[i] = fmt.Sprintf(`"%s"`, ns)
-		}
-		matchConditions = append(matchConditions, MatchGlobalExcludedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
-	}
-
-	if len(exemptedNamespaces) > 0 {
-		// Quote each namespace for proper CEL syntax
-		quotedNamespaces := make([]string, len(exemptedNamespaces))
-		for i, ns := range exemptedNamespaces {
-			quotedNamespaces[i] = fmt.Sprintf(`"%s"`, ns)
-		}
-		matchConditions = append(matchConditions, MatchGlobalExemptedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
-	}
-
+	// Build validations from template
 	validations, err := source.GetV1Beta1Validatons()
 	if err != nil {
 		return nil, err
 	}
 
-	variables := AllVariablesV1Beta1()
-
-	userVariables, err := source.GetV1Beta1Variables()
+	// Build variables (includes standard + template-specific variables)
+	variables, err := buildVariables(source)
 	if err != nil {
 		return nil, err
 	}
-	variables = append(variables, userVariables...)
 
+	// Get failure policy from template
 	failurePolicy, err := source.GetV1Beta1FailurePolicy()
 	if err != nil {
 		return nil, err
 	}
 
-	// Build match constraints from webhook config if available, otherwise use defaults
+	// Build match constraints based on webhook config availability
 	var matchConstraints *admissionregistrationv1beta1.MatchResources
 	if webhookConfig != nil {
-		// Use webhook configuration for matching criteria
-		resourceRules := make([]admissionregistrationv1beta1.NamedRuleWithOperations, 0, len(webhookConfig.Rules))
-		for _, rule := range webhookConfig.Rules {
-			// Convert operations from webhook format to VAP format
-			operations := make([]admissionregistrationv1beta1.OperationType, 0, len(rule.Operations))
-			operations = append(operations, rule.Operations...)
-
-			resourceRules = append(resourceRules, admissionregistrationv1beta1.NamedRuleWithOperations{
-				RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
-					Operations: operations,
-					Rule: admissionregistrationv1beta1.Rule{
-						APIGroups:   rule.APIGroups,
-						APIVersions: rule.APIVersions,
-						Resources:   rule.Resources,
-						Scope:       rule.Scope,
-					},
-				},
-			})
-		}
-
-		matchConstraints = &admissionregistrationv1beta1.MatchResources{
-			NamespaceSelector: webhookConfig.NamespaceSelector,
-			ObjectSelector:    webhookConfig.ObjectSelector,
-			ResourceRules:     resourceRules,
-			MatchPolicy:       (*admissionregistrationv1beta1.MatchPolicyType)(webhookConfig.MatchPolicy),
-		}
-
-		// Add webhook match conditions to the policy match conditions
-		if len(webhookConfig.MatchConditions) > 0 {
-			for _, webhookCondition := range webhookConfig.MatchConditions {
-				matchConditions = append(matchConditions, admissionregistrationv1beta1.MatchCondition{
-					Name:       webhookCondition.Name,
-					Expression: webhookCondition.Expression,
-				})
-			}
-		}
+		matchConstraints = buildMatchConstraintsFromWebhookConfig(webhookConfig)
+		matchConditions = appendWebhookMatchConditions(matchConditions, webhookConfig)
 	} else {
-		// Default match constraints when no webhook config available
-		matchConstraints = &admissionregistrationv1beta1.MatchResources{
-			ResourceRules: []admissionregistrationv1beta1.NamedRuleWithOperations{
-				{
-					RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
-						/// TODO(ritazh): default for now until we can safely expose these to users
-						Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
-						Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
-					},
-				},
-			},
-		}
+		matchConstraints = buildDefaultMatchConstraints()
 	}
 
+	// Construct the final ValidatingAdmissionPolicy
 	policy := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("gatekeeper-%s", template.GetName()),
@@ -145,6 +206,7 @@ func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintT
 			Variables:        variables,
 		},
 	}
+
 	return policy, nil
 }
 

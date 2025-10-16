@@ -85,6 +85,7 @@ func (s *Excluder) Equals(new *Excluder) bool { // nolint:revive
 	return reflect.DeepEqual(s.excludedNamespaces, new.excludedNamespaces)
 }
 
+// EqualsForProcess checks if the excluded namespaces for a specific process are equal.
 func (s *Excluder) EqualsForProcess(process Process, new *Excluder) bool { // nolint:revive
 	s.mux.RLock()
 	defer s.mux.RUnlock()

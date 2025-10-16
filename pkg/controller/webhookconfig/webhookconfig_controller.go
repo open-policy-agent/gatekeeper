@@ -195,7 +195,7 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Check if matching fields have changed
-	if r.cache.UpdateConfig(request.Name, newConfig) {
+	if r.cache.UpsertConfig(request.Name, newConfig) {
 		logger.Info("ValidatingWebhookConfiguration matching fields changed, triggering ConstraintTemplate reconciliation", "storedKey", request.Name)
 		r.TriggerConstraintTemplateReconciliation(ctx, request.Name)
 	}

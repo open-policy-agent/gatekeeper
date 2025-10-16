@@ -2054,8 +2054,7 @@ func Test_getWebhookConfigFromCache(t *testing.T) {
 
 	t.Run("returns nil when config not found in cache", func(t *testing.T) {
 		// Create a webhook cache with an event channel
-		events := make(chan event.GenericEvent, 1)
-		cache := webhookconfigcache.NewWebhookConfigCache(events)
+		cache := webhookconfigcache.NewWebhookConfigCache()
 		r := &ReconcileConstraintTemplate{
 			webhookCache: cache,
 		}

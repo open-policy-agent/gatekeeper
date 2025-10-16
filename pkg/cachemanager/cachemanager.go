@@ -258,6 +258,7 @@ func (c *CacheManager) ExcludeProcesses(newExcluder *process.Excluder) {
 	c.excluderChanged = true
 }
 
+// ExcluderChangedForProcess returns true if the process excluder has changed for the given process.
 func (c *CacheManager) ExcluderChangedForProcess(process process.Process, newExcluder *process.Excluder) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
