@@ -18,6 +18,7 @@ package webhookconfig
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,6 +41,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
+// webhookNameMu serializes access to webhook.VwhName global variable across sub-tests.
+var webhookNameMu sync.Mutex
+
 const (
 	testVwhName = "test-gatekeeper-validating-webhook-configuration"
 	timeout     = 20 * time.Second
@@ -52,15 +56,15 @@ func TestReconcile(t *testing.T) {
 	}
 
 	// Save original VwhName and restore after test
-	originalVwhName := webhook.VwhName
+	originalVwhName := getVwhName()
 	originalSyncVAPScope := transform.SyncVAPScope
 	defer func() {
-		webhook.VwhName = originalVwhName
+		setVwhName(originalVwhName)
 		transform.SyncVAPScope = originalSyncVAPScope
 	}()
 
 	// Set VwhName for tests
-	webhook.VwhName = ptr.To(testVwhName)
+	setVwhName(testVwhName)
 	transform.SyncVAPScope = ptr.To(true)
 
 	// Setup the Manager and Controller
@@ -85,12 +89,16 @@ func TestReconcile(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	t.Run("webhook config created triggers cache update", func(t *testing.T) {
+		// Serialize access to webhook.VwhName global variable
+		webhookNameMu.Lock()
+		defer webhookNameMu.Unlock()
+
 		suffix := "-created"
 		webhookName := testVwhName + suffix
 
 		// Temporarily change VwhName for this subtest
-		webhook.VwhName = ptr.To(webhookName)
-		defer func() { webhook.VwhName = ptr.To(testVwhName) }()
+		setVwhName(webhookName)
+		defer func() { setVwhName(testVwhName) }()
 
 		logger.Info("Running test: webhook config created triggers cache update")
 
@@ -122,12 +130,16 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("webhook config update with matching field changes triggers CT reconciliation", func(t *testing.T) {
+		// Serialize access to webhook.VwhName global variable
+		webhookNameMu.Lock()
+		defer webhookNameMu.Unlock()
+
 		suffix := "-updated"
 		webhookName := testVwhName + suffix
 
 		// Temporarily change VwhName for this subtest
-		webhook.VwhName = ptr.To(webhookName)
-		defer func() { webhook.VwhName = ptr.To(testVwhName) }()
+		setVwhName(webhookName)
+		defer func() { setVwhName(testVwhName) }()
 
 		logger.Info("Running test: webhook config update with matching field changes triggers CT reconciliation")
 
@@ -199,12 +211,16 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("webhook config update without matching field changes does not trigger reconciliation", func(t *testing.T) {
+		// Serialize access to webhook.VwhName global variable
+		webhookNameMu.Lock()
+		defer webhookNameMu.Unlock()
+
 		suffix := "-updated-no-change"
 		webhookName := testVwhName + suffix
 
 		// Temporarily change VwhName for this subtest
-		webhook.VwhName = ptr.To(webhookName)
-		defer func() { webhook.VwhName = ptr.To(testVwhName) }()
+		setVwhName(webhookName)
+		defer func() { setVwhName(testVwhName) }()
 
 		logger.Info("Running test: webhook config update without matching field changes does not trigger reconciliation")
 
@@ -257,12 +273,16 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("webhook config deletion triggers CT reconciliation and cache removal", func(t *testing.T) {
+		// Serialize access to webhook.VwhName global variable
+		webhookNameMu.Lock()
+		defer webhookNameMu.Unlock()
+
 		suffix := "-deleted"
 		webhookName := testVwhName + suffix
 
 		// Temporarily change VwhName for this subtest
-		webhook.VwhName = ptr.To(webhookName)
-		defer func() { webhook.VwhName = ptr.To(testVwhName) }()
+		setVwhName(webhookName)
+		defer func() { setVwhName(testVwhName) }()
 
 		logger.Info("Running test: webhook config deletion triggers CT reconciliation and cache removal")
 
@@ -332,12 +352,16 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("webhook namespace selector change triggers reconciliation", func(t *testing.T) {
+		// Serialize access to webhook.VwhName global variable
+		webhookNameMu.Lock()
+		defer webhookNameMu.Unlock()
+
 		suffix := "-namespace-selector"
 		webhookName := testVwhName + suffix
 
 		// Temporarily change VwhName for this subtest
-		webhook.VwhName = ptr.To(webhookName)
-		defer func() { webhook.VwhName = ptr.To(testVwhName) }()
+		setVwhName(webhookName)
+		defer func() { setVwhName(testVwhName) }()
 
 		logger.Info("Running test: webhook namespace selector change triggers reconciliation")
 
@@ -402,10 +426,10 @@ func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 	}
 
 	// Save original VwhName and restore after test
-	originalVwhName := webhook.VwhName
-	defer func() { webhook.VwhName = originalVwhName }()
+	originalVwhName := getVwhName()
+	defer func() { setVwhName(originalVwhName) }()
 
-	webhook.VwhName = ptr.To(testVwhName)
+	setVwhName(testVwhName)
 
 	// Setup the Manager
 	mgr, _ := testutils.SetupManager(t, cfg)

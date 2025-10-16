@@ -136,6 +136,7 @@ jobs:
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
             GENERATE_VAP=true \
             GENERATE_VAPBINDING=true \
+            SYNC_VAP_ENFORCEMENT_SCOPE=true \
             LOG_LEVEL=DEBUG
 
           make test-e2e \

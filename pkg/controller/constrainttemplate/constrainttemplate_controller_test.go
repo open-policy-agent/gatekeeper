@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -34,6 +35,7 @@ import (
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
@@ -2035,4 +2037,115 @@ func applyCRD(ctx context.Context, client client.Client, gvk schema.GroupVersion
 // This interface is getting used by tests to check the private objects of objectTracker.
 type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
+}
+
+// Test_getWebhookConfigFromCache tests the getWebhookConfigFromCache function.
+func Test_getWebhookConfigFromCache(t *testing.T) {
+	logger := logr.Discard()
+
+	t.Run("returns nil when cache is nil", func(t *testing.T) {
+		r := &ReconcileConstraintTemplate{
+			webhookCache: nil,
+		}
+
+		config := r.getWebhookConfigFromCache(logger)
+		require.Nil(t, config)
+	})
+
+	t.Run("returns nil when config not found in cache", func(t *testing.T) {
+		// Create a webhook cache with an event channel
+		events := make(chan event.GenericEvent, 1)
+		cache := webhookconfigcache.NewWebhookConfigCache(events)
+		r := &ReconcileConstraintTemplate{
+			webhookCache: cache,
+		}
+
+		config := r.getWebhookConfigFromCache(logger)
+		// Since we haven't set any config in the cache, it should return nil
+		require.Nil(t, config)
+	})
+}
+
+// Test_transformTemplateToVAP tests the transformTemplateToVAP function.
+func Test_transformTemplateToVAP(t *testing.T) {
+	logger := logr.Discard()
+
+	// Create a minimal CEL-based ConstraintTemplate for testing
+	source := &celSchema.Source{
+		FailurePolicy: ptr.To[string]("Fail"),
+		Variables: []celSchema.Variable{
+			{
+				Name:       "test_var",
+				Expression: "true",
+			},
+		},
+		Validations: []celSchema.Validation{
+			{
+				Expression: "1 == 1",
+				Message:    "test message",
+			},
+		},
+	}
+
+	ct := &v1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+		Spec: v1beta1.ConstraintTemplateSpec{
+			CRD: v1beta1.CRD{
+				Spec: v1beta1.CRDSpec{
+					Names: v1beta1.Names{
+						Kind: "TestTemplate",
+					},
+				},
+			},
+			Targets: []v1beta1.Target{
+				{
+					Target: target.Name,
+					Code: []v1beta1.Code{
+						{
+							Engine: "K8sNativeValidation",
+							Source: &templates.Anything{
+								Value: source.MustToUnstructured(),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+
+	unversionedCT := &templates.ConstraintTemplate{}
+	err := scheme.Convert(ct, unversionedCT, nil)
+	require.NoError(t, err)
+
+	// Save and restore transform.SyncVAPScope
+	oldSyncVAPScope := *transform.SyncVAPScope
+	defer func() { *transform.SyncVAPScope = oldSyncVAPScope }()
+
+	t.Run("SyncVAPScope disabled uses default config", func(t *testing.T) {
+		*transform.SyncVAPScope = false
+		r := &ReconcileConstraintTemplate{}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+		// The VAP name is derived from the template name, not the vapName parameter
+		require.Equal(t, "gatekeeper-test-template", vap.Name)
+	})
+
+	t.Run("SyncVAPScope enabled with nil caches", func(t *testing.T) {
+		*transform.SyncVAPScope = true
+		r := &ReconcileConstraintTemplate{
+			processExcluder: nil,
+			webhookCache:    nil,
+		}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-synced", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+		// The VAP name is derived from the template name
+		require.Equal(t, "gatekeeper-test-template", vap.Name)
+	})
 }

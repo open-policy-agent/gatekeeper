@@ -69,6 +69,8 @@ teardown_file() {
   if [[ -z "$api" ]]; then
     echo "vap is not enabled for the cluster. skip vap test"
   else
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/sync_with_exclusion_exact_match.yaml"
+
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsvap -ojson | jq -r -e '.status.byPod[0]'"
@@ -76,6 +78,26 @@ teardown_file() {
     kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsvap -oyaml
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicy gatekeeper-k8srequiredlabelsvap"
+
+    local vap_json=$(kubectl get ValidatingAdmissionPolicy gatekeeper-k8srequiredlabelsvap -o json)
+    
+    # Check for gatekeeper_internal_match_global_excluded_namespaces in matchConditions
+    local match_condition_check=$(echo "${vap_json}" | jq -r '.spec.matchConditions[]? | select(.expression | contains("gatekeeper_internal_match_global_excluded_namespaces")) | .expression')
+    if [[ -z "${match_condition_check}" ]]; then
+      echo "ERROR: ValidatingAdmissionPolicy does not contain gatekeeper_internal_match_global_excluded_namespaces in matchConditions"
+      sleep 10
+      exit 1
+    fi
+    echo "ValidatingAdmissionPolicy contains gatekeeper_internal_match_global_excluded_namespaces expression"
+    
+    # Check that matchConstraints.namespaceSelector is not nil
+    local namespace_selector=$(echo "${vap_json}" | jq -r '.spec.matchConstraints.namespaceSelector')
+    if [[ "${namespace_selector}" == "null" ]]; then
+      echo "ERROR: ValidatingAdmissionPolicy matchConstraints.namespaceSelector is nil"
+      sleep 10
+      exit 1
+    fi
+    echo "ValidatingAdmissionPolicy matchConstraints.namespaceSelector is not nil: ${namespace_selector}"
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml"
 

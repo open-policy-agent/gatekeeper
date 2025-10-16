@@ -2,6 +2,7 @@ package webhookconfig
 
 import (
 	"context"
+	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplate"
@@ -28,6 +29,27 @@ import (
 const (
 	ctrlName = "webhookconfig-controller"
 )
+
+// vwhNameMu protects access to webhook.VwhName for concurrent reads/writes.
+var vwhNameMu sync.RWMutex
+
+// getVwhName safely reads webhook.VwhName with synchronization.
+func getVwhName() string {
+	vwhNameMu.RLock()
+	defer vwhNameMu.RUnlock()
+	if webhook.VwhName == nil {
+		return ""
+	}
+	return *webhook.VwhName
+}
+
+// setVwhName safely writes to webhook.VwhName with synchronization.
+// This is primarily for testing purposes.
+func setVwhName(name string) {
+	vwhNameMu.Lock()
+	defer vwhNameMu.Unlock()
+	webhook.VwhName = &name
+}
 
 var logger = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ValidatingWebhookConfiguration", logging.Process, "webhook_config_controller")
 
@@ -183,5 +205,5 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 
 // isGatekeeperValidatingWebhook checks if this is a Gatekeeper validating webhook.
 func isGatekeeperValidatingWebhook(name string) bool {
-	return name == *webhook.VwhName
+	return name == getVwhName()
 }
