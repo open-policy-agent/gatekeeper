@@ -552,6 +552,7 @@ func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 
 			if policy == nil {
 				t.Fatal("expected non-nil policy")
+				return
 			}
 
 			// Verify match conditions count
@@ -622,8 +623,8 @@ func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 
 			// Verify policy name format
 			expectedName := fmt.Sprintf("gatekeeper-%s", strings.ToLower(test.kind))
-			if policy.ObjectMeta.Name != expectedName {
-				t.Errorf("expected policy name %q, got %q", expectedName, policy.ObjectMeta.Name)
+			if policy.Name != expectedName {
+				t.Errorf("expected policy name %q, got %q", expectedName, policy.Name)
 			}
 
 			// Verify ParamKind is set correctly
@@ -723,14 +724,14 @@ func TestConvertWebhookRulesToResourceRules(t *testing.T) {
 				}
 
 				// Verify APIGroups, APIVersions, Resources are preserved
-				if !reflect.DeepEqual(result[0].Rule.APIGroups, test.rules[0].Rule.APIGroups) {
-					t.Errorf("APIGroups mismatch: got %v, want %v", result[0].Rule.APIGroups, test.rules[0].Rule.APIGroups)
+				if !reflect.DeepEqual(result[0].APIGroups, test.rules[0].APIGroups) {
+					t.Errorf("APIGroups mismatch: got %v, want %v", result[0].APIGroups, test.rules[0].APIGroups)
 				}
-				if !reflect.DeepEqual(result[0].Rule.APIVersions, test.rules[0].Rule.APIVersions) {
-					t.Errorf("APIVersions mismatch: got %v, want %v", result[0].Rule.APIVersions, test.rules[0].Rule.APIVersions)
+				if !reflect.DeepEqual(result[0].APIVersions, test.rules[0].APIVersions) {
+					t.Errorf("APIVersions mismatch: got %v, want %v", result[0].APIVersions, test.rules[0].APIVersions)
 				}
-				if !reflect.DeepEqual(result[0].Rule.Resources, test.rules[0].Rule.Resources) {
-					t.Errorf("Resources mismatch: got %v, want %v", result[0].Rule.Resources, test.rules[0].Rule.Resources)
+				if !reflect.DeepEqual(result[0].Resources, test.rules[0].Resources) {
+					t.Errorf("Resources mismatch: got %v, want %v", result[0].Resources, test.rules[0].Resources)
 				}
 			}
 		})
@@ -818,6 +819,7 @@ func TestBuildMatchConstraintsFromWebhookConfig(t *testing.T) {
 
 			if result == nil {
 				t.Fatal("expected non-nil match constraints")
+				return
 			}
 
 			if len(result.ResourceRules) != test.expectedRules {
@@ -1142,7 +1144,7 @@ func TestBuildMatchConditions(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			conditions, err := buildMatchConditions(test.source, test.excludedNamespaces, test.exemptedNamespaces)
-			
+
 			if !errors.Is(err, test.expectedErr) {
 				t.Errorf("unexpected error. got %v; wanted %v", err, test.expectedErr)
 			}
@@ -1210,7 +1212,7 @@ func TestBuildVariables(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			variables, err := buildVariables(test.source)
-			
+
 			if !errors.Is(err, test.expectedErr) {
 				t.Errorf("unexpected error. got %v; wanted %v", err, test.expectedErr)
 			}
@@ -1260,6 +1262,7 @@ func TestBuildDefaultMatchConstraints(t *testing.T) {
 
 	if constraints == nil {
 		t.Fatal("expected non-nil match constraints")
+		return
 	}
 
 	if len(constraints.ResourceRules) != 1 {
@@ -1290,14 +1293,14 @@ func TestBuildDefaultMatchConstraints(t *testing.T) {
 	}
 
 	// Check wildcard resources
-	if len(rule.Rule.APIGroups) != 1 || rule.Rule.APIGroups[0] != "*" {
-		t.Errorf("expected wildcard APIGroups, got %v", rule.Rule.APIGroups)
+	if len(rule.APIGroups) != 1 || rule.APIGroups[0] != "*" {
+		t.Errorf("expected wildcard APIGroups, got %v", rule.APIGroups)
 	}
-	if len(rule.Rule.APIVersions) != 1 || rule.Rule.APIVersions[0] != "*" {
-		t.Errorf("expected wildcard APIVersions, got %v", rule.Rule.APIVersions)
+	if len(rule.APIVersions) != 1 || rule.APIVersions[0] != "*" {
+		t.Errorf("expected wildcard APIVersions, got %v", rule.APIVersions)
 	}
-	if len(rule.Rule.Resources) != 1 || rule.Rule.Resources[0] != "*" {
-		t.Errorf("expected wildcard Resources, got %v", rule.Rule.Resources)
+	if len(rule.Resources) != 1 || rule.Resources[0] != "*" {
+		t.Errorf("expected wildcard Resources, got %v", rule.Resources)
 	}
 }
 

@@ -47,14 +47,14 @@ func buildMatchConditions(source *schema.Source, excludedNamespaces, exemptedNam
 	// Add excluded namespaces condition if specified
 	if len(excludedNamespaces) > 0 {
 		quotedNamespaces := quoteNamespaces(excludedNamespaces)
-		matchConditions = append(matchConditions, 
+		matchConditions = append(matchConditions,
 			MatchGlobalExcludedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
 	}
 
 	// Add exempted namespaces condition if specified
 	if len(exemptedNamespaces) > 0 {
 		quotedNamespaces := quoteNamespaces(exemptedNamespaces)
-		matchConditions = append(matchConditions, 
+		matchConditions = append(matchConditions,
 			MatchGlobalExemptedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
 	}
 
@@ -75,13 +75,11 @@ func buildVariables(source *schema.Source) ([]admissionregistrationv1beta1.Varia
 // convertWebhookRulesToResourceRules converts webhook rules to VAP resource rules.
 func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.RuleWithOperations) []admissionregistrationv1beta1.NamedRuleWithOperations {
 	resourceRules := make([]admissionregistrationv1beta1.NamedRuleWithOperations, 0, len(rules))
-	
+
 	for _, rule := range rules {
 		// Convert operations from webhook format to VAP format
 		operations := make([]admissionregistrationv1beta1.OperationType, len(rule.Operations))
-		for i, op := range rule.Operations {
-			operations[i] = admissionregistrationv1beta1.OperationType(op)
-		}
+		copy(operations, rule.Operations)
 
 		resourceRules = append(resourceRules, admissionregistrationv1beta1.NamedRuleWithOperations{
 			RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
@@ -90,12 +88,12 @@ func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.Rul
 					APIGroups:   rule.APIGroups,
 					APIVersions: rule.APIVersions,
 					Resources:   rule.Resources,
-					Scope:      rule.Scope,
+					Scope:       rule.Scope,
 				},
 			},
 		})
 	}
-	
+
 	return resourceRules
 }
 
