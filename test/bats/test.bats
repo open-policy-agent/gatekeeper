@@ -85,7 +85,6 @@ teardown_file() {
     local match_condition_check=$(echo "${vap_json}" | jq -r '.spec.matchConditions[]? | select(.name | contains("gatekeeper_internal_match_global_excluded_namespaces")) | .name')
     if [[ -z "${match_condition_check}" ]]; then
       echo "ERROR: ValidatingAdmissionPolicy does not contain gatekeeper_internal_match_global_excluded_namespaces in matchConditions"
-      sleep 10
       exit 1
     fi
     echo "ValidatingAdmissionPolicy contains gatekeeper_internal_match_global_excluded_namespaces expression"
@@ -94,7 +93,6 @@ teardown_file() {
     local namespace_selector=$(echo "${vap_json}" | jq -r '.spec.matchConstraints.namespaceSelector')
     if [[ "${namespace_selector}" == "null" ]]; then
       echo "ERROR: ValidatingAdmissionPolicy matchConstraints.namespaceSelector is nil"
-      sleep 10
       exit 1
     fi
     echo "ValidatingAdmissionPolicy matchConstraints.namespaceSelector is not nil: ${namespace_selector}"
