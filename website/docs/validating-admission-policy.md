@@ -7,7 +7,9 @@ Validating Admission Policy CEL validation in Gatekeeper:
 Feature State: Gatekeeper version v3.18 (stable)
 
 :::note
-Set --enable-k8s-native-validation=false` to disable evaluating Validating Admission Policy CEL in constraint templates.
+Set `--enable-k8s-native-validation=false` to disable evaluating Validating Admission Policy CEL in constraint templates.
+
+Set `--sync-vap-enforcement-scope=true` to have Gatekeeper generate ValidatingAdmissionPolicy (VAP) resources while fully honoring the match criteria and namespace exclusions you have configured whether via ValidatingWebhookConfig, the Gatekeeper `Config` resource, or namespace exemption flags. This ensures the enforcement scope of generated VAPs always matches Gatekeeper's own boundaries. The flag defaults to `false` for now, will default to `true` in a future release, and will eventually be removed when this becomes the standard behavior.
 :::
 
 VAP management through Gatekeeper:

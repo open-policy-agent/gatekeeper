@@ -22,12 +22,15 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
@@ -46,6 +49,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -711,6 +715,252 @@ func TestConfig_Retries(t *testing.T) {
 	g.Eventually(func() bool {
 		return dataClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking final cache contents")
+}
+
+func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
+	ctx := context.Background()
+
+	// Helper to create a valid VAP-enabled constraint template
+	createVAPTemplate := func(name string) *v1beta1.ConstraintTemplate {
+		// Create a proper CEL source that enables VAP generation
+		source := &celSchema.Source{
+			Validations: []celSchema.Validation{
+				{
+					Expression: "true",
+					Message:    "test validation",
+				},
+			},
+			GenerateVAP: ptr.To(true),
+		}
+
+		ct := &v1beta1.ConstraintTemplate{}
+		ct.SetName(name)
+		ct.Spec.CRD.Spec.Names.Kind = name + "Kind"
+		// Add K8sNativeValidation target to make it VAP-eligible
+		ct.Spec.Targets = []v1beta1.Target{
+			{
+				Target: "admission.k8s.gatekeeper.sh",
+				Code: []v1beta1.Code{
+					{
+						Engine: "K8sNativeValidation",
+						Source: &templates.Anything{
+							Value: source.MustToUnstructured(),
+						},
+					},
+				},
+			},
+		}
+		return ct
+	}
+
+	t.Run("successful reconciliation with valid templates", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+		_, err := readiness.SetupTracker(mgr, false, false, false)
+		require.NoError(t, err)
+
+		// Create a mock reader that returns constraint templates
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if ctList, ok := list.(*v1beta1.ConstraintTemplateList); ok {
+					ct1 := createVAPTemplate("test-template-1")
+					ct2 := createVAPTemplate("test-template-2")
+					ctList.Items = []v1beta1.ConstraintTemplate{*ct1, *ct2}
+				}
+				return nil
+			},
+		}
+
+		// Create event channel
+		ctEvents := make(chan event.GenericEvent, 10)
+
+		// Create reconciler
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: ctEvents,
+		}
+
+		// Execute
+		reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+
+		// Verify events were sent
+		assert.Equal(t, 2, len(ctEvents))
+
+		// Verify the events contain the correct templates
+		event1 := <-ctEvents
+		event2 := <-ctEvents
+
+		ct1, ok1 := event1.Object.(*v1beta1.ConstraintTemplate)
+		ct2, ok2 := event2.Object.(*v1beta1.ConstraintTemplate)
+
+		assert.True(t, ok1)
+		assert.True(t, ok2)
+		assert.Contains(t, []string{"test-template-1", "test-template-2"}, ct1.GetName())
+		assert.Contains(t, []string{"test-template-1", "test-template-2"}, ct2.GetName())
+	})
+
+	t.Run("handles reader error gracefully", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				return fmt.Errorf("mock list error")
+			},
+		}
+
+		ctEvents := make(chan event.GenericEvent, 10)
+
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: ctEvents,
+		}
+
+		// Execute - should not panic
+		reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+
+		// Verify no events were sent due to error
+		assert.Equal(t, 0, len(ctEvents))
+	})
+
+	t.Run("skips templates without VAP support", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if ctList, ok := list.(*v1beta1.ConstraintTemplateList); ok {
+					// Create a constraint template WITHOUT K8sNativeValidation engine
+					// This means it won't generate VAP
+					ct := &v1beta1.ConstraintTemplate{}
+					ct.SetName("skip-template")
+					ct.Spec.CRD.Spec.Names.Kind = "SkipConstraint"
+					// Only Rego target, no K8sNativeValidation
+					ct.Spec.Targets = []v1beta1.Target{
+						{
+							Target: "admission.k8s.gatekeeper.sh",
+							Code: []v1beta1.Code{
+								{
+									Engine: "Rego",
+									Source: &templates.Anything{},
+								},
+							},
+						},
+					}
+					ctList.Items = []v1beta1.ConstraintTemplate{*ct}
+				}
+				return nil
+			},
+		}
+
+		ctEvents := make(chan event.GenericEvent, 10)
+
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: ctEvents,
+		}
+
+		// Execute
+		reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+
+		// Verify no events were sent since template shouldn't generate VAP
+		assert.Equal(t, 0, len(ctEvents))
+	})
+
+	t.Run("handles full event channel gracefully", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if ctList, ok := list.(*v1beta1.ConstraintTemplateList); ok {
+					// Create test constraint template
+					ct := createVAPTemplate("test-template")
+					ctList.Items = []v1beta1.ConstraintTemplate{*ct}
+				}
+				return nil
+			},
+		}
+
+		// Create a full event channel (capacity 0)
+		ctEvents := make(chan event.GenericEvent)
+
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: ctEvents,
+		}
+
+		// Execute - should not block
+		done := make(chan bool)
+		go func() {
+			reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+			done <- true
+		}()
+
+		// Verify it completes without blocking
+		select {
+		case <-done:
+			// Success - method completed
+		case <-time.After(time.Second):
+			t.Fatal("method blocked when event channel was full")
+		}
+	})
+
+	t.Run("handles empty template list", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				// Return empty list
+				return nil
+			},
+		}
+
+		ctEvents := make(chan event.GenericEvent, 10)
+
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: ctEvents,
+		}
+
+		// Execute
+		reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+
+		// Verify no events were sent
+		assert.Equal(t, 0, len(ctEvents))
+	})
+
+	t.Run("handles nil ctEvents channel", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if ctList, ok := list.(*v1beta1.ConstraintTemplateList); ok {
+					ct := createVAPTemplate("test-template")
+					ctList.Items = []v1beta1.ConstraintTemplate{*ct}
+				}
+				return nil
+			},
+		}
+
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: nil, // nil channel
+		}
+
+		// Execute - should not panic
+		require.NotPanics(t, func() {
+			reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+		})
+	})
 }
 
 // configFor returns a config resource that watches the requested set of resources.

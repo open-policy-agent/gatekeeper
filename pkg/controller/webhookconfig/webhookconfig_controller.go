@@ -142,7 +142,6 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Webhook was deleted, remove from cache and trigger reconciliation
-			// TODO: what happens if the webhook is deleted?
 			logger.Info("ValidatingWebhookConfiguration deleted, triggering ConstraintTemplate reconciliation")
 			r.cache.RemoveConfig(request.Name)
 			r.TriggerConstraintTemplateReconciliation(ctx, request.Name)
@@ -160,8 +159,7 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if gatekeeperWebhook == nil {
-		logger.Info("webhook not found in configuration", "name", webhook.ValidatingWebhookName)
-		// TODO: what happens if webhook is not found?
+		logger.Info("webhook not found", "name", webhook.ValidatingWebhookName)
 		return reconcile.Result{}, nil
 	}
 
@@ -178,8 +176,6 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 	if r.cache.UpdateConfig(request.Name, newConfig) {
 		logger.Info("ValidatingWebhookConfiguration matching fields changed, triggering ConstraintTemplate reconciliation", "storedKey", request.Name)
 		r.TriggerConstraintTemplateReconciliation(ctx, request.Name)
-	} else {
-		logger.V(1).Info("ValidatingWebhookConfiguration updated but no matching field changes detected", "storedKey", request.Name)
 	}
 
 	return reconcile.Result{}, nil

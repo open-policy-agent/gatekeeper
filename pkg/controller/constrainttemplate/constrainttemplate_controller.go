@@ -913,33 +913,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		}
 		logger.Info("get VAP", "vapName", vapName, "currentVap", currentVap)
 
-		var transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy
-		// TODO: handle excluded and exempted namespaces in a single place
-		if *transform.SyncVAPScope {
-			var excludedNamespaces []string
-			if r.processExcluder != nil {
-				excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
-			}
-			exemptedNamespaces := webhook.GetAllExemptedNamespacesWithWildcard()
-			// Get webhook configuration from cache if available
-			var webhookConfig *webhookconfigcache.WebhookMatchingConfig
-			if r.webhookCache != nil {
-				logger.Info("looking up webhook config in cache", "lookupKey", *webhook.VwhName)
-				config, exists := r.webhookCache.GetConfig(*webhook.VwhName)
-				if exists {
-					webhookConfig = &config
-					logger.Info("using webhook configuration for VAP matching", "vapName", vapName)
-				} else {
-					logger.Info("webhook config not found in cache, VAP will be created with default constraints", "lookupKey", *webhook.VwhName)
-				}
-			} else {
-				logger.Info("webhook cache is nil, VAP will be created with default constraints")
-			}
-			transformedVap, err = transform.TemplateToPolicyDefinitionWithWebhookConfig(unversionedCT, webhookConfig, excludedNamespaces, exemptedNamespaces)
-		} else {
-			logger.Info("using default configuration for VAP matching", "vapName", vapName)
-			transformedVap, err = transform.TemplateToPolicyDefinition(unversionedCT)
-		}
+		transformedVap, err := r.transformTemplateToVAP(unversionedCT, vapName, logger)
 		if err != nil {
 			logger.Error(err, "transform to VAP error", "vapName", vapName)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to VAP object", status, err)
@@ -1049,4 +1023,51 @@ func ShouldGenerateVAPForVersionedCT(ct *v1beta1.ConstraintTemplate, scheme *run
 		return false, err
 	}
 	return constraint.ShouldGenerateVAP(unversionedCT)
+}
+
+// transformTemplateToVAP transforms a ConstraintTemplate to a ValidatingAdmissionPolicy
+// It handles both synced webhook scope and default configurations.
+func (r *ReconcileConstraintTemplate) transformTemplateToVAP(
+	unversionedCT *templates.ConstraintTemplate,
+	vapName string,
+	logger logr.Logger,
+) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+	// Use default configuration if SyncVAPScope is not enabled
+	if !*transform.SyncVAPScope {
+		logger.Info("using default configuration for VAP matching", "vapName", vapName)
+		return transform.TemplateToPolicyDefinition(unversionedCT)
+	}
+
+	var excludedNamespaces []string
+	if r.processExcluder != nil {
+		excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
+	}
+
+	exemptedNamespaces := webhook.GetAllExemptedNamespacesWithWildcard()
+
+	webhookConfig := r.getWebhookConfigFromCache(logger)
+
+	return transform.TemplateToPolicyDefinitionWithWebhookConfig(
+		unversionedCT,
+		webhookConfig,
+		excludedNamespaces,
+		exemptedNamespaces,
+	)
+}
+
+// getWebhookConfigFromCache retrieves webhook configuration from cache
+// Returns nil if cache is unavailable or config not found.
+func (r *ReconcileConstraintTemplate) getWebhookConfigFromCache(logger logr.Logger) *webhookconfigcache.WebhookMatchingConfig {
+	if r.webhookCache == nil {
+		logger.Info("webhook cache is nil, VAP will be created with default match constraints")
+		return nil
+	}
+
+	config, exists := r.webhookCache.GetConfig(*webhook.VwhName)
+	if !exists {
+		logger.Info("webhook config not found in cache, VAP will be created with default match constraints", "lookupKey", *webhook.VwhName)
+		return nil
+	}
+
+	return &config
 }

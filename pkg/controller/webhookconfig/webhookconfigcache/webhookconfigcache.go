@@ -10,6 +10,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+var logger = log.Log.WithName("webhook-config-cache")
+
 // WebhookMatchingConfig represents the fields that affect resource matching in a webhook.
 type WebhookMatchingConfig struct {
 	NamespaceSelector *metav1.LabelSelector                        `json:"namespaceSelector,omitempty"`
@@ -37,9 +39,6 @@ func (w *WebhookConfigCache) UpdateConfig(webhookName string, newConfig WebhookM
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	logger := log.Log.WithName("webhook-config-cache")
-	logger.Info("storing webhook config in cache", "key", webhookName, "hasNamespaceSelector", newConfig.NamespaceSelector != nil)
-
 	oldConfig, exists := w.configs[webhookName]
 	if !exists || !reflect.DeepEqual(oldConfig, newConfig) {
 		w.configs[webhookName] = newConfig
@@ -60,9 +59,6 @@ func (w *WebhookConfigCache) RemoveConfig(webhookName string) {
 func (w *WebhookConfigCache) GetConfig(webhookName string) (WebhookMatchingConfig, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-
-	logger := log.Log.WithName("webhook-config-cache")
-	logger.Info("retrieving webhook config from cache", "key", webhookName, "cacheSize", len(w.configs))
 
 	config, exists := w.configs[webhookName]
 	logger.Info("webhook config lookup result", "key", webhookName, "exists", exists)
