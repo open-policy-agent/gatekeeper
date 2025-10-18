@@ -133,6 +133,8 @@ spec:
         command:
         - /manager
         env:
+        {{- include "gatekeeper.extraEnvs" . | nindent 8 }}
+        {{- include "controllerManager.extraEnvs" . | nindent 8 }}
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
