@@ -34,16 +34,18 @@ type Runner struct {
 
 	// newClient instantiates a Client for compiling Templates/Constraints, and
 	// validating objects against them.
-	newClient func(includeTrace bool, useK8sCEL bool) (gator.Client, error)
+	newClient func(includeTrace bool, printEnabled bool, useK8sCEL bool) (gator.Client, error)
 
 	scheme *runtime.Scheme
 
 	includeTrace bool
 
+	printEnabled bool
+
 	useK8sCEL bool
 }
 
-func NewRunner(filesystem fs.FS, newClient func(includeTrace bool, useK8sCEL bool) (gator.Client, error), opts ...RunnerOptions) (*Runner, error) {
+func NewRunner(filesystem fs.FS, newClient func(includeTrace bool, printEnabled bool, useK8sCEL bool) (gator.Client, error), opts ...RunnerOptions) (*Runner, error) {
 	s := runtime.NewScheme()
 	err := apis.AddToScheme(s)
 	if err != nil {
@@ -68,6 +70,12 @@ type RunnerOptions func(*Runner)
 func IncludeTrace(includeTrace bool) RunnerOptions {
 	return func(r *Runner) {
 		r.includeTrace = includeTrace
+	}
+}
+
+func EnablePrint(printEnabled bool) RunnerOptions {
+	return func(r *Runner) {
+		r.printEnabled = printEnabled
 	}
 }
 
@@ -144,7 +152,7 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 }
 
 func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t *Test) error {
-	client, err := r.newClient(r.includeTrace, r.useK8sCEL)
+	client, err := r.newClient(r.includeTrace, r.printEnabled, r.useK8sCEL)
 	if err != nil {
 		return fmt.Errorf("%w: %w", gator.ErrCreatingClient, err)
 	}
@@ -213,7 +221,7 @@ func (r *Runner) skipCase(tc *Case) CaseResult {
 }
 
 func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t *Test) (gator.Client, error) {
-	client, err := r.newClient(r.includeTrace, r.useK8sCEL)
+	client, err := r.newClient(r.includeTrace, r.printEnabled, r.useK8sCEL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", gator.ErrCreatingClient, err)
 	}
