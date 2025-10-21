@@ -82,23 +82,32 @@ func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.Rul
 	var errs []error
 	resourceRules := make([]admissionregistrationv1beta1.NamedRuleWithOperations, 0, len(rules))
 
-	if ctOps == nil {
-		errs = append(errs, fmt.Errorf("%w: constraintTemplate Operations is nil, using all operations from webhook rule", ErrOperationMismatch))
+	allOps := []admissionregistrationv1beta1.OperationType{
+		admissionregistrationv1beta1.Create,
+		admissionregistrationv1beta1.Update,
+		admissionregistrationv1beta1.Delete,
+		admissionregistrationv1beta1.Connect,
 	}
 
-	ctOpsSet := sets.New(ctOps...)
-	for _, rule := range rules {
-		ruleOpsSet := sets.New(rule.Operations...)
+	ctOperations := expandWildcardOperations(ctOps, allOps)
+	ctOpsSet := sets.New(ctOperations...)
 
+	for _, rule := range rules {
 		var operations []admissionregistrationv1beta1.OperationType
 
 		if ctOps == nil {
 			operations = make([]admissionregistrationv1beta1.OperationType, len(rule.Operations))
 			copy(operations, rule.Operations)
 		} else {
+			ruleOps := expandWildcardOperations(rule.Operations, allOps)
+			ruleOpsSet := sets.New(ruleOps...)
+
 			intersection := ruleOpsSet.Intersection(ctOpsSet)
+			if intersection.Len() == 0 {
+				return nil, ErrOperationNoMatch
+			}
 			if !intersection.Equal(ctOpsSet) {
-				errs = append(errs, fmt.Errorf("%w: template requires %v, webhook supports %v", ErrOperationMismatch, ctOps, rule.Operations))
+				errs = append(errs, ErrOperationMismatch)
 			}
 			operations = intersection.UnsortedList()
 		}
@@ -117,6 +126,15 @@ func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.Rul
 	}
 
 	return resourceRules, errors.Join(errs...)
+}
+
+func expandWildcardOperations(ops []admissionregistrationv1beta1.OperationType, allOps []admissionregistrationv1beta1.OperationType) []admissionregistrationv1beta1.OperationType {
+	for _, op := range ops {
+		if op == admissionregistrationv1beta1.OperationAll {
+			return allOps
+		}
+	}
+	return ops
 }
 
 // buildMatchConstraintsFromWebhookConfig creates MatchResources from webhook configuration.
@@ -207,6 +225,9 @@ func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintT
 		}
 		resourceRules, err := convertWebhookRulesToResourceRules(webhookConfig.Rules, ctOps)
 		if err != nil {
+			if errors.Is(err, ErrOperationNoMatch) {
+				return nil, err
+			}
 			errs = append(errs, err)
 		}
 		matchConstraints = buildMatchConstraintsFromWebhookConfig(webhookConfig, resourceRules)

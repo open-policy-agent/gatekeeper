@@ -658,62 +658,201 @@ func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 
 func TestConvertWebhookRulesToResourceRules(t *testing.T) {
 	tests := []struct {
-		name          string
-		rules         []admissionregistrationv1.RuleWithOperations
-		expectedCount int
-		validateFirst bool
+		name             string
+		rules            []admissionregistrationv1beta1.RuleWithOperations
+		ctOps            []admissionregistrationv1beta1.OperationType
+		expectedCount    int
+		expectError      bool
+		validateFirst    bool
+		expectedError    error
+		expectedOpsCount int
 	}{
 		{
-			name:          "empty rules",
-			rules:         []admissionregistrationv1.RuleWithOperations{},
-			expectedCount: 0,
-			validateFirst: false,
+			name:             "empty rules",
+			rules:            []admissionregistrationv1beta1.RuleWithOperations{},
+			ctOps:            nil,
+			expectedCount:    0,
+			expectError:      false,
+			validateFirst:    false,
+			expectedOpsCount: 0,
 		},
 		{
-			name: "single rule",
-			rules: []admissionregistrationv1.RuleWithOperations{
+			name: "single rule with nil ctOps",
+			rules: []admissionregistrationv1beta1.RuleWithOperations{
 				{
-					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
-					Rule: admissionregistrationv1.Rule{
+					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create},
+					Rule: admissionregistrationv1beta1.Rule{
 						APIGroups:   []string{"apps"},
 						APIVersions: []string{"v1"},
 						Resources:   []string{"deployments"},
 					},
 				},
 			},
-			expectedCount: 1,
-			validateFirst: true,
+			ctOps:            nil,
+			expectedCount:    1,
+			expectError:      false,
+			validateFirst:    true,
+			expectedOpsCount: 1,
 		},
 		{
-			name: "multiple rules",
-			rules: []admissionregistrationv1.RuleWithOperations{
+			name: "single rule with matching ctOps",
+			rules: []admissionregistrationv1beta1.RuleWithOperations{
 				{
-					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
-					Rule: admissionregistrationv1.Rule{
+					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+			ctOps:            []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create},
+			expectedCount:    1,
+			expectError:      false,
+			validateFirst:    true,
+			expectedOpsCount: 1,
+		},
+		{
+			name: "single rule with no operation match",
+			rules: []admissionregistrationv1beta1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create},
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+			ctOps:            []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Update},
+			expectedCount:    0,
+			expectError:      true,
+			validateFirst:    true,
+			expectedError:    ErrOperationNoMatch,
+			expectedOpsCount: 0,
+		},
+		{
+			name: "multiple rules with ctOps",
+			rules: []admissionregistrationv1beta1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+					Rule: admissionregistrationv1beta1.Rule{
 						APIGroups:   []string{""},
 						APIVersions: []string{"v1"},
 						Resources:   []string{"pods"},
 					},
 				},
 				{
-					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Delete},
-					Rule: admissionregistrationv1.Rule{
+					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Delete, admissionregistrationv1beta1.Create},
+					Rule: admissionregistrationv1beta1.Rule{
 						APIGroups:   []string{"apps"},
 						APIVersions: []string{"v1"},
 						Resources:   []string{"deployments"},
 					},
 				},
 			},
-			expectedCount: 2,
-			validateFirst: true,
+			ctOps:            []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create},
+			expectedCount:    2,
+			expectError:      false,
+			validateFirst:    true,
+			expectedError:    ErrOperationMismatch,
+			expectedOpsCount: 1,
+		},
+		{
+			name: "webhook rule with wildcard operation and specific ctOps",
+			rules: []admissionregistrationv1beta1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+			ctOps:            []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+			expectedCount:    1,
+			expectError:      false,
+			validateFirst:    true,
+			expectedOpsCount: 2,
+		},
+		{
+			name: "specific webhook rule with wildcard ctOps",
+			rules: []admissionregistrationv1beta1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+			ctOps:            []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+			expectedCount:    1,
+			expectError:      false,
+			validateFirst:    true,
+			expectedError:    ErrOperationMismatch,
+			expectedOpsCount: 2,
+		},
+		{
+			name: "both webhook and ctOps with wildcard",
+			rules: []admissionregistrationv1beta1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+			ctOps:            []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+			expectedCount:    1,
+			expectError:      false,
+			validateFirst:    true,
+			expectedOpsCount: 4,
+		},
+		{
+			name: "wildcard webhook with no matching specific ctOps should work",
+			rules: []admissionregistrationv1beta1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+			ctOps:            []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Connect},
+			expectedCount:    1,
+			expectError:      false,
+			validateFirst:    true,
+			expectedOpsCount: 1,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, err := convertWebhookRulesToResourceRules(test.rules, nil)
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
+			result, err := convertWebhookRulesToResourceRules(test.rules, test.ctOps)
+
+			// Check error expectation
+			if test.expectError && err == nil {
+				t.Error("expected error but got none")
+			}
+			if !test.expectError && err != nil {
+				// Check if it's just a mismatch warning (which still returns results)
+				if !errors.Is(err, ErrOperationMismatch) {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+
+			// Check for specific expected error
+			if test.expectedError != nil && err != nil {
+				if !errors.Is(err, test.expectedError) {
+					t.Errorf("expected %v but got: %v", test.expectedError, err)
+				}
 			}
 
 			if len(result) != test.expectedCount {
@@ -721,9 +860,14 @@ func TestConvertWebhookRulesToResourceRules(t *testing.T) {
 			}
 
 			if test.validateFirst && len(result) > 0 {
-				// Verify operations are properly converted
-				if len(result[0].Operations) != len(test.rules[0].Operations) {
-					t.Errorf("expected %d operations, got %d", len(test.rules[0].Operations), len(result[0].Operations))
+				if test.ctOps == nil {
+					if len(result[0].Operations) != len(test.rules[0].Operations) {
+						t.Errorf("expected %d operations, got %d", len(test.rules[0].Operations), len(result[0].Operations))
+					}
+				} else if !test.expectError {
+					if len(result[0].Operations) != test.expectedOpsCount {
+						t.Errorf("expected %d operations, got %d", test.expectedOpsCount, len(result[0].Operations))
+					}
 				}
 
 				// Verify APIGroups, APIVersions, Resources are preserved
@@ -736,6 +880,56 @@ func TestConvertWebhookRulesToResourceRules(t *testing.T) {
 				if !reflect.DeepEqual(result[0].Resources, test.rules[0].Resources) {
 					t.Errorf("Resources mismatch: got %v, want %v", result[0].Resources, test.rules[0].Resources)
 				}
+			}
+		})
+	}
+}
+
+func TestExpandWildcardOperations(t *testing.T) {
+	allOps := []admissionregistrationv1beta1.OperationType{
+		admissionregistrationv1beta1.Create,
+		admissionregistrationv1beta1.Update,
+		admissionregistrationv1beta1.Delete,
+		admissionregistrationv1beta1.Connect,
+	}
+
+	tests := []struct {
+		name     string
+		ops      []admissionregistrationv1beta1.OperationType
+		expected []admissionregistrationv1beta1.OperationType
+	}{
+		{
+			name:     "wildcard operation expands to all",
+			ops:      []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+			expected: allOps,
+		},
+		{
+			name:     "specific operations remain unchanged",
+			ops:      []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+			expected: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+		},
+		{
+			name:     "empty operations remain empty",
+			ops:      []admissionregistrationv1beta1.OperationType{},
+			expected: []admissionregistrationv1beta1.OperationType{},
+		},
+		{
+			name:     "wildcard with other operations expands to all",
+			ops:      []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.OperationAll},
+			expected: allOps,
+		},
+		{
+			name:     "nil operations remain nil",
+			ops:      nil,
+			expected: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := expandWildcardOperations(test.ops, allOps)
+			if !reflect.DeepEqual(result, test.expected) {
+				t.Errorf("expected %v, got %v", test.expected, result)
 			}
 		})
 	}

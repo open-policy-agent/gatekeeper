@@ -896,9 +896,9 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VAP should be created with unrecognized operations", func(t *testing.T) {
+	t.Run("VAP should not be created with unrecognized operations", func(t *testing.T) {
 		suffix := "VapShouldNotBeCreatedWithInvalidOps"
-		logger.Info("Running test: VapBinding should be created with v1 without warnings in enforcementPointsStatus")
+		logger.Info("Running test: VapBinding should not be created with v1 without warnings in enforcementPointsStatus")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
 		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
 		ro := []admissionregistrationv1.OperationType{
@@ -922,7 +922,6 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-			// check if vap resource exists now
 			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
@@ -2183,6 +2182,7 @@ func Test_getWebhookConfigFromCache(t *testing.T) {
 // Test_transformTemplateToVAP tests the transformTemplateToVAP function.
 func Test_transformTemplateToVAP(t *testing.T) {
 	logger := logr.Discard()
+	const testWebhookName = "gatekeeper-validating-webhook-configuration"
 
 	// Create a minimal CEL-based ConstraintTemplate for testing
 	source := &celSchema.Source{
@@ -2270,16 +2270,13 @@ func Test_transformTemplateToVAP(t *testing.T) {
 
 		*transform.SyncVAPScope = true
 
-		// Create webhook config cache with specific match constraints and conditions
 		cache := webhookconfigcache.NewWebhookConfigCache()
-		webhookName := "gatekeeper-validating-webhook-configuration"
+		webhookName := testWebhookName
 
-		// Set the global webhook name that getWebhookConfigFromCache will use
 		originalVwhName := webhook.VwhName
 		defer func() { webhook.VwhName = originalVwhName }()
 		webhook.VwhName = &webhookName
 
-		// Create webhook matching config with comprehensive match constraints
 		exactMatch := admissionregistrationv1.Exact
 		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
 			NamespaceSelector: &metav1.LabelSelector{
@@ -2325,7 +2322,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 			},
 		}
 
-		// Store webhook config in cache
 		cache.UpsertConfig(webhookName, webhookConfig)
 
 		r := &ReconcileConstraintTemplate{
@@ -2337,20 +2333,16 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
-		// Verify VAP has match constraints from webhook config
-		require.NotNil(t, vap.Spec.MatchConstraints, "MatchConstraints should not be nil")
-		require.NotNil(t, vap.Spec.MatchConstraints.NamespaceSelector, "NamespaceSelector should be synchronized from webhook")
-		require.NotNil(t, vap.Spec.MatchConstraints.ObjectSelector, "ObjectSelector should be synchronized from webhook")
+		require.NotNil(t, vap.Spec.MatchConstraints)
+		require.NotNil(t, vap.Spec.MatchConstraints.NamespaceSelector)
+		require.NotNil(t, vap.Spec.MatchConstraints.ObjectSelector)
 
-		// Verify namespace selector was copied correctly
 		require.Equal(t, "production", vap.Spec.MatchConstraints.NamespaceSelector.MatchLabels["environment"])
 		require.Len(t, vap.Spec.MatchConstraints.NamespaceSelector.MatchExpressions, 1)
 		require.Equal(t, "tier", vap.Spec.MatchConstraints.NamespaceSelector.MatchExpressions[0].Key)
 
-		// Verify object selector was copied correctly
 		require.Equal(t, "critical", vap.Spec.MatchConstraints.ObjectSelector.MatchLabels["app"])
 
-		// Verify resource rules were converted correctly
 		require.NotNil(t, vap.Spec.MatchConstraints.ResourceRules)
 		require.Len(t, vap.Spec.MatchConstraints.ResourceRules, 1)
 		require.Contains(t, vap.Spec.MatchConstraints.ResourceRules[0].Operations, admissionregistrationv1beta1.Create)
@@ -2359,14 +2351,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		require.Equal(t, []string{"v1"}, vap.Spec.MatchConstraints.ResourceRules[0].APIVersions)
 		require.Equal(t, []string{"deployments", "statefulsets"}, vap.Spec.MatchConstraints.ResourceRules[0].Resources)
 
-		// Verify match policy was copied
 		require.NotNil(t, vap.Spec.MatchConstraints.MatchPolicy)
 		exactMatchBeta := admissionregistrationv1beta1.Exact
 		require.Equal(t, &exactMatchBeta, vap.Spec.MatchConstraints.MatchPolicy)
 
-		// Verify webhook match conditions were appended to VAP match conditions
 		require.NotNil(t, vap.Spec.MatchConditions)
-		// Should have webhook conditions appended after any default/template conditions
 		webhookConditionsFound := 0
 		for _, cond := range vap.Spec.MatchConditions {
 			if cond.Name == "exclude-namespace" {
@@ -2378,13 +2367,12 @@ func Test_transformTemplateToVAP(t *testing.T) {
 				webhookConditionsFound++
 			}
 		}
-		require.Equal(t, 2, webhookConditionsFound, "Both webhook match conditions should be appended to VAP")
+		require.Equal(t, 2, webhookConditionsFound)
 	})
 
 	t.Run("SyncVAPScope enabled with excluded namespaces - adds to match conditions", func(t *testing.T) {
 		*transform.SyncVAPScope = true
 
-		// Create process excluder with excluded namespaces
 		processExcluder := process.Get()
 		processExcluder.Add([]configv1alpha1.MatchEntry{
 			{
@@ -2404,29 +2392,25 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
-		// Verify excluded namespaces were added to match conditions
 		require.NotNil(t, vap.Spec.MatchConditions)
 		hasExcludedNsCondition := false
 		for _, cond := range vap.Spec.MatchConditions {
 			if cond.Name == "gatekeeper_internal_match_global_excluded_namespaces" {
 				hasExcludedNsCondition = true
-				// Should contain CEL expression excluding the namespaces
 				require.Contains(t, cond.Expression, "kube-system")
 				require.Contains(t, cond.Expression, "gatekeeper-system")
 				break
 			}
 		}
-		require.True(t, hasExcludedNsCondition, "VAP should have match condition for excluded namespaces")
+		require.True(t, hasExcludedNsCondition)
 	})
 
 	t.Run("SyncVAPScope enabled with webhook config and excluded namespaces - combines both", func(t *testing.T) {
-		// Serialize access to webhook.VwhName global variable
 		webhookVAPTestMu.Lock()
 		defer webhookVAPTestMu.Unlock()
 
 		*transform.SyncVAPScope = true
 
-		// Create process excluder with excluded namespaces
 		processExcluder := process.Get()
 		processExcluder.Add([]configv1alpha1.MatchEntry{
 			{
@@ -2435,11 +2419,9 @@ func Test_transformTemplateToVAP(t *testing.T) {
 			},
 		})
 
-		// Create webhook config cache with match conditions
 		cache := webhookconfigcache.NewWebhookConfigCache()
-		webhookName := "gatekeeper-validating-webhook-configuration"
+		webhookName := testWebhookName
 
-		// Set the global webhook name that getWebhookConfigFromCache will use
 		originalVwhName := webhook.VwhName
 		defer func() { webhook.VwhName = originalVwhName }()
 		webhook.VwhName = &webhookName
@@ -2467,7 +2449,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
-		// Verify both webhook match conditions and excluded namespace conditions are present
 		require.NotNil(t, vap.Spec.MatchConditions)
 		hasWebhookCondition := false
 		hasExcludedNsCondition := false
@@ -2481,12 +2462,648 @@ func Test_transformTemplateToVAP(t *testing.T) {
 				require.Contains(t, cond.Expression, "test-exclude")
 			}
 		}
-		require.True(t, hasWebhookCondition, "VAP should have webhook match condition")
-		require.True(t, hasExcludedNsCondition, "VAP should have excluded namespace condition")
+		require.True(t, hasWebhookCondition)
+		require.True(t, hasExcludedNsCondition)
 
-		// Verify namespace selector from webhook config is present
 		require.NotNil(t, vap.Spec.MatchConstraints)
 		require.NotNil(t, vap.Spec.MatchConstraints.NamespaceSelector)
 		require.Equal(t, "true", vap.Spec.MatchConstraints.NamespaceSelector.MatchLabels["monitored"])
+	})
+
+	t.Run("ConstraintTemplate with operations - intersection with webhook operations", func(t *testing.T) {
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		ctWithOps := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template-with-ops"},
+			Spec: v1beta1.ConstraintTemplateSpec{
+				CRD: v1beta1.CRD{
+					Spec: v1beta1.CRDSpec{
+						Names: v1beta1.Names{Kind: "TestTemplateWithOps"},
+					},
+				},
+				Targets: []v1beta1.Target{
+					{
+						Target: target.Name,
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Create,
+							admissionregistrationv1.Update,
+						},
+						Code: []v1beta1.Code{
+							{
+								Engine: "K8sNativeValidation",
+								Source: &templates.Anything{Value: source.MustToUnstructured()},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		_ = v1beta1.AddToScheme(scheme)
+		unversionedCTWithOps := &templates.ConstraintTemplate{}
+		err := scheme.Convert(ctWithOps, unversionedCTWithOps, nil)
+		require.NoError(t, err)
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := testWebhookName
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+						admissionregistrationv1.Update,
+						admissionregistrationv1.Delete,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{webhookCache: cache}
+		vap, err := r.transformTemplateToVAP(unversionedCTWithOps, "test-vap-ops-intersection", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		operations := vap.Spec.MatchConstraints.ResourceRules[0].Operations
+		require.Contains(t, operations, admissionregistrationv1beta1.Create)
+		require.Contains(t, operations, admissionregistrationv1beta1.Update)
+		require.NotContains(t, operations, admissionregistrationv1beta1.Delete)
+		require.Len(t, operations, 2)
+	})
+
+	t.Run("ConstraintTemplate operations mismatch - logs warning but continues", func(t *testing.T) {
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		ctWithMismatchOps := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template-mismatch-ops"},
+			Spec: v1beta1.ConstraintTemplateSpec{
+				CRD: v1beta1.CRD{
+					Spec: v1beta1.CRDSpec{
+						Names: v1beta1.Names{Kind: "TestTemplateMismatchOps"},
+					},
+				},
+				Targets: []v1beta1.Target{
+					{
+						Target: target.Name,
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Create,
+							admissionregistrationv1.Delete,
+						},
+						Code: []v1beta1.Code{
+							{
+								Engine: "K8sNativeValidation",
+								Source: &templates.Anything{Value: source.MustToUnstructured()},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		_ = v1beta1.AddToScheme(scheme)
+		unversionedCTMismatch := &templates.ConstraintTemplate{}
+		err := scheme.Convert(ctWithMismatchOps, unversionedCTMismatch, nil)
+		require.NoError(t, err)
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := testWebhookName
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+						admissionregistrationv1.Update,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{webhookCache: cache}
+		vap, err := r.transformTemplateToVAP(unversionedCTMismatch, "test-vap-ops-mismatch", logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "operations mismatch")
+		require.NotNil(t, vap)
+
+		operations := vap.Spec.MatchConstraints.ResourceRules[0].Operations
+		require.Contains(t, operations, admissionregistrationv1beta1.Create)
+		require.NotContains(t, operations, admissionregistrationv1beta1.Delete)
+		require.Len(t, operations, 1)
+	})
+
+	t.Run("ConstraintTemplate no matching operations - returns error", func(t *testing.T) {
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		ctNoMatch := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template-no-match"},
+			Spec: v1beta1.ConstraintTemplateSpec{
+				CRD: v1beta1.CRD{
+					Spec: v1beta1.CRDSpec{
+						Names: v1beta1.Names{Kind: "TestTemplateNoMatch"},
+					},
+				},
+				Targets: []v1beta1.Target{
+					{
+						Target: target.Name,
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Delete,
+						},
+						Code: []v1beta1.Code{
+							{
+								Engine: "K8sNativeValidation",
+								Source: &templates.Anything{Value: source.MustToUnstructured()},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		_ = v1beta1.AddToScheme(scheme)
+		unversionedCTNoMatch := &templates.ConstraintTemplate{}
+		err := scheme.Convert(ctNoMatch, unversionedCTNoMatch, nil)
+		require.NoError(t, err)
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := testWebhookName
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+						admissionregistrationv1.Update,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{webhookCache: cache}
+		_, err = r.transformTemplateToVAP(unversionedCTNoMatch, "test-vap-no-match", logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no matching operations")
+	})
+
+	t.Run("ConstraintTemplate with nil operations - uses all webhook operations", func(t *testing.T) {
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		ctNilOps := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template-nil-ops"},
+			Spec: v1beta1.ConstraintTemplateSpec{
+				CRD: v1beta1.CRD{
+					Spec: v1beta1.CRDSpec{
+						Names: v1beta1.Names{Kind: "TestTemplateNilOps"},
+					},
+				},
+				Targets: []v1beta1.Target{
+					{
+						Target: target.Name,
+						Code: []v1beta1.Code{
+							{
+								Engine: "K8sNativeValidation",
+								Source: &templates.Anything{Value: source.MustToUnstructured()},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		_ = v1beta1.AddToScheme(scheme)
+		unversionedCTNilOps := &templates.ConstraintTemplate{}
+		err := scheme.Convert(ctNilOps, unversionedCTNilOps, nil)
+		require.NoError(t, err)
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := testWebhookName
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+						admissionregistrationv1.Update,
+						admissionregistrationv1.Delete,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{webhookCache: cache}
+		vap, err := r.transformTemplateToVAP(unversionedCTNilOps, "test-vap-nil-ops", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		operations := vap.Spec.MatchConstraints.ResourceRules[0].Operations
+		require.Contains(t, operations, admissionregistrationv1beta1.Create)
+		require.Contains(t, operations, admissionregistrationv1beta1.Update)
+		require.Contains(t, operations, admissionregistrationv1beta1.Delete)
+		require.Len(t, operations, 3)
+	})
+
+	t.Run("ConstraintTemplate with wildcard operations - matches all webhook operations", func(t *testing.T) {
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		ctWildcard := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template-wildcard"},
+			Spec: v1beta1.ConstraintTemplateSpec{
+				CRD: v1beta1.CRD{
+					Spec: v1beta1.CRDSpec{
+						Names: v1beta1.Names{Kind: "TestTemplateWildcard"},
+					},
+				},
+				Targets: []v1beta1.Target{
+					{
+						Target: target.Name,
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.OperationAll,
+						},
+						Code: []v1beta1.Code{
+							{
+								Engine: "K8sNativeValidation",
+								Source: &templates.Anything{Value: source.MustToUnstructured()},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		_ = v1beta1.AddToScheme(scheme)
+		unversionedCTWildcard := &templates.ConstraintTemplate{}
+		err := scheme.Convert(ctWildcard, unversionedCTWildcard, nil)
+		require.NoError(t, err)
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := testWebhookName
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+						admissionregistrationv1.Update,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{webhookCache: cache}
+		vap, err := r.transformTemplateToVAP(unversionedCTWildcard, "test-vap-wildcard", logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "operations mismatch")
+		require.NotNil(t, vap)
+
+		operations := vap.Spec.MatchConstraints.ResourceRules[0].Operations
+		require.Contains(t, operations, admissionregistrationv1beta1.Create)
+		require.Contains(t, operations, admissionregistrationv1beta1.Update)
+		require.Len(t, operations, 2)
+	})
+
+	t.Run("Webhook with wildcard operations - intersects with specific CT operations", func(t *testing.T) {
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		ctSpecific := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template-specific"},
+			Spec: v1beta1.ConstraintTemplateSpec{
+				CRD: v1beta1.CRD{
+					Spec: v1beta1.CRDSpec{
+						Names: v1beta1.Names{Kind: "TestTemplateSpecific"},
+					},
+				},
+				Targets: []v1beta1.Target{
+					{
+						Target: target.Name,
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Create,
+							admissionregistrationv1.Delete,
+						},
+						Code: []v1beta1.Code{
+							{
+								Engine: "K8sNativeValidation",
+								Source: &templates.Anything{Value: source.MustToUnstructured()},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		_ = v1beta1.AddToScheme(scheme)
+		unversionedCTSpecific := &templates.ConstraintTemplate{}
+		err := scheme.Convert(ctSpecific, unversionedCTSpecific, nil)
+		require.NoError(t, err)
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := testWebhookName
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.OperationAll,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{webhookCache: cache}
+		vap, err := r.transformTemplateToVAP(unversionedCTSpecific, "test-vap-webhook-wildcard", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		operations := vap.Spec.MatchConstraints.ResourceRules[0].Operations
+		require.Contains(t, operations, admissionregistrationv1beta1.Create)
+		require.Contains(t, operations, admissionregistrationv1beta1.Delete)
+		require.Len(t, operations, 2)
+	})
+
+	t.Run("Both webhook and CT with wildcard operations", func(t *testing.T) {
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		ctWildcard := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template-both-wildcard"},
+			Spec: v1beta1.ConstraintTemplateSpec{
+				CRD: v1beta1.CRD{
+					Spec: v1beta1.CRDSpec{
+						Names: v1beta1.Names{Kind: "TestTemplateBothWildcard"},
+					},
+				},
+				Targets: []v1beta1.Target{
+					{
+						Target: target.Name,
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.OperationAll,
+						},
+						Code: []v1beta1.Code{
+							{
+								Engine: "K8sNativeValidation",
+								Source: &templates.Anything{Value: source.MustToUnstructured()},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		_ = v1beta1.AddToScheme(scheme)
+		unversionedCTBothWildcard := &templates.ConstraintTemplate{}
+		err := scheme.Convert(ctWildcard, unversionedCTBothWildcard, nil)
+		require.NoError(t, err)
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := testWebhookName
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.OperationAll,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{webhookCache: cache}
+		vap, err := r.transformTemplateToVAP(unversionedCTBothWildcard, "test-vap-both-wildcard", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		operations := vap.Spec.MatchConstraints.ResourceRules[0].Operations
+		require.Contains(t, operations, admissionregistrationv1beta1.Create)
+		require.Contains(t, operations, admissionregistrationv1beta1.Update)
+		require.Contains(t, operations, admissionregistrationv1beta1.Delete)
+		require.Contains(t, operations, admissionregistrationv1beta1.Connect)
+		require.Len(t, operations, 4)
+	})
+
+	t.Run("Webhook supports all operations and CT supports CREATE", func(t *testing.T) {
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		ctCreate := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template-create-only"},
+			Spec: v1beta1.ConstraintTemplateSpec{
+				CRD: v1beta1.CRD{
+					Spec: v1beta1.CRDSpec{
+						Names: v1beta1.Names{Kind: "TestTemplateCreateOnly"},
+					},
+				},
+				Targets: []v1beta1.Target{
+					{
+						Target: target.Name,
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Create,
+						},
+						Code: []v1beta1.Code{
+							{
+								Engine: "K8sNativeValidation",
+								Source: &templates.Anything{Value: source.MustToUnstructured()},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		_ = v1beta1.AddToScheme(scheme)
+		unversionedCTCreate := &templates.ConstraintTemplate{}
+		err := scheme.Convert(ctCreate, unversionedCTCreate, nil)
+		require.NoError(t, err)
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := testWebhookName
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.OperationAll,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{webhookCache: cache}
+		vap, err := r.transformTemplateToVAP(unversionedCTCreate, "test-vap-webhook-all-ct-create", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		operations := vap.Spec.MatchConstraints.ResourceRules[0].Operations
+		require.Contains(t, operations, admissionregistrationv1beta1.Create)
+		require.Len(t, operations, 1)
+	})
+
+	t.Run("CT supports all operations and webhook supports CREATE", func(t *testing.T) {
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		ctAll := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template-all-ops"},
+			Spec: v1beta1.ConstraintTemplateSpec{
+				CRD: v1beta1.CRD{
+					Spec: v1beta1.CRDSpec{
+						Names: v1beta1.Names{Kind: "TestTemplateAllOps"},
+					},
+				},
+				Targets: []v1beta1.Target{
+					{
+						Target: target.Name,
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.OperationAll,
+						},
+						Code: []v1beta1.Code{
+							{
+								Engine: "K8sNativeValidation",
+								Source: &templates.Anything{Value: source.MustToUnstructured()},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		_ = v1beta1.AddToScheme(scheme)
+		unversionedCTAll := &templates.ConstraintTemplate{}
+		err := scheme.Convert(ctAll, unversionedCTAll, nil)
+		require.NoError(t, err)
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := testWebhookName
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{webhookCache: cache}
+		vap, err := r.transformTemplateToVAP(unversionedCTAll, "test-vap-ct-all-webhook-create", logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "operations mismatch")
+		require.NotNil(t, vap)
+
+		operations := vap.Spec.MatchConstraints.ResourceRules[0].Operations
+		require.Contains(t, operations, admissionregistrationv1beta1.Create)
+		require.Len(t, operations, 1)
 	})
 }
