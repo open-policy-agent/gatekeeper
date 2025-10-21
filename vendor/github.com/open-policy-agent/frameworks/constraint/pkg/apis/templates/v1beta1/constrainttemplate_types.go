@@ -17,6 +17,7 @@ package v1beta1
 
 import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	admissionv1 "k8s.io/api/admissionregistration/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -64,6 +65,9 @@ type Target struct {
 	// +listType=map
 	// +listMapKey=engine
 	Code []Code `json:"code,omitempty"`
+
+	// +kubebuilder:validation:Enum="*";CREATE;DELETE;UPDATE;CONNECT
+	Operations []admissionv1.OperationType `json:"operations,omitempty"`
 }
 
 type Code struct {

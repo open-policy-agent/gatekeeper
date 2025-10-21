@@ -7,7 +7,7 @@ const constraintTemplateCRDYaml = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.14.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   name: constrainttemplates.templates.gatekeeper.sh
 spec:
   group: templates.gatekeeper.sh
@@ -97,10 +97,23 @@ spec:
                       items:
                         type: string
                       type: array
+                    operations:
+                      enum:
+                      - '*'
+                      - CREATE
+                      - DELETE
+                      - UPDATE
+                      - CONNECT
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        type: string
+                      type: array
                     rego:
                       type: string
                     target:
                       type: string
+                  required:
+                  - code
                   type: object
                 type: array
             type: object
@@ -221,6 +234,17 @@ spec:
                       x-kubernetes-list-type: map
                     libs:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      enum:
+                      - '*'
+                      - CREATE
+                      - DELETE
+                      - UPDATE
+                      - CONNECT
+                      items:
+                        description: OperationType specifies an operation for a request.
                         type: string
                       type: array
                     rego:
@@ -347,6 +371,17 @@ spec:
                       x-kubernetes-list-type: map
                     libs:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      enum:
+                      - '*'
+                      - CREATE
+                      - DELETE
+                      - UPDATE
+                      - CONNECT
+                      items:
+                        description: OperationType specifies an operation for a request.
                         type: string
                       type: array
                     rego:

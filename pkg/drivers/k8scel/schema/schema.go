@@ -58,9 +58,6 @@ type Source struct {
 
 	// GenerateVAP enables/disables VAP generation and enforcement for policy.
 	GenerateVAP *bool `json:"generateVAP,omitempty"`
-
-	// Operations maps to ValidatingAdmissionPolicy's `spec.matchConstraints.resourceRules.operations` when enable generateVAP.
-	Operations []admissionv1.OperationType `json:"operations,omitempty"`
 }
 
 func (in *Source) Validate() error {
@@ -237,40 +234,6 @@ func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType
 	return &out, nil
 }
 
-// GetIntersectOperations return intersection ops between vwhc and ct
-func (in *Source) GetIntersectOperations(opsInVwhc *WebhookOperationsCache) ([]admissionv1.OperationType, error) {
-	var out []admissionv1.OperationType
-
-	if len(in.Operations) == 0 {
-		//If templateOperations is undefined, use all webhook operations
-		if len(opsInVwhc.operations) > 0 {
-			return opsInVwhc.GetAllOperations(), nil
-		}
-		//neither ops defined
-		return nil, ErrEmptyOperation
-	}
-	for _, op := range in.Operations {
-		switch op {
-		case admissionv1.Create, admissionv1.Update, admissionv1.Delete, admissionv1.Connect:
-			if opsInVwhc.HasOperation(op) {
-				out = append(out, op)
-			}
-		case admissionv1.OperationAll:
-			if opsInVwhc.HasOperation(op) {
-				return []admissionv1.OperationType{admissionv1.OperationAll}, nil
-			}
-		default:
-			//Return validation error if template specifies unsupported operations in status
-			return nil, fmt.Errorf("%w: unrecognized resource operation: %s", ErrBadOperation, op)
-		}
-	}
-	// no intersection
-	if len(out) == 0 {
-		return nil, ErrEmptyOperation
-	}
-	return out, nil
-}
-
 // MustToUnstructured() is a convenience method for converting to unstructured.
 // Intended for testing. It will panic on error.
 func (in *Source) MustToUnstructured() map[string]interface{} {
@@ -306,33 +269,13 @@ func GetSource(code templates.Code) (*Source, error) {
 	return out, nil
 }
 
-func containsOpsType(ops []admissionv1.OperationType, opsType admissionv1.OperationType) bool {
-	for _, op := range ops {
-		if op == opsType {
-			return true
-		}
-	}
-	return false
-}
-
-func removeOpsType(ops []admissionv1.OperationType, opsType admissionv1.OperationType) []admissionv1.OperationType {
-	var result []admissionv1.OperationType
-	for _, o := range ops {
-		if o != opsType {
-			result = append(result, o)
-		}
-	}
-	return result
-}
-
 func GetSourceFromTemplate(ct *templates.ConstraintTemplate) (*Source, error) {
 	if len(ct.Spec.Targets) != 1 {
 		return nil, ErrOneTargetAllowed
 	}
 
 	var source *Source
-	var target = ct.Spec.Targets[0]
-	for _, code := range target.Code {
+	for _, code := range ct.Spec.Targets[0].Code {
 		if code.Engine != Name {
 			continue
 		}
@@ -345,10 +288,6 @@ func GetSourceFromTemplate(ct *templates.ConstraintTemplate) (*Source, error) {
 	}
 	if source == nil {
 		return nil, ErrCELEngineMissing
-	}
-	//append operations if defined in ct target
-	if len(target.Operations) > 0 {
-		source.Operations = target.Operations
 	}
 
 	return source, nil

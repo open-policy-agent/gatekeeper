@@ -20,27 +20,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Helper function to create a webhook operations cache with specified operations
-func createCacheWithOperations(ops ...admissionregistrationv1.OperationType) *schema.WebhookOperationsCache {
-	cache := schema.NewWebhookOperationsCache()
-	vwhc := &admissionregistrationv1.ValidatingWebhookConfiguration{
-		Webhooks: []admissionregistrationv1.ValidatingWebhook{
-			{
-				Rules: []admissionregistrationv1.RuleWithOperations{
-					{
-						Operations: ops,
-						Rule: admissionregistrationv1.Rule{
-							Resources: []string{"*"},
-						},
-					},
-				},
-			},
-		},
-	}
-	cache.ExtractOperationsFromWebhookConfiguration(vwhc)
-	return cache
-}
-
 func TestTemplateToPolicyDefinition(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -253,9 +232,7 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 				},
 			}
 
-			// Create a cache with Create and Update operations
-			opsCache := createCacheWithOperations(admissionregistrationv1.Create, admissionregistrationv1.Update)
-			obj, err := TemplateToPolicyDefinition(template, opsCache)
+			obj, err := TemplateToPolicyDefinition(template)
 			if !errors.Is(err, test.expectedErr) {
 				t.Errorf("unexpected error. got %v; wanted %v", err, test.expectedErr)
 			}
@@ -734,7 +711,10 @@ func TestConvertWebhookRulesToResourceRules(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result := convertWebhookRulesToResourceRules(test.rules)
+			result, err := convertWebhookRulesToResourceRules(test.rules, nil)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
 
 			if len(result) != test.expectedCount {
 				t.Errorf("expected %d resource rules, got %d", test.expectedCount, len(result))
@@ -838,7 +818,28 @@ func TestBuildMatchConstraintsFromWebhookConfig(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result := buildMatchConstraintsFromWebhookConfig(test.webhookConfig)
+			// Convert v1 rules to v1beta1 rules
+			v1beta1Rules := make([]admissionregistrationv1beta1.RuleWithOperations, len(test.webhookConfig.Rules))
+			for i, rule := range test.webhookConfig.Rules {
+				v1beta1Ops := make([]admissionregistrationv1beta1.OperationType, len(rule.Operations))
+				copy(v1beta1Ops, rule.Operations)
+				v1beta1Rules[i] = admissionregistrationv1beta1.RuleWithOperations{
+					Operations: v1beta1Ops,
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   rule.APIGroups,
+						APIVersions: rule.APIVersions,
+						Resources:   rule.Resources,
+						Scope:       rule.Scope,
+					},
+				}
+			}
+
+			// Convert webhook rules to resource rules first
+			resourceRules, err := convertWebhookRulesToResourceRules(v1beta1Rules, nil)
+			if err != nil {
+				t.Errorf("unexpected error converting rules: %v", err)
+			}
+			result := buildMatchConstraintsFromWebhookConfig(test.webhookConfig, resourceRules)
 
 			if result == nil {
 				t.Fatal("expected non-nil match constraints")

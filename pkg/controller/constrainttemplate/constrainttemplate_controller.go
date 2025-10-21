@@ -912,11 +912,15 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		}
 		logger.Info("get VAP", "vapName", vapName, "currentVap", currentVap)
 
-		transformedVap, err := r.transformTemplateToVAP(unversionedCT, vapName, logger)
-		if err != nil {
-			logger.Error(err, "transform to VAP error", "vapName", vapName)
-			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to VAP object", status, err)
-			return err
+		transformedVap, err1 := r.transformTemplateToVAP(unversionedCT, vapName, logger)
+		if err1 != nil {
+			logger.Error(err1, "transform to VAP error", "vapName", vapName)
+			if transformedVap != nil && errors.Is(err1, transform.ErrOperationMismatch) {
+				logger.Info("operation mismatch detected, continuing with VAP generation", "vapName", vapName)
+			} else {
+				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to VAP object", status, err1)
+				return err
+			}
 		}
 
 		newVap, err := getRunTimeVAP(groupVersion, transformedVap, currentVap)
@@ -948,7 +952,11 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 				return err
 			}
 		}
-		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: GeneratedVAPState, ObservedGeneration: ct.GetGeneration(), Warning: ""}
+		warningMsg := ""
+		if err1 != nil && errors.Is(err1, transform.ErrOperationMismatch) {
+			warningMsg = err1.Error()
+		}
+		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: GeneratedVAPState, ObservedGeneration: ct.GetGeneration(), Warning: warningMsg}
 	}
 	// do not generate VAP resources
 	// remove if exists
@@ -1031,7 +1039,6 @@ func (r *ReconcileConstraintTemplate) transformTemplateToVAP(
 	vapName string,
 	logger logr.Logger,
 ) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
-	// Use default configuration if SyncVAPScope is not enabled
 	if !*transform.SyncVAPScope {
 		logger.Info("using default configuration for VAP matching", "vapName", vapName)
 		return transform.TemplateToPolicyDefinition(unversionedCT)

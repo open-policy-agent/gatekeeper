@@ -176,9 +176,7 @@ func makeReconcileConstraintTemplateForVap(suffix string, generateVAP *bool, ops
 		},
 		GenerateVAP: generateVAP,
 	}
-	if ops != nil {
-		source.Operations = ops
-	}
+
 	return &v1beta1.ConstraintTemplate{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConstraintTemplate",
@@ -197,7 +195,8 @@ func makeReconcileConstraintTemplateForVap(suffix string, generateVAP *bool, ops
 			},
 			Targets: []v1beta1.Target{
 				{
-					Target: target.Name,
+					Target:     target.Name,
+					Operations: ops,
 					Code: []v1beta1.Code{
 						{
 							Engine: "K8sNativeValidation",
@@ -796,7 +795,6 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-
 			return c.Create(ctx, cstr)
 		})
 		if err != nil {
@@ -1088,7 +1086,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapV1Beta1ShouldBeRecreated"
 
 		logger.Info("Running test: VAP v1beta1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -1144,7 +1142,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapV1ShouldBeRecreated"
 
 		logger.Info("Running test: VAP v1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -1200,7 +1198,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapbV1Beta1ShouldBeRecreated"
 
 		logger.Info("Running test: VAPB v1beta1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
@@ -1273,7 +1271,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapbV1ShouldBeRecreated"
 
 		logger.Info("Running test: VAPB v1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true))
+		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
