@@ -41,7 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
-// webhookNameMu serializes access to webhook.VwhName global variable across sub-tests.
 var webhookNameMu sync.Mutex
 
 const (
@@ -49,13 +48,11 @@ const (
 	timeout     = 20 * time.Second
 )
 
-// TestReconcile tests the webhook config controller reconcile logic.
 func TestReconcile(t *testing.T) {
 	if !operations.IsAssigned(operations.Generate) {
 		t.Skip("Skipping test because Generate operation is not assigned")
 	}
 
-	// Save original VwhName and restore after test
 	originalVwhName := getVwhName()
 	originalSyncVAPScope := transform.SyncVAPScope
 	defer func() {
@@ -63,21 +60,17 @@ func TestReconcile(t *testing.T) {
 		transform.SyncVAPScope = originalSyncVAPScope
 	}()
 
-	// Set VwhName for tests
 	setVwhName(testVwhName)
 	transform.SyncVAPScope = ptr.To(true)
 
-	// Setup the Manager and Controller
 	mgr, _ := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	ctx := context.Background()
 
-	// Create event channels
 	ctEvents := make(chan event.GenericEvent, 1024)
 	cache := webhookconfigcache.NewWebhookConfigCache()
 
-	// Create adder and add controller
 	adder := &Adder{
 		Cache:    cache,
 		ctEvents: ctEvents,
@@ -89,20 +82,17 @@ func TestReconcile(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	t.Run("webhook config created triggers cache update", func(t *testing.T) {
-		// Serialize access to webhook.VwhName global variable
 		webhookNameMu.Lock()
 		defer webhookNameMu.Unlock()
 
 		suffix := "-created"
 		webhookName := testVwhName + suffix
 
-		// Temporarily change VwhName for this subtest
 		setVwhName(webhookName)
 		defer func() { setVwhName(testVwhName) }()
 
 		logger.Info("Running test: webhook config created triggers cache update")
 
-		// Create webhook configuration
 		vwh := createTestValidatingWebhook(webhookName, []admissionregistrationv1.RuleWithOperations{
 			{
 				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
@@ -116,7 +106,6 @@ func TestReconcile(t *testing.T) {
 
 		testutils.CreateThenCleanup(ctx, t, c, vwh)
 
-		// Wait for cache to be updated
 		err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -130,24 +119,20 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("webhook config update with matching field changes triggers CT reconciliation", func(t *testing.T) {
-		// Serialize access to webhook.VwhName global variable
 		webhookNameMu.Lock()
 		defer webhookNameMu.Unlock()
 
 		suffix := "-updated"
 		webhookName := testVwhName + suffix
 
-		// Temporarily change VwhName for this subtest
 		setVwhName(webhookName)
 		defer func() { setVwhName(testVwhName) }()
 
 		logger.Info("Running test: webhook config update with matching field changes triggers CT reconciliation")
 
-		// Create a VAP-enabled constraint template
 		ct := createVAPConstraintTemplate("test-ct" + suffix)
 		testutils.CreateThenCleanup(ctx, t, c, ct)
 
-		// Create initial webhook configuration
 		vwh := createTestValidatingWebhook(webhookName, []admissionregistrationv1.RuleWithOperations{
 			{
 				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
@@ -161,13 +146,11 @@ func TestReconcile(t *testing.T) {
 
 		testutils.CreateThenCleanup(ctx, t, c, vwh)
 
-		// Clear initial events
 		time.Sleep(500 * time.Millisecond)
 		for len(ctEvents) > 0 {
 			<-ctEvents
 		}
 
-		// Update webhook with changed rules
 		err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -191,7 +174,6 @@ func TestReconcile(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Wait for CT reconciliation event
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -202,7 +184,6 @@ func TestReconcile(t *testing.T) {
 		})
 		require.NoError(t, err, "CT reconciliation should be triggered after webhook update")
 
-		// Verify the event is for our constraint template
 		evt := <-ctEvents
 		require.NotNil(t, evt.Object)
 		ctObj, ok := evt.Object.(*v1beta1.ConstraintTemplate)
@@ -211,24 +192,20 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("webhook config update without matching field changes does not trigger reconciliation", func(t *testing.T) {
-		// Serialize access to webhook.VwhName global variable
 		webhookNameMu.Lock()
 		defer webhookNameMu.Unlock()
 
 		suffix := "-updated-no-change"
 		webhookName := testVwhName + suffix
 
-		// Temporarily change VwhName for this subtest
 		setVwhName(webhookName)
 		defer func() { setVwhName(testVwhName) }()
 
 		logger.Info("Running test: webhook config update without matching field changes does not trigger reconciliation")
 
-		// Create a VAP-enabled constraint template
 		ct := createVAPConstraintTemplate("test-ct" + suffix)
 		testutils.CreateThenCleanup(ctx, t, c, ct)
 
-		// Create initial webhook configuration
 		vwh := createTestValidatingWebhook(webhookName, []admissionregistrationv1.RuleWithOperations{
 			{
 				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
@@ -242,13 +219,11 @@ func TestReconcile(t *testing.T) {
 
 		testutils.CreateThenCleanup(ctx, t, c, vwh)
 
-		// Clear initial events
 		time.Sleep(500 * time.Millisecond)
 		for len(ctEvents) > 0 {
 			<-ctEvents
 		}
 
-		// Update webhook with non-matching field change (e.g., annotations)
 		err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -257,7 +232,6 @@ func TestReconcile(t *testing.T) {
 				return err
 			}
 
-			// Update a non-matching field
 			if updatedWebhook.Annotations == nil {
 				updatedWebhook.Annotations = make(map[string]string)
 			}
@@ -267,30 +241,25 @@ func TestReconcile(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Wait a bit to ensure no events are generated
 		time.Sleep(1 * time.Second)
 		require.Empty(t, ctEvents, "no CT reconciliation events should be triggered for non-matching field changes")
 	})
 
 	t.Run("webhook config deletion triggers CT reconciliation and cache removal", func(t *testing.T) {
-		// Serialize access to webhook.VwhName global variable
 		webhookNameMu.Lock()
 		defer webhookNameMu.Unlock()
 
 		suffix := "-deleted"
 		webhookName := testVwhName + suffix
 
-		// Temporarily change VwhName for this subtest
 		setVwhName(webhookName)
 		defer func() { setVwhName(testVwhName) }()
 
 		logger.Info("Running test: webhook config deletion triggers CT reconciliation and cache removal")
 
-		// Create a VAP-enabled constraint template
 		ct := createVAPConstraintTemplate("test-ct" + suffix)
 		testutils.CreateThenCleanup(ctx, t, c, ct)
 
-		// Create webhook configuration
 		vwh := createTestValidatingWebhook(webhookName, []admissionregistrationv1.RuleWithOperations{
 			{
 				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
@@ -305,7 +274,6 @@ func TestReconcile(t *testing.T) {
 		err := c.Create(ctx, vwh)
 		require.NoError(t, err)
 
-		// Wait for cache to be populated
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -317,17 +285,14 @@ func TestReconcile(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Clear initial events
 		time.Sleep(500 * time.Millisecond)
 		for len(ctEvents) > 0 {
 			<-ctEvents
 		}
 
-		// Delete webhook
 		err = c.Delete(ctx, vwh)
 		require.NoError(t, err)
 
-		// Wait for CT reconciliation event
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -338,7 +303,6 @@ func TestReconcile(t *testing.T) {
 		})
 		require.NoError(t, err, "CT reconciliation should be triggered after webhook deletion")
 
-		// Verify cache removal
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -352,24 +316,20 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("webhook namespace selector change triggers reconciliation", func(t *testing.T) {
-		// Serialize access to webhook.VwhName global variable
 		webhookNameMu.Lock()
 		defer webhookNameMu.Unlock()
 
 		suffix := "-namespace-selector"
 		webhookName := testVwhName + suffix
 
-		// Temporarily change VwhName for this subtest
 		setVwhName(webhookName)
 		defer func() { setVwhName(testVwhName) }()
 
 		logger.Info("Running test: webhook namespace selector change triggers reconciliation")
 
-		// Create a VAP-enabled constraint template
 		ct := createVAPConstraintTemplate("test-ct" + suffix)
 		testutils.CreateThenCleanup(ctx, t, c, ct)
 
-		// Create initial webhook configuration with no namespace selector
 		vwh := createTestValidatingWebhook(webhookName, []admissionregistrationv1.RuleWithOperations{
 			{
 				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
@@ -383,13 +343,10 @@ func TestReconcile(t *testing.T) {
 
 		testutils.CreateThenCleanup(ctx, t, c, vwh)
 
-		// Clear initial events
 		time.Sleep(500 * time.Millisecond)
 		for len(ctEvents) > 0 {
 			<-ctEvents
 		}
-
-		// Update webhook with namespace selector
 		err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -406,7 +363,6 @@ func TestReconcile(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Wait for CT reconciliation event
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
@@ -419,19 +375,16 @@ func TestReconcile(t *testing.T) {
 	})
 }
 
-// TestTriggerConstraintTemplateReconciliation tests the trigger mechanism.
 func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 	if !operations.IsAssigned(operations.Generate) {
 		t.Skip("Skipping test because Generate operation is not assigned")
 	}
 
-	// Save original VwhName and restore after test
 	originalVwhName := getVwhName()
 	defer func() { setVwhName(originalVwhName) }()
 
 	setVwhName(testVwhName)
 
-	// Setup the Manager
 	mgr, _ := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
@@ -441,27 +394,23 @@ func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 	t.Run("successful reconciliation sends events for VAP-enabled templates", func(t *testing.T) {
 		logger.Info("Running test: successful reconciliation sends events for VAP-enabled templates")
 
-		// Create VAP-enabled templates
 		ct1 := createVAPConstraintTemplate("trigger-test-ct1")
 		ct2 := createVAPConstraintTemplate("trigger-test-ct2")
 		testutils.CreateThenCleanup(ctx, t, c, ct1)
 		testutils.CreateThenCleanup(ctx, t, c, ct2)
 
-		// Create event channel
 		ctEvents := make(chan event.GenericEvent, 10)
 
-		// Create reconciler
 		reconciler := &ReconcileWebhookConfig{
 			Client:   c,
 			scheme:   mgr.GetScheme(),
 			ctEvents: ctEvents,
 		}
 
-		// Trigger reconciliation
-		reconciler.TriggerConstraintTemplateReconciliation(ctx, testVwhName)
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		require.NoError(t, err, "Should trigger ConstraintTemplate reonciliation without error")
 
-		// Verify events were sent
-		err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			if len(ctEvents) < 2 {
@@ -475,45 +424,36 @@ func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 	t.Run("skips templates without VAP support", func(t *testing.T) {
 		logger.Info("Running test: skips templates without VAP support")
 
-		// Create non-VAP template
 		ct := createNonVAPConstraintTemplate("trigger-test-non-vap")
 		testutils.CreateThenCleanup(ctx, t, c, ct)
 
-		// Create event channel
 		ctEvents := make(chan event.GenericEvent, 10)
 
-		// Create reconciler
 		reconciler := &ReconcileWebhookConfig{
 			Client:   c,
 			scheme:   mgr.GetScheme(),
 			ctEvents: ctEvents,
 		}
 
-		// Trigger reconciliation
-		reconciler.TriggerConstraintTemplateReconciliation(ctx, testVwhName)
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		require.NoError(t, err, "Should trigger ConstraintTemplate reonciliation without error")
 
-		// Wait a bit and verify no events for non-VAP template
 		time.Sleep(500 * time.Millisecond)
-		// There might be events from previous tests, but we can't determine which ones
-		// are from this test specifically, so we just verify the trigger doesn't crash
 	})
 
 	t.Run("handles nil ctEvents channel gracefully", func(t *testing.T) {
 		logger.Info("Running test: handles nil ctEvents channel gracefully")
 
-		// Create reconciler with nil ctEvents
 		reconciler := &ReconcileWebhookConfig{
 			Client:   c,
 			scheme:   mgr.GetScheme(),
 			ctEvents: nil,
 		}
 
-		// This should not panic
-		reconciler.TriggerConstraintTemplateReconciliation(ctx, testVwhName)
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		require.NoError(t, err, "Should trigger ConstraintTemplate reonciliation without error")
 	})
 }
-
-// Helper functions
 
 func createTestValidatingWebhook(name string, rules []admissionregistrationv1.RuleWithOperations, namespaceSelector, objectSelector *metav1.LabelSelector) *admissionregistrationv1.ValidatingWebhookConfiguration {
 	sideEffects := admissionregistrationv1.SideEffectClassNone
@@ -549,7 +489,6 @@ func createTestValidatingWebhook(name string, rules []admissionregistrationv1.Ru
 }
 
 func createVAPConstraintTemplate(name string) *v1beta1.ConstraintTemplate {
-	// Create a proper CEL source that enables VAP generation
 	source := &celSchema.Source{
 		Validations: []celSchema.Validation{
 			{
@@ -568,7 +507,6 @@ func createVAPConstraintTemplate(name string) *v1beta1.ConstraintTemplate {
 	}
 	ct.SetName(name)
 	ct.Spec.CRD.Spec.Names.Kind = name + "Kind"
-	// Add K8sNativeValidation target to make it VAP-eligible
 	ct.Spec.Targets = []v1beta1.Target{
 		{
 			Target: target.Name,
@@ -595,7 +533,6 @@ func createNonVAPConstraintTemplate(name string) *v1beta1.ConstraintTemplate {
 	}
 	ct.SetName(name)
 	ct.Spec.CRD.Spec.Names.Kind = name + "Kind"
-	// Add only Rego target (no VAP support)
 	ct.Spec.Targets = []v1beta1.Target{
 		{
 			Target: target.Name,
@@ -610,4 +547,288 @@ violation[{"msg": "denied!"}] {
 	}
 
 	return ct
+}
+
+func TestSendEventWithRetry(t *testing.T) {
+	tests := []struct {
+		name          string
+		channelSize   int
+		expectSuccess bool
+		expectRetries bool
+		cancelContext bool
+		cancelAfter   time.Duration
+		validateDelay bool
+	}{
+		{
+			name:          "successful send on first attempt",
+			channelSize:   10,
+			expectSuccess: true,
+			expectRetries: false,
+		},
+		{
+			name:          "successful send after retries",
+			channelSize:   0,
+			expectSuccess: true,
+			expectRetries: true,
+		},
+		{
+			name:          "context cancellation during retry",
+			channelSize:   0,
+			cancelContext: true,
+			cancelAfter:   50 * time.Millisecond,
+			expectSuccess: false,
+		},
+		{
+			name:          "max retries exceeded",
+			channelSize:   0,
+			expectSuccess: false,
+			expectRetries: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctEvents := make(chan event.GenericEvent, tc.channelSize)
+
+			template := &v1beta1.ConstraintTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-template",
+				},
+			}
+
+			r := &ReconcileWebhookConfig{
+				ctEvents: ctEvents,
+			}
+
+			ctx := context.Background()
+			if tc.cancelContext {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.cancelAfter)
+				defer cancel()
+			}
+
+			if tc.expectRetries && tc.expectSuccess && !tc.cancelContext {
+				go func() {
+					time.Sleep(150 * time.Millisecond)
+					select {
+					case <-ctEvents:
+					case <-time.After(1 * time.Second):
+					}
+				}()
+			}
+
+			startTime := time.Now()
+
+			err := r.sendEventWithRetry(ctx, template)
+
+			switch {
+			case tc.cancelContext:
+				require.Error(t, err, "expected context cancellation error")
+				require.Equal(t, context.DeadlineExceeded, err, "expected deadline exceeded error")
+			case tc.name == "max retries exceeded":
+				require.Error(t, err, "expected error when max retries exceeded")
+			default:
+				require.NoError(t, err, "sendEventWithRetry should not return error")
+			}
+
+			if tc.expectRetries && tc.validateDelay {
+				elapsed := time.Since(startTime)
+				require.True(t, elapsed > 50*time.Millisecond, "expected some delay for retries")
+			}
+
+			if tc.expectSuccess && !tc.cancelContext {
+				select {
+				case receivedEvent := <-ctEvents:
+					require.Equal(t, template, receivedEvent.Object, "received event should match sent template")
+				case <-time.After(100 * time.Millisecond):
+					if tc.channelSize > 0 {
+						t.Fatal("expected event to be received")
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestSendEventWithRetry_ChannelBackpressure(t *testing.T) {
+	t.Run("channel becomes available after retry", func(t *testing.T) {
+		ctEvents := make(chan event.GenericEvent, 1)
+		template := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+		}
+
+		r := &ReconcileWebhookConfig{ctEvents: ctEvents}
+
+		ctEvents <- event.GenericEvent{Object: template}
+
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			select {
+			case <-ctEvents:
+			default:
+			}
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		startTime := time.Now()
+		err := r.sendEventWithRetry(ctx, template)
+		elapsed := time.Since(startTime)
+
+		require.NoError(t, err, "should succeed when channel becomes available")
+		require.True(t, elapsed > 25*time.Millisecond, "should have taken time for retry")
+
+		select {
+		case receivedEvent := <-ctEvents:
+			require.Equal(t, template, receivedEvent.Object)
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("expected event to be received")
+		}
+	})
+}
+
+func TestDirtyTemplateManagement(t *testing.T) {
+	t.Run("markDirtyTemplate adds template to dirty state", func(t *testing.T) {
+		r := &ReconcileWebhookConfig{}
+
+		template := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+		}
+
+		r.markDirtyTemplate(template)
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.NotNil(t, r.dirtyTemplates)
+		require.Contains(t, r.dirtyTemplates, "test-template")
+		require.Equal(t, template, r.dirtyTemplates["test-template"])
+	})
+
+	t.Run("markDirtyTemplate handles multiple templates", func(t *testing.T) {
+		r := &ReconcileWebhookConfig{}
+
+		template1 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-1"},
+		}
+		template2 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-2"},
+		}
+
+		r.markDirtyTemplate(template1)
+		r.markDirtyTemplate(template2)
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Len(t, r.dirtyTemplates, 2)
+		require.Contains(t, r.dirtyTemplates, "template-1")
+		require.Contains(t, r.dirtyTemplates, "template-2")
+	})
+
+	t.Run("getDirtyTemplatesAndClear returns all dirty templates and clears state", func(t *testing.T) {
+		r := &ReconcileWebhookConfig{}
+
+		template1 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-1"},
+		}
+		template2 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-2"},
+		}
+
+		r.markDirtyTemplate(template1)
+		r.markDirtyTemplate(template2)
+
+		dirtyTemplates := r.getDirtyTemplatesAndClear()
+
+		require.Len(t, dirtyTemplates, 2)
+		templateNames := make([]string, len(dirtyTemplates))
+		for i, template := range dirtyTemplates {
+			templateNames[i] = template.Name
+		}
+		require.Contains(t, templateNames, "template-1")
+		require.Contains(t, templateNames, "template-2")
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Empty(t, r.dirtyTemplates)
+	})
+
+	t.Run("getDirtyTemplatesAndClear returns nil when no dirty templates", func(t *testing.T) {
+		r := &ReconcileWebhookConfig{}
+
+		dirtyTemplates := r.getDirtyTemplatesAndClear()
+
+		require.Nil(t, dirtyTemplates)
+	})
+}
+
+func TestTriggerDirtyTemplateReconciliation(t *testing.T) {
+	t.Run("processes dirty templates and sends events", func(t *testing.T) {
+		ctEvents := make(chan event.GenericEvent, 10)
+		r := &ReconcileWebhookConfig{ctEvents: ctEvents}
+
+		template1 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-1"},
+		}
+		template2 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-2"},
+		}
+
+		r.markDirtyTemplate(template1)
+		r.markDirtyTemplate(template2)
+
+		ctx := context.Background()
+		err := r.triggerDirtyTemplateReconciliation(ctx)
+
+		require.NoError(t, err)
+		require.Len(t, ctEvents, 2)
+
+		receivedEvents := make([]event.GenericEvent, 2)
+		receivedEvents[0] = <-ctEvents
+		receivedEvents[1] = <-ctEvents
+
+		receivedNames := make([]string, 2)
+		for i, evt := range receivedEvents {
+			if template, ok := evt.Object.(*v1beta1.ConstraintTemplate); ok {
+				receivedNames[i] = template.Name
+			}
+		}
+		require.Contains(t, receivedNames, "template-1")
+		require.Contains(t, receivedNames, "template-2")
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Empty(t, r.dirtyTemplates)
+	})
+
+	t.Run("re-marks failed templates as dirty", func(t *testing.T) {
+		ctEvents := make(chan event.GenericEvent)
+		r := &ReconcileWebhookConfig{ctEvents: ctEvents}
+
+		template := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+		}
+
+		r.markDirtyTemplate(template)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		err := r.triggerDirtyTemplateReconciliation(ctx)
+
+		require.Error(t, err)
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Contains(t, r.dirtyTemplates, "test-template")
+	})
+
+	t.Run("returns nil when no dirty templates", func(t *testing.T) {
+		r := &ReconcileWebhookConfig{}
+
+		ctx := context.Background()
+		err := r.triggerDirtyTemplateReconciliation(ctx)
+
+		require.NoError(t, err)
+	})
 }

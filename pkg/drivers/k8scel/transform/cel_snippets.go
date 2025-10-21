@@ -85,7 +85,7 @@ const (
 	)
 	`
 
-	// Expression to exclude objects in globally excluded namespaces and namespace objects themselves if they're in the exclusion list.
+	// Expression to exclude objects in globally excluded namespaces and namespace objects themselves if they're in the exclusion list from Config resource.
 	matchGlobalExcludedNamespacesGlob = `
 	[object, oldObject].exists(obj,
 		obj != null && (
@@ -105,7 +105,7 @@ const (
 		)
 	)
 	`
-	// Expression to exempt objects in globally exempted namespaces and namespace objects themselves if they're in the exemption list.
+	// Expression to exempt objects in globally exempted namespaces and namespace objects themselves if they're in the exemption list from exempt namespace flags.
 	matchGlobalExemptedNamespacesGlob = `
 	[object, oldObject].exists(obj,
 		obj != null && (

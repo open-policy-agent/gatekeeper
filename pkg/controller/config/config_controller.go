@@ -17,7 +17,9 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
@@ -37,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -56,35 +59,96 @@ var (
 	configGVK = configv1alpha1.GroupVersion.WithKind("Config")
 )
 
-// TriggerConstraintTemplateReconciliation triggers CT reconciliation for those that require VAP generation.
-func (r *ReconcileConfig) TriggerConstraintTemplateReconciliation(ctx context.Context, processName process.Process) {
-	logger := logf.Log.WithValues("process", processName)
-	logger.Info("Triggering ConstraintTemplate reconciliation due to config exclusion changes")
+func (r *ReconcileConfig) markDirtyTemplate(template *v1beta1.ConstraintTemplate) {
+	r.dirtyMu.Lock()
+	defer r.dirtyMu.Unlock()
+	if r.dirtyTemplates == nil {
+		r.dirtyTemplates = make(map[string]*v1beta1.ConstraintTemplate)
+	}
+	r.dirtyTemplates[template.Name] = template
+}
 
-	// List all ConstraintTemplates
+func (r *ReconcileConfig) getDirtyTemplatesAndClear() []*v1beta1.ConstraintTemplate {
+	r.dirtyMu.Lock()
+	defer r.dirtyMu.Unlock()
+	if len(r.dirtyTemplates) == 0 {
+		return nil
+	}
+	templates := make([]*v1beta1.ConstraintTemplate, 0, len(r.dirtyTemplates))
+	for _, template := range r.dirtyTemplates {
+		templates = append(templates, template)
+	}
+	r.dirtyTemplates = make(map[string]*v1beta1.ConstraintTemplate)
+	return templates
+}
+
+func (r *ReconcileConfig) triggerConstraintTemplateReconciliation(ctx context.Context) error {
 	templateList := &v1beta1.ConstraintTemplateList{}
 	if err := r.reader.List(ctx, templateList); err != nil {
-		logger.Error(err, "failed to list ConstraintTemplates for config reconciliation")
-		return
+		log.Error(err, "failed to list ConstraintTemplates for config reconciliation")
+		return err
 	}
 
-	// Send generic events for each constraint template
+	var errs []error
 	for i := range templateList.Items {
 		generateVap, err := constrainttemplate.ShouldGenerateVAPForVersionedCT(&templateList.Items[i], r.scheme)
 		if err != nil || !generateVap {
-			logger.Info("skipping reconcile for template", "template", templateList.Items[i].GetName())
 			continue
 		}
-		select {
-		case r.ctEvents <- event.GenericEvent{
-			Object: &templateList.Items[i],
-		}:
-		default:
-			logger.Info("constraint template event channel full, skipping", "template", templateList.Items[i].GetName())
+		if err := r.sendEventWithRetry(ctx, &templateList.Items[i]); err != nil {
+			errs = append(errs, err)
+			r.markDirtyTemplate(&templateList.Items[i])
 		}
 	}
+	return errors.Join(errs...)
+}
 
-	logger.Info("triggered reconciliation for ConstraintTemplates", "count", len(templateList.Items))
+func (r *ReconcileConfig) triggerDirtyTemplateReconciliation(ctx context.Context) error {
+	dirtyTemplates := r.getDirtyTemplatesAndClear()
+	if len(dirtyTemplates) == 0 {
+		return nil
+	}
+
+	var errs []error
+	for _, template := range dirtyTemplates {
+		if err := r.sendEventWithRetry(ctx, template); err != nil {
+			errs = append(errs, err)
+			r.markDirtyTemplate(template)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (r *ReconcileConfig) sendEventWithRetry(ctx context.Context, template *v1beta1.ConstraintTemplate) error {
+	if r.ctEvents == nil {
+		log.V(1).Info("ctEvents channel is nil, skipping event", "template", template.Name)
+		return nil
+	}
+
+	return retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		return err != nil
+	}, func() error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case r.ctEvents <- event.GenericEvent{Object: template}:
+			log.V(1).Info("event sent successfully", "template", template.Name)
+			return nil
+		default:
+			log.V(1).Info("channel full, will retry with backoff", "template", template.Name)
+			return &ChannelFullError{}
+		}
+	})
+}
+
+type ChannelFullError struct{}
+
+func (e *ChannelFullError) Error() string {
+	return "channel is full"
+}
+
+func (e *ChannelFullError) Temporary() bool {
+	return true
 }
 
 type Adder struct {
@@ -179,6 +243,9 @@ type ReconcileConfig struct {
 	getPod func(context.Context) (*corev1.Pod, error)
 
 	ctEvents chan<- event.GenericEvent
+
+	dirtyMu        sync.Mutex
+	dirtyTemplates map[string]*v1beta1.ConstraintTemplate
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -235,11 +302,27 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		r.tracker.DisableStats()
 	}
 
-	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.cacheManager.ExcluderChangedForProcess(process.Webhook, newExcluder) && r.ctEvents != nil {
-		r.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+	var configChanged bool
+	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.ctEvents != nil {
+		configChanged = r.cacheManager.ExcluderChangedForProcess(process.Webhook, newExcluder)
 	}
 
 	r.cacheManager.ExcludeProcesses(newExcluder)
+	var ctTriggerError error
+	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.ctEvents != nil {
+		if configChanged {
+			ctTriggerError = r.triggerConstraintTemplateReconciliation(ctx)
+			if ctTriggerError != nil {
+				log.Error(ctTriggerError, "failed to trigger constraint template reconciliation")
+			}
+		} else {
+			ctTriggerError = r.triggerDirtyTemplateReconciliation(ctx)
+			if ctTriggerError != nil {
+				log.Error(ctTriggerError, "failed to trigger dirty template reconciliation")
+			}
+		}
+	}
+
 	// Directly accessing the NamespaceName.String(), as NamespaceName is embedded within reconcile.Request.
 	configSourceKey := aggregator.Key{Source: "config", ID: request.String()}
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
@@ -253,7 +336,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	if deleted {
 		return reconcile.Result{}, r.deleteStatus(ctx, request.Namespace, request.Name)
 	}
-	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance, nil)
+	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance, ctTriggerError)
 }
 
 func (r *ReconcileConfig) deleteStatus(ctx context.Context, cfgNamespace string, cfgName string) error {

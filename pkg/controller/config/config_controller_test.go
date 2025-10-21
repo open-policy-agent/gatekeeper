@@ -781,10 +781,9 @@ func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 			ctEvents: ctEvents,
 		}
 
-		// Execute
-		reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+		err = reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.NoError(t, err)
 
-		// Verify events were sent
 		assert.Equal(t, 2, len(ctEvents))
 
 		// Verify the events contain the correct templates
@@ -818,10 +817,9 @@ func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 			ctEvents: ctEvents,
 		}
 
-		// Execute - should not panic
-		reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.Error(t, err)
 
-		// Verify no events were sent due to error
 		assert.Equal(t, 0, len(ctEvents))
 	})
 
@@ -863,21 +861,18 @@ func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 			ctEvents: ctEvents,
 		}
 
-		// Execute
-		reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.NoError(t, err)
 
-		// Verify no events were sent since template shouldn't generate VAP
 		assert.Equal(t, 0, len(ctEvents))
 	})
 
-	t.Run("handles full event channel gracefully", func(t *testing.T) {
-		// Setup
+	t.Run("handles full event channel with retry", func(t *testing.T) {
 		mgr, _ := setupManager(t)
 
 		mockReader := &fakes.SpyReader{
 			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 				if ctList, ok := list.(*v1beta1.ConstraintTemplateList); ok {
-					// Create test constraint template
 					ct := createVAPTemplate("test-template")
 					ctList.Items = []v1beta1.ConstraintTemplate{*ct}
 				}
@@ -885,7 +880,6 @@ func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 			},
 		}
 
-		// Create a full event channel (capacity 0)
 		ctEvents := make(chan event.GenericEvent)
 
 		reconciler := &ReconcileConfig{
@@ -894,20 +888,9 @@ func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 			ctEvents: ctEvents,
 		}
 
-		// Execute - should not block
-		done := make(chan bool)
-		go func() {
-			reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
-			done <- true
-		}()
-
-		// Verify it completes without blocking
-		select {
-		case <-done:
-			// Success - method completed
-		case <-time.After(time.Second):
-			t.Fatal("method blocked when event channel was full")
-		}
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "channel is full")
 	})
 
 	t.Run("handles empty template list", func(t *testing.T) {
@@ -929,10 +912,9 @@ func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 			ctEvents: ctEvents,
 		}
 
-		// Execute
-		reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.NoError(t, err)
 
-		// Verify no events were sent
 		assert.Equal(t, 0, len(ctEvents))
 	})
 
@@ -956,10 +938,8 @@ func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
 			ctEvents: nil, // nil channel
 		}
 
-		// Execute - should not panic
-		require.NotPanics(t, func() {
-			reconciler.TriggerConstraintTemplateReconciliation(ctx, process.Webhook)
-		})
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.NoError(t, err)
 	})
 }
 
@@ -1019,4 +999,149 @@ func deleteResource(ctx context.Context, c client.Client, resounce *unstructured
 	}
 
 	return err
+}
+
+func TestDirtyTemplateManagement(t *testing.T) {
+	t.Run("markDirtyTemplate adds template to dirty state", func(t *testing.T) {
+		r := &ReconcileConfig{}
+
+		template := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+		}
+
+		r.markDirtyTemplate(template)
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.NotNil(t, r.dirtyTemplates)
+		require.Contains(t, r.dirtyTemplates, "test-template")
+		require.Equal(t, template, r.dirtyTemplates["test-template"])
+	})
+
+	t.Run("markDirtyTemplate handles multiple templates", func(t *testing.T) {
+		r := &ReconcileConfig{}
+
+		template1 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-1"},
+		}
+		template2 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-2"},
+		}
+
+		r.markDirtyTemplate(template1)
+		r.markDirtyTemplate(template2)
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Len(t, r.dirtyTemplates, 2)
+		require.Contains(t, r.dirtyTemplates, "template-1")
+		require.Contains(t, r.dirtyTemplates, "template-2")
+	})
+
+	t.Run("getDirtyTemplatesAndClear returns all dirty templates and clears state", func(t *testing.T) {
+		r := &ReconcileConfig{}
+
+		template1 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-1"},
+		}
+		template2 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-2"},
+		}
+
+		r.markDirtyTemplate(template1)
+		r.markDirtyTemplate(template2)
+
+		dirtyTemplates := r.getDirtyTemplatesAndClear()
+
+		require.Len(t, dirtyTemplates, 2)
+		templateNames := make([]string, len(dirtyTemplates))
+		for i, template := range dirtyTemplates {
+			templateNames[i] = template.Name
+		}
+		require.Contains(t, templateNames, "template-1")
+		require.Contains(t, templateNames, "template-2")
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Empty(t, r.dirtyTemplates)
+	})
+
+	t.Run("getDirtyTemplatesAndClear returns nil when no dirty templates", func(t *testing.T) {
+		r := &ReconcileConfig{}
+
+		dirtyTemplates := r.getDirtyTemplatesAndClear()
+
+		require.Nil(t, dirtyTemplates)
+	})
+}
+
+func TestTriggerDirtyTemplateReconciliation(t *testing.T) {
+	t.Run("processes dirty templates and sends events", func(t *testing.T) {
+		ctEvents := make(chan event.GenericEvent, 10)
+		r := &ReconcileConfig{ctEvents: ctEvents}
+
+		template1 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-1"},
+		}
+		template2 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-2"},
+		}
+
+		r.markDirtyTemplate(template1)
+		r.markDirtyTemplate(template2)
+
+		ctx := context.Background()
+		err := r.triggerDirtyTemplateReconciliation(ctx)
+
+		require.NoError(t, err)
+		require.Len(t, ctEvents, 2)
+
+		receivedEvents := make([]event.GenericEvent, 2)
+		receivedEvents[0] = <-ctEvents
+		receivedEvents[1] = <-ctEvents
+
+		receivedNames := make([]string, 2)
+		for i, evt := range receivedEvents {
+			if template, ok := evt.Object.(*v1beta1.ConstraintTemplate); ok {
+				receivedNames[i] = template.Name
+			}
+		}
+		require.Contains(t, receivedNames, "template-1")
+		require.Contains(t, receivedNames, "template-2")
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Empty(t, r.dirtyTemplates)
+	})
+
+	t.Run("re-marks failed templates as dirty", func(t *testing.T) {
+		ctEvents := make(chan event.GenericEvent)
+		r := &ReconcileConfig{ctEvents: ctEvents}
+
+		template := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+		}
+
+		r.markDirtyTemplate(template)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		err := r.triggerDirtyTemplateReconciliation(ctx)
+
+		require.Error(t, err)
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Contains(t, r.dirtyTemplates, "test-template")
+	})
+
+	t.Run("returns nil when no dirty templates", func(t *testing.T) {
+		r := &ReconcileConfig{}
+
+		ctx := context.Background()
+		err := r.triggerDirtyTemplateReconciliation(ctx)
+
+		require.NoError(t, err)
+	})
 }

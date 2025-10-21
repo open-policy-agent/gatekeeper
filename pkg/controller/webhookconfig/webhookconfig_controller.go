@@ -2,6 +2,7 @@ package webhookconfig
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -15,6 +16,7 @@ import (
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -53,34 +55,102 @@ func setVwhName(name string) {
 
 var logger = log.Log.V(logging.DebugLevel).WithName("controller").WithValues("kind", "ValidatingWebhookConfiguration", logging.Process, "webhook_config_controller")
 
-// TriggerConstraintTemplateReconciliation sends events to trigger CT reconciliation.
-func (r *ReconcileWebhookConfig) TriggerConstraintTemplateReconciliation(ctx context.Context, webhookName string) {
-	logger := logger.WithValues("webhook_name", webhookName)
+// markDirtyTemplate marks a specific constraint template for reconciliation.
+func (r *ReconcileWebhookConfig) markDirtyTemplate(template *v1beta1.ConstraintTemplate) {
+	r.dirtyMu.Lock()
+	defer r.dirtyMu.Unlock()
+	if r.dirtyTemplates == nil {
+		r.dirtyTemplates = make(map[string]*v1beta1.ConstraintTemplate)
+	}
+	r.dirtyTemplates[template.Name] = template
+	logger.V(1).Info("marked constraint template as dirty", "template", template.Name)
+}
+
+// getDirtyTemplatesAndClear returns dirty templates and clears the dirty state.
+func (r *ReconcileWebhookConfig) getDirtyTemplatesAndClear() []*v1beta1.ConstraintTemplate {
+	r.dirtyMu.Lock()
+	defer r.dirtyMu.Unlock()
+	if len(r.dirtyTemplates) == 0 {
+		return nil
+	}
+	templates := make([]*v1beta1.ConstraintTemplate, 0, len(r.dirtyTemplates))
+	for _, template := range r.dirtyTemplates {
+		templates = append(templates, template)
+	}
+	r.dirtyTemplates = make(map[string]*v1beta1.ConstraintTemplate)
+	return templates
+}
+
+// triggerConstraintTemplateReconciliation sends events to trigger CT reconciliation for all templates.
+func (r *ReconcileWebhookConfig) triggerConstraintTemplateReconciliation(ctx context.Context) error {
 	logger.Info("Triggering ConstraintTemplate reconciliation due to webhook matching field changes")
 
 	templateList := &v1beta1.ConstraintTemplateList{}
 	if err := r.List(ctx, templateList); err != nil {
 		logger.Error(err, "failed to list ConstraintTemplates for webhook reconciliation")
-		return
+		return err
 	}
 
-	// Send generic events for each constraint template
+	var errs []error
 	for i := range templateList.Items {
 		generateVap, err := constrainttemplate.ShouldGenerateVAPForVersionedCT(&templateList.Items[i], r.scheme)
 		if err != nil || !generateVap {
 			logger.Info("skipping reconcile for template", "template", templateList.Items[i].GetName())
 			continue
 		}
-		select {
-		case r.ctEvents <- event.GenericEvent{
-			Object: &templateList.Items[i],
-		}:
-		default:
-			logger.Info("constraint template event channel full, skipping", "template", templateList.Items[i].GetName())
+
+		if err := r.sendEventWithRetry(ctx, &templateList.Items[i]); err != nil {
+			errs = append(errs, err)
+			r.markDirtyTemplate(&templateList.Items[i])
 		}
 	}
+	return errors.Join(errs...)
+}
 
-	logger.Info("triggered reconciliation for ConstraintTemplates", "count", len(templateList.Items))
+// triggerDirtyTemplateReconciliation sends events only for dirty constraint templates.
+func (r *ReconcileWebhookConfig) triggerDirtyTemplateReconciliation(ctx context.Context) error {
+	dirtyTemplates := r.getDirtyTemplatesAndClear()
+	if len(dirtyTemplates) == 0 {
+		return nil
+	}
+
+	logger.Info("Triggering reconciliation for dirty ConstraintTemplates", "count", len(dirtyTemplates))
+
+	var errs []error
+	for _, template := range dirtyTemplates {
+		if err := r.sendEventWithRetry(ctx, template); err != nil {
+			errs = append(errs, err)
+			r.markDirtyTemplate(template)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (r *ReconcileWebhookConfig) sendEventWithRetry(ctx context.Context, template *v1beta1.ConstraintTemplate) error {
+	return retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		return err != nil
+	}, func() error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case r.ctEvents <- event.GenericEvent{Object: template}:
+			logger.V(1).Info("event sent successfully", "template", template.Name)
+			return nil
+		default:
+			logger.V(1).Info("channel full, will retry with backoff", "template", template.Name)
+			return &ChannelFullError{}
+		}
+	})
+}
+
+type ChannelFullError struct{}
+
+func (e *ChannelFullError) Error() string {
+	return "channel is full"
+}
+
+func (e *ChannelFullError) Temporary() bool {
+	return true
 }
 
 type Adder struct {
@@ -149,55 +219,69 @@ type ReconcileWebhookConfig struct {
 	scheme   *runtime.Scheme
 	cache    *webhookconfigcache.WebhookConfigCache
 	ctEvents chan<- event.GenericEvent
-}
 
-// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch
+	// dirtyMu protects access to dirtyTemplates
+	dirtyMu        sync.Mutex
+	dirtyTemplates map[string]*v1beta1.ConstraintTemplate
+} // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch
 
 // Reconcile processes ValidatingWebhookConfiguration changes.
 func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	logger := logger.WithValues("webhook_config", request.Name)
+	var configChanged bool
 
 	// Fetch the ValidatingWebhookConfiguration
 	webhookConfig := &admissionregistrationv1.ValidatingWebhookConfiguration{}
 	err := r.Get(ctx, request.NamespacedName, webhookConfig)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			// Webhook was deleted, remove from cache and trigger reconciliation
-			logger.Info("ValidatingWebhookConfiguration deleted, triggering ConstraintTemplate reconciliation")
+			// Webhook was deleted, remove from cache and trigger reconciliation for all templates
+			logger.Info("ValidatingWebhookConfiguration deleted, triggering reconciliation for all ConstraintTemplates")
 			r.cache.RemoveConfig(request.Name)
-			r.TriggerConstraintTemplateReconciliation(ctx, request.Name)
+			configChanged = true
+		} else {
+			return reconcile.Result{}, err
+		}
+	} else {
+		var gatekeeperWebhook *admissionregistrationv1.ValidatingWebhook
+		for i := range webhookConfig.Webhooks {
+			if webhookConfig.Webhooks[i].Name == webhook.ValidatingWebhookName {
+				gatekeeperWebhook = &webhookConfig.Webhooks[i]
+				break
+			}
+		}
+
+		if gatekeeperWebhook == nil {
+			logger.Info("webhook not found", "name", webhook.ValidatingWebhookName)
 			return reconcile.Result{}, nil
 		}
-		return reconcile.Result{}, err
-	}
 
-	var gatekeeperWebhook *admissionregistrationv1.ValidatingWebhook
-	for i := range webhookConfig.Webhooks {
-		if webhookConfig.Webhooks[i].Name == webhook.ValidatingWebhookName {
-			gatekeeperWebhook = &webhookConfig.Webhooks[i]
-			break
+		newConfig := webhookconfigcache.WebhookMatchingConfig{
+			NamespaceSelector: gatekeeperWebhook.NamespaceSelector,
+			ObjectSelector:    gatekeeperWebhook.ObjectSelector,
+			Rules:             gatekeeperWebhook.Rules,
+			MatchPolicy:       gatekeeperWebhook.MatchPolicy,
+			MatchConditions:   gatekeeperWebhook.MatchConditions,
+		}
+
+		if r.cache.UpsertConfig(request.Name, newConfig) {
+			logger.Info("ValidatingWebhookConfiguration matching fields changed", "storedKey", request.Name)
+			configChanged = true
 		}
 	}
 
-	if gatekeeperWebhook == nil {
-		logger.Info("webhook not found", "name", webhook.ValidatingWebhookName)
-		return reconcile.Result{}, nil
-	}
-
-	// Extract matching configuration
-	newConfig := webhookconfigcache.WebhookMatchingConfig{
-		NamespaceSelector: gatekeeperWebhook.NamespaceSelector,
-		ObjectSelector:    gatekeeperWebhook.ObjectSelector,
-		Rules:             gatekeeperWebhook.Rules,
-		MatchPolicy:       gatekeeperWebhook.MatchPolicy,
-		MatchConditions:   gatekeeperWebhook.MatchConditions,
-	}
-
-	// Check if matching fields have changed
-	if r.cache.UpsertConfig(request.Name, newConfig) {
-		logger.Info("ValidatingWebhookConfiguration matching fields changed, triggering ConstraintTemplate reconciliation", "storedKey", request.Name)
-		r.TriggerConstraintTemplateReconciliation(ctx, request.Name)
+	if configChanged {
+		// Config changed: reconcile all constraint templates
+		if err := r.triggerConstraintTemplateReconciliation(ctx); err != nil {
+			logger.Error(err, "failed to trigger ConstraintTemplate reconciliation")
+			return reconcile.Result{}, err
+		}
+	} else {
+		// No config change: reconcile only dirty templates
+		if err := r.triggerDirtyTemplateReconciliation(ctx); err != nil {
+			logger.Error(err, "failed to trigger dirty ConstraintTemplate reconciliation")
+			return reconcile.Result{}, err
+		}
 	}
 
 	return reconcile.Result{}, nil
