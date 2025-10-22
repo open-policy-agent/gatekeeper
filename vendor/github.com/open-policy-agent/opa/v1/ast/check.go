@@ -211,8 +211,10 @@ func (tc *typeChecker) getSchemaType(schemaAnnot *SchemaAnnotation, rule *Rule) 
 		tc.schemaTypes = make(map[string]types.Type)
 	}
 
-	if refType, exists := tc.schemaTypes[schemaAnnot.Schema.String()]; exists {
-		return refType, nil
+	if len(schemaAnnot.Schema) > 0 {
+		if refType, exists := tc.schemaTypes[schemaAnnot.Schema.String()]; exists {
+			return refType, nil
+		}
 	}
 
 	refType, err := processAnnotation(tc.ss, schemaAnnot, rule, tc.allowNet)
@@ -224,7 +226,11 @@ func (tc *typeChecker) getSchemaType(schemaAnnot *SchemaAnnotation, rule *Rule) 
 		return nil, nil
 	}
 
-	tc.schemaTypes[schemaAnnot.Schema.String()] = refType
+	// Only add to cache if schema is read from file
+	if len(schemaAnnot.Schema) > 0 {
+		tc.schemaTypes[schemaAnnot.Schema.String()] = refType
+	}
+
 	return refType, nil
 
 }
@@ -304,7 +310,7 @@ func (tc *typeChecker) checkRule(env *TypeEnv, as *AnnotationSet, rule *Rule) {
 				var err error
 				tpe, err = nestedObject(cpy, objPath, typeV)
 				if err != nil {
-					tc.err([]*Error{NewError(TypeErr, rule.Head.Location, err.Error())}) //nolint:govet
+					tc.err([]*Error{NewError(TypeErr, rule.Head.Location, "%s", err.Error())})
 					tpe = nil
 				}
 			} else if typeV != nil {
@@ -1312,7 +1318,7 @@ func processAnnotation(ss *SchemaSet, annot *SchemaAnnotation, rule *Rule, allow
 
 	tpe, err := loadSchema(schema, allowNet)
 	if err != nil {
-		return nil, NewError(TypeErr, rule.Location, err.Error()) //nolint:govet
+		return nil, NewError(TypeErr, rule.Location, "%s", err.Error())
 	}
 
 	return tpe, nil

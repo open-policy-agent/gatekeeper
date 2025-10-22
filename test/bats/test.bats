@@ -90,6 +90,15 @@ teardown_file() {
     assert_match 'denied' "${output}"
     assert_failure
     kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/good_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml
@@ -474,6 +483,30 @@ EOF
   kubectl apply -f test/externaldata/dummy-provider/manifest/service.yaml -n ${GATEKEEPER_NAMESPACE}
   assert_success
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n ${GATEKEEPER_NAMESPACE}"
+
+  # status test - wait for providerpodstatus to be created and verify content
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get providerpodstatus -n ${GATEKEEPER_NAMESPACE} --no-headers | wc -l | grep -E '^[1-9][0-9]*$'"
+  
+  # verify at least one providerpodstatus exists with the correct provider label
+  run kubectl get providerpodstatus -n ${GATEKEEPER_NAMESPACE} -l internal.gatekeeper.sh/provider-name=dummy-provider --no-headers
+  assert_success
+  [[ $(echo "${output}" | wc -l) -ge 1 ]]
+  
+  # verify the providerpodstatus has correct status fields
+  run kubectl get providerpodstatus -n ${GATEKEEPER_NAMESPACE} -l internal.gatekeeper.sh/provider-name=dummy-provider -o jsonpath='{.items[0].status.active}'
+  assert_success
+  assert_match "true" "${output}"
+  
+  # verify the provider itself shows status information
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get provider dummy-provider -o jsonpath='{.status.byPod}' | grep -v '\\[\\]'"
+
+  # metrics test
+  kubectl run temp --image=curlimages/curl -- tail -f /dev/null
+  kubectl wait --for=condition=Ready --timeout=60s pod temp
+
+  local pod_ip="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l gatekeeper.sh/operation=webhook -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec -it temp -- curl http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_provider'"
+  kubectl delete pod temp
 
   # validation test
   echo '# external data - validation test' >&3

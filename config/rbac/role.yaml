@@ -60,17 +60,6 @@ rules:
   - config.gatekeeper.sh
   resources:
   - '*'
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - config.gatekeeper.sh
-  resources:
   - configs
   verbs:
   - create
@@ -90,30 +79,10 @@ rules:
   - update
 - apiGroups:
   - connection.gatekeeper.sh
-  resources:
-  - '*'
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
   - constraints.gatekeeper.sh
-  resources:
-  - '*'
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
   - expansion.gatekeeper.sh
+  - mutations.gatekeeper.sh
+  - status.gatekeeper.sh
   resources:
   - '*'
   verbs:
@@ -137,32 +106,10 @@ rules:
   - update
   - watch
 - apiGroups:
-  - mutations.gatekeeper.sh
+  - externaldata.gatekeeper.sh
   resources:
-  - '*'
+  - providers/status
   verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - policy
-  resourceNames:
-  - gatekeeper-admin
-  resources:
-  - podsecuritypolicies
-  verbs:
-  - use
-- apiGroups:
-  - status.gatekeeper.sh
-  resources:
-  - '*'
-  verbs:
-  - create
-  - delete
   - get
   - list
   - patch
