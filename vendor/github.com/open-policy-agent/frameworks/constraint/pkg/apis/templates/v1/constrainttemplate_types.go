@@ -67,7 +67,6 @@ type Target struct {
 	// +kubebuilder:validation:Required
 	Code []Code `json:"code,omitempty"`
 
-	// +kubebuilder:validation:Enum="*";CREATE;DELETE;UPDATE;CONNECT
 	Operations []admissionv1.OperationType `json:"operations,omitempty"`
 }
 

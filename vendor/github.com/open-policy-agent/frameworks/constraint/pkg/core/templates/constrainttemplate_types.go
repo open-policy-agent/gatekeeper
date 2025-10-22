@@ -63,7 +63,6 @@ type Target struct {
 	// or "rego" can be specified.
 	Code []Code `json:"code,omitempty"`
 
-	// +kubebuilder:validation:Enum="*";CREATE;DELETE;UPDATE;CONNECT
 	Operations []admissionv1.OperationType `json:"operations,omitempty"`
 }
 
