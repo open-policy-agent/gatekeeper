@@ -1,6 +1,8 @@
 package transform
 
 import (
+	"fmt"
+
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
@@ -82,6 +84,49 @@ const (
 		)
 	)
 	`
+
+	// Expression to exclude objects in globally excluded namespaces and namespace objects themselves if they're in the exclusion list from Config resource.
+	matchGlobalExcludedNamespacesGlob = `
+	[object, oldObject].exists(obj,
+		obj != null && (
+			// For namespace objects, check if the namespace name itself is in the exclusion list
+			(has(obj.kind) && obj.kind == "Namespace" && has(obj.metadata.name)) ? (
+				![%s].exists(nsMatcher,
+					(string(obj.metadata.name).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+				)
+			) : (
+				// cluster-scoped objects (non-namespace) always match
+				!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
+					![%s].exists(nsMatcher,
+						(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+					)
+				)
+			)
+		)
+	)
+	`
+	// Expression to exempt objects in globally exempted namespaces and namespace objects themselves if they're in the exemption list from exempt namespace flags.
+	matchGlobalExemptedNamespacesGlob = `
+	[object, oldObject].exists(obj,
+		obj != null && (
+			// For namespace objects, check if the namespace name itself is in the exemption list
+			(has(obj.kind) && obj.kind == "Namespace" && has(obj.metadata.name)) ? (
+				![%s].exists(nsMatcher,
+					(string(obj.metadata.name).matches("^" + string(nsMatcher).replace("*", ".*") + "$")) &&
+					has(obj.metadata.labels) &&
+					("admission.gatekeeper.sh/ignore" in obj.metadata.labels)
+				)
+			) : (
+				// cluster-scoped objects (non-namespace) always match
+				!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
+					![%s].exists(nsMatcher,
+						(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+					)
+				)
+			)
+		)
+	)
+	`
 )
 
 const StrictCost = true
@@ -90,6 +135,20 @@ func MatchExcludedNamespacesGlobV1Beta1() admissionregistrationv1beta1.MatchCond
 	return admissionregistrationv1beta1.MatchCondition{
 		Name:       "gatekeeper_internal_match_excluded_namespaces",
 		Expression: matchExcludedNamespacesGlob,
+	}
+}
+
+func MatchGlobalExcludedNamespacesGlobV1Beta1(excludedNamespaces string) admissionregistrationv1beta1.MatchCondition {
+	return admissionregistrationv1beta1.MatchCondition{
+		Name:       "gatekeeper_internal_match_global_excluded_namespaces",
+		Expression: fmt.Sprintf(matchGlobalExcludedNamespacesGlob, excludedNamespaces, excludedNamespaces),
+	}
+}
+
+func MatchGlobalExemptedNamespacesGlobV1Beta1(exemptedNamespaces string) admissionregistrationv1beta1.MatchCondition {
+	return admissionregistrationv1beta1.MatchCondition{
+		Name:       "gatekeeper_internal_match_global_exempted_namespaces",
+		Expression: fmt.Sprintf(matchGlobalExemptedNamespacesGlob, exemptedNamespaces, exemptedNamespaces),
 	}
 }
 

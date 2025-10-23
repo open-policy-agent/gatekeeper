@@ -21,17 +21,22 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
@@ -39,6 +44,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/require"
@@ -66,6 +73,10 @@ const (
 	DenyAll = "DenyAll"
 	denyall = "denyall"
 )
+
+// webhookVAPTestMu serializes access to webhook.VwhName global variable
+// across Test_transformTemplateToVAP sub-tests to prevent race conditions.
+var webhookVAPTestMu sync.Mutex
 
 func makeReconcileConstraintTemplate(suffix string) *v1beta1.ConstraintTemplate {
 	return &v1beta1.ConstraintTemplate{
@@ -209,6 +220,15 @@ func expectedCRD(suffix string) *apiextensions.CustomResourceDefinition {
 	return crd
 }
 
+func getMatchEntryConfig() []configv1alpha1.MatchEntry {
+	return []configv1alpha1.MatchEntry{
+		{
+			ExcludedNamespaces: []wildcard.Wildcard{"foo"},
+			Processes:          []string{"*"},
+		},
+	}
+}
+
 func TestReconcile(t *testing.T) {
 	// Uncommenting the below enables logging of K8s internals like watch.
 	// fs := flag.NewFlagSet("", flag.PanicOnError)
@@ -255,14 +275,17 @@ func TestReconcile(t *testing.T) {
 		fakes.WithName("no-pod"),
 	)
 
-	// events will be used to receive events from dynamic watches registered
-	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, cfClient, wm, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	// constraintEvents for constraint controller, constraintTemplateEvents for webhook changes
+	constraintEvents := make(chan event.GenericEvent, 1024)
+	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
+	processExcluder := process.Get()
+	processExcluder.Add(getMatchEntryConfig())
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, constraintEvents, func(context.Context) (*corev1.Pod, error) { return pod, nil }, nil, processExcluder)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = add(mgr, rec)
+	err = add(mgr, rec, constraintTemplateEvents)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1772,14 +1795,17 @@ violation[{"msg": "denied!"}] {
 		fakes.WithName("no-pod"),
 	)
 
-	// events will be used to receive events from dynamic watches registered
-	events := make(chan event.GenericEvent, 1024)
-	rec, err := newReconciler(mgr, cfClient, wm, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	// constraintEvents for constraint controller, constraintTemplateEvents for webhook changes
+	constraintEvents := make(chan event.GenericEvent, 1024)
+	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
+	processExcluder := process.Get()
+	processExcluder.Add(getMatchEntryConfig())
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil }, nil, processExcluder)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = add(mgr, rec)
+	err = add(mgr, rec, constraintTemplateEvents)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1812,7 +1838,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// set event channel to receive request for constraint
-	events <- event.GenericEvent{
+	constraintEvents <- event.GenericEvent{
 		Object: cstr,
 	}
 
@@ -2017,4 +2043,341 @@ func applyCRD(ctx context.Context, client client.Client, gvk schema.GroupVersion
 // This interface is getting used by tests to check the private objects of objectTracker.
 type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
+}
+
+// Test_getWebhookConfigFromCache tests the getWebhookConfigFromCache function.
+func Test_getWebhookConfigFromCache(t *testing.T) {
+	logger := logr.Discard()
+
+	t.Run("returns nil when cache is nil", func(t *testing.T) {
+		r := &ReconcileConstraintTemplate{
+			webhookCache: nil,
+		}
+
+		config := r.getWebhookConfigFromCache(logger)
+		require.Nil(t, config)
+	})
+
+	t.Run("returns nil when config not found in cache", func(t *testing.T) {
+		// Create a webhook cache with an event channel
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		r := &ReconcileConstraintTemplate{
+			webhookCache: cache,
+		}
+
+		config := r.getWebhookConfigFromCache(logger)
+		// Since we haven't set any config in the cache, it should return nil
+		require.Nil(t, config)
+	})
+}
+
+// Test_transformTemplateToVAP tests the transformTemplateToVAP function.
+func Test_transformTemplateToVAP(t *testing.T) {
+	logger := logr.Discard()
+
+	// Create a minimal CEL-based ConstraintTemplate for testing
+	source := &celSchema.Source{
+		FailurePolicy: ptr.To[string]("Fail"),
+		Variables: []celSchema.Variable{
+			{
+				Name:       "test_var",
+				Expression: "true",
+			},
+		},
+		Validations: []celSchema.Validation{
+			{
+				Expression: "1 == 1",
+				Message:    "test message",
+			},
+		},
+	}
+
+	ct := &v1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+		Spec: v1beta1.ConstraintTemplateSpec{
+			CRD: v1beta1.CRD{
+				Spec: v1beta1.CRDSpec{
+					Names: v1beta1.Names{
+						Kind: "TestTemplate",
+					},
+				},
+			},
+			Targets: []v1beta1.Target{
+				{
+					Target: target.Name,
+					Code: []v1beta1.Code{
+						{
+							Engine: "K8sNativeValidation",
+							Source: &templates.Anything{
+								Value: source.MustToUnstructured(),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+
+	unversionedCT := &templates.ConstraintTemplate{}
+	err := scheme.Convert(ct, unversionedCT, nil)
+	require.NoError(t, err)
+
+	// Save and restore transform.SyncVAPScope
+	oldSyncVAPScope := *transform.SyncVAPScope
+	defer func() { *transform.SyncVAPScope = oldSyncVAPScope }()
+
+	t.Run("SyncVAPScope disabled uses default config", func(t *testing.T) {
+		*transform.SyncVAPScope = false
+		r := &ReconcileConstraintTemplate{}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+		// The VAP name is derived from the template name, not the vapName parameter
+		require.Equal(t, "gatekeeper-test-template", vap.Name)
+	})
+
+	t.Run("SyncVAPScope enabled with nil caches", func(t *testing.T) {
+		*transform.SyncVAPScope = true
+		r := &ReconcileConstraintTemplate{
+			processExcluder: nil,
+			webhookCache:    nil,
+		}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-synced", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+		// The VAP name is derived from the template name
+		require.Equal(t, "gatekeeper-test-template", vap.Name)
+	})
+
+	t.Run("SyncVAPScope enabled with webhook config - adds match constraints and conditions", func(t *testing.T) {
+		// Serialize access to webhook.VwhName global variable
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		// Create webhook config cache with specific match constraints and conditions
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := "gatekeeper-validating-webhook-configuration"
+
+		// Set the global webhook name that getWebhookConfigFromCache will use
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+
+		// Create webhook matching config with comprehensive match constraints
+		exactMatch := admissionregistrationv1.Exact
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			NamespaceSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"environment": "production",
+				},
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "tier",
+						Operator: metav1.LabelSelectorOpIn,
+						Values:   []string{"frontend", "backend"},
+					},
+				},
+			},
+			ObjectSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "critical",
+				},
+			},
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+						admissionregistrationv1.Update,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments", "statefulsets"},
+					},
+				},
+			},
+			MatchPolicy: &exactMatch,
+			MatchConditions: []admissionregistrationv1.MatchCondition{
+				{
+					Name:       "exclude-namespace",
+					Expression: `object.metadata.namespace != "kube-system"`,
+				},
+				{
+					Name:       "require-label",
+					Expression: `has(object.metadata.labels) && has(object.metadata.labels.team)`,
+				},
+			},
+		}
+
+		// Store webhook config in cache
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{
+			processExcluder: nil,
+			webhookCache:    cache,
+		}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-with-webhook-config", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		// Verify VAP has match constraints from webhook config
+		require.NotNil(t, vap.Spec.MatchConstraints, "MatchConstraints should not be nil")
+		require.NotNil(t, vap.Spec.MatchConstraints.NamespaceSelector, "NamespaceSelector should be synchronized from webhook")
+		require.NotNil(t, vap.Spec.MatchConstraints.ObjectSelector, "ObjectSelector should be synchronized from webhook")
+
+		// Verify namespace selector was copied correctly
+		require.Equal(t, "production", vap.Spec.MatchConstraints.NamespaceSelector.MatchLabels["environment"])
+		require.Len(t, vap.Spec.MatchConstraints.NamespaceSelector.MatchExpressions, 1)
+		require.Equal(t, "tier", vap.Spec.MatchConstraints.NamespaceSelector.MatchExpressions[0].Key)
+
+		// Verify object selector was copied correctly
+		require.Equal(t, "critical", vap.Spec.MatchConstraints.ObjectSelector.MatchLabels["app"])
+
+		// Verify resource rules were converted correctly
+		require.NotNil(t, vap.Spec.MatchConstraints.ResourceRules)
+		require.Len(t, vap.Spec.MatchConstraints.ResourceRules, 1)
+		require.Contains(t, vap.Spec.MatchConstraints.ResourceRules[0].Operations, admissionregistrationv1beta1.Create)
+		require.Contains(t, vap.Spec.MatchConstraints.ResourceRules[0].Operations, admissionregistrationv1beta1.Update)
+		require.Equal(t, []string{"apps"}, vap.Spec.MatchConstraints.ResourceRules[0].APIGroups)
+		require.Equal(t, []string{"v1"}, vap.Spec.MatchConstraints.ResourceRules[0].APIVersions)
+		require.Equal(t, []string{"deployments", "statefulsets"}, vap.Spec.MatchConstraints.ResourceRules[0].Resources)
+
+		// Verify match policy was copied
+		require.NotNil(t, vap.Spec.MatchConstraints.MatchPolicy)
+		exactMatchBeta := admissionregistrationv1beta1.Exact
+		require.Equal(t, &exactMatchBeta, vap.Spec.MatchConstraints.MatchPolicy)
+
+		// Verify webhook match conditions were appended to VAP match conditions
+		require.NotNil(t, vap.Spec.MatchConditions)
+		// Should have webhook conditions appended after any default/template conditions
+		webhookConditionsFound := 0
+		for _, cond := range vap.Spec.MatchConditions {
+			if cond.Name == "exclude-namespace" {
+				require.Equal(t, `object.metadata.namespace != "kube-system"`, cond.Expression)
+				webhookConditionsFound++
+			}
+			if cond.Name == "require-label" {
+				require.Equal(t, `has(object.metadata.labels) && has(object.metadata.labels.team)`, cond.Expression)
+				webhookConditionsFound++
+			}
+		}
+		require.Equal(t, 2, webhookConditionsFound, "Both webhook match conditions should be appended to VAP")
+	})
+
+	t.Run("SyncVAPScope enabled with excluded namespaces - adds to match conditions", func(t *testing.T) {
+		*transform.SyncVAPScope = true
+
+		// Create process excluder with excluded namespaces
+		processExcluder := process.Get()
+		processExcluder.Add([]configv1alpha1.MatchEntry{
+			{
+				ExcludedNamespaces: []wildcard.Wildcard{"kube-system", "gatekeeper-system"},
+				Processes:          []string{"webhook"},
+			},
+		})
+
+		cache := webhookconfigcache.NewWebhookConfigCache()
+
+		r := &ReconcileConstraintTemplate{
+			processExcluder: processExcluder,
+			webhookCache:    cache,
+		}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-with-excluded-ns", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		// Verify excluded namespaces were added to match conditions
+		require.NotNil(t, vap.Spec.MatchConditions)
+		hasExcludedNsCondition := false
+		for _, cond := range vap.Spec.MatchConditions {
+			if cond.Name == "gatekeeper_internal_match_global_excluded_namespaces" {
+				hasExcludedNsCondition = true
+				// Should contain CEL expression excluding the namespaces
+				require.Contains(t, cond.Expression, "kube-system")
+				require.Contains(t, cond.Expression, "gatekeeper-system")
+				break
+			}
+		}
+		require.True(t, hasExcludedNsCondition, "VAP should have match condition for excluded namespaces")
+	})
+
+	t.Run("SyncVAPScope enabled with webhook config and excluded namespaces - combines both", func(t *testing.T) {
+		// Serialize access to webhook.VwhName global variable
+		webhookVAPTestMu.Lock()
+		defer webhookVAPTestMu.Unlock()
+
+		*transform.SyncVAPScope = true
+
+		// Create process excluder with excluded namespaces
+		processExcluder := process.Get()
+		processExcluder.Add([]configv1alpha1.MatchEntry{
+			{
+				ExcludedNamespaces: []wildcard.Wildcard{"test-exclude"},
+				Processes:          []string{"webhook"},
+			},
+		})
+
+		// Create webhook config cache with match conditions
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		webhookName := "gatekeeper-validating-webhook-configuration"
+
+		// Set the global webhook name that getWebhookConfigFromCache will use
+		originalVwhName := webhook.VwhName
+		defer func() { webhook.VwhName = originalVwhName }()
+		webhook.VwhName = &webhookName
+		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+			NamespaceSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"monitored": "true",
+				},
+			},
+			MatchConditions: []admissionregistrationv1.MatchCondition{
+				{
+					Name:       "custom-condition",
+					Expression: `object.metadata.name.startsWith("prod-")`,
+				},
+			},
+		}
+		cache.UpsertConfig(webhookName, webhookConfig)
+
+		r := &ReconcileConstraintTemplate{
+			processExcluder: processExcluder,
+			webhookCache:    cache,
+		}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-combined", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+
+		// Verify both webhook match conditions and excluded namespace conditions are present
+		require.NotNil(t, vap.Spec.MatchConditions)
+		hasWebhookCondition := false
+		hasExcludedNsCondition := false
+		for _, cond := range vap.Spec.MatchConditions {
+			if cond.Name == "custom-condition" {
+				hasWebhookCondition = true
+				require.Equal(t, `object.metadata.name.startsWith("prod-")`, cond.Expression)
+			}
+			if cond.Name == "gatekeeper_internal_match_global_excluded_namespaces" {
+				hasExcludedNsCondition = true
+				require.Contains(t, cond.Expression, "test-exclude")
+			}
+		}
+		require.True(t, hasWebhookCondition, "VAP should have webhook match condition")
+		require.True(t, hasExcludedNsCondition, "VAP should have excluded namespace condition")
+
+		// Verify namespace selector from webhook config is present
+		require.NotNil(t, vap.Spec.MatchConstraints)
+		require.NotNil(t, vap.Spec.MatchConstraints.NamespaceSelector)
+		require.Equal(t, "true", vap.Spec.MatchConstraints.NamespaceSelector.MatchLabels["monitored"])
+	})
 }
