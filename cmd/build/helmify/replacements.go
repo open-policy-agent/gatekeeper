@@ -153,6 +153,8 @@ var replacements = map[string]string{
         - --audit-channel={{ .Values.audit.channel }}
         {{- end }}`,
 
+	"- HELMSUBST_DEPLOYMENT_SYNC_VAP_ENFORCEMENT_SCOPE": `{{ if hasKey .Values "syncVAPEnforcementScope" }}- --sync-vap-enforcement-scope={{ .Values.syncVAPEnforcementScope }}{{- end }}`,
+
 	"HELMSUBST_MUTATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.mutatingWebhookFailurePolicy }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_REINVOCATION_POLICY": `{{ .Values.mutatingWebhookReinvocationPolicy }}`,

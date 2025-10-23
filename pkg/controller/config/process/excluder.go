@@ -85,6 +85,13 @@ func (s *Excluder) Equals(new *Excluder) bool { // nolint:revive
 	return reflect.DeepEqual(s.excludedNamespaces, new.excludedNamespaces)
 }
 
+// EqualsForProcess checks if the excluded namespaces for a specific process are equal.
+func (s *Excluder) EqualsForProcess(process Process, new *Excluder) bool { // nolint:revive
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+	return reflect.DeepEqual(s.excludedNamespaces[process], new.excludedNamespaces[process])
+}
+
 func (s *Excluder) IsNamespaceExcluded(process Process, obj client.Object) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
@@ -94,6 +101,19 @@ func (s *Excluder) IsNamespaceExcluded(process Process, obj client.Object) (bool
 	}
 
 	return exactOrWildcardMatch(s.excludedNamespaces[process], obj.GetNamespace()), nil
+}
+
+// GetExcludedNamespaces returns a list of excluded namespace patterns for the given process.
+func (s *Excluder) GetExcludedNamespaces(process Process) []string {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+
+	var excludedNamespaces []string
+	for ns := range s.excludedNamespaces[process] {
+		excludedNamespaces = append(excludedNamespaces, string(ns))
+	}
+
+	return excludedNamespaces
 }
 
 func exactOrWildcardMatch(boolMap map[wildcard.Wildcard]bool, ns string) bool {
