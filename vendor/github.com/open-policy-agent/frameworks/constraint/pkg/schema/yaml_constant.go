@@ -100,6 +100,12 @@ spec:
                     operations:
                       items:
                         description: OperationType specifies an operation for a request.
+                        enum:
+                        - '*'
+                        - CREATE
+                        - DELETE
+                        - UPDATE
+                        - CONNECT
                         type: string
                       type: array
                     rego:
@@ -231,6 +237,12 @@ spec:
                         type: string
                       type: array
                     operations:
+                      enum:
+                      - '*'
+                      - CREATE
+                      - DELETE
+                      - UPDATE
+                      - CONNECT
                       items:
                         description: OperationType specifies an operation for a request.
                         type: string
@@ -364,6 +376,12 @@ spec:
                     operations:
                       items:
                         description: OperationType specifies an operation for a request.
+                        enum:
+                        - '*'
+                        - CREATE
+                        - DELETE
+                        - UPDATE
+                        - CONNECT
                         type: string
                       type: array
                     rego:

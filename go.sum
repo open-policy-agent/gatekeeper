@@ -19,8 +19,8 @@ cloud.google.com/go/trace v1.10.11/go.mod h1:fUr5L3wSXerNfT0f1bBg08W4axS2VbHGgYc
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 h1:bvDV9vkmnHYOMsOr4WLk+Vo07yKIzd94sVoIqshQ4bU=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24/go.mod h1:8o94RPi1/7XTJvwPpRSzSUedZrtlirdB3r9Z20bi2f8=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/DahuK/frameworks/constraint v0.0.0-20251023184543-c53a43823b9b h1:zNTOzDMXfFo9PfPzo8hRurMhOA3q6TeVr0W0XDvGNc4=
-github.com/DahuK/frameworks/constraint v0.0.0-20251023184543-c53a43823b9b/go.mod h1:5Ykfi0b/XkXhFbiHfhOSFnnBqnHm7Cihk6VR+srTH8U=
+github.com/DahuK/frameworks/constraint v0.0.0-20251023205622-6b768cd131cf h1:xQHFC+ELVpUzkBK3jvRtM/8tuLY3BkvAUTyykX2wyNw=
+github.com/DahuK/frameworks/constraint v0.0.0-20251023205622-6b768cd131cf/go.mod h1:5Ykfi0b/XkXhFbiHfhOSFnnBqnHm7Cihk6VR+srTH8U=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.27.0 h1:ErKg/3iS1AKcTkf3yixlZ54f9U1rljCkQyEXWUnIUxc=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.27.0/go.mod h1:yAZHSGnqScoU556rBOVkwLze6WP5N+U11RHuWaGVxwY=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.44.0 h1:TKInLYWIqv/RrPM9IbpbcAxmtAU0+EtrxbZGZn2pzfQ=

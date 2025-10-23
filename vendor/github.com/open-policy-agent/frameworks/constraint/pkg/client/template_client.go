@@ -200,6 +200,7 @@ func (e *templateClient) MatchesOperation(operation string) bool {
 
 	target := e.template.Spec.Targets[0]
 
+	// If no operations are specified, match all operations by default to maintain backward compatibility.
 	if len(target.Operations) == 0 {
 		return true
 	}

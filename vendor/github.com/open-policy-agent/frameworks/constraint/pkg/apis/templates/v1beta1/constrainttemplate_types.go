@@ -66,6 +66,7 @@ type Target struct {
 	// +listMapKey=engine
 	Code []Code `json:"code,omitempty"`
 
+	// +kubebuilder:validation:items:Enum=*;CREATE;DELETE;UPDATE;CONNECT
 	Operations []admissionv1.OperationType `json:"operations,omitempty"`
 }
 

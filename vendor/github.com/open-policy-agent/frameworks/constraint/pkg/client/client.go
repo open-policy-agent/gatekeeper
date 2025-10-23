@@ -65,14 +65,10 @@ type Client struct {
 	enforcementPoints []string
 }
 
+// ARGetter is an interface for getting an AdmissionRequest.
 type ARGetter interface {
 	GetAdmissionRequest() *admissionv1.AdmissionRequest
 }
-
-type IsAdmissionGetter interface {
-	IsAdmissionRequest() bool
-}
-
 
 // driverForTemplate returns the driver to be used for a template according
 // to the driver priority in the client. An empty string means the constraint

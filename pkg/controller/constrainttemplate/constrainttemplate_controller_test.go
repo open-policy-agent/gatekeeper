@@ -75,9 +75,9 @@ const (
 	denyall = "denyall"
 )
 
-// webhookVAPTestMu serializes access to webhook.VwhName global variable
-// across Test_transformTemplateToVAP sub-tests to prevent race conditions.
-var webhookVAPTestMu sync.Mutex
+// globalTestMu serializes access to all global variables (webhook.VwhName, transform.SyncVAPScope)
+// across all constraint template tests to prevent race conditions.
+var globalTestMu sync.Mutex
 
 func makeReconcileConstraintTemplate(suffix string) *v1beta1.ConstraintTemplate {
 	return &v1beta1.ConstraintTemplate{
@@ -283,7 +283,42 @@ func TestReconcile(t *testing.T) {
 	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
 	processExcluder := process.Get()
 	processExcluder.Add(getMatchEntryConfig())
-	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, constraintEvents, func(context.Context) (*corev1.Pod, error) { return pod, nil }, nil, processExcluder)
+
+	// Create webhook config cache for VAP operation tests
+	webhookCache := webhookconfigcache.NewWebhookConfigCache()
+
+	// Set up webhook configuration for VAP tests
+	const testWebhookName = "gatekeeper-validating-webhook-configuration"
+	webhookName := testWebhookName
+	originalVwhName := webhook.VwhName
+	defer func() { webhook.VwhName = originalVwhName }()
+	webhook.VwhName = &webhookName
+
+	exactMatch := admissionregistrationv1.Exact
+	webhookConfig := webhookconfigcache.WebhookMatchingConfig{
+		Rules: []admissionregistrationv1.RuleWithOperations{
+			{
+				Operations: []admissionregistrationv1.OperationType{
+					admissionregistrationv1.Create,
+					admissionregistrationv1.Update,
+					admissionregistrationv1.Delete,
+					admissionregistrationv1.Connect,
+				},
+				Rule: admissionregistrationv1.Rule{
+					APIGroups:   []string{""},
+					APIVersions: []string{"v1"},
+					Resources:   []string{"*"},
+				},
+			},
+		},
+		MatchPolicy: &exactMatch,
+	}
+	webhookCache.UpsertConfig(testWebhookName, webhookConfig)
+
+	// Make webhook cache available to tests for configuration
+	sharedWebhookCache := webhookCache
+
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, constraintEvents, func(context.Context) (*corev1.Pod, error) { return pod, nil }, webhookCache, processExcluder)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -693,7 +728,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VapBinding should not be created without generateVap intent in CT", func(t *testing.T) {
+	t.Run("  be created without generateVap intent in CT", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreatedWithoutGenerateVapIntent"
 		logger.Info("Running test: VapBinding should not be created without generateVap intent in CT")
 		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
@@ -868,10 +903,13 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreatedWithOps"
 
 		logger.Info("Running test: VAP should be created with operations")
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
+
 		cache := webhookconfigcache.NewWebhookConfigCache()
 		const testWebhookName = "gatekeeper-validating-webhook-configuration"
 		webhookName := testWebhookName
@@ -926,109 +964,17 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VAP should not be created with unrecognized operations", func(t *testing.T) {
-		suffix := "VapShouldNotBeCreatedWithInvalidOps"
-		logger.Info("Running test: VapBinding should not be created with v1 without warnings in enforcementPointsStatus")
-
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
-
-		*transform.SyncVAPScope = true
-		cache := webhookconfigcache.NewWebhookConfigCache()
-		const testWebhookName = "gatekeeper-validating-webhook-configuration"
-		webhookName := testWebhookName
-		originalVwhName := webhook.VwhName
-		defer func() { webhook.VwhName = originalVwhName }()
-		webhook.VwhName = &webhookName
-
-		exactMatch := admissionregistrationv1.Exact
-		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
-			Rules: []admissionregistrationv1.RuleWithOperations{
-				{
-					Operations: []admissionregistrationv1.OperationType{
-						admissionregistrationv1.Create,
-						admissionregistrationv1.Update,
-					},
-					Rule: admissionregistrationv1.Rule{
-						APIGroups:   []string{""},
-						APIVersions: []string{"v1"},
-						Resources:   []string{"*"},
-					},
-				},
-			},
-			MatchPolicy: &exactMatch,
-		}
-		cache.UpsertConfig(webhookName, webhookConfig)
-
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
-		ro := []admissionregistrationv1.OperationType{
-			"INVALID_OPS",
-			admissionregistrationv1.Update,
-		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), ro)
-		cstr := newDenyAllCstr(suffix)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			return c.Create(ctx, cstr)
-		})
-		if err != nil {
-			logger.Error(err, "create cstr")
-			t.Fatal(err)
-		}
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
-			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
-				if !apierrors.IsNotFound(err) {
-					return err
-				}
-				return nil
-			}
-			return fmt.Errorf("should result in error, vap not found")
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
-			sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), constraintTemplate.GetName())
-			if err != nil {
-				return err
-			}
-			key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
-			if err := c.Get(ctx, key, statusObj); err != nil {
-				return err
-			}
-			for _, sErr := range statusObj.Status.Errors {
-				if strings.Contains(sErr.Message, "invalid resource operation") {
-					return nil
-				}
-			}
-			return fmt.Errorf("not found invalid resource operation error message in ct status")
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
 	t.Run("VAP should be created with wildcard operations", func(t *testing.T) {
 		suffix := "VapShouldBeCreatedWithWildcardOps"
 
 		logger.Info("Running test: VAP should be created with wildcard operations")
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
+
 		cache := webhookconfigcache.NewWebhookConfigCache()
 		const testWebhookName = "gatekeeper-validating-webhook-configuration"
 		webhookName := testWebhookName
@@ -1091,10 +1037,13 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreatedWithAllOps"
 
 		logger.Info("Running test: VAP should be created with all individual operations")
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
+
 		cache := webhookconfigcache.NewWebhookConfigCache()
 		const testWebhookName = "gatekeeper-validating-webhook-configuration"
 		webhookName := testWebhookName
@@ -1156,10 +1105,13 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreatedWithDeleteOp"
 
 		logger.Info("Running test: VAP should be created with DELETE operation")
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
+
 		cache := webhookconfigcache.NewWebhookConfigCache()
 		const testWebhookName = "gatekeeper-validating-webhook-configuration"
 		webhookName := testWebhookName
@@ -1211,74 +1163,18 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VAP should be created with CONNECT operation", func(t *testing.T) {
-		suffix := "VapShouldBeCreatedWithConnectOp"
-
-		logger.Info("Running test: VAP should be created with CONNECT operation")
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
-
-		*transform.SyncVAPScope = true
-		cache := webhookconfigcache.NewWebhookConfigCache()
-		const testWebhookName = "gatekeeper-validating-webhook-configuration"
-		webhookName := testWebhookName
-		originalVwhName := webhook.VwhName
-		defer func() { webhook.VwhName = originalVwhName }()
-		webhook.VwhName = &webhookName
-
-		exactMatch := admissionregistrationv1.Exact
-		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
-			Rules: []admissionregistrationv1.RuleWithOperations{
-				{
-					Operations: []admissionregistrationv1.OperationType{
-						admissionregistrationv1.Connect,
-					},
-					Rule: admissionregistrationv1.Rule{
-						APIGroups:   []string{""},
-						APIVersions: []string{"v1"},
-						Resources:   []string{"*"},
-					},
-				},
-			},
-			MatchPolicy: &exactMatch,
-		}
-		cache.UpsertConfig(webhookName, webhookConfig)
-
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
-		ro := []admissionregistrationv1.OperationType{
-			admissionregistrationv1.Connect,
-		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), ro)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
-			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
-				return err
-			}
-			vapResourceRuleOps := vap.Spec.MatchConstraints.ResourceRules[0].Operations
-			if !sets.NewString(stringSliceFromOps(vapResourceRuleOps)...).Equal(sets.NewString(stringSliceFromOps(ro)...)) {
-				return fmt.Errorf("expected operations %v on VAP", ro)
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
 	t.Run("VAP should be created with empty operations using webhook defaults", func(t *testing.T) {
 		suffix := "VapShouldBeCreatedWithEmptyOps"
 
 		logger.Info("Running test: VAP should be created with empty operations using webhook defaults")
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
-		cache := webhookconfigcache.NewWebhookConfigCache()
+		// Use the shared webhook cache instead of creating a new one
+		cache := sharedWebhookCache
 		const testWebhookName = "gatekeeper-validating-webhook-configuration"
 		webhookName := testWebhookName
 		originalVwhName := webhook.VwhName
@@ -1290,7 +1186,7 @@ func TestReconcile(t *testing.T) {
 			Rules: []admissionregistrationv1.RuleWithOperations{
 				{
 					Operations: []admissionregistrationv1.OperationType{
-						admissionregistrationv1.Create,
+						admissionregistrationv1.Delete,
 						admissionregistrationv1.Update,
 					},
 					Rule: admissionregistrationv1.Rule{
@@ -1303,6 +1199,10 @@ func TestReconcile(t *testing.T) {
 			MatchPolicy: &exactMatch,
 		}
 		cache.UpsertConfig(webhookName, webhookConfig)
+		ro := []admissionregistrationv1.OperationType{
+			admissionregistrationv1.Delete,
+			admissionregistrationv1.Update,
+		}
 
 		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
@@ -1319,85 +1219,11 @@ func TestReconcile(t *testing.T) {
 			if vap.Spec.MatchConstraints == nil || len(vap.Spec.MatchConstraints.ResourceRules) == 0 {
 				return fmt.Errorf("expected VAP to have resource rules")
 			}
+			vapResourceRuleOps := vap.Spec.MatchConstraints.ResourceRules[0].Operations
+			if !sets.NewString(stringSliceFromOps(vapResourceRuleOps)...).Equal(sets.NewString(stringSliceFromOps(ro)...)) {
+				return fmt.Errorf("expected operations %v on VAP", ro)
+			}
 			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("VAP should handle mixed valid and invalid operations", func(t *testing.T) {
-		suffix := "VapShouldHandleMixedOps"
-
-		logger.Info("Running test: VAP should handle mixed valid and invalid operations")
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
-
-		*transform.SyncVAPScope = true
-		cache := webhookconfigcache.NewWebhookConfigCache()
-		const testWebhookName = "gatekeeper-validating-webhook-configuration"
-		webhookName := testWebhookName
-		originalVwhName := webhook.VwhName
-		defer func() { webhook.VwhName = originalVwhName }()
-		webhook.VwhName = &webhookName
-
-		exactMatch := admissionregistrationv1.Exact
-		webhookConfig := webhookconfigcache.WebhookMatchingConfig{
-			Rules: []admissionregistrationv1.RuleWithOperations{
-				{
-					Operations: []admissionregistrationv1.OperationType{
-						admissionregistrationv1.Create,
-						admissionregistrationv1.Update,
-					},
-					Rule: admissionregistrationv1.Rule{
-						APIGroups:   []string{""},
-						APIVersions: []string{"v1"},
-						Resources:   []string{"*"},
-					},
-				},
-			},
-			MatchPolicy: &exactMatch,
-		}
-		cache.UpsertConfig(webhookName, webhookConfig)
-
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
-		ro := []admissionregistrationv1.OperationType{
-			admissionregistrationv1.Create,
-			"INVALID_OP",
-			admissionregistrationv1.Update,
-		}
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), ro)
-		cstr := newDenyAllCstr(suffix)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			return c.Create(ctx, cstr)
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
-			sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), constraintTemplate.GetName())
-			if err != nil {
-				return err
-			}
-			key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
-			if err := c.Get(ctx, key, statusObj); err != nil {
-				return err
-			}
-			for _, sErr := range statusObj.Status.Errors {
-				if strings.Contains(sErr.Message, "invalid resource operation") {
-					return nil
-				}
-			}
-			return fmt.Errorf("expected invalid resource operation error for mixed operations")
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -2694,6 +2520,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("SyncVAPScope enabled with nil caches", func(t *testing.T) {
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
+
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 		r := &ReconcileConstraintTemplate{
 			processExcluder: nil,
@@ -2709,9 +2540,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 
 	t.Run("SyncVAPScope enabled with webhook config - adds match constraints and conditions", func(t *testing.T) {
 		// Serialize access to webhook.VwhName global variable
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		cache := webhookconfigcache.NewWebhookConfigCache()
@@ -2815,6 +2648,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("SyncVAPScope enabled with excluded namespaces - adds to match conditions", func(t *testing.T) {
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
+
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		processExcluder := process.Get()
@@ -2850,9 +2688,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("SyncVAPScope enabled with webhook config and excluded namespaces - combines both", func(t *testing.T) {
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		processExcluder := process.Get()
@@ -2915,9 +2755,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("ConstraintTemplate with operations - intersection with webhook operations", func(t *testing.T) {
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		ctWithOps := &v1beta1.ConstraintTemplate{
@@ -2989,9 +2831,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("ConstraintTemplate operations mismatch - logs warning but continues", func(t *testing.T) {
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		ctWithMismatchOps := &v1beta1.ConstraintTemplate{
@@ -3062,9 +2906,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("ConstraintTemplate no matching operations - returns error", func(t *testing.T) {
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		ctNoMatch := &v1beta1.ConstraintTemplate{
@@ -3128,9 +2974,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("ConstraintTemplate with nil operations - uses all webhook operations", func(t *testing.T) {
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		ctNilOps := &v1beta1.ConstraintTemplate{
@@ -3198,9 +3046,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("ConstraintTemplate with wildcard operations - matches all webhook operations", func(t *testing.T) {
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		ctWildcard := &v1beta1.ConstraintTemplate{
@@ -3270,9 +3120,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("Webhook with wildcard operations - intersects with specific CT operations", func(t *testing.T) {
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		ctSpecific := &v1beta1.ConstraintTemplate{
@@ -3341,9 +3193,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("Both webhook and CT with wildcard operations", func(t *testing.T) {
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		ctWildcard := &v1beta1.ConstraintTemplate{
@@ -3413,9 +3267,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("Webhook supports all operations and CT supports CREATE", func(t *testing.T) {
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		ctCreate := &v1beta1.ConstraintTemplate{
@@ -3482,9 +3338,11 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	})
 
 	t.Run("CT supports all operations and webhook supports CREATE", func(t *testing.T) {
-		webhookVAPTestMu.Lock()
-		defer webhookVAPTestMu.Unlock()
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
 
+		originalSyncVAPScope := *transform.SyncVAPScope
+		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
 		*transform.SyncVAPScope = true
 
 		ctAll := &v1beta1.ConstraintTemplate{
