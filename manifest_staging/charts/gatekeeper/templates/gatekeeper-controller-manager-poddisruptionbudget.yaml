@@ -13,7 +13,11 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: '{{ .Release.Namespace }}'
 spec:
+  {{- if hasKey .Values.pdb.controllerManager "maxUnavailable" }}
+  maxUnavailable: {{ .Values.pdb.controllerManager.maxUnavailable }}
+  {{- else }}
   minAvailable: {{ .Values.pdb.controllerManager.minAvailable }}
+  {{- end }}
   selector:
     matchLabels:
       app: '{{ template "gatekeeper.name" . }}'
