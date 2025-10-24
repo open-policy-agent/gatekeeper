@@ -750,24 +750,24 @@ __expansion_audit_test() {
 
 @test "constraint template operations test" {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_with_update_operations.yaml"
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabels -ojson | jq -r -e '.status.byPod[0]'"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -ojson | jq -r -e '.status.byPod[0]'"
 
   kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -oyaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided.yaml"
 
-  kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
   assert_success
 
-  kubectl label namespace good test=label --overwrite
+  run kubectl label namespace gatekeeper-test-ns2 test=label --overwrite
   assert_match 'denied' "${output}"
   assert_failure
 
-  kubectl delete -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+  run kubectl delete -f ${BATS_TESTS_DIR}/good/good_ns.yaml
 
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_with_all_operations.yaml"
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabels -ojson | jq -r -e '.status.byPod[0]'"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -ojson | jq -r -e '.status.byPod[0]'"
 
-  kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
   assert_match 'denied' "${output}"
   assert_failure
 
