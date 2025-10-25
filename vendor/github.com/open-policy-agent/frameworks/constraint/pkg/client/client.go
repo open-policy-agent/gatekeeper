@@ -12,7 +12,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/crds"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -21,6 +20,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	admissionv1 "k8s.io/api/admission/v1"
 )
 
 const statusField = "status"
@@ -63,6 +63,11 @@ type Client struct {
 
 	// enforcementPoints is array of enforcement points for which this client may be used.
 	enforcementPoints []string
+}
+
+// ARGetter is an interface for getting an AdmissionRequest.
+type ARGetter interface {
+	GetAdmissionRequest() *admissionv1.AdmissionRequest
 }
 
 // driverForTemplate returns the driver to be used for a template according
@@ -681,6 +686,24 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...reviews.Re
 	defer c.mtx.RUnlock()
 
 	for _, template := range c.templates {
+		if cfg.EnforcementPoint == apiconstraints.WebhookEnforcementPoint {
+			// for backward compatibility, matching all templates by default
+			operationMatched := true
+			for _, review := range reviews {
+				arGetter, ok := review.(ARGetter)
+				if !ok {
+					continue
+				}
+				req := arGetter.GetAdmissionRequest()
+				if !template.MatchesOperation(string(req.Operation)) {
+					operationMatched = false
+					break
+				}
+			}
+			if !operationMatched {
+				continue
+			}
+		}
 		templateList = append(templateList, template)
 	}
 
@@ -756,7 +779,7 @@ func (c *Client) review(ctx context.Context, target string, constraints []*unstr
 	var results []*types.Result
 	var stats []*instrumentation.StatsEntry
 	var tracesBuilder strings.Builder
-	errs := &errors.ErrorMap{}
+	errs := &clienterrors.ErrorMap{}
 
 	driverToConstraints := map[string][]*unstructured.Unstructured{}
 

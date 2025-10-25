@@ -411,6 +411,16 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 		return false, err
 	}
 
+	for _, target := range unversioned.Spec.Targets {
+		if target.Operations != nil {
+			for _, op := range target.Operations {
+				if string(op) == "*" && len(target.Operations) > 1 {
+					return false, fmt.Errorf("if '*' is present, must not specify other operations")
+				}
+			}
+		}
+	}
+
 	// Ensure that it is possible to generate a CRD for this ConstraintTemplate.
 	_, err = h.opa.CreateCRD(ctx, unversioned)
 	if err != nil {

@@ -18,6 +18,8 @@ package v1beta1
 import (
 	"unsafe"
 
+	admissionv1 "k8s.io/api/admissionregistration/v1"
+
 	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	coreTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/schema"
@@ -77,6 +79,12 @@ func Convert_v1beta1_Target_To_templates_Target(in *Target, out *coreTemplates.T
 		}
 	}
 
+	// Convert Operation slice from v1beta1 to core templates
+	if in.Operations != nil {
+		out.Operations = make([]admissionv1.OperationType, len(in.Operations))
+		copy(out.Operations, in.Operations)
+	}
+
 	if in.Rego == "" {
 		return nil
 	}
@@ -98,6 +106,21 @@ func Convert_v1beta1_Target_To_templates_Target(in *Target, out *coreTemplates.T
 			Engine: regoSchema.Name,
 			Source: &coreTemplates.Anything{Value: regoSource.ToUnstructured()},
 		})
+	}
+
+	return nil
+}
+
+func Convert_templates_Target_To_v1beta1_Target(in *coreTemplates.Target, out *Target, s conversion.Scope) error { // nolint:revive // Required exact function name.
+	// Call the auto-generated conversion function first
+	if err := autoConvert_templates_Target_To_v1beta1_Target(in, out, s); err != nil {
+		return err
+	}
+
+	// Add custom conversion for Operations field which auto-generation cannot handle
+	if in.Operations != nil {
+		out.Operations = make([]admissionv1.OperationType, len(in.Operations))
+		copy(out.Operations, in.Operations)
 	}
 
 	return nil

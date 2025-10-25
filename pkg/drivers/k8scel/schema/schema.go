@@ -289,5 +289,6 @@ func GetSourceFromTemplate(ct *templates.ConstraintTemplate) (*Source, error) {
 	if source == nil {
 		return nil, ErrCELEngineMissing
 	}
+
 	return source, nil
 }

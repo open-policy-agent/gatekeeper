@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"strings"
@@ -11,10 +12,12 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/ptr"
 )
 
@@ -73,13 +76,39 @@ func buildVariables(source *schema.Source) ([]admissionregistrationv1beta1.Varia
 }
 
 // convertWebhookRulesToResourceRules converts webhook rules to VAP resource rules.
-func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.RuleWithOperations) []admissionregistrationv1beta1.NamedRuleWithOperations {
+func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.RuleWithOperations, ctOps []admissionregistrationv1beta1.OperationType) ([]admissionregistrationv1beta1.NamedRuleWithOperations, error) {
+	var errs []error
 	resourceRules := make([]admissionregistrationv1beta1.NamedRuleWithOperations, 0, len(rules))
 
+	allOps := []admissionregistrationv1beta1.OperationType{
+		admissionregistrationv1beta1.Create,
+		admissionregistrationv1beta1.Update,
+		admissionregistrationv1beta1.Delete,
+		admissionregistrationv1beta1.Connect,
+	}
+
+	ctOperations := expandWildcardOperations(ctOps, allOps)
+	ctOpsSet := sets.New(ctOperations...)
+
 	for _, rule := range rules {
-		// Convert operations from webhook format to VAP format
-		operations := make([]admissionregistrationv1beta1.OperationType, len(rule.Operations))
-		copy(operations, rule.Operations)
+		var operations []admissionregistrationv1beta1.OperationType
+
+		if ctOps == nil {
+			operations = make([]admissionregistrationv1beta1.OperationType, len(rule.Operations))
+			copy(operations, rule.Operations)
+		} else {
+			ruleOps := expandWildcardOperations(rule.Operations, allOps)
+			ruleOpsSet := sets.New(ruleOps...)
+
+			intersection := ruleOpsSet.Intersection(ctOpsSet)
+			if intersection.Len() == 0 {
+				return nil, ErrOperationNoMatch
+			}
+			if !intersection.Equal(ctOpsSet) {
+				errs = append(errs, ErrOperationMismatch)
+			}
+			operations = intersection.UnsortedList()
+		}
 
 		resourceRules = append(resourceRules, admissionregistrationv1beta1.NamedRuleWithOperations{
 			RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
@@ -94,13 +123,20 @@ func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.Rul
 		})
 	}
 
-	return resourceRules
+	return resourceRules, errors.Join(errs...)
+}
+
+func expandWildcardOperations(ops []admissionregistrationv1beta1.OperationType, allOps []admissionregistrationv1beta1.OperationType) []admissionregistrationv1beta1.OperationType {
+	for _, op := range ops {
+		if op == admissionregistrationv1beta1.OperationAll {
+			return allOps
+		}
+	}
+	return ops
 }
 
 // buildMatchConstraintsFromWebhookConfig creates MatchResources from webhook configuration.
-func buildMatchConstraintsFromWebhookConfig(webhookConfig *webhookconfigcache.WebhookMatchingConfig) *admissionregistrationv1beta1.MatchResources {
-	resourceRules := convertWebhookRulesToResourceRules(webhookConfig.Rules)
-
+func buildMatchConstraintsFromWebhookConfig(webhookConfig *webhookconfigcache.WebhookMatchingConfig, resourceRules []admissionregistrationv1beta1.NamedRuleWithOperations) *admissionregistrationv1beta1.MatchResources {
 	return &admissionregistrationv1beta1.MatchResources{
 		NamespaceSelector: webhookConfig.NamespaceSelector,
 		ObjectSelector:    webhookConfig.ObjectSelector,
@@ -179,8 +215,20 @@ func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintT
 
 	// Build match constraints based on webhook config availability
 	var matchConstraints *admissionregistrationv1beta1.MatchResources
+	var errs []error
 	if webhookConfig != nil {
-		matchConstraints = buildMatchConstraintsFromWebhookConfig(webhookConfig)
+		ctOps, err := getTemplateOperations(template)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("template operations error: %w", err))
+		}
+		resourceRules, err := convertWebhookRulesToResourceRules(webhookConfig.Rules, ctOps)
+		if err != nil {
+			if errors.Is(err, ErrOperationNoMatch) {
+				return nil, err
+			}
+			errs = append(errs, err)
+		}
+		matchConstraints = buildMatchConstraintsFromWebhookConfig(webhookConfig, resourceRules)
 		matchConditions = appendWebhookMatchConditions(matchConditions, webhookConfig)
 	} else {
 		matchConstraints = buildDefaultMatchConstraints()
@@ -205,7 +253,14 @@ func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintT
 		},
 	}
 
-	return policy, nil
+	return policy, errors.Join(errs...)
+}
+
+func getTemplateOperations(template *templates.ConstraintTemplate) ([]admissionregistrationv1.OperationType, error) {
+	if len(template.Spec.Targets) != 1 {
+		return nil, schema.ErrOneTargetAllowed
+	}
+	return template.Spec.Targets[0].Operations, nil
 }
 
 // ConstraintToBinding converts a Constraint to a ValidatingAdmissionPolicyBinding.

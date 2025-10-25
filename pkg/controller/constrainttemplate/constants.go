@@ -18,4 +18,6 @@ const (
 	ErrGenerateVAPState = "error"
 	// GeneratedVAPState indicates a VAP was generated.
 	GeneratedVAPState = "generated"
+	// ErrOperationMismatchCode indicates operations mismatch between webhook and constraint template.
+	ErrOperationMismatchCode = "operation_mismatch_warning"
 )

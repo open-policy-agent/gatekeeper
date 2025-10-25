@@ -71,7 +71,8 @@ jobs:
             IMG=gatekeeper-e2e:latest
 
           make docker-buildx-crds \
-            CRD_IMG=gatekeeper-crds:latest 
+            CRD_IMG=gatekeeper-crds:latest \
+            CI=true
 
           make e2e-build-load-externaldata-image
 
