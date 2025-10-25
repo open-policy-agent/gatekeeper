@@ -912,13 +912,13 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		}
 		logger.Info("get VAP", "vapName", vapName, "currentVap", currentVap)
 
-		transformedVap, err1 := r.transformTemplateToVAP(unversionedCT, vapName, logger)
-		if err1 != nil {
-			logger.Error(err1, "transform to VAP error", "vapName", vapName)
-			if transformedVap != nil && errors.Is(err1, transform.ErrOperationMismatch) {
+		transformedVap, transformErr := r.transformTemplateToVAP(unversionedCT, vapName, logger)
+		if transformErr != nil {
+			logger.Error(transformErr, "transform to VAP error", "vapName", vapName)
+			if transformedVap != nil && errors.Is(transformErr, transform.ErrOperationMismatch) {
 				logger.Info("operation mismatch detected, continuing with VAP generation", "vapName", vapName)
 			} else {
-				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to VAP object", status, err1)
+				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to VAP object", status, transformErr)
 				return err
 			}
 		}
@@ -953,8 +953,8 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 			}
 		}
 		warningMsg := ""
-		if err1 != nil && errors.Is(err1, transform.ErrOperationMismatch) {
-			warningMsg = err1.Error()
+		if transformErr != nil && errors.Is(transformErr, transform.ErrOperationMismatch) {
+			warningMsg = transformErr.Error()
 		}
 		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: GeneratedVAPState, ObservedGeneration: ct.GetGeneration(), Warning: warningMsg}
 	}
