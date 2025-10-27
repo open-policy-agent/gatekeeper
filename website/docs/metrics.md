@@ -196,7 +196,11 @@ Below are the list of metrics provided by Gatekeeper:
 
     - `enforcement_action`: [`deny`, `dryrun`, `warn`]
 
+    - `constraint`: (optional, enabled via `--enable-constraint-label-metrics`) The name of the constraint that generated violations
+
     Aggregation: `LastValue`
+
+    **Note**: When the `--enable-constraint-label-metrics` flag is set to `true`, this metric will include a `constraint` label showing the name of each constraint that has violations. This provides granular per-constraint violation tracking but may significantly increase metric cardinality in environments with many constraints. Use this feature with caution in large-scale deployments.
 
 - Name: `gatekeeper_audit_duration_seconds`
 

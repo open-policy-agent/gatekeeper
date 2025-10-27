@@ -69,6 +69,7 @@ var (
 	apiCacheDir                  = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
 	emptyAuditResults            = newLimitQueue(0)
 	logStatsAudit                = flag.Bool("log-stats-audit", false, "(alpha) log stats metrics for the audit run")
+	enableConstraintLabelAuditMetrics = flag.Bool("enable-constraint-label-metrics", false, "Enable the 'constraint' label on the gatekeeper_violations metric to track violations per constraint. This may significantly increase metric cardinality. Default: false")
 )
 
 // Manager allows us to audit resources periodically.
@@ -225,7 +226,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 
 // New creates a new manager for audit.
 func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
-	reporter, err := newStatsReporter()
+	reporter, err := newStatsReporter(*enableConstraintLabelAuditMetrics)
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
 		return nil, err
@@ -353,9 +354,25 @@ func (am *Manager) audit(ctx context.Context) error {
 		}
 	}
 
+	// Report violations - aggregate by enforcement action for backward compatibility
 	for k, v := range totalViolationsPerEnforcementAction {
 		if err := am.reporter.reportTotalViolations(k, v); err != nil {
 			am.log.Error(err, "failed to report total violations")
+		}
+	}
+
+	// If constraint-label metrics are enabled, also report per-constraint violations
+	if *enableConstraintLabelAuditMetrics {
+		// Build a map of constraint enforcement actions
+		constraintEnforcementActions := make(map[util.KindVersionName]util.EnforcementAction)
+		for gvknn := range updateLists {
+			ar := updateLists[gvknn].Peek()
+			if ar != nil {
+				constraintEnforcementActions[gvknn] = util.EnforcementAction(ar.EnforcementAction)
+			}
+		}
+		if err := am.reporter.reportTotalViolationsPerConstraint(totalViolationsPerConstraint, constraintEnforcementActions); err != nil {
+			am.log.Error(err, "failed to report total violations per constraint")
 		}
 	}
 

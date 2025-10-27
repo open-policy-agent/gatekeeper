@@ -18,13 +18,33 @@ import (
 
 func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
 	var err error
-	r, err = newStatsReporter()
+	r, err = newStatsReporter(false) // disable constraint labels for backward compatibility tests
 	assert.NoError(t, err)
 	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
 	meter := mp.Meter("test")
 
 	_, err = meter.Int64ObservableGauge(violationsMetricName, metric.WithInt64Callback(r.observeTotalViolations))
+	assert.NoError(t, err)
+	auditDurationM, err = meter.Float64Histogram(auditDurationMetricName)
+	assert.NoError(t, err)
+	_, err = meter.Float64ObservableGauge(lastRunStartTimeMetricName, metric.WithFloat64Callback(r.observeRunStart))
+	assert.NoError(t, err)
+	_, err = meter.Float64ObservableGauge(lastRunEndTimeMetricName, metric.WithFloat64Callback(r.observeRunEnd))
+	assert.NoError(t, err)
+
+	return rdr, r
+}
+
+func initializeTestInstrumentsWithConstraintLabels(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
+	var err error
+	r, err = newStatsReporter(true) // enable constraint labels for new tests
+	assert.NoError(t, err)
+	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter := mp.Meter("test")
+
+	_, err = meter.Int64ObservableGauge(violationsMetricName, metric.WithInt64Callback(r.observeTotalViolationsWithConstraint))
 	assert.NoError(t, err)
 	auditDurationM, err = meter.Float64Histogram(auditDurationMetricName)
 	assert.NoError(t, err)
@@ -198,6 +218,63 @@ func TestReporter_observeRunEnd(t *testing.T) {
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
 			fmt.Println(rm.ScopeMetrics[0])
 			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[1], metricdatatest.IgnoreTimestamp())
+		})
+	}
+}
+
+func TestReporter_observeTotalViolationsWithConstraint(t *testing.T) {
+	tests := []struct {
+		name        string
+		ctx         context.Context
+		expectedErr error
+		want        metricdata.Metrics
+	}{
+		{
+			name:        "reporting total violations with constraint labels",
+			ctx:         context.Background(),
+			expectedErr: nil,
+			want: metricdata.Metrics{
+				Name: violationsMetricName,
+				Data: metricdata.Gauge[int64]{
+					DataPoints: []metricdata.DataPoint[int64]{
+						{
+							Attributes: attribute.NewSet(
+								attribute.String(enforcementActionKey, string(util.Deny)),
+								attribute.String(constraintKey, "test-constraint-1"),
+							),
+							Value: 5,
+						},
+						{
+							Attributes: attribute.NewSet(
+								attribute.String(enforcementActionKey, string(util.Warn)),
+								attribute.String(constraintKey, "test-constraint-2"),
+							),
+							Value: 3,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			constraintViolations := map[util.KindVersionName]int64{
+				{Kind: "TestKind", Version: "v1", Name: "test-constraint-1"}: 5,
+				{Kind: "TestKind", Version: "v1", Name: "test-constraint-2"}: 3,
+			}
+			constraintEnforcementActions := map[util.KindVersionName]util.EnforcementAction{
+				{Kind: "TestKind", Version: "v1", Name: "test-constraint-1"}: util.Deny,
+				{Kind: "TestKind", Version: "v1", Name: "test-constraint-2"}: util.Warn,
+			}
+
+			rdr, r := initializeTestInstrumentsWithConstraintLabels(t)
+			assert.NoError(t, r.reportTotalViolationsPerConstraint(constraintViolations, constraintEnforcementActions))
+
+			rm := &metricdata.ResourceMetrics{}
+			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
+
+			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
 		})
 	}
 }

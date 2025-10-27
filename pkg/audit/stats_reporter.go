@@ -19,6 +19,7 @@ const (
 	lastRunStartTimeMetricName = "audit_last_run_time"
 	lastRunEndTimeMetricName   = "audit_last_run_end_time"
 	enforcementActionKey       = "enforcement_action"
+	constraintKey              = "constraint"
 )
 
 var auditDurationM metric.Float64Histogram
@@ -43,6 +44,18 @@ func (r *reporter) observeTotalViolations(_ context.Context, o metric.Int64Obser
 	return nil
 }
 
+func (r *reporter) observeTotalViolationsWithConstraint(_ context.Context, o metric.Int64Observer) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for k, v := range r.totalViolationsPerConstraint {
+		o.Observe(v, metric.WithAttributes(
+			attribute.String(enforcementActionKey, string(k.EnforcementAction)),
+			attribute.String(constraintKey, k.ConstraintName),
+		))
+	}
+	return nil
+}
+
 func (r *reporter) reportTotalViolations(enforcementAction util.EnforcementAction, v int64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -50,6 +63,32 @@ func (r *reporter) reportTotalViolations(enforcementAction util.EnforcementActio
 		r.totalViolationsPerEnforcementAction = make(map[util.EnforcementAction]int64)
 	}
 	r.totalViolationsPerEnforcementAction[enforcementAction] = v
+	return nil
+}
+
+// ConstraintKey uniquely identifies a constraint and its enforcement action.
+type ConstraintKey struct {
+	ConstraintName    string
+	EnforcementAction util.EnforcementAction
+}
+
+func (r *reporter) reportTotalViolationsPerConstraint(constraintViolations map[util.KindVersionName]int64, constraintEnforcementActions map[util.KindVersionName]util.EnforcementAction) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.totalViolationsPerConstraint == nil {
+		r.totalViolationsPerConstraint = make(map[ConstraintKey]int64)
+	}
+	// Clear previous violations
+	r.totalViolationsPerConstraint = make(map[ConstraintKey]int64)
+	
+	for kvn, count := range constraintViolations {
+		enforcementAction := constraintEnforcementActions[kvn]
+		key := ConstraintKey{
+			ConstraintName:    kvn.Name,
+			EnforcementAction: enforcementAction,
+		}
+		r.totalViolationsPerConstraint[key] = count
+	}
 	return nil
 }
 
@@ -87,16 +126,24 @@ func (r *reporter) observeRunEnd(_ context.Context, o metric.Float64Observer) er
 }
 
 // newStatsReporter creates a reporter for audit metrics.
-func newStatsReporter() (*reporter, error) {
-	r := &reporter{}
+func newStatsReporter(enableConstraintLabelMetrics bool) (*reporter, error) {
+	r := &reporter{enableConstraintLabelMetrics: enableConstraintLabelMetrics}
 	var err error
 	meter := otel.GetMeterProvider().Meter("gatekeeper")
 
-	_, err = meter.Int64ObservableGauge(
-		violationsMetricName,
-		metric.WithDescription("Total number of audited violations"),
-		metric.WithInt64Callback(r.observeTotalViolations),
-	)
+	if enableConstraintLabelMetrics {
+		_, err = meter.Int64ObservableGauge(
+			violationsMetricName,
+			metric.WithDescription("Total number of audited violations"),
+			metric.WithInt64Callback(r.observeTotalViolationsWithConstraint),
+		)
+	} else {
+		_, err = meter.Int64ObservableGauge(
+			violationsMetricName,
+			metric.WithDescription("Total number of audited violations"),
+			metric.WithInt64Callback(r.observeTotalViolations),
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -134,4 +181,6 @@ type reporter struct {
 	endTime                             time.Time
 	startTime                           time.Time
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64
+	totalViolationsPerConstraint        map[ConstraintKey]int64
+	enableConstraintLabelMetrics        bool
 }
