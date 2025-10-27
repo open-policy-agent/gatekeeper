@@ -18,9 +18,9 @@ require (
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20251027174004-8e0ca170605e
 	github.com/open-policy-agent/opa v1.8.0
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.23.0
+	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/contrib/detectors/aws/ec2 v1.21.1
 	go.opentelemetry.io/contrib/detectors/gcp v1.36.0
 	go.opentelemetry.io/otel v1.37.0
@@ -126,7 +126,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.65.0 // indirect
+	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
