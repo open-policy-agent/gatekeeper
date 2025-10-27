@@ -37,7 +37,7 @@ jobs:
         make docker-buildx IMG=gatekeeper-e2e:latest
         make e2e-build-load-externaldata-image
         make e2e-reader-build-image
-        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest
+        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest CI=true
         kind load docker-image --name kind gatekeeper-e2e:latest fake-reader:latest gatekeeper-crds:latest
         kubectl create ns gatekeeper-system
 
