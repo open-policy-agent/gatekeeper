@@ -17,57 +17,54 @@ resources:
 - bases/status.gatekeeper.sh_connectionpodstatuses.yaml
 - bases/status.gatekeeper.sh_providerpodstatuses.yaml
 - bases/connection.gatekeeper.sh_connections.yaml
+- ../../vendor/github.com/open-policy-agent/frameworks/constraint/deploy
 # +kubebuilder:scaffold:crdkustomizeresource
 
-bases:
-- ../../vendor/github.com/open-policy-agent/frameworks/constraint/deploy
 
 patches:
-- target:
+- path: patches/preserve_unknown_fields_false.yaml
+  target:
     group: apiextensions.k8s.io
-    version: v1
     kind: CustomResourceDefinition
-  path: patches/preserve_unknown_fields_false.yaml
-
-patchesJson6902:
-- target:
-    group: apiextensions.k8s.io
     version: v1
+- path: patches/max_name_size.yaml
+  target:
+    group: apiextensions.k8s.io
     kind: CustomResourceDefinition
     name: assign.mutations.gatekeeper.sh
-  path: patches/max_name_size.yaml
-- target:
-    group: apiextensions.k8s.io
     version: v1
+- path: patches/max_name_size.yaml
+  target:
+    group: apiextensions.k8s.io
     kind: CustomResourceDefinition
     name: assignmetadata.mutations.gatekeeper.sh
-  path: patches/max_name_size.yaml
-- target:
-    group: apiextensions.k8s.io
     version: v1
+- path: patches/max_name_size.yaml
+  target:
+    group: apiextensions.k8s.io
     kind: CustomResourceDefinition
     name: modifyset.mutations.gatekeeper.sh
-  path: patches/max_name_size.yaml
-- target:
-    group: apiextensions.k8s.io
     version: v1
+- path: patches/max_name_size.yaml
+  target:
+    group: apiextensions.k8s.io
     kind: CustomResourceDefinition
     name: assignimage.mutations.gatekeeper.sh
-  path: patches/max_name_size.yaml
-- target:
-    group: apiextensions.k8s.io
     version: v1
+- path: patches/max_name_size.yaml
+  target:
+    group: apiextensions.k8s.io
     kind: CustomResourceDefinition
     name: expansiontemplate.expansion.gatekeeper.sh
-  path: patches/max_name_size.yaml
-- target:
-    group: apiextensions.k8s.io
     version: v1
+- path: patches/max_name_size.yaml
+  target:
+    group: apiextensions.k8s.io
     kind: CustomResourceDefinition
     name: syncsets.syncset.gatekeeper.sh
-  path: patches/max_name_size.yaml
+    version: v1
 
-patchesStrategicMerge:
+
 #- patches/max_name_size_for_modifyset.yaml
 #- patches/max_name_size_for_assign.yaml
 #- patches/max_name_size_for_assignmetadata.yaml
@@ -97,3 +94,5 @@ patchesStrategicMerge:
 # the following config is for teaching kustomize how to do kustomization for CRDs.
 configurations:
 - kustomizeconfig.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
