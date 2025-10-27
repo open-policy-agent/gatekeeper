@@ -120,7 +120,8 @@ jobs:
 
           make docker-buildx-crds \
             CRD_IMG=gatekeeper-crds:latest \
-            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
+            CI=true
 
           make e2e-build-load-externaldata-image \
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}

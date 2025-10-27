@@ -20,6 +20,7 @@ limitations under the License.
 package templates
 
 import (
+	"k8s.io/api/admissionregistration/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -252,6 +253,11 @@ func (in *Target) DeepCopyInto(out *Target) {
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
+	}
+	if in.Operations != nil {
+		in, out := &in.Operations, &out.Operations
+		*out = make([]v1.OperationType, len(*in))
+		copy(*out, *in)
 	}
 }
 
