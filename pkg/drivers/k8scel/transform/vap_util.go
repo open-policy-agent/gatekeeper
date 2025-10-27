@@ -8,7 +8,7 @@ import (
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 var vapMux sync.RWMutex
@@ -32,14 +32,14 @@ func IsVapAPIEnabled(log *logr.Logger) (bool, *schema.GroupVersion) {
 	if VapAPIEnabled != nil {
 		return *VapAPIEnabled, GroupVersion
 	}
-	config, err := rest.InClusterConfig()
+	cfg, err := config.GetConfig()
 	if err != nil {
-		log.Info("IsVapAPIEnabled InClusterConfig", "error", err)
+		log.Info("IsVapAPIEnabled GetConfig", "error", err)
 		VapAPIEnabled = new(bool)
 		*VapAPIEnabled = false
 		return false, nil
 	}
-	clientset, err := kubernetes.NewForConfig(config)
+	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		log.Info("IsVapAPIEnabled NewForConfig", "error", err)
 		*VapAPIEnabled = false
