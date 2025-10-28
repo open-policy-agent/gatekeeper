@@ -103,6 +103,7 @@ spec:
             - HELMSUBST_ADDITIONAL_MUTATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+            - --enable-constraint-label-metrics={{ .Values.enableConstraintLabelMetrics }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
@@ -203,6 +204,7 @@ spec:
             - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+            - --enable-constraint-label-metrics={{ .Values.enableConstraintLabelMetrics }}
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES

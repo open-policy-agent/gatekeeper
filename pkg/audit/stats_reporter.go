@@ -14,12 +14,13 @@ import (
 )
 
 const (
-	violationsMetricName       = "violations"
-	auditDurationMetricName    = "audit_duration_seconds"
-	lastRunStartTimeMetricName = "audit_last_run_time"
-	lastRunEndTimeMetricName   = "audit_last_run_end_time"
-	enforcementActionKey       = "enforcement_action"
-	constraintKey              = "constraint"
+	violationsMetricName              = "violations"
+	violationsPerConstraintMetricName = "violations_per_constraint"
+	auditDurationMetricName           = "audit_duration_seconds"
+	lastRunStartTimeMetricName        = "audit_last_run_time"
+	lastRunEndTimeMetricName          = "audit_last_run_end_time"
+	enforcementActionKey              = "enforcement_action"
+	constraintKey                     = "constraint"
 )
 
 var auditDurationM metric.Float64Histogram
@@ -133,17 +134,20 @@ func newStatsReporter(enableConstraintLabelMetrics bool) (*reporter, error) {
 
 	if enableConstraintLabelMetrics {
 		_, err = meter.Int64ObservableGauge(
-			violationsMetricName,
-			metric.WithDescription("Total number of audited violations"),
+			violationsPerConstraintMetricName,
+			metric.WithDescription("Total number of audited violations per constraint"),
 			metric.WithInt64Callback(r.observeTotalViolationsWithConstraint),
 		)
-	} else {
-		_, err = meter.Int64ObservableGauge(
-			violationsMetricName,
-			metric.WithDescription("Total number of audited violations"),
-			metric.WithInt64Callback(r.observeTotalViolations),
-		)
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	_, err = meter.Int64ObservableGauge(
+		violationsMetricName,
+		metric.WithDescription("Total number of audited violations"),
+		metric.WithInt64Callback(r.observeTotalViolations),
+	)
 	if err != nil {
 		return nil, err
 	}

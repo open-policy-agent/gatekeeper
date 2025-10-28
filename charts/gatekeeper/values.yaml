@@ -1,14 +1,13 @@
 replicas: 3
 revisionHistoryLimit: 10
 auditInterval: 60
-metricsBackends: [ "prometheus" ]
+metricsBackends: ["prometheus"]
 auditMatchKindOnly: false
 constraintViolationsLimit: 20
 auditFromCache: false
 disableAudit: false
 disableMutation: false
 disableValidatingWebhook: false
-enableConstraintLabelMetrics: false
 validatingWebhookName: gatekeeper-validating-webhook-configuration
 validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
@@ -18,7 +17,7 @@ validatingWebhookObjectSelector: {}
 validatingWebhookMatchConditions: []
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
-validatingWebhookSubResources: [ 'pods/ephemeralcontainers', 'pods/exec', 'pods/log', 'pods/eviction', 'pods/portforward', 'pods/proxy', 'pods/attach', 'pods/binding', 'pods/resize', 'deployments/scale', 'replicasets/scale', 'statefulsets/scale', 'replicationcontrollers/scale', 'services/proxy', 'nodes/proxy', 'services/status' ]
+validatingWebhookSubResources: ['pods/ephemeralcontainers', 'pods/exec', 'pods/log', 'pods/eviction', 'pods/portforward', 'pods/proxy', 'pods/attach', 'pods/binding', 'pods/resize', 'deployments/scale', 'replicasets/scale', 'statefulsets/scale', 'replicationcontrollers/scale', 'services/proxy', 'nodes/proxy', 'services/status']
 validatingWebhookURL: null
 validatingWebhookScope: '*'
 enableDeleteOperations: false
@@ -36,7 +35,7 @@ mutatingWebhookObjectSelector: {}
 mutatingWebhookMatchConditions: []
 mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
-mutatingWebhookSubResources: [ 'pods/ephemeralcontainers', 'pods/exec', 'pods/log', 'pods/eviction', 'pods/portforward', 'pods/proxy', 'pods/attach', 'pods/binding', 'deployments/scale', 'replicasets/scale', 'statefulsets/scale', 'replicationcontrollers/scale', 'services/proxy', 'nodes/proxy', 'services/status' ]
+mutatingWebhookSubResources: ['pods/ephemeralcontainers', 'pods/exec', 'pods/log', 'pods/eviction', 'pods/portforward', 'pods/proxy', 'pods/attach', 'pods/binding', 'deployments/scale', 'replicasets/scale', 'statefulsets/scale', 'replicationcontrollers/scale', 'services/proxy', 'nodes/proxy', 'services/status']
 mutatingWebhookURL: null
 mutatingWebhookScope: '*'
 mutationAnnotations: false
@@ -72,12 +71,17 @@ postUpgrade:
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
-    podSecurity: [ "pod-security.kubernetes.io/audit=restricted", "pod-security.kubernetes.io/audit-version=latest", "pod-security.kubernetes.io/warn=restricted", "pod-security.kubernetes.io/warn-version=latest", "pod-security.kubernetes.io/enforce=restricted", "pod-security.kubernetes.io/enforce-version=v1.24" ]
+    podSecurity: ["pod-security.kubernetes.io/audit=restricted",
+      "pod-security.kubernetes.io/audit-version=latest",
+      "pod-security.kubernetes.io/warn=restricted",
+      "pod-security.kubernetes.io/warn-version=latest",
+      "pod-security.kubernetes.io/enforce=restricted",
+      "pod-security.kubernetes.io/enforce-version=v1.24"]
     extraAnnotations: {}
     priorityClassName: ""
   affinity: {}
   tolerations: []
-  nodeSelector: { kubernetes.io/os: linux }
+  nodeSelector: {kubernetes.io/os: linux}
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
@@ -101,7 +105,12 @@ postInstall:
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
-    podSecurity: [ "pod-security.kubernetes.io/audit=restricted", "pod-security.kubernetes.io/audit-version=latest", "pod-security.kubernetes.io/warn=restricted", "pod-security.kubernetes.io/warn-version=latest", "pod-security.kubernetes.io/enforce=restricted", "pod-security.kubernetes.io/enforce-version=v1.24" ]
+    podSecurity: ["pod-security.kubernetes.io/audit=restricted",
+      "pod-security.kubernetes.io/audit-version=latest",
+      "pod-security.kubernetes.io/warn=restricted",
+      "pod-security.kubernetes.io/warn-version=latest",
+      "pod-security.kubernetes.io/enforce=restricted",
+      "pod-security.kubernetes.io/enforce-version=v1.24"]
     extraAnnotations: {}
     priorityClassName: ""
   probeWebhook:
@@ -117,7 +126,7 @@ postInstall:
     priorityClassName: ""
   affinity: {}
   tolerations: []
-  nodeSelector: { kubernetes.io/os: linux }
+  nodeSelector: {kubernetes.io/os: linux}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -142,7 +151,7 @@ preUninstall:
     priorityClassName: ""
   affinity: {}
   tolerations: []
-  nodeSelector: { kubernetes.io/os: linux }
+  nodeSelector: {kubernetes.io/os: linux}
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
@@ -182,18 +191,18 @@ controllerManager:
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
-      - podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-            - key: gatekeeper.sh/operation
-              operator: In
-              values:
-              - webhook
-          topologyKey: kubernetes.io/hostname
-        weight: 100
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: gatekeeper.sh/operation
+                  operator: In
+                  values:
+                    - webhook
+            topologyKey: kubernetes.io/hostname
+          weight: 100
   topologySpreadConstraints: []
   tolerations: []
-  nodeSelector: { kubernetes.io/os: linux }
+  nodeSelector: {kubernetes.io/os: linux}
   resources:
     limits:
       memory: 512Mi
@@ -212,7 +221,7 @@ controllerManager:
   podSecurityContext:
     fsGroup: 999
     supplementalGroups:
-    - 999
+      - 999
   extraRules: []
   networkPolicy:
     enabled: false
@@ -264,7 +273,7 @@ audit:
   podLabels: {}
   affinity: {}
   tolerations: []
-  nodeSelector: { kubernetes.io/os: linux }
+  nodeSelector: {kubernetes.io/os: linux}
   resources:
     limits:
       memory: 512Mi
@@ -283,7 +292,7 @@ audit:
   podSecurityContext:
     fsGroup: 999
     supplementalGroups:
-    - 999
+      - 999
   writeToRAMDisk: false
   extraRules: []
   disableGenerateOperation: false
@@ -292,7 +301,7 @@ audit:
 crds:
   affinity: {}
   tolerations: []
-  nodeSelector: { kubernetes.io/os: linux }
+  nodeSelector: {kubernetes.io/os: linux}
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
@@ -307,7 +316,7 @@ pdb:
   controllerManager:
     minAvailable: 1
 service: {}
-disabledBuiltins: [ "{http.send}" ]
+disabledBuiltins: ["{http.send}"]
 psp:
   enabled: false
 upgradeCRDs:
