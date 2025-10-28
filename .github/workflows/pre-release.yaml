@@ -66,7 +66,8 @@ jobs:
               PLATFORM="linux/amd64,linux/arm64" \
               OUTPUT_TYPE=type=registry \
               GENERATE_ATTESTATIONS=true \
-              PUSH_TO_GHCR=true
+              PUSH_TO_GHCR=true \
+              CI=true
           fi
 
           listUri="https://registry-1.docker.io/v2/${{ env.GATOR_IMAGE_REPO }}/tags/list"

@@ -27,6 +27,7 @@ import (
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -84,6 +85,18 @@ type CacheManagerInjector interface {
 	InjectCacheManager(cm *cm.CacheManager)
 }
 
+type GetProcessExcluderInjector interface {
+	InjectProcessExcluder(processExcluder *process.Excluder)
+}
+
+type ConstraintTemplateEventInjector interface {
+	InjectConstraintTemplateEvent(constraintTemplateEvents chan event.GenericEvent)
+}
+
+type WebhookConfigCacheInjector interface {
+	InjectWebhookConfigCache(webhookConfigCache *webhookconfigcache.WebhookConfigCache)
+}
+
 // Injectors is a list of adder structs that need injection. We can convert this
 // to an interface once we create controllers for things like data sync.
 var Injectors []Injector
@@ -93,17 +106,19 @@ var AddToManagerFuncs []func(manager.Manager) error
 
 // Dependencies are dependencies that can be injected into controllers.
 type Dependencies struct {
-	CFClient        *constraintclient.Client
-	WatchManger     *watch.Manager
-	Tracker         *readiness.Tracker
-	GetPod          func(context.Context) (*corev1.Pod, error)
-	ProcessExcluder *process.Excluder
-	MutationSystem  *mutation.System
-	ExpansionSystem *expansion.System
-	ProviderCache   *externaldata.ProviderCache
-	ExportSystem    *export.System
-	SyncEventsCh    chan event.GenericEvent
-	CacheMgr        *cm.CacheManager
+	CFClient           *constraintclient.Client
+	WatchManger        *watch.Manager
+	Tracker            *readiness.Tracker
+	GetPod             func(context.Context) (*corev1.Pod, error)
+	ProcessExcluder    *process.Excluder
+	MutationSystem     *mutation.System
+	ExpansionSystem    *expansion.System
+	ProviderCache      *externaldata.ProviderCache
+	ExportSystem       *export.System
+	SyncEventsCh       chan event.GenericEvent
+	CacheMgr           *cm.CacheManager
+	CtEvents           chan event.GenericEvent
+	WebhookConfigCache *webhookconfigcache.WebhookConfigCache
 }
 
 type defaultPodGetter struct {
@@ -218,6 +233,15 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		if a2, ok := a.(CacheManagerInjector); ok {
 			// this is used by the config controller to sync
 			a2.InjectCacheManager(deps.CacheMgr)
+		}
+		if a2, ok := a.(GetProcessExcluderInjector); ok {
+			a2.InjectProcessExcluder(deps.ProcessExcluder)
+		}
+		if a2, ok := a.(ConstraintTemplateEventInjector); ok {
+			a2.InjectConstraintTemplateEvent(deps.CtEvents)
+		}
+		if a2, ok := a.(WebhookConfigCacheInjector); ok {
+			a2.InjectWebhookConfigCache(deps.WebhookConfigCache)
 		}
 
 		if err := a.Add(m); err != nil {
