@@ -37,7 +37,7 @@ jobs:
         make docker-buildx IMG=gatekeeper-e2e:latest
         make e2e-build-load-externaldata-image
         make e2e-reader-build-image
-        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest
+        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest CI=true
         kind load docker-image --name kind gatekeeper-e2e:latest fake-reader:latest gatekeeper-crds:latest
         kubectl create ns gatekeeper-system
 
@@ -52,7 +52,7 @@ jobs:
         kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c reader --tail=-1 > logs-audit-export.json
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
       if: ${{ always() }}
       with:
         name: export-logs
