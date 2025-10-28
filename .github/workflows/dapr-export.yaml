@@ -27,7 +27,7 @@ permissions: read-all
 jobs:
   dapr_test:
     name: "Dapr export test"
-    runs-on: ubuntu-latest-8
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       matrix:

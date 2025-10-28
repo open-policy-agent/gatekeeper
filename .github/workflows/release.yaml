@@ -14,7 +14,7 @@ permissions: read-all
 jobs:
   tagged-release:
     name: "Tagged Release"
-    runs-on: "ubuntu-latest-8-cores"
+    runs-on: "ubuntu-24.04"
     permissions:
       contents: write
       packages: write
