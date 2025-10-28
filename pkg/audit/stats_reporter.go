@@ -67,7 +67,6 @@ func (r *reporter) reportTotalViolations(enforcementAction util.EnforcementActio
 	return nil
 }
 
-// ConstraintKey uniquely identifies a constraint and its enforcement action.
 type ConstraintKey struct {
 	ConstraintName    string
 	EnforcementAction util.EnforcementAction
@@ -79,7 +78,6 @@ func (r *reporter) reportTotalViolationsPerConstraint(constraintViolations map[u
 	if r.totalViolationsPerConstraint == nil {
 		r.totalViolationsPerConstraint = make(map[ConstraintKey]int64)
 	}
-	// Clear previous violations
 	r.totalViolationsPerConstraint = make(map[ConstraintKey]int64)
 	
 	for kvn, count := range constraintViolations {
