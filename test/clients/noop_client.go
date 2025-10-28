@@ -37,6 +37,10 @@ func (f *NoopClient) Create(_ context.Context, _ client.Object, _ ...client.Crea
 	return nil
 }
 
+func (f *NoopClient) Apply(_ context.Context, _ runtime.ApplyConfiguration, _ ...client.ApplyOption) error {
+	return nil
+}
+
 func (f *NoopClient) Delete(_ context.Context, _ client.Object, _ ...client.DeleteOption) error {
 	return nil
 }
