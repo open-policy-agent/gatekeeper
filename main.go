@@ -121,7 +121,6 @@ var (
 	externaldataProviderResponseCacheTTL = flag.Duration("external-data-provider-response-cache-ttl", 3*time.Minute, "TTL for the external data provider response cache. Specify the duration in 'h', 'm', or 's' for hours, minutes, or seconds respectively. Defaults to 3 minutes if unspecified. Setting the TTL to 0 disables the cache.")
 	enableReferential                    = flag.Bool("enable-referential-rules", true, "Enable referential rules. This flag defaults to true. Set this value to false if you want to disallow referential constraints. Because referential constraints read objects other than the object-under-test, they may be subject to race conditions. Users concerned about this may want to disable referential rules")
 	shutdownDelay                        = flag.Int("shutdown-delay", 10, "Time in seconds the controller runtime shutdown gets delayed after receiving a pod termination event. Prevents failing webhooks on pod shutdown. default: 10")
-	enableConstraintLabelMetrics         = flag.Bool("enable-constraint-label-metrics", false, "Enable the 'constraint' label on the gatekeeper_violations metric to track violations per constraint. This may significantly increase metric cardinality. Default: false")
 )
 
 func init() {

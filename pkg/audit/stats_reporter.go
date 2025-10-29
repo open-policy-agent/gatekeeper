@@ -79,7 +79,7 @@ func (r *reporter) reportTotalViolationsPerConstraint(constraintViolations map[u
 		r.totalViolationsPerConstraint = make(map[ConstraintKey]int64)
 	}
 	r.totalViolationsPerConstraint = make(map[ConstraintKey]int64)
-	
+
 	for kvn, count := range constraintViolations {
 		enforcementAction := constraintEnforcementActions[kvn]
 		key := ConstraintKey{
