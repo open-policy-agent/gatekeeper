@@ -184,7 +184,7 @@ all: lint test manager
 native-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test -mod vendor ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
+	go test ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
 
 .PHONY: benchmark-test
 benchmark-test:
@@ -327,15 +327,15 @@ e2e-reader-build-image:
 
 # Build manager binary
 manager: generate
-	GO111MODULE=on go build -mod vendor -o bin/manager -ldflags $(LDFLAGS)
+	GO111MODULE=on go build -o bin/manager -ldflags $(LDFLAGS)
 
 # Build manager binary
 manager-osx: generate
-	GO111MODULE=on go build -mod vendor -o bin/manager GOOS=darwin -ldflags $(LDFLAGS)
+	GO111MODULE=on go build -o bin/manager GOOS=darwin -ldflags $(LDFLAGS)
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate manifests
-	GO111MODULE=on go run -mod vendor ./main.go
+	GO111MODULE=on go run ./main.go
 
 # Install CRDs into a cluster
 install: manifests
