@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -10,6 +11,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
@@ -35,6 +37,7 @@ type Opts struct {
 	IncludeTrace bool
 	GatherStats  bool
 	UseK8sCEL    bool
+	Verbose	     bool
 }
 
 func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error) {
@@ -183,6 +186,12 @@ func makeRegoDriver(tOpts Opts) (*rego.Driver, error) {
 	}
 	if tOpts.IncludeTrace {
 		args = append(args, rego.Tracing(tOpts.IncludeTrace))
+	}
+	if tOpts.Verbose {
+		args = append(args,
+			rego.PrintEnabled(tOpts.Verbose),
+			rego.PrintHook(gator.NewPrintHook(os.Stdout)),
+		)
 	}
 
 	return rego.New(args...)
