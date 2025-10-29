@@ -354,16 +354,13 @@ func (am *Manager) audit(ctx context.Context) error {
 		}
 	}
 
-	// Report violations - aggregate by enforcement action for backward compatibility
 	for k, v := range totalViolationsPerEnforcementAction {
 		if err := am.reporter.reportTotalViolations(k, v); err != nil {
 			am.log.Error(err, "failed to report total violations")
 		}
 	}
 
-	// If constraint-label metrics are enabled, also report per-constraint violations
 	if *enableConstraintLabelAuditMetrics {
-		// Build a map of constraint enforcement actions
 		constraintEnforcementActions := make(map[util.KindVersionName]util.EnforcementAction)
 		for gvknn := range updateLists {
 			ar := updateLists[gvknn].Peek()
