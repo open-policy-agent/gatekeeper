@@ -122,6 +122,105 @@ not subject to the backwards compatibility design:
 should be considered part of our API and subject to backwards compatibility
 requirements.
 
+## Feature/API Stage Requirements
+
+Gatekeeper follows the Kubernetes [API versioning conventions](https://kubernetes.io/docs/reference/using-api/#api-versioning) 
+and maturity levels (Alpha, Beta, GA) to signal stability and compatibility guarantees. 
+
+### Alpha Stage Requirements
+
+Alpha features and APIs are experimental and may change or be removed without notice. 
+They are disabled by default and require explicit opt-in.
+
+**Requirements:**
+- Feature must be behind a feature flag or opt-in configuration flag
+- API version must be `v1alpha1` or similar alpha designation
+- Documentation must:
+  - Clearly mark the feature as "Alpha" in all user-facing docs
+  - Include warnings about stability and potential for breaking changes
+  - Document the opt-in mechanism (flags, configuration)
+  - Provide basic usage examples
+- Testing must include:
+  - Basic unit tests for core functionality
+  - At least one integration test demonstrating the feature works
+  - Test coverage documenting happy path scenarios
+- Must have a documented graduation plan outlining:
+  - Required functionality for Beta promotion
+  - Known limitations and gaps
+  - Anticipated timeline for Beta consideration
+- APIs may change in backward-incompatible ways without migration path
+- Features may be removed entirely in future releases
+- No performance or reliability SLOs required
+
+### Beta Stage Requirements
+
+Beta features are well-tested and enabled by default. The API is considered stable 
+enough for production use, though details may still change in compatible ways.
+
+**Requirements:**
+- Feature enabled by default (may still have feature flag for disabling)
+- API version must be `v1beta1` or similar beta designation
+- Multiple API versions may be served, with automatic conversion between them
+- Documentation must:
+  - Mark feature as "Beta" in user-facing docs
+  - Include comprehensive usage guides and examples
+- Testing must include:
+  - Comprehensive unit test coverage (>80% for new code)
+  - Integration tests covering major use cases
+  - E2E tests in CI demonstrating real-world scenarios
+- Metrics must be exported (may be marked as beta/experimental)
+- Performance characteristics must be documented
+- Breaking changes require deprecation notices and migration paths
+
+### GA (General Availability) Stage Requirements
+
+GA features are stable, production-ready, and carry strong backward compatibility 
+guarantees per this document's compatibility policy.
+
+**Requirements:**
+- API version must be `v1` (no alpha/beta designation)
+- Documentation must:
+  - Remove any Alpha/Beta warnings
+  - Be comprehensive and production-ready
+  - Provide complete reference documentation
+- Testing must include:
+  - Complete unit and integration test coverage
+  - Soak tests demonstrating stability over time
+- Metrics must be stable and documented
+- Security review completed and documented
+- Backward compatibility guarantees:
+  - API schema changes must be backward compatible
+  - Default values must not change in breaking ways
+  - Behavior changes require deprecation cycle
+  - Must support graceful version-to-version upgrades
+- Deprecation policy:
+  - Deprecated features must be announced in release notes
+  - Minimum deprecation period: one minor release cycle
+  - Migration path must be documented before deprecation
+
+### Feature Flag Lifecycle
+
+Feature flags follow a structured lifecycle:
+
+1. **Alpha:** Feature disabled by default, requires explicit flag to enable
+2. **Beta:** Feature enabled by default, flag allows disabling for rollback
+3. **GA:** Flag may be deprecated and eventually removed (after deprecation period)
+
+### Graduation Criteria Checklist
+
+Before promoting a feature, verify:
+
+- [ ] All requirements for target stage are met (see above)
+- [ ] API review completed by maintainers
+- [ ] Security implications reviewed and addressed
+- [ ] Performance impact measured and acceptable
+- [ ] Documentation updated to reflect new stage
+- [ ] Release notes updated with promotion announcement
+- [ ] Test coverage meets stage requirements
+- [ ] Metrics instrumentation completed (Beta+)
+- [ ] Backward compatibility verified (Beta+)
+- [ ] Upgrade/downgrade testing completed (GA)
+
 ## Practical Effects
 
 ### Project velocity
