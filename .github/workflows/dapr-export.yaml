@@ -38,7 +38,7 @@ jobs:
         helm repo add bitnami https://charts.bitnami.com/bitnami
         helm repo update
         helm upgrade --install dapr dapr/dapr --version=${{ matrix.DAPR_VERSION }} --namespace dapr-system --create-namespace --wait --debug
-        helm upgrade --install redis bitnami/redis --namespace default --set image.tag=7.0-debian-11 --wait --debug
+        helm upgrade --install redis bitnami/redis --namespace default --wait --debug
         make e2e-subscriber-build-load-image
         make e2e-subscriber-deploy
 
