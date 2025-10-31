@@ -15,14 +15,12 @@ spec:
       name: redis
       key: redis-password
 ---
-apiVersion: v1
-kind: ConfigMap
+apiVersion: connection.gatekeeper.sh/v1alpha1
+kind: Connection
 metadata:
   name: audit
   namespace: gatekeeper-system
-data:
+spec:
   driver: "dapr"
-  config: |
-    {
-      "component": "pubsub"
-    }
+  config:
+    component: "pubsub"

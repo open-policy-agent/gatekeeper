@@ -38,7 +38,7 @@ jobs:
         helm repo add bitnami https://charts.bitnami.com/bitnami
         helm repo update
         helm upgrade --install dapr dapr/dapr --version=${{ matrix.DAPR_VERSION }} --namespace dapr-system --create-namespace --wait --debug
-        helm upgrade --install redis bitnami/redis --namespace default --set image.tag=7.0-debian-11 --wait --debug
+        helm upgrade --install redis bitnami/redis --namespace default --wait --debug
         make e2e-subscriber-build-load-image
         make e2e-subscriber-deploy
 
@@ -49,8 +49,8 @@ jobs:
         make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest CI=true
         kind load docker-image --name kind gatekeeper-e2e:latest gatekeeper-crds:latest
         kubectl create ns gatekeeper-system
-        make e2e-publisher-deploy
         make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG AUDIT_CHANNEL=audit-channel EXPORT_BACKEND=dapr
+        make e2e-publisher-deploy
         make test-e2e ENABLE_EXPORT_TESTS=1 EXPORT_BACKEND=dapr
 
     - name: Save logs
