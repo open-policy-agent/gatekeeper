@@ -23,6 +23,7 @@ import (
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -788,6 +789,10 @@ func (f *fakeWriter) Patch(_ context.Context, _ client.Object, _ client.Patch, _
 }
 
 func (f *fakeWriter) DeleteAllOf(_ context.Context, _ client.Object, _ ...client.DeleteAllOfOption) error {
+	return nil
+}
+
+func (f *fakeWriter) Apply(_ context.Context, _ runtime.ApplyConfiguration, _ ...client.ApplyOption) error {
 	return nil
 }
 
