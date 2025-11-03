@@ -86,6 +86,15 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{/*
+Common annotations
+*/}}
+{{- define "gatekeeper.commonAnnotations" -}}
+{{- if .Values.commonAnnotations }}
+{{ toYaml .Values.commonAnnotations }}
+{{- end }}
+{{- end }}
+
+{{/*
 Selector labels
 */}}
 {{- define "gatekeeper.selectorLabels" -}}
@@ -141,4 +150,49 @@ Output post install webhook probe volume entry
 - name: cert
   secret:
     secretName: {{ .Values.externalCertInjection.secretName }}
+{{- end -}}
+
+{{/*
+Extra volume mounts for audit and controller-manager pods
+*/}}
+{{- define "gatekeeper.extraVolumeMounts" -}}
+{{- if .Values.extraVolumeMounts }}
+{{- toYaml .Values.extraVolumeMounts }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Extra volume mounts for audit and controller-manager pods
+*/}}
+{{- define "gatekeeper.extraVolumes" -}}
+{{- if .Values.extraVolumes }}
+{{- toYaml .Values.extraVolumes }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Extra env vars for audit and controller-manager pods
+*/}}
+{{- define "gatekeeper.extraEnvs" -}}
+{{- if .Values.extraEnvs }}
+{{- toYaml .Values.extraEnvs }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Extra env vars for controller-manager pods
+*/}}
+{{- define "controllerManager.extraEnvs" -}}
+{{- if .Values.controllerManager.extraEnvs }}
+{{- toYaml .Values.controllerManager.extraEnvs }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Extra env vars for audit pods
+*/}}
+{{- define "audit.extraEnvs" -}}
+{{- if .Values.audit.extraEnvs }}
+{{- toYaml .Values.audit.extraEnvs }}
+{{- end -}}
 {{- end -}}

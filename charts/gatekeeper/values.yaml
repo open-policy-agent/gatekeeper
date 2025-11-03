@@ -48,17 +48,20 @@ auditEventsInvolvedNamespace: false
 resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
 enableK8sNativeValidation: true
+commonAnnotations: {}
+extraVolumeMounts: []
+extraVolumes: []
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.21.0-beta.0
+  release: v3.21.0-rc.0
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.21.0-beta.0
+      tag: v3.21.0-rc.0
 postUpgrade:
   labelNamespace:
     serviceAccount:
@@ -67,7 +70,7 @@ postUpgrade:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.21.0-beta.0
+      tag: v3.21.0-rc.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -101,7 +104,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.21.0-beta.0
+      tag: v3.21.0-rc.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -145,7 +148,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.21.0-beta.0
+      tag: v3.21.0-rc.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""
@@ -171,6 +174,7 @@ enableRuntimeDefaultSeccompProfile: true
 controllerManager:
   serviceAccount:
     name: gatekeeper-admin
+    automountServiceAccountToken: true
   containerName: manager
   exemptNamespaces: []
   exemptNamespacePrefixes: []
@@ -261,6 +265,7 @@ audit:
       name: tmp-violations
   serviceAccount:
     name: gatekeeper-admin
+    automountServiceAccountToken: true
   containerName: manager
   hostNetwork: false
   dnsPolicy: ClusterFirst
@@ -317,8 +322,6 @@ pdb:
     minAvailable: 1
 service: {}
 disabledBuiltins: ["{http.send}"]
-psp:
-  enabled: false
 upgradeCRDs:
   serviceAccount:
     create: true

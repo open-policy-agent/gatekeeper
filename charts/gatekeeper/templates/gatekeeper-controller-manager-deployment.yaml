@@ -2,6 +2,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  annotations:
+    {{- include "gatekeeper.commonAnnotations" . | nindent 4 }}
   labels:
     {{- include "gatekeeper.commonLabels" . | nindent 4 }}
     app: '{{ template "gatekeeper.name" . }}'
@@ -51,7 +53,7 @@ spec:
     spec:
       affinity:
         {{- toYaml .Values.controllerManager.affinity | nindent 8 }}
-      automountServiceAccountToken: true
+      automountServiceAccountToken: {{ .Values.controllerManager.serviceAccount.automountServiceAccountToken }}
       containers:
       - {{- if .Values.image.release }}
         image: {{ .Values.image.repository }}:{{ .Values.image.release }}
@@ -84,7 +86,9 @@ spec:
         - --max-serving-threads={{ .Values.maxServingThreads }}
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+        {{ if .Values.additionalValidatingWebhookConfigsToRotateCerts | empty | not }}- --additional-validating-webhook-configs-to-rotate-certs={{ .Values.additionalValidatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
+        {{ if .Values.additionalMutatingWebhookConfigsToRotateCerts | empty | not }}- --additional-mutating-webhook-configs-to-rotate-certs={{ .Values.additionalMutatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
@@ -129,6 +133,8 @@ spec:
         command:
         - /manager
         env:
+        {{- include "gatekeeper.extraEnvs" . | nindent 8 }}
+        {{- include "controllerManager.extraEnvs" . | nindent 8 }}
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -178,6 +184,7 @@ spec:
           {{- end }}
           {{- toYaml .Values.controllerManager.securityContext | nindent 10}}
         volumeMounts:
+        {{- include "gatekeeper.extraVolumeMounts" . | nindent 8 }}
         - mountPath: /certs
           name: cert
           readOnly: true
@@ -199,6 +206,7 @@ spec:
       topologySpreadConstraints:
         {{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}
       volumes:
+      {{- include "gatekeeper.extraVolumes" . | nindent 6 }}
       - name: cert
         secret:
           defaultMode: 420
