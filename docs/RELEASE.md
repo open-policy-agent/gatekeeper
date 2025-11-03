@@ -104,9 +104,7 @@ This will build the `openpolicyagent/gatekeeper` image automatically, then publi
 
 ## Additional Post-Release Checklist
 
-After a major or minor release (not patch releases), review and release the following dependencies if they contain changes since their last release:
+After a major or minor release, review and release the following dependencies if they contain changes since their last release:
 
 - **frameworks/constraint**: If there are unreleased changes, cut a new release and tag the same commit ID that is referenced in Gatekeeper's `go.mod` with the next appropriate release tag.
 - **cert-controller**: If there are unreleased changes, cut a new release and tag the same commit ID that is referenced in Gatekeeper's `go.mod` with the next appropriate release tag.
-
-This ensures that the dependency versions referenced in Gatekeeper's release are properly tagged and available as standalone releases for other consumers of these libraries.
