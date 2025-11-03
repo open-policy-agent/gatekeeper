@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.14.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assignimage.mutations.gatekeeper.sh
@@ -277,7 +277,6 @@ spec:
                         not applied. All `subPath` entries must be a prefix of `location`. Any
                         glob characters will take on the same value as was used to
                         expand the matching glob in `location`.
-
 
                         Available Tests:
                         * MustExist    - the path must exist or do not mutate
