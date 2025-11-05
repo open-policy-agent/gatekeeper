@@ -431,6 +431,37 @@ __required_labels_audit_test() {
   [[ "$events" -ge 1 ]]
 }
 
+@test "constraint label metrics test" {
+  # Check if enable-constraint-label-metrics flag is enabled
+  local audit_pod="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l control-plane=audit-controller -o jsonpath='{.items[0].metadata.name}')"
+  local flag_enabled=$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod ${audit_pod} -o jsonpath='{.spec.containers[0].args}' | grep -c 'enable-constraint-label-metrics=true' || echo "0")
+  
+  if [[ "${flag_enabled}" == "0" ]]; then
+    skip "enable-constraint-label-metrics flag is not enabled"
+  fi
+
+  # Create a temporary curl pod to scrape metrics
+  kubectl run temp-metrics --image=curlimages/curl -- tail -f /dev/null
+  kubectl wait --for=condition=Ready --timeout=60s pod temp-metrics
+
+  # Get the audit pod IP for scraping metrics
+  local pod_ip="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l control-plane=audit-controller -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
+  
+  # Wait for audit to run and violations to be recorded
+  # The audit should have already run in previous tests that created violations
+  sleep 5
+
+  # Scrape metrics and check for gatekeeper_violations_per_constraint metric
+  # This metric should exist if the flag is enabled and audit has run
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec -it temp-metrics -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_violations_per_constraint'"
+  
+  # Verify the metric has the expected labels (constraint and enforcement_action)
+  local metrics_output=$(kubectl exec -it temp-metrics -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics)
+  echo "${metrics_output}" | grep 'gatekeeper_violations_per_constraint{constraint='
+  
+  kubectl delete pod temp-metrics
+}
+
 __namespace_exclusion_test() {
   local exclusion_config="$1"
   local excluded_namespace="$2"
