@@ -415,9 +415,20 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 		if target.Operations != nil {
 			for _, op := range target.Operations {
 				if string(op) == "*" && len(target.Operations) > 1 {
-					return false, fmt.Errorf("if '*' is present, must not specify other operations")
+					return true, fmt.Errorf("if '*' is present, must not specify other operations")
 				}
 			}
+		}
+		hasRego := target.Rego != ""
+		hasCodeRego := false
+		for _, code := range target.Code {
+			if code.Engine == "Rego" {
+				hasCodeRego = true
+				break
+			}
+		}
+		if hasRego && hasCodeRego {
+			return true, fmt.Errorf("rego can only be specified in one place per target")
 		}
 	}
 

@@ -1235,3 +1235,295 @@ func convertToRawExtension(obj runtime.Object) (*runtime.RawExtension, error) {
 	re.Raw = b
 	return re, nil
 }
+
+func TestValidateTemplate(t *testing.T) {
+	tests := []struct {
+		name          string
+		templateYAML  string
+		wantUserError bool
+		wantErr       bool
+		errContains   string
+	}{
+		{
+			name: "Valid template with Code field",
+			templateYAML: `
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: validtemplate
+spec:
+  crd:
+    spec:
+      names:
+        kind: ValidTemplate
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+              package validtemplate
+
+              violation[{"msg": msg}] {
+                msg := "test violation"
+              }
+`,
+			wantUserError: false,
+			wantErr:       false,
+		},
+		{
+			name: "Invalid template with Rego in both places",
+			templateYAML: `
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: duplicaterego
+spec:
+  crd:
+    spec:
+      names:
+        kind: DuplicateRego
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package duplicaterego
+
+        violation[{"msg": msg}] {
+          msg := "test violation"
+        }
+      code:
+        - engine: Rego
+          source:
+            rego: |
+              package duplicaterego
+
+              violation[{"msg": msg}] {
+                msg := "test violation"
+              }
+`,
+			wantUserError: true,
+			wantErr:       true,
+			errContains:   "rego can only be specified in one place per target",
+		},
+		{
+			name: "Invalid template with wildcard and other operations",
+			templateYAML: `
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: invalidoperations
+spec:
+  crd:
+    spec:
+      names:
+        kind: InvalidOperations
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+              package invalidoperations
+
+              violation[{"msg": msg}] {
+                msg := "test violation"
+              }
+      operations:
+        - "*"
+        - CREATE
+`,
+			wantUserError: true,
+			wantErr:       true,
+			errContains:   "if '*' is present, must not specify other operations",
+		},
+		{
+			name: "Valid template with wildcard operation only",
+			templateYAML: `
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: validwildcard
+spec:
+  crd:
+    spec:
+      names:
+        kind: ValidWildcard
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+              package validwildcard
+
+              violation[{"msg": msg}] {
+                msg := "test violation"
+              }
+      operations:
+        - "*"
+`,
+			wantUserError: false,
+			wantErr:       false,
+		},
+		{
+			name: "Valid template with specific operations",
+			templateYAML: `
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: validoperations
+spec:
+  crd:
+    spec:
+      names:
+        kind: ValidOperations
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+              package validoperations
+
+              violation[{"msg": msg}] {
+                msg := "test violation"
+              }
+      operations:
+        - CREATE
+        - UPDATE
+`,
+			wantUserError: false,
+			wantErr:       false,
+		},
+		{
+			name: "Template with multiple targets (should fail - only one target allowed)",
+			templateYAML: `
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: multitarget
+spec:
+  crd:
+    spec:
+      names:
+        kind: MultiTarget
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+              package multitarget1
+
+              violation[{"msg": msg}] {
+                msg := "test violation 1"
+              }
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+              package multitarget2
+
+              violation[{"msg": msg}] {
+                msg := "test violation 2"
+              }
+`,
+			wantUserError: true,
+			wantErr:       true,
+			errContains:   "must declare exactly one target",
+		},
+		{
+			name: "Valid template with empty CRD spec",
+			templateYAML: `
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: minimal
+spec:
+  crd:
+    spec:
+      names:
+        kind: Minimal
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+              package minimal
+
+              violation[{"msg": msg}] {
+                msg := "always deny"
+              }
+`,
+			wantUserError: false,
+			wantErr:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			opa, err := makeOpaClient()
+			if err != nil {
+				t.Fatalf("Could not initialize OPA: %s", err)
+			}
+
+			handler := validationHandler{
+				opa: opa,
+				webhookHandler: webhookHandler{
+					client: &nsGetter{},
+				},
+				log: log,
+			}
+
+			req := &admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Kind: metav1.GroupVersionKind{
+						Group:   "templates.gatekeeper.sh",
+						Version: "v1beta1",
+						Kind:    "ConstraintTemplate",
+					},
+					Object: runtime.RawExtension{
+						Raw: []byte(tt.templateYAML),
+					},
+					Operation: admissionv1.Create,
+				},
+			}
+
+			userError, err := handler.validateTemplate(ctx, req)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("validateTemplate() error = nil, wantErr = true")
+				} else if tt.errContains != "" && !contains(err.Error(), tt.errContains) {
+					t.Errorf("validateTemplate() error = %v, want error containing %q", err, tt.errContains)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("validateTemplate() unexpected error = %v, wantErr = false", err)
+				}
+			}
+
+			if userError != tt.wantUserError {
+				t.Errorf("validateTemplate() userError = %v, want %v", userError, tt.wantUserError)
+			}
+		})
+	}
+}
+
+// contains checks if a string contains a substring.
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && stringContains(s, substr)))
+}
+
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
