@@ -148,7 +148,7 @@ Limitations/drawbacks of exporting violations:
 
 Gatekeeper audit component is designed to run as a singleton because it writes to Constraint CRs, and having multiple instances could lead to conflicting writes. Gatekeeper audit component is also responsible for generating CRDs and VAP resources from ConstraintTemplate. Increasing audit replicas may result in writing conflicts for CRDs and VAP resources as well.
 
-If your setup only consumes audit results from logs (and does not rely on Constraint status updates), you can safely run multiple replicas. However, we generally don't recommend this unless you set `--constraint-violations-limit=0`.
+If your setup only consumes audit results from logs (and does not rely on Constraint status updates), you can safely run multiple replicas. However, we generally don't recommend this unless you set `--constraint-violations-limit=0`. Additionally, you must disable VAP generation when running multiple replicas to avoid conflicts.
 
 For more details on how to deploy audit and 
 number of instances to run, please refer to [operations audit](operations.md#audit). 
