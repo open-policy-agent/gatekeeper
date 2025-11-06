@@ -1245,6 +1245,30 @@ func TestValidateTemplate(t *testing.T) {
 		errContains   string
 	}{
 		{
+			name: "Valid template with Rego field",
+			templateYAML: `
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: validtemplate
+spec:
+  crd:
+    spec:
+      names:
+        kind: ValidTemplate
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+          package validtemplate
+          violation[{"msg": msg}] {
+            msg := "test violation"
+          }
+        
+`,
+			wantUserError: false,
+			wantErr:       false,
+		},
+		{
 			name: "Valid template with Code field",
 			templateYAML: `
 apiVersion: templates.gatekeeper.sh/v1beta1
