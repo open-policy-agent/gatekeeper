@@ -467,12 +467,17 @@ __required_labels_audit_test() {
   
   if [[ "${flag_was_enabled}" == "0" ]]; then
     echo "Restoring original deployment state..."
-    kubectl -n ${GATEKEEPER_NAMESPACE} patch deployment gatekeeper-audit --type='json' -p='[
-      {
-        "op": "remove",
-        "path": "/spec/template/spec/containers/0/args/-"
-      }
-    ]'
+    # Find the index of the flag to remove
+    local args_json=$(kubectl -n ${GATEKEEPER_NAMESPACE} get deployment gatekeeper-audit -o json | jq -c '.spec.template.spec.containers[0].args')
+    local flag_index=$(echo "${args_json}" | jq 'map(. == "--enable-constraint-label-metrics=true") | index(true)')
+    if [[ "${flag_index}" != "null" ]]; then
+      kubectl -n ${GATEKEEPER_NAMESPACE} patch deployment gatekeeper-audit --type='json' -p="[
+        {
+          \"op\": \"remove\",
+          \"path\": \"/spec/template/spec/containers/0/args/${flag_index}\"
+        }
+      ]"
+    fi
     kubectl -n ${GATEKEEPER_NAMESPACE} rollout status deployment/gatekeeper-audit --timeout=120s
   fi
 }
