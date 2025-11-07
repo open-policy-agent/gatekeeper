@@ -431,6 +431,7 @@ func (r *Writer) retryFailedConnections() {
 				delay = maxRetryDelay
 			}	
 			failedConn.RetryCount++
+			// Apply jitter to the retry delay
 			delay = wait.Jitter(delay, Jitter)			
 			failedConn.NextRetryAt = now.Add(delay)
 			r.closedConnections[name] = failedConn
