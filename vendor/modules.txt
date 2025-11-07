@@ -113,7 +113,7 @@ github.com/cespare/xxhash/v2
 # github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
 ## explicit
 github.com/common-nighthawk/go-figure
-# github.com/containerd/containerd v1.7.28
+# github.com/containerd/containerd v1.7.29
 ## explicit; go 1.23.0
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/content
