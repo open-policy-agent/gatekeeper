@@ -1056,7 +1056,7 @@ func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 		return nil, false
 	}
 
-	ref := p.parseTermFinish(term, true)
+	ref := p.parseHeadFinish(term, true)
 	if ref == nil {
 		p.illegal("expected rule head name")
 		return nil, false
@@ -1259,23 +1259,25 @@ func (p *Parser) parseLiteralExpr(negated bool) *Expr {
 				return nil
 			}
 		}
-		// If we find a plain `every` identifier, attempt to parse an every expression,
-		// add hint if it succeeds.
-		if term, ok := expr.Terms.(*Term); ok && Var("every").Equal(term.Value) {
-			var hint bool
-			t := p.save()
-			p.restore(s)
-			if expr := p.futureParser().parseEvery(); expr != nil {
-				_, hint = expr.Terms.(*Every)
-			}
-			p.restore(t)
-			if hint {
-				p.hint("`import future.keywords.every` for `every x in xs { ... }` expressions")
+
+		if p.isFutureKeyword("every") {
+			// If we find a plain `every` identifier, attempt to parse an every expression,
+			// add hint if it succeeds.
+			if term, ok := expr.Terms.(*Term); ok && Var("every").Equal(term.Value) {
+				var hint bool
+				t := p.save()
+				p.restore(s)
+				if expr := p.futureParser().parseEvery(); expr != nil {
+					_, hint = expr.Terms.(*Every)
+				}
+				p.restore(t)
+				if hint {
+					p.hint("`import future.keywords.every` for `every x in xs { ... }` expressions")
+				}
 			}
 		}
-		return expr
 	}
-	return nil
+	return expr
 }
 
 func (p *Parser) parseWith() []*With {
@@ -1368,26 +1370,28 @@ func (p *Parser) parseSome() *Expr {
 	}
 
 	p.restore(s)
-	s = p.save() // new copy for later
-	var hint bool
-	p.scan()
-	if term := p.futureParser().parseTermInfixCall(); term != nil {
-		if call, ok := term.Value.(Call); ok {
-			switch call[0].String() {
-			case Member.Name, MemberWithKey.Name:
-				hint = true
+
+	if p.isFutureKeyword("in") {
+		s = p.save() // new copy for later
+		var hint bool
+		p.scan()
+		if term := p.futureParser().parseTermInfixCall(); term != nil {
+			if call, ok := term.Value.(Call); ok {
+				switch call[0].String() {
+				case Member.Name, MemberWithKey.Name:
+					hint = true
+				}
 			}
+		}
+
+		// go on as before, it's `some x[...]` or illegal
+		p.restore(s)
+		if hint {
+			p.hint("`import future.keywords.in` for `some x in xs` expressions")
 		}
 	}
 
-	// go on as before, it's `some x[...]` or illegal
-	p.restore(s)
-	if hint {
-		p.hint("`import future.keywords.in` for `some x in xs` expressions")
-	}
-
 	for { // collecting var args
-
 		p.scan()
 
 		if p.s.tok != tokens.Ident {
@@ -1774,6 +1778,35 @@ func (p *Parser) parseTermFinish(head *Term, skipws bool) *Term {
 	}
 }
 
+func (p *Parser) parseHeadFinish(head *Term, skipws bool) *Term {
+	if head == nil {
+		return nil
+	}
+	offset := p.s.loc.Offset
+	p.doScan(false)
+
+	switch p.s.tok {
+	case tokens.Add, tokens.Sub, tokens.Mul, tokens.Quo, tokens.Rem,
+		tokens.And, tokens.Or,
+		tokens.Equal, tokens.Neq, tokens.Gt, tokens.Gte, tokens.Lt, tokens.Lte:
+		p.illegalToken()
+	case tokens.Whitespace:
+		p.doScan(skipws)
+	}
+
+	switch p.s.tok {
+	case tokens.LParen, tokens.Dot, tokens.LBrack:
+		return p.parseRef(head, offset)
+	case tokens.Whitespace:
+		p.scan()
+	}
+
+	if _, ok := head.Value.(Var); ok && RootDocumentNames.Contains(head) {
+		return RefTerm(head).SetLocation(head.Location)
+	}
+	return head
+}
+
 func (p *Parser) parseNumber() *Term {
 	var prefix string
 	loc := p.s.Loc()
@@ -1849,13 +1882,11 @@ func (p *Parser) parseString() *Term {
 		}
 
 		var s string
-		err := json.Unmarshal([]byte(p.s.lit), &s)
-		if err != nil {
+		if err := json.Unmarshal([]byte(p.s.lit), &s); err != nil {
 			p.errorf(p.s.Loc(), "illegal string literal: %s", p.s.lit)
 			return nil
 		}
-		term := StringTerm(s).SetLocation(p.s.Loc())
-		return term
+		return StringTerm(s).SetLocation(p.s.Loc())
 	}
 	return p.parseRawString()
 }
@@ -1864,8 +1895,7 @@ func (p *Parser) parseRawString() *Term {
 	if len(p.s.lit) < 2 {
 		return nil
 	}
-	term := StringTerm(p.s.lit[1 : len(p.s.lit)-1]).SetLocation(p.s.Loc())
-	return term
+	return StringTerm(p.s.lit[1 : len(p.s.lit)-1]).SetLocation(p.s.Loc())
 }
 
 // this is the name to use for instantiating an empty set, e.g., `set()`.
@@ -2343,7 +2373,7 @@ func (p *Parser) genwildcard() string {
 }
 
 func (p *Parser) error(loc *location.Location, reason string) {
-	p.errorf(loc, reason) //nolint:govet
+	p.errorf(loc, "%s", reason)
 }
 
 func (p *Parser) errorf(loc *location.Location, f string, a ...any) {
@@ -2566,6 +2596,7 @@ type rawAnnotation struct {
 	RelatedResources []any            `yaml:"related_resources"`
 	Authors          []any            `yaml:"authors"`
 	Schemas          []map[string]any `yaml:"schemas"`
+	Compile          map[string]any   `yaml:"compile"`
 	Custom           map[string]any   `yaml:"custom"`
 }
 
@@ -2631,6 +2662,40 @@ func (b *metadataParser) Parse() (*Annotations, error) {
 			return nil, fmt.Errorf("invalid related-resource definition %s: %w", v, err)
 		}
 		result.RelatedResources = append(result.RelatedResources, rr)
+	}
+
+	if raw.Compile != nil {
+		result.Compile = &CompileAnnotation{}
+		if unknowns, ok := raw.Compile["unknowns"]; ok {
+			if unknowns, ok := unknowns.([]any); ok {
+				result.Compile.Unknowns = make([]Ref, len(unknowns))
+				for i := range unknowns {
+					if unknown, ok := unknowns[i].(string); ok {
+						ref, err := ParseRef(unknown)
+						if err != nil {
+							return nil, fmt.Errorf("invalid unknowns element %q: %w", unknown, err)
+						}
+						result.Compile.Unknowns[i] = ref
+					}
+				}
+			}
+		}
+		if mask, ok := raw.Compile["mask_rule"]; ok {
+			if mask, ok := mask.(string); ok {
+				maskTerm, err := ParseTerm(mask)
+				if err != nil {
+					return nil, fmt.Errorf("invalid mask_rule annotation %q: %w", mask, err)
+				}
+				switch v := maskTerm.Value.(type) {
+				case Var, String:
+					result.Compile.MaskRule = Ref{maskTerm}
+				case Ref:
+					result.Compile.MaskRule = v
+				default:
+					return nil, fmt.Errorf("invalid mask_rule annotation type %q: %[1]T", mask)
+				}
+			}
+		}
 	}
 
 	for _, pair := range raw.Schemas {
@@ -2914,6 +2979,11 @@ func IsFutureKeywordForRegoVersion(s string, v RegoVersion) bool {
 	}
 
 	return yes
+}
+
+// isFutureKeyword answers if keyword is from the "future" with the parser options set.
+func (p *Parser) isFutureKeyword(s string) bool {
+	return IsFutureKeywordForRegoVersion(s, p.po.RegoVersion)
 }
 
 func (p *Parser) futureImport(imp *Import, allowedFutureKeywords map[string]tokens.Token) {

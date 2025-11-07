@@ -36,7 +36,7 @@ jobs:
         KUBERNETES_VERSION: ["1.31.6", "1.32.3", "1.33.2"] # Latest available versions of Kubernetes at - https://hub.docker.com/r/kindest/node/tags
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
         with:
           egress-policy: audit
 
@@ -46,7 +46,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          go-version: "1.24"
+          go-version: "1.25"
           check-latest: true
 
       - name: Download e2e dependencies

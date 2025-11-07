@@ -22,12 +22,15 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
@@ -46,6 +49,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -160,7 +164,7 @@ func TestReconcile(t *testing.T) {
 		fakes.WithName("no-pod"),
 	)
 
-	rec, err := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil }, nil)
 	require.NoError(t, err)
 
 	// Wrap the Controller Reconcile function so it writes each request to a map when it is finished reconciling.
@@ -452,7 +456,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 		fakes.WithName("no-pod"),
 	)
 
-	rec, err := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil }, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating reconciler: %w", err)
 	}
@@ -630,7 +634,7 @@ func TestConfig_Retries(t *testing.T) {
 		fakes.WithName("no-pod"),
 	)
 
-	rec, _ := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil })
+	rec, _ := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil }, nil)
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)
@@ -713,6 +717,232 @@ func TestConfig_Retries(t *testing.T) {
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking final cache contents")
 }
 
+func TestTriggerConstraintTemplateReconciliation(t *testing.T) {
+	ctx := context.Background()
+
+	// Helper to create a valid VAP-enabled constraint template
+	createVAPTemplate := func(name string) *v1beta1.ConstraintTemplate {
+		// Create a proper CEL source that enables VAP generation
+		source := &celSchema.Source{
+			Validations: []celSchema.Validation{
+				{
+					Expression: "true",
+					Message:    "test validation",
+				},
+			},
+			GenerateVAP: ptr.To(true),
+		}
+
+		ct := &v1beta1.ConstraintTemplate{}
+		ct.SetName(name)
+		ct.Spec.CRD.Spec.Names.Kind = name + "Kind"
+		// Add K8sNativeValidation target to make it VAP-eligible
+		ct.Spec.Targets = []v1beta1.Target{
+			{
+				Target: "admission.k8s.gatekeeper.sh",
+				Code: []v1beta1.Code{
+					{
+						Engine: "K8sNativeValidation",
+						Source: &templates.Anything{
+							Value: source.MustToUnstructured(),
+						},
+					},
+				},
+			},
+		}
+		return ct
+	}
+
+	t.Run("successful reconciliation with valid templates", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+		_, err := readiness.SetupTracker(mgr, false, false, false)
+		require.NoError(t, err)
+
+		// Create a mock reader that returns constraint templates
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if ctList, ok := list.(*v1beta1.ConstraintTemplateList); ok {
+					ct1 := createVAPTemplate("test-template-1")
+					ct2 := createVAPTemplate("test-template-2")
+					ctList.Items = []v1beta1.ConstraintTemplate{*ct1, *ct2}
+				}
+				return nil
+			},
+		}
+
+		// Create event channel
+		ctEvents := make(chan event.GenericEvent, 10)
+
+		// Create reconciler
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: ctEvents,
+		}
+
+		err = reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.NoError(t, err)
+
+		assert.Equal(t, 2, len(ctEvents))
+
+		// Verify the events contain the correct templates
+		event1 := <-ctEvents
+		event2 := <-ctEvents
+
+		ct1, ok1 := event1.Object.(*v1beta1.ConstraintTemplate)
+		ct2, ok2 := event2.Object.(*v1beta1.ConstraintTemplate)
+
+		assert.True(t, ok1)
+		assert.True(t, ok2)
+		assert.Contains(t, []string{"test-template-1", "test-template-2"}, ct1.GetName())
+		assert.Contains(t, []string{"test-template-1", "test-template-2"}, ct2.GetName())
+	})
+
+	t.Run("handles reader error gracefully", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				return fmt.Errorf("mock list error")
+			},
+		}
+
+		ctEvents := make(chan event.GenericEvent, 10)
+
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: ctEvents,
+		}
+
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.Error(t, err)
+
+		assert.Equal(t, 0, len(ctEvents))
+	})
+
+	t.Run("skips templates without VAP support", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if ctList, ok := list.(*v1beta1.ConstraintTemplateList); ok {
+					// Create a constraint template WITHOUT K8sNativeValidation engine
+					// This means it won't generate VAP
+					ct := &v1beta1.ConstraintTemplate{}
+					ct.SetName("skip-template")
+					ct.Spec.CRD.Spec.Names.Kind = "SkipConstraint"
+					// Only Rego target, no K8sNativeValidation
+					ct.Spec.Targets = []v1beta1.Target{
+						{
+							Target: "admission.k8s.gatekeeper.sh",
+							Code: []v1beta1.Code{
+								{
+									Engine: "Rego",
+									Source: &templates.Anything{},
+								},
+							},
+						},
+					}
+					ctList.Items = []v1beta1.ConstraintTemplate{*ct}
+				}
+				return nil
+			},
+		}
+
+		ctEvents := make(chan event.GenericEvent, 10)
+
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: ctEvents,
+		}
+
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.NoError(t, err)
+
+		assert.Equal(t, 0, len(ctEvents))
+	})
+
+	t.Run("handles full event channel with retry", func(t *testing.T) {
+		mgr, _ := setupManager(t)
+
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if ctList, ok := list.(*v1beta1.ConstraintTemplateList); ok {
+					ct := createVAPTemplate("test-template")
+					ctList.Items = []v1beta1.ConstraintTemplate{*ct}
+				}
+				return nil
+			},
+		}
+
+		ctEvents := make(chan event.GenericEvent)
+
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: ctEvents,
+		}
+
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "channel is full")
+	})
+
+	t.Run("handles empty template list", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				// Return empty list
+				return nil
+			},
+		}
+
+		ctEvents := make(chan event.GenericEvent, 10)
+
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: ctEvents,
+		}
+
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.NoError(t, err)
+
+		assert.Equal(t, 0, len(ctEvents))
+	})
+
+	t.Run("handles nil ctEvents channel", func(t *testing.T) {
+		// Setup
+		mgr, _ := setupManager(t)
+
+		mockReader := &fakes.SpyReader{
+			ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if ctList, ok := list.(*v1beta1.ConstraintTemplateList); ok {
+					ct := createVAPTemplate("test-template")
+					ctList.Items = []v1beta1.ConstraintTemplate{*ct}
+				}
+				return nil
+			},
+		}
+
+		reconciler := &ReconcileConfig{
+			reader:   mockReader,
+			scheme:   mgr.GetScheme(),
+			ctEvents: nil, // nil channel
+		}
+
+		err := reconciler.triggerConstraintTemplateReconciliation(ctx)
+		assert.NoError(t, err)
+	})
+}
+
 // configFor returns a config resource that watches the requested set of resources.
 func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 	entries := make([]configv1alpha1.SyncOnlyEntry, len(kinds))
@@ -769,4 +999,149 @@ func deleteResource(ctx context.Context, c client.Client, resounce *unstructured
 	}
 
 	return err
+}
+
+func TestDirtyTemplateManagement(t *testing.T) {
+	t.Run("markDirtyTemplate adds template to dirty state", func(t *testing.T) {
+		r := &ReconcileConfig{}
+
+		template := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+		}
+
+		r.markDirtyTemplate(template)
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.NotNil(t, r.dirtyTemplates)
+		require.Contains(t, r.dirtyTemplates, "test-template")
+		require.Equal(t, template, r.dirtyTemplates["test-template"])
+	})
+
+	t.Run("markDirtyTemplate handles multiple templates", func(t *testing.T) {
+		r := &ReconcileConfig{}
+
+		template1 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-1"},
+		}
+		template2 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-2"},
+		}
+
+		r.markDirtyTemplate(template1)
+		r.markDirtyTemplate(template2)
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Len(t, r.dirtyTemplates, 2)
+		require.Contains(t, r.dirtyTemplates, "template-1")
+		require.Contains(t, r.dirtyTemplates, "template-2")
+	})
+
+	t.Run("getDirtyTemplatesAndClear returns all dirty templates and clears state", func(t *testing.T) {
+		r := &ReconcileConfig{}
+
+		template1 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-1"},
+		}
+		template2 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-2"},
+		}
+
+		r.markDirtyTemplate(template1)
+		r.markDirtyTemplate(template2)
+
+		dirtyTemplates := r.getDirtyTemplatesAndClear()
+
+		require.Len(t, dirtyTemplates, 2)
+		templateNames := make([]string, len(dirtyTemplates))
+		for i, template := range dirtyTemplates {
+			templateNames[i] = template.Name
+		}
+		require.Contains(t, templateNames, "template-1")
+		require.Contains(t, templateNames, "template-2")
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Empty(t, r.dirtyTemplates)
+	})
+
+	t.Run("getDirtyTemplatesAndClear returns nil when no dirty templates", func(t *testing.T) {
+		r := &ReconcileConfig{}
+
+		dirtyTemplates := r.getDirtyTemplatesAndClear()
+
+		require.Nil(t, dirtyTemplates)
+	})
+}
+
+func TestTriggerDirtyTemplateReconciliation(t *testing.T) {
+	t.Run("processes dirty templates and sends events", func(t *testing.T) {
+		ctEvents := make(chan event.GenericEvent, 10)
+		r := &ReconcileConfig{ctEvents: ctEvents}
+
+		template1 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-1"},
+		}
+		template2 := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "template-2"},
+		}
+
+		r.markDirtyTemplate(template1)
+		r.markDirtyTemplate(template2)
+
+		ctx := context.Background()
+		err := r.triggerDirtyTemplateReconciliation(ctx)
+
+		require.NoError(t, err)
+		require.Len(t, ctEvents, 2)
+
+		receivedEvents := make([]event.GenericEvent, 2)
+		receivedEvents[0] = <-ctEvents
+		receivedEvents[1] = <-ctEvents
+
+		receivedNames := make([]string, 2)
+		for i, evt := range receivedEvents {
+			if template, ok := evt.Object.(*v1beta1.ConstraintTemplate); ok {
+				receivedNames[i] = template.Name
+			}
+		}
+		require.Contains(t, receivedNames, "template-1")
+		require.Contains(t, receivedNames, "template-2")
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Empty(t, r.dirtyTemplates)
+	})
+
+	t.Run("re-marks failed templates as dirty", func(t *testing.T) {
+		ctEvents := make(chan event.GenericEvent)
+		r := &ReconcileConfig{ctEvents: ctEvents}
+
+		template := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+		}
+
+		r.markDirtyTemplate(template)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		err := r.triggerDirtyTemplateReconciliation(ctx)
+
+		require.Error(t, err)
+
+		r.dirtyMu.Lock()
+		defer r.dirtyMu.Unlock()
+		require.Contains(t, r.dirtyTemplates, "test-template")
+	})
+
+	t.Run("returns nil when no dirty templates", func(t *testing.T) {
+		r := &ReconcileConfig{}
+
+		ctx := context.Background()
+		err := r.triggerDirtyTemplateReconciliation(ctx)
+
+		require.NoError(t, err)
+	})
 }

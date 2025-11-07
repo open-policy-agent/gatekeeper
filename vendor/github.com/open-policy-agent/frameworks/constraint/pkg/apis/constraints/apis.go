@@ -25,6 +25,9 @@ const (
 
 	// AllEnforcementPoints is a wildcard to indicate all enforcement points.
 	AllEnforcementPoints = "*"
+
+	// WebhookEnforcementPoint is the enforcement point for admission.
+	WebhookEnforcementPoint = "validation.gatekeeper.sh"
 )
 
 const (

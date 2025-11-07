@@ -139,6 +139,7 @@ func (ks *kindSet) Write() error {
 				obj = strings.Replace(obj, "        volumeMounts:", "        volumeMounts:\n        {{- include \"gatekeeper.extraVolumeMounts\" . | nindent 8 }}", 1)
 				// Inject extra volumes at the start of the volumes section for stability
 				obj = strings.Replace(obj, "      volumes:", "      volumes:\n      {{- include \"gatekeeper.extraVolumes\" . | nindent 6 }}", 1)
+				obj = strings.Replace(obj, "        env:", "        env:\n        {{- include \"gatekeeper.extraEnvs\" . | nindent 8 }}\n        {{- include \"controllerManager.extraEnvs\" . | nindent 8 }}", 1)
 			}
 
 			if name == "gatekeeper-audit" && kind == DeploymentKind {
@@ -151,6 +152,7 @@ func (ks *kindSet) Write() error {
 				// Inject extra mounts/volumes at the headers for stability
 				obj = strings.Replace(obj, "        volumeMounts:", "        volumeMounts:\n        {{- include \"gatekeeper.extraVolumeMounts\" . | nindent 8 }}", 1)
 				obj = strings.Replace(obj, "      volumes:", "      volumes:\n      {{- include \"gatekeeper.extraVolumes\" . | nindent 6 }}", 1)
+				obj = strings.Replace(obj, "        env:", "        env:\n        {{- include \"gatekeeper.extraEnvs\" . | nindent 8 }}\n        {{- include \"audit.extraEnvs\" . | nindent 8 }}", 1)
 			}
 
 			if name == "gatekeeper-manager-role" && kind == "Role" {
@@ -170,8 +172,8 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-manager-role" && kind == "ClusterRole" {
-				obj = strings.Replace(obj, "- gatekeeper-validating-webhook-configuration\n", "- {{ .Values.validatingWebhookName }}\n", 1)
-				obj = strings.Replace(obj, "- gatekeeper-mutating-webhook-configuration\n", "- {{ .Values.mutatingWebhookName }}\n", 1)
+				obj = strings.Replace(obj, "- gatekeeper-validating-webhook-configuration\n", "- {{ .Values.validatingWebhookName }}\n  {{- range $additionalValidatingWebhookConfig := .Values.additionalValidatingWebhookConfigsToRotateCerts }}\n  - {{ $additionalValidatingWebhookConfig }}\n  {{- end }}\n", 1)
+				obj = strings.Replace(obj, "- gatekeeper-mutating-webhook-configuration\n", "- {{ .Values.mutatingWebhookName }}\n  {{- range $additionalMutatingWebhookConfig := .Values.additionalMutatingWebhookConfigsToRotateCerts }}\n  - {{ $additionalMutatingWebhookConfig }}\n  {{- end }}\n", 1)
 			}
 
 			fmt.Printf("Writing %s\n", destFile)

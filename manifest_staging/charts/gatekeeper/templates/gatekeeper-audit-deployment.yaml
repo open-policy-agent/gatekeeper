@@ -89,6 +89,7 @@ spec:
         {{ if hasKey .Values.audit "channel" }}
         - --audit-channel={{ .Values.audit.channel }}
         {{- end }}
+        {{ if hasKey .Values "syncVAPEnforcementScope" }}- --sync-vap-enforcement-scope={{ .Values.syncVAPEnforcementScope }}{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}
         - --logtostderr
         - --health-addr=:{{ .Values.audit.healthPort }}
@@ -115,12 +116,26 @@ spec:
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}
         
+        {{- range .Values.controllerManager.exemptNamespaces}}
+        - --exempt-namespace={{ . }}
+        {{- end }}
+        
+        {{- range .Values.controllerManager.exemptNamespacePrefixes}}
+        - --exempt-namespace-prefix={{ . }}
+        {{- end }}
+        
+        {{- range .Values.controllerManager.exemptNamespaceSuffixes}}
+        - --exempt-namespace-suffix={{ . }}
+        {{- end }}
+        
         {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
         - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}
         command:
         - /manager
         env:
+        {{- include "gatekeeper.extraEnvs" . | nindent 8 }}
+        {{- include "audit.extraEnvs" . | nindent 8 }}
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

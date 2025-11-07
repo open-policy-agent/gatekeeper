@@ -368,3 +368,130 @@ func TestBadSerialization(t *testing.T) {
 		t.Errorf("resp.Allowed = %v, expected false. Reason: %s", resp.Allowed, resp.Result.Reason)
 	}
 }
+
+func TestGetAllExemptedNamespacesWithWildcard(t *testing.T) {
+	tests := []struct {
+		name                  string
+		exemptNamespaces      map[string]bool
+		exemptPrefixes        map[string]bool
+		exemptSuffixes        map[string]bool
+		expectedNamespaces    []string
+		expectedPrefixPattern []string
+		expectedSuffixPattern []string
+	}{
+		{
+			name:                  "empty exemptions",
+			exemptNamespaces:      map[string]bool{},
+			exemptPrefixes:        map[string]bool{},
+			exemptSuffixes:        map[string]bool{},
+			expectedNamespaces:    []string{},
+			expectedPrefixPattern: []string{},
+			expectedSuffixPattern: []string{},
+		},
+		{
+			name:                  "only exact match namespaces",
+			exemptNamespaces:      map[string]bool{"kube-system": true, "gatekeeper-system": true},
+			exemptPrefixes:        map[string]bool{},
+			exemptSuffixes:        map[string]bool{},
+			expectedNamespaces:    []string{"kube-system", "gatekeeper-system"},
+			expectedPrefixPattern: []string{},
+			expectedSuffixPattern: []string{},
+		},
+		{
+			name:                  "only prefix match namespaces",
+			exemptNamespaces:      map[string]bool{},
+			exemptPrefixes:        map[string]bool{"kube-": true, "openshift-": true},
+			exemptSuffixes:        map[string]bool{},
+			expectedNamespaces:    []string{},
+			expectedPrefixPattern: []string{"kube-*", "openshift-*"},
+			expectedSuffixPattern: []string{},
+		},
+		{
+			name:                  "only suffix match namespaces",
+			exemptNamespaces:      map[string]bool{},
+			exemptPrefixes:        map[string]bool{},
+			exemptSuffixes:        map[string]bool{"-system": true, "-monitoring": true},
+			expectedNamespaces:    []string{},
+			expectedPrefixPattern: []string{},
+			expectedSuffixPattern: []string{"*-system", "*-monitoring"},
+		},
+		{
+			name:                  "mixed exemptions",
+			exemptNamespaces:      map[string]bool{"default": true, "kube-system": true},
+			exemptPrefixes:        map[string]bool{"kube-": true},
+			exemptSuffixes:        map[string]bool{"-system": true},
+			expectedNamespaces:    []string{"default", "kube-system"},
+			expectedPrefixPattern: []string{"kube-*"},
+			expectedSuffixPattern: []string{"*-system"},
+		},
+		{
+			name:                  "single values",
+			exemptNamespaces:      map[string]bool{"test-ns": true},
+			exemptPrefixes:        map[string]bool{"dev-": true},
+			exemptSuffixes:        map[string]bool{"-prod": true},
+			expectedNamespaces:    []string{"test-ns"},
+			expectedPrefixPattern: []string{"dev-*"},
+			expectedSuffixPattern: []string{"*-prod"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original values
+			origExemptNamespace := exemptNamespace
+			origExemptNamespacePrefix := exemptNamespacePrefix
+			origExemptNamespaceSuffix := exemptNamespaceSuffix
+
+			// Restore original values after test
+			defer func() {
+				exemptNamespace = origExemptNamespace
+				exemptNamespacePrefix = origExemptNamespacePrefix
+				exemptNamespaceSuffix = origExemptNamespaceSuffix
+			}()
+
+			// Set test values
+			exemptNamespace = tt.exemptNamespaces
+			exemptNamespacePrefix = tt.exemptPrefixes
+			exemptNamespaceSuffix = tt.exemptSuffixes
+
+			// Call the function
+			result := GetAllExemptedNamespacesWithWildcard()
+
+			// Calculate expected total
+			expectedTotal := len(tt.expectedNamespaces) + len(tt.expectedPrefixPattern) + len(tt.expectedSuffixPattern)
+
+			// Verify total count
+			if len(result) != expectedTotal {
+				t.Errorf("GetAllExemptedNamespacesWithWildcard() returned %d items, expected %d. Got: %v",
+					len(result), expectedTotal, result)
+			}
+
+			// Create a map for easier lookup
+			resultMap := make(map[string]bool)
+			for _, ns := range result {
+				resultMap[ns] = true
+			}
+
+			// Verify exact match namespaces
+			for _, expected := range tt.expectedNamespaces {
+				if !resultMap[expected] {
+					t.Errorf("Expected namespace %q not found in result: %v", expected, result)
+				}
+			}
+
+			// Verify prefix patterns (should have * suffix)
+			for _, expected := range tt.expectedPrefixPattern {
+				if !resultMap[expected] {
+					t.Errorf("Expected prefix pattern %q not found in result: %v", expected, result)
+				}
+			}
+
+			// Verify suffix patterns (should have * prefix)
+			for _, expected := range tt.expectedSuffixPattern {
+				if !resultMap[expected] {
+					t.Errorf("Expected suffix pattern %q not found in result: %v", expected, result)
+				}
+			}
+		})
+	}
+}

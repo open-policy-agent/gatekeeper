@@ -101,3 +101,10 @@ This will build the `openpolicyagent/gatekeeper` image automatically, then publi
 ## Publishing
 
 1. GitHub Action will create a new release, review and edit it at https://github.com/open-policy-agent/gatekeeper/releases
+
+## Additional Post-Release Checklist
+
+After a major or minor release, review and release the following dependencies if they contain changes since their last release:
+
+- **frameworks/constraint**: If there are unreleased changes, cut a new release and tag the same commit ID that is referenced in Gatekeeper's `go.mod` with the next appropriate release tag.
+- **cert-controller**: If there are unreleased changes, cut a new release and tag the same commit ID that is referenced in Gatekeeper's `go.mod` with the next appropriate release tag.
