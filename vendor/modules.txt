@@ -113,7 +113,7 @@ github.com/cespare/xxhash/v2
 # github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
 ## explicit
 github.com/common-nighthawk/go-figure
-# github.com/containerd/containerd v1.7.28
+# github.com/containerd/containerd v1.7.29
 ## explicit; go 1.23.0
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/content
@@ -494,7 +494,7 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.14.1-0.20251031183427-40974f7dd486
 ## explicit; go 1.24.0
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20251103020510-6a8fd26dde3a
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20251105220536-241c4a079fc8
 ## explicit; go 1.24.6
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis
