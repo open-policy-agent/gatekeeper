@@ -110,8 +110,6 @@ spec:
                       type: string
                     target:
                       type: string
-                  required:
-                  - code
                   type: object
                 type: array
             type: object
