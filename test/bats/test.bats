@@ -438,8 +438,7 @@ __required_labels_audit_test() {
   
   if [[ "${flag_enabled}" == "0" ]]; then
     echo "Enabling constraint label metrics flag..."
-    local deployment="gatekeeper-audit"
-    kubectl -n ${GATEKEEPER_NAMESPACE} patch deployment ${deployment} --type='json' -p='[
+    kubectl -n ${GATEKEEPER_NAMESPACE} patch deployment gatekeeper-audit --type='json' -p='[
       {
         "op": "add",
         "path": "/spec/template/spec/containers/0/args/-",
@@ -447,7 +446,7 @@ __required_labels_audit_test() {
       }
     ]'
     
-    kubectl -n ${GATEKEEPER_NAMESPACE} rollout status deployment/${deployment} --timeout=120s
+    kubectl -n ${GATEKEEPER_NAMESPACE} rollout status deployment/gatekeeper-audit --timeout=120s
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl -n ${GATEKEEPER_NAMESPACE} wait --for=condition=Ready --timeout=60s pod -l control-plane=audit-controller"
     
     sleep 10
