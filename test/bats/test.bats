@@ -438,10 +438,10 @@ __required_labels_audit_test() {
     return 1
   fi
   
+  local flag_was_enabled="1"
   local flag_check=$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod ${audit_pod} -o jsonpath='{.spec.containers[0].args}' | grep 'enable-constraint-label-metrics=true' || echo "")
-  local flag_was_enabled="0"
-  if [[ -n "${flag_check}" ]]; then
-    flag_was_enabled="1"
+  if [[ -z "${flag_check}" ]]; then
+    flag_was_enabled="0"
     echo "Enabling constraint label metrics flag..."
     local deployment="gatekeeper-audit"
     kubectl -n ${GATEKEEPER_NAMESPACE} patch deployment ${deployment} --type='json' -p='[
