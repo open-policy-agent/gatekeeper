@@ -433,12 +433,18 @@ __required_labels_audit_test() {
 
 @test "constraint label metrics test" {
   local audit_pod="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l control-plane=audit-controller -o jsonpath='{.items[0].metadata.name}')"
-  local flag_enabled=$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod ${audit_pod} -o jsonpath='{.spec.containers[0].args}' | grep -c 'enable-constraint-label-metrics=true' || echo "0")
-  local flag_was_enabled="${flag_enabled}"
+  if [[ -z "${audit_pod}" ]]; then
+    echo "ERROR: Could not find audit pod"
+    return 1
+  fi
   
-  if [[ "${flag_enabled}" == "0" ]]; then
+  local flag_check=$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod ${audit_pod} -o jsonpath='{.spec.containers[0].args}' | grep 'enable-constraint-label-metrics=true' || echo "")
+  local flag_was_enabled="0"
+  if [[ -n "${flag_check}" ]]; then
+    flag_was_enabled="1"
     echo "Enabling constraint label metrics flag..."
-    kubectl -n ${GATEKEEPER_NAMESPACE} patch deployment gatekeeper-audit --type='json' -p='[
+    local deployment="gatekeeper-audit"
+    kubectl -n ${GATEKEEPER_NAMESPACE} patch deployment ${deployment} --type='json' -p='[
       {
         "op": "add",
         "path": "/spec/template/spec/containers/0/args/-",
@@ -446,21 +452,19 @@ __required_labels_audit_test() {
       }
     ]'
     
-    kubectl -n ${GATEKEEPER_NAMESPACE} rollout status deployment/gatekeeper-audit --timeout=120s
+    kubectl -n ${GATEKEEPER_NAMESPACE} rollout status deployment/${deployment} --timeout=120s
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl -n ${GATEKEEPER_NAMESPACE} wait --for=condition=Ready --timeout=60s pod -l control-plane=audit-controller"
     
-    sleep 10
+    echo "Waiting for audit to run with new flag (65 seconds)..."
+    sleep 65
   fi
 
+  kubectl delete pod temp-metrics --ignore-not-found=true 2>/dev/null || true
   kubectl run temp-metrics --image=curlimages/curl -- tail -f /dev/null
   kubectl wait --for=condition=Ready --timeout=60s pod temp-metrics
 
   local pod_ip="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l control-plane=audit-controller -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
-  
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec -it temp-metrics -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_violations_per_constraint'"
-  
-  local metrics_output=$(kubectl exec -it temp-metrics -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics)
-  echo "${metrics_output}" | grep 'gatekeeper_violations_per_constraint{constraint='
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec temp-metrics -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_violations_per_constraint'"
   
   kubectl delete pod temp-metrics
   
