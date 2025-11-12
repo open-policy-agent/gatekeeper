@@ -380,12 +380,10 @@ blockingLoop:
 }
 
 func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.Tracker, setupFinished chan struct{}) error {
-	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
-	// Determine which dependencies need to be created based on enabled operations
-	needsOPAClient := operations.HasValidationOperations() || *externaldata.ExternalDataEnabled
-	needsMutationSystem := mutation.Enabled() || *expansion.ExpansionEnabled
+	needsOPAClient := operations.IsAssigned(operations.Audit) || operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.Status) || *externaldata.ExternalDataEnabled
+	needsMutationSystem := operations.IsAssigned(operations.MutationWebhook) || operations.IsAssigned(operations.MutationController) || operations.IsAssigned(operations.MutationStatus) || *expansion.ExpansionEnabled
 	needsExpansionSystem := *expansion.ExpansionEnabled
 	needsProviderCache := *externaldata.ExternalDataEnabled
 
@@ -395,12 +393,9 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	var expansionSystem *expansion.System
 	var certWatcher *certwatcher.CertWatcher
 
-	// Setup external data provider cache if needed
 	if needsProviderCache {
-		setupLog.Info("setting up external data provider cache")
 		providerCache = frameworksexternaldata.NewCache()
 
-		// Set up cert watcher for external data (shared between OPA and mutation)
 		certFile := filepath.Join(*certDir, certName)
 		keyFile := filepath.Join(*certDir, keyName)
 
@@ -411,16 +406,13 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 			return err
 		}
 
-		setupLog.Info("setting up client cert watcher")
 		if err := mgr.Add(certWatcher); err != nil {
 			setupLog.Error(err, "unable to register client cert watcher")
 			return err
 		}
 	}
 
-	// Setup OPA client if needed for validation operations or external data
 	if needsOPAClient {
-		setupLog.Info("setting up OPA client")
 		args := []rego.Arg{rego.Tracing(false), rego.DisableBuiltins(disabledBuiltins.ToSlice()...)}
 		
 		if needsProviderCache {
@@ -438,7 +430,6 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 				return err
 			}
 
-			// Register the client cert watcher to the driver
 			args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
 		}
 
@@ -483,9 +474,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		}
 	}
 
-	// Setup mutation system if needed
 	if needsMutationSystem {
-		setupLog.Info("setting up mutation system")
 		mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
 		
 		if needsProviderCache {
@@ -496,13 +485,10 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		mutationSystem = mutation.NewSystem(mutationOpts)
 	}
 
-	// Setup expansion system if needed (depends on mutation system)
 	if needsExpansionSystem {
-		setupLog.Info("setting up expansion system")
 		expansionSystem = expansion.NewSystem(mutationSystem)
 	}
 
-	// Export system is always created
 	exportSystem := export.NewSystem()
 
 	c := mgr.GetCache()
@@ -529,18 +515,11 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		return err
 	}
 
-	// processExcluder is used for namespace exclusion for specified processes in config
 	processExcluder := process.Get()
 
-	// Setup all Controllers
-	setupLog.Info("setting up controllers")
-
-	// Cache manager is only needed for validation operations
 	var cm *cachemanager.CacheManager
 	var events chan event.GenericEvent
-	if operations.HasValidationOperations() {
-		// Events ch will be used to receive events from dynamic watches registered
-		// via the registrar below.
+	if operations.IsAssigned(operations.Audit) || operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.Status) {
 		events = make(chan event.GenericEvent, 1024)
 		reg, err := wm.NewRegistrar(
 			cachemanager.RegistrarName,

@@ -131,20 +131,3 @@ func AssignedStringList() []string {
 func HasValidationOperations() bool {
 	return IsAssigned(Audit) || IsAssigned(Status) || IsAssigned(Webhook)
 }
-
-// HasMutationOperations returns `true` if there
-// are any operations that would require mutation controllers.
-func HasMutationOperations() bool {
-	return IsAssigned(MutationController) || IsAssigned(MutationStatus) || IsAssigned(MutationWebhook)
-}
-
-// HasStatusOperation returns `true` if the Status operation is assigned.
-func HasStatusOperation() bool {
-	return IsAssigned(Status)
-}
-
-// HasGenerateOperation returns `true` if the Generate operation is assigned.
-func HasGenerateOperation() bool {
-	return IsAssigned(Generate)
-}
-
