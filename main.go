@@ -393,11 +393,29 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	var client *constraintclient.Client
 	var mutationSystem *mutation.System
 	var expansionSystem *expansion.System
+	var certWatcher *certwatcher.CertWatcher
 
 	// Setup external data provider cache if needed
 	if needsProviderCache {
 		setupLog.Info("setting up external data provider cache")
 		providerCache = frameworksexternaldata.NewCache()
+
+		// Set up cert watcher for external data (shared between OPA and mutation)
+		certFile := filepath.Join(*certDir, certName)
+		keyFile := filepath.Join(*certDir, keyName)
+
+		var err error
+		certWatcher, err = certwatcher.New(certFile, keyFile)
+		if err != nil {
+			setupLog.Error(err, "unable to create client cert watcher")
+			return err
+		}
+
+		setupLog.Info("setting up client cert watcher")
+		if err := mgr.Add(certWatcher); err != nil {
+			setupLog.Error(err, "unable to register client cert watcher")
+			return err
+		}
 	}
 
 	// Setup OPA client if needed for validation operations or external data
@@ -420,23 +438,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 				return err
 			}
 
-			certFile := filepath.Join(*certDir, certName)
-			keyFile := filepath.Join(*certDir, keyName)
-
-			// certWatcher is used to watch for changes to Gatekeeper's certificate and key files.
-			certWatcher, err := certwatcher.New(certFile, keyFile)
-			if err != nil {
-				setupLog.Error(err, "unable to create client cert watcher")
-				return err
-			}
-
-			setupLog.Info("setting up client cert watcher")
-			if err := mgr.Add(certWatcher); err != nil {
-				setupLog.Error(err, "unable to register client cert watcher")
-				return err
-			}
-
-			// register the client cert watcher to the driver
+			// Register the client cert watcher to the driver
 			args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
 		}
 
@@ -488,26 +490,6 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		
 		if needsProviderCache {
 			mutationOpts.ProviderCache = providerCache
-			
-			// Set up client cert watcher for mutation system if external data is enabled
-			certFile := filepath.Join(*certDir, certName)
-			keyFile := filepath.Join(*certDir, keyName)
-
-			certWatcher, err := certwatcher.New(certFile, keyFile)
-			if err != nil {
-				setupLog.Error(err, "unable to create client cert watcher for mutation")
-				return err
-			}
-
-			// Only add cert watcher if not already added for OPA client
-			if !needsOPAClient {
-				setupLog.Info("setting up client cert watcher for mutation")
-				if err := mgr.Add(certWatcher); err != nil {
-					setupLog.Error(err, "unable to register client cert watcher")
-					return err
-				}
-			}
-
 			mutationOpts.ClientCertWatcher = certWatcher
 		}
 		
@@ -520,7 +502,6 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		expansionSystem = expansion.NewSystem(mutationSystem)
 	}
 
-	// Export system is always created
 	// Export system is always created
 	exportSystem := export.NewSystem()
 
