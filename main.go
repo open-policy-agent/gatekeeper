@@ -382,7 +382,7 @@ blockingLoop:
 func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.Tracker, setupFinished chan struct{}) error {
 	<-setupFinished
 
-	needsOPAClient := operations.IsAssigned(operations.Audit) || operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.Status) || *externaldata.ExternalDataEnabled
+	needsOPAClient := operations.IsAssigned(operations.Audit) || operations.IsAssigned(operations.Webhook) || *externaldata.ExternalDataEnabled
 	needsMutationSystem := operations.IsAssigned(operations.MutationWebhook) || operations.IsAssigned(operations.MutationController) || operations.IsAssigned(operations.MutationStatus) || *expansion.ExpansionEnabled
 	needsExpansionSystem := *expansion.ExpansionEnabled
 	needsProviderCache := *externaldata.ExternalDataEnabled
@@ -519,7 +519,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 
 	var cm *cachemanager.CacheManager
 	var events chan event.GenericEvent
-	if operations.IsAssigned(operations.Audit) || operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.Status) {
+	if operations.IsAssigned(operations.Audit) || operations.IsAssigned(operations.Webhook) {
 		events = make(chan event.GenericEvent, 1024)
 		reg, err := wm.NewRegistrar(
 			cachemanager.RegistrarName,
