@@ -191,56 +191,58 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		deps.GetPod = fakePodGetter
 	}
 
-	// Adding the CacheManager as a runnable;
+	// Adding the CacheManager as a runnable only if validation operations are enabled;
 	// manager will start CacheManager.
-	if err := m.Add(deps.CacheMgr); err != nil {
-		return fmt.Errorf("error adding cache manager as a runnable: %w", err)
-	}
+	if deps.CacheMgr != nil {
+		if err := m.Add(deps.CacheMgr); err != nil {
+			return fmt.Errorf("error adding cache manager as a runnable: %w", err)
+		}
 
-	syncAdder := syncc.Adder{
-		Events:       deps.SyncEventsCh,
-		CacheManager: deps.CacheMgr,
-	}
-	// Create subordinate controller - we will feed it events dynamically via watch
-	if err := syncAdder.Add(m); err != nil {
-		return fmt.Errorf("registering sync controller: %w", err)
+		syncAdder := syncc.Adder{
+			Events:       deps.SyncEventsCh,
+			CacheManager: deps.CacheMgr,
+		}
+		// Create subordinate controller - we will feed it events dynamically via watch
+		if err := syncAdder.Add(m); err != nil {
+			return fmt.Errorf("registering sync controller: %w", err)
+		}
 	}
 
 	for _, a := range Injectors {
 		a.InjectTracker(deps.Tracker)
 
-		if a2, ok := a.(DataClientInjector); ok {
+		if a2, ok := a.(DataClientInjector); ok && deps.CFClient != nil {
 			a2.InjectCFClient(deps.CFClient)
 		}
-		if a2, ok := a.(WatchManagerInjector); ok {
+		if a2, ok := a.(WatchManagerInjector); ok && deps.WatchManger != nil {
 			a2.InjectWatchManager(deps.WatchManger)
 		}
-		if a2, ok := a.(MutationSystemInjector); ok {
+		if a2, ok := a.(MutationSystemInjector); ok && deps.MutationSystem != nil {
 			a2.InjectMutationSystem(deps.MutationSystem)
 		}
-		if a2, ok := a.(ExpansionSystemInjector); ok {
+		if a2, ok := a.(ExpansionSystemInjector); ok && deps.ExpansionSystem != nil {
 			a2.InjectExpansionSystem(deps.ExpansionSystem)
 		}
-		if a2, ok := a.(ProviderCacheInjector); ok {
+		if a2, ok := a.(ProviderCacheInjector); ok && deps.ProviderCache != nil {
 			a2.InjectProviderCache(deps.ProviderCache)
 		}
-		if a2, ok := a.(GetPodInjector); ok {
+		if a2, ok := a.(GetPodInjector); ok && deps.GetPod != nil {
 			a2.InjectGetPod(deps.GetPod)
 		}
-		if a2, ok := a.(ExportInjector); ok {
+		if a2, ok := a.(ExportInjector); ok && deps.ExportSystem != nil {
 			a2.InjectExportSystem(deps.ExportSystem)
 		}
-		if a2, ok := a.(CacheManagerInjector); ok {
+		if a2, ok := a.(CacheManagerInjector); ok && deps.CacheMgr != nil {
 			// this is used by the config controller to sync
 			a2.InjectCacheManager(deps.CacheMgr)
 		}
-		if a2, ok := a.(GetProcessExcluderInjector); ok {
+		if a2, ok := a.(GetProcessExcluderInjector); ok && deps.ProcessExcluder != nil {
 			a2.InjectProcessExcluder(deps.ProcessExcluder)
 		}
-		if a2, ok := a.(ConstraintTemplateEventInjector); ok {
+		if a2, ok := a.(ConstraintTemplateEventInjector); ok && deps.CtEvents != nil {
 			a2.InjectConstraintTemplateEvent(deps.CtEvents)
 		}
-		if a2, ok := a.(WebhookConfigCacheInjector); ok {
+		if a2, ok := a.(WebhookConfigCacheInjector); ok && deps.WebhookConfigCache != nil {
 			a2.InjectWebhookConfigCache(deps.WebhookConfigCache)
 		}
 

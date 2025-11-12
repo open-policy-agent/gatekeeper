@@ -383,91 +383,145 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
+	// Determine which dependencies need to be created based on enabled operations
+	needsOPAClient := operations.HasValidationOperations() || *externaldata.ExternalDataEnabled
+	needsMutationSystem := mutation.Enabled() || *expansion.ExpansionEnabled
+	needsExpansionSystem := *expansion.ExpansionEnabled
+	needsProviderCache := *externaldata.ExternalDataEnabled
+
 	var providerCache *frameworksexternaldata.ProviderCache
-	args := []rego.Arg{rego.Tracing(false), rego.DisableBuiltins(disabledBuiltins.ToSlice()...)}
-	mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
-	if *externaldata.ExternalDataEnabled {
+	var client *constraintclient.Client
+	var mutationSystem *mutation.System
+	var expansionSystem *expansion.System
+
+	// Setup external data provider cache if needed
+	if needsProviderCache {
+		setupLog.Info("setting up external data provider cache")
 		providerCache = frameworksexternaldata.NewCache()
-		args = append(args, rego.AddExternalDataProviderCache(providerCache))
-		mutationOpts.ProviderCache = providerCache
+	}
 
-		switch {
-		case *externaldataProviderResponseCacheTTL > 0:
-			providerResponseCache := frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
-			args = append(args, rego.AddExternalDataProviderResponseCache(providerResponseCache))
-		case *externaldataProviderResponseCacheTTL == 0:
-			setupLog.Info("external data provider response cache is disabled")
-		default:
-			err := fmt.Errorf("invalid value for external-data-provider-response-cache-ttl: %d", *externaldataProviderResponseCacheTTL)
-			setupLog.Error(err, "unable to create external data provider response cache")
-			return err
+	// Setup OPA client if needed for validation operations or external data
+	if needsOPAClient {
+		setupLog.Info("setting up OPA client")
+		args := []rego.Arg{rego.Tracing(false), rego.DisableBuiltins(disabledBuiltins.ToSlice()...)}
+		
+		if needsProviderCache {
+			args = append(args, rego.AddExternalDataProviderCache(providerCache))
+
+			switch {
+			case *externaldataProviderResponseCacheTTL > 0:
+				providerResponseCache := frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
+				args = append(args, rego.AddExternalDataProviderResponseCache(providerResponseCache))
+			case *externaldataProviderResponseCacheTTL == 0:
+				setupLog.Info("external data provider response cache is disabled")
+			default:
+				err := fmt.Errorf("invalid value for external-data-provider-response-cache-ttl: %d", *externaldataProviderResponseCacheTTL)
+				setupLog.Error(err, "unable to create external data provider response cache")
+				return err
+			}
+
+			certFile := filepath.Join(*certDir, certName)
+			keyFile := filepath.Join(*certDir, keyName)
+
+			// certWatcher is used to watch for changes to Gatekeeper's certificate and key files.
+			certWatcher, err := certwatcher.New(certFile, keyFile)
+			if err != nil {
+				setupLog.Error(err, "unable to create client cert watcher")
+				return err
+			}
+
+			setupLog.Info("setting up client cert watcher")
+			if err := mgr.Add(certWatcher); err != nil {
+				setupLog.Error(err, "unable to register client cert watcher")
+				return err
+			}
+
+			// register the client cert watcher to the driver
+			args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
 		}
 
-		certFile := filepath.Join(*certDir, certName)
-		keyFile := filepath.Join(*certDir, keyName)
+		cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 
-		// certWatcher is used to watch for changes to Gatekeeper's certificate and key files.
-		certWatcher, err := certwatcher.New(certFile, keyFile)
+		if *enableK8sCel {
+			k8sDriver, err := k8scel.New()
+			if err != nil {
+				setupLog.Error(err, "unable to set up K8s native driver")
+				return err
+			}
+			cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
+		}
+
+		externs := rego.Externs()
+		if *enableReferential {
+			externs = rego.Externs("inventory")
+		}
+		args = append(args, externs)
+
+		driver, err := rego.New(args...)
 		if err != nil {
-			setupLog.Error(err, "unable to create client cert watcher")
+			setupLog.Error(err, "unable to set up Driver")
 			return err
 		}
+		cfArgs = append(cfArgs, constraintclient.Driver(driver))
 
-		setupLog.Info("setting up client cert watcher")
-		if err := mgr.Add(certWatcher); err != nil {
-			setupLog.Error(err, "unable to register client cert watcher")
-			return err
+		eps := []string{}
+		if operations.IsAssigned(operations.Audit) {
+			eps = append(eps, util.AuditEnforcementPoint)
+		}
+		if operations.IsAssigned(operations.Webhook) {
+			eps = append(eps, util.WebhookEnforcementPoint)
 		}
 
-		// register the client cert watcher to the driver
-		args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
+		cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
 
-		// register the client cert watcher to the mutation system
-		mutationOpts.ClientCertWatcher = certWatcher
-	}
-
-	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
-
-	if *enableK8sCel {
-		k8sDriver, err := k8scel.New()
+		client, err = constraintclient.NewClient(cfArgs...)
 		if err != nil {
-			setupLog.Error(err, "unable to set up K8s native driver")
+			setupLog.Error(err, "unable to set up OPA client")
 			return err
 		}
-		cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
 	}
 
-	externs := rego.Externs()
-	if *enableReferential {
-		externs = rego.Externs("inventory")
-	}
-	args = append(args, externs)
+	// Setup mutation system if needed
+	if needsMutationSystem {
+		setupLog.Info("setting up mutation system")
+		mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
+		
+		if needsProviderCache {
+			mutationOpts.ProviderCache = providerCache
+			
+			// Set up client cert watcher for mutation system if external data is enabled
+			certFile := filepath.Join(*certDir, certName)
+			keyFile := filepath.Join(*certDir, keyName)
 
-	driver, err := rego.New(args...)
-	if err != nil {
-		setupLog.Error(err, "unable to set up Driver")
-		return err
-	}
-	cfArgs = append(cfArgs, constraintclient.Driver(driver))
+			certWatcher, err := certwatcher.New(certFile, keyFile)
+			if err != nil {
+				setupLog.Error(err, "unable to create client cert watcher for mutation")
+				return err
+			}
 
-	eps := []string{}
-	if operations.IsAssigned(operations.Audit) {
-		eps = append(eps, util.AuditEnforcementPoint)
-	}
-	if operations.IsAssigned(operations.Webhook) {
-		eps = append(eps, util.WebhookEnforcementPoint)
-	}
+			// Only add cert watcher if not already added for OPA client
+			if !needsOPAClient {
+				setupLog.Info("setting up client cert watcher for mutation")
+				if err := mgr.Add(certWatcher); err != nil {
+					setupLog.Error(err, "unable to register client cert watcher")
+					return err
+				}
+			}
 
-	cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
-
-	client, err := constraintclient.NewClient(cfArgs...)
-	if err != nil {
-		setupLog.Error(err, "unable to set up OPA client")
-		return err
+			mutationOpts.ClientCertWatcher = certWatcher
+		}
+		
+		mutationSystem = mutation.NewSystem(mutationOpts)
 	}
 
-	mutationSystem := mutation.NewSystem(mutationOpts)
-	expansionSystem := expansion.NewSystem(mutationSystem)
+	// Setup expansion system if needed (depends on mutation system)
+	if needsExpansionSystem {
+		setupLog.Info("setting up expansion system")
+		expansionSystem = expansion.NewSystem(mutationSystem)
+	}
+
+	// Export system is always created
+	// Export system is always created
 	exportSystem := export.NewSystem()
 
 	c := mgr.GetCache()
@@ -500,35 +554,40 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	// Setup all Controllers
 	setupLog.Info("setting up controllers")
 
-	// Events ch will be used to receive events from dynamic watches registered
-	// via the registrar below.
-	events := make(chan event.GenericEvent, 1024)
-	reg, err := wm.NewRegistrar(
-		cachemanager.RegistrarName,
-		events)
-	if err != nil {
-		setupLog.Error(err, "unable to set up watch registrar for cache manager")
-		return err
-	}
+	// Cache manager is only needed for validation operations
+	var cm *cachemanager.CacheManager
+	var events chan event.GenericEvent
+	if operations.HasValidationOperations() {
+		// Events ch will be used to receive events from dynamic watches registered
+		// via the registrar below.
+		events = make(chan event.GenericEvent, 1024)
+		reg, err := wm.NewRegistrar(
+			cachemanager.RegistrarName,
+			events)
+		if err != nil {
+			setupLog.Error(err, "unable to set up watch registrar for cache manager")
+			return err
+		}
 
-	syncMetricsCache := syncutil.NewMetricsCache()
-	cm, err := cachemanager.NewCacheManager(&cachemanager.Config{
-		CfClient:         client,
-		SyncMetricsCache: syncMetricsCache,
-		Tracker:          tracker,
-		ProcessExcluder:  processExcluder,
-		Registrar:        reg,
-		Reader:           mgr.GetCache(),
-	})
-	if err != nil {
-		setupLog.Error(err, "unable to create cache manager")
-		return err
-	}
+		syncMetricsCache := syncutil.NewMetricsCache()
+		cm, err = cachemanager.NewCacheManager(&cachemanager.Config{
+			CfClient:         client,
+			SyncMetricsCache: syncMetricsCache,
+			Tracker:          tracker,
+			ProcessExcluder:  processExcluder,
+			Registrar:        reg,
+			Reader:           mgr.GetCache(),
+		})
+		if err != nil {
+			setupLog.Error(err, "unable to create cache manager")
+			return err
+		}
 
-	err = mgr.Add(pruner.NewExpectationsPruner(cm, tracker))
-	if err != nil {
-		setupLog.Error(err, "adding expectations pruner to manager")
-		return err
+		err = mgr.Add(pruner.NewExpectationsPruner(cm, tracker))
+		if err != nil {
+			setupLog.Error(err, "adding expectations pruner to manager")
+			return err
+		}
 	}
 
 	opts := controller.Dependencies{
