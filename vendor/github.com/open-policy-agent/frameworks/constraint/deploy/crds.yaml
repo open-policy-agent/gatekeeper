@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.14.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   name: constrainttemplates.templates.gatekeeper.sh
 spec:
   group: templates.gatekeeper.sh
@@ -92,6 +92,17 @@ spec:
                       x-kubernetes-list-type: map
                     libs:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - '*'
+                        - CREATE
+                        - DELETE
+                        - UPDATE
+                        - CONNECT
                         type: string
                       type: array
                     rego:
@@ -224,6 +235,17 @@ spec:
                       items:
                         type: string
                       type: array
+                    operations:
+                      enum:
+                      - '*'
+                      - CREATE
+                      - DELETE
+                      - UPDATE
+                      - CONNECT
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        type: string
+                      type: array
                     rego:
                       type: string
                     target:
@@ -354,6 +376,17 @@ spec:
                       items:
                         type: string
                       type: array
+                    operations:
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - '*'
+                        - CREATE
+                        - DELETE
+                        - UPDATE
+                        - CONNECT
+                        type: string
+                      type: array
                     rego:
                       type: string
                     target:
@@ -409,7 +442,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.14.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   name: providers.externaldata.gatekeeper.sh
 spec:
   group: externaldata.gatekeeper.sh
@@ -461,9 +494,67 @@ spec:
                   https://.
                 type: string
             type: object
+          status:
+            description: ProviderStatus defines the observed state of Provider.
+            properties:
+              byPod:
+                description: ByPod is the status of the provider by pod
+                items:
+                  description: ProviderPodStatusStatus defines the observed state
+                    of ProviderPodStatus.
+                  properties:
+                    active:
+                      type: boolean
+                    errors:
+                      items:
+                        description: ProviderError represents a single error caught
+                          while managing providers.
+                        properties:
+                          errorTimestamp:
+                            format: date-time
+                            type: string
+                          message:
+                            type: string
+                          retryable:
+                            type: boolean
+                          type:
+                            description: |-
+                              Type indicates a specific class of error for use by controller code.
+                              If not present, the error should be treated as not matching any known type.
+                            type: string
+                        required:
+                        - message
+                        type: object
+                      type: array
+                    id:
+                      type: string
+                    lastCacheUpdateTime:
+                      format: date-time
+                      type: string
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    operations:
+                      items:
+                        type: string
+                      type: array
+                    providerUID:
+                      description: |-
+                        Storing the provider UID allows us to detect drift, such as
+                        when a provider has been recreated after its CRD was deleted
+                        out from under it, interrupting the watch
+                      type: string
+                  type: object
+                type: array
+            type: object
         type: object
     served: true
     storage: false
+    subresources:
+      status: {}
   - name: v1beta1
     schema:
       openAPIV3Schema:
@@ -502,6 +593,64 @@ spec:
                   https://.
                 type: string
             type: object
+          status:
+            description: ProviderStatus defines the observed state of Provider.
+            properties:
+              byPod:
+                description: ByPod is the status of the provider by pod
+                items:
+                  description: ProviderPodStatusStatus defines the observed state
+                    of ProviderPodStatus.
+                  properties:
+                    active:
+                      type: boolean
+                    errors:
+                      items:
+                        description: ProviderError represents a single error caught
+                          while managing providers.
+                        properties:
+                          errorTimestamp:
+                            format: date-time
+                            type: string
+                          message:
+                            type: string
+                          retryable:
+                            type: boolean
+                          type:
+                            description: |-
+                              Type indicates a specific class of error for use by controller code.
+                              If not present, the error should be treated as not matching any known type.
+                            type: string
+                        required:
+                        - message
+                        type: object
+                      type: array
+                    id:
+                      type: string
+                    lastCacheUpdateTime:
+                      format: date-time
+                      type: string
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    operations:
+                      items:
+                        type: string
+                      type: array
+                    providerUID:
+                      description: |-
+                        Storing the provider UID allows us to detect drift, such as
+                        when a provider has been recreated after its CRD was deleted
+                        out from under it, interrupting the watch
+                      type: string
+                  type: object
+                type: array
+            type: object
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}

@@ -7,7 +7,7 @@ const constraintTemplateCRDYaml = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.14.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   name: constrainttemplates.templates.gatekeeper.sh
 spec:
   group: templates.gatekeeper.sh
@@ -22,8 +22,7 @@ spec:
   - name: v1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplate is the Schema for the constrainttemplates
-          API
+        description: ConstraintTemplate is the Schema for the constrainttemplates API
         properties:
           apiVersion:
             description: |-
@@ -81,8 +80,7 @@ spec:
                       items:
                         properties:
                           engine:
-                            description: 'The engine used to evaluate the code. Example:
-                              "Rego". Required.'
+                            description: 'The engine used to evaluate the code. Example: "Rego". Required.'
                             type: string
                           source:
                             description: The source code for the template. Required.
@@ -99,10 +97,23 @@ spec:
                       items:
                         type: string
                       type: array
+                    operations:
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - '*'
+                        - CREATE
+                        - DELETE
+                        - UPDATE
+                        - CONNECT
+                        type: string
+                      type: array
                     rego:
                       type: string
                     target:
                       type: string
+                  required:
+                  - code
                   type: object
                 type: array
             type: object
@@ -117,8 +128,7 @@ spec:
                   properties:
                     errors:
                       items:
-                        description: CreateCRDError represents a single error caught
-                          during parsing, compiling, etc.
+                        description: CreateCRDError represents a single error caught during parsing, compiling, etc.
                         properties:
                           code:
                             type: string
@@ -132,8 +142,7 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: a unique identifier for the pod that wrote the
-                        status
+                      description: a unique identifier for the pod that wrote the status
                       type: string
                     observedGeneration:
                       format: int64
@@ -152,8 +161,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplate is the Schema for the constrainttemplates
-          API
+        description: ConstraintTemplate is the Schema for the constrainttemplates API
         properties:
           apiVersion:
             description: |-
@@ -211,8 +219,7 @@ spec:
                       items:
                         properties:
                           engine:
-                            description: 'The engine used to evaluate the code. Example:
-                              "Rego". Required.'
+                            description: 'The engine used to evaluate the code. Example: "Rego". Required.'
                             type: string
                           source:
                             description: The source code for the template. Required.
@@ -227,6 +234,17 @@ spec:
                       x-kubernetes-list-type: map
                     libs:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      enum:
+                      - '*'
+                      - CREATE
+                      - DELETE
+                      - UPDATE
+                      - CONNECT
+                      items:
+                        description: OperationType specifies an operation for a request.
                         type: string
                       type: array
                     rego:
@@ -247,8 +265,7 @@ spec:
                   properties:
                     errors:
                       items:
-                        description: CreateCRDError represents a single error caught
-                          during parsing, compiling, etc.
+                        description: CreateCRDError represents a single error caught during parsing, compiling, etc.
                         properties:
                           code:
                             type: string
@@ -262,8 +279,7 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: a unique identifier for the pod that wrote the
-                        status
+                      description: a unique identifier for the pod that wrote the status
                       type: string
                     observedGeneration:
                       format: int64
@@ -282,8 +298,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplate is the Schema for the constrainttemplates
-          API
+        description: ConstraintTemplate is the Schema for the constrainttemplates API
         properties:
           apiVersion:
             description: |-
@@ -341,8 +356,7 @@ spec:
                       items:
                         properties:
                           engine:
-                            description: 'The engine used to evaluate the code. Example:
-                              "Rego". Required.'
+                            description: 'The engine used to evaluate the code. Example: "Rego". Required.'
                             type: string
                           source:
                             description: The source code for the template. Required.
@@ -357,6 +371,17 @@ spec:
                       x-kubernetes-list-type: map
                     libs:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - '*'
+                        - CREATE
+                        - DELETE
+                        - UPDATE
+                        - CONNECT
                         type: string
                       type: array
                     rego:
@@ -377,8 +402,7 @@ spec:
                   properties:
                     errors:
                       items:
-                        description: CreateCRDError represents a single error caught
-                          during parsing, compiling, etc.
+                        description: CreateCRDError represents a single error caught during parsing, compiling, etc.
                         properties:
                           code:
                             type: string
@@ -392,8 +416,7 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: a unique identifier for the pod that wrote the
-                        status
+                      description: a unique identifier for the pod that wrote the status
                       type: string
                     observedGeneration:
                       format: int64

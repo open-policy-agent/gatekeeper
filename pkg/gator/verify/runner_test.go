@@ -11,7 +11,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
-
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/fixtures"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"

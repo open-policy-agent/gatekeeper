@@ -104,7 +104,9 @@ spec:
             - --client-ca-name={{ .Values.controllerManager.clientCAName }}
             - --client-cn-name={{ .Values.controllerManager.clientCNName }}
             - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+            - HELMSUBST_ADDITIONAL_VALIDATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
+            - HELMSUBST_ADDITIONAL_MUTATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
@@ -207,6 +209,7 @@ spec:
             - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - HELMSUBST_AUDIT_OPERATIONS
             - HELMSUBST_DEPLOYMENT_AUDIT_VIOLATION_EXPORT_ARGS
+            - HELMSUBST_DEPLOYMENT_SYNC_VAP_ENFORCEMENT_SCOPE
             - HELMSUBST_MUTATION_STATUS_ENABLED_ARG
             - --logtostderr
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
@@ -224,6 +227,9 @@ spec:
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_SUFFIXES
             - HELMSUBST_DEPLOYMENT_DEFAULT_WAIT_VAPB_GENERATION
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""

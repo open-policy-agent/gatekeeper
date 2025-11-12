@@ -92,7 +92,9 @@ spec:
         - --client-ca-name={{ .Values.controllerManager.clientCAName }}
         - --client-cn-name={{ .Values.controllerManager.clientCNName }}
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+        {{ if .Values.additionalValidatingWebhookConfigsToRotateCerts | empty | not }}- --additional-validating-webhook-configs-to-rotate-certs={{ .Values.additionalValidatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
+        {{ if .Values.additionalMutatingWebhookConfigsToRotateCerts | empty | not }}- --additional-mutating-webhook-configs-to-rotate-certs={{ .Values.additionalMutatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
@@ -141,6 +143,8 @@ spec:
         command:
         - /manager
         env:
+        {{- include "gatekeeper.extraEnvs" . | nindent 8 }}
+        {{- include "controllerManager.extraEnvs" . | nindent 8 }}
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

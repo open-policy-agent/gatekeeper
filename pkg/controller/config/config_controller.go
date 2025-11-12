@@ -17,15 +17,21 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	cm "github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/configstatus"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplate"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -33,8 +39,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -51,9 +59,102 @@ var (
 	configGVK = configv1alpha1.GroupVersion.WithKind("Config")
 )
 
+func (r *ReconcileConfig) markDirtyTemplate(template *v1beta1.ConstraintTemplate) {
+	r.dirtyMu.Lock()
+	defer r.dirtyMu.Unlock()
+	if r.dirtyTemplates == nil {
+		r.dirtyTemplates = make(map[string]*v1beta1.ConstraintTemplate)
+	}
+	r.dirtyTemplates[template.Name] = template
+}
+
+func (r *ReconcileConfig) getDirtyTemplatesAndClear() []*v1beta1.ConstraintTemplate {
+	r.dirtyMu.Lock()
+	defer r.dirtyMu.Unlock()
+	if len(r.dirtyTemplates) == 0 {
+		return nil
+	}
+	templates := make([]*v1beta1.ConstraintTemplate, 0, len(r.dirtyTemplates))
+	for _, template := range r.dirtyTemplates {
+		templates = append(templates, template)
+	}
+	r.dirtyTemplates = make(map[string]*v1beta1.ConstraintTemplate)
+	return templates
+}
+
+func (r *ReconcileConfig) triggerConstraintTemplateReconciliation(ctx context.Context) error {
+	templateList := &v1beta1.ConstraintTemplateList{}
+	if err := r.reader.List(ctx, templateList); err != nil {
+		log.Error(err, "failed to list ConstraintTemplates for config reconciliation")
+		return err
+	}
+
+	var errs []error
+	for i := range templateList.Items {
+		generateVap, err := constrainttemplate.ShouldGenerateVAPForVersionedCT(&templateList.Items[i], r.scheme)
+		if err != nil || !generateVap {
+			continue
+		}
+		if err := r.sendEventWithRetry(ctx, &templateList.Items[i]); err != nil {
+			errs = append(errs, err)
+			r.markDirtyTemplate(&templateList.Items[i])
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (r *ReconcileConfig) triggerDirtyTemplateReconciliation(ctx context.Context) error {
+	dirtyTemplates := r.getDirtyTemplatesAndClear()
+	if len(dirtyTemplates) == 0 {
+		return nil
+	}
+
+	var errs []error
+	for _, template := range dirtyTemplates {
+		if err := r.sendEventWithRetry(ctx, template); err != nil {
+			errs = append(errs, err)
+			r.markDirtyTemplate(template)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (r *ReconcileConfig) sendEventWithRetry(ctx context.Context, template *v1beta1.ConstraintTemplate) error {
+	if r.ctEvents == nil {
+		log.V(1).Info("ctEvents channel is nil, skipping event", "template", template.Name)
+		return nil
+	}
+
+	return retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		return err != nil
+	}, func() error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case r.ctEvents <- event.GenericEvent{Object: template}:
+			log.V(1).Info("event sent successfully", "template", template.Name)
+			return nil
+		default:
+			log.V(1).Info("channel full, will retry with backoff", "template", template.Name)
+			return &ChannelFullError{}
+		}
+	})
+}
+
+type ChannelFullError struct{}
+
+func (e *ChannelFullError) Error() string {
+	return "channel is full"
+}
+
+func (e *ChannelFullError) Temporary() bool {
+	return true
+}
+
 type Adder struct {
 	Tracker      *readiness.Tracker
 	CacheManager *cm.CacheManager
+	CtEvents     chan<- event.GenericEvent
 	// GetPod returns an instance of the currently running Gatekeeper pod
 	GetPod func(context.Context) (*corev1.Pod, error)
 }
@@ -61,7 +162,7 @@ type Adder struct {
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.CacheManager, a.Tracker, a.GetPod)
+	r, err := newReconciler(mgr, a.CacheManager, a.Tracker, a.GetPod, a.CtEvents)
 	if err != nil {
 		return err
 	}
@@ -81,8 +182,12 @@ func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, erro
 	a.GetPod = getPod
 }
 
+func (a *Adder) InjectConstraintTemplateEvent(ctEvents chan event.GenericEvent) {
+	a.CtEvents = ctEvents
+}
+
 // newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, cm *cm.CacheManager, tracker *readiness.Tracker, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConfig, error) {
+func newReconciler(mgr manager.Manager, cm *cm.CacheManager, tracker *readiness.Tracker, getPod func(context.Context) (*corev1.Pod, error), ctEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
 	if cm == nil {
 		return nil, fmt.Errorf("cacheManager must be non-nil")
 	}
@@ -95,6 +200,7 @@ func newReconciler(mgr manager.Manager, cm *cm.CacheManager, tracker *readiness.
 		cacheManager: cm,
 		tracker:      tracker,
 		getPod:       getPod,
+		ctEvents:     ctEvents,
 	}, nil
 }
 
@@ -135,10 +241,14 @@ type ReconcileConfig struct {
 	tracker *readiness.Tracker
 
 	getPod func(context.Context) (*corev1.Pod, error)
+
+	ctEvents chan<- event.GenericEvent
+
+	dirtyMu        sync.Mutex
+	dirtyTemplates map[string]*v1beta1.ConstraintTemplate
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
-// +kubebuilder:rbac:groups=policy,resources=podsecuritypolicies,resourceNames=gatekeeper-admin,verbs=use
 // +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch;
@@ -192,7 +302,27 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		r.tracker.DisableStats()
 	}
 
+	var configChanged bool
+	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.ctEvents != nil {
+		configChanged = r.cacheManager.ExcluderChangedForProcess(process.Webhook, newExcluder)
+	}
+
 	r.cacheManager.ExcludeProcesses(newExcluder)
+	var ctTriggerError error
+	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.ctEvents != nil {
+		if configChanged {
+			ctTriggerError = r.triggerConstraintTemplateReconciliation(ctx)
+			if ctTriggerError != nil {
+				log.Error(ctTriggerError, "failed to trigger constraint template reconciliation")
+			}
+		} else {
+			ctTriggerError = r.triggerDirtyTemplateReconciliation(ctx)
+			if ctTriggerError != nil {
+				log.Error(ctTriggerError, "failed to trigger dirty template reconciliation")
+			}
+		}
+	}
+
 	// Directly accessing the NamespaceName.String(), as NamespaceName is embedded within reconcile.Request.
 	configSourceKey := aggregator.Key{Source: "config", ID: request.String()}
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
@@ -206,7 +336,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	if deleted {
 		return reconcile.Result{}, r.deleteStatus(ctx, request.Namespace, request.Name)
 	}
-	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance, nil)
+	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, instance, ctTriggerError)
 }
 
 func (r *ReconcileConfig) deleteStatus(ctx context.Context, cfgNamespace string, cfgName string) error {

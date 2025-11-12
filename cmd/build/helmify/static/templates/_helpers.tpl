@@ -169,3 +169,30 @@ Extra volume mounts for audit and controller-manager pods
 {{- toYaml .Values.extraVolumes }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Extra env vars for audit and controller-manager pods
+*/}}
+{{- define "gatekeeper.extraEnvs" -}}
+{{- if .Values.extraEnvs }}
+{{- toYaml .Values.extraEnvs }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Extra env vars for controller-manager pods
+*/}}
+{{- define "controllerManager.extraEnvs" -}}
+{{- if .Values.controllerManager.extraEnvs }}
+{{- toYaml .Values.controllerManager.extraEnvs }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Extra env vars for audit pods
+*/}}
+{{- define "audit.extraEnvs" -}}
+{{- if .Values.audit.extraEnvs }}
+{{- toYaml .Values.audit.extraEnvs }}
+{{- end -}}
+{{- end -}}

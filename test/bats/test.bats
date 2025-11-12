@@ -69,6 +69,8 @@ teardown_file() {
   if [[ -z "$api" ]]; then
     echo "vap is not enabled for the cluster. skip vap test"
   else
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/sync_with_exclusion_exact_match.yaml"
+
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsvap -ojson | jq -r -e '.status.byPod[0]'"
@@ -76,6 +78,24 @@ teardown_file() {
     kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsvap -oyaml
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicy gatekeeper-k8srequiredlabelsvap"
+
+    local vap_json=$(kubectl get ValidatingAdmissionPolicy gatekeeper-k8srequiredlabelsvap -o json)
+    
+    # Check for gatekeeper_internal_match_global_excluded_namespaces in matchConditions
+    local match_condition_check=$(echo "${vap_json}" | jq -r '.spec.matchConditions[]? | select(.name | contains("gatekeeper_internal_match_global_excluded_namespaces")) | .name')
+    if [[ -z "${match_condition_check}" ]]; then
+      echo "ERROR: ValidatingAdmissionPolicy does not contain gatekeeper_internal_match_global_excluded_namespaces in matchConditions"
+      exit 1
+    fi
+    echo "ValidatingAdmissionPolicy contains gatekeeper_internal_match_global_excluded_namespaces expression"
+    
+    # Check that matchConstraints.namespaceSelector is not nil
+    local namespace_selector=$(echo "${vap_json}" | jq -r '.spec.matchConstraints.namespaceSelector')
+    if [[ "${namespace_selector}" == "null" ]]; then
+      echo "ERROR: ValidatingAdmissionPolicy matchConstraints.namespaceSelector is nil"
+      exit 1
+    fi
+    echo "ValidatingAdmissionPolicy matchConstraints.namespaceSelector is not nil: ${namespace_selector}"
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml"
 
@@ -90,6 +110,15 @@ teardown_file() {
     assert_match 'denied' "${output}"
     assert_failure
     kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/good_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml
@@ -475,6 +504,30 @@ EOF
   assert_success
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n ${GATEKEEPER_NAMESPACE}"
 
+  # status test - wait for providerpodstatus to be created and verify content
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get providerpodstatus -n ${GATEKEEPER_NAMESPACE} --no-headers | wc -l | grep -E '^[1-9][0-9]*$'"
+  
+  # verify at least one providerpodstatus exists with the correct provider label
+  run kubectl get providerpodstatus -n ${GATEKEEPER_NAMESPACE} -l internal.gatekeeper.sh/provider-name=dummy-provider --no-headers
+  assert_success
+  [[ $(echo "${output}" | wc -l) -ge 1 ]]
+  
+  # verify the providerpodstatus has correct status fields
+  run kubectl get providerpodstatus -n ${GATEKEEPER_NAMESPACE} -l internal.gatekeeper.sh/provider-name=dummy-provider -o jsonpath='{.items[0].status.active}'
+  assert_success
+  assert_match "true" "${output}"
+  
+  # verify the provider itself shows status information
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get provider dummy-provider -o jsonpath='{.status.byPod}' | grep -v '\\[\\]'"
+
+  # metrics test
+  kubectl run temp --image=curlimages/curl -- tail -f /dev/null
+  kubectl wait --for=condition=Ready --timeout=60s pod temp
+
+  local pod_ip="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l gatekeeper.sh/operation=webhook -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec -it temp -- curl http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_provider'"
+  kubectl delete pod temp
+
   # validation test
   echo '# external data - validation test' >&3
   kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml
@@ -693,6 +746,33 @@ __expansion_audit_test() {
   assert_match 'denied' "${output}"
   assert_failure
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_regov1.yaml"
+}
+
+@test "constraint template operations test" {
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_with_update_operations.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -ojson | jq -r -e '.status.byPod[0]'"
+
+  kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -oyaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided.yaml"
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+  assert_success
+
+  run kubectl label namespace gatekeeper-test-ns2 test=label --overwrite
+  assert_match 'denied' "${output}"
+  assert_failure
+
+  run kubectl delete -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_with_all_operations.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabelsv1 -ojson | jq -r -e '.status.byPod[0]'"
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+  assert_match 'denied' "${output}"
+  assert_failure
+
+  run kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_with_update_operations.yaml
+  run kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided.yaml
 }
 
 @test "shutdown delay"  {

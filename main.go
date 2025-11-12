@@ -48,6 +48,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
@@ -64,7 +65,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/version"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
-	_ "go.uber.org/automaxprocs" // set GOMAXPROCS to the number of container cores, if known.
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -542,6 +542,11 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		ExpansionSystem: expansionSystem,
 		ProviderCache:   providerCache,
 		ExportSystem:    exportSystem,
+	}
+
+	if operations.IsAssigned(operations.Generate) {
+		opts.CtEvents = make(chan event.GenericEvent, 1024)
+		opts.WebhookConfigCache = webhookconfigcache.NewWebhookConfigCache()
 	}
 
 	if err := controller.AddToManager(mgr, &opts); err != nil {

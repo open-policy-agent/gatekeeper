@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.14.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assign.mutations.gatekeeper.sh
@@ -288,6 +288,8 @@ spec:
                           provider:
                             description: Provider is the name of the external data provider.
                             type: string
+                        required:
+                        - provider
                         type: object
                       fromMetadata:
                         description: FromMetadata assigns a value from the specified metadata field.
@@ -309,7 +311,6 @@ spec:
                         not applied. All `subPath` entries must be a prefix of `location`. Any
                         glob characters will take on the same value as was used to
                         expand the matching glob in `location`.
-
 
                         Available Tests:
                         * MustExist    - the path must exist or do not mutate
@@ -641,6 +642,8 @@ spec:
                           provider:
                             description: Provider is the name of the external data provider.
                             type: string
+                        required:
+                        - provider
                         type: object
                       fromMetadata:
                         description: FromMetadata assigns a value from the specified metadata field.
@@ -662,7 +665,6 @@ spec:
                         not applied. All `subPath` entries must be a prefix of `location`. Any
                         glob characters will take on the same value as was used to
                         expand the matching glob in `location`.
-
 
                         Available Tests:
                         * MustExist    - the path must exist or do not mutate
@@ -994,6 +996,8 @@ spec:
                           provider:
                             description: Provider is the name of the external data provider.
                             type: string
+                        required:
+                        - provider
                         type: object
                       fromMetadata:
                         description: FromMetadata assigns a value from the specified metadata field.
@@ -1015,7 +1019,6 @@ spec:
                         not applied. All `subPath` entries must be a prefix of `location`. Any
                         glob characters will take on the same value as was used to
                         expand the matching glob in `location`.
-
 
                         Available Tests:
                         * MustExist    - the path must exist or do not mutate

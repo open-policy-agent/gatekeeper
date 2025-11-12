@@ -333,8 +333,6 @@ pdb:
     minAvailable: 1
 service: {}
 disabledBuiltins: ["{http.send}"]
-psp:
-  enabled: false
 upgradeCRDs:
   serviceAccount:
     create: true
