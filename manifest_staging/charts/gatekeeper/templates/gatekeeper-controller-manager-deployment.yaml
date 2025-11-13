@@ -66,14 +66,14 @@ spec:
         - --prometheus-port={{ .Values.controllerManager.metricsPort }}
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
-        - --disable-enforcementaction-validation={{ .Values.disableEnforcementActionValidation }}
+        {{ if ne .Values.disableEnforcementActionValidation "" }}- --disable-enforcementaction-validation={{ .Values.disableEnforcementActionValidation }}{{- end }}
         {{ if hasKey .Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}
         {{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}
         - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
         - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
-        - --log-level-key={{ (.Values.controllerManager.logLevelKey | empty | not) | ternary .Values.controllerManager.logLevelKey .Values.logLevelKey }}
-        - --log-level-encoder={{ (.Values.controllerManager.logLevelEncoder | empty | not) | ternary .Values.controllerManager.logLevelEncoder .Values.logLevelEncoder }}
-        - --cert-dir={{ .Values.certDir }}
+        {{ if or (ne (.Values.controllerManager.logLevelKey | default "") "") (ne (.Values.logLevelKey | default "") "") }}- --log-level-key={{ (.Values.controllerManager.logLevelKey | empty | not) | ternary .Values.controllerManager.logLevelKey .Values.logLevelKey }}{{- end }}
+        {{ if or (ne (.Values.controllerManager.logLevelEncoder | default "") "") (ne (.Values.logLevelEncoder | default "") "") }}- --log-level-encoder={{ (.Values.controllerManager.logLevelEncoder | empty | not) | ternary .Values.controllerManager.logLevelEncoder .Values.logLevelEncoder }}{{- end }}
+        {{ if ne .Values.certDir "" }}- --cert-dir={{ .Values.certDir }}{{- end }}
         - --exempt-namespace={{ .Release.Namespace }}
         
         {{- if not .Values.controllerManager.disableWebhookOperation }}
@@ -89,8 +89,9 @@ spec:
         - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
         - --max-serving-threads={{ .Values.maxServingThreads }}
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
-        - --client-ca-name={{ .Values.controllerManager.clientCAName }}
-        - --client-cn-name={{ .Values.controllerManager.clientCNName }}
+        {{ if ne .Values.controllerManager.clientCAName "" }}- --client-ca-name={{ .Values.controllerManager.clientCAName }}{{- end }}
+        {{ if ne .Values.controllerManager.clientCNName "" }}- --client-cn-name={{ .Values.controllerManager.clientCNName }}{{- end }}
+        {{ if ne .Values.controllerManager.certServiceName "" }}- --cert-service-name={{ .Values.controllerManager.certServiceName }}{{- end }}
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
         {{ if .Values.additionalValidatingWebhookConfigsToRotateCerts | empty | not }}- --additional-validating-webhook-configs-to-rotate-certs={{ .Values.additionalValidatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
@@ -102,10 +103,10 @@ spec:
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
-        - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
-        - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
-        - --otlp-endpoint={{ .Values.otlpEndpoint }}
-        - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
+        {{ if ne .Values.stackdriverOnlyWhenAvailable "" }}- --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}{{- end }}
+        {{ if ne .Values.stackdriverMetricInterval "" }}- --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}{{- end }}
+        {{ if ne .Values.otlpEndpoint "" }}- --otlp-endpoint={{ .Values.otlpEndpoint }}{{- end }}
+        {{ if ne .Values.otlpMetricInterval "" }}- --otlp-metric-interval={{ .Values.otlpMetricInterval }}{{- end }}
         {{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}
         

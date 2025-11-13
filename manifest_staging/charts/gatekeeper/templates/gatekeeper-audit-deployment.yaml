@@ -61,16 +61,16 @@ spec:
         args:
         - --audit-interval={{ .Values.auditInterval }}
         - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
-        - --log-level-key={{ (.Values.audit.logLevelKey | empty | not) | ternary .Values.audit.logLevelKey .Values.logLevelKey }}
-        - --log-level-encoder={{ (.Values.audit.logLevelEncoder | empty | not) | ternary .Values.audit.logLevelEncoder .Values.logLevelEncoder }}
-        - --cert-dir={{ .Values.certDir }}
+        {{ if or (ne (.Values.audit.logLevelKey | default "") "") (ne (.Values.logLevelKey | default "") "") }}- --log-level-key={{ (.Values.audit.logLevelKey | empty | not) | ternary .Values.audit.logLevelKey .Values.logLevelKey }}{{- end }}
+        {{ if or (ne (.Values.audit.logLevelEncoder | default "") "") (ne (.Values.logLevelEncoder | default "") "") }}- --log-level-encoder={{ (.Values.audit.logLevelEncoder | empty | not) | ternary .Values.audit.logLevelEncoder .Values.logLevelEncoder }}{{- end }}
+        {{ if ne .Values.certDir "" }}- --cert-dir={{ .Values.certDir }}{{- end }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         {{ if hasKey .Values "auditChunkSize" }}- --audit-chunk-size={{ .Values.auditChunkSize }}{{- end }}
         - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
-        - --api-cache-dir={{ .Values.apiCacheDir }}
+        {{ if ne .Values.apiCacheDir "" }}- --api-cache-dir={{ .Values.apiCacheDir }}{{- end }}
         {{ if hasKey .Values "emitAuditEvents" }}- --emit-audit-events={{ .Values.emitAuditEvents }}{{- end }}
         {{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}
         - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
@@ -104,10 +104,10 @@ spec:
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
-        - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
-        - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
-        - --otlp-endpoint={{ .Values.otlpEndpoint }}
-        - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
+        {{ if ne .Values.stackdriverOnlyWhenAvailable "" }}- --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}{{- end }}
+        {{ if ne .Values.stackdriverMetricInterval "" }}- --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}{{- end }}
+        {{ if ne .Values.otlpEndpoint "" }}- --otlp-endpoint={{ .Values.otlpEndpoint }}{{- end }}
+        {{ if ne .Values.otlpMetricInterval "" }}- --otlp-metric-interval={{ .Values.otlpMetricInterval }}{{- end }}
         
         {{- if .Values.audit.logFile}}
         - --log-file={{ .Values.audit.logFile }}

@@ -84,14 +84,14 @@ spec:
             - --prometheus-port=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_METRICS_PORT
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
-            - --disable-enforcementaction-validation={{ .Values.disableEnforcementActionValidation }}
+            {{ if ne .Values.disableEnforcementActionValidation "" }}- --disable-enforcementaction-validation={{ .Values.disableEnforcementActionValidation }}{{- end }}
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION
             - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
-            - --log-level-key={{ (.Values.controllerManager.logLevelKey | empty | not) | ternary .Values.controllerManager.logLevelKey .Values.logLevelKey }}
-            - --log-level-encoder={{ (.Values.controllerManager.logLevelEncoder | empty | not) | ternary .Values.controllerManager.logLevelEncoder .Values.logLevelEncoder }}
-            - --cert-dir={{ .Values.certDir }}
+            {{ if or (ne (.Values.controllerManager.logLevelKey | default "") "") (ne (.Values.logLevelKey | default "") "") }}- --log-level-key={{ (.Values.controllerManager.logLevelKey | empty | not) | ternary .Values.controllerManager.logLevelKey .Values.logLevelKey }}{{- end }}
+            {{ if or (ne (.Values.controllerManager.logLevelEncoder | default "") "") (ne (.Values.logLevelEncoder | default "") "") }}- --log-level-encoder={{ (.Values.controllerManager.logLevelEncoder | empty | not) | ternary .Values.controllerManager.logLevelEncoder .Values.logLevelEncoder }}{{- end }}
+            {{ if ne .Values.certDir "" }}- --cert-dir={{ .Values.certDir }}{{- end }}
             - --exempt-namespace={{ .Release.Namespace }}
             - HELMSUBST_CONTROLLER_MANAGER_OPERATIONS
             - --enable-external-data={{ .Values.enableExternalData }}
@@ -101,8 +101,9 @@ spec:
             - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
             - --max-serving-threads={{ .Values.maxServingThreads }}
             - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
-            - --client-ca-name={{ .Values.controllerManager.clientCAName }}
-            - --client-cn-name={{ .Values.controllerManager.clientCNName }}
+            {{ if ne .Values.controllerManager.clientCAName "" }}- --client-ca-name={{ .Values.controllerManager.clientCAName }}{{- end }}
+            {{ if ne .Values.controllerManager.clientCNName "" }}- --client-cn-name={{ .Values.controllerManager.clientCNName }}{{- end }}
+            {{ if ne .Values.controllerManager.certServiceName "" }}- --cert-service-name={{ .Values.controllerManager.certServiceName }}{{- end }}
             - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
             - HELMSUBST_ADDITIONAL_VALIDATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
@@ -111,10 +112,10 @@ spec:
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
-            - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
-            - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
-            - --otlp-endpoint={{ .Values.otlpEndpoint }}
-            - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
+            {{ if ne .Values.stackdriverOnlyWhenAvailable "" }}- --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}{{- end }}
+            {{ if ne .Values.stackdriverMetricInterval "" }}- --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}{{- end }}
+            {{ if ne .Values.otlpEndpoint "" }}- --otlp-endpoint={{ .Values.otlpEndpoint }}{{- end }}
+            {{ if ne .Values.otlpMetricInterval "" }}- --otlp-metric-interval={{ .Values.otlpMetricInterval }}{{- end }}
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
             - HELMSUBST_MUTATION_ENABLED_ARG
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
@@ -194,16 +195,16 @@ spec:
           args:
             - --audit-interval={{ .Values.auditInterval }}
             - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
-            - --log-level-key={{ (.Values.audit.logLevelKey | empty | not) | ternary .Values.audit.logLevelKey .Values.logLevelKey }}
-            - --log-level-encoder={{ (.Values.audit.logLevelEncoder | empty | not) | ternary .Values.audit.logLevelEncoder .Values.logLevelEncoder }}
-            - --cert-dir={{ .Values.certDir }}
+            {{ if or (ne (.Values.audit.logLevelKey | default "") "") (ne (.Values.logLevelKey | default "") "") }}- --log-level-key={{ (.Values.audit.logLevelKey | empty | not) | ternary .Values.audit.logLevelKey .Values.logLevelKey }}{{- end }}
+            {{ if or (ne (.Values.audit.logLevelEncoder | default "") "") (ne (.Values.logLevelEncoder | default "") "") }}- --log-level-encoder={{ (.Values.audit.logLevelEncoder | empty | not) | ternary .Values.audit.logLevelEncoder .Values.logLevelEncoder }}{{- end }}
+            {{ if ne .Values.certDir "" }}- --cert-dir={{ .Values.certDir }}{{- end }}
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
             - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - --audit-from-cache={{ .Values.auditFromCache }}
             - HELMSUBST_DEPLOYMENT_AUDIT_CHUNK_SIZE
             - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
-            - --api-cache-dir={{ .Values.apiCacheDir }}
+            {{ if ne .Values.apiCacheDir "" }}- --api-cache-dir={{ .Values.apiCacheDir }}{{- end }}
             - HELMSUBST_DEPLOYMENT_AUDIT_EMIT_EVENTS
             - HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION
             - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
@@ -217,10 +218,10 @@ spec:
             - --enable-external-data={{ .Values.enableExternalData }}
             - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - HELMSUBST_METRICS_BACKEND_ARG
-            - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
-            - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
-            - --otlp-endpoint={{ .Values.otlpEndpoint }}
-            - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
+            {{ if ne .Values.stackdriverOnlyWhenAvailable "" }}- --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}{{- end }}
+            {{ if ne .Values.stackdriverMetricInterval "" }}- --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}{{- end }}
+            {{ if ne .Values.otlpEndpoint "" }}- --otlp-endpoint={{ .Values.otlpEndpoint }}{{- end }}
+            {{ if ne .Values.otlpMetricInterval "" }}- --otlp-metric-interval={{ .Values.otlpMetricInterval }}{{- end }}
             - HELMSUBST_DEPLOYMENT_AUDIT_LOGFILE
             - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}

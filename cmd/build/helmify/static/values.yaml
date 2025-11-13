@@ -2,12 +2,12 @@ replicas: 3
 revisionHistoryLimit: 10
 auditInterval: 60
 metricsBackends: ["prometheus"]
-stackdriverOnlyWhenAvailable: false
-stackdriverMetricInterval: 10s
+stackdriverOnlyWhenAvailable: ""
+stackdriverMetricInterval: ""
 otlpEndpoint: ""
-otlpMetricInterval: 10s
+otlpMetricInterval: ""
 auditMatchKindOnly: false
-apiCacheDir: /tmp/audit
+apiCacheDir: ""
 constraintViolationsLimit: 20
 auditFromCache: false
 disableAudit: false
@@ -46,12 +46,12 @@ mutatingWebhookScope: '*'
 mutationAnnotations: false
 auditChunkSize: 500
 logLevel: INFO
-logLevelKey: level
-logLevelEncoder: lower
+logLevelKey: ""
+logLevelEncoder: ""
 logDenies: false
 logMutations: false
-certDir: /certs
-disableEnforcementActionValidation: false
+certDir: ""
+disableEnforcementActionValidation: ""
 admissionEventsInvolvedNamespace: false
 auditEventsInvolvedNamespace: false
 resourceQuota: true
@@ -199,7 +199,8 @@ controllerManager:
   tlsMinVersion: 1.3
   clientCertName: ""
   clientCAName: ""
-  clientCNName: kube-apiserver
+  clientCNName: ""
+  certServiceName: ""
   strategyType: RollingUpdate
   strategyRollingUpdate: {}
   podLabels: {}
