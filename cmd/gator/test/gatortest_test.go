@@ -11,7 +11,7 @@ import (
 )
 
 // Test_formatOutput makes sure that the formatted output of `gator test`
-// is consitent as we iterate over the tool. The purpose of this test IS NOT
+// is consistent as we iterate over the tool. The purpose of this test IS NOT
 // testing the `gator test` results themselves.
 func Test_formatOutput(t *testing.T) {
 	constraintObj := &unstructured.Unstructured{}
