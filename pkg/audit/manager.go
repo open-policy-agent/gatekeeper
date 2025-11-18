@@ -69,7 +69,7 @@ var (
 	apiCacheDir                       = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
 	emptyAuditResults                 = newLimitQueue(0)
 	logStatsAudit                     = flag.Bool("log-stats-audit", false, "(alpha) log stats metrics for the audit run")
-	enableConstraintLabelAuditMetrics = flag.Bool("enable-constraint-label-metrics", false, "Enable additional metric `gatekeeper_violation_per_constraint` with the `constraint` label to track violations per constraint. This may significantly increase metric cardinality. Default: false")
+	enableConstraintLabelAuditMetrics = flag.Bool("enable-constraint-label-metrics", false, "Enable additional metric `gatekeeper_violations_per_constraint` with the `constraint` label to track violations per constraint. This may significantly increase metric cardinality. Default: false")
 )
 
 // Manager allows us to audit resources periodically.
