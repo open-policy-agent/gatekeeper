@@ -5495,7 +5495,7 @@ spec:
           value: manager
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-        image: openpolicyagent/gatekeeper:v3.21.0-rc.1
+        image: openpolicyagent/gatekeeper:v3.21.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -5614,7 +5614,7 @@ spec:
           value: manager
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-        image: openpolicyagent/gatekeeper:v3.21.0-rc.1
+        image: openpolicyagent/gatekeeper:v3.21.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
