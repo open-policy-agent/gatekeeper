@@ -315,10 +315,10 @@ spec:
               violation[{"msg": "rego validation"}] { true }
 ```
 
-In this example, only the CEL validation will be executed. The Rego policy will not be evaluated.
+In this example, for validation only CEL code will be evaluated. The Rego code will not be evaluated at all for decision.
 
 **Important Notes:**
-- There is **no fallback mechanism** between engines. If the CEL policy has an error, the Rego policy will not be used as a backup.
+- There is **no fallback mechanism** between engines. If the CEL code has an error, the Rego code will not be used as a backup.
 - Violations or errors from the active engine (CEL in this case) are treated according to the `enforcementAction` specified in the Constraint.
 - Engine priority cannot be modified or customized per ConstraintTemplate.
 
