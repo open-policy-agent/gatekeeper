@@ -64,7 +64,6 @@ type Target struct {
 	// be specified in one place (either here or in the "rego" field)
 	// +listType=map
 	// +listMapKey=engine
-	// +kubebuilder:validation:Required
 	Code []Code `json:"code,omitempty"`
 
 	// +kubebuilder:validation:items:Enum=*;CREATE;DELETE;UPDATE;CONNECT
