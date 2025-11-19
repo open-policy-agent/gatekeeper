@@ -172,7 +172,7 @@ var replacements = map[string]string{
       operator: NotIn
       values:
       {{- range $value }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}`,
 
@@ -225,7 +225,7 @@ var replacements = map[string]string{
       operator: NotIn
       values:
       {{- range $value }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}`,
 
