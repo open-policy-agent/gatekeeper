@@ -3,6 +3,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  annotations:
+    {{- include "gatekeeper.commonAnnotations" . | nindent 4 }}
   labels:
     {{- include "gatekeeper.commonLabels" . | nindent 4 }}
     app: '{{ template "gatekeeper.name" . }}'
@@ -49,7 +51,7 @@ spec:
     spec:
       affinity:
         {{- toYaml .Values.audit.affinity | nindent 8 }}
-      automountServiceAccountToken: true
+      automountServiceAccountToken: {{ .Values.audit.serviceAccount.automountServiceAccountToken }}
       containers:
       - {{- if .Values.image.release }}
         image: {{ .Values.image.repository }}:{{ .Values.image.release }}
@@ -87,6 +89,7 @@ spec:
         {{ if hasKey .Values.audit "channel" }}
         - --audit-channel={{ .Values.audit.channel }}
         {{- end }}
+        {{ if hasKey .Values "syncVAPEnforcementScope" }}- --sync-vap-enforcement-scope={{ .Values.syncVAPEnforcementScope }}{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}
         - --logtostderr
         - --health-addr=:{{ .Values.audit.healthPort }}
@@ -113,12 +116,26 @@ spec:
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}
         
+        {{- range .Values.controllerManager.exemptNamespaces}}
+        - --exempt-namespace={{ . }}
+        {{- end }}
+        
+        {{- range .Values.controllerManager.exemptNamespacePrefixes}}
+        - --exempt-namespace-prefix={{ . }}
+        {{- end }}
+        
+        {{- range .Values.controllerManager.exemptNamespaceSuffixes}}
+        - --exempt-namespace-suffix={{ . }}
+        {{- end }}
+        
         {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
         - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}
         command:
         - /manager
         env:
+        {{- include "gatekeeper.extraEnvs" . | nindent 8 }}
+        {{- include "audit.extraEnvs" . | nindent 8 }}
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -165,6 +182,7 @@ spec:
           {{- end }}
           {{- toYaml .Values.audit.securityContext | nindent 10}}
         volumeMounts:
+        {{- include "gatekeeper.extraVolumeMounts" . | nindent 8 }}
         - mountPath: /certs
           name: cert
           readOnly: true
@@ -193,6 +211,7 @@ spec:
       tolerations:
         {{- toYaml .Values.audit.tolerations | nindent 8 }}
       volumes:
+      {{- include "gatekeeper.extraVolumes" . | nindent 6 }}
       - name: cert
         secret:
           defaultMode: 420
