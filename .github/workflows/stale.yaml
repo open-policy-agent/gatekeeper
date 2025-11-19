@@ -1,0 +1,37 @@
+name: "Close stale issues and PRs"
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # Run daily at midnight UTC
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
+        with:
+          egress-policy: audit
+
+      - uses: actions/stale@28ca1036281a5e5922ead5184a1bbf96e5fc984e # v9.0.0
+        with:
+          # Number of days of inactivity before an issue becomes stale
+          days-before-stale: 60
+          # Number of days of inactivity before a stale issue is closed
+          days-before-close: 14
+          # Label to use when marking an issue as stale
+          stale-issue-label: 'stale'
+          stale-pr-label: 'stale'
+          # Issues/PRs with these labels will never be considered stale
+          exempt-issue-labels: 'pinned,security,triaged'
+          exempt-pr-labels: 'pinned,security,triaged'
+          # Comment to post when marking an issue as stale
+          stale-issue-message: 'This issue has been automatically marked as stale because it has not had recent activity. It will be closed in 14 days if no further activity occurs. Thank you for your contributions.'
+          stale-pr-message: 'This PR has been automatically marked as stale because it has not had recent activity. It will be closed in 14 days if no further activity occurs. Thank you for your contributions.'
+          # Disable close comments (set to empty string)
+          close-issue-message: ''
+          close-pr-message: ''
