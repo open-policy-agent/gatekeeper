@@ -247,3 +247,90 @@ spec:
 | --- | --- |
 | `variables.params` | Contains constraint parameters e.g. `variables.params.labels` see [example](https://open-policy-agent.github.io/gatekeeper-library/website/validation/requiredlabels) |
 | `variables.anyObject` | Contains either an object or (on DELETE requests) oldObject, see [example](https://open-policy-agent.github.io/gatekeeper-library/website/validation/requiredlabels) |
+
+## Field Precedence in ConstraintTemplate
+
+ConstraintTemplates support multiple ways to define policy code, and it's important to understand the precedence rules when multiple fields are specified.
+
+### Schema Overview
+
+The ConstraintTemplate schema provides the following fields under `spec.targets[]`:
+
+- `spec.targets[].target` - The target name (e.g., `admission.k8s.gatekeeper.sh`)
+- `spec.targets[].rego` - Legacy field for Rego code (deprecated, maintained for backward compatibility)
+- `spec.targets[].code[]` - Array of code objects, each with:
+  - `code[].engine` - The engine name (e.g., `Rego`, `K8sNativeValidation`)
+  - `code[].source` - Engine-specific source code
+
+### Precedence Rules
+
+#### 1. Legacy `rego` Field Overwrites `code` Array Rego
+
+If both `spec.targets[].rego` and a Rego engine entry in `spec.targets[].code[]` are specified, the **legacy `rego` field takes precedence** and overwrites the Rego code in the `code` array.
+
+**Example:**
+
+```yaml
+spec:
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        # This Rego code will be used
+        package example
+        violation[{"msg": "from legacy rego field"}] { true }
+      code:
+        - engine: Rego
+          source:
+            rego: |
+              # This Rego code will be IGNORED
+              package example
+              violation[{"msg": "from code array"}] { true }
+```
+
+In this example, the policy defined in the `rego` field will be evaluated, while the Rego code in the `code` array will be ignored.
+
+**Best Practice:** Use only the `code` array for defining policies. The legacy `rego` field is maintained for backward compatibility with older ConstraintTemplate versions and should be avoided in new templates.
+
+#### 2. CEL Engine Takes Precedence Over Rego Engine
+
+When multiple engines are defined in the `code` array, **only one engine is evaluated** per ConstraintTemplate. The `K8sNativeValidation` (CEL) engine has higher priority than the `Rego` engine.
+
+**Example:**
+
+```yaml
+spec:
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: K8sNativeValidation
+          source:
+            validations:
+              - expression: "true"
+                message: "CEL validation - this will be evaluated"
+        - engine: Rego
+          source:
+            rego: |
+              # This Rego code will NOT be evaluated
+              package example
+              violation[{"msg": "rego validation"}] { true }
+```
+
+In this example, for validation only CEL code will be evaluated. The Rego code will not be evaluated at all for decision.
+
+**Important Notes:**
+- There is **no fallback mechanism** between engines. If the CEL code has an error, the Rego code will not be used as a backup.
+- Violations or errors from the active engine (CEL in this case) are treated according to the `enforcementAction` specified in the Constraint.
+- Engine priority cannot be modified or customized per ConstraintTemplate.
+
+### Recommendations
+
+1. **Use the `code` array**: Define all policy code using `spec.targets[].code[]` rather than the legacy `spec.targets[].rego` field.
+
+2. **Choose one engine**: Define policy logic in only one engine (either Rego or CEL) to avoid confusion about which policy will be evaluated.
+
+3. **Understand engine capabilities**: 
+   - Use **Rego** for complex policies that require referential constraints, external data, or custom logic.
+   - Use **CEL** for simpler validations that can benefit from in-process evaluation and potential integration with Kubernetes Validating Admission Policy.
+
+For more information on CEL integration and engine precedence, see the [Integration with Kubernetes Validating Admission Policy](validating-admission-policy.md) documentation.
+
