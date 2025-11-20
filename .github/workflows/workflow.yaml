@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        KUBERNETES_VERSION: ["1.31.6", "1.32.3", "1.33.2"] # Latest available versions of Kubernetes at - https://hub.docker.com/r/kindest/node/tags
+        KUBERNETES_VERSION: ["1.32.10", "1.33.6", "1.34.2"] # Latest available versions of Kubernetes at - https://hub.docker.com/r/kindest/node/tags
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
