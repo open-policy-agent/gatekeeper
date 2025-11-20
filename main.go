@@ -380,6 +380,7 @@ blockingLoop:
 }
 
 func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.Tracker, setupFinished chan struct{}) error {
+	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
 	needsOPAClient := operations.IsAssigned(operations.Audit) || operations.IsAssigned(operations.Webhook) || *externaldata.ExternalDataEnabled
@@ -399,6 +400,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		certFile := filepath.Join(*certDir, certName)
 		keyFile := filepath.Join(*certDir, keyName)
 
+		// certWatcher is used to watch for changes to Gatekeeper's certificate and key files.
 		var err error
 		certWatcher, err = certwatcher.New(certFile, keyFile)
 		if err != nil {
@@ -430,6 +432,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 				return err
 			}
 
+			// register the client cert watcher to the driver
 			args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
 		}
 
@@ -479,6 +482,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		
 		if needsProviderCache {
 			mutationOpts.ProviderCache = providerCache
+			// register the client cert watcher to the mutation system
 			mutationOpts.ClientCertWatcher = certWatcher
 		}
 		
@@ -515,11 +519,15 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		return err
 	}
 
+	// processExcluder is used for namespace exclusion for specified processes in config
 	processExcluder := process.Get()
 
+	// Setup all Controllers
 	var cm *cachemanager.CacheManager
 	var events chan event.GenericEvent
 	if operations.IsAssigned(operations.Audit) || operations.IsAssigned(operations.Webhook) {
+		// Events ch will be used to receive events from dynamic watches registered
+		// via the registrar below.
 		events = make(chan event.GenericEvent, 1024)
 		reg, err := wm.NewRegistrar(
 			cachemanager.RegistrarName,
