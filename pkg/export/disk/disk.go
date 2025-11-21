@@ -426,11 +426,11 @@ func (r *Writer) retryFailedConnections() {
 		} else {
 			log.Info("Failed to close connection on retry", "connection", name, "error", err, "attempt", failedConn.RetryCount+1)
 
+			failedConn.RetryCount++
 			delay := time.Duration(float64(baseRetryDelay) * math.Pow(retryBackoffFactor, float64(failedConn.RetryCount)))
 			if maxRetryDelay > 0 && delay > maxRetryDelay {
 				delay = maxRetryDelay
 			}
-			failedConn.RetryCount++
 			// Apply jitter to the retry delay
 			delay = wait.Jitter(delay, Jitter)
 			failedConn.NextRetryAt = now.Add(delay)
