@@ -246,6 +246,7 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 	}
 
 	resource.SetName(mockNameForResource(obj, resultantGVK))
+	ensureOwnerReference(resource, obj)
 
 	return resource, nil
 }
