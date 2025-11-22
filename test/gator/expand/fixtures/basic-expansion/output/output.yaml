@@ -6,6 +6,10 @@ metadata:
   labels:
     app: nginx
   name: nginx-deployment-pod
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
 spec:
   containers:
   - args:

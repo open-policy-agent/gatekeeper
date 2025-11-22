@@ -4,6 +4,10 @@ metadata:
   annotations:
     shouldPet: manytimes
   name: big-chungus-purr
+  ownerReferences:
+  - apiVersion: cat.myapp.sh/v1alpha1
+    kind: Cat
+    name: big-chungus
 spec:
   loud: very
 ---
@@ -15,6 +19,10 @@ metadata:
   labels:
     fluffy: extremely
   name: big-chungus-kitten
+  ownerReferences:
+  - apiVersion: cat.myapp.sh/v1alpha1
+    kind: Cat
+    name: big-chungus
 spec:
   age: 10
   breed: calico
