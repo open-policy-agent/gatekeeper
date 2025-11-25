@@ -30,7 +30,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v3.5.2
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v3.5.2
 
       - name: Setup Node
         uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -69,7 +69,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v3.5.2
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v3.5.2
 
       - uses: crate-ci/typos@626c4bedb751ce0b7f03262ca97ddda9a076ae1c # v1.39.2
         with:
