@@ -61,6 +61,7 @@ type Kinds struct {
 	// Required.
 	APIGroups []string `json:"apiGroups,omitempty" protobuf:"bytes,1,rep,name=apiGroups"`
 	Kinds     []string `json:"kinds,omitempty"`
+	APIVersions []string `json:"apiVersions,omitempty"`
 }
 
 // DummyCRD is a "dummy" CRD to hold the Match object, which we ultimately
