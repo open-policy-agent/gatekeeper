@@ -19,19 +19,13 @@ jobs:
 
       - uses: actions/stale@5f858e3efba33a5ca4407a664cc011ad407f2008 # v10.1.0
         with:
-          # Number of days of inactivity before an issue becomes stale
-          days-before-stale: 60
-          # Number of days of inactivity before a stale issue is closed
+          days-before-stale: 90
           days-before-close: 14
-          # Label to use when marking an issue as stale
           stale-issue-label: 'stale'
           stale-pr-label: 'stale'
-          # Issues/PRs with these labels will never be considered stale
           exempt-issue-labels: 'pinned,security,triaged'
           exempt-pr-labels: 'pinned,security,triaged'
-          # Comment to post when marking an issue as stale
           stale-issue-message: 'This issue has been automatically marked as stale because it has not had recent activity. It will be closed in 14 days if no further activity occurs. Thank you for your contributions.'
           stale-pr-message: 'This PR has been automatically marked as stale because it has not had recent activity. It will be closed in 14 days if no further activity occurs. Thank you for your contributions.'
-          # Disable close comments (set to empty string)
           close-issue-message: ''
           close-pr-message: ''
