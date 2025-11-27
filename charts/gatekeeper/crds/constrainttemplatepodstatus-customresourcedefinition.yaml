@@ -14,7 +14,6 @@ spec:
     listKind: ConstraintTemplatePodStatusList
     plural: constrainttemplatepodstatuses
     singular: constrainttemplatepodstatus
-  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1beta1

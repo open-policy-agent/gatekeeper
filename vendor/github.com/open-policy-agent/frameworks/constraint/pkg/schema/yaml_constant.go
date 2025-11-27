@@ -16,7 +16,6 @@ spec:
     listKind: ConstraintTemplateList
     plural: constrainttemplates
     singular: constrainttemplate
-  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1
