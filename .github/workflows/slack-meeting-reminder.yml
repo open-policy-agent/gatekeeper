@@ -3,17 +3,9 @@ name: Slack Meeting Reminder
 on:
   schedule:
     # Run every Wednesday at 9 AM PST (5 PM UTC) - 1 hour before 10 AM meeting
-    - cron: '0 17 * * 3'
+    - cron: "0 17 * * 3"
     # Run every Wednesday at 1 PM PST (9 PM UTC) - 1 hour before 2 PM meeting
-    - cron: '0 21 * * 3'
-  # Allow manual triggering for testing
-  workflow_dispatch:
-    inputs:
-      force_run:
-        description: 'Force send notification (bypass week check)'
-        required: false
-        default: 'true'
-        type: boolean
+    - cron: "0 21 * * 3"
 
 permissions: read-all
 
@@ -29,13 +21,6 @@ jobs:
       - name: Determine which time slot to use
         id: check-week
         run: |
-          # If manually triggered with force_run, skip the check
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.force_run }}" == "true" ]; then
-            echo "Manual trigger with force_run enabled"
-            echo "should_run=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
           # Get the ISO week number
           WEEK_NUM=$(date +%V)
           # Check if it's an even or odd week
