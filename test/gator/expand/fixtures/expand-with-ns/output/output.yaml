@@ -5,6 +5,10 @@ metadata:
     app: nginx
   name: nginx-deployment-pod
   namespace: my-ns
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
 spec:
   containers:
   - args:
