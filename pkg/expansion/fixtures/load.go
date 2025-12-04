@@ -12,7 +12,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignimage"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
