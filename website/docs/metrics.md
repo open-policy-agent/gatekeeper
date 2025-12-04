@@ -320,7 +320,7 @@ Below are the list of metrics provided by Gatekeeper:
 
 This section covers how to configure different metric backends to export the metrics. 
 
-- set `--metrics-backend`. Backend used for metrics. e.g. prometheus, stackdriver. This flag can be declared more than once. Omitting will default to supporting prometheus..
+- set `--metrics-backend`. Backend used for metrics. e.g. prometheus, stackdriver. This flag can be declared more than once. Omitting will default to supporting prometheus.
 
 ### Prometheus
 
