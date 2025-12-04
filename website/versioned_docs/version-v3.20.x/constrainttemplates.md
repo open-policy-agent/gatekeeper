@@ -247,3 +247,10 @@ spec:
 | --- | --- |
 | `variables.params` | Contains constraint parameters e.g. `variables.params.labels` see [example](https://open-policy-agent.github.io/gatekeeper-library/website/validation/requiredlabels) |
 | `variables.anyObject` | Contains either an object or (on DELETE requests) oldObject, see [example](https://open-policy-agent.github.io/gatekeeper-library/website/validation/requiredlabels) |
+
+## Field Precedence in ConstraintTemplate
+
+ConstraintTemplates support multiple ways to define policy code with the following precedence rules: (1) The legacy `spec.targets[].rego` field takes precedence over any Rego engine defined in `spec.targets[].code[]`. (2) When multiple engines are defined in the `code` array, only one engine is evaluated—the `K8sNativeValidation` (CEL) engine has higher priority than the `Rego` engine with no fallback mechanism. **Best practice:** Use the `code` array exclusively and define policy logic in only one engine (either Rego for complex policies with referential constraints and external data, or CEL for simpler validations) to avoid confusion about which policy will be evaluated.
+
+For more information on CEL integration and engine precedence, see the [Integration with Kubernetes Validating Admission Policy](validating-admission-policy.md) documentation.
+
