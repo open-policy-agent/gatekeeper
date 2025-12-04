@@ -328,13 +328,13 @@ Gatekeeper exposes Prometheus metrics by default on port `8888` at the `/metrics
 
 - set `--prometheus-port`. Prometheus port for metrics backend.
 
-### Opentelemetry
+### OpenTelemetry
 
 Gatekeeper can be configured to export metrics to an OpenTelemetry collector. This is useful for integrating with a variety of observability backends that support OpenTelemetry.
 
 - set `--otlp-endpoint`. OpenTelemetry exporter endpoint (HTTP exporter only).
 
-- set `--otlp-metric-interval`. Interval to read metrics for opentelemetry exporter. Defaulted to 10 secs if unspecified.
+- set `--otlp-metric-interval`. Interval to read metrics for OpenTelemetry exporter. Defaulted to 10 secs if unspecified.
 
 ### Stackdriver
 
