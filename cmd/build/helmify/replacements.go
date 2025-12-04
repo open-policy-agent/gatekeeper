@@ -329,6 +329,21 @@ var replacements = map[string]string{
 	"- HELMSUBST_METRICS_BACKEND_ARG": `
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
+        {{- end }}
+        {{- if .Values.prometheusPort}}
+        - --prometheus-port={{ .Values.prometheusPort }}
+        {{- end }}
+        {{- if .Values.otlpEndpoint}}
+        - --otlp-endpoint={{ .Values.otlpEndpoint }}
+        {{- end }}
+        {{- if .Values.otlpMetricInterval}}
+        - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
+        {{- end }}
+        {{- if .Values.stackdriverOnlyWhenAvailable}}
+        - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
+        {{- end }}
+        {{- if .Values.stackdriverMetricInterval}}
+        - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
         {{- end }}`,
 
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES": `
