@@ -16,6 +16,7 @@ linters:
     - govet
     - importas
     - ineffassign
+    - kubeapilinter
     - misspell
     - revive # replacement for golint
     - staticcheck
@@ -42,6 +43,18 @@ linters:
       rules:
         - name: var-naming
           disabled: true
+    custom:
+      kubeapilinter:
+        type: "module"
+        description: Kube API Linter lints Kube like APIs based on API conventions and best practices.
+        settings:
+          linters: 
+            disable:
+              - "*"
+            enable:
+              - statusoptional
+              - statussubresource
+          lintersConfig: {}
   exclusions:
     generated: lax
     presets:
@@ -52,6 +65,9 @@ linters:
     rules:
       - path: (.+)\.go$
         text: 'deprecated: This package is intended for older projects transitioning from OPA v0.x and will remain for the lifetime of OPA v1.x'
+      - linters:
+          - kubeapilinter
+        path-except: api/*
     paths:
       - pkg/target/matchcrd_constant.go
       - third_party$

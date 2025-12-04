@@ -15,11 +15,16 @@ import (
 // +kubebuilder:object:generate=true
 
 type ConfigPodStatusStatus struct {
-	ID                 string         `json:"id,omitempty"`
-	ConfigUID          types.UID      `json:"configUID,omitempty"`
-	Operations         []string       `json:"operations,omitempty"`
-	ObservedGeneration int64          `json:"observedGeneration,omitempty"`
-	Errors             []*ConfigError `json:"errors,omitempty"`
+	// +optional
+	ID string `json:"id,omitempty"`
+	// +optional
+	ConfigUID types.UID `json:"configUID,omitempty"`
+	// +optional
+	Operations []string `json:"operations,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// +optional
+	Errors []*ConfigError `json:"errors,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
