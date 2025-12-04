@@ -19,7 +19,7 @@ var (
 type ExternalData struct {
 	// Provider is the name of the external data provider.
 	// +kubebuilder:validation:Required
-	Provider string `json:"provider,omitempty"`
+	Provider *string `json:"provider,omitempty"`
 
 	// DataSource specifies where to extract the data that will be sent
 	// to the external data provider as parameters.

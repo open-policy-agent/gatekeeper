@@ -28,7 +28,7 @@ import (
 type ConnectionSpec struct {
 	// +kubebuilder:validation:Required
 	// Driver is the name of one of the expected drivers i.e. dapr, disk
-	Driver string `json:"driver"`
+	Driver *string `json:"driver,omitempty"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:validation:XPreserveUnknownFields
@@ -37,6 +37,7 @@ type ConnectionSpec struct {
 
 // ConnectionStatus defines the observed state of Connection.
 type ConnectionStatus struct {
+	// +optional
 	ByPod []statusv1alpha1.ConnectionPodStatusStatus `json:"byPod,omitempty"`
 }
 

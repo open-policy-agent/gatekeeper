@@ -71,6 +71,7 @@ type ExpansionTemplate struct {
 
 // ExpansionTemplateStatus defines the observed state of ExpansionTemplate.
 type ExpansionTemplateStatus struct {
+	// +optional
 	ByPod []status.ExpansionTemplatePodStatusStatus `json:"byPod,omitempty"`
 }
 
