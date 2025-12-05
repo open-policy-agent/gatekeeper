@@ -3,6 +3,7 @@ package bench
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -385,7 +386,7 @@ func TestFormatComparison(t *testing.T) {
 	}
 
 	for _, s := range expectedStrings {
-		if !containsString(output, s) {
+		if !strings.Contains(output, s) {
 			t.Errorf("expected output to contain %q", s)
 		}
 	}
@@ -413,21 +414,10 @@ func TestFormatComparison_WithRegression(t *testing.T) {
 	}
 
 	for _, s := range expectedStrings {
-		if !containsString(output, s) {
+		if !strings.Contains(output, s) {
 			t.Errorf("expected output to contain %q", s)
 		}
 	}
 }
 
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStringHelper(s, substr))
-}
 
-func containsStringHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

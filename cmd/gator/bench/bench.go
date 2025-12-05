@@ -39,7 +39,8 @@ gator bench --filename="policies/" --memory
 # Save benchmark results as baseline
 gator bench --filename="policies/" --save=baseline.json
 
-# Compare against baseline (fail if >10% regression or >1ms absolute increase)
+# Compare against baseline (fail only if BOTH >10% regression AND >1ms absolute increase)
+# This prevents false positives for fast policies where small absolute changes appear as large percentages
 gator bench --filename="policies/" --compare=baseline.json --threshold=10 --min-threshold=1ms`
 )
 
