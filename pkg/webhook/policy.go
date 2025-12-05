@@ -17,6 +17,7 @@ package webhook
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -625,13 +626,13 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	}
 
 	trace, dump := h.tracingLevel(ctx, req)
-	resp, err := h.review(ctx, review, trace, dump)
+	resp, err := h.review(ctx, review, review.Namespace, trace, dump)
 	if err != nil {
 		return nil, fmt.Errorf("error reviewing resource %s: %w", req.Name, err)
 	}
 
 	for _, res := range resultants {
-		resultantResp, err := h.review(ctx, createReviewForResultant(res.Obj, review.Namespace), trace, dump)
+		resultantResp, err := h.review(ctx, createReviewForResultant(res.Obj, review.Namespace), review.Namespace, trace, dump)
 		if err != nil {
 			return nil, fmt.Errorf("error reviewing resultant resource: %w", err)
 		}
@@ -643,8 +644,25 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	return resp, nil
 }
 
-func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {
-	resp, err := h.opa.Review(ctx, review, reviews.EnforcementPoint(util.WebhookEnforcementPoint), reviews.Tracing(trace), reviews.Stats(*logStatsAdmission))
+func (h *validationHandler) review(ctx context.Context, review interface{}, namespace *corev1.Namespace, trace bool, dump bool) (*rtypes.Responses, error) {
+	// Build review options
+	opts := []reviews.ReviewOpt{
+		reviews.EnforcementPoint(util.WebhookEnforcementPoint),
+		reviews.Tracing(trace),
+		reviews.Stats(*logStatsAdmission),
+	}
+
+	// Add namespace option if available for CEL namespaceObject and Rego input.namespace support
+	if namespace != nil {
+		nsMap, err := namespaceToMap(namespace)
+		if err != nil {
+			h.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
+		} else {
+			opts = append(opts, reviews.Namespace(nsMap))
+		}
+	}
+
+	resp, err := h.opa.Review(ctx, review, opts...)
 	if resp != nil && trace {
 		h.log.Info(resp.TraceDump())
 	}
@@ -658,6 +676,27 @@ func (h *validationHandler) review(ctx context.Context, review interface{}, trac
 	}
 
 	return resp, err
+}
+
+// namespaceToMap converts a corev1.Namespace to map[string]interface{} for passing
+// to the constraint client. This enables CEL expressions to use namespaceObject
+// and Rego policies to access input.namespace.
+func namespaceToMap(ns *corev1.Namespace) (map[string]interface{}, error) {
+	if ns == nil {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(ns)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal namespace: %w", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal namespace: %w", err)
+	}
+
+	return result, nil
 }
 
 func (h *validationHandler) createReviewForRequest(ctx context.Context, req *admission.Request) (*target.AugmentedReview, error) {

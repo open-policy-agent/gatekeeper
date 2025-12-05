@@ -612,7 +612,16 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			Object:    obj,
 			Namespace: ns,
 		}
-		resp, err := am.opa.Review(ctx, au, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
+		opts := []reviews.ReviewOpt{
+			reviews.EnforcementPoint(util.AuditEnforcementPoint),
+			reviews.Stats(*logStatsAudit),
+		}
+		if ns != nil {
+			if nsMap, err := namespaceToMap(ns); err == nil {
+				opts = append(opts, reviews.Namespace(nsMap))
+			}
+		}
+		resp, err := am.opa.Review(ctx, au, opts...)
 		if err != nil {
 			am.log.Error(err, fmt.Sprintf("Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
 			continue
@@ -703,7 +712,16 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				Source:    mutationtypes.SourceTypeOriginal,
 			}
 
-			resp, err := am.opa.Review(ctx, augmentedObj, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
+			opts := []reviews.ReviewOpt{
+				reviews.EnforcementPoint(util.AuditEnforcementPoint),
+				reviews.Stats(*logStatsAudit),
+			}
+			if ns != nil {
+				if nsMap, err := namespaceToMap(ns); err == nil {
+					opts = append(opts, reviews.Namespace(nsMap))
+				}
+			}
+			resp, err := am.opa.Review(ctx, augmentedObj, opts...)
 			if err != nil {
 				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
 				continue
@@ -727,7 +745,16 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					Namespace: ns,
 					Source:    mutationtypes.SourceTypeGenerated,
 				}
-				resultantResp, err := am.opa.Review(ctx, au, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
+				resultantOpts := []reviews.ReviewOpt{
+					reviews.EnforcementPoint(util.AuditEnforcementPoint),
+					reviews.Stats(*logStatsAudit),
+				}
+				if ns != nil {
+					if nsMap, err := namespaceToMap(ns); err == nil {
+						resultantOpts = append(resultantOpts, reviews.Namespace(nsMap))
+					}
+				}
+				resultantResp, err := am.opa.Review(ctx, au, resultantOpts...)
 				if err != nil {
 					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
 					continue
@@ -1312,4 +1339,25 @@ func reportExportConnectionErrors(
 	if err := exportController.UpdateOrCreateConnectionPodStatus(ctx, client, client, scheme, *exportutil.AuditConnection, exportErrors, &activeConnection, getPod); err != nil {
 		logger.Error(err, "failed to write export errors to the connection pod status")
 	}
+}
+
+// namespaceToMap converts a corev1.Namespace to map[string]interface{} for passing
+// to the constraint client. This enables CEL expressions to use namespaceObject
+// and Rego policies to access input.namespace.
+func namespaceToMap(ns *corev1.Namespace) (map[string]interface{}, error) {
+	if ns == nil {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(ns)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal namespace: %w", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal namespace: %w", err)
+	}
+
+	return result, nil
 }

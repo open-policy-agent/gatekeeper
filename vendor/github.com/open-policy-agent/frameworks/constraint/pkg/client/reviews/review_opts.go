@@ -1,9 +1,14 @@
 package reviews
 
+// ReviewCfg contains configuration options for a single review query.
 type ReviewCfg struct {
 	TracingEnabled   bool
 	StatsEnabled     bool
 	EnforcementPoint string
+	// Namespace is the namespace object for the resource being reviewed.
+	// For namespaced resources, this contains the full namespace object
+	// including metadata and labels. For cluster-scoped resources, this is nil.
+	Namespace map[string]interface{}
 }
 
 // ReviewOpt specifies optional arguments for Query driver calls.
@@ -30,5 +35,14 @@ func Stats(enabled bool) ReviewOpt {
 func EnforcementPoint(ep string) ReviewOpt {
 	return func(cfg *ReviewCfg) {
 		cfg.EnforcementPoint = ep
+	}
+}
+
+// Namespace sets the namespace object for the review.
+// This makes the namespace available to policy templates as input.namespace (Rego)
+// or namespaceObject (CEL), enabling policies to access namespace labels and metadata.
+func Namespace(ns map[string]interface{}) ReviewOpt {
+	return func(cfg *ReviewCfg) {
+		cfg.Namespace = ns
 	}
 }

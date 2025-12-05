@@ -286,8 +286,8 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		}
 
 		// Parse input into an ast.Value to avoid round-tripping through JSON when
-		// possible.
-		parsedInput, err := toParsedInput(target, kindConstraints, reviewMap)
+		// possible. Include namespace if provided for namespace-based policies.
+		parsedInput, err := toParsedInput(target, kindConstraints, reviewMap, cfg.Namespace)
 		if err != nil {
 			return nil, err
 		}
@@ -502,7 +502,7 @@ func toConstraintsByKind(constraints []*unstructured.Unstructured) map[string][]
 	return constraintsByKind
 }
 
-func toParsedInput(target string, constraints []*unstructured.Unstructured, review map[string]interface{}) (ast.Value, error) {
+func toParsedInput(target string, constraints []*unstructured.Unstructured, review map[string]interface{}, namespace map[string]interface{}) (ast.Value, error) {
 	// Store constraint keys in a format InterfaceToValue does not need to
 	// round-trip through JSON.
 	constraintKeys := toKeySlice(constraints)
@@ -511,6 +511,12 @@ func toParsedInput(target string, constraints []*unstructured.Unstructured, revi
 		"target":      target,
 		"constraints": constraintKeys,
 		"review":      review,
+	}
+
+	// Add namespace object if available (for namespaced resources).
+	// This enables policies to access namespace labels and metadata via input.namespace.
+	if namespace != nil {
+		input["namespace"] = namespace
 	}
 
 	// Parse input into an ast.Value to avoid round-tripping through JSON when
