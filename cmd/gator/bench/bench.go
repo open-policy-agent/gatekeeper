@@ -101,7 +101,7 @@ func init() {
 		"a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "",
 		"temporary directory to download and unpack images to.")
-	Cmd.Flags().StringVarP(&flagEngine, flagNameEngine, "e", "rego",
+	Cmd.Flags().StringVarP(&flagEngine, flagNameEngine, "e", string(bench.EngineRego),
 		fmt.Sprintf("policy engine to benchmark. One of: %s|%s|%s", bench.EngineRego, bench.EngineCEL, bench.EngineAll))
 	Cmd.Flags().IntVarP(&flagIterations, flagNameIterations, "n", 1000,
 		"number of benchmark iterations to run. Use at least 1000 for meaningful P99 metrics.")
@@ -228,13 +228,13 @@ func run(_ *cobra.Command, _ []string) {
 
 func parseEngine(s string) (bench.Engine, error) {
 	switch strings.ToLower(s) {
-	case "rego":
+	case string(bench.EngineRego):
 		return bench.EngineRego, nil
-	case "cel":
+	case string(bench.EngineCEL):
 		return bench.EngineCEL, nil
-	case "all":
+	case string(bench.EngineAll):
 		return bench.EngineAll, nil
 	default:
-		return "", fmt.Errorf("invalid engine %q (valid: rego, cel, all)", s)
+		return "", fmt.Errorf("invalid engine %q (valid: %s, %s, %s)", s, bench.EngineRego, bench.EngineCEL, bench.EngineAll)
 	}
 }
