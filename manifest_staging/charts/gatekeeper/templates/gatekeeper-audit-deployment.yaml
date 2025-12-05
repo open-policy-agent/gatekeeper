@@ -192,7 +192,7 @@ spec:
         - mountPath: {{ .Values.audit.exportVolumeMount.path }}
           name: {{ .Values.audit.exportVolume.name }}
         {{- end }}
-      {{ if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") (not .Values.audit.disableAuditSidecar ) }}
+      {{ if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") (not .Values.audit.disableAuditSidecar) }}
       - {{ toYaml .Values.audit.exportSidecar | nindent 8 }}
       {{- end }}
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
