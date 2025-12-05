@@ -15,7 +15,10 @@ ENV GO111MODULE=on \
 COPY . /go/src/github.com/open-policy-agent/gatekeeper
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper/cmd/gator
 
-RUN go build -mod vendor -a -ldflags "${LDFLAGS}" -o /gator
+RUN \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -a -ldflags "${LDFLAGS}" -o /gator
 
 FROM --platform=$BUILDPLATFORM gcr.io/distroless/static-debian12@sha256:87bce11be0af225e4ca761c40babb06d6d559f5767fbf7dc3c47f0f1a466b92c AS build
 USER 65532:65532
