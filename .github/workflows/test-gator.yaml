@@ -30,10 +30,6 @@ jobs:
     name: "Test Gator"
     runs-on: ubuntu-22.04
     timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        KUBERNETES_VERSION: ["1.31.6", "1.32.3", "1.33.2"] # Latest available versions of Kubernetes at - https://hub.docker.com/r/kindest/node/tags
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
@@ -48,12 +44,6 @@ jobs:
         with:
           go-version: "1.25"
           check-latest: true
-
-      - name: Download e2e dependencies
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/bin
-          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-dependencies KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
 
       - name: gator test
         run: make test-gator-containerized
