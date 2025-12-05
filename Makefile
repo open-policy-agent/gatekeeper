@@ -80,7 +80,7 @@ GOLANGCI_LINT_VERSION := v2.4.0
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
-CUSTOM_GOLANGCI_LINT := ./bin/golangci-lint-kube-api-linter
+
 TIMEOUT ?= 30m
 
 BENCHMARK_FILE_NAME ?= benchmarks.txt
@@ -383,11 +383,11 @@ manifests: __controller-gen
 lint:
 
 # Run using Docker
-	
+
 	docker run --rm -t -v $(shell pwd):/app \
 		-v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
 		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} \
-		sh -c "test -f /app/bin/golangci-lint-kube-api-linter || golangci-lint custom && \
+		sh -c "test -f /app/bin/golangci-lint-kube-api-linter || golangci-lint custom ; \
 			/app/bin/golangci-lint-kube-api-linter run --timeout=$(TIMEOUT) --fix --concurrency 2 "
 
 # Intentionally kept for reference during transition.

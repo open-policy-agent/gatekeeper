@@ -28,7 +28,7 @@ import (
 type ConnectionSpec struct {
 	// +kubebuilder:validation:Required
 	// Driver is the name of one of the expected drivers i.e. dapr, disk
-	Driver string `json:"driver,omitempty"`
+	Driver string `json:"driver"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:validation:XPreserveUnknownFields

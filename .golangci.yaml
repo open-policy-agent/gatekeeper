@@ -67,7 +67,7 @@ linters:
         text: 'deprecated: This package is intended for older projects transitioning from OPA v0.x and will remain for the lifetime of OPA v1.x'
       - linters:
           - kubeapilinter
-        path-except: api/*
+        path-except: apis/*
     paths:
       - pkg/target/matchcrd_constant.go
       - third_party$
