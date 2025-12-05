@@ -124,13 +124,13 @@ jobs:
             --save /tmp/baseline.json
 
           # Compare against baseline with min-threshold to handle CI variance
-          # Fast policies (~200µs) can show large % swings from small absolute changes
+          # Fast policies (~200us) can show large % swings from small absolute changes
           ./bin/gator bench \
             --filename test/gator/bench/basic/ \
             --iterations 30 \
             --compare /tmp/baseline.json \
             --threshold 50 \
-            --min-threshold 500µs
+            --min-threshold 500us
 
       - name: Test min-threshold
         run: |

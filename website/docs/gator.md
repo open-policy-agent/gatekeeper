@@ -663,7 +663,7 @@ gator bench --filename=policies/
 | `--save` | | | Save results to file for future comparison |
 | `--compare` | | | Compare against a baseline file |
 | `--threshold` | | `10` | Regression threshold percentage (for CI/CD) |
-| `--min-threshold` | | `0` | Minimum absolute latency difference to consider (e.g., `100µs`). Useful for fast policies where percentage changes may be noise. |
+| `--min-threshold` | | `0` | Minimum absolute latency difference to consider (e.g., `100us` or `100µs`). Useful for fast policies where percentage changes may be noise. |
 | `--stats` | | `false` | Gather detailed statistics from constraint framework |
 
 ### Examples
@@ -814,12 +814,12 @@ Bytes/Review   150.00 KB    152.00 KB    +1.3%   ✓
 For fast policies (< 1ms), small percentage changes may be noise. Use `--min-threshold` to set an absolute minimum difference:
 
 ```shell
-gator bench --filename=policies/ --compare=baseline.json --threshold=10 --min-threshold=100µs
+gator bench --filename=policies/ --compare=baseline.json --threshold=10 --min-threshold=100us
 ```
 
 This marks a metric as passing if either:
 - The percentage change is within the threshold (10%), OR
-- The absolute difference is less than the min-threshold (100µs)
+- The absolute difference is less than the min-threshold (100us)
 
 ### CI/CD Integration
 
@@ -859,7 +859,7 @@ jobs:
             gator bench -f policies/ --memory \
               --compare=baseline.json \
               --threshold=10 \
-              --min-threshold=100µs
+              --min-threshold=100us
           else
             gator bench -f policies/ --memory --save=baseline.json
           fi
@@ -873,7 +873,7 @@ jobs:
 ```
 
 :::tip
-Use `--min-threshold` in CI to prevent flaky failures. For policies that evaluate in under 1ms, a 10% regression might only be 50µs of noise from system jitter.
+Use `--min-threshold` in CI to prevent flaky failures. For policies that evaluate in under 1ms, a 10% regression might only be 50us of noise from system jitter.
 :::
 
 #### Exit Codes
