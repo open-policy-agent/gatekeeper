@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"sigs.k8s.io/yaml"
 )
 
@@ -19,7 +20,7 @@ func SaveResults(results []Results, path string) error {
 	var err error
 
 	switch ext {
-	case ".yaml", ".yml":
+	case gator.ExtYAML, gator.ExtYML:
 		data, err = yaml.Marshal(results)
 	default:
 		// Default to JSON
@@ -48,7 +49,7 @@ func LoadBaseline(path string) ([]Results, error) {
 	var results []Results
 
 	switch ext {
-	case ".yaml", ".yml":
+	case gator.ExtYAML, gator.ExtYML:
 		err = yaml.Unmarshal(data, &results)
 	default:
 		// Default to JSON
