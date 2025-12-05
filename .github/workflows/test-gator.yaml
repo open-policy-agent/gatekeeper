@@ -110,6 +110,14 @@ jobs:
             --memory \
             --output table
 
+      - name: Test concurrent execution
+        run: |
+          ./bin/gator bench \
+            --filename test/gator/bench/basic/ \
+            --iterations 100 \
+            --concurrency 4 \
+            --output table
+
       - name: Test JSON output
         run: |
           ./bin/gator bench \
@@ -131,3 +139,20 @@ jobs:
             --iterations 30 \
             --compare /tmp/baseline.json \
             --threshold 50
+
+      - name: Test min-threshold
+        run: |
+          # Save baseline
+          ./bin/gator bench \
+            --filename test/gator/bench/basic/ \
+            --iterations 30 \
+            --save /tmp/baseline-min.json
+
+          # Compare with strict threshold (0.1%) but loose min-threshold (1s)
+          # This ensures the flag prevents failure from small variations
+          ./bin/gator bench \
+            --filename test/gator/bench/basic/ \
+            --iterations 30 \
+            --compare /tmp/baseline-min.json \
+            --threshold 0.1 \
+            --min-threshold 1s

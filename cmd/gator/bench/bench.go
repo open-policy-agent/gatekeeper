@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	cmdutils "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/bench"
@@ -11,7 +12,7 @@ import (
 )
 
 const (
-	examples = `# Benchmark policies with default settings (100 iterations, rego engine)
+	examples = `# Benchmark policies with default settings (1000 iterations, rego engine)
 gator bench --filename="policies/"
 
 # Benchmark with both Rego and CEL engines
@@ -19,6 +20,9 @@ gator bench --filename="policies/" --engine=all
 
 # Benchmark with custom iterations and warmup
 gator bench --filename="policies/" --iterations=500 --warmup=50
+
+# Benchmark with concurrent load (simulates real webhook traffic)
+gator bench --filename="policies/" --concurrency=10
 
 # Output results as JSON
 gator bench --filename="policies/" --output=json
@@ -35,8 +39,8 @@ gator bench --filename="policies/" --memory
 # Save benchmark results as baseline
 gator bench --filename="policies/" --save=baseline.json
 
-# Compare against baseline (fail if >10% regression)
-gator bench --filename="policies/" --compare=baseline.json --threshold=10`
+# Compare against baseline (fail if >10% regression or >1ms absolute increase)
+gator bench --filename="policies/" --compare=baseline.json --threshold=10 --min-threshold=1ms`
 )
 
 // Cmd is the cobra command for the bench subcommand.
@@ -57,33 +61,37 @@ Supports both Rego and CEL policy engines for comparison.`,
 }
 
 var (
-	flagFilenames  []string
-	flagImages     []string
-	flagTempDir    string
-	flagEngine     string
-	flagIterations int
-	flagWarmup     int
-	flagOutput     string
-	flagStats      bool
-	flagMemory     bool
-	flagSave       string
-	flagCompare    string
-	flagThreshold  float64
+	flagFilenames    []string
+	flagImages       []string
+	flagTempDir      string
+	flagEngine       string
+	flagIterations   int
+	flagWarmup       int
+	flagConcurrency  int
+	flagOutput       string
+	flagStats        bool
+	flagMemory       bool
+	flagSave         string
+	flagCompare      string
+	flagThreshold    float64
+	flagMinThreshold time.Duration
 )
 
 const (
-	flagNameFilename   = "filename"
-	flagNameImage      = "image"
-	flagNameTempDir    = "tempdir"
-	flagNameEngine     = "engine"
-	flagNameIterations = "iterations"
-	flagNameWarmup     = "warmup"
-	flagNameOutput     = "output"
-	flagNameStats      = "stats"
-	flagNameMemory     = "memory"
-	flagNameSave       = "save"
-	flagNameCompare    = "compare"
-	flagNameThreshold  = "threshold"
+	flagNameFilename     = "filename"
+	flagNameImage        = "image"
+	flagNameTempDir      = "tempdir"
+	flagNameEngine       = "engine"
+	flagNameIterations   = "iterations"
+	flagNameWarmup       = "warmup"
+	flagNameConcurrency  = "concurrency"
+	flagNameOutput       = "output"
+	flagNameStats        = "stats"
+	flagNameMemory       = "memory"
+	flagNameSave         = "save"
+	flagNameCompare      = "compare"
+	flagNameThreshold    = "threshold"
+	flagNameMinThreshold = "min-threshold"
 )
 
 func init() {
@@ -95,10 +103,12 @@ func init() {
 		"temporary directory to download and unpack images to.")
 	Cmd.Flags().StringVarP(&flagEngine, flagNameEngine, "e", "rego",
 		fmt.Sprintf("policy engine to benchmark. One of: %s|%s|%s", bench.EngineRego, bench.EngineCEL, bench.EngineAll))
-	Cmd.Flags().IntVarP(&flagIterations, flagNameIterations, "n", 100,
-		"number of benchmark iterations to run.")
+	Cmd.Flags().IntVarP(&flagIterations, flagNameIterations, "n", 1000,
+		"number of benchmark iterations to run. Use at least 1000 for meaningful P99 metrics.")
 	Cmd.Flags().IntVar(&flagWarmup, flagNameWarmup, 10,
 		"number of warmup iterations before measurement.")
+	Cmd.Flags().IntVarP(&flagConcurrency, flagNameConcurrency, "c", 1,
+		"number of concurrent goroutines for reviews. Higher values simulate realistic webhook load.")
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "table",
 		"output format. One of: table|json|yaml")
 	Cmd.Flags().BoolVar(&flagStats, flagNameStats, false,
@@ -111,6 +121,8 @@ func init() {
 		"compare results against a baseline file (supports .json and .yaml).")
 	Cmd.Flags().Float64Var(&flagThreshold, flagNameThreshold, 10.0,
 		"regression threshold percentage for comparison. Exit code 1 if exceeded.")
+	Cmd.Flags().DurationVar(&flagMinThreshold, flagNameMinThreshold, 0,
+		"minimum absolute latency difference to consider a regression (e.g., 1ms). Prevents false positives on fast policies.")
 }
 
 func run(_ *cobra.Command, _ []string) {
@@ -143,20 +155,26 @@ func run(_ *cobra.Command, _ []string) {
 		cmdutils.ErrFatalf("threshold must be non-negative")
 	}
 
+	if flagConcurrency < 1 {
+		cmdutils.ErrFatalf("concurrency must be at least 1")
+	}
+
 	// Run benchmark
 	opts := &bench.Opts{
-		Filenames:   flagFilenames,
-		Images:      flagImages,
-		TempDir:     flagTempDir,
-		Engine:      engine,
-		Iterations:  flagIterations,
-		Warmup:      flagWarmup,
-		GatherStats: flagStats,
-		Memory:      flagMemory,
-		Save:        flagSave,
-		Baseline:    flagCompare,
-		Threshold:   flagThreshold,
-		Writer:      os.Stderr,
+		Filenames:    flagFilenames,
+		Images:       flagImages,
+		TempDir:      flagTempDir,
+		Engine:       engine,
+		Iterations:   flagIterations,
+		Warmup:       flagWarmup,
+		Concurrency:  flagConcurrency,
+		GatherStats:  flagStats,
+		Memory:       flagMemory,
+		Save:         flagSave,
+		Baseline:     flagCompare,
+		Threshold:    flagThreshold,
+		MinThreshold: flagMinThreshold,
+		Writer:       os.Stderr,
 	}
 
 	results, err := bench.Run(opts)
@@ -188,7 +206,7 @@ func run(_ *cobra.Command, _ []string) {
 			cmdutils.ErrFatalf("loading baseline: %v", err)
 		}
 
-		comparisons := bench.Compare(baseline, results, flagThreshold)
+		comparisons := bench.Compare(baseline, results, flagThreshold, flagMinThreshold)
 		if len(comparisons) == 0 {
 			fmt.Fprintf(os.Stderr, "\nWarning: No matching engines found for comparison\n")
 		} else {

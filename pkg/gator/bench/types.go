@@ -55,6 +55,15 @@ type Opts struct {
 	// If a metric regresses more than this percentage, the benchmark fails.
 	Threshold float64
 
+	// MinThreshold is the minimum absolute latency difference (in duration) to consider
+	// a regression. This prevents false positives on very fast policies where small
+	// absolute changes appear as large percentage changes.
+	MinThreshold time.Duration
+
+	// Concurrency is the number of concurrent goroutines to use for reviews.
+	// Default is 1 (sequential). Higher values simulate realistic webhook load.
+	Concurrency int
+
 	// Writer is where warnings and informational messages are written.
 	// If nil, warnings are not printed.
 	Writer io.Writer
@@ -82,6 +91,9 @@ type Results struct {
 
 	// Iterations is the number of review cycles run.
 	Iterations int `json:"iterations" yaml:"iterations"`
+
+	// Concurrency is the number of concurrent goroutines used.
+	Concurrency int `json:"concurrency" yaml:"concurrency"`
 
 	// SetupDuration is the total time taken to load templates, constraints, and data.
 	SetupDuration time.Duration `json:"setupDuration" yaml:"setupDuration"`

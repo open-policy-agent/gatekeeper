@@ -159,7 +159,7 @@ func TestCompare(t *testing.T) {
 			},
 		}
 
-		comparisons := Compare(baseline, current, 10.0)
+		comparisons := Compare(baseline, current, 10.0, 0)
 		if len(comparisons) != 1 {
 			t.Fatalf("expected 1 comparison, got %d", len(comparisons))
 		}
@@ -183,7 +183,7 @@ func TestCompare(t *testing.T) {
 			},
 		}
 
-		comparisons := Compare(baseline, current, 10.0)
+		comparisons := Compare(baseline, current, 10.0, 0)
 		if len(comparisons) != 1 {
 			t.Fatalf("expected 1 comparison, got %d", len(comparisons))
 		}
@@ -210,7 +210,7 @@ func TestCompare(t *testing.T) {
 			},
 		}
 
-		comparisons := Compare(baseline, current, 10.0)
+		comparisons := Compare(baseline, current, 10.0, 0)
 		if len(comparisons) != 1 {
 			t.Fatalf("expected 1 comparison, got %d", len(comparisons))
 		}
@@ -242,9 +242,65 @@ func TestCompare(t *testing.T) {
 			},
 		}
 
-		comparisons := Compare(baseline, current, 10.0)
+		comparisons := Compare(baseline, current, 10.0, 0)
 		if len(comparisons) != 0 {
 			t.Errorf("expected 0 comparisons for non-matching engine, got %d", len(comparisons))
+		}
+	})
+
+	t.Run("min threshold bypasses percentage regression", func(t *testing.T) {
+		// Use a fast baseline where percentage changes are noise
+		fastBaseline := []Results{
+			{
+				Engine: EngineRego,
+				Latencies: Latencies{
+					P50:  100 * time.Microsecond,
+					P95:  200 * time.Microsecond,
+					P99:  300 * time.Microsecond,
+					Mean: 150 * time.Microsecond,
+				},
+				ReviewsPerSecond: 10000,
+			},
+		}
+
+		current := []Results{
+			{
+				Engine: EngineRego,
+				Latencies: Latencies{
+					P50:  120 * time.Microsecond, // 20% increase but only 20µs
+					P95:  240 * time.Microsecond, // 20% increase but only 40µs
+					P99:  360 * time.Microsecond, // 20% increase but only 60µs
+					Mean: 180 * time.Microsecond, // 20% increase but only 30µs
+				},
+				ReviewsPerSecond: 8000, // 20% decrease
+			},
+		}
+
+		// Without min threshold, this would fail (20% > 10%)
+		comparisonsWithoutMin := Compare(fastBaseline, current, 10.0, 0)
+		if len(comparisonsWithoutMin) != 1 {
+			t.Fatalf("expected 1 comparison, got %d", len(comparisonsWithoutMin))
+		}
+		if comparisonsWithoutMin[0].Passed {
+			t.Error("expected comparison without min-threshold to fail")
+		}
+
+		// With min threshold of 100µs, latency changes should pass (all < 100µs difference)
+		// but throughput should still fail since it uses percentage
+		comparisonsWithMin := Compare(fastBaseline, current, 10.0, 100*time.Microsecond)
+		if len(comparisonsWithMin) != 1 {
+			t.Fatalf("expected 1 comparison, got %d", len(comparisonsWithMin))
+		}
+
+		// Some latency metrics should pass now due to min threshold
+		passedLatencyCount := 0
+		for _, m := range comparisonsWithMin[0].Metrics {
+			if m.Name == "P50 Latency" && m.Passed {
+				passedLatencyCount++
+			}
+		}
+		if passedLatencyCount == 0 {
+			t.Error("expected at least P50 Latency to pass with min-threshold")
 		}
 	})
 }

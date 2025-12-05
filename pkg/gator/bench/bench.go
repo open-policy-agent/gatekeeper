@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis"
@@ -20,6 +22,12 @@ import (
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 )
 
+const (
+	// MinIterationsForP99 is the minimum number of iterations recommended for
+	// statistically meaningful P99 metrics.
+	MinIterationsForP99 = 1000
+)
+
 var scheme *k8sruntime.Scheme
 
 func init() {
@@ -32,6 +40,17 @@ func init() {
 // Run executes the benchmark with the given options and returns results
 // for each engine tested.
 func Run(opts *Opts) ([]Results, error) {
+	// Warn if iterations are too low for meaningful P99 statistics
+	if opts.Iterations < MinIterationsForP99 && opts.Writer != nil {
+		fmt.Fprintf(opts.Writer, "Warning: %d iterations may not provide statistically meaningful P99 metrics. Consider using at least %d iterations.\n\n",
+			opts.Iterations, MinIterationsForP99)
+	}
+
+	// Default concurrency to 1 (sequential)
+	if opts.Concurrency < 1 {
+		opts.Concurrency = 1
+	}
+
 	// Read all resources from files/images
 	objs, err := reader.ReadSources(opts.Filenames, opts.Images, opts.TempDir)
 	if err != nil {
@@ -209,7 +228,7 @@ func runBenchmark(
 
 	// Measurement phase
 	var durations []time.Duration
-	totalViolations := 0
+	var totalViolations int64
 
 	// Memory profiling: capture memory stats before and after
 	var memStatsBefore, memStatsAfter runtime.MemStats
@@ -219,30 +238,20 @@ func runBenchmark(
 	}
 
 	benchStart := time.Now()
-	for i := 0; i < opts.Iterations; i++ {
-		for _, obj := range reviewObjs {
-			au := target.AugmentedUnstructured{
-				Object: *obj,
-				Source: mutationtypes.SourceTypeOriginal,
-			}
 
-			reviewStart := time.Now()
-			resp, err := client.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
-			reviewDuration := time.Since(reviewStart)
-
-			if err != nil {
-				return nil, fmt.Errorf("review failed for %s/%s: %w",
-					obj.GetNamespace(), obj.GetName(), err)
-			}
-
-			durations = append(durations, reviewDuration)
-
-			// Count violations
-			for _, r := range resp.ByTarget {
-				totalViolations += len(r.Results)
-			}
+	// Concurrent or sequential execution based on concurrency setting
+	if opts.Concurrency > 1 {
+		durations, totalViolations, err = runConcurrentBenchmark(ctx, client, reviewObjs, opts)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		durations, totalViolations, err = runSequentialBenchmark(ctx, client, reviewObjs, opts)
+		if err != nil {
+			return nil, err
 		}
 	}
+
 	totalDuration := time.Since(benchStart)
 
 	// Capture memory stats after measurement
@@ -273,11 +282,12 @@ func runBenchmark(
 		ConstraintCount:    loadedConstraintCount,
 		ObjectCount:        len(reviewObjs),
 		Iterations:         opts.Iterations,
+		Concurrency:        opts.Concurrency,
 		SetupDuration:      setupDuration,
 		SetupBreakdown:     setupBreakdown,
 		TotalDuration:      totalDuration,
 		Latencies:          latencies,
-		ViolationCount:     totalViolations,
+		ViolationCount:     int(totalViolations),
 		ReviewsPerSecond:   throughput,
 		MemoryStats:        memStats,
 		SkippedTemplates:   skippedTemplates,
@@ -350,4 +360,145 @@ func isEngineIncompatibleError(err error) bool {
 		return true
 	}
 	return false
+}
+
+// runSequentialBenchmark runs the benchmark sequentially (single-threaded).
+func runSequentialBenchmark(
+	ctx context.Context,
+	client *constraintclient.Client,
+	reviewObjs []*unstructured.Unstructured,
+	opts *Opts,
+) ([]time.Duration, int64, error) {
+	var durations []time.Duration
+	var totalViolations int64
+
+	for i := 0; i < opts.Iterations; i++ {
+		for _, obj := range reviewObjs {
+			au := target.AugmentedUnstructured{
+				Object: *obj,
+				Source: mutationtypes.SourceTypeOriginal,
+			}
+
+			reviewStart := time.Now()
+			resp, err := client.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
+			reviewDuration := time.Since(reviewStart)
+
+			if err != nil {
+				return nil, 0, fmt.Errorf("review failed for %s/%s: %w",
+					obj.GetNamespace(), obj.GetName(), err)
+			}
+
+			durations = append(durations, reviewDuration)
+
+			// Count violations
+			for _, r := range resp.ByTarget {
+				totalViolations += int64(len(r.Results))
+			}
+		}
+	}
+
+	return durations, totalViolations, nil
+}
+
+// reviewResult holds the result of a single review for concurrent execution.
+type reviewResult struct {
+	duration   time.Duration
+	violations int
+	err        error
+}
+
+// runConcurrentBenchmark runs the benchmark with multiple goroutines.
+func runConcurrentBenchmark(
+	ctx context.Context,
+	client *constraintclient.Client,
+	reviewObjs []*unstructured.Unstructured,
+	opts *Opts,
+) ([]time.Duration, int64, error) {
+	totalReviews := opts.Iterations * len(reviewObjs)
+
+	// Create work items
+	type workItem struct {
+		iteration int
+		objIndex  int
+	}
+	workChan := make(chan workItem, totalReviews)
+	for i := 0; i < opts.Iterations; i++ {
+		for j := range reviewObjs {
+			workChan <- workItem{iteration: i, objIndex: j}
+		}
+	}
+	close(workChan)
+
+	// Result collection
+	resultsChan := make(chan reviewResult, totalReviews)
+	var wg sync.WaitGroup
+	var firstErr atomic.Value
+
+	// Launch worker goroutines
+	for w := 0; w < opts.Concurrency; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for work := range workChan {
+				// Check if we should stop due to an error
+				if firstErr.Load() != nil {
+					return
+				}
+
+				obj := reviewObjs[work.objIndex]
+				au := target.AugmentedUnstructured{
+					Object: *obj,
+					Source: mutationtypes.SourceTypeOriginal,
+				}
+
+				reviewStart := time.Now()
+				resp, err := client.Review(ctx, au, reviews.EnforcementPoint(util.GatorEnforcementPoint))
+				reviewDuration := time.Since(reviewStart)
+
+				if err != nil {
+					firstErr.CompareAndSwap(nil, fmt.Errorf("review failed for %s/%s: %w",
+						obj.GetNamespace(), obj.GetName(), err))
+					resultsChan <- reviewResult{err: err}
+					return
+				}
+
+				violations := 0
+				for _, r := range resp.ByTarget {
+					violations += len(r.Results)
+				}
+
+				resultsChan <- reviewResult{
+					duration:   reviewDuration,
+					violations: violations,
+				}
+			}
+		}()
+	}
+
+	// Wait for all workers to complete and close results channel
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	// Collect results
+	var durations []time.Duration
+	var totalViolations int64
+
+	for result := range resultsChan {
+		if result.err != nil {
+			continue
+		}
+		durations = append(durations, result.duration)
+		totalViolations += int64(result.violations)
+	}
+
+	// Check for errors
+	if errVal := firstErr.Load(); errVal != nil {
+		if err, ok := errVal.(error); ok {
+			return nil, 0, err
+		}
+	}
+
+	return durations, totalViolations, nil
 }

@@ -633,6 +633,10 @@ templatename3:
 
 `gator bench` measures the performance of Gatekeeper policy evaluation. It loads ConstraintTemplates, Constraints, and Kubernetes resources, then repeatedly evaluates the resources against the constraints to gather latency and throughput metrics.
 
+:::note
+`gator bench` measures **compute-only** policy evaluation latency, which does not include network round-trip time, TLS overhead, or Kubernetes API server processing. Real-world webhook latency will be higher. Use these metrics for relative comparisons between policy versions, not as absolute production latency predictions.
+:::
+
 This command is useful for:
 - **Policy developers**: Testing policy performance before deployment
 - **Platform teams**: Comparing Rego vs CEL engine performance
@@ -651,13 +655,15 @@ gator bench --filename=policies/
 | `--filename` | `-f` | | File or directory containing ConstraintTemplates, Constraints, and resources. Repeatable. |
 | `--image` | `-i` | | OCI image URL containing policies. Repeatable. |
 | `--engine` | `-e` | `rego` | Policy engine to benchmark: `rego`, `cel`, or `all` |
-| `--iterations` | `-n` | `100` | Number of benchmark iterations |
+| `--iterations` | `-n` | `1000` | Number of benchmark iterations. Use ≥1000 for reliable P99 percentiles. |
 | `--warmup` | | `10` | Warmup iterations before measurement |
+| `--concurrency` | `-c` | `1` | Number of concurrent goroutines for parallel evaluation |
 | `--output` | `-o` | `table` | Output format: `table`, `json`, or `yaml` |
-| `--memory` | | `false` | Enable memory profiling |
+| `--memory` | | `false` | Enable memory profiling (estimates only, not GC-cycle accurate) |
 | `--save` | | | Save results to file for future comparison |
 | `--compare` | | | Compare against a baseline file |
 | `--threshold` | | `10` | Regression threshold percentage (for CI/CD) |
+| `--min-threshold` | | `0` | Minimum absolute latency difference to consider (e.g., `100µs`). Useful for fast policies where percentage changes may be noise. |
 | `--stats` | | `false` | Gather detailed statistics from constraint framework |
 
 ### Examples
@@ -676,8 +682,8 @@ Configuration:
   Templates:      5
   Constraints:    10
   Objects:        50
-  Iterations:     100
-  Total Reviews:  5000
+  Iterations:     1000
+  Total Reviews:  50000
 
 Timing:
   Setup Duration:  25.00ms
@@ -685,7 +691,7 @@ Timing:
     └─ Template Compilation:  20.00ms
     └─ Constraint Loading:    3.00ms
     └─ Data Loading:          1.95ms
-  Total Duration:  2.50s
+  Total Duration:  25.00s
   Throughput:      2000.00 reviews/sec
 
 Latency (per review):
@@ -697,7 +703,30 @@ Latency (per review):
   P99:   2.50ms
 
 Results:
-  Violations Found:  150
+  Violations Found:  1500
+```
+
+#### Concurrent Benchmarking
+
+Simulate parallel load to test contention behavior:
+
+```shell
+gator bench --filename=policies/ --concurrency=4
+```
+
+This runs 4 parallel goroutines each executing reviews concurrently.
+
+```
+=== Benchmark Results: REGO Engine ===
+
+Configuration:
+  Templates:      5
+  Constraints:    10
+  Objects:        50
+  Iterations:     1000
+  Concurrency:    4
+  Total Reviews:  50000
+...
 ```
 
 #### Compare Rego vs CEL Engines
@@ -739,12 +768,16 @@ gator bench --filename=policies/ --memory
 Adds memory statistics to the output:
 
 ```
-Memory:
+Memory (estimated):
   Allocs/Review:  3000
   Bytes/Review:   150.00 KB
   Total Allocs:   15000000
   Total Bytes:    732.42 MB
 ```
+
+:::caution
+Memory statistics are estimates based on `runtime.MemStats` captured before and after benchmark runs. They do not account for garbage collection cycles that may occur during benchmarking. For production memory analysis, use Go's pprof profiler.
+:::
 
 #### Save and Compare Baselines
 
@@ -777,6 +810,16 @@ Bytes/Review   150.00 KB    152.00 KB    +1.3%   ✓
 
 ✓ No significant regressions (threshold: 10.0%)
 ```
+
+For fast policies (< 1ms), small percentage changes may be noise. Use `--min-threshold` to set an absolute minimum difference:
+
+```shell
+gator bench --filename=policies/ --compare=baseline.json --threshold=10 --min-threshold=100µs
+```
+
+This marks a metric as passing if either:
+- The percentage change is within the threshold (10%), OR
+- The absolute difference is less than the min-threshold (100µs)
 
 ### CI/CD Integration
 
@@ -812,7 +855,11 @@ jobs:
       - name: Run benchmark
         run: |
           if [ -f baseline.json ]; then
-            gator bench -f policies/ --memory --compare=baseline.json --threshold=10
+            # Use min-threshold to avoid flaky failures on fast policies
+            gator bench -f policies/ --memory \
+              --compare=baseline.json \
+              --threshold=10 \
+              --min-threshold=100µs
           else
             gator bench -f policies/ --memory --save=baseline.json
           fi
@@ -824,6 +871,10 @@ jobs:
           name: benchmark-baseline
           path: baseline.json
 ```
+
+:::tip
+Use `--min-threshold` in CI to prevent flaky failures. For policies that evaluate in under 1ms, a 10% regression might only be 50µs of noise from system jitter.
+:::
 
 #### Exit Codes
 
@@ -838,12 +889,24 @@ When `--compare` is used with `--threshold`, the command exits with code `1` if 
 
 | Metric | Description |
 |--------|-------------|
-| **P50/P95/P99 Latency** | Percentile latencies per review. P99 of 2ms means 99% of reviews complete in ≤2ms. |
+| **P50/P95/P99 Latency** | Percentile latencies per review. P99 of 2ms means 99% of reviews complete in ≤2ms. Use ≥1000 iterations for reliable P99. |
 | **Mean Latency** | Average time per review |
 | **Throughput** | Reviews processed per second |
-| **Allocs/Review** | Memory allocations per review (with `--memory`) |
-| **Bytes/Review** | Bytes allocated per review (with `--memory`) |
+| **Allocs/Review** | Memory allocations per review (with `--memory`). Estimate only. |
+| **Bytes/Review** | Bytes allocated per review (with `--memory`). Estimate only. |
 | **Setup Duration** | Time to load templates, constraints, and data |
+
+#### Setup Duration Breakdown
+
+Setup duration includes:
+- **Client Creation**: Initializing the constraint client
+- **Template Compilation**: Compiling Rego/CEL code in ConstraintTemplates
+- **Constraint Loading**: Adding constraints to the client
+- **Data Loading**: Loading all Kubernetes resources into the data cache
+
+:::note
+Data loading adds all provided resources to the constraint client's cache. This is intentional behavior that matches how Gatekeeper evaluates referential constraints—policies that reference other cluster resources (e.g., checking if a namespace exists) need this cached data available during evaluation.
+:::
 
 #### Performance Guidance
 
@@ -851,6 +914,7 @@ When `--compare` is used with `--threshold`, the command exits with code `1` if 
 - **CEL is typically faster than Rego** for equivalent policies
 - **High memory allocations** may indicate inefficient policy patterns
 - **Setup time** matters for cold starts; consider template compilation cost
+- **Concurrency testing** (`--concurrency=N`) reveals contention issues not visible in sequential runs
 
 
 ## Bundling Policy into OCI Artifacts

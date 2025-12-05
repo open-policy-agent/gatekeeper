@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"sigs.k8s.io/yaml"
 )
@@ -62,8 +63,9 @@ func LoadBaseline(path string) ([]Results, error) {
 
 // Compare compares current results against baseline results and returns comparison data.
 // The threshold is the percentage change considered a regression (e.g., 10 means 10%).
+// The minThreshold is the minimum absolute difference to consider a regression.
 // For latency metrics, positive change = regression. For throughput, negative change = regression.
-func Compare(baseline, current []Results, threshold float64) []ComparisonResult {
+func Compare(baseline, current []Results, threshold float64, minThreshold time.Duration) []ComparisonResult {
 	var comparisons []ComparisonResult
 
 	// Create a map of baseline results by engine for easy lookup
@@ -81,14 +83,14 @@ func Compare(baseline, current []Results, threshold float64) []ComparisonResult 
 			continue
 		}
 
-		comparison := compareResults(base, curr, threshold)
+		comparison := compareResults(base, curr, threshold, minThreshold)
 		comparisons = append(comparisons, comparison)
 	}
 
 	return comparisons
 }
 
-func compareResults(baseline, current *Results, threshold float64) ComparisonResult {
+func compareResults(baseline, current *Results, threshold float64, minThreshold time.Duration) ComparisonResult {
 	var metrics []MetricComparison
 	var failedMetrics []string
 	allPassed := true
@@ -107,7 +109,10 @@ func compareResults(baseline, current *Results, threshold float64) ComparisonRes
 
 	for _, m := range latencyMetrics {
 		delta := calculateDelta(m.baseline, m.current)
-		passed := delta <= threshold
+		// For latency, check both percentage threshold AND minimum absolute threshold
+		// If minThreshold is set, ignore regressions smaller than the absolute minimum
+		absDiff := time.Duration(m.current) - time.Duration(m.baseline)
+		passed := delta <= threshold || (minThreshold > 0 && absDiff < minThreshold)
 		if !passed {
 			allPassed = false
 			failedMetrics = append(failedMetrics, m.name)

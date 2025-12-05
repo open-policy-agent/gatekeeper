@@ -165,6 +165,9 @@ func writeResultTable(w io.Writer, r *Results) {
 	fmt.Fprintf(tw, "  Constraints:\t%d\n", r.ConstraintCount)
 	fmt.Fprintf(tw, "  Objects:\t%d\n", r.ObjectCount)
 	fmt.Fprintf(tw, "  Iterations:\t%d\n", r.Iterations)
+	if r.Concurrency > 1 {
+		fmt.Fprintf(tw, "  Concurrency:\t%d\n", r.Concurrency)
+	}
 	fmt.Fprintf(tw, "  Total Reviews:\t%d\n", r.Iterations*r.ObjectCount)
 	fmt.Fprintln(tw)
 
@@ -399,6 +402,7 @@ type JSONResults struct {
 	ConstraintCount    int                `json:"constraintCount" yaml:"constraintCount"`
 	ObjectCount        int                `json:"objectCount" yaml:"objectCount"`
 	Iterations         int                `json:"iterations" yaml:"iterations"`
+	Concurrency        int                `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
 	TotalReviews       int                `json:"totalReviews" yaml:"totalReviews"`
 	SetupDuration      string             `json:"setupDuration" yaml:"setupDuration"`
 	SetupBreakdown     JSONSetupBreakdown `json:"setupBreakdown" yaml:"setupBreakdown"`
@@ -447,6 +451,7 @@ func toJSONResults(results []Results) []JSONResults {
 			ConstraintCount: r.ConstraintCount,
 			ObjectCount:     r.ObjectCount,
 			Iterations:      r.Iterations,
+			Concurrency:     r.Concurrency,
 			TotalReviews:    r.Iterations * r.ObjectCount,
 			SetupDuration:   r.SetupDuration.String(),
 			SetupBreakdown: JSONSetupBreakdown{
