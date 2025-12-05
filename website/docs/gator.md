@@ -759,6 +759,10 @@ Templates without CEL code will be skipped when benchmarking the CEL engine.
 A warning will be displayed indicating which templates were skipped.
 :::
 
+:::caution
+The CEL engine does not support referential constraints. When benchmarking with CEL, objects that fail to load as referential data will be reported in a "Skipped Data Objects" warning. If you have policies that rely on referential data (e.g., checking if a namespace exists), those constraints will not be fully exercised during CEL benchmarks.
+:::
+
 #### Memory Profiling
 
 ```shell

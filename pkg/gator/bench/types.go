@@ -86,6 +86,10 @@ type Results struct {
 	// SkippedConstraints contains names of constraints skipped due to missing templates.
 	SkippedConstraints []string `json:"skippedConstraints,omitempty" yaml:"skippedConstraints,omitempty"`
 
+	// SkippedDataObjects contains names of objects that failed to load as referential data.
+	// This typically happens with CEL engine which doesn't support referential constraints.
+	SkippedDataObjects []string `json:"skippedDataObjects,omitempty" yaml:"skippedDataObjects,omitempty"`
+
 	// ObjectCount is the number of objects reviewed.
 	ObjectCount int `json:"objectCount" yaml:"objectCount"`
 

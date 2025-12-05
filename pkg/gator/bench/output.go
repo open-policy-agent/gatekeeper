@@ -171,8 +171,8 @@ func writeResultTable(w io.Writer, r *Results) {
 	fmt.Fprintf(tw, "  Total Reviews:\t%d\n", r.Iterations*r.ObjectCount)
 	fmt.Fprintln(tw)
 
-	// Skipped templates/constraints warning
-	if len(r.SkippedTemplates) > 0 || len(r.SkippedConstraints) > 0 {
+	// Skipped templates/constraints/data warning
+	if len(r.SkippedTemplates) > 0 || len(r.SkippedConstraints) > 0 || len(r.SkippedDataObjects) > 0 {
 		fmt.Fprintln(tw, "Warnings:")
 		if len(r.SkippedTemplates) > 0 {
 			fmt.Fprintf(tw, "  Skipped Templates:\t%d (%s)\n",
@@ -181,6 +181,17 @@ func writeResultTable(w io.Writer, r *Results) {
 		if len(r.SkippedConstraints) > 0 {
 			fmt.Fprintf(tw, "  Skipped Constraints:\t%d (%s)\n",
 				len(r.SkippedConstraints), strings.Join(r.SkippedConstraints, ", "))
+		}
+		if len(r.SkippedDataObjects) > 0 {
+			fmt.Fprintf(tw, "  Skipped Data Objects:\t%d (referential constraints not exercised)\n",
+				len(r.SkippedDataObjects))
+			// Show first few objects if not too many
+			if len(r.SkippedDataObjects) <= 5 {
+				fmt.Fprintf(tw, "    Objects:\t%s\n", strings.Join(r.SkippedDataObjects, ", "))
+			} else {
+				fmt.Fprintf(tw, "    Objects:\t%s, ... (and %d more)\n",
+					strings.Join(r.SkippedDataObjects[:5], ", "), len(r.SkippedDataObjects)-5)
+			}
 		}
 		fmt.Fprintln(tw)
 	}
@@ -413,6 +424,7 @@ type JSONResults struct {
 	MemoryStats        *JSONMemoryStats   `json:"memoryStats,omitempty" yaml:"memoryStats,omitempty"`
 	SkippedTemplates   []string           `json:"skippedTemplates,omitempty" yaml:"skippedTemplates,omitempty"`
 	SkippedConstraints []string           `json:"skippedConstraints,omitempty" yaml:"skippedConstraints,omitempty"`
+	SkippedDataObjects []string           `json:"skippedDataObjects,omitempty" yaml:"skippedDataObjects,omitempty"`
 }
 
 // JSONSetupBreakdown is a JSON/YAML-friendly version of SetupBreakdown with string durations.
@@ -473,6 +485,7 @@ func toJSONResults(results []Results) []JSONResults {
 			ReviewsPerSecond:   r.ReviewsPerSecond,
 			SkippedTemplates:   r.SkippedTemplates,
 			SkippedConstraints: r.SkippedConstraints,
+			SkippedDataObjects: r.SkippedDataObjects,
 		}
 
 		// Add memory stats if available

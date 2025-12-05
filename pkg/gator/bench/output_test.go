@@ -235,6 +235,83 @@ func TestFormatResults_SkippedTemplates(t *testing.T) {
 	}
 }
 
+func TestFormatResults_SkippedDataObjects(t *testing.T) {
+	results := []Results{
+		{
+			Engine:             EngineCEL,
+			TemplateCount:      2,
+			ConstraintCount:    2,
+			ObjectCount:        5,
+			Iterations:         10,
+			SetupDuration:      50 * time.Millisecond,
+			TotalDuration:      time.Second,
+			Latencies:          Latencies{Min: time.Millisecond, Max: time.Millisecond, Mean: time.Millisecond},
+			ViolationCount:     0,
+			ReviewsPerSecond:   50,
+			SkippedDataObjects: []string{"default/pod1", "default/pod2", "kube-system/configmap1"},
+		},
+	}
+
+	output, err := FormatResults(results, OutputFormatTable)
+	if err != nil {
+		t.Fatalf("FormatResults() error = %v", err)
+	}
+
+	// Check for warnings section with skipped data objects
+	expectedStrings := []string{
+		"Warnings:",
+		"Skipped Data Objects:",
+		"referential constraints not exercised",
+		"default/pod1",
+		"default/pod2",
+		"kube-system/configmap1",
+	}
+
+	for _, s := range expectedStrings {
+		if !strings.Contains(output, s) {
+			t.Errorf("table output missing skipped data warning: %q\nOutput:\n%s", s, output)
+		}
+	}
+}
+
+func TestFormatResults_SkippedDataObjectsTruncated(t *testing.T) {
+	// Test with more than 5 objects to verify truncation
+	results := []Results{
+		{
+			Engine:           EngineCEL,
+			TemplateCount:    2,
+			ConstraintCount:  2,
+			ObjectCount:      10,
+			Iterations:       10,
+			SetupDuration:    50 * time.Millisecond,
+			TotalDuration:    time.Second,
+			Latencies:        Latencies{Min: time.Millisecond, Max: time.Millisecond, Mean: time.Millisecond},
+			ViolationCount:   0,
+			ReviewsPerSecond: 100,
+			SkippedDataObjects: []string{
+				"obj1", "obj2", "obj3", "obj4", "obj5", "obj6", "obj7",
+			},
+		},
+	}
+
+	output, err := FormatResults(results, OutputFormatTable)
+	if err != nil {
+		t.Fatalf("FormatResults() error = %v", err)
+	}
+
+	// Should show truncation message
+	expectedStrings := []string{
+		"Skipped Data Objects:",
+		"and 2 more",
+	}
+
+	for _, s := range expectedStrings {
+		if !strings.Contains(output, s) {
+			t.Errorf("table output missing truncation message: %q\nOutput:\n%s", s, output)
+		}
+	}
+}
+
 func TestFormatResults_ComparisonTable(t *testing.T) {
 	results := []Results{
 		{

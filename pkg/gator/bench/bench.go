@@ -197,14 +197,20 @@ func runBenchmark(
 	}
 
 	// Add all objects as data (for referential constraints)
-	// Note: CEL driver doesn't support referential constraints, so we skip AddData errors for CEL
+	// Note: CEL driver doesn't support referential constraints, so we track skipped objects
 	dataStart := time.Now()
+	var skippedDataObjects []string
 	for _, obj := range reviewObjs {
 		_, err := client.AddData(ctx, obj)
 		if err != nil {
-			// CEL engine doesn't support referential data, so we can safely ignore this error
-			// for CEL-only benchmarks. The review will still work for non-referential constraints.
+			// CEL engine doesn't support referential data, so we track skipped objects
+			// and continue. The review will still work for non-referential constraints.
 			if engine == EngineCEL {
+				objName := obj.GetName()
+				if ns := obj.GetNamespace(); ns != "" {
+					objName = ns + "/" + objName
+				}
+				skippedDataObjects = append(skippedDataObjects, objName)
 				continue
 			}
 			return nil, fmt.Errorf("adding data %q: %w", obj.GetName(), err)
@@ -293,6 +299,7 @@ func runBenchmark(
 		MemoryStats:        memStats,
 		SkippedTemplates:   skippedTemplates,
 		SkippedConstraints: skippedConstraints,
+		SkippedDataObjects: skippedDataObjects,
 	}, nil
 }
 
