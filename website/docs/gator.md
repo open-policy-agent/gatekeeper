@@ -676,7 +676,7 @@ gator bench --filename=policies/
 
 Output:
 ```
-=== Benchmark Results: REGO Engine ===
+=== Benchmark Results: Rego Engine ===
 
 Configuration:
   Templates:      5
@@ -717,7 +717,7 @@ gator bench --filename=policies/ --concurrency=4
 This runs 4 parallel goroutines each executing reviews concurrently.
 
 ```
-=== Benchmark Results: REGO Engine ===
+=== Benchmark Results: Rego Engine ===
 
 Configuration:
   Templates:      5
@@ -740,7 +740,7 @@ This runs benchmarks for both engines and displays a comparison table:
 ```
 === Engine Comparison ===
 
-Metric         REGO        CEL
+Metric         Rego        CEL
 ------         ------      ------
 Templates      5           5
 Constraints    10          10
@@ -751,7 +751,7 @@ P95 Latency    1.20ms      600.00µs
 P99 Latency    2.50ms      900.00µs
 Violations     150         150
 
-Performance: CEL is 1.75x faster than REGO
+Performance: CEL is 1.75x faster than Rego
 ```
 
 :::note
@@ -796,7 +796,7 @@ gator bench --filename=policies/ --memory --compare=baseline.json
 Output includes a comparison table:
 
 ```
-=== Baseline Comparison: REGO Engine ===
+=== Baseline Comparison: Rego Engine ===
 
 Metric         Baseline     Current      Delta   Status
 ------         --------     -------      -----   ------
@@ -943,6 +943,10 @@ You can run these scripts locally to validate these characteristics on your own 
 - For admission webhooks (long-running), CEL's evaluation speed advantage compounds over time
 
 #### Concurrency Scaling
+
+:::note
+The `--concurrency` flag simulates parallel policy evaluation similar to how Kubernetes admission webhooks handle concurrent requests. In production, Gatekeeper processes multiple admission requests simultaneously, making concurrent benchmarking essential for realistic performance testing.
+:::
 
 - **Linear scaling** up to 4-8 concurrent workers
 - **Diminishing returns** beyond CPU core count
