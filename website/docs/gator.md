@@ -629,6 +629,230 @@ templatename3:
 
 
 
+## The `gator bench` subcommand
+
+`gator bench` measures the performance of Gatekeeper policy evaluation. It loads ConstraintTemplates, Constraints, and Kubernetes resources, then repeatedly evaluates the resources against the constraints to gather latency and throughput metrics.
+
+This command is useful for:
+- **Policy developers**: Testing policy performance before deployment
+- **Platform teams**: Comparing Rego vs CEL engine performance
+- **CI/CD pipelines**: Detecting performance regressions between releases
+
+### Usage
+
+```shell
+gator bench --filename=policies/
+```
+
+#### Flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--filename` | `-f` | | File or directory containing ConstraintTemplates, Constraints, and resources. Repeatable. |
+| `--image` | `-i` | | OCI image URL containing policies. Repeatable. |
+| `--engine` | `-e` | `rego` | Policy engine to benchmark: `rego`, `cel`, or `all` |
+| `--iterations` | `-n` | `100` | Number of benchmark iterations |
+| `--warmup` | | `10` | Warmup iterations before measurement |
+| `--output` | `-o` | `table` | Output format: `table`, `json`, or `yaml` |
+| `--memory` | | `false` | Enable memory profiling |
+| `--save` | | | Save results to file for future comparison |
+| `--compare` | | | Compare against a baseline file |
+| `--threshold` | | `10` | Regression threshold percentage (for CI/CD) |
+| `--stats` | | `false` | Gather detailed statistics from constraint framework |
+
+### Examples
+
+#### Basic Benchmark
+
+```shell
+gator bench --filename=policies/
+```
+
+Output:
+```
+=== Benchmark Results: REGO Engine ===
+
+Configuration:
+  Templates:      5
+  Constraints:    10
+  Objects:        50
+  Iterations:     100
+  Total Reviews:  5000
+
+Timing:
+  Setup Duration:  25.00ms
+    └─ Client Creation:       0.05ms
+    └─ Template Compilation:  20.00ms
+    └─ Constraint Loading:    3.00ms
+    └─ Data Loading:          1.95ms
+  Total Duration:  2.50s
+  Throughput:      2000.00 reviews/sec
+
+Latency (per review):
+  Min:   200.00µs
+  Max:   5.00ms
+  Mean:  500.00µs
+  P50:   450.00µs
+  P95:   1.20ms
+  P99:   2.50ms
+
+Results:
+  Violations Found:  150
+```
+
+#### Compare Rego vs CEL Engines
+
+```shell
+gator bench --filename=policies/ --engine=all
+```
+
+This runs benchmarks for both engines and displays a comparison table:
+
+```
+=== Engine Comparison ===
+
+Metric         REGO        CEL
+------         ------      ------
+Templates      5           5
+Constraints    10          10
+Setup Time     25.00ms     15.00ms
+Throughput     2000/sec    3500/sec
+Mean Latency   500.00µs    285.00µs
+P95 Latency    1.20ms      600.00µs
+P99 Latency    2.50ms      900.00µs
+Violations     150         150
+
+Performance: CEL is 1.75x faster than REGO
+```
+
+:::note
+Templates without CEL code will be skipped when benchmarking the CEL engine.
+A warning will be displayed indicating which templates were skipped.
+:::
+
+#### Memory Profiling
+
+```shell
+gator bench --filename=policies/ --memory
+```
+
+Adds memory statistics to the output:
+
+```
+Memory:
+  Allocs/Review:  3000
+  Bytes/Review:   150.00 KB
+  Total Allocs:   15000000
+  Total Bytes:    732.42 MB
+```
+
+#### Save and Compare Baselines
+
+Save benchmark results as a baseline:
+
+```shell
+gator bench --filename=policies/ --memory --save=baseline.json
+```
+
+Compare future runs against the baseline:
+
+```shell
+gator bench --filename=policies/ --memory --compare=baseline.json
+```
+
+Output includes a comparison table:
+
+```
+=== Baseline Comparison: REGO Engine ===
+
+Metric         Baseline     Current      Delta   Status
+------         --------     -------      -----   ------
+P50 Latency    450.00µs     460.00µs     +2.2%   ✓
+P95 Latency    1.20ms       1.25ms       +4.2%   ✓
+P99 Latency    2.50ms       2.60ms       +4.0%   ✓
+Mean Latency   500.00µs     510.00µs     +2.0%   ✓
+Throughput     2000/sec     1960/sec     -2.0%   ✓
+Allocs/Review  3000         3050         +1.7%   ✓
+Bytes/Review   150.00 KB    152.00 KB    +1.3%   ✓
+
+✓ No significant regressions (threshold: 10.0%)
+```
+
+### CI/CD Integration
+
+Use `gator bench` in CI/CD pipelines to detect performance regressions automatically.
+
+#### GitHub Actions Example
+
+```yaml
+name: Policy Benchmark
+
+on:
+  pull_request:
+    paths:
+      - 'policies/**'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: .
+        continue-on-error: true  # First run won't have baseline
+
+      - name: Install gator
+        run: |
+          go install github.com/open-policy-agent/gatekeeper/v3/cmd/gator@latest
+
+      - name: Run benchmark
+        run: |
+          if [ -f baseline.json ]; then
+            gator bench -f policies/ --memory --compare=baseline.json --threshold=10
+          else
+            gator bench -f policies/ --memory --save=baseline.json
+          fi
+
+      - name: Upload baseline
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: baseline.json
+```
+
+#### Exit Codes
+
+| Exit Code | Meaning |
+|-----------|---------|
+| `0` | Benchmark completed successfully, no regressions detected |
+| `1` | Error occurred, or regression threshold exceeded (when using `--compare`) |
+
+When `--compare` is used with `--threshold`, the command exits with code `1` if any metric regresses beyond the threshold. This enables CI/CD pipelines to fail builds that introduce performance regressions.
+
+### Understanding Metrics
+
+| Metric | Description |
+|--------|-------------|
+| **P50/P95/P99 Latency** | Percentile latencies per review. P99 of 2ms means 99% of reviews complete in ≤2ms. |
+| **Mean Latency** | Average time per review |
+| **Throughput** | Reviews processed per second |
+| **Allocs/Review** | Memory allocations per review (with `--memory`) |
+| **Bytes/Review** | Bytes allocated per review (with `--memory`) |
+| **Setup Duration** | Time to load templates, constraints, and data |
+
+#### Performance Guidance
+
+- **P99 latency < 100ms** is recommended for production admission webhooks
+- **CEL is typically faster than Rego** for equivalent policies
+- **High memory allocations** may indicate inefficient policy patterns
+- **Setup time** matters for cold starts; consider template compilation cost
+
+
 ## Bundling Policy into OCI Artifacts
 
 It may be useful to bundle policy files into OCI Artifacts for ingestion during
