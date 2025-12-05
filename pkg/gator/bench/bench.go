@@ -2,9 +2,9 @@ package bench
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,6 +12,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
@@ -346,20 +347,8 @@ func isEngineIncompatibleError(err error) bool {
 	if err == nil {
 		return false
 	}
-	errStr := err.Error()
-	// CEL engine returns this error when no CEL code block is present
-	if strings.Contains(errStr, "no CEL code") ||
-		strings.Contains(errStr, "missing CEL source") ||
-		strings.Contains(errStr, "No language driver is installed") ||
-		strings.Contains(errStr, "no validator for driver") {
-		return true
-	}
-	// Rego engine returns this error when no Rego code block is present
-	if strings.Contains(errStr, "no Rego code") ||
-		strings.Contains(errStr, "missing Rego source") {
-		return true
-	}
-	return false
+
+	return errors.Is(err, clienterrors.ErrNoDriver)
 }
 
 // runSequentialBenchmark runs the benchmark sequentially (single-threaded).

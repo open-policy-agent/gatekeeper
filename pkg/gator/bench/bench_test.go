@@ -2,10 +2,13 @@ package bench
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 )
 
 func TestRun_MissingInputs(t *testing.T) {
@@ -667,33 +670,18 @@ func TestIsEngineIncompatibleError(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "no CEL code error",
-			err:      &testError{msg: "no CEL code found"},
+			name:     "ErrNoDriver directly",
+			err:      clienterrors.ErrNoDriver,
 			expected: true,
 		},
 		{
-			name:     "no language driver error",
-			err:      &testError{msg: "No language driver is installed"},
+			name:     "ErrNoDriver wrapped",
+			err:      fmt.Errorf("constraint template error: %w", clienterrors.ErrNoDriver),
 			expected: true,
 		},
 		{
-			name:     "no Rego code error",
-			err:      &testError{msg: "no Rego code found"},
-			expected: true,
-		},
-		{
-			name:     "missing CEL source error",
-			err:      &testError{msg: "missing CEL source"},
-			expected: true,
-		},
-		{
-			name:     "missing Rego source error",
-			err:      &testError{msg: "missing Rego source"},
-			expected: true,
-		},
-		{
-			name:     "no validator for driver error",
-			err:      &testError{msg: "no validator for driver"},
+			name:     "ErrNoDriver double wrapped",
+			err:      fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", clienterrors.ErrNoDriver)),
 			expected: true,
 		},
 		{

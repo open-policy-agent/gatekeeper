@@ -419,5 +419,3 @@ func TestFormatComparison_WithRegression(t *testing.T) {
 		}
 	}
 }
-
-
