@@ -920,6 +920,14 @@ Data loading adds all provided resources to the constraint client's cache. This 
 
 The following characteristics are based on architectural differences between policy engines and general benchmarking principles. Actual numbers will vary based on policy complexity, hardware, and workload.
 
+:::tip
+These insights were generated using the data gathering scripts in the Gatekeeper repository:
+- [`test/gator/bench/scripts/gather-data.sh`](https://github.com/open-policy-agent/gatekeeper/blob/master/test/gator/bench/scripts/gather-data.sh) - Collects benchmark data across different scenarios
+- [`test/gator/bench/scripts/analyze-data.sh`](https://github.com/open-policy-agent/gatekeeper/blob/master/test/gator/bench/scripts/analyze-data.sh) - Analyzes and summarizes the collected data
+
+You can run these scripts locally to validate these characteristics on your own hardware.
+:::
+
 #### CEL vs Rego
 
 | Characteristic | CEL | Rego |
