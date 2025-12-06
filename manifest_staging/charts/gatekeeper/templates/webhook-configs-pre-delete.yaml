@@ -32,7 +32,7 @@ spec:
       {{- end }}
       containers:
         - name: kubectl-delete
-          image: "{{ .Values.preUninstall.deleteWebhookConfigurations.image.repository }}:{{ .Values.preUninstall.deleteWebhookConfigurations.image.tag }}"
+          image: {{ printf "%s/%s:%s" .Values.preUninstall.deleteWebhookConfigurations.image.registry .Values.preUninstall.deleteWebhookConfigurations.image.repository .Values.preUninstall.deleteWebhookConfigurations.image.tag }}
           imagePullPolicy: {{ .Values.preUninstall.deleteWebhookConfigurations.image.pullPolicy }}
           args:
             - delete
