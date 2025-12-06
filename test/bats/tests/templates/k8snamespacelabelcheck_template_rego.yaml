@@ -21,14 +21,14 @@ spec:
 
         violation[{"msg": msg}] {
           # Check if namespace object is provided
-          not input.namespace
+          not input.review.namespaceObject
           msg := "namespaceObject is null - namespace data not available"
         }
 
         violation[{"msg": msg}] {
           # Check if namespace has the required label
-          input.namespace
+          input.review.namespaceObject
           required_label := input.parameters.requiredLabel
-          not input.namespace.metadata.labels[required_label]
-          msg := sprintf("Namespace '%s' does not have required label: %s", [input.namespace.metadata.name, required_label])
+          not input.review.namespaceObject.metadata.labels[required_label]
+          msg := sprintf("Namespace '%s' does not have required label: %s", [input.review.namespaceObject.metadata.name, required_label])
         }

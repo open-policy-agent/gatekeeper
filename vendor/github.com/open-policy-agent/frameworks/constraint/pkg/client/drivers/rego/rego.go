@@ -26,11 +26,10 @@ violation[response] {
   key := input.constraints[_]
   # Construct the input object from the Constraint and temporary object in storage.
   # Silently exits if the Constraint no longer exists.
-  # Include namespace if available for namespace-based policies.
+  # Note: input.review already contains namespaceObject if available (set by driver).
   inp := {
     "review": input.review,
     "parameters": data.constraints[key.kind][key.name],
-    "namespace": object.get(input, "namespace", null),
   }
   # Run the Template with Constraint.
   data.template.violation[r] with input as inp

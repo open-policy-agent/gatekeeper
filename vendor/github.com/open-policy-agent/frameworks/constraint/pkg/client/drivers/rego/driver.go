@@ -507,16 +507,15 @@ func toParsedInput(target string, constraints []*unstructured.Unstructured, revi
 	// round-trip through JSON.
 	constraintKeys := toKeySlice(constraints)
 
+	// Add namespaceObject to review. This enables policies to access namespace
+	// labels and metadata via input.review.namespaceObject.
+	// Value is the namespace object for namespaced resources, or nil for cluster-scoped resources.
+	review["namespaceObject"] = namespace
+
 	input := map[string]interface{}{
 		"target":      target,
 		"constraints": constraintKeys,
 		"review":      review,
-	}
-
-	// Add namespace object if available (for namespaced resources).
-	// This enables policies to access namespace labels and metadata via input.namespace.
-	if namespace != nil {
-		input["namespace"] = namespace
 	}
 
 	// Parse input into an ast.Value to avoid round-tripping through JSON when
