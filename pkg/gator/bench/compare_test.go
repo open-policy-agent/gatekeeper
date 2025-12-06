@@ -286,22 +286,17 @@ func TestCompare(t *testing.T) {
 			t.Error("expected comparison without min-threshold to fail")
 		}
 
-		// With min threshold of 100µs, latency changes should pass (all < 100µs difference)
-		// but throughput should still fail since it uses percentage
-		comparisonsWithMin := Compare(fastBaseline, current, 10.0, 100*time.Microsecond)
+		// With min threshold of 1s, all changes should pass as the absolute differences
+		// are well below the min-threshold tolerance
+		comparisonsWithMin := Compare(fastBaseline, current, 10.0, 1*time.Second)
 		if len(comparisonsWithMin) != 1 {
 			t.Fatalf("expected 1 comparison, got %d", len(comparisonsWithMin))
 		}
 
-		// Some latency metrics should pass now due to min threshold
-		passedLatencyCount := 0
-		for _, m := range comparisonsWithMin[0].Metrics {
-			if m.Name == "P50 Latency" && m.Passed {
-				passedLatencyCount++
-			}
-		}
-		if passedLatencyCount == 0 {
-			t.Error("expected at least P50 Latency to pass with min-threshold")
+		// With a large min threshold, the comparison should pass since all differences
+		// are below the min-threshold tolerance (including throughput)
+		if !comparisonsWithMin[0].Passed {
+			t.Errorf("expected comparison with large min-threshold (1s) to pass, got failed metrics: %v", comparisonsWithMin[0].FailedMetrics)
 		}
 	})
 }

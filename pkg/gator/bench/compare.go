@@ -130,7 +130,21 @@ func compareResults(baseline, current *Results, threshold float64, minThreshold 
 	// Compare throughput (lower is worse, so negative delta = regression)
 	throughputDelta := calculateDelta(baseline.ReviewsPerSecond, current.ReviewsPerSecond)
 	// For throughput, we invert the logic: negative delta is a regression
+	// If minThreshold is set, convert it to a throughput difference threshold
+	// A latency increase of minThreshold corresponds to a throughput change that we should ignore
 	throughputPassed := -throughputDelta <= threshold
+	if !throughputPassed && minThreshold > 0 {
+		// Calculate the absolute throughput difference
+		absThroughputDiff := baseline.ReviewsPerSecond - current.ReviewsPerSecond
+		// Convert minThreshold to an equivalent throughput tolerance
+		// If we tolerate minThreshold latency change, we should tolerate proportional throughput change
+		// Use baseline throughput to derive a reasonable tolerance from the latency threshold
+		// throughput ≈ 1/latency, so tolerance should be proportional to baseline throughput
+		minThroughputDiff := baseline.ReviewsPerSecond * (float64(minThreshold) / float64(baseline.Latencies.Mean))
+		if absThroughputDiff < minThroughputDiff {
+			throughputPassed = true
+		}
+	}
 	if !throughputPassed {
 		allPassed = false
 		failedMetrics = append(failedMetrics, "Throughput")
