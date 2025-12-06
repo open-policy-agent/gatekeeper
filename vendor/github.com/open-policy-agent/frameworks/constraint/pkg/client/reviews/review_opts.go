@@ -39,8 +39,7 @@ func EnforcementPoint(ep string) ReviewOpt {
 }
 
 // Namespace sets the namespace object for the review.
-// This makes the namespace available to policy templates as input.namespace (Rego)
-// or namespaceObject (CEL), enabling policies to access namespace labels and metadata.
+// This makes the namespace available to policy templates.
 func Namespace(ns map[string]interface{}) ReviewOpt {
 	return func(cfg *ReviewCfg) {
 		cfg.Namespace = ns

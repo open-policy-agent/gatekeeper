@@ -617,7 +617,9 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			reviews.Stats(*logStatsAudit),
 		}
 		if ns != nil {
-			if nsMap, err := namespaceToMap(ns); err == nil {
+			if nsMap, err := util.NamespaceToMap(ns); err != nil {
+				am.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
+			} else {
 				opts = append(opts, reviews.Namespace(nsMap))
 			}
 		}
@@ -717,7 +719,9 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				reviews.Stats(*logStatsAudit),
 			}
 			if ns != nil {
-				if nsMap, err := namespaceToMap(ns); err == nil {
+				if nsMap, err := util.NamespaceToMap(ns); err != nil {
+					am.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
+				} else {
 					opts = append(opts, reviews.Namespace(nsMap))
 				}
 			}
@@ -750,7 +754,9 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					reviews.Stats(*logStatsAudit),
 				}
 				if ns != nil {
-					if nsMap, err := namespaceToMap(ns); err == nil {
+					if nsMap, err := util.NamespaceToMap(ns); err != nil {
+						am.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
+					} else {
 						resultantOpts = append(resultantOpts, reviews.Namespace(nsMap))
 					}
 				}
@@ -1339,25 +1345,4 @@ func reportExportConnectionErrors(
 	if err := exportController.UpdateOrCreateConnectionPodStatus(ctx, client, client, scheme, *exportutil.AuditConnection, exportErrors, &activeConnection, getPod); err != nil {
 		logger.Error(err, "failed to write export errors to the connection pod status")
 	}
-}
-
-// namespaceToMap converts a corev1.Namespace to map[string]interface{} for passing
-// to the constraint client. This enables CEL expressions to use namespaceObject
-// and Rego policies to access input.namespace.
-func namespaceToMap(ns *corev1.Namespace) (map[string]interface{}, error) {
-	if ns == nil {
-		return nil, nil
-	}
-
-	data, err := json.Marshal(ns)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal namespace: %w", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal namespace: %w", err)
-	}
-
-	return result, nil
 }
