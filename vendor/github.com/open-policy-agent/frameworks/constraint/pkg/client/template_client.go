@@ -191,7 +191,7 @@ func makeMatchers(targets []handler.TargetHandler, constraint *unstructured.Unst
 	return result, nil
 }
 
-// MatchesOperation checks if the given operation type matches any of the template's target operations
+// MatchesOperation checks if the given operation type matches any of the template's target operations.
 func (e *templateClient) MatchesOperation(operation string) bool {
 	if len(e.template.Spec.Targets) != 1 {
 		// for backward compatibility, matching all templates by default

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-cm-in-unlabeled-ns
+  namespace: ns-without-env-label
+data:
+  key: value

@@ -19,7 +19,9 @@ teardown_file() {
     gatekeeper-test-playground-scoped \
     gatekeeper-excluded-namespace \
     gatekeeper-excluded-prefix-match-namespace \
-    gatekeeper-excluded-suffix-match-namespace || true
+    gatekeeper-excluded-suffix-match-namespace \
+    ns-with-env-label \
+    ns-without-env-label || true
   kubectl delete "$(kubectl api-resources --api-group=constraints.gatekeeper.sh -o name | tr "\n" "," | sed -e 's/,$//')" -l gatekeeper.sh/tests=yes || true
   kubectl delete ConstraintTemplates -l gatekeeper.sh/tests=yes || true
   kubectl delete configs.config.gatekeeper.sh -n ${GATEKEEPER_NAMESPACE} -l gatekeeper.sh/tests=yes || true
@@ -746,6 +748,74 @@ __expansion_audit_test() {
   assert_match 'denied' "${output}"
   assert_failure
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_regov1.yaml"
+}
+
+# Tests for namespace object access - verifies that policies can access namespace labels
+# via namespaceObject (CEL) and input.namespace (Rego)
+@test "namespace object access - CEL engine test" {
+  # Create test namespaces
+  kubectl apply -f ${BATS_TESTS_DIR}/good/ns_with_env_label.yaml
+  kubectl apply -f ${BATS_TESTS_DIR}/bad/ns_without_env_label.yaml
+
+  # Apply CEL template that checks namespace labels via namespaceObject
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8snamespacelabelcheck_template_cel.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8snamespacelabelcheckcel -ojson | jq -r -e '.status.byPod[0]'"
+
+  kubectl get constrainttemplates.templates.gatekeeper.sh k8snamespacelabelcheckcel -oyaml
+
+  # Apply constraint that requires 'environment' label on namespace
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/ns_must_have_env_label_cel.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8snamespacelabelcheckcel ns-must-have-env-label-cel"
+
+  # ConfigMap in namespace WITH 'environment' label should succeed
+  run kubectl apply -f ${BATS_TESTS_DIR}/good/cm_in_labeled_ns.yaml
+  assert_success
+
+  # ConfigMap in namespace WITHOUT 'environment' label should fail
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/cm_in_unlabeled_ns.yaml
+  assert_match 'denied' "${output}"
+  assert_match 'does not have required label' "${output}"
+  assert_failure
+
+  # Cleanup
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/cm_in_labeled_ns.yaml
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/ns_must_have_env_label_cel.yaml
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8snamespacelabelcheck_template_cel.yaml
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/ns_with_env_label.yaml
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/ns_without_env_label.yaml
+}
+
+@test "namespace object access - Rego engine test" {
+  # Create test namespaces
+  kubectl apply -f ${BATS_TESTS_DIR}/good/ns_with_env_label.yaml
+  kubectl apply -f ${BATS_TESTS_DIR}/bad/ns_without_env_label.yaml
+
+  # Apply Rego template that checks namespace labels via input.namespace
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8snamespacelabelcheck_template_rego.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8snamespacelabelcheckrego -ojson | jq -r -e '.status.byPod[0]'"
+
+  kubectl get constrainttemplates.templates.gatekeeper.sh k8snamespacelabelcheckrego -oyaml
+
+  # Apply constraint that requires 'environment' label on namespace
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/ns_must_have_env_label_rego.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8snamespacelabelcheckrego ns-must-have-env-label-rego"
+
+  # ConfigMap in namespace WITH 'environment' label should succeed
+  run kubectl apply -f ${BATS_TESTS_DIR}/good/cm_in_labeled_ns.yaml
+  assert_success
+
+  # ConfigMap in namespace WITHOUT 'environment' label should fail
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/cm_in_unlabeled_ns.yaml
+  assert_match 'denied' "${output}"
+  assert_match 'does not have required label' "${output}"
+  assert_failure
+
+  # Cleanup
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/cm_in_labeled_ns.yaml
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/ns_must_have_env_label_rego.yaml
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8snamespacelabelcheck_template_rego.yaml
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/ns_with_env_label.yaml
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/ns_without_env_label.yaml
 }
 
 @test "constraint template operations test" {

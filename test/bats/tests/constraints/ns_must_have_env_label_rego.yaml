@@ -1,0 +1,14 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sNamespaceLabelCheckRego
+metadata:
+  name: ns-must-have-env-label-rego
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["ConfigMap"]
+    namespaces:
+      - ns-with-env-label
+      - ns-without-env-label
+  parameters:
+    requiredLabel: "environment"

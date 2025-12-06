@@ -612,7 +612,18 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			Object:    obj,
 			Namespace: ns,
 		}
-		resp, err := am.opa.Review(ctx, au, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
+		opts := []reviews.ReviewOpt{
+			reviews.EnforcementPoint(util.AuditEnforcementPoint),
+			reviews.Stats(*logStatsAudit),
+		}
+		if ns != nil {
+			if nsMap, err := util.NamespaceToMap(ns); err != nil {
+				am.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
+			} else {
+				opts = append(opts, reviews.Namespace(nsMap))
+			}
+		}
+		resp, err := am.opa.Review(ctx, au, opts...)
 		if err != nil {
 			am.log.Error(err, fmt.Sprintf("Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
 			continue
@@ -703,7 +714,18 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				Source:    mutationtypes.SourceTypeOriginal,
 			}
 
-			resp, err := am.opa.Review(ctx, augmentedObj, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
+			opts := []reviews.ReviewOpt{
+				reviews.EnforcementPoint(util.AuditEnforcementPoint),
+				reviews.Stats(*logStatsAudit),
+			}
+			if ns != nil {
+				if nsMap, err := util.NamespaceToMap(ns); err != nil {
+					am.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
+				} else {
+					opts = append(opts, reviews.Namespace(nsMap))
+				}
+			}
+			resp, err := am.opa.Review(ctx, augmentedObj, opts...)
 			if err != nil {
 				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
 				continue
@@ -727,7 +749,18 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					Namespace: ns,
 					Source:    mutationtypes.SourceTypeGenerated,
 				}
-				resultantResp, err := am.opa.Review(ctx, au, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
+				resultantOpts := []reviews.ReviewOpt{
+					reviews.EnforcementPoint(util.AuditEnforcementPoint),
+					reviews.Stats(*logStatsAudit),
+				}
+				if ns != nil {
+					if nsMap, err := util.NamespaceToMap(ns); err != nil {
+						am.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
+					} else {
+						resultantOpts = append(resultantOpts, reviews.Namespace(nsMap))
+					}
+				}
+				resultantResp, err := am.opa.Review(ctx, au, resultantOpts...)
 				if err != nil {
 					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
 					continue

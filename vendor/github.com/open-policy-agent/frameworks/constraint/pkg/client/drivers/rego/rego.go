@@ -26,6 +26,7 @@ violation[response] {
   key := input.constraints[_]
   # Construct the input object from the Constraint and temporary object in storage.
   # Silently exits if the Constraint no longer exists.
+  # Note: input.review already contains namespaceObject if available (set by driver).
   inp := {
     "review": input.review,
     "parameters": data.constraints[key.kind][key.name],

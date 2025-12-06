@@ -2,6 +2,7 @@ package k8scel
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/opa/storage"
 	admissionv1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
@@ -198,8 +200,18 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 			return nil, fmt.Errorf("nil validator for constraint template %v", strings.ToLower(constraint.GetKind()))
 		}
 
-		// TODO: should namespace be made available, if possible? Generally that context should be present
-		response := validator.Validate(ctx, versionedAttr.GetResource(), versionedAttr, constraint, nil, celAPI.PerCallLimit, nil)
+		// Convert namespace from map[string]interface{} to *corev1.Namespace if provided.
+		// This enables CEL expressions to access namespaceObject for namespace-based policies.
+		var namespace *corev1.Namespace
+		if cfg.Namespace != nil {
+			namespace, err = mapToNamespace(cfg.Namespace)
+			if err != nil {
+				// Log warning but don't fail - continue without namespace
+				namespace = nil
+			}
+		}
+
+		response := validator.Validate(ctx, versionedAttr.GetResource(), versionedAttr, constraint, namespace, celAPI.PerCallLimit, nil)
 
 		for _, decision := range response.Decisions {
 			if decision.Action == validating.ActionDeny {
@@ -251,4 +263,25 @@ type ARGetter interface {
 
 type IsAdmissionGetter interface {
 	IsAdmissionRequest() bool
+}
+
+// mapToNamespace converts a map[string]interface{} representation of a namespace
+// to a *corev1.Namespace. This is used to pass the namespace object to the CEL
+// validator for namespaceObject support.
+func mapToNamespace(ns map[string]interface{}) (*corev1.Namespace, error) {
+	if ns == nil {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(ns)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal namespace: %w", err)
+	}
+
+	namespace := &corev1.Namespace{}
+	if err := json.Unmarshal(data, namespace); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal namespace: %w", err)
+	}
+
+	return namespace, nil
 }
