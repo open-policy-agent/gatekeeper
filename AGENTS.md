@@ -15,7 +15,7 @@ Gatekeeper is a Kubernetes admission controller that provides policy-based gover
 
 **Repository Details:**
 - **Size & Type:** Large-scale Go project (~165k lines) focused on Kubernetes admission control and policy governance with extensive test coverage
-- **Primary Language:** Go 1.24+ with vendored dependencies
+- **Primary Language:** Go 1.24+ with Go modules
 - **Key Frameworks:** controller-runtime, OPA/Rego, Common Expression Language (CEL)
 - **Container Technology:** Docker with multi-stage builds using buildx
 - **Testing Stack:** Go test, BATS (Bash Automated Testing System), envtest for Kubernetes integration
@@ -100,7 +100,6 @@ Gatekeeper is a Kubernetes admission controller that provides policy-based gover
 │   ├── externaldata/                  # External data provider tests
 │   └── testutils/                     # Test utilities and helpers
 ├── third_party/                       # Third-party dependencies
-├── vendor/                            # Go vendor dependencies
 └── website/                           # Documentation website source
 ```
 
@@ -125,7 +124,6 @@ Gatekeeper is a Kubernetes admission controller that provides policy-based gover
 **Critical Prerequisites:**
 - **Always install Go 1.24.2 or later** - verified compatible version
 - **Docker with buildx support** - required for all builds
-- **vendor/ directory must be present** - run `go mod vendor` if missing
 
 **Essential Build Commands:**
 ```bash
@@ -146,14 +144,12 @@ make deploy               # Deploy to Kubernetes cluster
 **Critical Build Issues & Solutions:**
 - **Empty test files cause lint failures** - remove any empty `.go` files in `pkg/` directories
 - **Docker buildx required** - standard docker build will fail, must use buildx
-- **Vendor dependencies** - run `go mod vendor` before building if vendor/ missing
 - **Tool versions matter** - golangci-lint v2.3.0 specifically required
 
 **Development Environment Setup:**
 1. Install Go 1.24.2+ and Docker with buildx
 2. Clone with full dependency chain: `git clone --recurse-submodules`
-3. **Always run `go mod vendor` after fresh clone**
-4. **Always run `make lint` before committing** - catches common issues
+3. **Always run `make lint` before committing** - catches common issues
 5. Use `make native-test` for fast feedback during development
 
 ### Testing Strategy
@@ -312,7 +308,7 @@ When contributing to Gatekeeper, maintain clear and human-friendly communication
 **Common Validation Failures:**
 - **Lint failures:** Usually formatting or import issues, run `make lint` locally first
 - **Test timeouts:** E2E tests can timeout after 15 minutes, check cluster resources
-- **Build failures:** Often vendor/ or Docker buildx issues, ensure prerequisites met
+- **Build failures:** Often Docker buildx issues, ensure prerequisites met
 
 **Security & Performance Notes:**
 - **All admission webhook changes require security review** - validate input sanitization

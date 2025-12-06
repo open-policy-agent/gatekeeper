@@ -34,12 +34,12 @@ COPY bin/manager .
 def build_manager():
     cmd = [
         "make tilt-prepare",
-        "GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod vendor -a -o .tiltbuild/bin/manager",
+        "GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o .tiltbuild/bin/manager",
     ]
     local_resource(
         "manager",
         cmd=";".join(cmd),
-        deps=["pkg", "third_party", "vendor",
+        deps=["pkg", "third_party",
               "apis", "go.mod", "go.sum", "main.go"],
         labels=["bin"],
     )
@@ -81,14 +81,14 @@ def build_crds():
 # deploy_gatekeeper defines the deploy process for the gatekeeper chart from manifest_staging/charts/gatekeeper.
 def deploy_gatekeeper():
     local("kubectl create namespace gatekeeper-system || true")
-    
+
     local_resource(
         name="generate-helm-values",
         cmd="cat tilt-settings.json | jq '.helm_values' > .tiltbuild/helm_values.generated.yaml",
         deps=["tilt-settings.json"],
         labels=["helm"],
     )
-    
+
     helm_values = settings.get("helm_values", {})
 
     k8s_yaml(helm(
