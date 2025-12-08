@@ -273,6 +273,11 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		opt(cfg)
 	}
 
+	// Add namespaceObject to review before the loop. This enables policies to access
+	// namespace labels and metadata via input.review.namespaceObject.
+	// Value is the namespace object for namespaced resources, or nil for cluster-scoped resources.
+	reviewMap["namespaceObject"] = cfg.Namespace
+
 	var statsEntries []*instrumentation.StatsEntry
 
 	for kind, kindConstraints := range constraintsByKind {
@@ -286,8 +291,8 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		}
 
 		// Parse input into an ast.Value to avoid round-tripping through JSON when
-		// possible. Include namespace if provided for namespace-based policies.
-		parsedInput, err := toParsedInput(target, kindConstraints, reviewMap, cfg.Namespace)
+		// possible.
+		parsedInput, err := toParsedInput(target, kindConstraints, reviewMap)
 		if err != nil {
 			return nil, err
 		}
@@ -502,15 +507,10 @@ func toConstraintsByKind(constraints []*unstructured.Unstructured) map[string][]
 	return constraintsByKind
 }
 
-func toParsedInput(target string, constraints []*unstructured.Unstructured, review map[string]interface{}, namespace map[string]interface{}) (ast.Value, error) {
+func toParsedInput(target string, constraints []*unstructured.Unstructured, review map[string]interface{}) (ast.Value, error) {
 	// Store constraint keys in a format InterfaceToValue does not need to
 	// round-trip through JSON.
 	constraintKeys := toKeySlice(constraints)
-
-	// Add namespaceObject to review. This enables policies to access namespace
-	// labels and metadata via input.review.namespaceObject.
-	// Value is the namespace object for namespaced resources, or nil for cluster-scoped resources.
-	review["namespaceObject"] = namespace
 
 	input := map[string]interface{}{
 		"target":      target,

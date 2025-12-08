@@ -2,7 +2,7 @@ module github.com/open-policy-agent/gatekeeper/v3
 
 go 1.25.0
 
-replace github.com/open-policy-agent/frameworks/constraint => github.com/jaydipgabani/frameworks/constraint v0.0.0-20251206014645-7099316682b3
+replace github.com/open-policy-agent/frameworks/constraint => github.com/jaydipgabani/frameworks/constraint v0.0.0-20251208192823-1223dc45e7c7
 
 require (
 	cloud.google.com/go/trace v1.10.11

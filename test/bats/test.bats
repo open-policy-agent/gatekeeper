@@ -790,7 +790,7 @@ __expansion_audit_test() {
   kubectl apply -f ${BATS_TESTS_DIR}/good/ns_with_env_label.yaml
   kubectl apply -f ${BATS_TESTS_DIR}/bad/ns_without_env_label.yaml
 
-  # Apply Rego template that checks namespace labels via input.namespace
+  # Apply Rego template that checks namespace labels via input.review.namespaceObject
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8snamespacelabelcheck_template_rego.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8snamespacelabelcheckrego -ojson | jq -r -e '.status.byPod[0]'"
 
