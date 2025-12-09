@@ -90,6 +90,7 @@ jobs:
           ./bin/gator bench \
             --filename test/gator/bench/both/ \
             --iterations 50 \
+            --engine all \
             --output table
 
       - name: Test memory profiling

@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 )
 
 func TestRun_MissingInputs(t *testing.T) {
@@ -658,46 +656,123 @@ metadata:
 	}
 }
 
-func TestIsEngineIncompatibleError(t *testing.T) {
-	tests := []struct {
-		name     string
-		err      error
-		expected bool
-	}{
-		{
-			name:     "nil error",
-			err:      nil,
-			expected: false,
-		},
-		{
-			name:     "ErrNoDriver directly",
-			err:      clienterrors.ErrNoDriver,
-			expected: true,
-		},
-		{
-			name:     "ErrNoDriver wrapped",
-			err:      fmt.Errorf("constraint template error: %w", clienterrors.ErrNoDriver),
-			expected: true,
-		},
-		{
-			name:     "ErrNoDriver double wrapped",
-			err:      fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", clienterrors.ErrNoDriver)),
-			expected: true,
-		},
-		{
-			name:     "unrelated error",
-			err:      &testError{msg: "some other error"},
-			expected: false,
-		},
+func TestRun_Concurrent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write template
+	templateFile := filepath.Join(tmpDir, "template.yaml")
+	err := os.WriteFile(templateFile, []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+        violation[{"msg": msg}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("missing required labels: %v", [missing])
+        }
+`), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write template file: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isEngineIncompatibleError(tt.err)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, result)
-			}
-		})
+	// Write constraint
+	constraintFile := filepath.Join(tmpDir, "constraint.yaml")
+	err = os.WriteFile(constraintFile, []byte(`
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-team-label
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+  parameters:
+    labels: ["team"]
+`), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write constraint file: %v", err)
+	}
+
+	// Write multiple objects to review for concurrent testing
+	for i := 0; i < 3; i++ {
+		objectFile := filepath.Join(tmpDir, fmt.Sprintf("pod%d.yaml", i))
+		err = os.WriteFile(objectFile, []byte(fmt.Sprintf(`
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod-%d
+spec:
+  containers:
+  - name: test
+    image: nginx
+`, i)), 0o600)
+		if err != nil {
+			t.Fatalf("failed to write object file: %v", err)
+		}
+	}
+
+	// Run benchmark with concurrency > 1
+	results, err := Run(&Opts{
+		Filenames:   []string{tmpDir},
+		Iterations:  10,
+		Warmup:      1,
+		Engine:      EngineRego,
+		Concurrency: 4,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	r := results[0]
+	if r.Engine != EngineRego {
+		t.Errorf("expected engine %s, got %s", EngineRego, r.Engine)
+	}
+	if r.Concurrency != 4 {
+		t.Errorf("expected concurrency 4, got %d", r.Concurrency)
+	}
+	if r.TemplateCount != 1 {
+		t.Errorf("expected 1 template, got %d", r.TemplateCount)
+	}
+	if r.ConstraintCount != 1 {
+		t.Errorf("expected 1 constraint, got %d", r.ConstraintCount)
+	}
+	if r.ObjectCount != 3 {
+		t.Errorf("expected 3 objects, got %d", r.ObjectCount)
+	}
+	if r.Iterations != 10 {
+		t.Errorf("expected 10 iterations, got %d", r.Iterations)
+	}
+	// All pods are missing the required "team" label, so we expect violations
+	if r.ViolationCount == 0 {
+		t.Error("expected violations for missing labels")
+	}
+	if r.ReviewsPerSecond <= 0 {
+		t.Error("expected positive throughput")
 	}
 }
 

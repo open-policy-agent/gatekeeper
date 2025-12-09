@@ -159,7 +159,7 @@ func runBenchmark(
 		_, err = client.AddTemplate(ctx, templ)
 		if err != nil {
 			// Check if this is an engine compatibility issue
-			if isEngineIncompatibleError(err) {
+			if errors.Is(err, clienterrors.ErrNoDriver) {
 				skippedTemplates = append(skippedTemplates, obj.GetName())
 				continue
 			}
@@ -197,23 +197,24 @@ func runBenchmark(
 	}
 
 	// Add all objects as data (for referential constraints)
-	// Note: CEL driver doesn't support referential constraints, so we track skipped objects
+	// Note: CEL driver doesn't support referential constraints, so skip data loading for CEL
 	dataStart := time.Now()
 	var skippedDataObjects []string
-	for _, obj := range reviewObjs {
-		_, err := client.AddData(ctx, obj)
-		if err != nil {
-			// CEL engine doesn't support referential data, so we track skipped objects
-			// and continue. The review will still work for non-referential constraints.
-			if engine == EngineCEL {
-				objName := obj.GetName()
-				if ns := obj.GetNamespace(); ns != "" {
-					objName = ns + "/" + objName
-				}
-				skippedDataObjects = append(skippedDataObjects, objName)
-				continue
+	if engine == EngineCEL {
+		// CEL engine doesn't support referential data, skip data loading entirely
+		for _, obj := range reviewObjs {
+			objName := obj.GetName()
+			if ns := obj.GetNamespace(); ns != "" {
+				objName = ns + "/" + objName
 			}
-			return nil, fmt.Errorf("adding data %q: %w", obj.GetName(), err)
+			skippedDataObjects = append(skippedDataObjects, objName)
+		}
+	} else {
+		for _, obj := range reviewObjs {
+			_, err := client.AddData(ctx, obj)
+			if err != nil {
+				return nil, fmt.Errorf("adding data %q: %w", obj.GetName(), err)
+			}
 		}
 	}
 	setupBreakdown.DataLoading = time.Since(dataStart)
@@ -346,16 +347,6 @@ func makeCELDriver(gatherStats bool) (*k8scel.Driver, error) {
 		args = append(args, k8scel.GatherStats())
 	}
 	return k8scel.New(args...)
-}
-
-// isEngineIncompatibleError checks if an error indicates that a template
-// is incompatible with the current engine (e.g., Rego-only template with CEL engine).
-func isEngineIncompatibleError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	return errors.Is(err, clienterrors.ErrNoDriver)
 }
 
 // runSequentialBenchmark runs the benchmark sequentially (single-threaded).

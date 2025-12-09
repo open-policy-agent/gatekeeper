@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	examples = `# Benchmark policies with default settings (1000 iterations, rego engine)
+	examples = `# Benchmark policies with default settings (1000 iterations, cel engine)
 gator bench --filename="policies/"
 
 # Benchmark with both Rego and CEL engines
@@ -102,7 +102,7 @@ func init() {
 		"a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "",
 		"temporary directory to download and unpack images to.")
-	Cmd.Flags().StringVarP(&flagEngine, flagNameEngine, "e", string(bench.EngineRego),
+	Cmd.Flags().StringVarP(&flagEngine, flagNameEngine, "e", string(bench.EngineCEL),
 		fmt.Sprintf("policy engine to benchmark. One of: %s|%s|%s", bench.EngineRego, bench.EngineCEL, bench.EngineAll))
 	Cmd.Flags().IntVarP(&flagIterations, flagNameIterations, "n", 1000,
 		"number of benchmark iterations to run. Use at least 1000 for meaningful P99 metrics.")
