@@ -751,7 +751,7 @@ __expansion_audit_test() {
 }
 
 # Tests for namespace object access - verifies that policies can access namespace labels
-# via namespaceObject (CEL) and input.namespace (Rego)
+# via namespaceObject (CEL) and input.review.namespaceObject (Rego)
 @test "namespace object access - CEL engine test" {
   # Create test namespaces
   kubectl apply -f ${BATS_TESTS_DIR}/good/ns_with_env_label.yaml

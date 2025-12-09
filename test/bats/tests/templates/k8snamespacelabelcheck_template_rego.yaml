@@ -19,14 +19,18 @@ spec:
       rego: |
         package k8snamespacelabelcheckrego
 
+        is_namespaced {
+          input.review.object.metadata.namespace
+        }
+
         violation[{"msg": msg}] {
-          # Check if namespace object is provided
+          is_namespaced
           not input.review.namespaceObject
           msg := "namespaceObject is null - namespace data not available"
         }
 
         violation[{"msg": msg}] {
-          # Check if namespace has the required label
+          is_namespaced
           input.review.namespaceObject
           required_label := input.parameters.requiredLabel
           not input.review.namespaceObject.metadata.labels[required_label]

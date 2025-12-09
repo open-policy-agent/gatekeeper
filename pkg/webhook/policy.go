@@ -652,13 +652,8 @@ func (h *validationHandler) review(ctx context.Context, review interface{}, name
 	}
 
 	// Add namespace option if available for CEL namespaceObject and Rego input.review.namespaceObject support
-	if namespace != nil {
-		nsMap, err := util.NamespaceToMap(namespace)
-		if err != nil {
-			h.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
-		} else {
-			opts = append(opts, reviews.Namespace(nsMap))
-		}
+	if opt := util.NamespaceReviewOpt(namespace, h.log); opt != nil {
+		opts = append(opts, opt)
 	}
 
 	resp, err := h.opa.Review(ctx, review, opts...)
