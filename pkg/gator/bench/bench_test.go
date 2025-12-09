@@ -857,11 +857,3 @@ func TestMakeClient_UnsupportedEngine(t *testing.T) {
 		t.Errorf("expected 'unsupported engine' error, got: %v", err)
 	}
 }
-
-type testError struct {
-	msg string
-}
-
-func (e *testError) Error() string {
-	return e.msg
-}
