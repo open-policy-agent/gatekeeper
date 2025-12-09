@@ -616,12 +616,8 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			reviews.EnforcementPoint(util.AuditEnforcementPoint),
 			reviews.Stats(*logStatsAudit),
 		}
-		if ns != nil {
-			if nsMap, err := util.NamespaceToMap(ns); err != nil {
-				am.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
-			} else {
-				opts = append(opts, reviews.Namespace(nsMap))
-			}
+		if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
+			opts = append(opts, opt)
 		}
 		resp, err := am.opa.Review(ctx, au, opts...)
 		if err != nil {
@@ -718,12 +714,8 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				reviews.EnforcementPoint(util.AuditEnforcementPoint),
 				reviews.Stats(*logStatsAudit),
 			}
-			if ns != nil {
-				if nsMap, err := util.NamespaceToMap(ns); err != nil {
-					am.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
-				} else {
-					opts = append(opts, reviews.Namespace(nsMap))
-				}
+			if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
+				opts = append(opts, opt)
 			}
 			resp, err := am.opa.Review(ctx, augmentedObj, opts...)
 			if err != nil {
@@ -753,12 +745,8 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					reviews.EnforcementPoint(util.AuditEnforcementPoint),
 					reviews.Stats(*logStatsAudit),
 				}
-				if ns != nil {
-					if nsMap, err := util.NamespaceToMap(ns); err != nil {
-						am.log.Error(err, "failed to convert namespace to map, continuing without namespace context")
-					} else {
-						resultantOpts = append(resultantOpts, reviews.Namespace(nsMap))
-					}
+				if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
+					resultantOpts = append(resultantOpts, opt)
 				}
 				resultantResp, err := am.opa.Review(ctx, au, resultantOpts...)
 				if err != nil {
