@@ -12,13 +12,26 @@ func AppliesTo(applyTo []ApplyTo, gvk schema.GroupVersionKind) bool {
 	return false
 }
 
-// ApplyTo determines what GVKs items the mutation should apply to.
+// AppliesOperationTo checks if any item in the given slice of ApplyTo allows the given operation.
+func AppliesOperationTo(applyTo []ApplyTo, operation string) bool {
+	for _, apply := range applyTo {
+		if apply.MatchesOperation(operation) {
+			return true
+		}
+	}
+	return false
+}
+
+// ApplyTo determines what GVKs and operations the mutation should apply to.
 // Globs are not allowed.
 // +kubebuilder:object:generate=true
 type ApplyTo struct {
-	Groups   []string `json:"groups,omitempty"`
-	Kinds    []string `json:"kinds,omitempty"`
-	Versions []string `json:"versions,omitempty"`
+	Groups     []string `json:"groups,omitempty"`
+	Kinds      []string `json:"kinds,omitempty"`
+	Versions   []string `json:"versions,omitempty"`
+	// Operations specifies which admission operations (CREATE, UPDATE, DELETE) should trigger
+	// this mutation. If empty, defaults to ["CREATE", "UPDATE"] for backward compatibility.
+	Operations []string `json:"operations,omitempty"`
 }
 
 // Flatten returns the set of GroupVersionKinds this ApplyTo matches.
@@ -54,4 +67,18 @@ func (a ApplyTo) Matches(gvk schema.GroupVersionKind) bool {
 	}
 
 	return true
+}
+
+// MatchesOperation returns true if the operation is contained in the ApplyTo's
+// operations list. If no operations are specified, it defaults to allowing
+// CREATE and UPDATE for backward compatibility. Users can explicitly specify
+// DELETE operations if they have legitimate use cases.
+func (a ApplyTo) MatchesOperation(operation string) bool {
+	// If no operations specified, default to CREATE and UPDATE for backward compatibility
+	if len(a.Operations) == 0 {
+		return operation == "CREATE" || operation == "UPDATE"
+	}
+	
+	// Check if the operation is explicitly allowed by the user
+	return contains(a.Operations, operation)
 }

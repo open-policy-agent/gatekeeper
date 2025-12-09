@@ -1,6 +1,7 @@
 package types
 
 import (
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -19,4 +20,7 @@ type Mutable struct {
 
 	// Source specifies which types of resources the mutator should be applied to
 	Source SourceType
+	
+	// Operation is the admission operation being performed (CREATE, UPDATE, DELETE)
+	Operation admissionv1.Operation
 }
