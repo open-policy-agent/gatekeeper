@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
         with:
           egress-policy: audit
 
@@ -29,7 +29,7 @@ jobs:
           echo "PATCH_VERSION=${PATCH_VERSION}" >> ${GITHUB_ENV}
           echo "TAG=${TAG}" >> ${GITHUB_ENV}
       
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
         with:
           fetch-depth: 0
 
@@ -52,7 +52,7 @@ jobs:
           make patch-version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x TAG=v${TAG} OLDVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.$((PATCH_VERSION-1)) OPA_VERSIONS="${versions}"
       
       - name: Create release pull request
-        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        uses: peter-evans/create-pull-request@84ae59a2cdc2258d6fa0732dd66352dddae2a412 # v7.0.9
         with:
           commit-message: "chore: Patch docs for ${{ env.TAG }} release"
           title: "chore: Patch docs for ${{ env.TAG }} release"

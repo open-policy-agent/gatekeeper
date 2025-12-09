@@ -17,10 +17,8 @@ resources:
 - bases/status.gatekeeper.sh_connectionpodstatuses.yaml
 - bases/status.gatekeeper.sh_providerpodstatuses.yaml
 - bases/connection.gatekeeper.sh_connections.yaml
+- bases/constrainttemplate-customresourcedefinition.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
-
-bases:
-- ../../vendor/github.com/open-policy-agent/frameworks/constraint/deploy
 
 patches:
 - target:

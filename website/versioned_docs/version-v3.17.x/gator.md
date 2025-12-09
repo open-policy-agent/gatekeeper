@@ -195,7 +195,7 @@ to check.
     - If "no", then no violation messages must otherwise match the assertion.
     - If a nonnegative integer, then exactly that many violations must match.
       Defaults to "yes".
-- `message` matches violations containing the exact string specified. `message`
+- `message` is a regular expression used to match the violation message. `message`
   is case-sensitive. If not specified or explicitly set to empty string, all
   messages returned by the Constraint are considered matching.
 
