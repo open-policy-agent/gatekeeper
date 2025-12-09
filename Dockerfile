@@ -16,7 +16,10 @@ ENV GO111MODULE=on \
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper
 COPY . .
 
-RUN go build -mod vendor -a -ldflags "${LDFLAGS}" -o manager
+RUN \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -a -ldflags "${LDFLAGS}" -o manager
 
 FROM gcr.io/distroless/static-debian12@sha256:4b2a093ef4649bccd586625090a3c668b254cfe180dee54f4c94f3e9bd7e381e
 
