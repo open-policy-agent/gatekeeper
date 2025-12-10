@@ -4,13 +4,11 @@ on:
     paths:
       - "go.mod"
       - "go.sum"
-      - "vendor/**"
       - "third_party/k8s.io/kubernetes/hack/verify-licenses.sh"
   pull_request:
     paths:
       - "go.mod"
       - "go.sum"
-      - "vendor/**"
       - "third_party/k8s.io/kubernetes/hack/verify-licenses.sh"
 
 permissions:
