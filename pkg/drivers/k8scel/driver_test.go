@@ -34,7 +34,7 @@ func TestMapToNamespace(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name:    "nil input",
+			name:    "nil input (cluster-scoped resource)",
 			input:   nil,
 			wantErr: false,
 		},
@@ -66,6 +66,16 @@ func TestMapToNamespace(t *testing.T) {
 			wantName: "simple-namespace",
 			wantErr:  false,
 		},
+		{
+			name: "invalid input causes marshal error",
+			input: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					// channels cannot be marshaled to JSON
+					"invalid": make(chan int),
+				},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -73,6 +83,10 @@ func TestMapToNamespace(t *testing.T) {
 			ns, err := mapToNamespace(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("mapToNamespace() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			// If we expected an error, we're done checking
+			if tt.wantErr {
 				return
 			}
 			if tt.input == nil {
@@ -171,11 +185,11 @@ func TestDriverQueryWithNamespace(t *testing.T) {
 		namespace map[string]interface{}
 	}{
 		{
-			name:      "no namespace provided",
+			name:      "cluster-scoped resource (no namespace)",
 			namespace: nil,
 		},
 		{
-			name: "namespace with labels",
+			name: "namespaced resource with namespace labels",
 			namespace: map[string]interface{}{
 				"apiVersion": "v1",
 				"kind":       "Namespace",
@@ -184,6 +198,14 @@ func TestDriverQueryWithNamespace(t *testing.T) {
 					"labels": map[string]interface{}{
 						"environment": "production",
 					},
+				},
+			},
+		},
+		{
+			name: "invalid namespace data (should log error but not fail)",
+			namespace: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"invalid": make(chan int),
 				},
 			},
 		},

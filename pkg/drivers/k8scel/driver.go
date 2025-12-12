@@ -16,6 +16,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	pSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/opa/storage"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,6 +27,7 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
 	celAPI "k8s.io/apiserver/pkg/apis/cel"
 	"k8s.io/apiserver/pkg/cel/environment"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // NOTE: This is a PROTOTYPE driver. Do not use this for any critical work
@@ -50,7 +52,10 @@ const (
 	runTimeNSDescription = "the number of nanoseconds it took to evaluate the constraint"
 )
 
-var _ drivers.Driver = &Driver{}
+var (
+	_   drivers.Driver = &Driver{}
+	log                = logf.Log.WithName("k8scel-driver").WithValues(logging.Process, "k8scel")
+)
 
 type Driver struct {
 	mux         sync.RWMutex
@@ -206,7 +211,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		if cfg.Namespace != nil {
 			namespace, err = mapToNamespace(cfg.Namespace)
 			if err != nil {
-				// Log warning but don't fail - continue without namespace
+				log.Error(err, "failed to convert namespace to corev1.Namespace, continuing without namespace")
 				namespace = nil
 			}
 		}
