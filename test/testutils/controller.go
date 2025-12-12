@@ -31,9 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var (
-	gkCRDPath = []string{"config", "crd", "bases"}
-)
+var gkCRDPath = []string{"config", "crd", "bases"}
 
 // ConstantRetry makes 3,000 attempts at a rate of 100 per second. Since this
 // is a test instance and not a "real" cluster, this is fine and there's no need
