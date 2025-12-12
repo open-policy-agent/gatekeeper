@@ -1,6 +1,7 @@
 package syncset
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -17,7 +18,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"

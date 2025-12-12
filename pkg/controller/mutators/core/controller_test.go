@@ -16,6 +16,7 @@ limitations under the License.
 package core
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -37,7 +38,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
