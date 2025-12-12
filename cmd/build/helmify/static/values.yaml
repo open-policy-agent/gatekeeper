@@ -2,6 +2,11 @@ replicas: 3
 revisionHistoryLimit: 10
 auditInterval: 60
 metricsBackends: ["prometheus"]
+prometheusPort:
+otlpEndpoint:
+otlpMetricInterval:
+stackdriverOnlyWhenAvailable:
+stackdriverMetricInterval:
 auditMatchKindOnly: false
 constraintViolationsLimit: 20
 auditFromCache: false
