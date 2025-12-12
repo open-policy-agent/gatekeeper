@@ -195,6 +195,7 @@ metadata:
   - apiVersion: apps/v1
     kind: Deployment
     name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -217,6 +218,7 @@ metadata:
   - apiVersion: apps/v1
     kind: Deployment
     name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -239,6 +241,7 @@ metadata:
   - apiVersion: apps/v1
     kind: Deployment
     name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -262,6 +265,7 @@ metadata:
   - apiVersion: apps/v1
     kind: Deployment
     name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -285,6 +289,7 @@ metadata:
   - apiVersion: apps/v1
     kind: Deployment
     name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -309,6 +314,7 @@ metadata:
   - apiVersion: apps/v1
     kind: Deployment
     name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -592,6 +598,7 @@ metadata:
   - apiVersion: cat.myapp.sh/v1alpha1
     kind: Cat
     name: big-chungus
+    uid: ""
 spec:
   breed: calico
   weight: 10
@@ -610,6 +617,7 @@ metadata:
   - apiVersion: cat.myapp.sh/v1alpha1
     kind: Cat
     name: big-chungus
+    uid: ""
 spec:
   loud: very
 `
@@ -645,6 +653,7 @@ metadata:
   - apiVersion: batch/v1
     kind: CronJob
     name: my-cronjob
+    uid: ""
 spec:
   template:
     spec:
@@ -670,6 +679,7 @@ metadata:
   - apiVersion: batch/v1
     kind: Job
     name: my-cronjob-job
+    uid: ""
 spec:
   containers:
   - args:

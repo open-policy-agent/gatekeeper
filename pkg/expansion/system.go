@@ -12,6 +12,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -265,32 +266,20 @@ func ensureOwnerReference(resultant, parent *unstructured.Unstructured) {
 		return
 	}
 
-	ownerRef := map[string]interface{}{
-		"apiVersion": parentAPIVersion,
-		"kind":       parentKind,
-		"name":       parentName,
+	newOwnerRef := metav1.OwnerReference{
+		APIVersion: parentAPIVersion,
+		Kind:       parentKind,
+		Name:       parentName,
 	}
 
-	refs, found, err := unstructured.NestedSlice(resultant.Object, "metadata", "ownerReferences")
-	if err != nil {
-		return
-	}
-	if found {
-		for _, ref := range refs {
-			refMap, ok := ref.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			if refMap["apiVersion"] == parentAPIVersion && refMap["kind"] == parentKind && refMap["name"] == parentName {
-				return
-			}
+	existingRefs := resultant.GetOwnerReferences()
+	for _, ref := range existingRefs {
+		if ref.APIVersion == parentAPIVersion && ref.Kind == parentKind && ref.Name == parentName {
+			return
 		}
-	} else {
-		refs = []interface{}{}
 	}
 
-	refs = append(refs, ownerRef)
-	_ = unstructured.SetNestedSlice(resultant.Object, refs, "metadata", "ownerReferences")
+	resultant.SetOwnerReferences(append(existingRefs, newOwnerRef))
 }
 
 // mockNameForResource returns a mock name for a resultant resource created

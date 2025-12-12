@@ -599,6 +599,7 @@ func TestExpandResource(t *testing.T) {
 								"apiVersion": "apps/v1",
 								"kind":       "Deployment",
 								"name":       "test-deployment",
+								"uid":        "",
 							},
 						},
 					},
