@@ -31,7 +31,7 @@ type ConnectionSpec struct {
 	Driver string `json:"driver"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Schemaless
-	// +kubebuilder:validation:XPreserveUnknownFields
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Config *types.Anything `json:"config"`
 }
 
