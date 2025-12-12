@@ -12,6 +12,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -246,8 +247,39 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 	}
 
 	resource.SetName(mockNameForResource(obj, resultantGVK))
+	ensureOwnerReference(resource, obj)
 
 	return resource, nil
+}
+
+// ensureOwnerReference appends an OwnerReference describing parent to the resultant
+// resource if one is not already present.
+func ensureOwnerReference(resultant, parent *unstructured.Unstructured) {
+	if resultant == nil || parent == nil {
+		return
+	}
+
+	parentAPIVersion := parent.GetAPIVersion()
+	parentKind := parent.GetKind()
+	parentName := parent.GetName()
+	if parentAPIVersion == "" || parentKind == "" || parentName == "" {
+		return
+	}
+
+	newOwnerRef := metav1.OwnerReference{
+		APIVersion: parentAPIVersion,
+		Kind:       parentKind,
+		Name:       parentName,
+	}
+
+	existingRefs := resultant.GetOwnerReferences()
+	for _, ref := range existingRefs {
+		if ref.APIVersion == parentAPIVersion && ref.Kind == parentKind && ref.Name == parentName {
+			return
+		}
+	}
+
+	resultant.SetOwnerReferences(append(existingRefs, newOwnerRef))
 }
 
 // mockNameForResource returns a mock name for a resultant resource created

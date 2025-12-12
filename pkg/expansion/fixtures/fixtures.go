@@ -191,6 +191,34 @@ metadata:
     app: nginx
   name: nginx-deployment-pod
   namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+    uid: ""
+spec:
+  containers:
+  - args:
+    - "/bin/sh"
+    image: nginx:1.14.2
+    name: nginx
+    ports:
+    - containerPort: '80'
+`
+
+	PodNoMutateWithNs = `
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: nginx
+  name: nginx-deployment-pod
+  namespace: not-default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -209,6 +237,11 @@ metadata:
     app: nginx
   name: nginx-deployment-pod
   namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -228,6 +261,11 @@ metadata:
     app: nginx
   name: nginx-deployment-pod
   namespace: not-default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -247,6 +285,11 @@ metadata:
     app: nginx
   name: nginx-deployment-pod
   namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -267,6 +310,11 @@ metadata:
     owner: admin
   name: nginx-deployment-pod
   namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+    uid: ""
 spec:
   containers:
   - args:
@@ -546,6 +594,11 @@ metadata:
     fluffy: extremely
   name: big-chungus-kitten
   namespace: default
+  ownerReferences:
+  - apiVersion: cat.myapp.sh/v1alpha1
+    kind: Cat
+    name: big-chungus
+    uid: ""
 spec:
   breed: calico
   weight: 10
@@ -560,6 +613,11 @@ metadata:
     shouldPet: manytimes
   name: big-chungus-purr
   namespace: default
+  ownerReferences:
+  - apiVersion: cat.myapp.sh/v1alpha1
+    kind: Cat
+    name: big-chungus
+    uid: ""
 spec:
   loud: very
 `
@@ -591,6 +649,11 @@ kind: Job
 metadata:
   name: my-cronjob-job
   namespace: default
+  ownerReferences:
+  - apiVersion: batch/v1
+    kind: CronJob
+    name: my-cronjob
+    uid: ""
 spec:
   template:
     spec:
@@ -612,6 +675,11 @@ metadata:
     owner: admin
   name: my-cronjob-job-pod
   namespace: default
+  ownerReferences:
+  - apiVersion: batch/v1
+    kind: Job
+    name: my-cronjob-job
+    uid: ""
 spec:
   containers:
   - args:

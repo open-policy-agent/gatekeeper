@@ -423,6 +423,264 @@ func TestValidateTemplate(t *testing.T) {
 	}
 }
 
+func TestExpandResource(t *testing.T) {
+	tests := []struct {
+		name      string
+		obj       *unstructured.Unstructured
+		ns        *corev1.Namespace
+		template  *expansionunversioned.ExpansionTemplate
+		want      *unstructured.Unstructured
+		expectErr bool
+		errSubstr string
+	}{
+		{
+			name: "successful expansion with namespace",
+			obj:  fixtures.LoadFixture(fixtures.DeploymentNginx, t),
+			ns:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			template: &expansionunversioned.ExpansionTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+				Spec: expansionunversioned.ExpansionTemplateSpec{
+					TemplateSource: "spec.template",
+					GeneratedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				},
+			},
+			want: fixtures.LoadFixture(fixtures.PodNoMutate, t),
+		},
+		{
+			name: "successful expansion without namespace",
+			obj:  fixtures.LoadFixture(fixtures.DeploymentNginxWithNs, t),
+			ns:   nil,
+			template: &expansionunversioned.ExpansionTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+				Spec: expansionunversioned.ExpansionTemplateSpec{
+					TemplateSource: "spec.template",
+					GeneratedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				},
+			},
+			want: fixtures.LoadFixture(fixtures.PodNoMutateWithNs, t),
+		},
+		{
+			name: "empty template source",
+			obj:  fixtures.LoadFixture(fixtures.DeploymentNginx, t),
+			ns:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			template: &expansionunversioned.ExpansionTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+				Spec: expansionunversioned.ExpansionTemplateSpec{
+					TemplateSource: "",
+					GeneratedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				},
+			},
+			expectErr: true,
+			errSubstr: "cannot expand resource using a template with no source",
+		},
+		{
+			name: "empty generated GVK",
+			obj:  fixtures.LoadFixture(fixtures.DeploymentNginx, t),
+			ns:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			template: &expansionunversioned.ExpansionTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+				Spec: expansionunversioned.ExpansionTemplateSpec{
+					TemplateSource: "spec.template",
+					GeneratedGVK:   expansionunversioned.GeneratedGVK{},
+				},
+			},
+			expectErr: true,
+			errSubstr: "cannot expand resource using template with empty generatedGVK",
+		},
+		{
+			name: "source field not found",
+			obj:  fixtures.LoadFixture(fixtures.DeploymentNginx, t),
+			ns:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			template: &expansionunversioned.ExpansionTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+				Spec: expansionunversioned.ExpansionTemplateSpec{
+					TemplateSource: "spec.nonexistent",
+					GeneratedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				},
+			},
+			expectErr: true,
+			errSubstr: "could not find source field",
+		},
+		{
+			name: "invalid source path",
+			obj: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name":      "test-deployment",
+						"namespace": "default",
+					},
+					"spec": "invalid-not-a-map",
+				},
+			},
+			ns: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			template: &expansionunversioned.ExpansionTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+				Spec: expansionunversioned.ExpansionTemplateSpec{
+					TemplateSource: "spec.template",
+					GeneratedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				},
+			},
+			expectErr: true,
+			errSubstr: "could not extract source field from unstructured",
+		},
+		{
+			name: "cluster scoped resource without namespace",
+			obj: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment",
+					},
+					"spec": map[string]interface{}{
+						"template": map[string]interface{}{
+							"metadata": map[string]interface{}{
+								"labels": map[string]interface{}{
+									"app": "nginx",
+								},
+							},
+							"spec": map[string]interface{}{
+								"containers": []interface{}{
+									map[string]interface{}{
+										"name":  "nginx",
+										"image": "nginx:1.14.2",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			ns: nil,
+			template: &expansionunversioned.ExpansionTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+				Spec: expansionunversioned.ExpansionTemplateSpec{
+					TemplateSource: "spec.template",
+					GeneratedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				},
+			},
+			want: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "v1",
+					"kind":       "Pod",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-pod",
+						"labels": map[string]interface{}{
+							"app": "nginx",
+						},
+						"ownerReferences": []interface{}{
+							map[string]interface{}{
+								"apiVersion": "apps/v1",
+								"kind":       "Deployment",
+								"name":       "test-deployment",
+								"uid":        "",
+							},
+						},
+					},
+					"spec": map[string]interface{}{
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":  "nginx",
+								"image": "nginx:1.14.2",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "error extracting namespace from parent resource",
+			obj: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name":      "test-deployment",
+						"namespace": 123, // invalid type for namespace
+					},
+					"spec": map[string]interface{}{
+						"template": map[string]interface{}{
+							"metadata": map[string]interface{}{
+								"labels": map[string]interface{}{
+									"app": "nginx",
+								},
+							},
+						},
+					},
+				},
+			},
+			ns: nil,
+			template: &expansionunversioned.ExpansionTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+				Spec: expansionunversioned.ExpansionTemplateSpec{
+					TemplateSource: "spec.template",
+					GeneratedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				},
+			},
+			expectErr: true,
+			errSubstr: "could not extract namespace field",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := expandResource(tc.obj, tc.ns, tc.template)
+
+			if tc.expectErr {
+				if err == nil {
+					t.Errorf("expected error containing %q, but got nil", tc.errSubstr)
+					return
+				}
+				if !strings.Contains(err.Error(), tc.errSubstr) {
+					t.Errorf("expected error to contain %q, but got %q", tc.errSubstr, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if tc.want != nil {
+				if diff := cmp.Diff(result, tc.want); diff != "" {
+					t.Errorf("expandResource() mismatch (-got +want):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
 func noError(e error, t *testing.T) {
 	if e != nil {
 		t.Errorf("did want want error, but got %s", e)
