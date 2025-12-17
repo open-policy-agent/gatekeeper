@@ -15,11 +15,11 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/gomega v1.38.2
 	github.com/open-policy-agent/cert-controller v0.14.1-0.20251031183427-40974f7dd486
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20251105220536-241c4a079fc8
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20251212003702-cf69624a8e54
 	github.com/open-policy-agent/opa v1.10.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.23.2
-	github.com/spf13/cobra v1.10.1
+	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/contrib/detectors/aws/ec2 v1.21.1
 	go.opentelemetry.io/contrib/detectors/gcp v1.36.0
