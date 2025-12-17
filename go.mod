@@ -13,7 +13,7 @@ require (
 	github.com/golang/protobuf v1.5.4
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/onsi/gomega v1.38.2
+	github.com/onsi/gomega v1.38.3
 	github.com/open-policy-agent/cert-controller v0.14.1-0.20251031183427-40974f7dd486
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20251212003702-cf69624a8e54
 	github.com/open-policy-agent/opa v1.10.0
