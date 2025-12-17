@@ -60,7 +60,7 @@ type ModifySetParameters struct {
 	// Values describes the values provided to the operation as `values.fromList`.
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:validation:Type=object
-	// +kubebuilder:validation:XPreserveUnknownFields
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Values Values `json:"values,omitempty"`
 }
 
