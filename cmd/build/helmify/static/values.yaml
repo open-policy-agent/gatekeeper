@@ -302,6 +302,7 @@ audit:
   extraRules: []
   disableGenerateOperation: false
   disableAuditOperation: false
+  disableAuditSidecar: false
   disableStatusOperation: false
 crds:
   affinity: {}
