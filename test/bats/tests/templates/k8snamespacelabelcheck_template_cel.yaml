@@ -1,0 +1,34 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8snamespacelabelcheckcel
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sNamespaceLabelCheckCel
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            requiredLabel:
+              type: string
+              description: "Label that must exist on the namespace"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: K8sNativeValidation
+          source:
+            generateVAP: false
+            validations:
+              # Check that namespaceObject is not null AND has the required label
+              # This validates that namespaceObject actually contains the real namespace
+              - expression: |
+                  namespaceObject != null && 
+                  has(namespaceObject.metadata) && 
+                  has(namespaceObject.metadata.labels) && 
+                  variables.params.requiredLabel in namespaceObject.metadata.labels
+                messageExpression: |
+                  namespaceObject == null ? 
+                    "namespaceObject is null - NOT SUPPORTED" : 
+                    "Namespace '" + namespaceObject.metadata.name + "' does not have required label: " + variables.params.requiredLabel
