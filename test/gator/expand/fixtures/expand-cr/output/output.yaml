@@ -8,6 +8,7 @@ metadata:
   - apiVersion: cat.myapp.sh/v1alpha1
     kind: Cat
     name: big-chungus
+    uid: ""
 spec:
   loud: very
 ---
@@ -23,6 +24,7 @@ metadata:
   - apiVersion: cat.myapp.sh/v1alpha1
     kind: Cat
     name: big-chungus
+    uid: ""
 spec:
   age: 10
   breed: calico
