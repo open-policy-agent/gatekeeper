@@ -15,13 +15,29 @@ import (
 )
 
 const (
-	ctMetricName   = "constraint_templates"
-	ingestCount    = "constraint_template_ingestion_count"
-	ingestDuration = "constraint_template_ingestion_duration_seconds"
-	statusKey      = "status"
+	ctMetricName    = "constraint_templates"
+	celCTMetricName = "constraint_templates_with_cel"
+	vapMetricName   = "validating_admission_policies"
+	ingestCount     = "constraint_template_ingestion_count"
+	ingestDuration  = "constraint_template_ingestion_duration_seconds"
+	statusKey       = "status"
 
-	ctDesc = "Number of observed constraint templates"
+	ctDesc    = "Number of observed constraint templates"
+	celCTDesc = "Number of constraint templates with CEL engine"
 )
+
+// VAPStatus represents the status of a VAP resource.
+type VAPStatus string
+
+const (
+	// VAPStatusActive indicates a VAP is operating normally.
+	VAPStatusActive VAPStatus = "active"
+	// VAPStatusError indicates there is a problem with a VAP.
+	VAPStatusError VAPStatus = "error"
+)
+
+// AllVAPStatuses is the set of all allowed values of VAPStatus.
+var AllVAPStatuses = []VAPStatus{VAPStatusActive, VAPStatusError}
 
 var (
 	ingestCountM    metric.Int64Counter
@@ -49,12 +65,30 @@ func (r *reporter) reportIngestDuration(ctx context.Context, status metrics.Stat
 func newStatsReporter() *reporter {
 	var err error
 	reg := &ctRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
-	r := &reporter{registry: reg}
+	r := &reporter{registry: reg, vapRegistry: newVAPRegistry(), celRegistry: newCelRegistry()}
 	meter := otel.GetMeterProvider().Meter("gatekeeper")
 	_, err = meter.Int64ObservableGauge(
 		ctMetricName,
 		metric.WithDescription(ctDesc),
 		metric.WithInt64Callback(r.observeCTM),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = meter.Int64ObservableGauge(
+		celCTMetricName,
+		metric.WithDescription(celCTDesc),
+		metric.WithInt64Callback(r.observeCelCTM),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = meter.Int64ObservableGauge(
+		vapMetricName,
+		metric.WithDescription("Number of ValidatingAdmissionPolicy resources by generation status (active = successfully generated, error = generation failed)"),
+		metric.WithInt64Callback(r.observeVAP),
 	)
 	if err != nil {
 		panic(err)
@@ -79,9 +113,90 @@ func newStatsReporter() *reporter {
 }
 
 type reporter struct {
-	mu       sync.RWMutex
-	ctReport map[metrics.Status]int64
-	registry *ctRegistry
+	mu          sync.RWMutex
+	ctReport    map[metrics.Status]int64
+	registry    *ctRegistry
+	vapRegistry *vapRegistry
+	celRegistry *celRegistry
+}
+
+// vapRegistry tracks individual VAP resources for accurate counting.
+type vapRegistry struct {
+	mu    sync.RWMutex
+	cache map[types.NamespacedName]VAPStatus
+}
+
+func newVAPRegistry() *vapRegistry {
+	return &vapRegistry{cache: make(map[types.NamespacedName]VAPStatus)}
+}
+
+type celRegistry struct {
+	mu    sync.RWMutex
+	cache map[types.NamespacedName]bool
+}
+
+func newCelRegistry() *celRegistry {
+	return &celRegistry{cache: make(map[types.NamespacedName]bool)}
+}
+
+func (r *celRegistry) add(key types.NamespacedName) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cache[key] = true
+}
+
+func (r *celRegistry) remove(key types.NamespacedName) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.cache, key)
+}
+
+func (r *celRegistry) count() int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return int64(len(r.cache))
+}
+
+func (r *reporter) observeCelCTM(_ context.Context, o metric.Int64Observer) error {
+	o.Observe(r.celRegistry.count())
+	return nil
+}
+
+func (r *reporter) ReportCelCT(_ context.Context, templateName types.NamespacedName) error {
+	r.celRegistry.add(templateName)
+	return nil
+}
+
+func (r *reporter) DeleteCelCT(_ context.Context, templateName types.NamespacedName) error {
+	r.celRegistry.remove(templateName)
+	return nil
+}
+
+func (r *vapRegistry) add(key types.NamespacedName, status VAPStatus) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	existing, ok := r.cache[key]
+	if ok && existing == status {
+		return
+	}
+	r.cache[key] = status
+}
+
+func (r *vapRegistry) remove(key types.NamespacedName) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.cache, key)
+}
+
+func (r *vapRegistry) computeTotals() map[VAPStatus]int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	totals := make(map[VAPStatus]int64)
+	for _, status := range r.cache {
+		totals[status]++
+	}
+	return totals
 }
 
 type ctRegistry struct {
@@ -142,5 +257,23 @@ func (r *reporter) observeCTM(_ context.Context, o metric.Int64Observer) error {
 	for status, count := range r.ctReport {
 		o.Observe(count, metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
+	return nil
+}
+
+func (r *reporter) observeVAP(_ context.Context, observer metric.Int64Observer) error {
+	totals := r.vapRegistry.computeTotals()
+	for _, status := range AllVAPStatuses {
+		observer.Observe(totals[status], metric.WithAttributes(attribute.String(statusKey, string(status))))
+	}
+	return nil
+}
+
+func (r *reporter) ReportVAPStatus(_ context.Context, templateName types.NamespacedName, status VAPStatus) error {
+	r.vapRegistry.add(templateName, status)
+	return nil
+}
+
+func (r *reporter) DeleteVAPStatus(_ context.Context, templateName types.NamespacedName) error {
+	r.vapRegistry.remove(templateName)
 	return nil
 }
