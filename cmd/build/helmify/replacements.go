@@ -330,16 +330,16 @@ var replacements = map[string]string{
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
-        {{- if has "opentelemetry" .Values.metricsBackends}}
+        {{- if and (has "opentelemetry" .Values.metricsBackends) (hasKey .Values "otlpEndpoint") }}
         - --otlp-endpoint={{ .Values.otlpEndpoint }}
         {{- end }}
-        {{- if has "opentelemetry" .Values.metricsBackends}}
+        {{- if and (has "opentelemetry" .Values.metricsBackends) (hasKey .Values "otlpMetricInterval") }}
         - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
         {{- end }}
-        {{- if has "stackdriver" .Values.metricsBackends}}
+        {{- if and (has "stackdriver" .Values.metricsBackends) (hasKey .Values "stackdriverOnlyWhenAvailable") }}
         - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
         {{- end }}
-        {{- if has "stackdriver" .Values.metricsBackends}}
+        {{- if and (has "stackdriver" .Values.metricsBackends) (hasKey .Values "stackdriverMetricInterval") }}
         - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
         {{- end }}`,
 
