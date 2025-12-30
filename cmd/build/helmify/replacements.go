@@ -330,9 +330,6 @@ var replacements = map[string]string{
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
-        {{- if has "prometheus" .Values.metricsBackends}}
-        - --prometheus-port={{ .Values.prometheusPort }}
-        {{- end }}
         {{- if has "opentelemetry" .Values.metricsBackends}}
         - --otlp-endpoint={{ .Values.otlpEndpoint }}
         {{- end }}

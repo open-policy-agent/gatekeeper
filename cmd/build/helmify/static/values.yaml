@@ -2,7 +2,6 @@ replicas: 3
 revisionHistoryLimit: 10
 auditInterval: 60
 metricsBackends: ["prometheus"]
-prometheusPort: 8888
 otlpEndpoint: ""
 otlpMetricInterval: "10s"
 stackdriverOnlyWhenAvailable: false
