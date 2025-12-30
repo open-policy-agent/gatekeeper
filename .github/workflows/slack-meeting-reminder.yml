@@ -1,0 +1,95 @@
+name: Slack Meeting Reminder
+
+on:
+  schedule:
+    # Run every Wednesday at 9 AM PST (5 PM UTC) - 1 hour before 10 AM meeting
+    - cron: "0 17 * * 3"
+    # Run every Wednesday at 1 PM PST (9 PM UTC) - 1 hour before 2 PM meeting
+    - cron: "0 21 * * 3"
+
+permissions: read-all
+
+jobs:
+  send-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+
+      - name: Determine which time slot to use
+        id: check-week
+        run: |
+          # Get the ISO week number
+          WEEK_NUM=$(date +%V)
+          # Check if it's an even or odd week
+          if [ $((WEEK_NUM % 2)) -eq 0 ]; then
+            # Even week: 1 PM PST (21:00 UTC)
+            EXPECTED_HOUR=21
+          else
+            # Odd week: 9 AM PST (17:00 UTC)
+            EXPECTED_HOUR=17
+          fi
+          CURRENT_HOUR=$(date -u +%H)
+          echo "Expected hour: $EXPECTED_HOUR, Current hour: $CURRENT_HOUR"
+          if [ "$CURRENT_HOUR" -eq "$EXPECTED_HOUR" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Slack notification
+        if: steps.check-week.outputs.should_run == 'true'
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --fail \
+            --data '{
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "The OPA Gatekeeper weekly is starting in 1 hour!  :clock1:\n\nAdd your agenda items to the meeting notes to get your questions answered by one of the Gatekeeper maintainers.\n\n<https://docs.google.com/document/d/1A1-Q-1OMw3QODs1wT6eqfLTagcGmgzAJAjJihiO3T48/edit|Meeting Notes>"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Starting time is every Wednesday alternating between:*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "• 10:00 and 14:00 Pacific Time"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "• 21:00 and 05:00 Central European Time"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "<https://zoom.us/j/332405601|Join Meeting> :point_left:"
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "Check out previous meetings on <https://www.youtube.com/@openpolicyagent8458|YouTube>"
+                    }
+                  ]
+                }
+              ]
+            }' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
