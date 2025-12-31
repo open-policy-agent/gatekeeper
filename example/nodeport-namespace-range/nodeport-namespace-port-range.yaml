@@ -1,0 +1,18 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sNodePortNamespaceRange
+metadata:
+  name: enforce-nodeport-namespace-range
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Service"]
+  parameters:
+    ranges:
+      team-a:
+        namespacePattern: "team-a-*"
+        portRange: "[30000:30100]"
+      team-b:
+        namespacePattern: "team-b-*"
+        portRange: "[30101:30200]"
