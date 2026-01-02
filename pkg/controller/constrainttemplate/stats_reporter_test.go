@@ -143,9 +143,9 @@ func TestVAPMetrics(t *testing.T) {
 	rdr, r := initializeVAPTestInstruments(t)
 	ctx := context.Background()
 
-	assert.NoError(t, r.ReportVAPStatus(ctx, types.NamespacedName{Name: "template-1"}, VAPStatusActive))
-	assert.NoError(t, r.ReportVAPStatus(ctx, types.NamespacedName{Name: "template-2"}, VAPStatusActive))
-	assert.NoError(t, r.ReportVAPStatus(ctx, types.NamespacedName{Name: "template-3"}, VAPStatusError))
+	assert.NoError(t, r.ReportVAPStatus(ctx, types.NamespacedName{Name: "template-1"}, metrics.VAPStatusActive))
+	assert.NoError(t, r.ReportVAPStatus(ctx, types.NamespacedName{Name: "template-2"}, metrics.VAPStatusActive))
+	assert.NoError(t, r.ReportVAPStatus(ctx, types.NamespacedName{Name: "template-3"}, metrics.VAPStatusError))
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
@@ -172,8 +172,8 @@ func TestVAPMetrics(t *testing.T) {
 		}
 	}
 
-	assert.Equal(t, int64(2), statusCounts[string(VAPStatusActive)])
-	assert.Equal(t, int64(1), statusCounts[string(VAPStatusError)])
+	assert.Equal(t, int64(2), statusCounts[string(metrics.VAPStatusActive)])
+	assert.Equal(t, int64(1), statusCounts[string(metrics.VAPStatusError)])
 }
 
 func TestReportDeleteVAPStatus(t *testing.T) {
@@ -181,7 +181,7 @@ func TestReportDeleteVAPStatus(t *testing.T) {
 	ctx := context.Background()
 
 	templateName := types.NamespacedName{Name: "template-to-delete"}
-	assert.NoError(t, r.ReportVAPStatus(ctx, templateName, VAPStatusActive))
+	assert.NoError(t, r.ReportVAPStatus(ctx, templateName, metrics.VAPStatusActive))
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
@@ -205,7 +205,7 @@ func TestReportDeleteVAPStatus(t *testing.T) {
 			statusCountsBefore[statusAttr.AsString()] = dp.Value
 		}
 	}
-	assert.Equal(t, int64(1), statusCountsBefore[string(VAPStatusActive)])
+	assert.Equal(t, int64(1), statusCountsBefore[string(metrics.VAPStatusActive)])
 
 	assert.NoError(t, r.DeleteVAPStatus(ctx, templateName))
 
@@ -237,17 +237,17 @@ func TestVAPStatusUpdate(t *testing.T) {
 
 	templateName := types.NamespacedName{Name: "template-update-test"}
 
-	assert.NoError(t, r.ReportVAPStatus(ctx, templateName, VAPStatusError))
+	assert.NoError(t, r.ReportVAPStatus(ctx, templateName, metrics.VAPStatusError))
 
 	totals := r.vapRegistry.computeTotals()
-	assert.Equal(t, int64(1), totals[VAPStatusError])
-	assert.Equal(t, int64(0), totals[VAPStatusActive])
+	assert.Equal(t, int64(1), totals[metrics.VAPStatusError])
+	assert.Equal(t, int64(0), totals[metrics.VAPStatusActive])
 
-	assert.NoError(t, r.ReportVAPStatus(ctx, templateName, VAPStatusActive))
+	assert.NoError(t, r.ReportVAPStatus(ctx, templateName, metrics.VAPStatusActive))
 
 	totals = r.vapRegistry.computeTotals()
-	assert.Equal(t, int64(0), totals[VAPStatusError])
-	assert.Equal(t, int64(1), totals[VAPStatusActive])
+	assert.Equal(t, int64(0), totals[metrics.VAPStatusError])
+	assert.Equal(t, int64(1), totals[metrics.VAPStatusActive])
 }
 
 func initializeCelTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {

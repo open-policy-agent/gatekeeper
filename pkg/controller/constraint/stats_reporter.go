@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -17,30 +18,17 @@ const (
 	statusKey             = "status"
 )
 
-// VAPStatus represents the status of a VAPB resource.
-type VAPStatus string
-
-const (
-	// VAPStatusActive indicates a VAPB is operating normally.
-	VAPStatusActive VAPStatus = "active"
-	// VAPStatusError indicates there is a problem with a VAPB.
-	VAPStatusError VAPStatus = "error"
-)
-
-// AllVAPStatuses is the set of all allowed values of VAPStatus.
-var AllVAPStatuses = []VAPStatus{VAPStatusActive, VAPStatusError}
-
 // vapbRegistry tracks individual VAPB resources for accurate counting.
 type vapbRegistry struct {
 	mu    sync.RWMutex
-	cache map[types.NamespacedName]VAPStatus
+	cache map[types.NamespacedName]metrics.VAPStatus
 }
 
 func newVAPBRegistry() *vapbRegistry {
-	return &vapbRegistry{cache: make(map[types.NamespacedName]VAPStatus)}
+	return &vapbRegistry{cache: make(map[types.NamespacedName]metrics.VAPStatus)}
 }
 
-func (r *vapbRegistry) add(key types.NamespacedName, status VAPStatus) {
+func (r *vapbRegistry) add(key types.NamespacedName, status metrics.VAPStatus) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	existing, ok := r.cache[key]
@@ -56,11 +44,11 @@ func (r *vapbRegistry) remove(key types.NamespacedName) {
 	delete(r.cache, key)
 }
 
-func (r *vapbRegistry) computeTotals() map[VAPStatus]int64 {
+func (r *vapbRegistry) computeTotals() map[metrics.VAPStatus]int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	totals := make(map[VAPStatus]int64)
+	totals := make(map[metrics.VAPStatus]int64)
 	for _, status := range r.cache {
 		totals[status]++
 	}
@@ -78,7 +66,7 @@ func (r *reporter) observeConstraints(_ context.Context, observer metric.Int64Ob
 
 func (r *reporter) observeVAPB(_ context.Context, observer metric.Int64Observer) error {
 	totals := r.vapbRegistry.computeTotals()
-	for _, status := range AllVAPStatuses {
+	for _, status := range metrics.AllVAPStatuses {
 		observer.Observe(totals[status], metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
 	return nil
@@ -97,7 +85,7 @@ func (r *reporter) reportConstraints(_ context.Context, t tags, v int64) error {
 // StatsReporter reports audit metrics.
 type StatsReporter interface {
 	reportConstraints(ctx context.Context, t tags, v int64) error
-	ReportVAPBStatus(ctx context.Context, name types.NamespacedName, status VAPStatus) error
+	ReportVAPBStatus(ctx context.Context, name types.NamespacedName, status metrics.VAPStatus) error
 	DeleteVAPBStatus(ctx context.Context, name types.NamespacedName) error
 }
 
@@ -129,7 +117,7 @@ type reporter struct {
 	vapbRegistry      *vapbRegistry
 }
 
-func (r *reporter) ReportVAPBStatus(_ context.Context, name types.NamespacedName, status VAPStatus) error {
+func (r *reporter) ReportVAPBStatus(_ context.Context, name types.NamespacedName, status metrics.VAPStatus) error {
 	r.vapbRegistry.add(name, status)
 	return nil
 }

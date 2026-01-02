@@ -538,7 +538,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 	shouldGenerateVAPB, VAPEnforcementActions, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
 	if err != nil {
 		log.Error(err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
-		_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusError)
+		_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusError)
 		return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 	}
 	isAPIEnabled := false
@@ -549,7 +549,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 	if shouldGenerateVAPB {
 		if !isAPIEnabled {
 			log.Error(ErrValidatingAdmissionPolicyAPIDisabled, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName())
-			_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusError)
+			_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusError)
 			status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("cannot generate ValidatingAdmissionPolicyBinding: %s", ErrValidatingAdmissionPolicyAPIDisabled)})
 			shouldGenerateVAPB = false
 		} else {
@@ -561,22 +561,22 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			switch {
 			case errors.Is(err, celSchema.ErrCELEngineMissing):
 				updateEnforcementPointStatus(status, util.VAPEnforcementPoint, ErrGenerateVAPBState, err.Error(), instance.GetGeneration())
-				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusError)
+				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusError)
 				shouldGenerateVAPB = false
 			case err != nil:
 				log.Error(err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy", "constraint", instance.GetName(), "constraint_template", unversionedCT.GetName())
-				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusError)
+				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusError)
 				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy: %s", err)})
 				shouldGenerateVAPB = false
 			case !hasVAP:
 				log.Error(ErrVAPConditionsNotSatisfied, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName(), "constraint_template", unversionedCT.GetName())
-				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusError)
+				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusError)
 				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("cannot generate ValidatingAdmissionPolicyBinding: %s", ErrVAPConditionsNotSatisfied)})
 				shouldGenerateVAPB = false
 			default:
 				// reconcile for vapb generation if annotation is not set
 				if ct.Annotations == nil || (ct.Annotations[BlockVAPBGenerationUntilAnnotation] == "" && ct.Annotations[VAPBGenerationAnnotation] != "unblocked") {
-					_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusError)
+					_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusError)
 					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, errors.New("annotation to wait for ValidatingAdmissionPolicyBinding generation not found"), "could not find annotation to wait for ValidatingAdmissionPolicyBinding generation")
 				}
 
@@ -590,7 +590,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 					if t.After(time.Now()) {
 						wait := time.Until(t)
 						updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, fmt.Sprintf("waiting for %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", wait), instance.GetGeneration())
-						_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusError)
+						_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusError)
 						return wait, r.writer.Update(ctx, status)
 					}
 				}
@@ -630,18 +630,18 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		if currentVapBinding == nil {
 			log.Info("creating vapbinding")
 			if err := r.writer.Create(ctx, newVapBinding); err != nil {
-				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusError)
+				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusError)
 				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not create ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 		} else if !reflect.DeepEqual(currentVapBinding, newVapBinding) {
 			log.Info("updating vapbinding")
 			if err := r.writer.Update(ctx, newVapBinding); err != nil {
-				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusError)
+				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusError)
 				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not update ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 		}
 		updateEnforcementPointStatus(status, util.VAPEnforcementPoint, GeneratedVAPBState, "", instance.GetGeneration())
-		_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusActive)
+		_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusActive)
 	}
 	// do not generate vapbinding resources
 	// remove if exists
@@ -661,7 +661,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		if currentVapBinding != nil {
 			log.Info("deleting vapbinding")
 			if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
-				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, VAPStatusError)
+				_ = r.reporter.ReportVAPBStatus(ctx, vapBindingKey, metrics.VAPStatusError)
 				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 			cleanEnforcementPointStatus(status, util.VAPEnforcementPoint)

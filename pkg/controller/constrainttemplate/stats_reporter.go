@@ -26,19 +26,6 @@ const (
 	celCTDesc = "Number of constraint templates with CEL engine"
 )
 
-// VAPStatus represents the status of a VAP resource.
-type VAPStatus string
-
-const (
-	// VAPStatusActive indicates a VAP is operating normally.
-	VAPStatusActive VAPStatus = "active"
-	// VAPStatusError indicates there is a problem with a VAP.
-	VAPStatusError VAPStatus = "error"
-)
-
-// AllVAPStatuses is the set of all allowed values of VAPStatus.
-var AllVAPStatuses = []VAPStatus{VAPStatusActive, VAPStatusError}
-
 var (
 	ingestCountM    metric.Int64Counter
 	ingestDurationM metric.Float64Histogram
@@ -123,11 +110,11 @@ type reporter struct {
 // vapRegistry tracks individual VAP resources for accurate counting.
 type vapRegistry struct {
 	mu    sync.RWMutex
-	cache map[types.NamespacedName]VAPStatus
+	cache map[types.NamespacedName]metrics.VAPStatus
 }
 
 func newVAPRegistry() *vapRegistry {
-	return &vapRegistry{cache: make(map[types.NamespacedName]VAPStatus)}
+	return &vapRegistry{cache: make(map[types.NamespacedName]metrics.VAPStatus)}
 }
 
 type celRegistry struct {
@@ -172,7 +159,7 @@ func (r *reporter) DeleteCelCT(_ context.Context, templateName types.NamespacedN
 	return nil
 }
 
-func (r *vapRegistry) add(key types.NamespacedName, status VAPStatus) {
+func (r *vapRegistry) add(key types.NamespacedName, status metrics.VAPStatus) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	existing, ok := r.cache[key]
@@ -188,11 +175,11 @@ func (r *vapRegistry) remove(key types.NamespacedName) {
 	delete(r.cache, key)
 }
 
-func (r *vapRegistry) computeTotals() map[VAPStatus]int64 {
+func (r *vapRegistry) computeTotals() map[metrics.VAPStatus]int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	totals := make(map[VAPStatus]int64)
+	totals := make(map[metrics.VAPStatus]int64)
 	for _, status := range r.cache {
 		totals[status]++
 	}
@@ -262,13 +249,13 @@ func (r *reporter) observeCTM(_ context.Context, o metric.Int64Observer) error {
 
 func (r *reporter) observeVAP(_ context.Context, observer metric.Int64Observer) error {
 	totals := r.vapRegistry.computeTotals()
-	for _, status := range AllVAPStatuses {
+	for _, status := range metrics.AllVAPStatuses {
 		observer.Observe(totals[status], metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
 	return nil
 }
 
-func (r *reporter) ReportVAPStatus(_ context.Context, templateName types.NamespacedName, status VAPStatus) error {
+func (r *reporter) ReportVAPStatus(_ context.Context, templateName types.NamespacedName, status metrics.VAPStatus) error {
 	r.vapRegistry.add(templateName, status)
 	return nil
 }
