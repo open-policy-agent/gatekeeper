@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	ctMetricName    = "constraint_templates"
+	ctMetricName = "constraint_templates"
+	// celCTMetricName is a separate metric for backward compatibility with existing metrics. Together with ctMetricName, it allows to derive the number of non-CEL constraint templates.
 	celCTMetricName = "constraint_templates_with_cel"
 	vapMetricName   = "validating_admission_policies"
 	ingestCount     = "constraint_template_ingestion_count"
@@ -52,7 +53,7 @@ func (r *reporter) reportIngestDuration(ctx context.Context, status metrics.Stat
 func newStatsReporter() *reporter {
 	var err error
 	reg := &ctRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
-	r := &reporter{registry: reg, vapRegistry: newVAPRegistry(), celRegistry: newCelRegistry()}
+	r := &reporter{registry: reg, vapRegistry: metrics.NewVAPStatusRegistry(), celRegistry: newCelRegistry()}
 	meter := otel.GetMeterProvider().Meter("gatekeeper")
 	_, err = meter.Int64ObservableGauge(
 		ctMetricName,
@@ -103,18 +104,8 @@ type reporter struct {
 	mu          sync.RWMutex
 	ctReport    map[metrics.Status]int64
 	registry    *ctRegistry
-	vapRegistry *vapRegistry
+	vapRegistry *metrics.VAPStatusRegistry
 	celRegistry *celRegistry
-}
-
-// vapRegistry tracks individual VAP resources for accurate counting.
-type vapRegistry struct {
-	mu    sync.RWMutex
-	cache map[types.NamespacedName]metrics.VAPStatus
-}
-
-func newVAPRegistry() *vapRegistry {
-	return &vapRegistry{cache: make(map[types.NamespacedName]metrics.VAPStatus)}
 }
 
 type celRegistry struct {
@@ -149,41 +140,12 @@ func (r *reporter) observeCelCTM(_ context.Context, o metric.Int64Observer) erro
 	return nil
 }
 
-func (r *reporter) ReportCelCT(_ context.Context, templateName types.NamespacedName) error {
+func (r *reporter) ReportCelCT(templateName types.NamespacedName) {
 	r.celRegistry.add(templateName)
-	return nil
 }
 
-func (r *reporter) DeleteCelCT(_ context.Context, templateName types.NamespacedName) error {
+func (r *reporter) DeleteCelCT(templateName types.NamespacedName) {
 	r.celRegistry.remove(templateName)
-	return nil
-}
-
-func (r *vapRegistry) add(key types.NamespacedName, status metrics.VAPStatus) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	existing, ok := r.cache[key]
-	if ok && existing == status {
-		return
-	}
-	r.cache[key] = status
-}
-
-func (r *vapRegistry) remove(key types.NamespacedName) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.cache, key)
-}
-
-func (r *vapRegistry) computeTotals() map[metrics.VAPStatus]int64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	totals := make(map[metrics.VAPStatus]int64)
-	for _, status := range r.cache {
-		totals[status]++
-	}
-	return totals
 }
 
 type ctRegistry struct {
@@ -248,19 +210,17 @@ func (r *reporter) observeCTM(_ context.Context, o metric.Int64Observer) error {
 }
 
 func (r *reporter) observeVAP(_ context.Context, observer metric.Int64Observer) error {
-	totals := r.vapRegistry.computeTotals()
+	totals := r.vapRegistry.ComputeTotals()
 	for _, status := range metrics.AllVAPStatuses {
 		observer.Observe(totals[status], metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
 	return nil
 }
 
-func (r *reporter) ReportVAPStatus(_ context.Context, templateName types.NamespacedName, status metrics.VAPStatus) error {
-	r.vapRegistry.add(templateName, status)
-	return nil
+func (r *reporter) ReportVAPStatus(templateName types.NamespacedName, status metrics.VAPStatus) {
+	r.vapRegistry.Add(templateName, status)
 }
 
-func (r *reporter) DeleteVAPStatus(_ context.Context, templateName types.NamespacedName) error {
-	r.vapRegistry.remove(templateName)
-	return nil
+func (r *reporter) DeleteVAPStatus(templateName types.NamespacedName) {
+	r.vapRegistry.Remove(templateName)
 }

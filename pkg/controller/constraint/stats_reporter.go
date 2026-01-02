@@ -18,43 +18,6 @@ const (
 	statusKey             = "status"
 )
 
-// vapbRegistry tracks individual VAPB resources for accurate counting.
-type vapbRegistry struct {
-	mu    sync.RWMutex
-	cache map[types.NamespacedName]metrics.VAPStatus
-}
-
-func newVAPBRegistry() *vapbRegistry {
-	return &vapbRegistry{cache: make(map[types.NamespacedName]metrics.VAPStatus)}
-}
-
-func (r *vapbRegistry) add(key types.NamespacedName, status metrics.VAPStatus) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	existing, ok := r.cache[key]
-	if ok && existing == status {
-		return
-	}
-	r.cache[key] = status
-}
-
-func (r *vapbRegistry) remove(key types.NamespacedName) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.cache, key)
-}
-
-func (r *vapbRegistry) computeTotals() map[metrics.VAPStatus]int64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	totals := make(map[metrics.VAPStatus]int64)
-	for _, status := range r.cache {
-		totals[status]++
-	}
-	return totals
-}
-
 func (r *reporter) observeConstraints(_ context.Context, observer metric.Int64Observer) error {
 	r.mux.RLock()
 	defer r.mux.RUnlock()
@@ -65,7 +28,7 @@ func (r *reporter) observeConstraints(_ context.Context, observer metric.Int64Ob
 }
 
 func (r *reporter) observeVAPB(_ context.Context, observer metric.Int64Observer) error {
-	totals := r.vapbRegistry.computeTotals()
+	totals := r.vapbRegistry.ComputeTotals()
 	for _, status := range metrics.AllVAPStatuses {
 		observer.Observe(totals[status], metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
@@ -85,13 +48,13 @@ func (r *reporter) reportConstraints(_ context.Context, t tags, v int64) error {
 // StatsReporter reports audit metrics.
 type StatsReporter interface {
 	reportConstraints(ctx context.Context, t tags, v int64) error
-	ReportVAPBStatus(ctx context.Context, name types.NamespacedName, status metrics.VAPStatus) error
-	DeleteVAPBStatus(ctx context.Context, name types.NamespacedName) error
+	ReportVAPBStatus(name types.NamespacedName, status metrics.VAPStatus)
+	DeleteVAPBStatus(name types.NamespacedName)
 }
 
 // newStatsReporter creates a reporter for audit metrics.
 func newStatsReporter() (*reporter, error) {
-	r := &reporter{vapbRegistry: newVAPBRegistry()}
+	r := &reporter{vapbRegistry: metrics.NewVAPStatusRegistry()}
 	var err error
 	meter := otel.GetMeterProvider().Meter("gatekeeper")
 	_, err = meter.Int64ObservableGauge(
@@ -114,15 +77,13 @@ func newStatsReporter() (*reporter, error) {
 type reporter struct {
 	mux               sync.RWMutex
 	constraintsReport map[tags]int64
-	vapbRegistry      *vapbRegistry
+	vapbRegistry      *metrics.VAPStatusRegistry
 }
 
-func (r *reporter) ReportVAPBStatus(_ context.Context, name types.NamespacedName, status metrics.VAPStatus) error {
-	r.vapbRegistry.add(name, status)
-	return nil
+func (r *reporter) ReportVAPBStatus(name types.NamespacedName, status metrics.VAPStatus) {
+	r.vapbRegistry.Add(name, status)
 }
 
-func (r *reporter) DeleteVAPBStatus(_ context.Context, name types.NamespacedName) error {
-	r.vapbRegistry.remove(name)
-	return nil
+func (r *reporter) DeleteVAPBStatus(name types.NamespacedName) {
+	r.vapbRegistry.Remove(name)
 }

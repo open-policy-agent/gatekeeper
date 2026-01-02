@@ -97,10 +97,10 @@ func TestVAPBMetrics(t *testing.T) {
 	rdr, r := initializeVAPTestInstruments(t)
 	ctx := context.Background()
 
-	assert.NoError(t, r.ReportVAPBStatus(ctx, types.NamespacedName{Name: "vapb-1"}, metrics.VAPStatusActive))
-	assert.NoError(t, r.ReportVAPBStatus(ctx, types.NamespacedName{Name: "vapb-2"}, metrics.VAPStatusActive))
-	assert.NoError(t, r.ReportVAPBStatus(ctx, types.NamespacedName{Name: "vapb-3"}, metrics.VAPStatusActive))
-	assert.NoError(t, r.ReportVAPBStatus(ctx, types.NamespacedName{Name: "vapb-4"}, metrics.VAPStatusError))
+	r.ReportVAPBStatus(types.NamespacedName{Name: "vapb-1"}, metrics.VAPStatusActive)
+	r.ReportVAPBStatus(types.NamespacedName{Name: "vapb-2"}, metrics.VAPStatusActive)
+	r.ReportVAPBStatus(types.NamespacedName{Name: "vapb-3"}, metrics.VAPStatusActive)
+	r.ReportVAPBStatus(types.NamespacedName{Name: "vapb-4"}, metrics.VAPStatusError)
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
@@ -134,7 +134,7 @@ func TestReportDeleteVAPBStatus(t *testing.T) {
 	ctx := context.Background()
 
 	vapbName := types.NamespacedName{Name: "vapb-to-delete"}
-	assert.NoError(t, r.ReportVAPBStatus(ctx, vapbName, metrics.VAPStatusActive))
+	r.ReportVAPBStatus(vapbName, metrics.VAPStatusActive)
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
@@ -163,28 +163,27 @@ func TestReportDeleteVAPBStatus(t *testing.T) {
 	assert.Equal(t, int64(1), statusCountsBefore[string(metrics.VAPStatusActive)])
 	assert.Equal(t, int64(0), statusCountsBefore[string(metrics.VAPStatusError)])
 
-	assert.NoError(t, r.DeleteVAPBStatus(ctx, vapbName))
+	r.DeleteVAPBStatus(vapbName)
 
-	totals := r.vapbRegistry.computeTotals()
+	totals := r.vapbRegistry.ComputeTotals()
 	assert.Equal(t, int64(0), totals[metrics.VAPStatusActive])
 	assert.Equal(t, int64(0), totals[metrics.VAPStatusError])
 }
 
 func TestVAPBStatusUpdate(t *testing.T) {
 	_, r := initializeVAPTestInstruments(t)
-	ctx := context.Background()
 
 	vapbName := types.NamespacedName{Name: "vapb-update-test"}
 
-	assert.NoError(t, r.ReportVAPBStatus(ctx, vapbName, metrics.VAPStatusError))
+	r.ReportVAPBStatus(vapbName, metrics.VAPStatusError)
 
-	totals := r.vapbRegistry.computeTotals()
+	totals := r.vapbRegistry.ComputeTotals()
 	assert.Equal(t, int64(1), totals[metrics.VAPStatusError])
 	assert.Equal(t, int64(0), totals[metrics.VAPStatusActive])
 
-	assert.NoError(t, r.ReportVAPBStatus(ctx, vapbName, metrics.VAPStatusActive))
+	r.ReportVAPBStatus(vapbName, metrics.VAPStatusActive)
 
-	totals = r.vapbRegistry.computeTotals()
+	totals = r.vapbRegistry.ComputeTotals()
 	assert.Equal(t, int64(0), totals[metrics.VAPStatusError])
 	assert.Equal(t, int64(1), totals[metrics.VAPStatusActive])
 }

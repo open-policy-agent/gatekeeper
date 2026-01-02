@@ -143,9 +143,9 @@ func TestVAPMetrics(t *testing.T) {
 	rdr, r := initializeVAPTestInstruments(t)
 	ctx := context.Background()
 
-	assert.NoError(t, r.ReportVAPStatus(ctx, types.NamespacedName{Name: "template-1"}, metrics.VAPStatusActive))
-	assert.NoError(t, r.ReportVAPStatus(ctx, types.NamespacedName{Name: "template-2"}, metrics.VAPStatusActive))
-	assert.NoError(t, r.ReportVAPStatus(ctx, types.NamespacedName{Name: "template-3"}, metrics.VAPStatusError))
+	r.ReportVAPStatus(types.NamespacedName{Name: "template-1"}, metrics.VAPStatusActive)
+	r.ReportVAPStatus(types.NamespacedName{Name: "template-2"}, metrics.VAPStatusActive)
+	r.ReportVAPStatus(types.NamespacedName{Name: "template-3"}, metrics.VAPStatusError)
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
@@ -181,7 +181,7 @@ func TestReportDeleteVAPStatus(t *testing.T) {
 	ctx := context.Background()
 
 	templateName := types.NamespacedName{Name: "template-to-delete"}
-	assert.NoError(t, r.ReportVAPStatus(ctx, templateName, metrics.VAPStatusActive))
+	r.ReportVAPStatus(templateName, metrics.VAPStatusActive)
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
@@ -207,7 +207,7 @@ func TestReportDeleteVAPStatus(t *testing.T) {
 	}
 	assert.Equal(t, int64(1), statusCountsBefore[string(metrics.VAPStatusActive)])
 
-	assert.NoError(t, r.DeleteVAPStatus(ctx, templateName))
+	r.DeleteVAPStatus(templateName)
 
 	rm = &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
@@ -233,19 +233,18 @@ func TestReportDeleteVAPStatus(t *testing.T) {
 
 func TestVAPStatusUpdate(t *testing.T) {
 	_, r := initializeVAPTestInstruments(t)
-	ctx := context.Background()
 
 	templateName := types.NamespacedName{Name: "template-update-test"}
 
-	assert.NoError(t, r.ReportVAPStatus(ctx, templateName, metrics.VAPStatusError))
+	r.ReportVAPStatus(templateName, metrics.VAPStatusError)
 
-	totals := r.vapRegistry.computeTotals()
+	totals := r.vapRegistry.ComputeTotals()
 	assert.Equal(t, int64(1), totals[metrics.VAPStatusError])
 	assert.Equal(t, int64(0), totals[metrics.VAPStatusActive])
 
-	assert.NoError(t, r.ReportVAPStatus(ctx, templateName, metrics.VAPStatusActive))
+	r.ReportVAPStatus(templateName, metrics.VAPStatusActive)
 
-	totals = r.vapRegistry.computeTotals()
+	totals = r.vapRegistry.ComputeTotals()
 	assert.Equal(t, int64(0), totals[metrics.VAPStatusError])
 	assert.Equal(t, int64(1), totals[metrics.VAPStatusActive])
 }
@@ -266,9 +265,9 @@ func TestCelCTMetrics(t *testing.T) {
 	rdr, r := initializeCelTestInstruments(t)
 	ctx := context.Background()
 
-	assert.NoError(t, r.ReportCelCT(ctx, types.NamespacedName{Name: "template-1"}))
-	assert.NoError(t, r.ReportCelCT(ctx, types.NamespacedName{Name: "template-2"}))
-	assert.NoError(t, r.ReportCelCT(ctx, types.NamespacedName{Name: "template-3"}))
+	r.ReportCelCT(types.NamespacedName{Name: "template-1"})
+	r.ReportCelCT(types.NamespacedName{Name: "template-2"})
+	r.ReportCelCT(types.NamespacedName{Name: "template-3"})
 
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
@@ -292,18 +291,17 @@ func TestCelCTMetrics(t *testing.T) {
 
 func TestDeleteCelCT(t *testing.T) {
 	_, r := initializeCelTestInstruments(t)
-	ctx := context.Background()
 
-	assert.NoError(t, r.ReportCelCT(ctx, types.NamespacedName{Name: "template-1"}))
-	assert.NoError(t, r.ReportCelCT(ctx, types.NamespacedName{Name: "template-2"}))
+	r.ReportCelCT(types.NamespacedName{Name: "template-1"})
+	r.ReportCelCT(types.NamespacedName{Name: "template-2"})
 
 	assert.Equal(t, int64(2), r.celRegistry.count())
 
-	assert.NoError(t, r.DeleteCelCT(ctx, types.NamespacedName{Name: "template-1"}))
+	r.DeleteCelCT(types.NamespacedName{Name: "template-1"})
 
 	assert.Equal(t, int64(1), r.celRegistry.count())
 
-	assert.NoError(t, r.DeleteCelCT(ctx, types.NamespacedName{Name: "template-2"}))
+	r.DeleteCelCT(types.NamespacedName{Name: "template-2"})
 
 	assert.Equal(t, int64(0), r.celRegistry.count())
 }

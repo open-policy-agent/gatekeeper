@@ -326,8 +326,8 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	deleted = deleted || !ct.GetDeletionTimestamp().IsZero()
 
 	if deleted {
-		_ = r.metrics.DeleteVAPStatus(ctx, request.NamespacedName)
-		_ = r.metrics.DeleteCelCT(ctx, request.NamespacedName)
+		r.metrics.DeleteVAPStatus(request.NamespacedName)
+		r.metrics.DeleteCelCT(request.NamespacedName)
 		ctRef := &templates.ConstraintTemplate{}
 		ctRef.SetNamespace(request.Namespace)
 		ctRef.SetName(request.Name)
@@ -497,7 +497,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	templateName := types.NamespacedName{Name: ct.GetName()}
 	switch {
 	case errors.Is(err, celSchema.ErrCELEngineMissing):
-		_ = r.metrics.DeleteCelCT(ctx, templateName)
+		r.metrics.DeleteCelCT(templateName)
 	case err != nil:
 		logger.Error(err, "generateVap error")
 		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{
@@ -506,7 +506,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			Warning:            fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error()),
 		}
 	default:
-		_ = r.metrics.ReportCelCT(ctx, templateName)
+		r.metrics.ReportCelCT(templateName)
 	}
 
 	var requeueAfter time.Duration
@@ -890,7 +890,7 @@ func (r *ReconcileConstraintTemplate) generateCRD(ctx context.Context, ct *v1bet
 func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1.ConstraintTemplate, unversionedCT *templates.ConstraintTemplate, status *statusv1beta1.ConstraintTemplatePodStatus, logger logr.Logger, generateVap bool) error {
 	if !operations.IsAssigned(operations.Generate) {
 		logger.Info("generate operation is not assigned, ValidatingAdmissionPolicy resource will not be generated")
-		_ = r.metrics.DeleteVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()})
+		r.metrics.DeleteVAPStatus(types.NamespacedName{Name: ct.GetName()})
 		return nil
 	}
 	isVapAPIEnabled := false
@@ -902,7 +902,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 	logger.Info("groupVersion", "groupVersion", groupVersion)
 
 	if generateVap && (!isVapAPIEnabled || groupVersion == nil) {
-		_ = r.metrics.ReportVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
+		r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 		logger.Error(constraint.ErrValidatingAdmissionPolicyAPIDisabled, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
 		err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, constraint.ErrValidatingAdmissionPolicyAPIDisabled)
 		return err
@@ -911,7 +911,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 	if generateVap && isVapAPIEnabled && groupVersion != nil {
 		currentVap, err := vapForVersion(groupVersion)
 		if err != nil {
-			_ = r.metrics.ReportVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
+			r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 			logger.Error(err, "error getting VAP object with respective groupVersion")
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP with runtime group version", status, err)
 			return err
@@ -920,7 +920,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		logger.Info("check if VAP exists", "vapName", vapName)
 		if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
 			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
-				_ = r.metrics.ReportVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
+				r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get VAP object", status, err)
 				return err
 			}
@@ -934,7 +934,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 			if transformedVap != nil && errors.Is(transformErr, transform.ErrOperationMismatch) {
 				logger.Info("operation mismatch detected, continuing with VAP generation", "vapName", vapName)
 			} else {
-				_ = r.metrics.ReportVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
+				r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not transform to VAP object", status, transformErr)
 				return err
 			}
@@ -942,7 +942,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 
 		newVap, err := getRunTimeVAP(groupVersion, transformedVap, currentVap)
 		if err != nil {
-			_ = r.metrics.ReportVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
+			r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 			logger.Error(err, "getRunTimeVAP error", "vapName", vapName)
 			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not get runtime VAP object", status, err)
 			return err
@@ -955,7 +955,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		if currentVap == nil {
 			logger.Info("creating VAP", "vapName", vapName)
 			if err := r.Create(ctx, newVap); err != nil {
-				_ = r.metrics.ReportVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
+				r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 				logger.Info("creating VAP error", "vapName", vapName, "error", err)
 				err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create VAP object", status, err)
 				return err
@@ -967,7 +967,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		} else if !reflect.DeepEqual(currentVap, newVap) {
 			logger.Info("updating VAP")
 			if err := r.Update(ctx, newVap); err != nil {
-				_ = r.metrics.ReportVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
+				r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update VAP object", status, err)
 				return err
 			}
@@ -977,7 +977,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 			warningMsg = transformErr.Error()
 		}
 		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: GeneratedVAPState, ObservedGeneration: ct.GetGeneration(), Warning: warningMsg}
-		_ = r.metrics.ReportVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusActive)
+		r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusActive)
 	}
 	// do not generate VAP resources
 	// remove if exists
@@ -999,7 +999,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		if currentVap != nil {
 			logger.Info("deleting VAP")
 			if err := r.Delete(ctx, currentVap); err != nil {
-				_ = r.metrics.ReportVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
+				r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete VAP object", status, err)
 				return err
 			}
@@ -1009,10 +1009,10 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 				return err
 			}
 		}
-		_ = r.metrics.DeleteVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()})
-	}
-	if !generateVap {
-		_ = r.metrics.DeleteVAPStatus(ctx, types.NamespacedName{Name: ct.GetName()})
+		r.metrics.DeleteVAPStatus(types.NamespacedName{Name: ct.GetName()})
+	} else if !generateVap {
+		// VAP API is not enabled or groupVersion is nil, but we still need to clean up metrics
+		r.metrics.DeleteVAPStatus(types.NamespacedName{Name: ct.GetName()})
 	}
 	return nil
 }
