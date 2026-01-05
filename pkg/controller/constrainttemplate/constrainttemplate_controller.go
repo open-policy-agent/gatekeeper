@@ -493,20 +493,17 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	t := r.tracker.For(gvkConstraintTemplate)
 	t.Observe(unversionedCT)
 
-	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
 	templateName := types.NamespacedName{Name: ct.GetName()}
-	switch {
-	case errors.Is(err, celSchema.ErrCELEngineMissing):
-		r.metrics.DeleteCelCT(templateName)
-	case err != nil:
-		logger.Error(err, "generateVap error")
-		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{
-			State:              ErrGenerateVAPState,
-			ObservedGeneration: ct.GetGeneration(),
-			Warning:            fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error()),
-		}
-	default:
+	if celSchema.HasCELEngine(unversionedCT) {
 		r.metrics.ReportCelCT(templateName)
+	} else {
+		r.metrics.DeleteCelCT(templateName)
+	}
+
+	generateVap, err := constraint.ShouldGenerateVAP(unversionedCT)
+	if err != nil && !errors.Is(err, celSchema.ErrCELEngineMissing) {
+		logger.Error(err, "generateVap error")
+		status.Status.VAPGenerationStatus = &statusv1beta1.VAPGenerationStatus{State: ErrGenerateVAPState, ObservedGeneration: ct.GetGeneration(), Warning: fmt.Sprintf("ValidatingAdmissionPolicy is not generated: %s", err.Error())}
 	}
 
 	var requeueAfter time.Duration
