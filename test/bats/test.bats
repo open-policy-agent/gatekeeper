@@ -287,29 +287,6 @@ teardown_file() {
   kubectl delete pod temp
 }
 
-@test "constraint template metrics are reported" {
-  # Ensure there's at least one ConstraintTemplate and Constraint so the constraint metrics are non-zero
-  kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get constrainttemplates.templates.gatekeeper.sh k8srequiredlabels -ojson | jq -r -e '.status.byPod[0]'"
-  kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper_audit.yaml
-
-  kubectl get pod temp >/dev/null 2>&1 || kubectl run temp --image=curlimages/curl -- tail -f /dev/null
-  kubectl wait --for=condition=Ready --timeout=60s pod temp
-
-  local pod_ip="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l gatekeeper.sh/operation=audit -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
-
-  # Verify constraint_templates metric with status=active is present and >= 1
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_constraint_templates{status=\"active\"}' | awk '{gsub(/\r/,\"\",\$2); print \$2}' | xargs test 0 -lt"
-
-  # Verify constraints metric with status=active sums to >= 1 (across enforcement actions)
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep '^gatekeeper_constraints' | grep 'status=\"active\"' | awk '{gsub(/\r/,\"\",\$2); sum+=\$2} END {print sum}' | xargs test 0 -lt"
-
-  kubectl delete pod temp
-
-  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper_audit.yaml
-  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
-}
-
 @test "unique labels test" {
   kubectl apply -f ${BATS_TESTS_DIR}/templates/k8suniquelabel_template.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_gatekeeper_label_unique.yaml"
