@@ -17,9 +17,27 @@ validatingWebhookObjectSelector: {}
 validatingWebhookMatchConditions: []
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
-validatingWebhookSubResources: ['pods/ephemeralcontainers', 'pods/exec', 'pods/log', 'pods/eviction', 'pods/portforward', 'pods/proxy', 'pods/attach', 'pods/binding', 'pods/resize', 'deployments/scale', 'replicasets/scale', 'statefulsets/scale', 'replicationcontrollers/scale', 'services/proxy', 'nodes/proxy', 'services/status']
+validatingWebhookSubResources:
+  [
+    "pods/ephemeralcontainers",
+    "pods/exec",
+    "pods/log",
+    "pods/eviction",
+    "pods/portforward",
+    "pods/proxy",
+    "pods/attach",
+    "pods/binding",
+    "pods/resize",
+    "deployments/scale",
+    "replicasets/scale",
+    "statefulsets/scale",
+    "replicationcontrollers/scale",
+    "services/proxy",
+    "nodes/proxy",
+    "services/status",
+  ]
 validatingWebhookURL: null
-validatingWebhookScope: '*'
+validatingWebhookScope: "*"
 enableDeleteOperations: false
 enableConnectOperations: false
 enableExternalData: true
@@ -35,9 +53,26 @@ mutatingWebhookObjectSelector: {}
 mutatingWebhookMatchConditions: []
 mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
-mutatingWebhookSubResources: ['pods/ephemeralcontainers', 'pods/exec', 'pods/log', 'pods/eviction', 'pods/portforward', 'pods/proxy', 'pods/attach', 'pods/binding', 'deployments/scale', 'replicasets/scale', 'statefulsets/scale', 'replicationcontrollers/scale', 'services/proxy', 'nodes/proxy', 'services/status']
+mutatingWebhookSubResources:
+  [
+    "pods/ephemeralcontainers",
+    "pods/exec",
+    "pods/log",
+    "pods/eviction",
+    "pods/portforward",
+    "pods/proxy",
+    "pods/attach",
+    "pods/binding",
+    "deployments/scale",
+    "replicasets/scale",
+    "statefulsets/scale",
+    "replicationcontrollers/scale",
+    "services/proxy",
+    "nodes/proxy",
+    "services/status",
+  ]
 mutatingWebhookURL: null
-mutatingWebhookScope: '*'
+mutatingWebhookScope: "*"
 mutationAnnotations: false
 auditChunkSize: 500
 logLevel: INFO
@@ -74,23 +109,26 @@ postUpgrade:
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
-    podSecurity: ["pod-security.kubernetes.io/audit=restricted",
-      "pod-security.kubernetes.io/audit-version=latest",
-      "pod-security.kubernetes.io/warn=restricted",
-      "pod-security.kubernetes.io/warn-version=latest",
-      "pod-security.kubernetes.io/enforce=restricted",
-      "pod-security.kubernetes.io/enforce-version=v1.24"]
+    podSecurity:
+      [
+        "pod-security.kubernetes.io/audit=restricted",
+        "pod-security.kubernetes.io/audit-version=latest",
+        "pod-security.kubernetes.io/warn=restricted",
+        "pod-security.kubernetes.io/warn-version=latest",
+        "pod-security.kubernetes.io/enforce=restricted",
+        "pod-security.kubernetes.io/enforce-version=v1.24",
+      ]
     extraAnnotations: {}
     priorityClassName: ""
   affinity: {}
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -108,12 +146,15 @@ postInstall:
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
-    podSecurity: ["pod-security.kubernetes.io/audit=restricted",
-      "pod-security.kubernetes.io/audit-version=latest",
-      "pod-security.kubernetes.io/warn=restricted",
-      "pod-security.kubernetes.io/warn-version=latest",
-      "pod-security.kubernetes.io/enforce=restricted",
-      "pod-security.kubernetes.io/enforce-version=v1.24"]
+    podSecurity:
+      [
+        "pod-security.kubernetes.io/audit=restricted",
+        "pod-security.kubernetes.io/audit-version=latest",
+        "pod-security.kubernetes.io/warn=restricted",
+        "pod-security.kubernetes.io/warn-version=latest",
+        "pod-security.kubernetes.io/enforce=restricted",
+        "pod-security.kubernetes.io/enforce-version=v1.24",
+      ]
     extraAnnotations: {}
     priorityClassName: ""
   probeWebhook:
@@ -129,12 +170,12 @@ postInstall:
     priorityClassName: ""
   affinity: {}
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -154,13 +195,13 @@ preUninstall:
     priorityClassName: ""
   affinity: {}
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -206,7 +247,7 @@ controllerManager:
           weight: 100
   topologySpreadConstraints: []
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   resources:
     limits:
       memory: 512Mi
@@ -217,7 +258,7 @@ controllerManager:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -253,7 +294,7 @@ audit:
       allowPrivilegeEscalation: false
       capabilities:
         drop:
-        - ALL
+          - ALL
       readOnlyRootFilesystem: true
       runAsGroup: 999
       runAsNonRoot: true
@@ -261,8 +302,8 @@ audit:
       seccompProfile:
         type: RuntimeDefault
     volumeMounts:
-    - mountPath: /tmp/violations
-      name: tmp-violations
+      - mountPath: /tmp/violations
+        name: tmp-violations
   serviceAccount:
     name: gatekeeper-admin
     automountServiceAccountToken: true
@@ -278,7 +319,7 @@ audit:
   podLabels: {}
   affinity: {}
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   resources:
     limits:
       memory: 512Mi
@@ -289,7 +330,7 @@ audit:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -307,13 +348,13 @@ audit:
 crds:
   affinity: {}
   tolerations: []
-  nodeSelector: {kubernetes.io/os: linux}
+  nodeSelector: { kubernetes.io/os: linux }
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - ALL
+        - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 65532
     runAsNonRoot: true
