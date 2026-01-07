@@ -107,6 +107,8 @@ spec:
         - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+
+        - --enable-constraint-label-metrics={{ .Values.enableConstraintLabelMetrics }}
         
         {{- if hasKey .Values "defaultCreateVAPForTemplates"}}
         - --default-create-vap-for-templates={{ .Values.defaultCreateVAPForTemplates }}
