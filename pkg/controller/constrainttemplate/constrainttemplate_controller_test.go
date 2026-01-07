@@ -16,6 +16,7 @@ limitations under the License.
 package constrainttemplate
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -49,7 +50,6 @@ import (
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
