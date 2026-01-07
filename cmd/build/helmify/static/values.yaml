@@ -87,7 +87,9 @@ commonAnnotations: {}
 extraVolumeMounts: []
 extraVolumes: []
 image:
+  registry: docker.io
   repository: openpolicyagent/gatekeeper
+  crdRegistry: docker.io
   crdRepository: openpolicyagent/gatekeeper-crds
   release: v3.22.0-beta.0
   pullPolicy: IfNotPresent
@@ -95,6 +97,7 @@ image:
 preInstall:
   crdRepository:
     image:
+      registry: null
       repository: null
       tag: v3.22.0-beta.0
 postUpgrade:
@@ -104,6 +107,7 @@ postUpgrade:
       create: true
     enabled: false
     image:
+      registry: docker.io
       repository: openpolicyagent/gatekeeper-crds
       tag: v3.22.0-beta.0
       pullPolicy: IfNotPresent
@@ -141,6 +145,7 @@ postInstall:
     enabled: true
     extraRules: []
     image:
+      registry: docker.io
       repository: openpolicyagent/gatekeeper-crds
       tag: v3.22.0-beta.0
       pullPolicy: IfNotPresent
@@ -160,6 +165,7 @@ postInstall:
   probeWebhook:
     enabled: true
     image:
+      registry: docker.io
       repository: curlimages/curl
       tag: 8.12.0
       pullPolicy: IfNotPresent
@@ -188,6 +194,7 @@ preUninstall:
     extraRules: []
     enabled: false
     image:
+      registry: docker.io
       repository: openpolicyagent/gatekeeper-crds
       tag: v3.22.0-beta.0
       pullPolicy: IfNotPresent
