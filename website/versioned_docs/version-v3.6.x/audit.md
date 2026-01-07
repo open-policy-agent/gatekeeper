@@ -108,7 +108,12 @@ In addition to violations, these other audit events may be useful (all uniquely 
 All of these events (including `violation_audited`) are marked with the same `audit_id` for a given audit run.
 
 ## Running Audit
-By default, audit runs as its own deployment. To limit traffic to the API server and to avoid contention writing audit results to constraints, audit should run as a singleton pod.
+
+### Why Audit Runs as a Singleton
+
+By default, audit runs as its own deployment. Gatekeeper audit component is designed to run as a singleton because it writes to Constraint CRs, and having multiple instances could lead to conflicting writes. To limit traffic to the API server and to avoid contention writing audit results to constraints, audit should run as a singleton pod.
+
+If your setup only consumes audit results from logs (and does not rely on Constraint status updates), you can safely run multiple replicas. However, we generally don't recommend this unless you set `--constraint-violations-limit=0`.
 
 ## Configuring Audit
 
