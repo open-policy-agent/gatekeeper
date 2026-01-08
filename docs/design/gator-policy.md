@@ -1,7 +1,7 @@
 # Gator Policy Design and Implementation
 
 **Status**: MVP Complete, Post-MVP Proposed
-**Author**: Gatekeeper Team
+**Author**: Sertac Ozercan
 **Created**: 2026-01-08
 **Last Updated**: 2026-01-08
 
