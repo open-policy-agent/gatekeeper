@@ -22,8 +22,8 @@ func TestNewVAPStatusRegistry(t *testing.T) {
 
 func TestVAPStatusRegistry_Add(t *testing.T) {
 	tests := []struct {
-		name           string
-		operations     []struct {
+		name       string
+		operations []struct {
 			key    types.NamespacedName
 			status VAPStatus
 		}
@@ -52,8 +52,8 @@ func TestVAPStatusRegistry_Add(t *testing.T) {
 				{key: types.NamespacedName{Name: "test3", Namespace: "ns1"}, status: VAPStatusActive},
 			},
 			expectedCache: map[types.NamespacedName]VAPStatus{
-				{Name: "test1"}:                 VAPStatusActive,
-				{Name: "test2"}:                 VAPStatusError,
+				{Name: "test1"}:                   VAPStatusActive,
+				{Name: "test2"}:                   VAPStatusError,
 				{Name: "test3", Namespace: "ns1"}: VAPStatusActive,
 			},
 		},
