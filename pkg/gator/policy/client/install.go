@@ -283,7 +283,7 @@ func (e *GatekeeperNotInstalledError) Error() string {
 
 Install Gatekeeper first:
   kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
-  
+
 Or with Helm:
   helm install gatekeeper/gatekeeper --name-template=gatekeeper`
 }

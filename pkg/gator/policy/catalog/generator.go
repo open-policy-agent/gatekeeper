@@ -141,8 +141,13 @@ func parsePolicyFromTemplate(templatePath, libraryRoot string) (*Policy, error) 
 	category := extractCategory(relPath)
 
 	// Extract version from annotations or use default
+	// The gatekeeper-library uses metadata.gatekeeper.sh/version annotation
 	version := "v1.0.0"
-	if v, ok := template.Metadata.Annotations["policy.gatekeeper.sh/version"]; ok {
+	if v, ok := template.Metadata.Annotations["metadata.gatekeeper.sh/version"]; ok {
+		// Normalize version to have v prefix
+		if !strings.HasPrefix(v, "v") {
+			v = "v" + v
+		}
 		version = v
 	}
 
