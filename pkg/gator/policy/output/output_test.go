@@ -130,13 +130,21 @@ func TestJSONPrinter_PrintSearchResults(t *testing.T) {
 }
 
 func TestNewPrinter(t *testing.T) {
-	tablePrinter := NewPrinter(FormatTable)
+	tablePrinter, err := NewPrinter(FormatTable)
+	require.NoError(t, err)
 	assert.IsType(t, &TablePrinter{}, tablePrinter)
 
-	jsonPrinter := NewPrinter(FormatJSON)
+	jsonPrinter, err := NewPrinter(FormatJSON)
+	require.NoError(t, err)
 	assert.IsType(t, &JSONPrinter{}, jsonPrinter)
 
-	// Default should be table
-	defaultPrinter := NewPrinter("")
+	// Default (empty string) should be table
+	defaultPrinter, err := NewPrinter("")
+	require.NoError(t, err)
 	assert.IsType(t, &TablePrinter{}, defaultPrinter)
+
+	// Invalid format should return error
+	_, err = NewPrinter("invalid")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid output format")
 }

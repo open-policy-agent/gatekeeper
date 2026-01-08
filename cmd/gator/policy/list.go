@@ -80,6 +80,9 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Output results
-	printer := output.NewPrinter(output.Format(listOutput))
+	printer, err := output.NewPrinter(output.Format(listOutput))
+	if err != nil {
+		return err
+	}
 	return printer.PrintPolicies(os.Stdout, policyInfos)
 }

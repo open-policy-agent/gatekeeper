@@ -86,6 +86,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output results
-	printer := output.NewPrinter(output.Format(searchOutput))
+	printer, err := output.NewPrinter(output.Format(searchOutput))
+	if err != nil {
+		return err
+	}
 	return printer.PrintSearchResults(os.Stdout, results)
 }

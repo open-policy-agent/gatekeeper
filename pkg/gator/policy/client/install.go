@@ -21,15 +21,10 @@ const (
 type InstallOptions struct {
 	// Policies is the list of policy names to install.
 	Policies []string
-	// PolicyVersions maps policy names to specific versions (from policy@vX syntax).
-	// If a policy is not in this map, the catalog version is used.
-	PolicyVersions map[string]string
 	// Bundle is the bundle name to install.
 	Bundle string
 	// EnforcementAction overrides the enforcement action for constraints.
 	EnforcementAction string
-	// Version is the specific version to install (applies to all policies).
-	Version string
 	// DryRun if true, only prints what would be done.
 	DryRun bool
 }
@@ -50,6 +45,8 @@ type InstallResult struct {
 	ConstraintsInstalled int
 	// TemplatesInstalled is the number of templates installed.
 	TemplatesInstalled int
+	// TotalRequested is the total number of policies requested for installation.
+	TotalRequested int
 }
 
 // Install installs policies from the catalog.
@@ -91,6 +88,9 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		return nil, fmt.Errorf("no policies specified")
 	}
 
+	// Track total policies requested
+	result.TotalRequested = len(policyNames)
+
 	// Validate Gatekeeper is installed (skip if dry-run)
 	if !opts.DryRun {
 		installed, err := k8sClient.GatekeeperInstalled(ctx)
@@ -118,17 +118,6 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 			result.Failed = append(result.Failed, policyName)
 			result.Errors[policyName] = fmt.Sprintf("policy not found: %s", policyName)
 			// Fail fast per MVP design
-			return result, nil
-		}
-
-		// Check version constraints
-		requestedVersion := opts.Version
-		if v, ok := opts.PolicyVersions[policyName]; ok {
-			requestedVersion = v
-		}
-		if requestedVersion != "" && requestedVersion != policy.Version {
-			result.Failed = append(result.Failed, policyName)
-			result.Errors[policyName] = fmt.Sprintf("requested version %s not available; catalog has %s", requestedVersion, policy.Version)
 			return result, nil
 		}
 

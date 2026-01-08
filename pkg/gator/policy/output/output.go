@@ -1,6 +1,7 @@
 package output
 
 import (
+	"fmt"
 	"io"
 )
 
@@ -41,11 +42,14 @@ type Printer interface {
 }
 
 // NewPrinter creates a new Printer for the given format.
-func NewPrinter(format Format) Printer {
+// Returns an error if the format is not recognized.
+func NewPrinter(format Format) (Printer, error) {
 	switch format {
 	case FormatJSON:
-		return &JSONPrinter{}
+		return &JSONPrinter{}, nil
+	case FormatTable, "":
+		return &TablePrinter{}, nil
 	default:
-		return &TablePrinter{}
+		return nil, fmt.Errorf("invalid output format: %s (must be table or json)", format)
 	}
 }

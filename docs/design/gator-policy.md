@@ -49,7 +49,6 @@ gator policy
 ├── install <policy...>         # Install one or more policies
 │   --bundle <name>             # Install a policy bundle
 │   --enforcement-action <act>  # Override enforcement action
-│   --version <ver>             # Specific version
 │   --dry-run                   # Preview only
 ├── uninstall <policy...>       # Remove policies
 │   --dry-run                   # Preview only
@@ -213,15 +212,16 @@ The `templatePath`, `constraintPath`, and `sampleConstraintPath` fields are **al
 | **Catalog Content Version** | `metadata.updatedAt` | Timestamp indicating when this catalog snapshot was generated from the library. | ISO 8601 timestamp |
 | **Policy Version** | `policies[].version` | Version of the individual ConstraintTemplate/Constraint. Tracks policy logic changes. | semver (e.g., `v1.2.0`) |
 
-#### Version Syntax in Commands
+#### Version Behavior
 
-```bash
-gator policy install k8srequiredlabels              # Latest version
-gator policy install k8srequiredlabels@v1.2.0       # Specific version
-gator policy install --bundle pod-security-baseline@v1.0.0   # Bundle at version
-```
+Policies are always installed at the version currently available in the catalog. There is no support for installing older versions of policies.
 
-> **MVP Limitation**: The catalog currently contains only one version per policy. If you specify a version (via `policy@vX` or `--version`) that doesn't match the catalog version, the installation will fail with an error indicating the version is not available. Multi-version catalog support is planned for post-MVP.
+> **Limitation**: The gatekeeper-library does not maintain historical versions of policy templates. Each policy has exactly one version at any given time. When the library updates a policy, the previous version is replaced. As a result, `gator policy install` always installs the current version from the catalog.
+
+If you need a specific older version of a policy, you must:
+1. Check out the gatekeeper-library at the desired git tag/commit
+2. Use `gator policy generate-catalog` to create a catalog from that version
+3. Configure `GATOR_CATALOG_URL` to point to your custom catalog
 
 ### Configuration
 
@@ -365,7 +365,6 @@ All commands support `--output` / `-o` flag:
 
 | Scenario | Behavior |
 |----------|----------|
-| `policy@vX` vs `--version vY` | **Error**: mutually exclusive. Use one or the other. |
 | `upgrade --all` vs explicit policies | **Error**: mutually exclusive. Either upgrade all or specify names. |
 | `install --bundle X` with positional policies | **Allowed**: installs the bundle AND the additional policies. Bundle policies get both templates and constraints; additional positional policies get **template-only** (no constraints). Duplicates are deduplicated. |
 | `install --bundle X --bundle Y` | **Allowed**: both bundles are installed. Duplicate policies are deduplicated. |

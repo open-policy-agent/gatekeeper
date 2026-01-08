@@ -19,7 +19,6 @@ import (
 var (
 	installBundle            string
 	installEnforcementAction string
-	installVersion           string
 	installDryRun            bool
 )
 
@@ -37,9 +36,6 @@ gator policy install k8srequiredlabels
 # Install multiple policies
 gator policy install k8srequiredlabels k8scontainerlimits
 
-# Install at a specific version
-gator policy install k8srequiredlabels@v1.2.0
-
 # Install a bundle (templates + constraints)
 gator policy install --bundle pod-security-baseline
 
@@ -53,7 +49,6 @@ gator policy install --bundle pod-security-baseline --dry-run`,
 
 	cmd.Flags().StringVar(&installBundle, "bundle", "", "Install a policy bundle (e.g., pod-security-baseline, pod-security-restricted)")
 	cmd.Flags().StringVar(&installEnforcementAction, "enforcement-action", "", "Override enforcement action (deny, warn, dryrun)")
-	cmd.Flags().StringVar(&installVersion, "version", "", "Install specific version")
 	cmd.Flags().BoolVar(&installDryRun, "dry-run", false, "Preview changes without applying")
 
 	return cmd
@@ -82,26 +77,8 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Parse policy names and handle version suffix
-	var policyNames []string
-	policyVersions := make(map[string]string)
-	for _, arg := range args {
-		name := arg
-		version := ""
-		if idx := strings.Index(arg, "@"); idx != -1 {
-			name = arg[:idx]
-			version = arg[idx+1:]
-		}
-		policyNames = append(policyNames, name)
-		if version != "" {
-			policyVersions[name] = version
-		}
-	}
-
-	// Validate mutual exclusivity: policy@vX and --version
-	if installVersion != "" && len(policyVersions) > 0 {
-		return fmt.Errorf("cannot use --version with policy@version syntax; use one or the other")
-	}
+	// Parse policy names
+	policyNames := args
 
 	// Load catalog
 	cache, err := catalog.NewCache()
@@ -132,10 +109,8 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	// Build install options
 	opts := &client.InstallOptions{
 		Policies:          policyNames,
-		PolicyVersions:    policyVersions,
 		Bundle:            installBundle,
 		EnforcementAction: installEnforcementAction,
-		Version:           installVersion,
 		DryRun:            installDryRun,
 	}
 
@@ -197,9 +172,8 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		}
 
 		msg := fmt.Sprintf("installation incomplete: %d of %d policies installed",
-			len(result.Installed), len(result.Installed)+len(result.Failed))
-		fmt.Fprintf(os.Stderr, "\nError: %s\n", msg)
-		fmt.Fprintln(os.Stderr, "Re-run command to continue (already installed will be skipped).")
+			len(result.Installed), result.TotalRequested)
+		fmt.Fprintln(os.Stderr, "\nRe-run command to continue (already installed will be skipped).")
 		return gatorpolicy.NewPartialSuccessError(msg)
 	}
 

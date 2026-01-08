@@ -26,7 +26,7 @@ metadata:
   name: k8stestpolicy
   annotations:
     description: "A test policy for unit testing"
-    policy.gatekeeper.sh/version: "1.0.0"
+    metadata.gatekeeper.sh/version: "1.0.0"
 spec:
   crd:
     spec:
@@ -108,8 +108,8 @@ spec:
 			if policy.Category != "pod-security" {
 				t.Errorf("Expected category 'pod-security', got '%s'", policy.Category)
 			}
-			if policy.Version != "1.0.0" {
-				t.Errorf("Expected version '1.0.0', got '%s'", policy.Version)
+			if policy.Version != "v1.0.0" {
+				t.Errorf("Expected version 'v1.0.0', got '%s'", policy.Version)
 			}
 		}
 	}
@@ -139,7 +139,7 @@ metadata:
   name: k8stestbundlepolicy
   annotations:
     description: "A test policy for bundle testing"
-    policy.gatekeeper.sh/version: "1.0.0"
+    metadata.gatekeeper.sh/version: "1.0.0"
 spec:
   crd:
     spec:
@@ -408,7 +408,7 @@ metadata:
   name: k8srequiredlabels
   annotations:
     description: "Requires all resources to contain specific labels"
-    policy.gatekeeper.sh/version: "1.2.3"
+    metadata.gatekeeper.sh/version: "1.2.3"
 spec:
   crd:
     spec:
@@ -440,8 +440,8 @@ spec:
 		t.Errorf("Expected description to match, got '%s'", policy.Description)
 	}
 
-	if policy.Version != "1.2.3" {
-		t.Errorf("Expected version '1.2.3', got '%s'", policy.Version)
+	if policy.Version != "v1.2.3" {
+		t.Errorf("Expected version 'v1.2.3', got '%s'", policy.Version)
 	}
 
 	if policy.Category != "general" {

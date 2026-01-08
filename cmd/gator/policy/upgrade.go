@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	gatorpolicy "github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
@@ -49,6 +50,14 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// Validate arguments
 	if !upgradeAll && len(args) == 0 {
 		return fmt.Errorf("specify policy name(s) or use --all to upgrade all policies")
+	}
+
+	// Validate enforcement action
+	if upgradeEnforcementAction != "" {
+		action := strings.ToLower(upgradeEnforcementAction)
+		if action != "deny" && action != "warn" && action != "dryrun" {
+			return fmt.Errorf("invalid enforcement action: %s (must be deny, warn, or dryrun)", upgradeEnforcementAction)
+		}
 	}
 
 	// Load catalog
@@ -130,7 +139,11 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 	// Print summary
 	if len(result.Upgraded) == 0 && len(result.Failed) == 0 {
-		fmt.Fprintln(os.Stdout, "\nAll policies are up to date.")
+		if len(result.NotFound) > 0 {
+			fmt.Fprintf(os.Stdout, "\nNo upgrades available. %d policies not found in catalog.\n", len(result.NotFound))
+		} else {
+			fmt.Fprintln(os.Stdout, "\nAll policies are up to date.")
+		}
 	}
 
 	return nil
