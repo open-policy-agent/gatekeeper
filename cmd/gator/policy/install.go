@@ -76,6 +76,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		if action != "deny" && action != "warn" && action != "dryrun" {
 			return fmt.Errorf("invalid enforcement action: %s (must be deny, warn, or dryrun)", installEnforcementAction)
 		}
+		// Warn if enforcement action specified without bundle (template-only installs don't have constraints)
+		if installBundle == "" {
+			fmt.Fprintln(os.Stderr, "Warning: --enforcement-action is ignored for template-only installs (no bundle specified)")
+		}
 	}
 
 	// Parse policy names and handle version suffix
@@ -185,11 +189,11 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		for _, name := range result.Failed {
 			errMsg := result.Errors[name]
 			fmt.Fprintf(os.Stderr, "✗ %s - failed: %s\n", name, errMsg)
+		}
 
-			// Check for conflict error
-			if strings.Contains(errMsg, "not managed by gator") {
-				return gatorpolicy.NewConflictError(fmt.Sprintf("installation incomplete: %s", errMsg))
-			}
+		// Check if we have a conflict error
+		if result.ConflictErr != nil {
+			return gatorpolicy.NewConflictError(fmt.Sprintf("installation incomplete: %s", result.ConflictErr.Error()))
 		}
 
 		msg := fmt.Sprintf("installation incomplete: %d of %d policies installed",

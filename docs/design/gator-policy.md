@@ -112,8 +112,6 @@ The policy catalog is a YAML file that provides metadata about available policie
 - **Production**: `https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/catalog.yaml`
 - **Local/Testing**: File path via `GATOR_CATALOG_URL=file:///path/to/catalog.yaml`
 
-> **Note**: The default branch is `main`. Some older references may use `master`; always verify the actual branch in the upstream repository.
-
 #### Schema Definition
 
 ```yaml

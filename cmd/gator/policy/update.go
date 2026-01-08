@@ -1,7 +1,7 @@
 package policy
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -9,6 +9,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/client"
 	"github.com/spf13/cobra"
 )
+
+var updateInsecure bool
 
 func newUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -21,20 +23,30 @@ gator policy update`,
 		RunE: runUpdate,
 	}
 
+	cmd.Flags().BoolVar(&updateInsecure, "insecure", false, "Allow plain HTTP catalog URLs (not recommended)")
+
 	return cmd
 }
 
 func runUpdate(cmd *cobra.Command, _ []string) error {
 	cmd.SilenceUsage = true
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	catalogURL := catalog.GetCatalogURL()
 	fmt.Fprintf(os.Stdout, "Fetching catalog from %s...\n", catalogURL)
 
 	// Fetch catalog
 	fetcher := catalog.NewHTTPFetcher(catalog.DefaultTimeout)
+	if updateInsecure {
+		fetcher.SetInsecure(true)
+		fmt.Fprintln(os.Stderr, "Warning: --insecure flag set, allowing plain HTTP (not recommended for production)")
+	}
 	data, err := fetcher.Fetch(ctx, catalogURL)
 	if err != nil {
+		// Check for insecure HTTP error and provide helpful message
+		if errors.Is(err, catalog.ErrInsecureHTTP) {
+			return fmt.Errorf("%w; use --insecure to override (not recommended)", err)
+		}
 		return fmt.Errorf("fetching catalog: %w", err)
 	}
 

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -422,7 +423,10 @@ func TestUninstall(t *testing.T) {
 		}
 
 		result, err := Uninstall(context.Background(), fakeClient, opts)
-		require.NoError(t, err)
+		// Fail-fast: should return error for unmanaged policy
+		require.Error(t, err)
+		var conflictErr *ConflictError
+		assert.True(t, errors.As(err, &conflictErr))
 		assert.Len(t, result.NotManaged, 1)
 		assert.Len(t, result.Failed, 1)
 	})

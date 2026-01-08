@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -43,6 +44,8 @@ type InstallResult struct {
 	Failed []string
 	// Errors contains error messages for failed policies.
 	Errors map[string]string
+	// ConflictErr is set if a conflict error occurred (resource not managed by gator).
+	ConflictErr *ConflictError
 	// ConstraintsInstalled is the number of constraints installed.
 	ConstraintsInstalled int
 	// TemplatesInstalled is the number of templates installed.
@@ -140,6 +143,11 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		if err != nil {
 			result.Failed = append(result.Failed, policyName)
 			result.Errors[policyName] = err.Error()
+			// Preserve typed error for conflict detection
+			var conflictErr *ConflictError
+			if errors.As(err, &conflictErr) {
+				result.ConflictErr = conflictErr
+			}
 			// Fail fast - stop on first error
 			return result, nil
 		}

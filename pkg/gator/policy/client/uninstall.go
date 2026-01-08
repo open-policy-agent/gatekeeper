@@ -51,14 +51,14 @@ func Uninstall(ctx context.Context, k8sClient Client, opts UninstallOptions) (*U
 		}
 	}
 
-	// Uninstall each policy
+	// Uninstall each policy - fail fast on errors per design doc
 	for _, policyName := range opts.Policies {
 		err := uninstallPolicy(ctx, k8sClient, policyName, opts.DryRun, result)
 		if err != nil {
 			result.Failed = append(result.Failed, policyName)
 			result.Errors[policyName] = err.Error()
-			// Continue with other policies
-			continue
+			// Fail fast - stop on first error
+			return result, err
 		}
 	}
 
@@ -87,7 +87,10 @@ func uninstallPolicy(ctx context.Context, k8sClient Client, policyName string, d
 		}
 	}
 
-	// Delete template (Kubernetes will garbage collect constraints when CRD is deleted)
+	// Delete template
+	// Note: When the ConstraintTemplate is deleted, Gatekeeper removes the associated
+	// Constraint CRD, which orphans any Constraint CRs (they remain in etcd but become
+	// unknown kinds). This is acceptable behavior - the constraints won't be enforced.
 	if !dryRun {
 		if err := k8sClient.DeleteTemplate(ctx, policyName); err != nil {
 			return fmt.Errorf("deleting template: %w", err)
