@@ -6,16 +6,10 @@
 # - A running Kubernetes cluster with Gatekeeper installed
 # - The gator binary built and available in PATH or ./bin/gator
 #
-# NOTE: These tests use the catalog.yaml at the project root, which is
-#       generated from the real gatekeeper-library for integration testing.
-#
-# TODO: Once the gatekeeper-library PR adding the catalog is merged, update
-#       CATALOG_URL to point to the official catalog:
-#       https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/catalog.yaml
 
 GATOR="${GATOR:-./bin/gator}"
-# Use catalog from project root (generated from gatekeeper-library)
-CATALOG_URL="file://${PWD}/catalog.yaml"
+# Temp location for testing
+CATALOG_URL="https://raw.githubusercontent.com/sozercan/gatekeeper-library/refs/heads/bundles/catalog.yaml"
 
 setup_file() {
     export GATOR_CATALOG_URL="${CATALOG_URL}"
