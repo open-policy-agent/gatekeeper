@@ -1,0 +1,65 @@
+# Test Policy Catalog
+#
+# This catalog is used for local development and testing of the gator policy command.
+# It references local template files in the testdata directory.
+#
+# Usage:
+#   export GATOR_CATALOG_URL=file:///path/to/this/catalog.yaml
+#   gator policy update
+#   gator policy search test
+
+apiVersion: gator.gatekeeper.sh/v1alpha1
+kind: PolicyCatalog
+metadata:
+  name: test-catalog
+  version: v1.0.0
+  updatedAt: "2026-01-08T00:00:00Z"
+  repository: file://testdata
+
+bundles:
+  - name: test-bundle
+    description: "A test bundle with multiple policies for testing bundle installation"
+    policies:
+      - test-required-labels
+      - test-container-limits
+
+  - name: pod-security-baseline-mock
+    description: "Mock PSS baseline bundle for testing"
+    policies:
+      - test-privileged-container
+
+policies:
+  # General policy - template only
+  - name: test-required-labels
+    version: v1.0.0
+    description: "Test policy that requires specific labels on resources"
+    category: general
+    templatePath: templates/requiredlabels/template.yaml
+    sampleConstraintPath: templates/requiredlabels/samples/constraint.yaml
+    documentationUrl: https://example.com/docs/requiredlabels
+
+  # General policy - template only
+  - name: test-container-limits
+    version: v1.0.0
+    description: "Test policy that requires container resource limits"
+    category: general
+    templatePath: templates/containerlimits/template.yaml
+    bundles:
+      - test-bundle
+
+  # Pod security policy - included in bundle with constraint
+  - name: test-privileged-container
+    version: v1.0.0
+    description: "Test policy that blocks privileged containers"
+    category: pod-security
+    templatePath: templates/privilegedcontainer/template.yaml
+    constraintPath: templates/privilegedcontainer/constraint.yaml
+    bundles:
+      - pod-security-baseline-mock
+
+  # Policy with newer version available (for upgrade testing)
+  - name: test-upgradeable
+    version: v2.0.0
+    description: "Test policy for testing upgrades (v2.0.0 available)"
+    category: general
+    templatePath: templates/upgradeable/template-v2.yaml
