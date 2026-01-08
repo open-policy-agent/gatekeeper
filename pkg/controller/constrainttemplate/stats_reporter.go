@@ -17,6 +17,7 @@ import (
 const (
 	ctMetricName = "constraint_templates"
 	// celCTMetricName is a separate metric for backward compatibility with existing metrics. Together with ctMetricName, it allows to derive the number of non-CEL constraint templates.
+	// Example: rego_only_count = constraint_templates - constraint_templates_with_cel
 	celCTMetricName = "constraint_templates_with_cel"
 	vapMetricName   = "validating_admission_policies"
 	ingestCount     = "constraint_template_ingestion_count"

@@ -135,15 +135,20 @@ teardown_file() {
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
 
-    kubectl delete pod temp --ignore-not-found
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/good_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml
 
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vapb_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_validating_admission_policy_bindings{status=\"active\"}' | awk '{gsub(/\r/,\"\",\$2); print \$2}'); [ -z \"\$vapb_count\" ] || [ \"\$vapb_count\" -eq 0 ]"
+
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
     # wait for k8s to register deletion with eventual consistency
     sleep 5
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_validating_admission_policies{status=\"active\"}' | awk '{gsub(/\r/,\"\",\$2); print \$2}'); [ -z \"\$vap_count\" ] || [ \"\$vap_count\" -eq 0 ]"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "cel_ct_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_constraint_templates_with_cel_rego' | awk '{gsub(/\r/,\"\",\$2); print \$2}'); [ -z \"\$cel_ct_count\" ] || [ \"\$cel_ct_count\" -eq 0 ]"
+
+    kubectl delete pod temp --ignore-not-found
   fi
 }
 

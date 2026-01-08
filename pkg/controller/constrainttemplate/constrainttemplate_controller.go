@@ -1006,9 +1006,8 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 				return err
 			}
 		}
-		r.metrics.DeleteVAPStatus(types.NamespacedName{Name: ct.GetName()})
-	} else if !generateVap {
-		// VAP API is not enabled or groupVersion is nil, but we still need to clean up metrics
+	}
+	if !generateVap {
 		r.metrics.DeleteVAPStatus(types.NamespacedName{Name: ct.GetName()})
 	}
 	return nil
