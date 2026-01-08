@@ -146,7 +146,7 @@ teardown_file() {
     # wait for k8s to register deletion with eventual consistency
     sleep 5
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_validating_admission_policies{status=\"active\"}' | awk '{gsub(/\r/,\"\",\$2); print \$2}'); [ -z \"\$vap_count\" ] || [ \"\$vap_count\" -eq 0 ]"
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "cel_ct_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_constraint_templates_with_cel_rego' | awk '{gsub(/\r/,\"\",\$2); print \$2}'); [ -z \"\$cel_ct_count\" ] || [ \"\$cel_ct_count\" -eq 0 ]"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "cel_ct_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_constraint_templates_with_cel' | awk '{gsub(/\r/,\"\",\$2); print \$2}'); [ -z \"\$cel_ct_count\" ] || [ \"\$cel_ct_count\" -eq 0 ]"
 
     kubectl delete pod temp --ignore-not-found
   fi
