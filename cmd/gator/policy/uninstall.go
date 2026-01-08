@@ -1,7 +1,6 @@
 package policy
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -40,7 +39,7 @@ gator policy uninstall k8srequiredlabels --dry-run`,
 
 func runUninstall(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// Create Kubernetes client
 	k8sClient, err := client.NewK8sClient()
@@ -66,7 +65,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		gatekeeperNotInstalledError := &client.GatekeeperNotInstalledError{}
 		if errors.As(err, &gatekeeperNotInstalledError) {
 			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(gatorpolicy.ExitClusterError)
+			return gatorpolicy.NewClusterError(err.Error())
 		}
 		return err
 	}
@@ -98,11 +97,11 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	}
 
 	if hasConflict {
-		os.Exit(gatorpolicy.ExitConflictError)
+		return gatorpolicy.NewConflictError("uninstall failed: some policies are not managed by gator")
 	}
 
 	if len(result.Failed) > 0 {
-		os.Exit(gatorpolicy.ExitPartialSuccess)
+		return gatorpolicy.NewPartialSuccessError("uninstall incomplete: some policies failed")
 	}
 
 	return nil

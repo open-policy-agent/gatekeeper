@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/expand"
@@ -8,6 +9,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/test"
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/verify"
+	gatorpolicy "github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/version"
 	"github.com/spf13/cobra"
 	k8sVersion "sigs.k8s.io/release-utils/version"
@@ -35,6 +37,11 @@ var rootCmd = &cobra.Command{
 func main() {
 	err := rootCmd.Execute()
 	if err != nil {
+		// Check for ExitError to get the proper exit code
+		var exitErr *gatorpolicy.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.Code)
+		}
 		os.Exit(1)
 	}
 }

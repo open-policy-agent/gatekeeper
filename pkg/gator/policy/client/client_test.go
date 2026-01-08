@@ -10,6 +10,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/labels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -215,7 +216,8 @@ func (c *FakeClient) GetTemplate(_ context.Context, name string) (*unstructured.
 	if tmpl, ok := c.templates[name]; ok {
 		return tmpl, nil
 	}
-	return nil, fmt.Errorf("template not found: %s", name)
+	// Return a k8s-style NotFound error so uninstall logic works correctly
+	return nil, k8serrors.NewNotFound(schema.GroupResource{Group: "templates.gatekeeper.sh", Resource: "constrainttemplates"}, name)
 }
 
 func (c *FakeClient) InstallTemplate(_ context.Context, template *unstructured.Unstructured) error {
@@ -593,3 +595,220 @@ func (f *FakeFetcher) FetchContent(_ context.Context, path string) ([]byte, erro
 	}
 	return nil, fmt.Errorf("content not found: %s", path)
 }
+
+func (f *FakeFetcher) SetInsecure(_ bool) {}
+
+// TestInstallBundlePlusPositionalPolicies tests that bundle + positional policies are both installed.
+func TestInstallBundlePlusPositionalPolicies(t *testing.T) {
+	cat := &catalog.PolicyCatalog{
+		Policies: []catalog.Policy{
+			{
+				Name:           "bundle-policy",
+				Version:        "v1.0.0",
+				Description:    "Policy in bundle",
+				Category:       "general",
+				TemplatePath:   "templates/bundle-policy.yaml",
+				ConstraintPath: "constraints/bundle-policy.yaml",
+			},
+			{
+				Name:         "additional-policy",
+				Version:      "v1.0.0",
+				Description:  "Additional policy",
+				Category:     "general",
+				TemplatePath: "templates/additional-policy.yaml",
+			},
+		},
+		Bundles: []catalog.Bundle{
+			{
+				Name:        "test-bundle",
+				Description: "Test bundle",
+				Policies:    []string{"bundle-policy"},
+			},
+		},
+	}
+
+	fakeClient := NewFakeClient()
+	fetcher := &FakeFetcher{
+		content: map[string][]byte{
+			"templates/bundle-policy.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: bundle-policy
+`),
+			"constraints/bundle-policy.yaml": []byte(`
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: BundlePolicy
+metadata:
+  name: bundle-policy-constraint
+`),
+			"templates/additional-policy.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: additional-policy
+`),
+		},
+	}
+
+	// Install bundle AND additional policy
+	opts := &InstallOptions{
+		Policies: []string{"additional-policy"},
+		Bundle:   "test-bundle",
+	}
+
+	result, err := Install(context.Background(), fakeClient, fetcher, cat, opts)
+	require.NoError(t, err)
+
+	// Both should be installed
+	assert.Len(t, result.Installed, 2)
+	assert.Contains(t, result.Installed, "bundle-policy")
+	assert.Contains(t, result.Installed, "additional-policy")
+
+	// Bundle policy should have constraint installed
+	assert.Equal(t, 1, result.ConstraintsInstalled)
+
+	// Templates installed should be 2
+	assert.Equal(t, 2, result.TemplatesInstalled)
+}
+
+// TestInstallPolicyWithVersion tests that policy@version syntax works.
+func TestInstallPolicyWithVersion(t *testing.T) {
+	cat := &catalog.PolicyCatalog{
+		Policies: []catalog.Policy{
+			{
+				Name:         "versioned-policy",
+				Version:      "v1.0.0",
+				Description:  "Test policy",
+				Category:     "general",
+				TemplatePath: "templates/versioned-policy.yaml",
+			},
+		},
+	}
+
+	t.Run("version matches catalog", func(t *testing.T) {
+		fakeClient := NewFakeClient()
+		fetcher := &FakeFetcher{
+			content: map[string][]byte{
+				"templates/versioned-policy.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: versioned-policy
+`),
+			},
+		}
+
+		opts := &InstallOptions{
+			Policies:       []string{"versioned-policy"},
+			PolicyVersions: map[string]string{"versioned-policy": "v1.0.0"},
+		}
+
+		result, err := Install(context.Background(), fakeClient, fetcher, cat, opts)
+		require.NoError(t, err)
+		assert.Len(t, result.Installed, 1)
+	})
+
+	t.Run("version does not match catalog", func(t *testing.T) {
+		fakeClient := NewFakeClient()
+		fetcher := &FakeFetcher{}
+
+		opts := &InstallOptions{
+			Policies:       []string{"versioned-policy"},
+			PolicyVersions: map[string]string{"versioned-policy": "v2.0.0"},
+		}
+
+		result, err := Install(context.Background(), fakeClient, fetcher, cat, opts)
+		require.NoError(t, err)
+		assert.Len(t, result.Failed, 1)
+		assert.Contains(t, result.Errors["versioned-policy"], "v2.0.0 not available")
+	})
+
+	t.Run("global version flag", func(t *testing.T) {
+		fakeClient := NewFakeClient()
+		fetcher := &FakeFetcher{
+			content: map[string][]byte{
+				"templates/versioned-policy.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: versioned-policy
+`),
+			},
+		}
+
+		opts := &InstallOptions{
+			Policies: []string{"versioned-policy"},
+			Version:  "v1.0.0",
+		}
+
+		result, err := Install(context.Background(), fakeClient, fetcher, cat, opts)
+		require.NoError(t, err)
+		assert.Len(t, result.Installed, 1)
+	})
+}
+
+// TestUpgradeWithBundleContext tests that upgrade preserves bundle context for constraints.
+func TestUpgradeWithBundleContext(t *testing.T) {
+	cat := &catalog.PolicyCatalog{
+		Policies: []catalog.Policy{
+			{
+				Name:           "bundle-policy",
+				Version:        "v2.0.0",
+				Description:    "Updated bundle policy",
+				Category:       "general",
+				TemplatePath:   "templates/bundle-policy.yaml",
+				ConstraintPath: "constraints/bundle-policy.yaml",
+			},
+		},
+		Bundles: []catalog.Bundle{
+			{
+				Name:        "test-bundle",
+				Description: "Test bundle",
+				Policies:    []string{"bundle-policy"},
+			},
+		},
+	}
+
+	fakeClient := NewFakeClient()
+	// Add existing managed template with bundle label
+	tmpl := &unstructured.Unstructured{}
+	tmpl.SetName("bundle-policy")
+	tmpl.SetLabels(map[string]string{
+		labels.LabelManagedBy: labels.ManagedByValue,
+		labels.LabelBundle:    "test-bundle",
+	})
+	tmpl.SetAnnotations(map[string]string{
+		labels.AnnotationVersion: "v1.0.0",
+		labels.AnnotationSource:  labels.SourceValue,
+	})
+	fakeClient.templates["bundle-policy"] = tmpl
+
+	fetcher := &FakeFetcher{
+		content: map[string][]byte{
+			"templates/bundle-policy.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: bundle-policy
+`),
+			"constraints/bundle-policy.yaml": []byte(`
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: BundlePolicy
+metadata:
+  name: bundle-policy-constraint
+`),
+		},
+	}
+
+	opts := UpgradeOptions{
+		Policies: []string{"bundle-policy"},
+	}
+
+	result, err := Upgrade(context.Background(), fakeClient, fetcher, cat, opts)
+	require.NoError(t, err)
+	assert.Len(t, result.Upgraded, 1)
+	assert.Equal(t, "v1.0.0", result.Upgraded[0].FromVersion)
+	assert.Equal(t, "v2.0.0", result.Upgraded[0].ToVersion)
+}
+

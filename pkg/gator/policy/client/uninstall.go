@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/labels"
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 // UninstallOptions contains options for uninstalling policies.
@@ -68,8 +69,13 @@ func uninstallPolicy(ctx context.Context, k8sClient Client, policyName string, d
 	// Get existing template
 	existing, err := k8sClient.GetTemplate(ctx, policyName)
 	if err != nil {
-		result.NotFound = append(result.NotFound, policyName)
-		return nil // Not found is not an error for uninstall
+		// Distinguish between "not found" and other errors (auth, network, etc.)
+		if errors.IsNotFound(err) {
+			result.NotFound = append(result.NotFound, policyName)
+			return nil // Not found is not an error for uninstall
+		}
+		// Real error - propagate it
+		return fmt.Errorf("getting template: %w", err)
 	}
 
 	// Check if managed by gator

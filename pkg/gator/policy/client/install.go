@@ -20,11 +20,14 @@ const (
 type InstallOptions struct {
 	// Policies is the list of policy names to install.
 	Policies []string
+	// PolicyVersions maps policy names to specific versions (from policy@vX syntax).
+	// If a policy is not in this map, the catalog version is used.
+	PolicyVersions map[string]string
 	// Bundle is the bundle name to install.
 	Bundle string
 	// EnforcementAction overrides the enforcement action for constraints.
 	EnforcementAction string
-	// Version is the specific version to install.
+	// Version is the specific version to install (applies to all policies).
 	Version string
 	// DryRun if true, only prints what would be done.
 	DryRun bool
@@ -55,16 +58,30 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 	// Determine which policies to install
 	var policyNames []string
 	bundleName := ""
+	seen := make(map[string]bool)
 
+	// If bundle is specified, resolve bundle policies first
 	if opts.Bundle != "" {
 		bundleName = opts.Bundle
-		var err error
-		policyNames, err = cat.ResolveBundlePolicies(opts.Bundle)
+		bundlePolicies, err := cat.ResolveBundlePolicies(opts.Bundle)
 		if err != nil {
 			return nil, fmt.Errorf("resolving bundle policies: %w", err)
 		}
-	} else {
-		policyNames = opts.Policies
+		for _, p := range bundlePolicies {
+			if !seen[p] {
+				seen[p] = true
+				policyNames = append(policyNames, p)
+			}
+		}
+	}
+
+	// Add any additional positional policies (deduplicated)
+	// These are installed as template-only (no constraints) even when bundle is set
+	for _, p := range opts.Policies {
+		if !seen[p] {
+			seen[p] = true
+			policyNames = append(policyNames, p)
+		}
 	}
 
 	if len(policyNames) == 0 {
@@ -82,16 +99,44 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		}
 	}
 
+	// Build set of bundle policies for determining if constraints should be installed
+	bundlePolicies := make(map[string]bool)
+	if opts.Bundle != "" {
+		bundlePolicyList, _ := cat.ResolveBundlePolicies(opts.Bundle)
+		for _, p := range bundlePolicyList {
+			bundlePolicies[p] = true
+		}
+	}
+
 	// Install each policy
 	for _, policyName := range policyNames {
 		policy := cat.GetPolicy(policyName)
 		if policy == nil {
 			result.Failed = append(result.Failed, policyName)
 			result.Errors[policyName] = fmt.Sprintf("policy not found: %s", policyName)
-			continue
+			// Fail fast per MVP design
+			return result, nil
 		}
 
-		skipped, err := installPolicy(ctx, k8sClient, fetcher, policy, bundleName, opts, result)
+		// Check version constraints
+		requestedVersion := opts.Version
+		if v, ok := opts.PolicyVersions[policyName]; ok {
+			requestedVersion = v
+		}
+		if requestedVersion != "" && requestedVersion != policy.Version {
+			result.Failed = append(result.Failed, policyName)
+			result.Errors[policyName] = fmt.Sprintf("requested version %s not available; catalog has %s", requestedVersion, policy.Version)
+			return result, nil
+		}
+
+		// Determine if this policy should install constraints
+		// Only bundle policies get constraints, additional positional policies get template-only
+		installBundle := ""
+		if bundlePolicies[policyName] {
+			installBundle = bundleName
+		}
+
+		skipped, err := installPolicy(ctx, k8sClient, fetcher, policy, installBundle, opts, result)
 		if err != nil {
 			result.Failed = append(result.Failed, policyName)
 			result.Errors[policyName] = err.Error()

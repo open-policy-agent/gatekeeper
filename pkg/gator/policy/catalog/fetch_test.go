@@ -30,15 +30,15 @@ func TestHTTPFetcher_PathTraversalProtection(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "test: content")
 
-	// Path traversal attempt should fail
+	// Path traversal attempt should fail (early check for "..")
 	_, err = fetcher.FetchContent(ctx, "../../../etc/passwd")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "escapes catalog directory")
+	assert.Contains(t, err.Error(), "path traversal")
 
 	// Another traversal attempt
 	_, err = fetcher.FetchContent(ctx, "subdir/../../etc/passwd")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "escapes catalog directory")
+	assert.Contains(t, err.Error(), "path traversal")
 }
 
 func TestHTTPFetcher_SetBaseURL(t *testing.T) {

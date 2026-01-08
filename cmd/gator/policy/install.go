@@ -61,14 +61,14 @@ gator policy install --bundle pod-security-baseline --dry-run`,
 
 func runInstall(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// Validate arguments
 	if installBundle == "" && len(args) == 0 {
 		return fmt.Errorf("specify policy name(s) or use --bundle to install a bundle")
 	}
 	// Note: --bundle with positional policies IS allowed per design.
-	// Bundle is processed first, then individual policies are added.
+	// Bundle is processed first, then individual policies are added (template-only).
 
 	// Validate enforcement action
 	if installEnforcementAction != "" {
@@ -76,6 +76,27 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		if action != "deny" && action != "warn" && action != "dryrun" {
 			return fmt.Errorf("invalid enforcement action: %s (must be deny, warn, or dryrun)", installEnforcementAction)
 		}
+	}
+
+	// Parse policy names and handle version suffix
+	var policyNames []string
+	policyVersions := make(map[string]string)
+	for _, arg := range args {
+		name := arg
+		version := ""
+		if idx := strings.Index(arg, "@"); idx != -1 {
+			name = arg[:idx]
+			version = arg[idx+1:]
+		}
+		policyNames = append(policyNames, name)
+		if version != "" {
+			policyVersions[name] = version
+		}
+	}
+
+	// Validate mutual exclusivity: policy@vX and --version
+	if installVersion != "" && len(policyVersions) > 0 {
+		return fmt.Errorf("cannot use --version with policy@version syntax; use one or the other")
 	}
 
 	// Load catalog
@@ -93,17 +114,6 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	// Create fetcher for templates/constraints with the catalog URL as base
 	fetcher := catalog.NewHTTPFetcherWithBaseURL(catalog.DefaultTimeout, catalog.GetCatalogURL())
 
-	// Parse policy names (handle version suffix)
-	var policyNames []string
-	for _, arg := range args {
-		name := arg
-		if idx := strings.Index(arg, "@"); idx != -1 {
-			name = arg[:idx]
-			// Version override from arg takes precedence
-		}
-		policyNames = append(policyNames, name)
-	}
-
 	// Create Kubernetes client (unless dry-run)
 	var k8sClient client.Client
 	if !installDryRun {
@@ -118,6 +128,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	// Build install options
 	opts := &client.InstallOptions{
 		Policies:          policyNames,
+		PolicyVersions:    policyVersions,
 		Bundle:            installBundle,
 		EnforcementAction: installEnforcementAction,
 		Version:           installVersion,
@@ -146,7 +157,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		gatekeeperNotInstalledError := &client.GatekeeperNotInstalledError{}
 		if errors.As(err, &gatekeeperNotInstalledError) {
 			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(gatorpolicy.ExitClusterError)
+			return gatorpolicy.NewClusterError(err.Error())
 		}
 		return err
 	}
@@ -177,14 +188,15 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 			// Check for conflict error
 			if strings.Contains(errMsg, "not managed by gator") {
-				os.Exit(gatorpolicy.ExitConflictError)
+				return gatorpolicy.NewConflictError(fmt.Sprintf("installation incomplete: %s", errMsg))
 			}
 		}
 
-		fmt.Fprintf(os.Stderr, "\nError: Installation incomplete. %d of %d policies installed.\n",
+		msg := fmt.Sprintf("installation incomplete: %d of %d policies installed",
 			len(result.Installed), len(result.Installed)+len(result.Failed))
+		fmt.Fprintf(os.Stderr, "\nError: %s\n", msg)
 		fmt.Fprintln(os.Stderr, "Re-run command to continue (already installed will be skipped).")
-		os.Exit(gatorpolicy.ExitPartialSuccess)
+		return gatorpolicy.NewPartialSuccessError(msg)
 	}
 
 	// Print summary for bundles

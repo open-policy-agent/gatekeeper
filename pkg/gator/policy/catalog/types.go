@@ -82,19 +82,22 @@ func (c *PolicyCatalog) GetBundle(name string) *Bundle {
 	return nil
 }
 
+// MaxInheritanceDepth is the maximum depth of bundle inheritance to prevent runaway expansion.
+const MaxInheritanceDepth = 10
+
 // ResolveBundlePolicies returns all policy names for a bundle, including inherited policies.
+// Inheritance is processed parent-first (deepest ancestor first), so child policies can override.
 func (c *PolicyCatalog) ResolveBundlePolicies(bundleName string) ([]string, error) {
 	bundle := c.GetBundle(bundleName)
 	if bundle == nil {
 		return nil, &BundleNotFoundError{Name: bundleName}
 	}
 
-	seen := make(map[string]bool)
+	// First, build the inheritance chain from child to ancestors
+	var inheritanceChain []*Bundle
 	visitedBundles := make(map[string]bool)
-	var policies []string
-
-	// Resolve inheritance chain with cycle detection
 	current := bundle
+
 	for current != nil {
 		// Check for circular inheritance
 		if visitedBundles[current.Name] {
@@ -102,12 +105,13 @@ func (c *PolicyCatalog) ResolveBundlePolicies(bundleName string) ([]string, erro
 		}
 		visitedBundles[current.Name] = true
 
-		for _, p := range current.Policies {
-			if !seen[p] {
-				seen[p] = true
-				policies = append(policies, p)
-			}
+		// Check depth limit
+		if len(inheritanceChain) >= MaxInheritanceDepth {
+			return nil, fmt.Errorf("bundle inheritance exceeds maximum depth of %d", MaxInheritanceDepth)
 		}
+
+		inheritanceChain = append(inheritanceChain, current)
+
 		if current.Inherits == "" {
 			break
 		}
@@ -116,6 +120,21 @@ func (c *PolicyCatalog) ResolveBundlePolicies(bundleName string) ([]string, erro
 			return nil, &BundleNotFoundError{Name: current.Inherits}
 		}
 		current = parent
+	}
+
+	// Now process in reverse order (parent-first, deepest ancestor first)
+	// This ensures parent policies are added first, and child policies can be deduplicated
+	seen := make(map[string]bool)
+	var policies []string
+
+	for i := len(inheritanceChain) - 1; i >= 0; i-- {
+		b := inheritanceChain[i]
+		for _, p := range b.Policies {
+			if !seen[p] {
+				seen[p] = true
+				policies = append(policies, p)
+			}
+		}
 	}
 
 	return policies, nil

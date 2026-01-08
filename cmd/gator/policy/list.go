@@ -1,7 +1,6 @@
 package policy
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -34,7 +33,7 @@ gator policy list --output=json`,
 
 func runList(cmd *cobra.Command, _ []string) error {
 	cmd.SilenceUsage = true
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// Create Kubernetes client
 	k8sClient, err := client.NewK8sClient()

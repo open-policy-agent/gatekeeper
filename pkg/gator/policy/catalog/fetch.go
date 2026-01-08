@@ -27,20 +27,26 @@ const (
 	fileScheme = "file"
 )
 
+// ErrInsecureHTTP is returned when plain HTTP is used without the insecure flag.
+var ErrInsecureHTTP = fmt.Errorf("plain HTTP is not allowed for security reasons; use HTTPS or set --insecure to override")
+
 // Fetcher defines the interface for fetching catalog data.
 type Fetcher interface {
 	// Fetch retrieves the catalog from the given URL.
 	Fetch(ctx context.Context, catalogURL string) ([]byte, error)
 	// FetchContent retrieves content from a URL (for templates/constraints).
 	FetchContent(ctx context.Context, contentURL string) ([]byte, error)
+	// SetInsecure allows fetching over plain HTTP (not recommended for production).
+	SetInsecure(insecure bool)
 }
 
 // HTTPFetcher implements Fetcher using HTTP and file:// protocols.
 // HTTPFetcher is safe for concurrent use after creation.
 type HTTPFetcher struct {
-	client  *http.Client
-	baseURL string
-	mu      sync.RWMutex // protects baseURL
+	client   *http.Client
+	baseURL  string
+	insecure bool
+	mu       sync.RWMutex // protects baseURL and insecure
 }
 
 // NewHTTPFetcher creates a new HTTPFetcher with the given timeout.
@@ -63,6 +69,13 @@ func NewHTTPFetcherWithBaseURL(timeout time.Duration, baseURL string) *HTTPFetch
 	}
 }
 
+// SetInsecure allows fetching over plain HTTP (not recommended for production).
+func (f *HTTPFetcher) SetInsecure(insecure bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.insecure = insecure
+}
+
 // SetBaseURL sets the base URL for resolving relative paths.
 func (f *HTTPFetcher) SetBaseURL(baseURL string) {
 	f.mu.Lock()
@@ -70,11 +83,36 @@ func (f *HTTPFetcher) SetBaseURL(baseURL string) {
 	f.baseURL = baseURL
 }
 
+// validateScheme checks if the URL scheme is allowed.
+func (f *HTTPFetcher) validateScheme(u *url.URL) error {
+	f.mu.RLock()
+	insecure := f.insecure
+	f.mu.RUnlock()
+
+	// Allow file:// and https://
+	if u.Scheme == fileScheme || u.Scheme == "https" {
+		return nil
+	}
+	// Allow http:// only if insecure mode is enabled
+	if u.Scheme == "http" {
+		if insecure {
+			return nil
+		}
+		return ErrInsecureHTTP
+	}
+	return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
+}
+
 // Fetch retrieves the catalog from the given URL.
 func (f *HTTPFetcher) Fetch(ctx context.Context, catalogURL string) ([]byte, error) {
 	u, err := url.Parse(catalogURL)
 	if err != nil {
 		return nil, fmt.Errorf("parsing catalog URL: %w", err)
+	}
+
+	// Validate URL scheme
+	if err := f.validateScheme(u); err != nil {
+		return nil, err
 	}
 
 	// Store base URL for relative path resolution
@@ -91,14 +129,23 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, catalogURL string) ([]byte, err
 
 // FetchContent retrieves content from a URL, resolving relative paths against the catalog URL.
 func (f *HTTPFetcher) FetchContent(ctx context.Context, contentPath string) ([]byte, error) {
+	// Security: Validate the content path doesn't contain path traversal attempts
+	// This applies to all content paths, whether file:// or HTTP
+	if strings.Contains(contentPath, "..") {
+		return nil, fmt.Errorf("content path contains path traversal: %s", contentPath)
+	}
+
 	// Check if it's an absolute URL
 	u, err := url.Parse(contentPath)
 	if err != nil {
 		return nil, fmt.Errorf("parsing content path: %w", err)
 	}
 
-	// If it has a scheme, fetch directly
+	// If it has a scheme, validate and fetch directly
 	if u.Scheme != "" {
+		if err := f.validateScheme(u); err != nil {
+			return nil, err
+		}
 		if u.Scheme == fileScheme {
 			return os.ReadFile(u.Path)
 		}

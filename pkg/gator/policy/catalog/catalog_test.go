@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -377,3 +378,112 @@ func TestNewCache_WithoutGatorHome(t *testing.T) {
 	assert.NotEmpty(t, cache.Dir())
 	assert.True(t, filepath.IsAbs(cache.Dir()))
 }
+
+// TestResolveBundlePolicies_ParentFirstOrdering tests that bundle inheritance uses parent-first ordering.
+func TestResolveBundlePolicies_ParentFirstOrdering(t *testing.T) {
+	cat := &PolicyCatalog{
+		Bundles: []Bundle{
+			{Name: "grandparent", Policies: []string{"gp1", "gp2"}},
+			{Name: "parent", Inherits: "grandparent", Policies: []string{"p1", "p2"}},
+			{Name: "child", Inherits: "parent", Policies: []string{"c1", "c2"}},
+		},
+	}
+
+	// When resolving "child", policies should be in order: grandparent first, then parent, then child
+	policies, err := cat.ResolveBundlePolicies("child")
+	require.NoError(t, err)
+
+	// Parent-first means grandparent policies come first
+	assert.Equal(t, []string{"gp1", "gp2", "p1", "p2", "c1", "c2"}, policies)
+}
+
+// TestResolveBundlePolicies_MaxDepth tests that inheritance depth is limited.
+func TestResolveBundlePolicies_MaxDepth(t *testing.T) {
+	// Create a chain longer than MaxInheritanceDepth
+	bundles := make([]Bundle, MaxInheritanceDepth+2)
+	for i := 0; i < len(bundles); i++ {
+		bundles[i] = Bundle{
+			Name:     fmt.Sprintf("bundle%d", i),
+			Policies: []string{fmt.Sprintf("policy%d", i)},
+		}
+		if i > 0 {
+			bundles[i].Inherits = bundles[i-1].Name
+		}
+	}
+
+	cat := &PolicyCatalog{Bundles: bundles}
+
+	// Resolving the last bundle should fail due to depth limit
+	_, err := cat.ResolveBundlePolicies(bundles[len(bundles)-1].Name)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "maximum depth")
+}
+
+// TestResolveBundlePolicies_Deduplication tests that duplicate policies are deduplicated.
+func TestResolveBundlePolicies_Deduplication(t *testing.T) {
+	cat := &PolicyCatalog{
+		Bundles: []Bundle{
+			{Name: "parent", Policies: []string{"shared-policy", "parent-only"}},
+			{Name: "child", Inherits: "parent", Policies: []string{"shared-policy", "child-only"}},
+		},
+	}
+
+	policies, err := cat.ResolveBundlePolicies("child")
+	require.NoError(t, err)
+
+	// shared-policy should only appear once (from parent, since parent-first)
+	assert.Equal(t, []string{"shared-policy", "parent-only", "child-only"}, policies)
+}
+
+// TestHTTPFetcher_RejectsPlainHTTP tests that plain HTTP is rejected by default.
+func TestHTTPFetcher_RejectsPlainHTTP(t *testing.T) {
+	fetcher := NewHTTPFetcher(5 * time.Second)
+
+	// Should reject plain HTTP
+	_, err := fetcher.Fetch(context.Background(), "http://example.com/catalog.yaml")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInsecureHTTP)
+}
+
+// TestHTTPFetcher_AllowsHTTPWithInsecure tests that HTTP is allowed with insecure flag.
+func TestHTTPFetcher_AllowsHTTPWithInsecure(t *testing.T) {
+	fetcher := NewHTTPFetcher(5 * time.Second)
+	fetcher.SetInsecure(true)
+
+	// With insecure flag, HTTP should be allowed (will fail on network, but not on scheme validation)
+	_, err := fetcher.Fetch(context.Background(), "http://localhost:99999/catalog.yaml")
+	// Should NOT be ErrInsecureHTTP (it will be a network error instead)
+	assert.NotErrorIs(t, err, ErrInsecureHTTP)
+}
+
+// TestHTTPFetcher_AllowsHTTPS tests that HTTPS is always allowed.
+func TestHTTPFetcher_AllowsHTTPS(t *testing.T) {
+	fetcher := NewHTTPFetcher(1 * time.Second)
+
+	// HTTPS should be allowed (will fail on network/cert, but not on scheme validation)
+	_, err := fetcher.Fetch(context.Background(), "https://localhost:99999/catalog.yaml")
+	// Should NOT be ErrInsecureHTTP
+	assert.NotErrorIs(t, err, ErrInsecureHTTP)
+}
+
+// TestHTTPFetcher_RejectsPathTraversal tests that path traversal is rejected for HTTP.
+func TestHTTPFetcher_RejectsPathTraversal(t *testing.T) {
+	fetcher := NewHTTPFetcher(5 * time.Second)
+	fetcher.SetBaseURL("https://example.com/catalog.yaml")
+
+	// Should reject paths with ".."
+	_, err := fetcher.FetchContent(context.Background(), "../../../etc/passwd")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}
+
+// TestHTTPFetcher_RejectsPathTraversalAbsoluteURL tests path traversal in absolute URLs.
+func TestHTTPFetcher_RejectsPathTraversalAbsoluteURL(t *testing.T) {
+	fetcher := NewHTTPFetcher(5 * time.Second)
+
+	// Should reject absolute URLs with ".."
+	_, err := fetcher.FetchContent(context.Background(), "https://evil.com/../../../etc/passwd")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}
+

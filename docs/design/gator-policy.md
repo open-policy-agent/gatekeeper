@@ -223,6 +223,8 @@ gator policy install k8srequiredlabels@v1.2.0       # Specific version
 gator policy install --bundle pod-security-baseline@v1.0.0   # Bundle at version
 ```
 
+> **MVP Limitation**: The catalog currently contains only one version per policy. If you specify a version (via `policy@vX` or `--version`) that doesn't match the catalog version, the installation will fail with an error indicating the version is not available. Multi-version catalog support is planned for post-MVP.
+
 ### Configuration
 
 #### Environment Variables
@@ -367,7 +369,7 @@ All commands support `--output` / `-o` flag:
 |----------|----------|
 | `policy@vX` vs `--version vY` | **Error**: mutually exclusive. Use one or the other. |
 | `upgrade --all` vs explicit policies | **Error**: mutually exclusive. Either upgrade all or specify names. |
-| `install --bundle X` with positional policies | **Allowed**: installs the bundle AND the additional policies. Bundle is processed first, then individual policies. |
+| `install --bundle X` with positional policies | **Allowed**: installs the bundle AND the additional policies. Bundle policies get both templates and constraints; additional positional policies get **template-only** (no constraints). Duplicates are deduplicated. |
 | `install --bundle X --bundle Y` | **Allowed**: both bundles are installed. Duplicate policies are deduplicated. |
 
 ### Bundle Inheritance Semantics
@@ -430,6 +432,11 @@ When a bundle specifies `inherits: <parent-bundle>`, the following rules apply:
 - **HTTPS required**: By default, only `https://` catalog URLs are accepted.
 - **`file://` allowed**: For local development/testing only. Not recommended for production.
 - **Plain HTTP rejected**: `http://` URLs are rejected with an error. Use `--insecure` flag to override (with warning).
+
+**Path Traversal Protection**:
+- All content paths (e.g., `templatePath`, `constraintPath` in the catalog) are validated.
+- Paths containing `..` sequences are rejected to prevent directory traversal attacks.
+- Both URL paths (for HTTP fetches) and file paths (for `file://` fetches) are validated.
 
 **Resource Validation**:
 - Before applying any resource, gator validates:

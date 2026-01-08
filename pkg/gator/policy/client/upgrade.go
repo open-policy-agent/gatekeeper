@@ -125,9 +125,10 @@ func Upgrade(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 }
 
 func upgradePolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts UpgradeOptions) error {
-	// Use install with the existing bundle name
+	// Use install with the existing bundle name to preserve constraint installation behavior
 	installOpts := &InstallOptions{
 		Policies:          []string{policy.Name},
+		Bundle:            bundleName, // Pass bundle context so constraints are upgraded too
 		EnforcementAction: opts.EnforcementAction,
 		DryRun:            opts.DryRun,
 	}
@@ -135,6 +136,17 @@ func upgradePolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	// Create a minimal catalog for the install
 	cat := &catalog.PolicyCatalog{
 		Policies: []catalog.Policy{*policy},
+	}
+
+	// If this was a bundle-installed policy, we need to ensure constraints are updated
+	// by temporarily including this policy in the bundle's policy list
+	if bundleName != "" {
+		cat.Bundles = []catalog.Bundle{
+			{
+				Name:     bundleName,
+				Policies: []string{policy.Name},
+			},
+		}
 	}
 
 	_, err := Install(ctx, k8sClient, fetcher, cat, installOpts)

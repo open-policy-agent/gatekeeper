@@ -1,7 +1,6 @@
 package policy
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -45,7 +44,7 @@ gator policy upgrade --all --dry-run`,
 
 func runUpgrade(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// Validate arguments
 	if !upgradeAll && len(args) == 0 {
@@ -90,7 +89,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		gatekeeperNotInstalledError := &client.GatekeeperNotInstalledError{}
 		if errors.As(err, &gatekeeperNotInstalledError) {
 			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(gatorpolicy.ExitClusterError)
+			return gatorpolicy.NewClusterError(err.Error())
 		}
 		return err
 	}
@@ -126,7 +125,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(result.Failed) > 0 {
-		os.Exit(gatorpolicy.ExitPartialSuccess)
+		return gatorpolicy.NewPartialSuccessError("upgrade incomplete: some policies failed to upgrade")
 	}
 
 	// Print summary
