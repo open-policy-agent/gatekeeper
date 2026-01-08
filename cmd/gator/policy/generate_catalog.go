@@ -19,7 +19,10 @@ gator policy generate-catalog --library-path=. --output=catalog.yaml
 gator policy generate-catalog --library-path=. --bundles=bundles.yaml
 
 # Generate with custom version
-gator policy generate-catalog --library-path=. --version=v1.2.0`
+gator policy generate-catalog --library-path=. --version=v1.2.0
+
+# Generate with URLs instead of local paths (for publishing)
+gator policy generate-catalog --library-path=. --base-url=https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master`
 
 func newGenerateCatalogCommand() *cobra.Command {
 	var (
@@ -29,6 +32,7 @@ func newGenerateCatalogCommand() *cobra.Command {
 		catalogVersion string
 		repository     string
 		bundlesFile    string
+		baseURL        string
 		validate       bool
 	)
 
@@ -45,6 +49,7 @@ func newGenerateCatalogCommand() *cobra.Command {
 				catalogVersion: catalogVersion,
 				repository:     repository,
 				bundlesFile:    bundlesFile,
+				baseURL:        baseURL,
 				validate:       validate,
 			})
 		},
@@ -56,6 +61,7 @@ func newGenerateCatalogCommand() *cobra.Command {
 	cmd.Flags().StringVar(&catalogVersion, "version", "v1.0.0", "Version of the catalog")
 	cmd.Flags().StringVar(&repository, "repository", "https://github.com/open-policy-agent/gatekeeper-library", "Repository URL")
 	cmd.Flags().StringVar(&bundlesFile, "bundles", "", "Path to bundles definition file (optional)")
+	cmd.Flags().StringVar(&baseURL, "base-url", "", "Base URL for template/constraint paths (e.g., https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master)")
 	cmd.Flags().BoolVar(&validate, "validate", true, "Validate the generated catalog")
 
 	return cmd
@@ -68,6 +74,7 @@ type generateCatalogOptions struct {
 	catalogVersion string
 	repository     string
 	bundlesFile    string
+	baseURL        string
 	validate       bool
 }
 
@@ -92,6 +99,7 @@ func runGenerateCatalog(opts *generateCatalogOptions) error {
 		CatalogVersion: opts.catalogVersion,
 		Repository:     opts.repository,
 		BundlesFile:    opts.bundlesFile,
+		BaseURL:        opts.baseURL,
 	})
 	if err != nil {
 		return fmt.Errorf("generating catalog: %w", err)

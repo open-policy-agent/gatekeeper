@@ -448,3 +448,66 @@ spec:
 		t.Errorf("Expected category 'general', got '%s'", policy.Category)
 	}
 }
+
+func TestConvertPathsToURLs(t *testing.T) {
+	catalog := &PolicyCatalog{
+		Policies: []Policy{
+			{
+				Name:                 "test-policy",
+				TemplatePath:         "library/general/test/template.yaml",
+				ConstraintPath:       "library/general/test/samples/constraint.yaml",
+				SampleConstraintPath: "library/general/test/samples/constraint.yaml",
+			},
+			{
+				Name:                 "already-url",
+				TemplatePath:         "https://example.com/template.yaml",
+				ConstraintPath:       "",
+				SampleConstraintPath: "",
+			},
+		},
+	}
+
+	baseURL := "https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master"
+	convertPathsToURLs(catalog, baseURL)
+
+	// Check first policy paths are converted
+	expectedTemplate := "https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/general/test/template.yaml"
+	if catalog.Policies[0].TemplatePath != expectedTemplate {
+		t.Errorf("Expected templatePath %q, got %q", expectedTemplate, catalog.Policies[0].TemplatePath)
+	}
+
+	expectedConstraint := "https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/general/test/samples/constraint.yaml"
+	if catalog.Policies[0].ConstraintPath != expectedConstraint {
+		t.Errorf("Expected constraintPath %q, got %q", expectedConstraint, catalog.Policies[0].ConstraintPath)
+	}
+
+	// Check that already-URL paths are not modified
+	if catalog.Policies[1].TemplatePath != "https://example.com/template.yaml" {
+		t.Errorf("URL path should not be modified, got %q", catalog.Policies[1].TemplatePath)
+	}
+
+	// Check that empty paths remain empty
+	if catalog.Policies[1].ConstraintPath != "" {
+		t.Errorf("Empty path should remain empty, got %q", catalog.Policies[1].ConstraintPath)
+	}
+}
+
+func TestConvertPathsToURLs_TrailingSlash(t *testing.T) {
+	catalog := &PolicyCatalog{
+		Policies: []Policy{
+			{
+				Name:         "test-policy",
+				TemplatePath: "library/test/template.yaml",
+			},
+		},
+	}
+
+	// Base URL with trailing slash should work correctly
+	baseURL := "https://example.com/repo/"
+	convertPathsToURLs(catalog, baseURL)
+
+	expected := "https://example.com/repo/library/test/template.yaml"
+	if catalog.Policies[0].TemplatePath != expected {
+		t.Errorf("Expected %q, got %q", expected, catalog.Policies[0].TemplatePath)
+	}
+}

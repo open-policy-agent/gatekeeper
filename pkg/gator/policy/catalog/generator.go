@@ -24,6 +24,10 @@ type GeneratorOptions struct {
 	Repository string
 	// BundlesFile is an optional path to a bundles definition file.
 	BundlesFile string
+	// BaseURL is the base URL for template/constraint paths.
+	// If set, paths will be converted to full URLs (e.g., https://raw.githubusercontent.com/.../library/...).
+	// If empty, relative paths will be used (e.g., library/...).
+	BaseURL string
 }
 
 // Bundle annotation key for metadata.gatekeeper.sh/bundle.
@@ -101,6 +105,11 @@ func GenerateCatalog(opts *GeneratorOptions) (*PolicyCatalog, error) {
 	} else {
 		// Auto-generate Pod Security Standards bundles
 		generatePSSBundles(catalog)
+	}
+
+	// Convert paths to URLs if base URL is provided
+	if opts.BaseURL != "" {
+		convertPathsToURLs(catalog, opts.BaseURL)
 	}
 
 	return catalog, nil
@@ -427,5 +436,26 @@ func generatePSSBundles(catalog *PolicyCatalog) {
 			Policies:    policies,
 		}
 		catalog.Bundles = append(catalog.Bundles, bundle)
+	}
+}
+
+// convertPathsToURLs converts all relative paths in the catalog to full URLs.
+// The baseURL should be the raw content URL prefix (e.g., https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master).
+func convertPathsToURLs(catalog *PolicyCatalog, baseURL string) {
+	// Ensure baseURL doesn't have trailing slash
+	baseURL = strings.TrimSuffix(baseURL, "/")
+
+	for i := range catalog.Policies {
+		policy := &catalog.Policies[i]
+
+		if policy.TemplatePath != "" && !strings.HasPrefix(policy.TemplatePath, "http") {
+			policy.TemplatePath = baseURL + "/" + policy.TemplatePath
+		}
+		if policy.ConstraintPath != "" && !strings.HasPrefix(policy.ConstraintPath, "http") {
+			policy.ConstraintPath = baseURL + "/" + policy.ConstraintPath
+		}
+		if policy.SampleConstraintPath != "" && !strings.HasPrefix(policy.SampleConstraintPath, "http") {
+			policy.SampleConstraintPath = baseURL + "/" + policy.SampleConstraintPath
+		}
 	}
 }
