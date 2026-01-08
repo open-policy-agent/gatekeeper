@@ -130,6 +130,34 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Distribution`
 
+- Name: `gatekeeper_constraint_templates_with_cel`
+
+    Description: `Number of constraint templates with CEL engine`
+
+    Aggregation: `LastValue`
+
+### ValidatingAdmissionPolicy
+
+- Name: `gatekeeper_validating_admission_policies`
+
+    Description: `Number of ValidatingAdmissionPolicy resources by generation status`
+
+    Tags:
+
+    - `status`: [`active`, `error`] (active = successfully generated, error = generation failed)
+
+    Aggregation: `LastValue`
+
+- Name: `gatekeeper_validating_admission_policy_bindings`
+
+    Description: `Number of ValidatingAdmissionPolicyBinding resources by generation status`
+
+    Tags:
+
+    - `status`: [`active`, `error`] (active = successfully generated, error = generation failed)
+
+    Aggregation: `LastValue`
+
 ### Expansion Template
 
 - Name: `gatekeeper_expansion_templates`

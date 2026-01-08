@@ -15,12 +15,17 @@ import (
 )
 
 const (
-	ctMetricName   = "constraint_templates"
-	ingestCount    = "constraint_template_ingestion_count"
-	ingestDuration = "constraint_template_ingestion_duration_seconds"
-	statusKey      = "status"
+	ctMetricName = "constraint_templates"
+	// celCTMetricName is a separate metric for backward compatibility with existing metrics. Together with ctMetricName, it allows to derive the number of non-CEL constraint templates.
+	// Example: rego_only_count = constraint_templates - constraint_templates_with_cel.
+	celCTMetricName = "constraint_templates_with_cel"
+	vapMetricName   = "validating_admission_policies"
+	ingestCount     = "constraint_template_ingestion_count"
+	ingestDuration  = "constraint_template_ingestion_duration_seconds"
+	statusKey       = "status"
 
-	ctDesc = "Number of observed constraint templates"
+	ctDesc    = "Number of observed constraint templates"
+	celCTDesc = "Number of constraint templates with CEL engine"
 )
 
 var (
@@ -49,12 +54,30 @@ func (r *reporter) reportIngestDuration(ctx context.Context, status metrics.Stat
 func newStatsReporter() *reporter {
 	var err error
 	reg := &ctRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
-	r := &reporter{registry: reg}
+	r := &reporter{registry: reg, vapRegistry: metrics.NewVAPStatusRegistry(), celRegistry: newCelRegistry()}
 	meter := otel.GetMeterProvider().Meter("gatekeeper")
 	_, err = meter.Int64ObservableGauge(
 		ctMetricName,
 		metric.WithDescription(ctDesc),
 		metric.WithInt64Callback(r.observeCTM),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = meter.Int64ObservableGauge(
+		celCTMetricName,
+		metric.WithDescription(celCTDesc),
+		metric.WithInt64Callback(r.observeCelCTM),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = meter.Int64ObservableGauge(
+		vapMetricName,
+		metric.WithDescription("Number of ValidatingAdmissionPolicy resources by generation status (active = successfully generated, error = generation failed)"),
+		metric.WithInt64Callback(r.observeVAP),
 	)
 	if err != nil {
 		panic(err)
@@ -79,9 +102,51 @@ func newStatsReporter() *reporter {
 }
 
 type reporter struct {
-	mu       sync.RWMutex
-	ctReport map[metrics.Status]int64
-	registry *ctRegistry
+	mu          sync.RWMutex
+	ctReport    map[metrics.Status]int64
+	registry    *ctRegistry
+	vapRegistry *metrics.VAPStatusRegistry
+	celRegistry *celRegistry
+}
+
+type celRegistry struct {
+	mu    sync.RWMutex
+	cache map[types.NamespacedName]bool
+}
+
+func newCelRegistry() *celRegistry {
+	return &celRegistry{cache: make(map[types.NamespacedName]bool)}
+}
+
+func (r *celRegistry) add(key types.NamespacedName) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cache[key] = true
+}
+
+func (r *celRegistry) remove(key types.NamespacedName) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.cache, key)
+}
+
+func (r *celRegistry) count() int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return int64(len(r.cache))
+}
+
+func (r *reporter) observeCelCTM(_ context.Context, o metric.Int64Observer) error {
+	o.Observe(r.celRegistry.count())
+	return nil
+}
+
+func (r *reporter) ReportCelCT(templateName types.NamespacedName) {
+	r.celRegistry.add(templateName)
+}
+
+func (r *reporter) DeleteCelCT(templateName types.NamespacedName) {
+	r.celRegistry.remove(templateName)
 }
 
 type ctRegistry struct {
@@ -143,4 +208,20 @@ func (r *reporter) observeCTM(_ context.Context, o metric.Int64Observer) error {
 		o.Observe(count, metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
 	return nil
+}
+
+func (r *reporter) observeVAP(_ context.Context, observer metric.Int64Observer) error {
+	totals := r.vapRegistry.ComputeTotals()
+	for _, status := range metrics.AllVAPStatuses {
+		observer.Observe(totals[status], metric.WithAttributes(attribute.String(statusKey, string(status))))
+	}
+	return nil
+}
+
+func (r *reporter) ReportVAPStatus(templateName types.NamespacedName, status metrics.VAPStatus) {
+	r.vapRegistry.Add(templateName, status)
+}
+
+func (r *reporter) DeleteVAPStatus(templateName types.NamespacedName) {
+	r.vapRegistry.Remove(templateName)
 }
