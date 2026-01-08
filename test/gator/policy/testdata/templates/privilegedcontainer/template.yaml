@@ -1,0 +1,40 @@
+# Test ConstraintTemplate: Privileged Container
+#
+# This is a simplified template for testing purposes.
+# Based on: https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/privileged-containers
+
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: test-privileged-container
+  annotations:
+    description: "Controls the ability of any container to enable privileged mode."
+spec:
+  crd:
+    spec:
+      names:
+        kind: TestPrivilegedContainer
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            exemptImages:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package testprivilegedcontainer
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.privileged == true
+          msg := sprintf("Privileged container is not allowed: %v", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          container.securityContext.privileged == true
+          msg := sprintf("Privileged init container is not allowed: %v", [container.name])
+        }
