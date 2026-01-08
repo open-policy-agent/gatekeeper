@@ -739,4 +739,3 @@ metadata:
 	assert.Equal(t, "v1.0.0", result.Upgraded[0].FromVersion)
 	assert.Equal(t, "v2.0.0", result.Upgraded[0].ToVersion)
 }
-

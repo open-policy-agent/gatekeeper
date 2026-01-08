@@ -17,8 +17,8 @@ type PolicyCatalog struct {
 	// Cached indexes for O(1) lookups (built lazily, thread-safe)
 	policyIndex     map[string]int `json:"-" yaml:"-"`
 	bundleIndex     map[string]int `json:"-" yaml:"-"`
-	policyIndexOnce sync.Once     `json:"-" yaml:"-"`
-	bundleIndexOnce sync.Once     `json:"-" yaml:"-"`
+	policyIndexOnce sync.Once      `json:"-" yaml:"-"`
+	bundleIndexOnce sync.Once      `json:"-" yaml:"-"`
 }
 
 // CatalogMetadata contains metadata about the catalog itself.

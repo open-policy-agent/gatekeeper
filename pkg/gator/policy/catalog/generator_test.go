@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+const testVersion = "v1.0.0"
+
 func TestGenerateCatalog(t *testing.T) {
 	// Create a temporary test library structure
 	tempDir := t.TempDir()
@@ -70,7 +72,7 @@ spec:
 	opts := &GeneratorOptions{
 		LibraryPath:    tempDir,
 		CatalogName:    "test-catalog",
-		CatalogVersion: "v1.0.0",
+		CatalogVersion: testVersion,
 		Repository:     "https://example.com/test-catalog",
 	}
 
@@ -84,8 +86,8 @@ spec:
 		t.Errorf("Expected catalog name 'test-catalog', got '%s'", catalog.Metadata.Name)
 	}
 
-	if catalog.Metadata.Version != "v1.0.0" {
-		t.Errorf("Expected catalog version 'v1.0.0', got '%s'", catalog.Metadata.Version)
+	if catalog.Metadata.Version != testVersion {
+		t.Errorf("Expected catalog version '%s', got '%s'", testVersion, catalog.Metadata.Version)
 	}
 
 	if catalog.Metadata.Repository != "https://example.com/test-catalog" {
@@ -108,8 +110,8 @@ spec:
 			if policy.Category != "pod-security" {
 				t.Errorf("Expected category 'pod-security', got '%s'", policy.Category)
 			}
-			if policy.Version != "v1.0.0" {
-				t.Errorf("Expected version 'v1.0.0', got '%s'", policy.Version)
+			if policy.Version != testVersion {
+				t.Errorf("Expected version '%s', got '%s'", testVersion, policy.Version)
 			}
 		}
 	}
