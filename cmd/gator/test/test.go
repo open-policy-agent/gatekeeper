@@ -85,7 +85,18 @@ func run(_ *cobra.Command, _ []string) {
 		cmdutils.ErrFatalf("no input data identified")
 	}
 
-	responses, err := test.Test(unstrucs, test.Opts{IncludeTrace: flagIncludeTrace, GatherStats: flagGatherStats, UseK8sCEL: flagEnableK8sCel})
+	var opts []test.Opt
+	if flagIncludeTrace {
+		opts = append(opts, test.WithTrace())
+	}
+	if flagGatherStats {
+		opts = append(opts, test.WithGatherStats())
+	}
+	if flagEnableK8sCel {
+		opts = append(opts, test.WithK8sCEL(flagGatherStats))
+	}
+
+	responses, err := test.Test(unstrucs, opts...)
 	if err != nil {
 		cmdutils.ErrFatalf("auditing objects: %v", err)
 	}
