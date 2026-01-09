@@ -1272,7 +1272,9 @@ func TestRunner_Run(t *testing.T) {
 
 			ctx := context.Background()
 
-			runner, err := NewRunner(tc.f, gator.NewOPAClient)
+			runner, err := NewRunner(tc.f, func() (gator.Client, error) {
+				return gator.NewOPAClient(false)
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1300,7 +1302,7 @@ func TestRunner_Run_ClientError(t *testing.T) {
 		TestResults: []TestResult{{Error: gator.ErrCreatingClient}},
 	}
 
-	runner, err := NewRunner(fstest.MapFS{}, func(_ bool, _ bool) (gator.Client, error) {
+	runner, err := NewRunner(fstest.MapFS{}, func() (gator.Client, error) {
 		return nil, errors.New("error")
 	})
 	if err != nil {
@@ -1642,7 +1644,9 @@ func TestRunner_RunCase(t *testing.T) {
 					constraintFile: &fstest.MapFile{Data: []byte(tc.constraint)},
 					objectFile:     &fstest.MapFile{Data: []byte(tc.object)},
 				},
-				gator.NewOPAClient,
+				func() (gator.Client, error) {
+					return gator.NewOPAClient(false)
+				},
 			)
 			if err != nil {
 				t.Fatal(err)
