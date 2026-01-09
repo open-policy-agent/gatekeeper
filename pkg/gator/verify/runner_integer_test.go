@@ -271,7 +271,7 @@ func TestRunner_Run_Integer(t *testing.T) {
 				},
 			}
 
-			runner, err := NewRunner(f, func() (gator.Client, error) {
+			runner, err := NewRunner(f, func(_ ...gator.Opt) (gator.Client, error) {
 				return gator.NewOPAClient(false)
 			})
 			if err != nil {

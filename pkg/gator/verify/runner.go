@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -34,14 +35,14 @@ type Runner struct {
 
 	// newClient instantiates a Client for compiling Templates/Constraints, and
 	// validating objects against them.
-	newClient func() (gator.Client, error)
+	newClient func(opts ...gator.Opt) (gator.Client, error)
 
 	scheme *runtime.Scheme
 
 	includeTrace bool
 }
 
-func NewRunner(filesystem fs.FS, newClient func() (gator.Client, error), opts ...RunnerOptions) (*Runner, error) {
+func NewRunner(filesystem fs.FS, newClient func(opts ...gator.Opt) (gator.Client, error), opts ...RunnerOptions) (*Runner, error) {
 	s := runtime.NewScheme()
 	err := apis.AddToScheme(s)
 	if err != nil {
@@ -163,8 +164,10 @@ func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t *Test)
 // runCases executes every Case in the Test. Returns the results for every Case,
 // or an error if there was a problem executing the Test.
 func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t *Test) ([]CaseResult, error) {
-	newClient := func() (gator.Client, error) {
-		c, err := r.makeTestClient(ctx, suiteDir, t)
+	newClient := func(opts ...gator.Opt) (gator.Client, error) {
+		c, err := r.makeTestClient(ctx, func() (gator.Client, error) {
+			return r.newClient(opts...)
+		}, suiteDir, t)
 		if err != nil {
 			return nil, err
 		}
@@ -204,8 +207,8 @@ func (r *Runner) skipCase(tc *Case) CaseResult {
 	return CaseResult{Name: tc.Name, Skipped: true}
 }
 
-func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t *Test) (gator.Client, error) {
-	client, err := r.newClient()
+func (r *Runner) makeTestClient(ctx context.Context, newClient func() (gator.Client, error), suiteDir string, t *Test) (gator.Client, error) {
+	client, err := newClient()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", gator.ErrCreatingClient, err)
 	}
@@ -275,15 +278,19 @@ func (r *Runner) addTemplate(suiteDir, templatePath string, client gator.Client)
 }
 
 // RunCase executes a Case and returns the result of the run.
-func (r *Runner) runCase(ctx context.Context, newClient func() (gator.Client, error), newExpander func() (*expand.Expander, error), suiteDir string, tc *Case) CaseResult {
+func (r *Runner) runCase(ctx context.Context, newClient func(opts ...gator.Opt) (gator.Client, error), newExpander func() (*expand.Expander, error), suiteDir string, tc *Case) CaseResult {
 	start := time.Now()
-	trace, err := r.checkCase(ctx, newClient, newExpander, suiteDir, tc)
+	var printBuf bytes.Buffer
+	trace, err := r.checkCase(ctx, func() (gator.Client, error) {
+		return newClient(gator.WithPrintHook(&printBuf))
+	}, newExpander, suiteDir, tc)
 
 	return CaseResult{
 		Name:    tc.Name,
 		Error:   err,
 		Runtime: Duration(time.Since(start)),
 		Trace:   trace,
+		Print: printBuf.String(),
 	}
 }
 
