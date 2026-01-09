@@ -1,6 +1,9 @@
 package test
 
 import (
+	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -245,7 +248,7 @@ func TestTest(t *testing.T) {
 				objs = append(objs, u)
 			}
 
-			resps, err := Test(objs, Opts{})
+			resps, err := Test(objs)
 			if tc.err != nil {
 				require.ErrorIs(t, err, tc.err)
 			} else if err != nil {
@@ -285,7 +288,7 @@ func Test_Test_withTrace(t *testing.T) {
 		objs = append(objs, u)
 	}
 
-	resps, err := Test(objs, Opts{IncludeTrace: true})
+	resps, err := Test(objs, WithTrace())
 	if err != nil {
 		t.Errorf("got err '%v', want nil", err)
 	}
@@ -346,7 +349,7 @@ func Test_Test_withStats(t *testing.T) {
 		objs = append(objs, u)
 	}
 
-	resps, err := Test(objs, Opts{GatherStats: true})
+	resps, err := Test(objs, WithGatherStats())
 	assert.NoError(t, err)
 
 	actualStats := resps.StatsEntries
@@ -409,5 +412,40 @@ func Test_Test_withStats(t *testing.T) {
 		if stat.Name == "constraintCount" {
 			require.Equal(t, stat.Value, 1)
 		}
+	}
+}
+
+func TestTest_Print(t *testing.T) {
+	var printBuf bytes.Buffer
+
+	inputs := []string{
+		fixtures.TemplateAlwaysValidate,
+		fixtures.ConstraintAlwaysValidate,
+		fixtures.Object,
+	}
+
+	var objs []*unstructured.Unstructured
+	for _, input := range inputs {
+		u, err := reader.ReadUnstructured([]byte(input))
+		if err != nil {
+			t.Fatalf("readUnstructured for input %q: %v", input, err)
+		}
+		objs = append(objs, u)
+	}
+
+	_, err := Test(objs, WithPrintHook(&printBuf))
+	if err != nil {
+		t.Errorf("got err '%v', want nil", err)
+	}
+
+	// The constraint template results in three debug statements. The use of the object's kind is only for
+	// illustration purposes to make it clear three debug statements being written is not a bug.
+	want := strings.Builder{}
+	for _, kind := range []string{"ConstraintTemplate", "AlwaysValidate", "Object"} {
+		want.WriteString(fmt.Sprintf("a debug message (%s)\n", kind))
+	}
+
+	if diff := cmp.Diff(want.String(), printBuf.String()); diff != "" {
+		t.Fatalf("diff in print statements (-want +got)\n%s", diff)
 	}
 }

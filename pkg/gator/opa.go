@@ -6,20 +6,29 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"io"
 )
 
-func NewOPAClient(includeTrace bool, k8sCEL bool) (Client, error) {
+type Opt func() ([]constraintclient.Opt, []rego.Arg, error)
+
+func NewOPAClient(includeTrace bool, opts ...Opt) (Client, error) {
 	args := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 
-	if k8sCEL {
-		k8sDriver, err := k8scel.New()
+	driverArgs := []rego.Arg{
+		rego.Tracing(includeTrace),
+	}
+
+	for _, opt := range opts {
+		extraArgs, extraDriverArgs, err := opt()
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, constraintclient.Driver(k8sDriver))
+
+		args = append(args, extraArgs...)
+		driverArgs = append(driverArgs, extraDriverArgs...)
 	}
 
-	driver, err := rego.New(rego.Tracing(includeTrace))
+	driver, err := rego.New(driverArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -32,4 +41,26 @@ func NewOPAClient(includeTrace bool, k8sCEL bool) (Client, error) {
 	}
 
 	return c, nil
+}
+
+func WithK8sCEL() Opt {
+	return func() ([]constraintclient.Opt, []rego.Arg, error) {
+		k8sDriver, err := k8scel.New()
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return []constraintclient.Opt{
+			constraintclient.Driver(k8sDriver),
+		}, []rego.Arg{}, nil
+	}
+}
+
+func WithPrintHook(w io.Writer) Opt {
+	return func() ([]constraintclient.Opt, []rego.Arg, error) {
+		return []constraintclient.Opt{}, []rego.Arg{
+			rego.PrintEnabled(true),
+			rego.PrintHook(NewPrintHook(w)),
+		}, nil
+	}
 }

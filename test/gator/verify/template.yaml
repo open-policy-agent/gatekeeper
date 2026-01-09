@@ -21,6 +21,7 @@ spec:
         package foo
 
         violation[{"msg": msg}] {
+          print("Hello, World")
           parameters := object.get(input, "parameters", {})
           wantFoo := object.get(parameters, "foo", "")
           gotFoo := object.get(input.review.object, "foo", "")
