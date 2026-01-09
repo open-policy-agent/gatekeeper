@@ -9,6 +9,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	cmdutils "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/test"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -50,6 +51,7 @@ var (
 	flagTempDir      string
 	flagEnableK8sCel bool
 	flagDenyOnly     bool
+	flagVerbose      bool
 )
 
 const (
@@ -57,6 +59,7 @@ const (
 	flagNameOutput   = "output"
 	flagNameImage    = "image"
 	flagNameTempDir  = "tempdir"
+	flagNameVerbose  = "verbose"
 
 	stringJSON          = "json"
 	stringYAML          = "yaml"
@@ -74,6 +77,7 @@ func init() {
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 	Cmd.Flags().BoolVarP(&flagDenyOnly, "deny-only", "", false, "output only denied constraints")
+	Cmd.Flags().BoolVarP(&flagVerbose, flagNameVerbose, "v", false, "print extended test output")
 }
 
 func run(_ *cobra.Command, _ []string) {
@@ -97,6 +101,9 @@ func run(_ *cobra.Command, _ []string) {
 	if flagEnableK8sCel {
 		opts = append(opts, test.WithK8sCEL(flagGatherStats))
 	}
+	if flagVerbose {
+		opts = append(opts, gator.WithPrintHook(&printBuf))
+	}
 
 	responses, err := test.Test(unstrucs, opts...)
 	if err != nil {
@@ -105,6 +112,10 @@ func run(_ *cobra.Command, _ []string) {
 	results := responses.Results()
 
 	fmt.Print(formatOutput(flagOutput, results, responses.StatsEntries))
+
+	if printBuf.Len() > 0 {
+		fmt.Printf("\n%s\n", printBuf.String())
+	}
 
 	// Whether or not we return non-zero depends on whether we have a `deny`
 	// enforcementAction on one of the violated constraints
