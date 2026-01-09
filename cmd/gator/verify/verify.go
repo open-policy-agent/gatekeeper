@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -112,8 +113,9 @@ func runE(cmd *cobra.Command, args []string) error {
 func runSuites(ctx context.Context, fileSystem fs.FS, suites []*verify.Suite, filter verify.Filter) error {
 	isFailure := false
 
-	runner, err := verify.NewRunner(fileSystem, func() (gator.Client, error) {
-		var opts []gator.Opt
+	printBufs := make(map[string]*bytes.Buffer)
+
+	runner, err := verify.NewRunner(fileSystem, func(opts ...gator.Opt) (gator.Client, error) {
 		if flagEnableK8sCel {
 			opts = append(opts, gator.WithK8sCEL())
 		}
@@ -143,12 +145,26 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []*verify.Suite, fi
 		results[i] = suiteResult
 		i++
 	}
+
 	w := &strings.Builder{}
+
 	printer := verify.PrinterGo{}
 	err = printer.Print(w, results, verbose)
 	if err != nil {
 		return err
 	}
+
+	if len(printBufs) > 0 {
+		w.WriteString("\n")
+
+		for suite, printBuf := range printBufs {
+			if printBuf.Len() > 0 {
+				w.WriteString("SUITE: " + suite + "\n")
+				w.WriteString(printBuf.String() + "\n")
+			}
+		}
+	}
+
 	fmt.Println(w)
 
 	if isFailure {

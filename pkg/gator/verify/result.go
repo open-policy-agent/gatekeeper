@@ -110,6 +110,9 @@ type CaseResult struct {
 	// NOTE: This is a string pointer to differentiate between an empty ("") trace and an unset one (nil);
 	// also for efficiency reasons as traces could be arbitrarily large theoretically.
 	Trace *string
+
+	// Print statements in Rego, only filled when verbose mode is enabled.
+	Print string
 }
 
 // IsFailure returns true if the test failed to execute or produced an
