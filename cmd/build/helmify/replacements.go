@@ -161,17 +161,21 @@ var replacements = map[string]string{
 
 	"HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
 
-	"HELMSUBST_MUTATING_WEBHOOK_MATCHEXPRESSION_METADATANAME": `key: kubernetes.io/metadata.name
-      operator: NotIn
-      values:
-      - {{ .Release.Namespace }}`,
-
 	"- HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
-    {{- range $key, $value := .Values.mutatingWebhookExemptNamespacesLabels}}
+	  {{- /* 1. Get mandatory exemption from helper */ -}}
+    {{- $defaults := include "gatekeeper.mandatoryNamespaceExemption" . | fromYaml -}}
+    {{- /* 2. Merge user values with mandatory exemption. */ -}}
+    {{- $merged := merge (deepCopy .Values.mutatingWebhookExemptNamespacesLabels) $defaults -}}
+    {{- range $key, $value := $merged }}
     - key: {{ $key }}
       operator: NotIn
       values:
-      {{- range $value }}
+      {{- /* Ensure current namespace is in the list for the metadata key */ -}}
+      {{- $list := $value -}}
+      {{- if eq $key "kubernetes.io/metadata.name" }}
+        {{- $list = append $value $.Release.Namespace | uniq -}}
+      {{- end }}
+      {{- range $list }}
       - {{ . }}
       {{- end }}
     {{- end }}`,
@@ -214,17 +218,21 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
 
-	"HELMSUBST_VALIDATING_WEBHOOK_MATCHEXPRESSION_METADATANAME": `key: kubernetes.io/metadata.name
-      operator: NotIn
-      values:
-      - {{ .Release.Namespace }}`,
-
 	"- HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
-    {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
+    {{- /* 1. Get mandatory exemption from helper */ -}}
+    {{- $defaults := include "gatekeeper.mandatoryNamespaceExemption" . | fromYaml -}}
+    {{- /* 2. Merge user values with mandatory exemption. */ -}}
+    {{- $merged := merge (deepCopy .Values.validatingWebhookExemptNamespacesLabels) $defaults -}}
+    {{- range $key, $value := $merged }}
     - key: {{ $key }}
       operator: NotIn
       values:
-      {{- range $value }}
+      {{- /* Ensure current namespace is in the list for the metadata key */ -}}
+      {{- $list := $value -}}
+      {{- if eq $key "kubernetes.io/metadata.name" }}
+        {{- $list = append $value $.Release.Namespace | uniq -}}
+      {{- end }}
+      {{- range $list }}
       - {{ . }}
       {{- end }}
     {{- end }}`,

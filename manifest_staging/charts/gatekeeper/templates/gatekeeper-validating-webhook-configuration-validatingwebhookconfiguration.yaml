@@ -36,16 +36,21 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
-    - key: kubernetes.io/metadata.name
-      operator: NotIn
-      values:
-      - {{ .Release.Namespace }}
     
-    {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
+    {{- /* 1. Get mandatory exemption from helper */ -}}
+    {{- $defaults := include "gatekeeper.mandatoryNamespaceExemption" . | fromYaml -}}
+    {{- /* 2. Merge user values with mandatory exemption. */ -}}
+    {{- $merged := merge (deepCopy .Values.validatingWebhookExemptNamespacesLabels) $defaults -}}
+    {{- range $key, $value := $merged }}
     - key: {{ $key }}
       operator: NotIn
       values:
-      {{- range $value }}
+      {{- /* Ensure current namespace is in the list for the metadata key */ -}}
+      {{- $list := $value -}}
+      {{- if eq $key "kubernetes.io/metadata.name" }}
+        {{- $list = append $value $.Release.Namespace | uniq -}}
+      {{- end }}
+      {{- range $list }}
       - {{ . }}
       {{- end }}
     {{- end }}
@@ -91,10 +96,24 @@ webhooks:
   name: check-ignore-label.gatekeeper.sh
   namespaceSelector:
     matchExpressions:
-    - key: kubernetes.io/metadata.name
+    
+    {{- /* 1. Get mandatory exemption from helper */ -}}
+    {{- $defaults := include "gatekeeper.mandatoryNamespaceExemption" . | fromYaml -}}
+    {{- /* 2. Merge user values with mandatory exemption. */ -}}
+    {{- $merged := merge (deepCopy .Values.validatingWebhookExemptNamespacesLabels) $defaults -}}
+    {{- range $key, $value := $merged }}
+    - key: {{ $key }}
       operator: NotIn
       values:
-      - {{ .Release.Namespace }}
+      {{- /* Ensure current namespace is in the list for the metadata key */ -}}
+      {{- $list := $value -}}
+      {{- if eq $key "kubernetes.io/metadata.name" }}
+        {{- $list = append $value $.Release.Namespace | uniq -}}
+      {{- end }}
+      {{- range $list }}
+      - {{ . }}
+      {{- end }}
+    {{- end }}
   rules:
   - apiGroups:
     - ""
