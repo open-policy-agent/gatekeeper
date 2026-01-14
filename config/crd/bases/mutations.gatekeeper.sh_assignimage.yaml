@@ -57,6 +57,10 @@ spec:
                       items:
                         type: string
                       type: array
+                    operations:
+                      items:
+                        type: string
+                      type: array
                     versions:
                       items:
                         type: string
