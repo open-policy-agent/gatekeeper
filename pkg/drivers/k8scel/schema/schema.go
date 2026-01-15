@@ -292,3 +292,17 @@ func GetSourceFromTemplate(ct *templates.ConstraintTemplate) (*Source, error) {
 
 	return source, nil
 }
+
+// HasCELEngine checks if the ConstraintTemplate has a CEL engine code block,
+// without validating the source content.
+func HasCELEngine(ct *templates.ConstraintTemplate) bool {
+	if len(ct.Spec.Targets) != 1 {
+		return false
+	}
+	for _, code := range ct.Spec.Targets[0].Code {
+		if code.Engine == Name {
+			return true
+		}
+	}
+	return false
+}
