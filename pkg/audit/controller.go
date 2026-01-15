@@ -38,6 +38,10 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		log.Info("auditing is disabled")
 		return nil
 	}
+	if deps.Client == nil {
+		log.Info("audit requires OPA client, skipping")
+		return nil
+	}
 	am, err := New(m, deps)
 	if err != nil {
 		return err
