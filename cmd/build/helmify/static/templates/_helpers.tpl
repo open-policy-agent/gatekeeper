@@ -199,7 +199,7 @@ Extra env vars for audit pods
 
 {{/*
 Mandatory namespace exemption for Gatekeeper.
-Used for in the NamespaceSelector of the Gatekeeper validating and mutating webhook to ensure
+Used in the NamespaceSelector of the Gatekeeper validating and mutating webhook to ensure
 deployed namespace is exempted.
 */}}
 {{- define "gatekeeper.mandatoryNamespaceExemption" -}}

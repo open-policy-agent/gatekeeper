@@ -162,7 +162,7 @@ var replacements = map[string]string{
 	"HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
-	  {{- /* 1. Get mandatory exemption from helper */ -}}
+    {{- /* 1. Get mandatory exemption from helper */ -}}
     {{- $defaults := include "gatekeeper.mandatoryNamespaceExemption" . | fromYaml -}}
     {{- /* 2. Merge user values with mandatory exemption. */ -}}
     {{- $merged := merge (deepCopy .Values.mutatingWebhookExemptNamespacesLabels) $defaults -}}

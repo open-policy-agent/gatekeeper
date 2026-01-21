@@ -37,7 +37,7 @@ webhooks:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
     
-	  {{- /* 1. Get mandatory exemption from helper */ -}}
+    {{- /* 1. Get mandatory exemption from helper */ -}}
     {{- $defaults := include "gatekeeper.mandatoryNamespaceExemption" . | fromYaml -}}
     {{- /* 2. Merge user values with mandatory exemption. */ -}}
     {{- $merged := merge (deepCopy .Values.mutatingWebhookExemptNamespacesLabels) $defaults -}}
