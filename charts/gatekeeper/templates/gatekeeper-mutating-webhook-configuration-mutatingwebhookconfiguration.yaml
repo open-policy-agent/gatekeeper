@@ -46,7 +46,7 @@ webhooks:
       operator: NotIn
       values:
       {{- range $value }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}
   objectSelector: {{ toYaml .Values.mutatingWebhookObjectSelector | nindent 4 }}
