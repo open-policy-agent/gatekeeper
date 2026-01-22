@@ -133,7 +133,7 @@ func compareResults(baseline, current *Results, threshold float64, minThreshold 
 	// If minThreshold is set, convert it to a throughput difference threshold
 	// A latency increase of minThreshold corresponds to a throughput change that we should ignore
 	throughputPassed := -throughputDelta <= threshold
-	if !throughputPassed && minThreshold > 0 {
+	if !throughputPassed && minThreshold > 0 && baseline.Latencies.Mean > 0 {
 		// Calculate the absolute throughput difference
 		absThroughputDiff := baseline.ReviewsPerSecond - current.ReviewsPerSecond
 		// Convert minThreshold to an equivalent throughput tolerance
