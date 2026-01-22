@@ -14,7 +14,6 @@ spec:
     listKind: AssignList
     plural: assign
     singular: assign
-  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1

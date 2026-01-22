@@ -329,6 +329,18 @@ var replacements = map[string]string{
 	"- HELMSUBST_METRICS_BACKEND_ARG": `
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
+        {{- end }}
+        {{- if and (has "opentelemetry" .Values.metricsBackends) (hasKey .Values "otlpEndpoint") }}
+        - --otlp-endpoint={{ .Values.otlpEndpoint }}
+        {{- end }}
+        {{- if and (has "opentelemetry" .Values.metricsBackends) (hasKey .Values "otlpMetricInterval") }}
+        - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
+        {{- end }}
+        {{- if and (has "stackdriver" .Values.metricsBackends) (hasKey .Values "stackdriverOnlyWhenAvailable") }}
+        - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
+        {{- end }}
+        {{- if and (has "stackdriver" .Values.metricsBackends) (hasKey .Values "stackdriverMetricInterval") }}
+        - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
         {{- end }}`,
 
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES": `

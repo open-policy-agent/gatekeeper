@@ -1272,7 +1272,9 @@ func TestRunner_Run(t *testing.T) {
 
 			ctx := context.Background()
 
-			runner, err := NewRunner(tc.f, gator.NewOPAClient)
+			runner, err := NewRunner(tc.f, func(_ ...gator.Opt) (gator.Client, error) {
+				return gator.NewOPAClient(false)
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1300,7 +1302,7 @@ func TestRunner_Run_ClientError(t *testing.T) {
 		TestResults: []TestResult{{Error: gator.ErrCreatingClient}},
 	}
 
-	runner, err := NewRunner(fstest.MapFS{}, func(_ bool, _ bool) (gator.Client, error) {
+	runner, err := NewRunner(fstest.MapFS{}, func(_ ...gator.Opt) (gator.Client, error) {
 		return nil, errors.New("error")
 	})
 	if err != nil {
@@ -1642,7 +1644,9 @@ func TestRunner_RunCase(t *testing.T) {
 					constraintFile: &fstest.MapFile{Data: []byte(tc.constraint)},
 					objectFile:     &fstest.MapFile{Data: []byte(tc.object)},
 				},
-				gator.NewOPAClient,
+				func(_ ...gator.Opt) (gator.Client, error) {
+					return gator.NewOPAClient(false)
+				},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -1662,5 +1666,51 @@ func TestRunner_RunCase(t *testing.T) {
 				t.Errorf("%s", diff)
 			}
 		})
+	}
+}
+
+
+func TestRunner_Run_Print(t *testing.T) {
+	runner, err := NewRunner(
+		fstest.MapFS{
+			"template.yaml":   &fstest.MapFile{Data: []byte(fixtures.TemplateAlwaysValidate)},
+			"constraint.yaml": &fstest.MapFile{Data: []byte(fixtures.ConstraintAlwaysValidate)},
+			"object.yaml":     &fstest.MapFile{Data: []byte(fixtures.Object)},
+		},
+		func(opts ...gator.Opt) (gator.Client, error) {
+			return gator.NewOPAClient(false, opts...)
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+
+	suite := &Suite{
+		Tests: []Test{{
+			Template:   "template.yaml",
+			Constraint: "constraint.yaml",
+			Cases: []*Case{{
+				Object:     "object.yaml",
+				Assertions: []Assertion{{
+					Violations: gator.IntStrFromStr("no"),
+				}},
+			}},
+		}},
+	}
+
+	got := runner.Run(ctx, &nilFilter{}, suite)
+	want := SuiteResult{
+		TestResults: []TestResult{{
+			CaseResults: []CaseResult{{
+				Print: "a debug message (Object)\n",
+			}},
+		}},
+	}
+	if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
+		cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
+	); diff != "" {
+		t.Fatalf("%s", diff)
 	}
 }

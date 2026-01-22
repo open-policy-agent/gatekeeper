@@ -11,7 +11,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2" // yaml.v3 inserts a space before '-', which is inconsistent with standard, kubernetes and kubebuilder format. yaml.v2 does not insert these spaces.
+	"go.yaml.in/yaml/v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
