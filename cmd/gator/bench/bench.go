@@ -156,8 +156,26 @@ func run(_ *cobra.Command, _ []string) {
 		cmdutils.ErrFatalf("threshold must be non-negative")
 	}
 
+	if flagMinThreshold < 0 {
+		cmdutils.ErrFatalf("min-threshold must be non-negative")
+	}
+
 	if flagConcurrency < 1 {
 		cmdutils.ErrFatalf("concurrency must be at least 1")
+	}
+
+	// Warn if warmup exceeds iterations (likely user error)
+	if flagWarmup > flagIterations {
+		fmt.Fprintf(os.Stderr, "Warning: warmup (%d) exceeds iterations (%d). Consider reducing warmup.\n\n", flagWarmup, flagIterations)
+	}
+
+	// Validate baseline file exists before running expensive benchmark
+	if flagCompare != "" {
+		if _, err := os.Stat(flagCompare); os.IsNotExist(err) {
+			cmdutils.ErrFatalf("baseline file does not exist: %s", flagCompare)
+		} else if err != nil {
+			cmdutils.ErrFatalf("cannot access baseline file: %v", err)
+		}
 	}
 
 	// Run benchmark

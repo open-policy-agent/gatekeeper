@@ -445,6 +445,7 @@ type JSONResults struct {
 	ViolationCount     int                `json:"violationCount" yaml:"violationCount"`
 	ReviewsPerSecond   float64            `json:"reviewsPerSecond" yaml:"reviewsPerSecond"`
 	MemoryStats        *JSONMemoryStats   `json:"memoryStats,omitempty" yaml:"memoryStats,omitempty"`
+	StatsEntries       []JSONStatsEntry   `json:"statsEntries,omitempty" yaml:"statsEntries,omitempty"`
 	SkippedTemplates   []string           `json:"skippedTemplates,omitempty" yaml:"skippedTemplates,omitempty"`
 	SkippedConstraints []string           `json:"skippedConstraints,omitempty" yaml:"skippedConstraints,omitempty"`
 	SkippedDataObjects []string           `json:"skippedDataObjects,omitempty" yaml:"skippedDataObjects,omitempty"`
@@ -474,6 +475,27 @@ type JSONMemoryStats struct {
 	BytesPerReview  string `json:"bytesPerReview" yaml:"bytesPerReview"`
 	TotalAllocs     uint64 `json:"totalAllocs" yaml:"totalAllocs"`
 	TotalBytes      string `json:"totalBytes" yaml:"totalBytes"`
+}
+
+// JSONStatsEntry is a JSON/YAML-friendly version of StatsEntry.
+type JSONStatsEntry struct {
+	Scope    string          `json:"scope" yaml:"scope"`
+	StatsFor string          `json:"statsFor,omitempty" yaml:"statsFor,omitempty"`
+	Stats    []JSONStat      `json:"stats" yaml:"stats"`
+	Labels   []JSONStatLabel `json:"labels,omitempty" yaml:"labels,omitempty"`
+}
+
+// JSONStat is a JSON/YAML-friendly version of instrumentation.Stat.
+type JSONStat struct {
+	Name   string      `json:"name" yaml:"name"`
+	Value  interface{} `json:"value" yaml:"value"`
+	Source string      `json:"source" yaml:"source"`
+}
+
+// JSONStatLabel is a JSON/YAML-friendly version of instrumentation.Label.
+type JSONStatLabel struct {
+	Name  string      `json:"name" yaml:"name"`
+	Value interface{} `json:"value" yaml:"value"`
 }
 
 func toJSONResults(results []Results) []JSONResults {
@@ -518,6 +540,42 @@ func toJSONResults(results []Results) []JSONResults {
 				BytesPerReview:  formatBytes(r.MemoryStats.BytesPerReview),
 				TotalAllocs:     r.MemoryStats.TotalAllocs,
 				TotalBytes:      formatBytes(r.MemoryStats.TotalBytes),
+			}
+		}
+
+		// Add stats entries if available
+		if len(r.StatsEntries) > 0 {
+			jr.StatsEntries = make([]JSONStatsEntry, 0, len(r.StatsEntries))
+			for _, entry := range r.StatsEntries {
+				if entry == nil {
+					continue
+				}
+				jsonEntry := JSONStatsEntry{
+					Scope:    entry.Scope,
+					StatsFor: entry.StatsFor,
+				}
+				// Convert stats
+				for _, stat := range entry.Stats {
+					if stat == nil {
+						continue
+					}
+					jsonEntry.Stats = append(jsonEntry.Stats, JSONStat{
+						Name:   stat.Name,
+						Value:  stat.Value,
+						Source: fmt.Sprintf("%s/%s", stat.Source.Type, stat.Source.Value),
+					})
+				}
+				// Convert labels
+				for _, label := range entry.Labels {
+					if label == nil {
+						continue
+					}
+					jsonEntry.Labels = append(jsonEntry.Labels, JSONStatLabel{
+						Name:  label.Name,
+						Value: label.Value,
+					})
+				}
+				jr.StatsEntries = append(jr.StatsEntries, jsonEntry)
 			}
 		}
 
