@@ -654,7 +654,7 @@ gator bench --filename=policies/
 |------|-------|---------|-------------|
 | `--filename` | `-f` | | File or directory containing ConstraintTemplates, Constraints, and resources. Repeatable. |
 | `--image` | `-i` | | OCI image URL containing policies. Repeatable. |
-| `--engine` | `-e` | `rego` | Policy engine to benchmark: `rego`, `cel`, or `all` |
+| `--engine` | `-e` | `cel` | Policy engine to benchmark: `rego`, `cel`, or `all` |
 | `--iterations` | `-n` | `1000` | Number of benchmark iterations. Use ≥1000 for reliable P99 percentiles. |
 | `--warmup` | | `10` | Warmup iterations before measurement |
 | `--concurrency` | `-c` | `1` | Number of concurrent goroutines for parallel evaluation |

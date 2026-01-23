@@ -14,6 +14,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
@@ -248,13 +249,14 @@ func runBenchmark(
 	benchStart := time.Now()
 
 	// Concurrent or sequential execution based on concurrency setting
+	var statsEntries []*instrumentation.StatsEntry
 	if opts.Concurrency > 1 {
-		durations, totalViolations, err = runConcurrentBenchmark(ctx, client, reviewObjs, opts)
+		durations, totalViolations, statsEntries, err = runConcurrentBenchmark(ctx, client, reviewObjs, opts)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		durations, totalViolations, err = runSequentialBenchmark(ctx, client, reviewObjs, opts)
+		durations, totalViolations, statsEntries, err = runSequentialBenchmark(ctx, client, reviewObjs, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -298,6 +300,7 @@ func runBenchmark(
 		ViolationCount:     int(totalViolations),
 		ReviewsPerSecond:   throughput,
 		MemoryStats:        memStats,
+		StatsEntries:       statsEntries,
 		SkippedTemplates:   skippedTemplates,
 		SkippedConstraints: skippedConstraints,
 		SkippedDataObjects: skippedDataObjects,
@@ -355,9 +358,10 @@ func runSequentialBenchmark(
 	client *constraintclient.Client,
 	reviewObjs []*unstructured.Unstructured,
 	opts *Opts,
-) ([]time.Duration, int64, error) {
+) ([]time.Duration, int64, []*instrumentation.StatsEntry, error) {
 	var durations []time.Duration
 	var totalViolations int64
+	var statsEntries []*instrumentation.StatsEntry
 
 	for i := 0; i < opts.Iterations; i++ {
 		for _, obj := range reviewObjs {
@@ -371,7 +375,7 @@ func runSequentialBenchmark(
 			reviewDuration := time.Since(reviewStart)
 
 			if err != nil {
-				return nil, 0, fmt.Errorf("review failed for %s/%s: %w",
+				return nil, 0, nil, fmt.Errorf("review failed for %s/%s: %w",
 					obj.GetNamespace(), obj.GetName(), err)
 			}
 
@@ -381,17 +385,23 @@ func runSequentialBenchmark(
 			for _, r := range resp.ByTarget {
 				totalViolations += int64(len(r.Results))
 			}
+
+			// Collect stats only from first iteration to avoid excessive data
+			if opts.GatherStats && i == 0 {
+				statsEntries = append(statsEntries, resp.StatsEntries...)
+			}
 		}
 	}
 
-	return durations, totalViolations, nil
+	return durations, totalViolations, statsEntries, nil
 }
 
 // reviewResult holds the result of a single review for concurrent execution.
 type reviewResult struct {
-	duration   time.Duration
-	violations int
-	err        error
+	duration     time.Duration
+	violations   int
+	statsEntries []*instrumentation.StatsEntry
+	err          error
 }
 
 // runConcurrentBenchmark runs the benchmark with multiple goroutines.
@@ -400,7 +410,7 @@ func runConcurrentBenchmark(
 	client *constraintclient.Client,
 	reviewObjs []*unstructured.Unstructured,
 	opts *Opts,
-) ([]time.Duration, int64, error) {
+) ([]time.Duration, int64, []*instrumentation.StatsEntry, error) {
 	totalReviews := opts.Iterations * len(reviewObjs)
 
 	// Create work items
@@ -454,9 +464,16 @@ func runConcurrentBenchmark(
 					violations += len(r.Results)
 				}
 
+				// Collect stats only from first iteration to avoid excessive data
+				var stats []*instrumentation.StatsEntry
+				if opts.GatherStats && work.iteration == 0 {
+					stats = resp.StatsEntries
+				}
+
 				resultsChan <- reviewResult{
-					duration:   reviewDuration,
-					violations: violations,
+					duration:     reviewDuration,
+					violations:   violations,
+					statsEntries: stats,
 				}
 			}
 		}()
@@ -471,6 +488,7 @@ func runConcurrentBenchmark(
 	// Collect results
 	var durations []time.Duration
 	var totalViolations int64
+	var statsEntries []*instrumentation.StatsEntry
 
 	for result := range resultsChan {
 		if result.err != nil {
@@ -478,14 +496,17 @@ func runConcurrentBenchmark(
 		}
 		durations = append(durations, result.duration)
 		totalViolations += int64(result.violations)
+		if len(result.statsEntries) > 0 {
+			statsEntries = append(statsEntries, result.statsEntries...)
+		}
 	}
 
 	// Check for errors
 	if errVal := firstErr.Load(); errVal != nil {
 		if err, ok := errVal.(error); ok {
-			return nil, 0, err
+			return nil, 0, nil, err
 		}
 	}
 
-	return durations, totalViolations, nil
+	return durations, totalViolations, statsEntries, nil
 }

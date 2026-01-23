@@ -3,6 +3,8 @@ package bench
 import (
 	"io"
 	"time"
+
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 )
 
 // Engine represents the policy evaluation engine to benchmark.
@@ -119,6 +121,9 @@ type Results struct {
 
 	// MemoryStats contains memory allocation statistics (only populated with --memory).
 	MemoryStats *MemoryStats `json:"memoryStats,omitempty" yaml:"memoryStats,omitempty"`
+
+	// StatsEntries contains per-constraint statistics from the policy engine (only populated with --stats).
+	StatsEntries []*instrumentation.StatsEntry `json:"statsEntries,omitempty" yaml:"statsEntries,omitempty"`
 }
 
 // SetupBreakdown contains detailed timing for setup phases.

@@ -233,6 +233,29 @@ func writeResultTable(w io.Writer, r *Results) {
 		fmt.Fprintf(tw, "  Total Bytes:\t%s\n", formatBytes(r.MemoryStats.TotalBytes))
 	}
 
+	// Stats section (if available)
+	if len(r.StatsEntries) > 0 {
+		fmt.Fprintln(tw)
+		fmt.Fprintln(tw, "Per-Constraint Statistics (from first iteration):")
+		for _, entry := range r.StatsEntries {
+			if entry == nil {
+				continue
+			}
+			// Include StatsFor to identify which constraint/template produced the stat
+			if entry.StatsFor != "" {
+				fmt.Fprintf(tw, "  Constraint: %s (Scope: %s)\n", entry.StatsFor, entry.Scope)
+			} else {
+				fmt.Fprintf(tw, "  Scope: %s\n", entry.Scope)
+			}
+			for _, stat := range entry.Stats {
+				if stat == nil {
+					continue
+				}
+				fmt.Fprintf(tw, "    %s:\t%v %s\n", stat.Name, stat.Value, stat.Source.Type)
+			}
+		}
+	}
+
 	tw.Flush()
 }
 
