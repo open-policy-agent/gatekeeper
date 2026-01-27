@@ -8,13 +8,17 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 )
 
@@ -476,6 +480,82 @@ func TestSystem_getTLSCertificate(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("System.getTLSCertificate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSystem_sendRequests_contextTimeout(t *testing.T) {
+	tests := []struct {
+		name            string
+		providerTimeout int
+		wantTimeout     time.Duration
+	}{
+		{
+			name:            "uses provider timeout of 10 seconds",
+			providerTimeout: 10,
+			wantTimeout:     10 * time.Second,
+		},
+		{
+			name:            "uses provider timeout of 3 seconds",
+			providerTimeout: 3,
+			wantTimeout:     3 * time.Second,
+		},
+		{
+			name:            "uses provider timeout of 1 second",
+			providerTimeout: 1,
+			wantTimeout:     1 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedCtx context.Context
+			providerName := "test-provider-timeout"
+
+			providerCache := externaldata.NewCache()
+			provider := &externaldataUnversioned.Provider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: providerName,
+				},
+				Spec: externaldataUnversioned.ProviderSpec{
+					URL:      "https://localhost:8080/validate",
+					Timeout:  tt.providerTimeout,
+					CABundle: util.ValidCABundle,
+				},
+			}
+			if err := providerCache.Upsert(provider); err != nil {
+				t.Fatalf("failed to upsert provider: %v", err)
+			}
+
+			s := NewSystem(SystemOpts{
+				ProviderCache: providerCache,
+				SendRequestToExternalDataProvider: func(ctx context.Context, _ *externaldataUnversioned.Provider, _ []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+					capturedCtx = ctx
+					return &externaldata.ProviderResponse{
+						Response: externaldata.Response{Idempotent: true},
+					}, http.StatusOK, nil
+				},
+			})
+
+			providerKeys := map[string]sets.Set[string]{
+				providerName: sets.New[string]("key1"),
+			}
+			s.sendRequests(providerKeys, nil)
+
+			if capturedCtx == nil {
+				t.Fatal("sendRequestToExternalDataProvider was not called")
+			}
+
+			deadline, ok := capturedCtx.Deadline()
+			if !ok {
+				t.Fatal("expected context to have a deadline")
+			}
+
+			// Allow some tolerance for test execution time
+			actualTimeout := time.Until(deadline)
+			if actualTimeout > tt.wantTimeout || actualTimeout < tt.wantTimeout-100*time.Millisecond {
+				t.Errorf("expected timeout ~%v, got %v", tt.wantTimeout, actualTimeout)
 			}
 		})
 	}
