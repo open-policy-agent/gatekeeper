@@ -290,7 +290,7 @@ func (r *Runner) runCase(ctx context.Context, newClient func(opts ...gator.Opt) 
 		Error:   err,
 		Runtime: Duration(time.Since(start)),
 		Trace:   trace,
-		Print: printBuf.String(),
+		Print:   printBuf.String(),
 	}
 }
 

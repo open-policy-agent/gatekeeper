@@ -1669,7 +1669,6 @@ func TestRunner_RunCase(t *testing.T) {
 	}
 }
 
-
 func TestRunner_Run_Print(t *testing.T) {
 	runner, err := NewRunner(
 		fstest.MapFS{
@@ -1692,7 +1691,7 @@ func TestRunner_Run_Print(t *testing.T) {
 			Template:   "template.yaml",
 			Constraint: "constraint.yaml",
 			Cases: []*Case{{
-				Object:     "object.yaml",
+				Object: "object.yaml",
 				Assertions: []Assertion{{
 					Violations: gator.IntStrFromStr("no"),
 				}},
