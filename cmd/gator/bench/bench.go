@@ -123,7 +123,7 @@ func init() {
 	Cmd.Flags().Float64Var(&flagThreshold, flagNameThreshold, 10.0,
 		"regression threshold percentage for comparison. Exit code 1 if exceeded.")
 	Cmd.Flags().DurationVar(&flagMinThreshold, flagNameMinThreshold, 0,
-		"minimum absolute difference to consider a regression (e.g., 1ms). Prevents false positives on fast policies where small absolute changes appear as large percentages.")
+		"minimum absolute latency difference to consider a regression (e.g., 1ms). Prevents false positives on fast policies where small absolute changes appear as large percentages.")
 }
 
 func run(_ *cobra.Command, _ []string) {

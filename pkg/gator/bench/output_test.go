@@ -236,19 +236,22 @@ func TestFormatResults_SkippedTemplates(t *testing.T) {
 }
 
 func TestFormatResults_SkippedDataObjects(t *testing.T) {
+	// Test skipped data objects - this tests actual failures during data loading,
+	// not CEL engine limitations (which use ReferentialDataSupported flag)
 	results := []Results{
 		{
-			Engine:             EngineCEL,
-			TemplateCount:      2,
-			ConstraintCount:    2,
-			ObjectCount:        5,
-			Iterations:         10,
-			SetupDuration:      50 * time.Millisecond,
-			TotalDuration:      time.Second,
-			Latencies:          Latencies{Min: time.Millisecond, Max: time.Millisecond, Mean: time.Millisecond},
-			ViolationCount:     0,
-			ReviewsPerSecond:   50,
-			SkippedDataObjects: []string{"default/pod1", "default/pod2", "kube-system/configmap1"},
+			Engine:                   EngineRego,
+			TemplateCount:            2,
+			ConstraintCount:          2,
+			ObjectCount:              5,
+			Iterations:               10,
+			SetupDuration:            50 * time.Millisecond,
+			TotalDuration:            time.Second,
+			Latencies:                Latencies{Min: time.Millisecond, Max: time.Millisecond, Mean: time.Millisecond},
+			ViolationCount:           0,
+			ReviewsPerSecond:         50,
+			ReferentialDataSupported: true,
+			SkippedDataObjects:       []string{"default/pod1", "default/pod2", "kube-system/configmap1"},
 		},
 	}
 
@@ -261,7 +264,7 @@ func TestFormatResults_SkippedDataObjects(t *testing.T) {
 	expectedStrings := []string{
 		"Warnings:",
 		"Skipped Data Objects:",
-		"referential constraints not exercised",
+		"failed to load as referential data",
 		"default/pod1",
 		"default/pod2",
 		"kube-system/configmap1",
@@ -278,16 +281,17 @@ func TestFormatResults_SkippedDataObjectsTruncated(t *testing.T) {
 	// Test with more than 5 objects to verify truncation
 	results := []Results{
 		{
-			Engine:           EngineCEL,
-			TemplateCount:    2,
-			ConstraintCount:  2,
-			ObjectCount:      10,
-			Iterations:       10,
-			SetupDuration:    50 * time.Millisecond,
-			TotalDuration:    time.Second,
-			Latencies:        Latencies{Min: time.Millisecond, Max: time.Millisecond, Mean: time.Millisecond},
-			ViolationCount:   0,
-			ReviewsPerSecond: 100,
+			Engine:                   EngineRego,
+			TemplateCount:            2,
+			ConstraintCount:          2,
+			ObjectCount:              10,
+			Iterations:               10,
+			SetupDuration:            50 * time.Millisecond,
+			TotalDuration:            time.Second,
+			Latencies:                Latencies{Min: time.Millisecond, Max: time.Millisecond, Mean: time.Millisecond},
+			ViolationCount:           0,
+			ReviewsPerSecond:         100,
+			ReferentialDataSupported: true,
 			SkippedDataObjects: []string{
 				"obj1", "obj2", "obj3", "obj4", "obj5", "obj6", "obj7",
 			},
@@ -309,6 +313,49 @@ func TestFormatResults_SkippedDataObjectsTruncated(t *testing.T) {
 		if !strings.Contains(output, s) {
 			t.Errorf("table output missing truncation message: %q\nOutput:\n%s", s, output)
 		}
+	}
+}
+
+func TestFormatResults_ReferentialDataNotSupported(t *testing.T) {
+	// Test that CEL engine shows informational note (not warning) about referential data
+	results := []Results{
+		{
+			Engine:                   EngineCEL,
+			TemplateCount:            2,
+			ConstraintCount:          2,
+			ObjectCount:              5,
+			Iterations:               10,
+			SetupDuration:            50 * time.Millisecond,
+			TotalDuration:            time.Second,
+			Latencies:                Latencies{Min: time.Millisecond, Max: time.Millisecond, Mean: time.Millisecond},
+			ViolationCount:           0,
+			ReviewsPerSecond:         50,
+			ReferentialDataSupported: false, // CEL doesn't support referential data
+		},
+	}
+
+	output, err := FormatResults(results, OutputFormatTable)
+	if err != nil {
+		t.Fatalf("FormatResults() error = %v", err)
+	}
+
+	// Should show informational note, not warning
+	expectedStrings := []string{
+		"Note:",
+		"Referential Data:",
+		"Not supported by",
+		"CEL",
+	}
+
+	for _, s := range expectedStrings {
+		if !strings.Contains(output, s) {
+			t.Errorf("table output missing referential data note: %q\nOutput:\n%s", s, output)
+		}
+	}
+
+	// Should NOT show "Warnings:" for referential data (that's for actual failures)
+	if strings.Contains(output, "Warnings:") {
+		t.Errorf("table output should not show Warnings for CEL referential data limitation\nOutput:\n%s", output)
 	}
 }
 

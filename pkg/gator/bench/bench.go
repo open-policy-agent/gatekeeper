@@ -201,16 +201,8 @@ func runBenchmark(
 	// Note: CEL driver doesn't support referential constraints, so skip data loading for CEL
 	dataStart := time.Now()
 	var skippedDataObjects []string
-	if engine == EngineCEL {
-		// CEL engine doesn't support referential data, skip data loading entirely
-		for _, obj := range reviewObjs {
-			objName := obj.GetName()
-			if ns := obj.GetNamespace(); ns != "" {
-				objName = ns + "/" + objName
-			}
-			skippedDataObjects = append(skippedDataObjects, objName)
-		}
-	} else {
+	referentialDataSupported := engine != EngineCEL
+	if referentialDataSupported {
 		for _, obj := range reviewObjs {
 			_, err := client.AddData(ctx, obj)
 			if err != nil {
@@ -218,6 +210,9 @@ func runBenchmark(
 			}
 		}
 	}
+	// Note: We don't populate skippedDataObjects for CEL engine because it's expected
+	// behavior (CEL doesn't support referential data), not an error. The
+	// ReferentialDataSupported field indicates this engine limitation.
 	setupBreakdown.DataLoading = time.Since(dataStart)
 
 	setupDuration := time.Since(setupStart)
@@ -287,23 +282,24 @@ func runBenchmark(
 	throughput := calculateThroughput(totalReviews, totalDuration)
 
 	return &Results{
-		Engine:             engine,
-		TemplateCount:      loadedTemplateCount,
-		ConstraintCount:    loadedConstraintCount,
-		ObjectCount:        len(reviewObjs),
-		Iterations:         opts.Iterations,
-		Concurrency:        opts.Concurrency,
-		SetupDuration:      setupDuration,
-		SetupBreakdown:     setupBreakdown,
-		TotalDuration:      totalDuration,
-		Latencies:          latencies,
-		ViolationCount:     int(totalViolations),
-		ReviewsPerSecond:   throughput,
-		MemoryStats:        memStats,
-		StatsEntries:       statsEntries,
-		SkippedTemplates:   skippedTemplates,
-		SkippedConstraints: skippedConstraints,
-		SkippedDataObjects: skippedDataObjects,
+		Engine:                   engine,
+		TemplateCount:            loadedTemplateCount,
+		ConstraintCount:          loadedConstraintCount,
+		ObjectCount:              len(reviewObjs),
+		Iterations:               opts.Iterations,
+		Concurrency:              opts.Concurrency,
+		SetupDuration:            setupDuration,
+		SetupBreakdown:           setupBreakdown,
+		TotalDuration:            totalDuration,
+		Latencies:                latencies,
+		ViolationCount:           int(totalViolations),
+		ReviewsPerSecond:         throughput,
+		MemoryStats:              memStats,
+		StatsEntries:             statsEntries,
+		SkippedTemplates:         skippedTemplates,
+		SkippedConstraints:       skippedConstraints,
+		SkippedDataObjects:       skippedDataObjects,
+		ReferentialDataSupported: referentialDataSupported,
 	}, nil
 }
 

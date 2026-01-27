@@ -89,8 +89,13 @@ type Results struct {
 	SkippedConstraints []string `json:"skippedConstraints,omitempty" yaml:"skippedConstraints,omitempty"`
 
 	// SkippedDataObjects contains names of objects that failed to load as referential data.
-	// This typically happens with CEL engine which doesn't support referential constraints.
+	// This is populated only when actual errors occur during data loading, not for expected
+	// engine limitations (use ReferentialDataSupported for that).
 	SkippedDataObjects []string `json:"skippedDataObjects,omitempty" yaml:"skippedDataObjects,omitempty"`
+
+	// ReferentialDataSupported indicates whether the engine supports referential data.
+	// When false, referential constraints cannot be exercised (e.g., CEL engine).
+	ReferentialDataSupported bool `json:"referentialDataSupported" yaml:"referentialDataSupported"`
 
 	// ObjectCount is the number of objects reviewed.
 	ObjectCount int `json:"objectCount" yaml:"objectCount"`

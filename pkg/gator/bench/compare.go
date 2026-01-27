@@ -158,6 +158,8 @@ func compareResults(baseline, current *Results, threshold float64, minThreshold 
 	})
 
 	// Compare memory stats if available
+	// Note: minThreshold is a time.Duration and applies only to latency/throughput metrics.
+	// Memory metrics are evaluated strictly against the percentage threshold.
 	if baseline.MemoryStats != nil && current.MemoryStats != nil {
 		allocsDelta := calculateDelta(
 			float64(baseline.MemoryStats.AllocsPerReview),

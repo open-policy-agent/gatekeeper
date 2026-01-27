@@ -183,7 +183,7 @@ func writeResultTable(w io.Writer, r *Results) {
 				len(r.SkippedConstraints), strings.Join(r.SkippedConstraints, ", "))
 		}
 		if len(r.SkippedDataObjects) > 0 {
-			fmt.Fprintf(tw, "  Skipped Data Objects:\t%d (referential constraints not exercised)\n",
+			fmt.Fprintf(tw, "  Skipped Data Objects:\t%d (failed to load as referential data)\n",
 				len(r.SkippedDataObjects))
 			// Show first few objects if not too many
 			if len(r.SkippedDataObjects) <= 5 {
@@ -193,6 +193,14 @@ func writeResultTable(w io.Writer, r *Results) {
 					strings.Join(r.SkippedDataObjects[:5], ", "), len(r.SkippedDataObjects)-5)
 			}
 		}
+		fmt.Fprintln(tw)
+	}
+
+	// Informational note about engine limitations (not a warning)
+	if !r.ReferentialDataSupported {
+		fmt.Fprintln(tw, "Note:")
+		fmt.Fprintf(tw, "  Referential Data:\tNot supported by %s engine\n", r.Engine)
+		fmt.Fprintln(tw, "  \t(Referential constraints cannot be exercised with this engine)")
 		fmt.Fprintln(tw)
 	}
 
@@ -431,24 +439,25 @@ func formatBytes(b uint64) string {
 
 // JSONResults is a JSON/YAML-friendly version of Results with string durations.
 type JSONResults struct {
-	Engine             string             `json:"engine" yaml:"engine"`
-	TemplateCount      int                `json:"templateCount" yaml:"templateCount"`
-	ConstraintCount    int                `json:"constraintCount" yaml:"constraintCount"`
-	ObjectCount        int                `json:"objectCount" yaml:"objectCount"`
-	Iterations         int                `json:"iterations" yaml:"iterations"`
-	Concurrency        int                `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
-	TotalReviews       int                `json:"totalReviews" yaml:"totalReviews"`
-	SetupDuration      string             `json:"setupDuration" yaml:"setupDuration"`
-	SetupBreakdown     JSONSetupBreakdown `json:"setupBreakdown" yaml:"setupBreakdown"`
-	TotalDuration      string             `json:"totalDuration" yaml:"totalDuration"`
-	Latencies          JSONLatency        `json:"latencies" yaml:"latencies"`
-	ViolationCount     int                `json:"violationCount" yaml:"violationCount"`
-	ReviewsPerSecond   float64            `json:"reviewsPerSecond" yaml:"reviewsPerSecond"`
-	MemoryStats        *JSONMemoryStats   `json:"memoryStats,omitempty" yaml:"memoryStats,omitempty"`
-	StatsEntries       []JSONStatsEntry   `json:"statsEntries,omitempty" yaml:"statsEntries,omitempty"`
-	SkippedTemplates   []string           `json:"skippedTemplates,omitempty" yaml:"skippedTemplates,omitempty"`
-	SkippedConstraints []string           `json:"skippedConstraints,omitempty" yaml:"skippedConstraints,omitempty"`
-	SkippedDataObjects []string           `json:"skippedDataObjects,omitempty" yaml:"skippedDataObjects,omitempty"`
+	Engine                   string             `json:"engine" yaml:"engine"`
+	TemplateCount            int                `json:"templateCount" yaml:"templateCount"`
+	ConstraintCount          int                `json:"constraintCount" yaml:"constraintCount"`
+	ObjectCount              int                `json:"objectCount" yaml:"objectCount"`
+	Iterations               int                `json:"iterations" yaml:"iterations"`
+	Concurrency              int                `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
+	TotalReviews             int                `json:"totalReviews" yaml:"totalReviews"`
+	SetupDuration            string             `json:"setupDuration" yaml:"setupDuration"`
+	SetupBreakdown           JSONSetupBreakdown `json:"setupBreakdown" yaml:"setupBreakdown"`
+	TotalDuration            string             `json:"totalDuration" yaml:"totalDuration"`
+	Latencies                JSONLatency        `json:"latencies" yaml:"latencies"`
+	ViolationCount           int                `json:"violationCount" yaml:"violationCount"`
+	ReviewsPerSecond         float64            `json:"reviewsPerSecond" yaml:"reviewsPerSecond"`
+	MemoryStats              *JSONMemoryStats   `json:"memoryStats,omitempty" yaml:"memoryStats,omitempty"`
+	StatsEntries             []JSONStatsEntry   `json:"statsEntries,omitempty" yaml:"statsEntries,omitempty"`
+	SkippedTemplates         []string           `json:"skippedTemplates,omitempty" yaml:"skippedTemplates,omitempty"`
+	SkippedConstraints       []string           `json:"skippedConstraints,omitempty" yaml:"skippedConstraints,omitempty"`
+	SkippedDataObjects       []string           `json:"skippedDataObjects,omitempty" yaml:"skippedDataObjects,omitempty"`
+	ReferentialDataSupported bool               `json:"referentialDataSupported" yaml:"referentialDataSupported"`
 }
 
 // JSONSetupBreakdown is a JSON/YAML-friendly version of SetupBreakdown with string durations.
@@ -526,11 +535,12 @@ func toJSONResults(results []Results) []JSONResults {
 				P95:  r.Latencies.P95.String(),
 				P99:  r.Latencies.P99.String(),
 			},
-			ViolationCount:     r.ViolationCount,
-			ReviewsPerSecond:   r.ReviewsPerSecond,
-			SkippedTemplates:   r.SkippedTemplates,
-			SkippedConstraints: r.SkippedConstraints,
-			SkippedDataObjects: r.SkippedDataObjects,
+			ViolationCount:           r.ViolationCount,
+			ReviewsPerSecond:         r.ReviewsPerSecond,
+			SkippedTemplates:         r.SkippedTemplates,
+			SkippedConstraints:       r.SkippedConstraints,
+			SkippedDataObjects:       r.SkippedDataObjects,
+			ReferentialDataSupported: r.ReferentialDataSupported,
 		}
 
 		// Add memory stats if available
