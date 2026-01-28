@@ -2,8 +2,6 @@ module github.com/open-policy-agent/gatekeeper/v3
 
 go 1.25.0
 
-replace github.com/open-policy-agent/frameworks/constraint => github.com/open-policy-agent/frameworks/constraint v0.0.0-20260128184941-edd146a3c974
-
 require (
 	cloud.google.com/go/trace v1.10.11
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.44.0
@@ -17,7 +15,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/gomega v1.39.0
 	github.com/open-policy-agent/cert-controller v0.14.1-0.20251031183427-40974f7dd486
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20251217214254-e3880ce65b48
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20260128205711-a9aa88503224
 	github.com/open-policy-agent/opa v1.12.3
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.23.2
