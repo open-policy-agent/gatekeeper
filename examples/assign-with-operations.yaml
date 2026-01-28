@@ -57,47 +57,52 @@ spec:
     # No operations field - defaults to CREATE and UPDATE for backward compatibility
   match:
     scope: Namespaced
-  location: "metadata.labels.legacy-mutator"
+  location: "spec.containers[name:*].resources.limits.cpu"
   parameters:
     assign:
-      value: "true"
+      value: "500m"
 
 ---
-# Example 4: DELETE operation mutation (advanced use case)
-# Use with caution - most mutations don't need to run on DELETE
+# Example 4: AssignMetadata with operations for labels
+# Use AssignMetadata for metadata mutations (labels/annotations)
+# Note: AssignMetadata does not have applyTo, so operations is not available here.
+# For metadata mutations, the operation filtering is done via match criteria.
 apiVersion: mutations.gatekeeper.sh/v1
-kind: Assign
+kind: AssignMetadata
 metadata:
-  name: assign-delete-example
+  name: assign-label-example
+spec:
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: [""]
+      kinds: ["Pod"]
+  location: "metadata.labels.managed-by"
+  parameters:
+    assign:
+      value: "gatekeeper"
+
+---
+# Example 5: ModifySet with operations field
+# ModifySet also supports the operations field in applyTo
+apiVersion: mutations.gatekeeper.sh/v1
+kind: ModifySet
+metadata:
+  name: modifyset-tolerations-create-only
 spec:
   applyTo:
   - groups: [""]
     kinds: ["Pod"]
     versions: ["v1"]
-    operations: ["DELETE"]  # Example: Apply only on DELETE operations (if you have a use case)
+    operations: ["CREATE"]  # Only apply on CREATE operations
   match:
     scope: Namespaced
-  location: "metadata.labels.deletion-timestamp"
+  location: "spec.tolerations"
   parameters:
-    assign:
-      value: "processing"
-
----
-# Example 5: All operations mutation
-# Demonstrates applying mutations on all possible operations
-apiVersion: mutations.gatekeeper.sh/v1
-kind: Assign
-metadata:
-  name: assign-all-operations
-spec:
-  applyTo:
-  - groups: [""]
-    kinds: ["Pod"]
-    versions: ["v1"]
-    operations: ["CREATE", "UPDATE", "DELETE"]  # Apply on all operations
-  match:
-    scope: Namespaced
-  location: "metadata.labels.lifecycle-stage"
-  parameters:
-    assign:
-      value: "managed"
+    operation: merge
+    values:
+      fromList:
+      - key: "node.kubernetes.io/not-ready"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300

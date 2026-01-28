@@ -1,6 +1,20 @@
 package match
 
-import "k8s.io/apimachinery/pkg/runtime/schema"
+import (
+	admissionv1 "k8s.io/api/admission/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+)
+
+// ApplyToOperation is a string type that represents an admission operation.
+// +kubebuilder:validation:Enum=CREATE;UPDATE;DELETE
+type ApplyToOperation string
+
+// Operation constants for ApplyToOperation.
+const (
+	OperationCreate ApplyToOperation = "CREATE"
+	OperationUpdate ApplyToOperation = "UPDATE"
+	OperationDelete ApplyToOperation = "DELETE"
+)
 
 // AppliesTo checks if any item the given slice of ApplyTo applies to the given object.
 func AppliesTo(applyTo []ApplyTo, gvk schema.GroupVersionKind) bool {
@@ -13,7 +27,7 @@ func AppliesTo(applyTo []ApplyTo, gvk schema.GroupVersionKind) bool {
 }
 
 // AppliesOperationTo checks if any item in the given slice of ApplyTo allows the given operation.
-func AppliesOperationTo(applyTo []ApplyTo, operation string) bool {
+func AppliesOperationTo(applyTo []ApplyTo, operation admissionv1.Operation) bool {
 	for _, apply := range applyTo {
 		if apply.MatchesOperation(operation) {
 			return true
@@ -31,7 +45,8 @@ type ApplyTo struct {
 	Versions   []string `json:"versions,omitempty"`
 	// Operations specifies which admission operations (CREATE, UPDATE, DELETE) should trigger
 	// this mutation. If empty, defaults to ["CREATE", "UPDATE"] for backward compatibility.
-	Operations []string `json:"operations,omitempty"`
+	// +kubebuilder:validation:items:Enum=CREATE;UPDATE;DELETE
+	Operations []ApplyToOperation `json:"operations,omitempty"`
 }
 
 // Flatten returns the set of GroupVersionKinds this ApplyTo matches.
@@ -73,12 +88,21 @@ func (a ApplyTo) Matches(gvk schema.GroupVersionKind) bool {
 // operations list. If no operations are specified, it defaults to allowing
 // CREATE and UPDATE for backward compatibility. Users can explicitly specify
 // DELETE operations if they have legitimate use cases.
-func (a ApplyTo) MatchesOperation(operation string) bool {
+func (a ApplyTo) MatchesOperation(operation admissionv1.Operation) bool {
 	// If no operations specified, default to CREATE and UPDATE for backward compatibility
 	if len(a.Operations) == 0 {
-		return operation == "CREATE" || operation == "UPDATE"
+		return operation == admissionv1.Create || operation == admissionv1.Update
 	}
-	
+
 	// Check if the operation is explicitly allowed by the user
-	return contains(a.Operations, operation)
+	return containsOperation(a.Operations, ApplyToOperation(operation))
+}
+
+func containsOperation(list []ApplyToOperation, s ApplyToOperation) bool {
+	for _, item := range list {
+		if item == s {
+			return true
+		}
+	}
+	return false
 }
