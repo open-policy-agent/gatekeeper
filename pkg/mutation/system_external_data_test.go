@@ -506,6 +506,11 @@ func TestSystem_sendRequests_contextTimeout(t *testing.T) {
 			providerTimeout: 1,
 			wantTimeout:     1 * time.Second,
 		},
+		{
+			name:            "uses default timeout when provider timeout is 0",
+			providerTimeout: 0,
+			wantTimeout:     defaultExternalDataRequestTimeout,
+		},
 	}
 
 	for _, tt := range tests {
