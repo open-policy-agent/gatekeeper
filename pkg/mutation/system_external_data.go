@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
@@ -57,6 +58,8 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 	return s.mutateWithExternalData(obj, externalData, errors)
 }
 
+const defaultExternalDataRequestTimeout = 5 * time.Second
+
 // sendRequests sends requests to all providers in parallel.
 func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]error) {
 	var (
@@ -81,11 +84,21 @@ func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCe
 			continue
 		}
 
+		providerCopy := provider
+		keysList := keys.UnsortedList()
+
 		wg.Add(1)
-		go func(provider *externaldataUnversioned.Provider, keys []string) {
+		go func(provider externaldataUnversioned.Provider, keys []string) {
 			defer wg.Done()
 
-			resp, _, err := fn(context.Background(), provider, keys, clientCert)
+			timeout := time.Duration(provider.Spec.Timeout) * time.Second
+			if timeout <= 0 {
+				timeout = defaultExternalDataRequestTimeout
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+
+			resp, _, err := fn(ctx, &provider, keys, clientCert)
 
 			mutex.Lock()
 			defer mutex.Unlock()
@@ -103,9 +116,9 @@ func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCe
 			for _, item := range resp.Response.Items {
 				responses[provider.Name][item.Key] = &item
 			}
-		}(&provider, keys.UnsortedList())
-		wg.Wait()
+		}(providerCopy, keysList)
 	}
+	wg.Wait()
 
 	return responses, errors
 }
