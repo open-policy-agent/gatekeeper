@@ -91,8 +91,8 @@ func (d *Driver) AddTemplate(_ context.Context, ct *templates.ConstraintTemplate
 		return err
 	}
 	vapVars = append(vapVars, vapVarsSuffix...)
-	// Defaulting to true in MustBaseEnvSet to enforce strict cost calculation for CEL, following k8s.
-	filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), transform.StrictCost))
+	// StrictCost is now enabled by default in MustBaseEnvSet (via StrictCostOpt in baseOpts).
+	filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
 	if err != nil {
 		return err
 	}

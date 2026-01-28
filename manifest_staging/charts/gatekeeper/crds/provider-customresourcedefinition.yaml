@@ -117,7 +117,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: Provider is the Schema for the providers API
+        description: Provider is the Schema for the providers API.
         properties:
           apiVersion:
             description: |-
