@@ -20,7 +20,7 @@ type Mutable struct {
 
 	// Source specifies which types of resources the mutator should be applied to
 	Source SourceType
-	
+
 	// Operation is the admission operation being performed (CREATE, UPDATE, DELETE)
 	Operation admissionv1.Operation
 }

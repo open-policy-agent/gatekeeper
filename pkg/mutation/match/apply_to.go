@@ -40,9 +40,9 @@ func AppliesOperationTo(applyTo []ApplyTo, operation admissionv1.Operation) bool
 // Globs are not allowed.
 // +kubebuilder:object:generate=true
 type ApplyTo struct {
-	Groups     []string `json:"groups,omitempty"`
-	Kinds      []string `json:"kinds,omitempty"`
-	Versions   []string `json:"versions,omitempty"`
+	Groups   []string `json:"groups,omitempty"`
+	Kinds    []string `json:"kinds,omitempty"`
+	Versions []string `json:"versions,omitempty"`
 	// Operations specifies which admission operations (CREATE, UPDATE, DELETE) should trigger
 	// this mutation. If empty, defaults to ["CREATE", "UPDATE"] for backward compatibility.
 	// +kubebuilder:validation:items:Enum=CREATE;UPDATE;DELETE
@@ -51,7 +51,7 @@ type ApplyTo struct {
 
 // Flatten returns the set of GroupVersionKinds this ApplyTo matches.
 // The GVKs are not guaranteed to be sorted or unique.
-func (a ApplyTo) Flatten() []schema.GroupVersionKind {
+func (a *ApplyTo) Flatten() []schema.GroupVersionKind {
 	var result []schema.GroupVersionKind
 	for _, group := range a.Groups {
 		for _, version := range a.Versions {
@@ -70,7 +70,7 @@ func (a ApplyTo) Flatten() []schema.GroupVersionKind {
 
 // Matches returns true if the Object's Group, Version, and Kind are contained
 // in the ApplyTo's match lists.
-func (a ApplyTo) Matches(gvk schema.GroupVersionKind) bool {
+func (a *ApplyTo) Matches(gvk schema.GroupVersionKind) bool {
 	if !contains(a.Groups, gvk.Group) {
 		return false
 	}
@@ -88,7 +88,15 @@ func (a ApplyTo) Matches(gvk schema.GroupVersionKind) bool {
 // operations list. If no operations are specified, it defaults to allowing
 // CREATE and UPDATE for backward compatibility. Users can explicitly specify
 // DELETE operations if they have legitimate use cases.
-func (a ApplyTo) MatchesOperation(operation admissionv1.Operation) bool {
+// If operation is empty (e.g., in audit/expansion contexts), returns true
+// to maintain backward compatibility with non-admission flows.
+func (a *ApplyTo) MatchesOperation(operation admissionv1.Operation) bool {
+	// If operation is empty (audit, expansion, or gator contexts), allow the mutation
+	// These contexts don't have admission operations and should not be filtered
+	if operation == "" {
+		return true
+	}
+
 	// If no operations specified, default to CREATE and UPDATE for backward compatibility
 	if len(a.Operations) == 0 {
 		return operation == admissionv1.Create || operation == admissionv1.Update
