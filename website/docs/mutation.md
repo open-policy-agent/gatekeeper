@@ -95,6 +95,8 @@ applyTo:
 - `operations: ["CREATE", "UPDATE"]` - Explicit version of the default behavior
 - `operations: ["DELETE"]` - Advanced scenarios where cleanup mutations are needed (use with caution)
 
+> **Important Consideration:** When using `operations: ["CREATE"]` only, the mutation will not apply to resources that already exist before the mutator is deployed. If those resources are later updated (e.g., for label changes or finalizer removal), the mutation will not be applied, and the previously mutated values remain unchanged. However, if the mutator is later deleted or modified, resources created under the old mutator may no longer match the new policy, which could cause issues if the field was set differently than what the user originally specified. Users should be aware that `operations: ["CREATE"]` effectively makes the mutated fields read-only for the mutation lifecycle.
+
 The `match` section is common to all mutators. It supports the following match criteria:
 - scope - the scope (Namespaced | Cluster) of the mutated resource
 - kinds - the resource kind, any of the elements listed

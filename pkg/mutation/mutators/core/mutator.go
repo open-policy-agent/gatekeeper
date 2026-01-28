@@ -128,9 +128,9 @@ func MatchWithApplyTo(mut *types.Mutable, applies []match.ApplyTo, mat *match.Ma
 	if !match.AppliesTo(applies, gvk) {
 		return false, nil
 	}
-	
+
 	// Check if the operation is allowed by the ApplyTo configuration
-	if !match.AppliesOperationTo(applies, string(mut.Operation)) {
+	if !match.AppliesOperationTo(applies, mut.Operation) {
 		return false, nil
 	}
 

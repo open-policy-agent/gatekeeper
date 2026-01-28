@@ -46,7 +46,7 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
+                    ApplyTo determines what GVKs and operations the mutation should apply to.
                     Globs are not allowed.
                   properties:
                     groups:
@@ -58,7 +58,16 @@ spec:
                         type: string
                       type: array
                     operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE) should trigger
+                        this mutation. If empty, defaults to ["CREATE", "UPDATE"] for backward compatibility.
                       items:
+                        description: ApplyToOperation is a string type that represents
+                          an admission operation.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - DELETE
                         type: string
                       type: array
                     versions:
@@ -418,7 +427,7 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
+                    ApplyTo determines what GVKs and operations the mutation should apply to.
                     Globs are not allowed.
                   properties:
                     groups:
@@ -430,7 +439,16 @@ spec:
                         type: string
                       type: array
                     operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE) should trigger
+                        this mutation. If empty, defaults to ["CREATE", "UPDATE"] for backward compatibility.
                       items:
+                        description: ApplyToOperation is a string type that represents
+                          an admission operation.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - DELETE
                         type: string
                       type: array
                     versions:
@@ -790,7 +808,7 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
+                    ApplyTo determines what GVKs and operations the mutation should apply to.
                     Globs are not allowed.
                   properties:
                     groups:
@@ -802,7 +820,16 @@ spec:
                         type: string
                       type: array
                     operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE) should trigger
+                        this mutation. If empty, defaults to ["CREATE", "UPDATE"] for backward compatibility.
                       items:
+                        description: ApplyToOperation is a string type that represents
+                          an admission operation.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - DELETE
                         type: string
                       type: array
                     versions:

@@ -89,6 +89,14 @@ applyTo:
 3. **Avoid DELETE operations** unless you have specific cleanup requirements
 4. **Test thoroughly** when changing operation behavior on existing mutations
 
+### Important Considerations
+
+When using `operations: ["CREATE"]` only:
+- Resources that **already exist** before the mutator is deployed will NOT have the mutation applied
+- If those resources are later updated (e.g., for label changes or finalizer removal), the mutation will NOT be applied during the update
+- If the mutator is later deleted or modified, resources created under the old mutator may no longer match the new policy
+- Effectively, `operations: ["CREATE"]` makes the mutated fields read-only for the mutation lifecycle
+
 ## Related Documentation
 
 - [Mutation Documentation](https://open-policy-agent.github.io/gatekeeper/website/docs/mutation/)
