@@ -85,15 +85,17 @@ applyTo:
 **Supported operations:**
 - `CREATE` - Apply mutation when resources are created
 - `UPDATE` - Apply mutation when resources are updated  
-- `DELETE` - Apply mutation when resources are deleted (advanced use cases only)
+- `DELETE` - Apply mutation when resources are deleted
+- `CONNECT` - Apply mutation for connect operations (e.g., `kubectl exec`, `kubectl port-forward`)
 
-**Backward Compatibility:** If the `operations` field is not specified, the mutation defaults to `["CREATE", "UPDATE"]` to maintain compatibility with existing mutations.
+**Backward Compatibility:** If the `operations` field is not specified or is empty, the mutation applies to all operations (CREATE, UPDATE, DELETE, and CONNECT). This is consistent with how empty `groups`, `kinds`, and `versions` fields work in `applyTo` - empty means match all.
 
 **Common Use Cases:**
 - `operations: ["CREATE"]` - Ideal for setting initial values that shouldn't change on updates (e.g., environment variables with immutable constraints)
 - `operations: ["UPDATE"]` - For mutations that should only apply when resources are modified
-- `operations: ["CREATE", "UPDATE"]` - Explicit version of the default behavior
+- `operations: ["CREATE", "UPDATE"]` - Apply to both creation and updates, but not deletes or connects
 - `operations: ["DELETE"]` - Advanced scenarios where cleanup mutations are needed (use with caution)
+- `operations: ["CONNECT"]` - Advanced scenarios for mutating connect subresources (use with caution)
 
 > **Important Consideration:** When using `operations: ["CREATE"]` only, the mutation will not apply to resources that already exist before the mutator is deployed. If those resources are later updated (e.g., for label changes or finalizer removal), the mutation will not be applied, and the previously mutated values remain unchanged. However, if the mutator is later deleted or modified, resources created under the old mutator may no longer match the new policy, which could cause issues if the field was set differently than what the user originally specified. Users should be aware that `operations: ["CREATE"]` effectively makes the mutated fields read-only for the mutation lifecycle.
 

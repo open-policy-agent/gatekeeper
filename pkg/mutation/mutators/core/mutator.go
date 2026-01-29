@@ -31,7 +31,7 @@ func NewTester(name string, kind string, path parser.Path, ptests []unversioned.
 
 // NewValidatedBindings returns a slice of gvks from the given applies, or an
 // error if the applies are invalid.
-func NewValidatedBindings(name string, kind string, applies []match.ApplyTo) ([]schema.GroupVersionKind, error) {
+func NewValidatedBindings(name string, kind string, applies []match.MutationApplyTo) ([]schema.GroupVersionKind, error) {
 	for _, applyTo := range applies {
 		if len(applyTo.Groups) == 0 || len(applyTo.Versions) == 0 || len(applyTo.Kinds) == 0 {
 			return nil, fmt.Errorf("invalid applyTo for %s mutator %s, all of group, version and kind must be specified", kind, name)
@@ -59,7 +59,7 @@ func gatherPathTests(mutName string, mutKind string, pts []unversioned.PathTest)
 	return pathTests, nil
 }
 
-func getSortedGVKs(bindings []match.ApplyTo) []schema.GroupVersionKind {
+func getSortedGVKs(bindings []match.MutationApplyTo) []schema.GroupVersionKind {
 	// deduplicate GVKs
 	gvksMap := map[schema.GroupVersionKind]struct{}{}
 	for _, binding := range bindings {
@@ -123,9 +123,9 @@ func CheckKeyNotChanged(p parser.Path) error {
 	return nil
 }
 
-func MatchWithApplyTo(mut *types.Mutable, applies []match.ApplyTo, mat *match.Match) (bool, error) {
+func MatchWithApplyTo(mut *types.Mutable, applies []match.MutationApplyTo, mat *match.Match) (bool, error) {
 	gvk := mut.Object.GetObjectKind().GroupVersionKind()
-	if !match.AppliesTo(applies, gvk) {
+	if !match.AppliesToMutation(applies, gvk) {
 		return false, nil
 	}
 

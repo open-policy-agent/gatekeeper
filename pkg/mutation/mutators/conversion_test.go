@@ -25,17 +25,17 @@ func TestAssignToMutator(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsunversioned.AssignSpec{
-			ApplyTo: []match.ApplyTo{
-				{
+			ApplyTo: []match.MutationApplyTo{
+				{ApplyTo: match.ApplyTo{
 					Groups:   []string{"group1", "group2"},
 					Kinds:    []string{"kind1", "kind2", "kind3"},
 					Versions: []string{"version1"},
-				},
-				{
+				}},
+				{ApplyTo: match.ApplyTo{
 					Groups:   []string{"group3", "group4"},
 					Kinds:    []string{"kind4", "kind2", "kind3"},
 					Versions: []string{"version1"},
-				},
+				}},
 			},
 			Match:    match.Match{},
 			Location: "spec.foo",
@@ -103,17 +103,17 @@ func TestAssignHasDiff(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsunversioned.AssignSpec{
-			ApplyTo: []match.ApplyTo{
-				{
+			ApplyTo: []match.MutationApplyTo{
+				{ApplyTo: match.ApplyTo{
 					Groups:   []string{"group1", "group2"},
 					Kinds:    []string{"kind1", "kind2", "kind3"},
 					Versions: []string{"version1"},
-				},
-				{
+				}},
+				{ApplyTo: match.ApplyTo{
 					Groups:   []string{"group3", "group4"},
 					Kinds:    []string{"kind4", "kind2", "kind3"},
 					Versions: []string{"version1"},
-				},
+				}},
 			},
 			Match:    match.Match{},
 			Location: "spec.foo",
@@ -278,12 +278,12 @@ func TestParseShouldFail(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsunversioned.AssignSpec{
-			ApplyTo: []match.ApplyTo{
-				{
+			ApplyTo: []match.MutationApplyTo{
+				{ApplyTo: match.ApplyTo{
 					Groups:   []string{"group3", "group4"},
 					Kinds:    []string{"kind4", "kind2", "kind3"},
 					Versions: []string{"version1"},
-				},
+				}},
 			},
 			Match:    match.Match{},
 			Location: "aaa..bb",

@@ -10,96 +10,96 @@ import (
 func TestApplyTo_MatchesOperation(t *testing.T) {
 	tests := []struct {
 		name      string
-		applyTo   ApplyTo
+		applyTo   MutationApplyTo
 		operation admissionv1.Operation
 		want      bool
 	}{
 		{
-			name:      "empty operations - defaults to CREATE",
-			applyTo:   ApplyTo{},
+			name:      "empty operations - allows CREATE (backward compatibility)",
+			applyTo:   MutationApplyTo{},
 			operation: admissionv1.Create,
 			want:      true,
 		},
 		{
-			name:      "empty operations - defaults to UPDATE",
-			applyTo:   ApplyTo{},
+			name:      "empty operations - allows UPDATE (backward compatibility)",
+			applyTo:   MutationApplyTo{},
 			operation: admissionv1.Update,
 			want:      true,
 		},
 		{
-			name:      "empty operations - rejects DELETE (backward compatibility)",
-			applyTo:   ApplyTo{},
+			name:      "empty operations - allows DELETE (backward compatibility)",
+			applyTo:   MutationApplyTo{},
 			operation: admissionv1.Delete,
-			want:      false,
+			want:      true,
 		},
 		{
 			name: "explicit CREATE only",
-			applyTo: ApplyTo{
-				Operations: []ApplyToOperation{OperationCreate},
+			applyTo: MutationApplyTo{
+				Operations: []admissionv1.Operation{admissionv1.Create},
 			},
 			operation: admissionv1.Create,
 			want:      true,
 		},
 		{
 			name: "explicit CREATE only - rejects UPDATE",
-			applyTo: ApplyTo{
-				Operations: []ApplyToOperation{OperationCreate},
+			applyTo: MutationApplyTo{
+				Operations: []admissionv1.Operation{admissionv1.Create},
 			},
 			operation: admissionv1.Update,
 			want:      false,
 		},
 		{
 			name: "explicit UPDATE only",
-			applyTo: ApplyTo{
-				Operations: []ApplyToOperation{OperationUpdate},
+			applyTo: MutationApplyTo{
+				Operations: []admissionv1.Operation{admissionv1.Update},
 			},
 			operation: admissionv1.Update,
 			want:      true,
 		},
 		{
 			name: "explicit UPDATE only - rejects CREATE",
-			applyTo: ApplyTo{
-				Operations: []ApplyToOperation{OperationUpdate},
+			applyTo: MutationApplyTo{
+				Operations: []admissionv1.Operation{admissionv1.Update},
 			},
 			operation: admissionv1.Create,
 			want:      false,
 		},
 		{
 			name: "multiple operations - CREATE and UPDATE",
-			applyTo: ApplyTo{
-				Operations: []ApplyToOperation{OperationCreate, OperationUpdate},
+			applyTo: MutationApplyTo{
+				Operations: []admissionv1.Operation{admissionv1.Create, admissionv1.Update},
 			},
 			operation: admissionv1.Create,
 			want:      true,
 		},
 		{
 			name: "multiple operations - CREATE and UPDATE with UPDATE",
-			applyTo: ApplyTo{
-				Operations: []ApplyToOperation{OperationCreate, OperationUpdate},
+			applyTo: MutationApplyTo{
+				Operations: []admissionv1.Operation{admissionv1.Create, admissionv1.Update},
 			},
 			operation: admissionv1.Update,
 			want:      true,
 		},
 		{
 			name: "multiple operations - rejects DELETE",
-			applyTo: ApplyTo{
-				Operations: []ApplyToOperation{OperationCreate, OperationUpdate},
+			applyTo: MutationApplyTo{
+				Operations: []admissionv1.Operation{admissionv1.Create, admissionv1.Update},
 			},
 			operation: admissionv1.Delete,
 			want:      false,
 		},
 		{
 			name: "DELETE operation allowed when explicitly specified",
-			applyTo: ApplyTo{
-				Operations: []ApplyToOperation{OperationDelete},
+			applyTo: MutationApplyTo{
+				Operations: []admissionv1.Operation{admissionv1.Delete},
 			},
 			operation: admissionv1.Delete,
 			want:      true,
 		},
 		{
 			name: "multiple operations including DELETE",
-			applyTo: ApplyTo{
-				Operations: []ApplyToOperation{OperationCreate, OperationUpdate, OperationDelete},
+			applyTo: MutationApplyTo{
+				Operations: []admissionv1.Operation{admissionv1.Create, admissionv1.Update, admissionv1.Delete},
 			},
 			operation: admissionv1.Delete,
 			want:      true,
@@ -119,63 +119,63 @@ func TestApplyTo_MatchesOperation(t *testing.T) {
 func TestAppliesOperationTo(t *testing.T) {
 	tests := []struct {
 		name      string
-		applyTo   []ApplyTo
+		applyTo   []MutationApplyTo
 		operation admissionv1.Operation
 		want      bool
 	}{
 		{
 			name:      "empty slice",
-			applyTo:   []ApplyTo{},
+			applyTo:   []MutationApplyTo{},
 			operation: admissionv1.Create,
 			want:      false,
 		},
 		{
 			name: "single ApplyTo - matches CREATE",
-			applyTo: []ApplyTo{
-				{Operations: []ApplyToOperation{OperationCreate}},
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionv1.Operation{admissionv1.Create}},
 			},
 			operation: admissionv1.Create,
 			want:      true,
 		},
 		{
 			name: "single ApplyTo - no match",
-			applyTo: []ApplyTo{
-				{Operations: []ApplyToOperation{OperationCreate}},
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionv1.Operation{admissionv1.Create}},
 			},
 			operation: admissionv1.Update,
 			want:      false,
 		},
 		{
 			name: "multiple ApplyTo - first matches",
-			applyTo: []ApplyTo{
-				{Operations: []ApplyToOperation{OperationCreate}},
-				{Operations: []ApplyToOperation{OperationUpdate}},
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionv1.Operation{admissionv1.Create}},
+				{Operations: []admissionv1.Operation{admissionv1.Update}},
 			},
 			operation: admissionv1.Create,
 			want:      true,
 		},
 		{
 			name: "multiple ApplyTo - second matches",
-			applyTo: []ApplyTo{
-				{Operations: []ApplyToOperation{OperationCreate}},
-				{Operations: []ApplyToOperation{OperationUpdate}},
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionv1.Operation{admissionv1.Create}},
+				{Operations: []admissionv1.Operation{admissionv1.Update}},
 			},
 			operation: admissionv1.Update,
 			want:      true,
 		},
 		{
 			name: "multiple ApplyTo - no match",
-			applyTo: []ApplyTo{
-				{Operations: []ApplyToOperation{OperationCreate}},
-				{Operations: []ApplyToOperation{OperationUpdate}},
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionv1.Operation{admissionv1.Create}},
+				{Operations: []admissionv1.Operation{admissionv1.Update}},
 			},
 			operation: admissionv1.Delete,
 			want:      false,
 		},
 		{
 			name: "mixed with default behavior",
-			applyTo: []ApplyTo{
-				{Operations: []ApplyToOperation{OperationDelete}}, // Only DELETE (explicitly allowed)
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionv1.Operation{admissionv1.Delete}}, // Only DELETE (explicitly allowed)
 				{}, // Defaults to CREATE, UPDATE
 			},
 			operation: admissionv1.Create,
@@ -183,8 +183,8 @@ func TestAppliesOperationTo(t *testing.T) {
 		},
 		{
 			name: "mixed with default behavior - UPDATE",
-			applyTo: []ApplyTo{
-				{Operations: []ApplyToOperation{OperationDelete}}, // Only DELETE (explicitly allowed)
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionv1.Operation{admissionv1.Delete}}, // Only DELETE (explicitly allowed)
 				{}, // Defaults to CREATE, UPDATE
 			},
 			operation: admissionv1.Update,
@@ -192,8 +192,8 @@ func TestAppliesOperationTo(t *testing.T) {
 		},
 		{
 			name: "mixed with default behavior - DELETE allowed when specified",
-			applyTo: []ApplyTo{
-				{Operations: []ApplyToOperation{OperationDelete}}, // Only DELETE (explicitly allowed)
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionv1.Operation{admissionv1.Delete}}, // Only DELETE (explicitly allowed)
 				{}, // Defaults to CREATE, UPDATE
 			},
 			operation: admissionv1.Delete,
@@ -214,17 +214,19 @@ func TestAppliesOperationTo(t *testing.T) {
 func TestApplyTo_Matches_WithOperations(t *testing.T) {
 	tests := []struct {
 		name    string
-		applyTo ApplyTo
+		applyTo MutationApplyTo
 		gvk     schema.GroupVersionKind
 		want    bool
 	}{
 		{
 			name: "basic GVK match with operations field present",
-			applyTo: ApplyTo{
-				Groups:     []string{"apps"},
-				Kinds:      []string{"Deployment"},
-				Versions:   []string{"v1"},
-				Operations: []ApplyToOperation{OperationCreate}, // This should not affect GVK matching
+			applyTo: MutationApplyTo{
+				ApplyTo: ApplyTo{
+					Groups:   []string{"apps"},
+					Kinds:    []string{"Deployment"},
+					Versions: []string{"v1"},
+				},
+				Operations: []admissionv1.Operation{admissionv1.Create}, // This should not affect GVK matching
 			},
 			gvk: schema.GroupVersionKind{
 				Group:   "apps",
@@ -235,11 +237,13 @@ func TestApplyTo_Matches_WithOperations(t *testing.T) {
 		},
 		{
 			name: "GVK no match with operations field present",
-			applyTo: ApplyTo{
-				Groups:     []string{"apps"},
-				Kinds:      []string{"Deployment"},
-				Versions:   []string{"v1"},
-				Operations: []ApplyToOperation{OperationCreate}, // This should not affect GVK matching
+			applyTo: MutationApplyTo{
+				ApplyTo: ApplyTo{
+					Groups:   []string{"apps"},
+					Kinds:    []string{"Deployment"},
+					Versions: []string{"v1"},
+				},
+				Operations: []admissionv1.Operation{admissionv1.Create}, // This should not affect GVK matching
 			},
 			gvk: schema.GroupVersionKind{
 				Group:   "apps",
