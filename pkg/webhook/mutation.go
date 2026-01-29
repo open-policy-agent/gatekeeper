@@ -27,6 +27,7 @@ import (
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -107,6 +108,11 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 
 	if isGkServiceAccount(req.UserInfo) {
 		return admission.Allowed("Gatekeeper does not self-manage")
+	}
+
+	if req.Operation != admissionv1.Create &&
+		req.Operation != admissionv1.Update {
+		return admission.Allowed("Mutating only on create or update")
 	}
 
 	if h.isGatekeeperResource(&req) {
