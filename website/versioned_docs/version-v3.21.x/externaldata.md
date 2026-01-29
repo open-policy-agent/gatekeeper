@@ -47,6 +47,7 @@ The following external data providers are maintained by the community:
 - [ratify](https://github.com/deislabs/ratify)
 - [cosign-gatekeeper-provider](https://github.com/sigstore/cosign-gatekeeper-provider)
 - [GitHub artifact attestations OPA provider](https://github.com/github/artifact-attestations-opa-provider)
+- [JFrog verify evidence OPA provider](https://github.com/jfrog/jfrog-opa-policy)
 
 ### Sample providers
 
