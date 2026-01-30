@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -93,8 +94,10 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 		config.GVKAggregator = aggregator.NewGVKAggregator()
 	}
 
+	cfClient := normalizeCFDataClient(config.CfClient)
+
 	cm := &CacheManager{
-		cfClient:                   config.CfClient,
+		cfClient:                   cfClient,
 		syncMetricsCache:           config.SyncMetricsCache,
 		tracker:                    config.Tracker,
 		processExcluder:            config.ProcessExcluder,
@@ -304,7 +307,7 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 	}
 
 	syncKey := syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName())
-	if c.watchesGVK(gvk) {
+	if c.watchesGVK(gvk) && c.cfClient != nil {
 		_, err = c.cfClient.AddData(ctx, instance)
 		if err != nil {
 			c.syncMetricsCache.AddObject(
@@ -331,10 +334,11 @@ func (c *CacheManager) AddObject(ctx context.Context, instance *unstructured.Uns
 }
 
 func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.Unstructured) error {
-	if _, err := c.cfClient.RemoveData(ctx, instance); err != nil {
-		return err
+	if c.cfClient != nil {
+		if _, err := c.cfClient.RemoveData(ctx, instance); err != nil {
+			return err
+		}
 	}
-
 	// only delete from metrics map if the data removal was successful
 	c.syncMetricsCache.DeleteObject(syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName()))
 	c.tracker.ForData(instance.GroupVersionKind()).CancelExpect(instance)
@@ -343,8 +347,10 @@ func (c *CacheManager) RemoveObject(ctx context.Context, instance *unstructured.
 }
 
 func (c *CacheManager) wipeData(ctx context.Context) error {
-	if _, err := c.cfClient.RemoveData(ctx, target.WipeData()); err != nil {
-		return err
+	if c.cfClient != nil {
+		if _, err := c.cfClient.RemoveData(ctx, target.WipeData()); err != nil {
+			return err
+		}
 	}
 
 	// reset sync cache before sending the metric
@@ -520,4 +526,18 @@ func (c *CacheManager) wipeCacheIfNeeded(ctx context.Context) {
 		c.excluderChanged = false
 		c.needToList = true
 	}
+}
+
+// normalizeCFDataClient converts typed nil pointers to untyped nil.
+func normalizeCFDataClient(client CFDataClient) CFDataClient {
+	if client == nil {
+		return nil
+	}
+
+	val := reflect.ValueOf(client)
+	if val.Kind() == reflect.Pointer && val.IsNil() {
+		return nil
+	}
+
+	return client
 }
