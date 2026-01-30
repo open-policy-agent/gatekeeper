@@ -1,12 +1,13 @@
 package gator
 
 import (
+	"io"
+
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	"io"
 )
 
 type Opt func() ([]constraintclient.Opt, []rego.Arg, error)
