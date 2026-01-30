@@ -39,6 +39,7 @@ spec:
       rego: |
         package k8salwaysvalidate
         violation[{"msg": msg}] {
+          print(sprintf("a debug message (%v)", [input.review.object.kind]))
           false
           msg := "should always pass"
         }
