@@ -42,6 +42,10 @@ var AddToManagerFuncs []func(manager.Manager, Dependencies) error
 
 // AddToManager adds all Controllers to the Manager.
 func AddToManager(m manager.Manager, deps Dependencies) error {
+	if deps.OpaClient == nil && deps.MutationSystem == nil {
+		log.Info("webhook requires OPA client or mutation system, skipping")
+		return nil
+	}
 	for _, f := range AddToManagerFuncs {
 		if err := f(m, deps); err != nil {
 			return err
