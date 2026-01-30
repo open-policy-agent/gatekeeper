@@ -82,3 +82,7 @@ func (f *SubResourceNoopClient) Update(_ context.Context, _ client.Object, _ ...
 func (f *SubResourceNoopClient) Patch(_ context.Context, _ client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) error {
 	return nil
 }
+
+func (f *SubResourceNoopClient) Apply(_ context.Context, _ runtime.ApplyConfiguration, _ ...client.SubResourceApplyOption) error {
+	return nil
+}
