@@ -23,7 +23,6 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 	r = newStatsReporter()
 	meter := mp.Meter("test")
 
-	// Ensure the pipeline has a callback setup
 	ingestDurationM, err = meter.Float64Histogram(ingestDuration)
 	assert.NoError(t, err)
 
@@ -125,4 +124,184 @@ func TestObserveCTM(t *testing.T) {
 			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
 		})
 	}
+}
+
+func initializeVAPTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
+	var err error
+	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	r = newStatsReporter()
+	meter := mp.Meter("test")
+
+	_, err = meter.Int64ObservableGauge(vapMetricName, metric.WithInt64Callback(r.observeVAP))
+	assert.NoError(t, err)
+
+	return rdr, r
+}
+
+func TestVAPMetrics(t *testing.T) {
+	rdr, r := initializeVAPTestInstruments(t)
+	ctx := context.Background()
+
+	r.ReportVAPStatus(types.NamespacedName{Name: "template-1"}, metrics.VAPStatusActive)
+	r.ReportVAPStatus(types.NamespacedName{Name: "template-2"}, metrics.VAPStatusActive)
+	r.ReportVAPStatus(types.NamespacedName{Name: "template-3"}, metrics.VAPStatusError)
+
+	rm := &metricdata.ResourceMetrics{}
+	assert.NoError(t, rdr.Collect(ctx, rm))
+
+	var vapMetric *metricdata.Metrics
+	for _, sm := range rm.ScopeMetrics {
+		for i := range sm.Metrics {
+			if sm.Metrics[i].Name == vapMetricName {
+				vapMetric = &sm.Metrics[i]
+				break
+			}
+		}
+	}
+	assert.NotNil(t, vapMetric)
+
+	gaugeData, ok := vapMetric.Data.(metricdata.Gauge[int64])
+	assert.True(t, ok)
+
+	statusCounts := make(map[string]int64)
+	for _, dp := range gaugeData.DataPoints {
+		statusAttr, exists := dp.Attributes.Value(attribute.Key(statusKey))
+		if exists {
+			statusCounts[statusAttr.AsString()] = dp.Value
+		}
+	}
+
+	assert.Equal(t, int64(2), statusCounts[string(metrics.VAPStatusActive)])
+	assert.Equal(t, int64(1), statusCounts[string(metrics.VAPStatusError)])
+}
+
+func TestReportDeleteVAPStatus(t *testing.T) {
+	rdr, r := initializeVAPTestInstruments(t)
+	ctx := context.Background()
+
+	templateName := types.NamespacedName{Name: "template-to-delete"}
+	r.ReportVAPStatus(templateName, metrics.VAPStatusActive)
+
+	rm := &metricdata.ResourceMetrics{}
+	assert.NoError(t, rdr.Collect(ctx, rm))
+
+	var vapMetricBefore *metricdata.Metrics
+	for _, sm := range rm.ScopeMetrics {
+		for i := range sm.Metrics {
+			if sm.Metrics[i].Name == vapMetricName {
+				vapMetricBefore = &sm.Metrics[i]
+				break
+			}
+		}
+	}
+	assert.NotNil(t, vapMetricBefore)
+	gaugeDataBefore, ok := vapMetricBefore.Data.(metricdata.Gauge[int64])
+	assert.True(t, ok)
+	statusCountsBefore := make(map[string]int64)
+	for _, dp := range gaugeDataBefore.DataPoints {
+		statusAttr, exists := dp.Attributes.Value(attribute.Key(statusKey))
+		if exists {
+			statusCountsBefore[statusAttr.AsString()] = dp.Value
+		}
+	}
+	assert.Equal(t, int64(1), statusCountsBefore[string(metrics.VAPStatusActive)])
+
+	r.DeleteVAPStatus(templateName)
+
+	rm = &metricdata.ResourceMetrics{}
+	assert.NoError(t, rdr.Collect(ctx, rm))
+
+	var vapMetric *metricdata.Metrics
+	for _, sm := range rm.ScopeMetrics {
+		for i := range sm.Metrics {
+			if sm.Metrics[i].Name == vapMetricName {
+				vapMetric = &sm.Metrics[i]
+				break
+			}
+		}
+	}
+	assert.NotNil(t, vapMetric)
+
+	gaugeData, ok := vapMetric.Data.(metricdata.Gauge[int64])
+	assert.True(t, ok)
+
+	for _, dp := range gaugeData.DataPoints {
+		assert.Equal(t, int64(0), dp.Value)
+	}
+}
+
+func TestVAPStatusUpdate(t *testing.T) {
+	_, r := initializeVAPTestInstruments(t)
+
+	templateName := types.NamespacedName{Name: "template-update-test"}
+
+	r.ReportVAPStatus(templateName, metrics.VAPStatusError)
+
+	totals := r.vapRegistry.ComputeTotals()
+	assert.Equal(t, int64(1), totals[metrics.VAPStatusError])
+	assert.Equal(t, int64(0), totals[metrics.VAPStatusActive])
+
+	r.ReportVAPStatus(templateName, metrics.VAPStatusActive)
+
+	totals = r.vapRegistry.ComputeTotals()
+	assert.Equal(t, int64(0), totals[metrics.VAPStatusError])
+	assert.Equal(t, int64(1), totals[metrics.VAPStatusActive])
+}
+
+func initializeCelTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
+	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	r = newStatsReporter()
+	meter := mp.Meter("test")
+
+	_, err := meter.Int64ObservableGauge(celCTMetricName, metric.WithInt64Callback(r.observeCelCTM))
+	assert.NoError(t, err)
+
+	return rdr, r
+}
+
+func TestCelCTMetrics(t *testing.T) {
+	rdr, r := initializeCelTestInstruments(t)
+	ctx := context.Background()
+
+	r.ReportCelCT(types.NamespacedName{Name: "template-1"})
+	r.ReportCelCT(types.NamespacedName{Name: "template-2"})
+	r.ReportCelCT(types.NamespacedName{Name: "template-3"})
+
+	rm := &metricdata.ResourceMetrics{}
+	assert.NoError(t, rdr.Collect(ctx, rm))
+
+	var celMetric *metricdata.Metrics
+	for _, sm := range rm.ScopeMetrics {
+		for i := range sm.Metrics {
+			if sm.Metrics[i].Name == celCTMetricName {
+				celMetric = &sm.Metrics[i]
+				break
+			}
+		}
+	}
+	assert.NotNil(t, celMetric)
+
+	gaugeData, ok := celMetric.Data.(metricdata.Gauge[int64])
+	assert.True(t, ok)
+	assert.Len(t, gaugeData.DataPoints, 1)
+	assert.Equal(t, int64(3), gaugeData.DataPoints[0].Value)
+}
+
+func TestDeleteCelCT(t *testing.T) {
+	_, r := initializeCelTestInstruments(t)
+
+	r.ReportCelCT(types.NamespacedName{Name: "template-1"})
+	r.ReportCelCT(types.NamespacedName{Name: "template-2"})
+
+	assert.Equal(t, int64(2), r.celRegistry.count())
+
+	r.DeleteCelCT(types.NamespacedName{Name: "template-1"})
+
+	assert.Equal(t, int64(1), r.celRegistry.count())
+
+	r.DeleteCelCT(types.NamespacedName{Name: "template-2"})
+
+	assert.Equal(t, int64(0), r.celRegistry.count())
 }
