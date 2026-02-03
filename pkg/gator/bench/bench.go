@@ -409,6 +409,10 @@ func runConcurrentBenchmark(
 ) ([]time.Duration, int64, []*instrumentation.StatsEntry, error) {
 	totalReviews := opts.Iterations * len(reviewObjs)
 
+	// Create a cancellable context for error propagation
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Create work items
 	type workItem struct {
 		iteration int
@@ -433,9 +437,11 @@ func runConcurrentBenchmark(
 		go func() {
 			defer wg.Done()
 			for work := range workChan {
-				// Check if we should stop due to an error
-				if firstErr.Load() != nil {
+				// Check if we should stop due to context cancellation
+				select {
+				case <-ctx.Done():
 					return
+				default:
 				}
 
 				obj := reviewObjs[work.objIndex]
@@ -451,6 +457,7 @@ func runConcurrentBenchmark(
 				if err != nil {
 					firstErr.CompareAndSwap(nil, fmt.Errorf("review failed for %s/%s: %w",
 						obj.GetNamespace(), obj.GetName(), err))
+					cancel() // Signal other goroutines to stop
 					resultsChan <- reviewResult{err: err}
 					return
 				}
@@ -475,13 +482,11 @@ func runConcurrentBenchmark(
 		}()
 	}
 
-	// Wait for all workers to complete and close results channel
 	go func() {
 		wg.Wait()
 		close(resultsChan)
 	}()
 
-	// Collect results
 	var durations []time.Duration
 	var totalViolations int64
 	var statsEntries []*instrumentation.StatsEntry
@@ -497,11 +502,11 @@ func runConcurrentBenchmark(
 		}
 	}
 
-	// Check for errors
 	if errVal := firstErr.Load(); errVal != nil {
 		if err, ok := errVal.(error); ok {
 			return nil, 0, nil, err
 		}
+		return nil, 0, nil, fmt.Errorf("unexpected non-error value stored in firstErr: %T", errVal)
 	}
 
 	return durations, totalViolations, statsEntries, nil

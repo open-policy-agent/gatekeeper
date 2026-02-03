@@ -760,7 +760,11 @@ A warning will be displayed indicating which templates were skipped.
 :::
 
 :::caution
-The CEL engine does not support referential constraints. When benchmarking with CEL, objects that fail to load as referential data will be reported in a "Skipped Data Objects" warning. If you have policies that rely on referential data (e.g., checking if a namespace exists), those constraints will not be fully exercised during CEL benchmarks.
+The CEL engine does not support referential constraints. Referential data loading
+is skipped entirely when benchmarking with CEL—this is expected behavior, not an error.
+If you have policies that rely on referential data (e.g., checking if a namespace exists),
+those constraints will not be fully exercised during CEL benchmarks. An informational note
+will be displayed indicating that referential data is not supported by the CEL engine.
 :::
 
 #### Memory Profiling
