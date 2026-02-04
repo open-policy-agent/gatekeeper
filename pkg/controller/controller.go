@@ -39,13 +39,17 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-var debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
+var (
+	debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
+	externalMode    = flag.Bool("external-mode", false, "Run Gatekeeper external to the target cluster.")
+)
 
 type Injector interface {
 	InjectTracker(tracker *readiness.Tracker)
@@ -167,28 +171,49 @@ func (g *defaultPodGetter) GetPod(ctx context.Context) (*corev1.Pod, error) {
 
 // AddToManager adds all Controllers to the Manager.
 func AddToManager(m manager.Manager, deps *Dependencies) error {
-	if deps.GetPod == nil {
-		podGetter := &defaultPodGetter{
-			scheme: m.GetScheme(),
-			client: m.GetClient(),
-		}
-		deps.GetPod = podGetter.GetPod
+	if *externalMode {
+		// In external mode, the pod doesn't exist in the target cluster. skip setting OwnerReferences.
+		util.SetSkipPodOwnerRef(true)
 	}
-	if *debugUseFakePod {
-		err := os.Setenv("POD_NAME", "no-pod")
-		if err != nil {
-			return err
-		}
 
-		fakePodGetter := func(_ context.Context) (*corev1.Pod, error) {
-			pod := fakes.Pod(
-				fakes.WithNamespace(util.GetNamespace()),
-				fakes.WithName(util.GetPodName()),
-			)
+	if deps.GetPod == nil {
+		if *debugUseFakePod {
+			err := os.Setenv("POD_NAME", "no-pod")
+			if err != nil {
+				return err
+			}
 
-			return pod, nil
+			fakePodGetter := func(_ context.Context) (*corev1.Pod, error) {
+				pod := fakes.Pod(
+					fakes.WithNamespace(util.GetNamespace()),
+					fakes.WithName(util.GetPodName()),
+				)
+
+				return pod, nil
+			}
+			deps.GetPod = fakePodGetter
+		} else {
+			// for external mode, use InClusterConfig to connect to management cluster.
+			var podClient client.Client
+			if *externalMode {
+				mgmtConfig, err := rest.InClusterConfig()
+				if err != nil {
+					return fmt.Errorf("external-mode requires in-cluster config for management cluster: %w", err)
+				}
+				podClient, err = client.New(mgmtConfig, client.Options{Scheme: m.GetScheme()})
+				if err != nil {
+					return fmt.Errorf("creating management cluster client: %w", err)
+				}
+			} else {
+				podClient = m.GetClient()
+			}
+
+			podGetter := &defaultPodGetter{
+				scheme: m.GetScheme(),
+				client: podClient,
+			}
+			deps.GetPod = podGetter.GetPod
 		}
-		deps.GetPod = fakePodGetter
 	}
 
 	// Adding the CacheManager as a runnable;
