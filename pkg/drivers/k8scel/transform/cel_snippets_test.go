@@ -253,7 +253,7 @@ func TestMatchKinds(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), StrictCost))
+			filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -458,7 +458,7 @@ func TestMatchNameGlob(t *testing.T) {
 
 		for _, subTest := range expandedTests {
 			t.Run(subTest.name, func(t *testing.T) {
-				filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), StrictCost))
+				filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -628,7 +628,7 @@ func TestMatchNamespacesGlob(t *testing.T) {
 
 		for _, subTest := range expandedTests {
 			t.Run(subTest.name, func(t *testing.T) {
-				filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), StrictCost))
+				filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -802,7 +802,7 @@ func TestMatchExcludedNamespacesGlob(t *testing.T) {
 
 		for _, subTest := range expandedTests {
 			t.Run(subTest.name, func(t *testing.T) {
-				filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), StrictCost))
+				filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -866,7 +866,7 @@ func TestParamsBinding(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), StrictCost))
+			filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -947,7 +947,7 @@ func TestObjectBinding(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), StrictCost))
+			filterCompiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
 			if err != nil {
 				t.Fatal(err)
 			}
