@@ -70,7 +70,7 @@ func TestNewConnectionStatusForPod(t *testing.T) {
 	}
 }
 
-func TestNewConnectionStatusForPod_SkipsOwnerRefInExternalMode(t *testing.T) {
+func TestNewConnectionStatusForPod_SkipsOwnerRefInRemoteClusterMode(t *testing.T) {
 	const podName = "some-gk-pod"
 	const podNS = "a-gk-namespace"
 	const connectionName = "audit"
@@ -78,7 +78,7 @@ func TestNewConnectionStatusForPod_SkipsOwnerRefInExternalMode(t *testing.T) {
 
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
-	// Enable skip OwnerRef mode (external mode)
+	// Enable skip OwnerRef mode (remote cluster mode)
 	util.SetSkipPodOwnerRef(true)
 	t.Cleanup(func() {
 		util.SetSkipPodOwnerRef(false)
@@ -104,7 +104,7 @@ func TestNewConnectionStatusForPod_SkipsOwnerRefInExternalMode(t *testing.T) {
 
 	// Verify OwnerReference is NOT set
 	if len(status.GetOwnerReferences()) != 0 {
-		t.Errorf("Expected no OwnerReferences in external mode, got %d", len(status.GetOwnerReferences()))
+		t.Errorf("Expected no OwnerReferences in remote cluster mode, got %d", len(status.GetOwnerReferences()))
 	}
 
 	// Verify all other fields are still populated correctly

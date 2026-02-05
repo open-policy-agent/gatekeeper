@@ -16,11 +16,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+const (
+	podName  = "some-gk-pod"
+	podNS    = "a-gk-namespace"
+	cstrName = "a-constraint"
+	cstrKind = "AConstraintKind"
+)
+
 func TestNewConstraintStatusForPod(t *testing.T) {
-	podName := "some-gk-pod"
-	podNS := "a-gk-namespace"
-	cstrName := "a-constraint"
-	cstrKind := "AConstraintKind"
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
 	scheme := runtime.NewScheme()
@@ -80,15 +83,10 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	}
 }
 
-func TestNewConstraintStatusForPod_SkipsOwnerRefInExternalMode(t *testing.T) {
-	podName := "some-gk-pod"
-	podNS := "a-gk-namespace"
-	cstrName := "a-constraint"
-	cstrKind := "AConstraintKind"
-
+func TestNewConstraintStatusForPod_SkipsOwnerRefInRemoteClusterMode(t *testing.T) {
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
-	// Enable skip OwnerRef mode (external mode)
+	// Enable skip OwnerRef mode (remote cluster mode)
 	util.SetSkipPodOwnerRef(true)
 	t.Cleanup(func() {
 		util.SetSkipPodOwnerRef(false)
@@ -118,7 +116,7 @@ func TestNewConstraintStatusForPod_SkipsOwnerRefInExternalMode(t *testing.T) {
 
 	// Verify OwnerReference is NOT set
 	if len(status.GetOwnerReferences()) != 0 {
-		t.Errorf("Expected no OwnerReferences in external mode, got %d", len(status.GetOwnerReferences()))
+		t.Errorf("Expected no OwnerReferences in remote cluster mode, got %d", len(status.GetOwnerReferences()))
 	}
 
 	// Verify all other fields are still populated correctly

@@ -68,14 +68,14 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	}
 }
 
-func TestNewConstraintTemplateStatusForPod_SkipsOwnerRefInExternalMode(t *testing.T) {
+func TestNewConstraintTemplateStatusForPod_SkipsOwnerRefInRemoteClusterMode(t *testing.T) {
 	podName := "some-gk-pod"
 	podNS := "a-gk-namespace"
 	templateName := "a-template"
 
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
-	// Enable skip OwnerRef mode (external mode)
+	// Enable skip OwnerRef mode (remote cluster mode)
 	util.SetSkipPodOwnerRef(true)
 	t.Cleanup(func() {
 		util.SetSkipPodOwnerRef(false)
@@ -101,7 +101,7 @@ func TestNewConstraintTemplateStatusForPod_SkipsOwnerRefInExternalMode(t *testin
 
 	// Verify OwnerReference is NOT set
 	if len(status.GetOwnerReferences()) != 0 {
-		t.Errorf("Expected no OwnerReferences in external mode, got %d", len(status.GetOwnerReferences()))
+		t.Errorf("Expected no OwnerReferences in remote cluster mode, got %d", len(status.GetOwnerReferences()))
 	}
 
 	// Verify all other fields are still populated correctly

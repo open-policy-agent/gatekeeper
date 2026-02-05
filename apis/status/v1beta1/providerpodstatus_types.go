@@ -100,7 +100,7 @@ func NewProviderStatusForPod(pod *corev1.Pod, providerName string, scheme *runti
 		PodLabel:          pod.Name,
 	})
 
-	// Skip OwnerReference in external mode
+	// Skip OwnerReference in remote cluster mode
 	if !util.ShouldSkipPodOwnerRef() {
 		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
 			return nil, err

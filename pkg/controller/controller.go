@@ -48,7 +48,7 @@ import (
 
 var (
 	debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
-	externalMode    = flag.Bool("external-mode", false, "Run Gatekeeper external to the target cluster.")
+	remoteCluster   = flag.Bool("enable-remote-cluster", false, "(alpha) Enable remote cluster mode where Gatekeeper operates against a target cluster specified via --kubeconfig while running in the local cluster. Mutually exclusive with --debug-use-fake-pod.")
 )
 
 type Injector interface {
@@ -171,8 +171,12 @@ func (g *defaultPodGetter) GetPod(ctx context.Context) (*corev1.Pod, error) {
 
 // AddToManager adds all Controllers to the Manager.
 func AddToManager(m manager.Manager, deps *Dependencies) error {
-	if *externalMode {
-		// In external mode, the pod doesn't exist in the target cluster. skip setting OwnerReferences.
+	if *remoteCluster && *debugUseFakePod {
+		return fmt.Errorf("--enable-remote-cluster and --debug-use-fake-pod are mutually exclusive")
+	}
+
+	if *remoteCluster {
+		// In remote cluster mode, the pod doesn't exist in the target cluster. Skip setting OwnerReferences.
 		util.SetSkipPodOwnerRef(true)
 	}
 
@@ -193,12 +197,12 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 			}
 			deps.GetPod = fakePodGetter
 		} else {
-			// for external mode, use InClusterConfig to connect to management cluster.
+			// In remote cluster mode, use InClusterConfig to connect to local cluster.
 			var podClient client.Client
-			if *externalMode {
+			if *remoteCluster {
 				mgmtConfig, err := rest.InClusterConfig()
 				if err != nil {
-					return fmt.Errorf("external-mode requires in-cluster config for management cluster: %w", err)
+					return fmt.Errorf("enable-remote-cluster requires in-cluster config for local cluster: %w", err)
 				}
 				podClient, err = client.New(mgmtConfig, client.Options{Scheme: m.GetScheme()})
 				if err != nil {

@@ -72,14 +72,14 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 	}
 }
 
-func TestNewMutatorStatusForPod_SkipsOwnerRefInExternalMode(t *testing.T) {
+func TestNewMutatorStatusForPod_SkipsOwnerRefInRemoteClusterMode(t *testing.T) {
 	podName := "some-gk-pod-m"
 	podNS := "a-gk-namespace-m"
 	mutator := testhelpers.NewDummyMutator("a-mutator", "spec.value", nil)
 
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
-	// Enable skip OwnerRef mode (external mode)
+	// Enable skip OwnerRef mode (remote cluster mode)
 	util.SetSkipPodOwnerRef(true)
 	t.Cleanup(func() {
 		util.SetSkipPodOwnerRef(false)
@@ -105,7 +105,7 @@ func TestNewMutatorStatusForPod_SkipsOwnerRefInExternalMode(t *testing.T) {
 
 	// Verify OwnerReference is NOT set
 	if len(status.GetOwnerReferences()) != 0 {
-		t.Errorf("Expected no OwnerReferences in external mode, got %d", len(status.GetOwnerReferences()))
+		t.Errorf("Expected no OwnerReferences in remote cluster mode, got %d", len(status.GetOwnerReferences()))
 	}
 
 	// Verify all other fields are still populated correctly
