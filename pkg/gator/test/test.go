@@ -10,6 +10,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
@@ -29,28 +30,26 @@ func init() {
 	}
 }
 
-// options for the Test func.
-type Opts struct {
-	// Driver specific options
-	IncludeTrace bool
-	GatherStats  bool
-	UseK8sCEL    bool
-}
-
-func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error) {
+func Test(objs []*unstructured.Unstructured, opts ...gator.Opt) (*GatorResponses, error) {
 	args := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
-	if tOpts.UseK8sCEL {
-		k8sDriver, err := makeK8sCELDriver(tOpts)
+
+	driverArgs := []rego.Arg{}
+
+	for _, opt := range opts {
+		extraArgs, extraDriverArgs, err := opt()
 		if err != nil {
-			return nil, fmt.Errorf("creating K8s native driver: %w", err)
+			return nil, err
 		}
-		args = append(args, constraintclient.Driver(k8sDriver))
+
+		args = append(args, extraArgs...)
+		driverArgs = append(driverArgs, extraDriverArgs...)
 	}
 
-	driver, err := makeRegoDriver(tOpts)
+	driver, err := rego.New(driverArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("creating Rego driver: %w", err)
 	}
+
 	args = append(args, constraintclient.Driver(driver), constraintclient.EnforcementPoints(util.GatorEnforcementPoint))
 
 	client, err := constraintclient.NewClient(args...)
@@ -176,24 +175,37 @@ func Test(objs []*unstructured.Unstructured, tOpts Opts) (*GatorResponses, error
 	return responses, nil
 }
 
-func makeRegoDriver(tOpts Opts) (*rego.Driver, error) {
-	var args []rego.Arg
-	if tOpts.GatherStats {
-		args = append(args, rego.GatherStats())
+func WithGatherStats() gator.Opt {
+	return func() ([]constraintclient.Opt, []rego.Arg, error) {
+		return []constraintclient.Opt{}, []rego.Arg{
+			rego.GatherStats(),
+		}, nil
 	}
-	if tOpts.IncludeTrace {
-		args = append(args, rego.Tracing(tOpts.IncludeTrace))
-	}
-
-	return rego.New(args...)
 }
 
-func makeK8sCELDriver(tOpts Opts) (*k8scel.Driver, error) {
-	var args []k8scel.Arg
-
-	if tOpts.GatherStats {
-		args = append(args, k8scel.GatherStats())
+func WithTrace() gator.Opt {
+	return func() ([]constraintclient.Opt, []rego.Arg, error) {
+		return []constraintclient.Opt{}, []rego.Arg{
+			rego.Tracing(true),
+		}, nil
 	}
+}
 
-	return k8scel.New(args...)
+func WithK8sCEL(gatherStats bool) gator.Opt {
+	return func() ([]constraintclient.Opt, []rego.Arg, error) {
+		var args []k8scel.Arg
+
+		if gatherStats {
+			args = append(args, k8scel.GatherStats())
+		}
+
+		k8sDriver, err := k8scel.New(args...)
+		if err != nil {
+			return []constraintclient.Opt{}, []rego.Arg{}, fmt.Errorf("creating K8s native driver: %w", err)
+		}
+
+		return []constraintclient.Opt{
+			constraintclient.Driver(k8sDriver),
+		}, []rego.Arg{}, nil
+	}
 }

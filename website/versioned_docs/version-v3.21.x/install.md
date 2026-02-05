@@ -28,7 +28,7 @@ For either installation method, make sure you have cluster admin permissions:
 If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.21.0/deploy/gatekeeper.yaml
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.21.1/deploy/gatekeeper.yaml
 ```
 
 ### Deploying a Release using development image
@@ -92,7 +92,7 @@ You can alter the variables in `charts/gatekeeper/values.yaml` to customize your
 If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
 
   ```sh
-  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.21.0/deploy/gatekeeper.yaml
+  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.21.1/deploy/gatekeeper.yaml
   ```
 
 ### Using make
