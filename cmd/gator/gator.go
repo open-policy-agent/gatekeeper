@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/bench"
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/sync"
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/test"
@@ -17,6 +18,7 @@ var commands = []*cobra.Command{
 	test.Cmd,
 	expand.Cmd,
 	sync.Cmd,
+	bench.Cmd,
 	k8sVersion.WithFont("alligator2"),
 }
 
