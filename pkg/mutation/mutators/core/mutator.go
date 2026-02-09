@@ -38,6 +38,11 @@ func NewValidatedBindings(name string, kind string, applies []match.MutationAppl
 		}
 	}
 
+	// Validate that all specified operations are valid Kubernetes admission operations
+	if err := match.ValidateOperations(applies); err != nil {
+		return nil, fmt.Errorf("invalid applyTo for %s mutator %s: %w", kind, name, err)
+	}
+
 	gvks := getSortedGVKs(applies)
 	if len(gvks) == 0 {
 		return nil, fmt.Errorf("applyTo required for %s mutator %s", kind, name)

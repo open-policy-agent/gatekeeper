@@ -97,15 +97,16 @@ spec:
                       type: array
                     operations:
                       description: |-
-                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT) should trigger
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
                       items:
-                        description: Operation is the type of resource operation being checked for admission control
+                        description: OperationType specifies an operation for a request.
                         enum:
                         - CREATE
                         - UPDATE
                         - DELETE
                         - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -465,15 +466,16 @@ spec:
                       type: array
                     operations:
                       description: |-
-                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT) should trigger
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
                       items:
-                        description: Operation is the type of resource operation being checked for admission control
+                        description: OperationType specifies an operation for a request.
                         enum:
                         - CREATE
                         - UPDATE
                         - DELETE
                         - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -833,15 +835,16 @@ spec:
                       type: array
                     operations:
                       description: |-
-                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT) should trigger
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
                       items:
-                        description: Operation is the type of resource operation being checked for admission control
+                        description: OperationType specifies an operation for a request.
                         enum:
                         - CREATE
                         - UPDATE
                         - DELETE
                         - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -1223,15 +1226,16 @@ spec:
                       type: array
                     operations:
                       description: |-
-                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT) should trigger
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
                       items:
-                        description: Operation is the type of resource operation being checked for admission control
+                        description: OperationType specifies an operation for a request.
                         enum:
                         - CREATE
                         - UPDATE
                         - DELETE
                         - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -3854,15 +3858,16 @@ spec:
                       type: array
                     operations:
                       description: |-
-                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT) should trigger
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
                       items:
-                        description: Operation is the type of resource operation being checked for admission control
+                        description: OperationType specifies an operation for a request.
                         enum:
                         - CREATE
                         - UPDATE
                         - DELETE
                         - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -4191,15 +4196,16 @@ spec:
                       type: array
                     operations:
                       description: |-
-                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT) should trigger
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
                       items:
-                        description: Operation is the type of resource operation being checked for admission control
+                        description: OperationType specifies an operation for a request.
                         enum:
                         - CREATE
                         - UPDATE
                         - DELETE
                         - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -4528,15 +4534,16 @@ spec:
                       type: array
                     operations:
                       description: |-
-                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT) should trigger
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
                       items:
-                        description: Operation is the type of resource operation being checked for admission control
+                        description: OperationType specifies an operation for a request.
                         enum:
                         - CREATE
                         - UPDATE
                         - DELETE
                         - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:

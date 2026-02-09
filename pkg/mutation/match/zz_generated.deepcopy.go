@@ -21,7 +21,7 @@ package match
 
 import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
-	"k8s.io/api/admission/v1"
+	"k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -146,7 +146,7 @@ func (in *MutationApplyTo) DeepCopyInto(out *MutationApplyTo) {
 	in.ApplyTo.DeepCopyInto(&out.ApplyTo)
 	if in.Operations != nil {
 		in, out := &in.Operations, &out.Operations
-		*out = make([]v1.Operation, len(*in))
+		*out = make([]v1.OperationType, len(*in))
 		copy(*out, *in)
 	}
 }

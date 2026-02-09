@@ -1,7 +1,11 @@
 package match
 
 import (
+	"fmt"
+	"slices"
+
 	admissionv1 "k8s.io/api/admission/v1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -50,10 +54,10 @@ type ApplyTo struct {
 // +kubebuilder:object:generate=true
 type MutationApplyTo struct {
 	ApplyTo `json:",inline"`
-	// Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT) should trigger
+	// Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
 	// this mutation. If empty, all operations are allowed for backward compatibility.
-	// +kubebuilder:validation:items:Enum=CREATE;UPDATE;DELETE;CONNECT
-	Operations []admissionv1.Operation `json:"operations,omitempty"`
+	// +kubebuilder:validation:items:Enum=CREATE;UPDATE;DELETE;CONNECT;*
+	Operations []admissionregistrationv1.OperationType `json:"operations,omitempty"`
 }
 
 // Flatten returns the set of GroupVersionKinds this ApplyTo matches.
@@ -122,15 +126,35 @@ func (a *MutationApplyTo) MatchesOperation(operation admissionv1.Operation) bool
 		return true
 	}
 
+	if slices.Contains(a.Operations, admissionregistrationv1.OperationAll) {
+		return true
+	}
+
 	// Check if the operation is explicitly allowed by the user
-	return containsOperation(a.Operations, operation)
+	// Convert admissionv1.Operation to admissionregistrationv1.OperationType for comparison
+	opType := admissionregistrationv1.OperationType(operation)
+	return slices.Contains(a.Operations, opType)
 }
 
-func containsOperation(list []admissionv1.Operation, s admissionv1.Operation) bool {
-	for _, item := range list {
-		if item == s {
-			return true
+// validOperations defines the set of valid admission operations.
+var validOperations = map[admissionregistrationv1.OperationType]bool{
+	admissionregistrationv1.Create:       true,
+	admissionregistrationv1.Update:       true,
+	admissionregistrationv1.Delete:       true,
+	admissionregistrationv1.Connect:      true,
+	admissionregistrationv1.OperationAll: true,
+}
+
+// ValidateOperations validates that all operations in the MutationApplyTo
+// are valid Kubernetes admission operations (CREATE, UPDATE, DELETE, CONNECT, *).
+// Returns an error if any invalid operation is found.
+func ValidateOperations(applyTo []MutationApplyTo) error {
+	for i, apply := range applyTo {
+		for _, op := range apply.Operations {
+			if !validOperations[op] {
+				return fmt.Errorf("invalid operation %q in applyTo[%d].operations: must be one of CREATE, UPDATE, DELETE, CONNECT, *", op, i)
+			}
 		}
 	}
-	return false
+	return nil
 }
