@@ -62,7 +62,7 @@ jobs:
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
           
           # Install kind
-          curl -Lo $GITHUB_WORKSPACE/bin/kind https://kind.sigs.k8s.io/dl/v0.25.0/kind-linux-amd64
+          curl -Lo $GITHUB_WORKSPACE/bin/kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
           chmod +x $GITHUB_WORKSPACE/bin/kind
           
           # Install kubectl
@@ -161,7 +161,7 @@ jobs:
 
       - name: Load image into management cluster
         run: |
-          docker save ${{ env.GATEKEEPER_IMAGE }} | kind load image-archive --name ${{ env.MANAGEMENT_CLUSTER }} /dev/stdin
+          kind load docker-image ${{ env.GATEKEEPER_IMAGE }} --name ${{ env.MANAGEMENT_CLUSTER }}
           echo "Image loaded into management cluster"
 
       - name: Deploy CRDs to nested cluster
