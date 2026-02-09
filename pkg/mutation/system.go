@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -142,13 +143,13 @@ func (s *System) GetConflicts(id types.ID) map[types.ID]bool {
 
 // Mutate applies the mutation in place to the given object. Returns
 // true if applying Mutators caused any changes to the object.
-func (s *System) Mutate(mutable *types.Mutable) (bool, error) {
+func (s *System) Mutate(ctx context.Context, mutable *types.Mutable) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 
 	convergence := SystemConvergenceFalse
 
-	iterations, merr := s.mutate(mutable)
+	iterations, merr := s.mutate(ctx, mutable)
 	if merr == nil {
 		convergence = SystemConvergenceTrue
 	}
@@ -166,7 +167,7 @@ func (s *System) Mutate(mutable *types.Mutable) (bool, error) {
 
 // mutate runs all Mutators on obj. Returns the number of iterations required
 // to converge, and any error encountered attempting to run Mutators.
-func (s *System) mutate(mutable *types.Mutable) (int, error) {
+func (s *System) mutate(ctx context.Context, mutable *types.Mutable) (int, error) {
 	mutationUUID := s.newUUID()
 	original := unversioned.DeepCopyWithPlaceholders(mutable.Object)
 	var allAppliedMutations [][]types.Mutator
@@ -206,7 +207,7 @@ func (s *System) mutate(mutable *types.Mutable) (int, error) {
 				return 0, nil
 			}
 
-			err := s.resolvePlaceholders(mutable.Object)
+			err := s.resolvePlaceholders(ctx, mutable.Object)
 			if err != nil {
 				return iteration, fmt.Errorf("failed to resolve external data placeholders: %w", err)
 			}

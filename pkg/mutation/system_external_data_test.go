@@ -381,7 +381,7 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 				ClientCertWatcher:                 clientCertWatcher,
 			})
 
-			err := s.resolvePlaceholders(tt.args.obj)
+			err := s.resolvePlaceholders(context.Background(), tt.args.obj)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("System.resolvePlaceholders() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -488,6 +488,7 @@ func TestSystem_getTLSCertificate(t *testing.T) {
 func TestSystem_sendRequests_contextTimeout(t *testing.T) {
 	tests := []struct {
 		name            string
+		parentTimeout   time.Duration // 0 means use context.Background()
 		providerTimeout int
 		wantTimeout     time.Duration
 	}{
@@ -510,6 +511,12 @@ func TestSystem_sendRequests_contextTimeout(t *testing.T) {
 			name:            "uses default timeout when provider timeout is 0",
 			providerTimeout: 0,
 			wantTimeout:     defaultExternalDataRequestTimeout,
+		},
+		{
+			name:            "parent context deadline wins when shorter than provider timeout",
+			parentTimeout:   1 * time.Second,
+			providerTimeout: 10,
+			wantTimeout:     1 * time.Second,
 		},
 	}
 
@@ -543,10 +550,17 @@ func TestSystem_sendRequests_contextTimeout(t *testing.T) {
 				},
 			})
 
-			providerKeys := map[string]sets.Set[string]{
-				providerName: sets.New[string]("key1"),
+			parentCtx := context.Background()
+			if tt.parentTimeout > 0 {
+				var cancel context.CancelFunc
+				parentCtx, cancel = context.WithTimeout(parentCtx, tt.parentTimeout)
+				defer cancel()
 			}
-			s.sendRequests(providerKeys, nil)
+
+			providerKeys := map[string]sets.Set[string]{
+				providerName: sets.New("key1"),
+			}
+			s.sendRequests(parentCtx, providerKeys, nil)
 
 			if capturedCtx == nil {
 				t.Fatal("sendRequestToExternalDataProvider was not called")
@@ -563,5 +577,51 @@ func TestSystem_sendRequests_contextTimeout(t *testing.T) {
 				t.Errorf("expected timeout ~%v, got %v", tt.wantTimeout, actualTimeout)
 			}
 		})
+	}
+}
+
+func TestSystem_sendRequests_parentContextCancellation(t *testing.T) {
+	providerName := "test-provider-cancel"
+
+	providerCache := externaldata.NewCache()
+	provider := &externaldataUnversioned.Provider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: providerName,
+		},
+		Spec: externaldataUnversioned.ProviderSpec{
+			URL:      "https://localhost:8080/validate",
+			Timeout:  10,
+			CABundle: util.ValidCABundle,
+		},
+	}
+	if err := providerCache.Upsert(provider); err != nil {
+		t.Fatalf("failed to upsert provider: %v", err)
+	}
+
+	var capturedCtx context.Context
+	s := NewSystem(SystemOpts{
+		ProviderCache: providerCache,
+		SendRequestToExternalDataProvider: func(ctx context.Context, _ *externaldataUnversioned.Provider, _ []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			capturedCtx = ctx
+			return &externaldata.ProviderResponse{
+				Response: externaldata.Response{Idempotent: true},
+			}, http.StatusOK, nil
+		},
+	})
+
+	parentCtx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	providerKeys := map[string]sets.Set[string]{
+		providerName: sets.New[string]("key1"),
+	}
+	s.sendRequests(parentCtx, providerKeys, nil)
+
+	if capturedCtx == nil {
+		t.Fatal("sendRequestToExternalDataProvider was not called")
+	}
+
+	if err := capturedCtx.Err(); err != context.Canceled {
+		t.Errorf("expected context to be canceled, got %v", err)
 	}
 }
