@@ -161,7 +161,7 @@ jobs:
 
       - name: Load image into management cluster
         run: |
-          kind load docker-image ${{ env.GATEKEEPER_IMAGE }} --name ${{ env.MANAGEMENT_CLUSTER }}
+          docker save ${{ env.GATEKEEPER_IMAGE }} | kind load image-archive --name ${{ env.MANAGEMENT_CLUSTER }} /dev/stdin
           echo "Image loaded into management cluster"
 
       - name: Deploy CRDs to nested cluster
