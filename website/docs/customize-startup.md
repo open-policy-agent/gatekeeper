@@ -82,9 +82,10 @@ Gatekeeper needs permissions to read Pods in the **local cluster** (to resolve i
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
   name: gatekeeper-manager-role
+  namespace: gatekeeper-system
 rules:
 - apiGroups: [""]
   resources: ["pods"]

@@ -176,6 +176,10 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 	}
 
 	if *remoteCluster {
+		kubeconfigFlag := flag.Lookup("kubeconfig")
+		if kubeconfigFlag == nil || kubeconfigFlag.Value.String() == "" {
+			return fmt.Errorf("--enable-remote-cluster requires --kubeconfig to be specified pointing to the target cluster")
+		}
 		// In remote cluster mode, the pod doesn't exist in the target cluster. Skip setting OwnerReferences.
 		util.SetSkipPodOwnerRef(true)
 	}
