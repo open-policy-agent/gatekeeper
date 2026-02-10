@@ -206,7 +206,7 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 			if *remoteCluster {
 				mgmtConfig, err := rest.InClusterConfig()
 				if err != nil {
-					return fmt.Errorf("enable-remote-cluster requires in-cluster config for local cluster: %w", err)
+					return fmt.Errorf("--enable-remote-cluster requires in-cluster config for local cluster: %w", err)
 				}
 				podClient, err = client.New(mgmtConfig, client.Options{Scheme: m.GetScheme()})
 				if err != nil {

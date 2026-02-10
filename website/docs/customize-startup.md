@@ -100,7 +100,8 @@ To find orphaned status resources, compare the `gatekeeper.sh/pod` label against
 
 ```bash
 # List all pod names referenced in status resources (repeat for each status type)
-kubectl get constrainttemplatepodstatuses -o jsonpath='{.items[*].metadata.labels.gatekeeper\.sh/pod}' | tr ' ' '\n' | sort -u
+kubectl get constrainttemplatepodstatuses -n gatekeeper-system \
+  -o jsonpath="{.items[*].metadata.labels['gatekeeper\.sh/pod']}" | tr ' ' '\n' | sort -u
 
 # Compare with running Gatekeeper pods in local cluster
 kubectl get pods -n gatekeeper-system -l control-plane=controller-manager -o name
@@ -111,7 +112,8 @@ To clean up orphaned resources after identifying old pod names:
 ```bash
 # Delete status resources for a specific old pod
 OLD_POD="gatekeeper-controller-manager-old-xyz"
-kubectl delete constrainttemplatepodstatuses,constraintpodstatuses,mutatorpodstatuses,expansiontemplatepodstatuses,configpodstatuses,providerpodstatuses,connectionpodstatuses -l gatekeeper.sh/pod=$OLD_POD
+kubectl delete constrainttemplatepodstatuses,constraintpodstatuses,mutatorpodstatuses,expansiontemplatepodstatuses,configpodstatuses,providerpodstatuses,connectionpodstatuses \
+  -n gatekeeper-system -l gatekeeper.sh/pod=$OLD_POD
 ```
 
 ## Other Configuration Options

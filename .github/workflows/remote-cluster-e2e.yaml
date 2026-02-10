@@ -394,10 +394,10 @@ jobs:
         run: |
           # Wait for status to be created
           for i in {1..60}; do
-            ITEMS=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses \
-              -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items}')
-            if [[ "$ITEMS" == *"gatekeeper"* ]]; then
-              echo "ConstraintTemplatePodStatus found"
+            NAME=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses \
+              -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [[ -n "$NAME" ]]; then
+              echo "ConstraintTemplatePodStatus found: $NAME"
               break
             fi
             echo "Waiting for ConstraintTemplatePodStatus... ($i/60)"
@@ -439,10 +439,10 @@ jobs:
         run: |
           # Wait for status to be created
           for i in {1..60}; do
-            ITEMS=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constraintpodstatuses \
-              -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items}')
-            if [[ "$ITEMS" == *"gatekeeper"* ]]; then
-              echo "ConstraintPodStatus found"
+            NAME=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constraintpodstatuses \
+              -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [[ -n "$NAME" ]]; then
+              echo "ConstraintPodStatus found: $NAME"
               break
             fi
             echo "Waiting for ConstraintPodStatus... ($i/60)"
@@ -488,15 +488,21 @@ jobs:
 
       - name: Verify status resources are stable (no GC churn)
         run: |
-          # Get UID of status resource
-          UID1=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses \
-            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.uid}')
+          # Get the specific resource name first to avoid ordering issues
+          STATUS_NAME=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.name}')
+          
+          echo "Checking stability of: $STATUS_NAME"
+          
+          # Get UID for that specific resource
+          UID1=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses/"$STATUS_NAME" \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.metadata.uid}')
           
           echo "Initial UID: $UID1"
           sleep 10
           
-          UID2=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses \
-            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.uid}')
+          UID2=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses/"$STATUS_NAME" \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.metadata.uid}')
           
           echo "UID after 10s: $UID2"
           
