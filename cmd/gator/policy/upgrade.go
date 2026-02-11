@@ -9,6 +9,7 @@ import (
 	gatorpolicy "github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/client"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/output"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +40,7 @@ gator policy upgrade --all
 # Preview changes without applying
 gator policy upgrade --all --dry-run
 
-# Output results as JSON
+# Output as JSON for scripting
 gator policy upgrade --all -o json`,
 		RunE: runUpgrade,
 	}
@@ -47,8 +48,8 @@ gator policy upgrade --all -o json`,
 	cmd.Flags().BoolVar(&upgradeAll, "all", false, "Upgrade all installed policies")
 	cmd.Flags().StringSliceVar(&upgradeBundles, "bundle", nil, "Upgrade all policies in a bundle (may be specified multiple times)")
 	cmd.Flags().StringVar(&upgradeEnforcementAction, "enforcement-action", "", "Override enforcement action (deny, warn, dryrun)")
-	cmd.Flags().BoolVar(&upgradeDryRun, "dry-run", false, "Preview changes without applying (requires cluster access \u2014 uses server-side dry run)")
-	cmd.Flags().StringVarP(&upgradeOutput, "output", "o", "", "Output format: table (default) or json")
+	cmd.Flags().BoolVar(&upgradeDryRun, "dry-run", false, "Preview changes without applying (requires cluster access to check current state)")
+	cmd.Flags().StringVarP(&upgradeOutput, "output", "o", "table", "Output format: table, json")
 
 	return cmd
 }
@@ -70,9 +71,10 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Validate output format early
-	if upgradeOutput != "" && upgradeOutput != "table" && upgradeOutput != "json" {
-		return fmt.Errorf("invalid output format: %s (must be table or json)", upgradeOutput)
+	// Create printer
+	printer, err := output.NewPrinter(output.Format(upgradeOutput))
+	if err != nil {
+		return err
 	}
 
 	// Load catalog
@@ -95,8 +97,6 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 	// Create fetcher for templates/constraints with the catalog URL as base
 	fetcher := catalog.NewHTTPFetcherWithBaseURL(catalog.DefaultTimeout, catalog.GetCatalogURL())
-
-	// Print header (for dry-run, we print after we know what will be upgraded)
 
 	// Resolve bundle policies if --bundle is specified
 	policyNames := args
@@ -139,47 +139,37 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Print results
-	if upgradeDryRun && len(result.Upgraded) > 0 {
-		fmt.Fprintf(os.Stdout, "==> Would upgrade %d policies:\n", len(result.Upgraded))
+	// Build output result
+	outResult := &output.UpgradeResult{
+		AlreadyCurrent: result.AlreadyCurrent,
+		NotInstalled:   result.NotInstalled,
+		NotFound:       result.NotFound,
+		DryRun:         upgradeDryRun,
 	}
+
 	for _, change := range result.Upgraded {
-		if upgradeDryRun {
-			fmt.Fprintf(os.Stdout, "%s %s -> %s\n", change.Name, change.FromVersion, change.ToVersion)
-		} else {
-			fmt.Fprintf(os.Stdout, "✓ %s upgraded (%s → %s)\n", change.Name, change.FromVersion, change.ToVersion)
-		}
+		outResult.Upgraded = append(outResult.Upgraded, output.UpgradeEntry{
+			Name:        change.Name,
+			FromVersion: change.FromVersion,
+			ToVersion:   change.ToVersion,
+		})
 	}
 
-	for _, name := range result.AlreadyCurrent {
-		fmt.Fprintf(os.Stdout, "- %s (already at latest version)\n", name)
-	}
-
-	for _, name := range result.NotInstalled {
-		fmt.Fprintf(os.Stdout, "- %s (not installed)\n", name)
-	}
-
-	for _, name := range result.NotFound {
-		fmt.Fprintf(os.Stdout, "- %s (not found in catalog)\n", name)
-	}
-
-	// Print failures
 	for _, name := range result.Failed {
-		errMsg := result.Errors[name]
-		fmt.Fprintf(os.Stderr, "✗ %s - failed: %s\n", name, errMsg)
+		outResult.Failed = append(outResult.Failed, output.FailedEntry{
+			Name:  name,
+			Error: result.Errors[name],
+		})
 	}
 
+	// Print results
+	if printErr := printer.PrintUpgradeResult(os.Stdout, outResult); printErr != nil {
+		return printErr
+	}
+
+	// Return appropriate error for non-success cases
 	if len(result.Failed) > 0 {
 		return gatorpolicy.NewPartialSuccessError("upgrade incomplete: some policies failed to upgrade")
-	}
-
-	// Print summary
-	if len(result.Upgraded) == 0 && len(result.Failed) == 0 {
-		if len(result.NotFound) > 0 {
-			fmt.Fprintf(os.Stdout, "\nNo upgrades available. %d policies not found in catalog.\n", len(result.NotFound))
-		} else {
-			fmt.Fprintln(os.Stdout, "\nAll policies are up to date.")
-		}
 	}
 
 	return nil

@@ -152,7 +152,9 @@ policies:
     description: "Blocks privileged containers"
     category: pod-security
     templatePath: library/pod-security-policy/privileged-containers/template.yaml
-    constraintPath: library/pod-security-policy/privileged-containers/samples/psp-privileged-container/constraint.yaml
+    bundleConstraints:
+      pod-security-baseline: library/pod-security-policy/privileged-containers/samples/psp-privileged-container/constraint.yaml
+      pod-security-restricted: library/pod-security-policy/privileged-containers/samples/psp-privileged-container/constraint.yaml
     bundles:
       - pod-security-baseline
       - pod-security-restricted
@@ -187,14 +189,14 @@ policies:
 | `description` | string | Yes | Human-readable description |
 | `category` | string | Yes | Category: `general`, `pod-security`, etc. |
 | `templatePath` | string | Yes | Relative path to ConstraintTemplate YAML |
-| `constraintPath` | string | No | Relative path to Constraint YAML (for bundles) |
+| `bundleConstraints` | map[string]string | No | Maps bundle names to their constraint YAML paths. Different bundles may need different constraint configurations for the same template (e.g., baseline vs restricted PSS profiles). |
 | `sampleConstraintPath` | string | No | Relative path to sample Constraint |
 | `documentationUrl` | string | No | Link to documentation |
 | `bundles` | []string | No | Bundle(s) this policy belongs to |
 
 #### Path Resolution Rules
 
-The `templatePath`, `constraintPath`, and `sampleConstraintPath` fields are **always relative to the library repository root**, regardless of catalog location:
+The `templatePath`, `bundleConstraints`, and `sampleConstraintPath` fields are **always relative to the library repository root**, regardless of catalog location:
 
 | Catalog Source | Path Resolution |
 |----------------|----------------|

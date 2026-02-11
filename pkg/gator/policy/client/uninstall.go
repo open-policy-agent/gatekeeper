@@ -2,10 +2,11 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/labels"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // UninstallOptions contains options for uninstalling policies.
@@ -51,13 +52,22 @@ func Uninstall(ctx context.Context, k8sClient Client, opts UninstallOptions) (*U
 		}
 	}
 
-	// Uninstall each policy - fail fast on errors per design doc
+	// Uninstall each policy - continue on managed-by conflicts, fail fast on
+	// unexpected errors (auth, network, etc.) to match install's behavior.
 	for _, policyName := range opts.Policies {
 		err := uninstallPolicy(ctx, k8sClient, policyName, opts.DryRun, result)
 		if err != nil {
+			// Conflict errors (not managed by gator) are non-fatal — the policy
+			// is already tracked in result.NotManaged by uninstallPolicy, so we
+			// only need to record the message and keep going.
+			var conflictErr *ConflictError
+			if errors.As(err, &conflictErr) {
+				result.Errors[policyName] = err.Error()
+				continue
+			}
+			// Unexpected errors are fatal — stop processing.
 			result.Failed = append(result.Failed, policyName)
 			result.Errors[policyName] = err.Error()
-			// Fail fast - stop on first error
 			return result, err
 		}
 	}
@@ -70,7 +80,7 @@ func uninstallPolicy(ctx context.Context, k8sClient Client, policyName string, d
 	existing, err := k8sClient.GetTemplate(ctx, policyName)
 	if err != nil {
 		// Distinguish between "not found" and other errors (auth, network, etc.)
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			result.NotFound = append(result.NotFound, policyName)
 			return nil // Not found is not an error for uninstall
 		}

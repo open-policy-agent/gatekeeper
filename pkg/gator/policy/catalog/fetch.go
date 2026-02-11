@@ -132,9 +132,12 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, catalogURL string) ([]byte, err
 
 // FetchContent retrieves content from a URL, resolving relative paths against the catalog URL.
 func (f *HTTPFetcher) FetchContent(ctx context.Context, contentPath string) ([]byte, error) {
-	// Security: Validate the content path doesn't contain path traversal attempts
-	// This applies to all content paths, whether file:// or HTTP
-	if strings.Contains(contentPath, "..") {
+	// Security: Validate the content path doesn't contain path traversal attempts.
+	// Check both the raw path and a URL-decoded/cleaned version to prevent
+	// bypasses via percent-encoding (e.g., %2e%2e).
+	decodedPath, _ := url.PathUnescape(contentPath)
+	cleanedPath := path.Clean(decodedPath)
+	if strings.Contains(contentPath, "..") || strings.Contains(decodedPath, "..") || strings.Contains(cleanedPath, "..") {
 		return nil, fmt.Errorf("content path contains path traversal: %s", contentPath)
 	}
 

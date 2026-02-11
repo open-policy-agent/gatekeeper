@@ -48,6 +48,48 @@ func (p *JSONPrinter) PrintMessage(w io.Writer, message string) error {
 	return p.writeJSON(w, output)
 }
 
+// PrintInstallResult outputs install results as JSON.
+func (p *JSONPrinter) PrintInstallResult(w io.Writer, result *InstallResult) error {
+	output := struct {
+		APIVersion string         `json:"apiVersion"`
+		Kind       string         `json:"kind"`
+		Result     *InstallResult `json:"result"`
+	}{
+		APIVersion: JSONOutputVersion,
+		Kind:       "InstallResult",
+		Result:     result,
+	}
+	return p.writeJSON(w, output)
+}
+
+// PrintUninstallResult outputs uninstall results as JSON.
+func (p *JSONPrinter) PrintUninstallResult(w io.Writer, result *UninstallResult) error {
+	output := struct {
+		APIVersion string           `json:"apiVersion"`
+		Kind       string           `json:"kind"`
+		Result     *UninstallResult `json:"result"`
+	}{
+		APIVersion: JSONOutputVersion,
+		Kind:       "UninstallResult",
+		Result:     result,
+	}
+	return p.writeJSON(w, output)
+}
+
+// PrintUpgradeResult outputs upgrade results as JSON.
+func (p *JSONPrinter) PrintUpgradeResult(w io.Writer, result *UpgradeResult) error {
+	output := struct {
+		APIVersion string         `json:"apiVersion"`
+		Kind       string         `json:"kind"`
+		Result     *UpgradeResult `json:"result"`
+	}{
+		APIVersion: JSONOutputVersion,
+		Kind:       "UpgradeResult",
+		Result:     result,
+	}
+	return p.writeJSON(w, output)
+}
+
 func (p *JSONPrinter) writeJSON(w io.Writer, v interface{}) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {

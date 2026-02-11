@@ -8,6 +8,7 @@ import (
 	gatorpolicy "github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/client"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/output"
 	"github.com/spf13/cobra"
 )
 
@@ -37,14 +38,14 @@ gator policy uninstall --bundle pod-security-baseline
 # Preview changes without applying
 gator policy uninstall k8srequiredlabels --dry-run
 
-# Output results as JSON
+# Output as JSON for scripting
 gator policy uninstall k8srequiredlabels -o json`,
 		RunE: runUninstall,
 	}
 
 	cmd.Flags().StringSliceVar(&uninstallBundles, "bundle", nil, "Uninstall all policies in a bundle (may be specified multiple times)")
-	cmd.Flags().BoolVar(&uninstallDryRun, "dry-run", false, "Preview changes without applying (requires cluster access — uses server-side dry run)")
-	cmd.Flags().StringVarP(&uninstallOutput, "output", "o", "", "Output format: table (default) or json")
+	cmd.Flags().BoolVar(&uninstallDryRun, "dry-run", false, "Preview changes without applying (requires cluster access to check current state)")
+	cmd.Flags().StringVarP(&uninstallOutput, "output", "o", "table", "Output format: table, json")
 
 	return cmd
 }
@@ -58,9 +59,10 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("specify policy name(s) or use --bundle to uninstall a bundle")
 	}
 
-	// Validate output format early
-	if uninstallOutput != "" && uninstallOutput != "table" && uninstallOutput != "json" {
-		return fmt.Errorf("invalid output format: %s (must be table or json)", uninstallOutput)
+	// Create printer
+	printer, err := output.NewPrinter(output.Format(uninstallOutput))
+	if err != nil {
+		return err
 	}
 
 	// Resolve bundle policies via catalog if --bundle is specified
@@ -101,19 +103,6 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating Kubernetes client: %w", err)
 	}
 
-	// Print header
-	if len(uninstallBundles) > 0 {
-		for _, b := range uninstallBundles {
-			if uninstallDryRun {
-				fmt.Fprintf(os.Stdout, "==> Would uninstall %s bundle:\n", b)
-			} else {
-				fmt.Fprintf(os.Stdout, "Uninstalling %s bundle...\n", b)
-			}
-		}
-	} else if uninstallDryRun {
-		fmt.Fprintf(os.Stdout, "==> Would uninstall %d policies:\n", len(policyNames))
-	}
-
 	// Build uninstall options
 	opts := client.UninstallOptions{
 		Policies: policyNames,
@@ -132,33 +121,28 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Print results
-	for _, name := range result.Uninstalled {
-		if uninstallDryRun {
-			fmt.Fprintf(os.Stdout, "%s\n", name)
-		} else {
-			fmt.Fprintf(os.Stdout, "✓ %s uninstalled\n", name)
-		}
-	}
-
-	for _, name := range result.NotFound {
-		fmt.Fprintf(os.Stdout, "- %s (not found)\n", name)
-	}
-
-	// Print failures
-	hasConflict := false
-	for _, name := range result.NotManaged {
-		errMsg := result.Errors[name]
-		fmt.Fprintf(os.Stderr, "✗ %s - %s\n", name, errMsg)
-		hasConflict = true
+	// Build output result
+	outResult := &output.UninstallResult{
+		Uninstalled: result.Uninstalled,
+		NotFound:    result.NotFound,
+		NotManaged:  result.NotManaged,
+		DryRun:      uninstallDryRun,
 	}
 
 	for _, name := range result.Failed {
-		errMsg := result.Errors[name]
-		fmt.Fprintf(os.Stderr, "✗ %s - failed: %s\n", name, errMsg)
+		outResult.Failed = append(outResult.Failed, output.FailedEntry{
+			Name:  name,
+			Error: result.Errors[name],
+		})
 	}
 
-	if hasConflict {
+	// Print results
+	if printErr := printer.PrintUninstallResult(os.Stdout, outResult); printErr != nil {
+		return printErr
+	}
+
+	// Return appropriate error for non-success cases
+	if len(result.NotManaged) > 0 {
 		return gatorpolicy.NewConflictError("uninstall failed: some policies are not managed by gator")
 	}
 

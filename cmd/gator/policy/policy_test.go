@@ -18,11 +18,6 @@ func TestInstallCommand_ValidationErrors(t *testing.T) {
 			expectError: "specify policy name(s) or use --bundle",
 		},
 		{
-			name:        "invalid output format",
-			args:        []string{"test-policy", "-o", "xml"},
-			expectError: "invalid output format",
-		},
-		{
 			name:        "scoped enforcement action rejected",
 			args:        []string{"test-policy", "--enforcement-action=scoped"},
 			expectError: "scoped",
@@ -31,6 +26,11 @@ func TestInstallCommand_ValidationErrors(t *testing.T) {
 			name:        "invalid enforcement action",
 			args:        []string{"test-policy", "--enforcement-action=invalid"},
 			expectError: "invalid enforcement action",
+		},
+		{
+			name:        "invalid output format",
+			args:        []string{"test-policy", "-o", "xml"},
+			expectError: "invalid output format",
 		},
 	}
 

@@ -873,4 +873,3 @@ func TestUpdatePolicyBundles_NoBundles(t *testing.T) {
 		t.Errorf("Expected policy1 in no bundles, got %v", cat.Policies[0].Bundles)
 	}
 }
-

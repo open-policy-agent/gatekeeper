@@ -148,3 +148,172 @@ func TestNewPrinter(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid output format")
 }
+
+func TestTablePrinter_PrintInstallResult(t *testing.T) {
+	printer := &TablePrinter{}
+	var buf bytes.Buffer
+
+	result := &InstallResult{
+		Installed: []InstallEntry{
+			{Name: "policy1", Version: "v1.0.0"},
+			{Name: "policy2", Version: "v2.0.0"},
+		},
+		Skipped:              []string{"policy3"},
+		TemplatesInstalled:   2,
+		ConstraintsInstalled: 1,
+	}
+
+	err := printer.PrintInstallResult(&buf, result)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "policy1")
+	assert.Contains(t, output, "v1.0.0")
+	assert.Contains(t, output, "installed")
+	assert.Contains(t, output, "policy3")
+	assert.Contains(t, output, "already installed")
+	assert.Contains(t, output, "2 templates")
+}
+
+func TestTablePrinter_PrintInstallResult_DryRun(t *testing.T) {
+	printer := &TablePrinter{}
+	var buf bytes.Buffer
+
+	result := &InstallResult{
+		Installed: []InstallEntry{
+			{Name: "policy1", Version: "v1.0.0"},
+		},
+		DryRun: true,
+	}
+
+	err := printer.PrintInstallResult(&buf, result)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "policy1")
+	assert.Contains(t, output, "v1.0.0")
+	assert.NotContains(t, output, "✓")
+}
+
+func TestTablePrinter_PrintUninstallResult(t *testing.T) {
+	printer := &TablePrinter{}
+	var buf bytes.Buffer
+
+	result := &UninstallResult{
+		Uninstalled: []string{"policy1"},
+		NotFound:    []string{"policy2"},
+		NotManaged:  []string{"policy3"},
+	}
+
+	err := printer.PrintUninstallResult(&buf, result)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "policy1")
+	assert.Contains(t, output, "uninstalled")
+	assert.Contains(t, output, "policy2")
+	assert.Contains(t, output, "not found")
+	assert.Contains(t, output, "policy3")
+	assert.Contains(t, output, "not managed")
+}
+
+func TestTablePrinter_PrintUpgradeResult(t *testing.T) {
+	printer := &TablePrinter{}
+	var buf bytes.Buffer
+
+	result := &UpgradeResult{
+		Upgraded: []UpgradeEntry{
+			{Name: "policy1", FromVersion: "v1.0.0", ToVersion: "v2.0.0"},
+		},
+		AlreadyCurrent: []string{"policy2"},
+	}
+
+	err := printer.PrintUpgradeResult(&buf, result)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "policy1")
+	assert.Contains(t, output, "v1.0.0")
+	assert.Contains(t, output, "v2.0.0")
+	assert.Contains(t, output, "policy2")
+	assert.Contains(t, output, "already at latest")
+}
+
+func TestJSONPrinter_PrintInstallResult(t *testing.T) {
+	printer := &JSONPrinter{}
+	var buf bytes.Buffer
+
+	result := &InstallResult{
+		Installed: []InstallEntry{
+			{Name: "policy1", Version: "v1.0.0"},
+		},
+		TemplatesInstalled:   1,
+		ConstraintsInstalled: 0,
+	}
+
+	err := printer.PrintInstallResult(&buf, result)
+	require.NoError(t, err)
+
+	var output struct {
+		APIVersion string         `json:"apiVersion"`
+		Kind       string         `json:"kind"`
+		Result     *InstallResult `json:"result"`
+	}
+	err = json.Unmarshal(buf.Bytes(), &output)
+	require.NoError(t, err)
+	assert.Equal(t, JSONOutputVersion, output.APIVersion)
+	assert.Equal(t, "InstallResult", output.Kind)
+	assert.Len(t, output.Result.Installed, 1)
+	assert.Equal(t, "policy1", output.Result.Installed[0].Name)
+}
+
+func TestJSONPrinter_PrintUninstallResult(t *testing.T) {
+	printer := &JSONPrinter{}
+	var buf bytes.Buffer
+
+	result := &UninstallResult{
+		Uninstalled: []string{"policy1"},
+		NotManaged:  []string{"policy2"},
+	}
+
+	err := printer.PrintUninstallResult(&buf, result)
+	require.NoError(t, err)
+
+	var output struct {
+		APIVersion string           `json:"apiVersion"`
+		Kind       string           `json:"kind"`
+		Result     *UninstallResult `json:"result"`
+	}
+	err = json.Unmarshal(buf.Bytes(), &output)
+	require.NoError(t, err)
+	assert.Equal(t, JSONOutputVersion, output.APIVersion)
+	assert.Equal(t, "UninstallResult", output.Kind)
+	assert.Equal(t, []string{"policy1"}, output.Result.Uninstalled)
+	assert.Equal(t, []string{"policy2"}, output.Result.NotManaged)
+}
+
+func TestJSONPrinter_PrintUpgradeResult(t *testing.T) {
+	printer := &JSONPrinter{}
+	var buf bytes.Buffer
+
+	result := &UpgradeResult{
+		Upgraded: []UpgradeEntry{
+			{Name: "policy1", FromVersion: "v1.0.0", ToVersion: "v2.0.0"},
+		},
+	}
+
+	err := printer.PrintUpgradeResult(&buf, result)
+	require.NoError(t, err)
+
+	var output struct {
+		APIVersion string         `json:"apiVersion"`
+		Kind       string         `json:"kind"`
+		Result     *UpgradeResult `json:"result"`
+	}
+	err = json.Unmarshal(buf.Bytes(), &output)
+	require.NoError(t, err)
+	assert.Equal(t, JSONOutputVersion, output.APIVersion)
+	assert.Equal(t, "UpgradeResult", output.Kind)
+	assert.Len(t, output.Result.Upgraded, 1)
+	assert.Equal(t, "v2.0.0", output.Result.Upgraded[0].ToVersion)
+}

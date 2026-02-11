@@ -1,7 +1,6 @@
 package policy
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -58,7 +57,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	cat, err := cache.LoadCatalog()
 	if err != nil {
 		// If no cache, try to fetch
-		ctx := context.Background()
+		ctx := cmd.Context()
 		fetcher := catalog.NewHTTPFetcher(catalog.DefaultTimeout)
 		cat, err = catalog.LoadCatalog(ctx, fetcher, catalog.GetCatalogURL())
 		if err != nil {

@@ -11,6 +11,7 @@ import (
 	gatorpolicy "github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/client"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/output"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -49,15 +50,15 @@ gator policy install --bundle pod-security-baseline --enforcement-action=warn
 # Preview changes without applying
 gator policy install --bundle pod-security-baseline --dry-run
 
-# Output results as JSON
-gator policy install --bundle pod-security-baseline -o json`,
+# Output as JSON for scripting
+gator policy install --bundle pod-security-baseline --dry-run -o json`,
 		RunE: runInstall,
 	}
 
 	cmd.Flags().StringSliceVar(&installBundles, "bundle", nil, "Install a policy bundle (may be specified multiple times)")
 	cmd.Flags().StringVar(&installEnforcementAction, "enforcement-action", "", "Override enforcement action (deny, warn, dryrun). Note: 'scoped' is not supported in this release.")
-	cmd.Flags().BoolVar(&installDryRun, "dry-run", false, "Preview changes without applying (requires cluster access — uses server-side dry run)")
-	cmd.Flags().StringVarP(&installOutput, "output", "o", "", "Output format: table (default) or json")
+	cmd.Flags().BoolVar(&installDryRun, "dry-run", false, "Preview changes without applying (does not require cluster access)")
+	cmd.Flags().StringVarP(&installOutput, "output", "o", "table", "Output format: table, json")
 
 	return cmd
 }
@@ -88,9 +89,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Validate output format early
-	if installOutput != "" && installOutput != "table" && installOutput != "json" {
-		return fmt.Errorf("invalid output format: %s (must be table or json)", installOutput)
+	// Create printer
+	printer, err := output.NewPrinter(output.Format(installOutput))
+	if err != nil {
+		return err
 	}
 
 	// Parse policy names
@@ -130,23 +132,6 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		DryRun:            installDryRun,
 	}
 
-	// Print header
-	if len(installBundles) > 0 {
-		for _, b := range installBundles {
-			bundlePolicies, err := cat.ResolveBundlePolicies(b)
-			if err != nil {
-				return err
-			}
-			if installDryRun {
-				fmt.Fprintf(os.Stdout, "==> Would install %s bundle (%d policies):\n", b, len(bundlePolicies))
-			} else {
-				fmt.Fprintf(os.Stdout, "Installing %s bundle (%d policies)...\n", b, len(bundlePolicies))
-			}
-		}
-	} else if installDryRun {
-		fmt.Fprintf(os.Stdout, "==> Would install %d policies:\n", len(policyNames))
-	}
-
 	// Perform installation
 	result, err := client.Install(ctx, k8sClient, fetcher, cat, opts)
 	if err != nil {
@@ -159,32 +144,39 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Print results
+	// Build output result
+	outResult := &output.InstallResult{
+		TemplatesInstalled:   result.TemplatesInstalled,
+		ConstraintsInstalled: result.ConstraintsInstalled,
+		DryRun:               installDryRun,
+	}
+
 	for _, name := range result.Installed {
-		policy := cat.GetPolicy(name)
 		version := ""
-		if policy != nil {
+		if policy := cat.GetPolicy(name); policy != nil {
 			version = policy.Version
 		}
-		if installDryRun {
-			fmt.Fprintf(os.Stdout, "%s %s\n", name, version)
-		} else {
-			fmt.Fprintf(os.Stdout, "✓ %s (%s) installed\n", name, version)
-		}
+		outResult.Installed = append(outResult.Installed, output.InstallEntry{
+			Name:    name,
+			Version: version,
+		})
+	}
+	outResult.Skipped = result.Skipped
+
+	for _, name := range result.Failed {
+		outResult.Failed = append(outResult.Failed, output.FailedEntry{
+			Name:  name,
+			Error: result.Errors[name],
+		})
 	}
 
-	for _, name := range result.Skipped {
-		fmt.Fprintf(os.Stdout, "- %s (already installed at same version)\n", name)
+	// Print results
+	if printErr := printer.PrintInstallResult(os.Stdout, outResult); printErr != nil {
+		return printErr
 	}
 
-	// Print failures
+	// Return appropriate error for non-success cases
 	if len(result.Failed) > 0 {
-		for _, name := range result.Failed {
-			errMsg := result.Errors[name]
-			fmt.Fprintf(os.Stderr, "✗ %s - failed: %s\n", name, errMsg)
-		}
-
-		// Check if we have a conflict error
 		if result.ConflictErr != nil {
 			return gatorpolicy.NewConflictError(fmt.Sprintf("installation incomplete: %s", result.ConflictErr.Error()))
 		}
@@ -193,12 +185,6 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			len(result.Installed), result.TotalRequested)
 		fmt.Fprintln(os.Stderr, "\nRe-run command to continue (already installed will be skipped).")
 		return gatorpolicy.NewPartialSuccessError(msg)
-	}
-
-	// Print summary for bundles
-	if len(installBundles) > 0 && !installDryRun {
-		fmt.Fprintf(os.Stdout, "\n✓ Installed %d templates, %d constraints\n",
-			result.TemplatesInstalled, result.ConstraintsInstalled)
 	}
 
 	return nil

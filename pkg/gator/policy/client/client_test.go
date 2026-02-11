@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -429,12 +428,11 @@ func TestUninstall(t *testing.T) {
 		}
 
 		result, err := Uninstall(context.Background(), fakeClient, opts)
-		// Fail-fast: should return error for unmanaged policy
-		require.Error(t, err)
-		var conflictErr *ConflictError
-		assert.True(t, errors.As(err, &conflictErr))
+		// Conflict errors are non-fatal — tracked in NotManaged, not Failed
+		require.NoError(t, err)
 		assert.Len(t, result.NotManaged, 1)
-		assert.Len(t, result.Failed, 1)
+		assert.Empty(t, result.Failed)
+		assert.Contains(t, result.Errors["unmanaged-policy"], "ConstraintTemplate")
 	})
 
 	t.Run("uninstall with no policies", func(t *testing.T) {
@@ -1231,4 +1229,3 @@ func TestSetEnforcementAction(t *testing.T) {
 		assert.Equal(t, "dryrun", action)
 	})
 }
-
