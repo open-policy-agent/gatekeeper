@@ -31,23 +31,38 @@ type CatalogMetadata struct {
 
 // Bundle represents a curated set of policies with pre-configured constraints.
 type Bundle struct {
-	Name        string   `json:"name" yaml:"name"`
-	Description string   `json:"description" yaml:"description"`
-	Inherits    string   `json:"inherits,omitempty" yaml:"inherits,omitempty"`
-	Policies    []string `json:"policies" yaml:"policies"`
+	// Name is the unique identifier for this bundle (e.g., "pod-security-baseline").
+	Name string `json:"name" yaml:"name"`
+	// Description provides a human-readable summary of the bundle's purpose.
+	Description string `json:"description" yaml:"description"`
+	// Inherits specifies a parent bundle whose policies are included in this bundle.
+	Inherits string `json:"inherits,omitempty" yaml:"inherits,omitempty"`
+	// Policies lists policy names (not full Policy objects) included in this bundle.
+	Policies []string `json:"policies" yaml:"policies"`
 }
 
 // Policy represents a single policy available in the catalog.
 type Policy struct {
-	Name                 string   `json:"name" yaml:"name"`
-	Version              string   `json:"version" yaml:"version"`
-	Description          string   `json:"description" yaml:"description"`
-	Category             string   `json:"category" yaml:"category"`
-	TemplatePath         string   `json:"templatePath" yaml:"templatePath"`
-	ConstraintPath       string   `json:"constraintPath,omitempty" yaml:"constraintPath,omitempty"`
-	SampleConstraintPath string   `json:"sampleConstraintPath,omitempty" yaml:"sampleConstraintPath,omitempty"`
-	DocumentationURL     string   `json:"documentationUrl,omitempty" yaml:"documentationUrl,omitempty"`
-	Bundles              []string `json:"bundles,omitempty" yaml:"bundles,omitempty"`
+	// Name is the unique identifier for this policy, typically matching the ConstraintTemplate name.
+	Name string `json:"name" yaml:"name"`
+	// Version is the semantic version of this policy (e.g., "v1.2.3").
+	Version string `json:"version" yaml:"version"`
+	// Description provides a human-readable summary of what this policy enforces.
+	Description string `json:"description" yaml:"description"`
+	// Category groups related policies (e.g., "general", "pod-security").
+	Category string `json:"category" yaml:"category"`
+	// TemplatePath is the URL or relative path to the ConstraintTemplate YAML.
+	TemplatePath string `json:"templatePath" yaml:"templatePath"`
+	// BundleConstraints maps bundle names to their constraint file paths.
+	// Different bundles may require different constraint configurations for the same template
+	// (e.g., baseline vs restricted PSS profiles need different constraint values).
+	BundleConstraints map[string]string `json:"bundleConstraints,omitempty" yaml:"bundleConstraints,omitempty"`
+	// SampleConstraintPath is the URL or relative path to an example constraint YAML for reference.
+	SampleConstraintPath string `json:"sampleConstraintPath,omitempty" yaml:"sampleConstraintPath,omitempty"`
+	// DocumentationURL links to external documentation for this policy.
+	DocumentationURL string `json:"documentationUrl,omitempty" yaml:"documentationUrl,omitempty"`
+	// Bundles lists which bundles include this policy (reverse reference for discovery).
+	Bundles []string `json:"bundles,omitempty" yaml:"bundles,omitempty"`
 }
 
 // GetPolicy returns the policy with the given name, or nil if not found.

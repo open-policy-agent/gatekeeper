@@ -168,7 +168,7 @@ func parsePolicyFromTemplate(templatePath, libraryRoot string) (*Policy, error) 
 
 	// Look for constraint files in samples directory
 	templateDir := filepath.Dir(templatePath)
-	constraintPath, sampleConstraintPath := findConstraintPaths(templateDir, libraryRoot)
+	sampleConstraintPath := findConstraintPath(templateDir, libraryRoot)
 
 	// Get documentation URL
 	docURL := ""
@@ -188,13 +188,24 @@ func parsePolicyFromTemplate(templatePath, libraryRoot string) (*Policy, error) 
 		}
 	}
 
+	// Build BundleConstraints: map each bundle to the constraint path.
+	// For now, all bundles share the same sample constraint path.
+	// TODO: support per-bundle constraint files in the library.
+	var bundleConstraints map[string]string
+	if sampleConstraintPath != "" && len(bundles) > 0 {
+		bundleConstraints = make(map[string]string, len(bundles))
+		for _, b := range bundles {
+			bundleConstraints[b] = sampleConstraintPath
+		}
+	}
+
 	policy := &Policy{
 		Name:                 template.Metadata.Name,
 		Version:              version,
 		Description:          description,
 		Category:             category,
 		TemplatePath:         relPath,
-		ConstraintPath:       constraintPath,
+		BundleConstraints:    bundleConstraints,
 		SampleConstraintPath: sampleConstraintPath,
 		DocumentationURL:     docURL,
 		Bundles:              bundles,
@@ -221,14 +232,16 @@ func extractCategory(relPath string) string {
 	return "general"
 }
 
-// findConstraintPaths looks for constraint files in the samples directory.
-// Returns constraintPath (for bundle installation) and sampleConstraintPath.
-// Both are set to the first constraint file found in samples/.
-func findConstraintPaths(templateDir, libraryRoot string) (constraintPath, sampleConstraintPath string) {
+// findConstraintPath looks for constraint files in the samples directory.
+// Returns the relative path to the first constraint file found, used as the sample constraint
+// and as the default constraint path for bundle installations.
+func findConstraintPath(templateDir, libraryRoot string) string {
 	samplesDir := filepath.Join(templateDir, "samples")
 	if _, err := os.Stat(samplesDir); os.IsNotExist(err) {
-		return "", ""
+		return ""
 	}
+
+	var result string
 
 	// Walk samples directory to find constraint files
 	_ = filepath.Walk(samplesDir, func(path string, info os.FileInfo, err error) error {
@@ -250,17 +263,15 @@ func findConstraintPaths(templateDir, libraryRoot string) (constraintPath, sampl
 			// Check if it's a constraint
 			if isConstraintFile(data) {
 				relPath, _ := filepath.Rel(libraryRoot, path)
-				if constraintPath == "" {
-					// Use first constraint found for both paths
-					constraintPath = relPath
-					sampleConstraintPath = relPath
+				if result == "" {
+					result = relPath
 				}
 			}
 		}
 		return nil
 	})
 
-	return constraintPath, sampleConstraintPath
+	return result
 }
 
 // isConstraintFile checks if the YAML content is a Constraint.
@@ -451,8 +462,10 @@ func convertPathsToURLs(catalog *PolicyCatalog, baseURL string) {
 		if policy.TemplatePath != "" && !strings.HasPrefix(policy.TemplatePath, "http") {
 			policy.TemplatePath = baseURL + "/" + policy.TemplatePath
 		}
-		if policy.ConstraintPath != "" && !strings.HasPrefix(policy.ConstraintPath, "http") {
-			policy.ConstraintPath = baseURL + "/" + policy.ConstraintPath
+		for bundle, cPath := range policy.BundleConstraints {
+			if cPath != "" && !strings.HasPrefix(cPath, "http") {
+				policy.BundleConstraints[bundle] = baseURL + "/" + cPath
+			}
 		}
 		if policy.SampleConstraintPath != "" && !strings.HasPrefix(policy.SampleConstraintPath, "http") {
 			policy.SampleConstraintPath = baseURL + "/" + policy.SampleConstraintPath

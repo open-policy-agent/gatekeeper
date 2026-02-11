@@ -6,11 +6,16 @@ import (
 	"os"
 
 	gatorpolicy "github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/client"
 	"github.com/spf13/cobra"
 )
 
-var uninstallDryRun bool
+var (
+	uninstallBundles []string
+	uninstallDryRun  bool
+	uninstallOutput  string
+)
 
 func newUninstallCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -26,13 +31,20 @@ gator policy uninstall k8srequiredlabels
 # Uninstall multiple policies
 gator policy uninstall k8srequiredlabels k8scontainerlimits
 
+# Uninstall all policies in a bundle
+gator policy uninstall --bundle pod-security-baseline
+
 # Preview changes without applying
-gator policy uninstall k8srequiredlabels --dry-run`,
-		Args: cobra.MinimumNArgs(1),
+gator policy uninstall k8srequiredlabels --dry-run
+
+# Output results as JSON
+gator policy uninstall k8srequiredlabels -o json`,
 		RunE: runUninstall,
 	}
 
-	cmd.Flags().BoolVar(&uninstallDryRun, "dry-run", false, "Preview changes without applying")
+	cmd.Flags().StringSliceVar(&uninstallBundles, "bundle", nil, "Uninstall all policies in a bundle (may be specified multiple times)")
+	cmd.Flags().BoolVar(&uninstallDryRun, "dry-run", false, "Preview changes without applying (requires cluster access — uses server-side dry run)")
+	cmd.Flags().StringVarP(&uninstallOutput, "output", "o", "", "Output format: table (default) or json")
 
 	return cmd
 }
@@ -41,6 +53,48 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 	ctx := cmd.Context()
 
+	// Validate arguments
+	if len(uninstallBundles) == 0 && len(args) == 0 {
+		return fmt.Errorf("specify policy name(s) or use --bundle to uninstall a bundle")
+	}
+
+	// Validate output format early
+	if uninstallOutput != "" && uninstallOutput != "table" && uninstallOutput != "json" {
+		return fmt.Errorf("invalid output format: %s (must be table or json)", uninstallOutput)
+	}
+
+	// Resolve bundle policies via catalog if --bundle is specified
+	policyNames := args
+	if len(uninstallBundles) > 0 {
+		cache, err := catalog.NewCache()
+		if err != nil {
+			return fmt.Errorf("initializing cache: %w", err)
+		}
+
+		cat, err := cache.LoadCatalog()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "\nRun 'gator policy update' to refresh the catalog.")
+			return fmt.Errorf("loading catalog: %w", err)
+		}
+
+		seen := make(map[string]bool)
+		for _, name := range policyNames {
+			seen[name] = true
+		}
+		for _, b := range uninstallBundles {
+			bundlePolicies, err := cat.ResolveBundlePolicies(b)
+			if err != nil {
+				return err
+			}
+			for _, name := range bundlePolicies {
+				if !seen[name] {
+					seen[name] = true
+					policyNames = append(policyNames, name)
+				}
+			}
+		}
+	}
+
 	// Create Kubernetes client
 	k8sClient, err := client.NewK8sClient()
 	if err != nil {
@@ -48,13 +102,21 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print header
-	if uninstallDryRun {
-		fmt.Fprintf(os.Stdout, "==> Would uninstall %d policies:\n", len(args))
+	if len(uninstallBundles) > 0 {
+		for _, b := range uninstallBundles {
+			if uninstallDryRun {
+				fmt.Fprintf(os.Stdout, "==> Would uninstall %s bundle:\n", b)
+			} else {
+				fmt.Fprintf(os.Stdout, "Uninstalling %s bundle...\n", b)
+			}
+		}
+	} else if uninstallDryRun {
+		fmt.Fprintf(os.Stdout, "==> Would uninstall %d policies:\n", len(policyNames))
 	}
 
 	// Build uninstall options
 	opts := client.UninstallOptions{
-		Policies: args,
+		Policies: policyNames,
 		DryRun:   uninstallDryRun,
 	}
 

@@ -49,6 +49,9 @@ type Client interface {
 	// InstallConstraint installs or updates a Constraint.
 	InstallConstraint(ctx context.Context, constraint *unstructured.Unstructured) error
 
+	// GetConstraint gets a Constraint by GVR and name.
+	GetConstraint(ctx context.Context, gvr schema.GroupVersionResource, name string) (*unstructured.Unstructured, error)
+
 	// DeleteTemplate deletes a ConstraintTemplate.
 	DeleteTemplate(ctx context.Context, name string) error
 
@@ -188,6 +191,11 @@ func (c *K8sClient) InstallConstraint(ctx context.Context, constraint *unstructu
 	constraint.SetResourceVersion(existing.GetResourceVersion())
 	_, err = c.dynamicClient.Resource(gvr).Update(ctx, constraint, metav1.UpdateOptions{})
 	return err
+}
+
+// GetConstraint gets a Constraint by GVR and name.
+func (c *K8sClient) GetConstraint(ctx context.Context, gvr schema.GroupVersionResource, name string) (*unstructured.Unstructured, error) {
+	return c.dynamicClient.Resource(gvr).Get(ctx, name, metav1.GetOptions{})
 }
 
 // DeleteTemplate deletes a ConstraintTemplate.

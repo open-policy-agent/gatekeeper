@@ -53,7 +53,8 @@ policies:
     description: "Test policy that blocks privileged containers"
     category: pod-security
     templatePath: templates/privilegedcontainer/template.yaml
-    constraintPath: templates/privilegedcontainer/constraint.yaml
+    bundleConstraints:
+      pod-security-baseline-mock: templates/privilegedcontainer/constraint.yaml
     bundles:
       - pod-security-baseline-mock
 

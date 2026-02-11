@@ -11,6 +11,7 @@
 - [Mental Model](#mental-model)
 - [Part 1: Design](#part-1-design)
   - [MVP Design](#mvp-design)
+  - [Known Limitations & Deferred Items](#known-limitations--deferred-items)
   - [Post-MVP Design](#post-mvp-design)
 - [Part 2: Implementation](#part-2-implementation)
   - [MVP Implementation](#mvp-implementation)
@@ -466,6 +467,66 @@ When a bundle specifies `inherits: <parent-bundle>`, the following rules apply:
 - `search` / `list`: < 500ms (local cache / single API call)
 - `install` (single policy): < 2s
 - `install --bundle` (10 policies): < 10s
+
+### Known Limitations & Deferred Items
+
+The following capabilities were identified during the MVP review process and are **intentionally deferred** to post-MVP. They are documented here so they are not lost and can be prioritized in future iterations.
+
+#### 1. `scoped` Enforcement Action (Install & Upgrade)
+
+The `scoped` enforcement action (which delegates enforcement decisions to individual constraints) is **not supported** in the MVP. Both `install --enforcement-action` and `upgrade --enforcement-action` reject `scoped` with an error.
+
+**Rationale**: `scoped` requires additional per-constraint configuration that does not fit the current simplified install model. Supporting it properly requires a way to specify per-constraint enforcement scopes, likely through the declarative `PolicyFile` approach (see Post-MVP).
+
+**Workaround**: Users who need `scoped` enforcement can manually edit the Constraint CR after installation.
+
+#### 2. `--exclude-policies` for `generate-catalog`
+
+The `generate-catalog` command currently includes **all** discovered policies from the library. There is no mechanism to exclude specific policies or categories during catalog generation.
+
+**Rationale**: The initial catalog generation is expected to be comprehensive. Selective inclusion/exclusion adds complexity without clear MVP use cases.
+
+**Future**: Add `--exclude-policies` and/or `--include-categories` flags to `generate-catalog`.
+
+#### 3. `--all` Flag for `uninstall`
+
+The `uninstall` command requires explicit policy names or `--bundle`. There is no `--all` flag to uninstall every gator-managed resource in one command.
+
+**Rationale**: Mass uninstall is a destructive operation. Requiring explicit names or bundles reduces the risk of accidental removal of all policies from a cluster.
+
+**Future**: Add `--all` flag with a confirmation prompt or require `--yes` for non-interactive use.
+
+#### 4. Multiple Catalog Sources
+
+The MVP supports a single catalog source configured via `GATOR_CATALOG_URL`. There is no support for merging policies from multiple catalogs or custom registries.
+
+**Rationale**: The MVP focuses on the official `gatekeeper-library` as the sole source. Multi-source support requires a merge strategy, conflict resolution rules, and priority ordering.
+
+**Future**: Support multiple catalog URLs (e.g., via a config file) with precedence rules. This also relates to the Post-MVP OCI catalog support.
+
+#### 5. Mutex / File Locking for Concurrent Processes
+
+The local catalog cache (`$GATOR_HOME/catalog.yaml`) has no file locking. Concurrent `gator policy update` or `gator policy install` processes running against the same cache directory may race on reads/writes.
+
+**Rationale**: CLI tools are typically invoked sequentially. Concurrent invocation is uncommon in practice and adds implementation complexity.
+
+**Future**: Add advisory file locking (e.g., `flock`) around cache read/write operations, or use atomic rename for writes.
+
+#### 6. Mutation Policy Support in Catalog Generator
+
+The `generate-catalog` command discovers only **validation** policies (ConstraintTemplates). Mutation policies (`Assign`, `AssignMetadata`, `ModifySet`) in the `mutation/` directory of the gatekeeper-library are not included.
+
+**Rationale**: The MVP policy management model is built around ConstraintTemplates and Constraints. Mutation resources have a different lifecycle and configuration model.
+
+**Future**: Extend the catalog schema and generator to support mutation policies as a separate resource type.
+
+#### 7. Cross-Cluster and Multi-Cluster Support
+
+The MVP client operates against a single cluster determined by the current `KUBECONFIG` context. There is no built-in support for managing policies across multiple clusters.
+
+**Rationale**: Multi-cluster management significantly increases scope and requires decisions around consistency models, rollout strategies, and failure handling.
+
+**Future**: The PolicySync controller (see Post-MVP) provides a foundation for multi-cluster management. Additionally, a `--context` flag could allow targeting specific kubeconfig contexts.
 
 ---
 

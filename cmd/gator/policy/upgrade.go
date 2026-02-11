@@ -14,8 +14,10 @@ import (
 
 var (
 	upgradeAll               bool
+	upgradeBundles           []string
 	upgradeEnforcementAction string
 	upgradeDryRun            bool
+	upgradeOutput            string
 )
 
 func newUpgradeCommand() *cobra.Command {
@@ -24,21 +26,29 @@ func newUpgradeCommand() *cobra.Command {
 		Short: "Upgrade installed policies to latest versions",
 		Long: `Upgrade installed policies to their latest versions from the catalog.
 
-Requires specifying policy name(s) or --all flag.`,
+Requires specifying policy name(s), --bundle, or --all flag.`,
 		Example: `# Upgrade a specific policy
 gator policy upgrade k8srequiredlabels
+
+# Upgrade all policies in a bundle
+gator policy upgrade --bundle pod-security-baseline
 
 # Upgrade all installed policies
 gator policy upgrade --all
 
 # Preview changes without applying
-gator policy upgrade --all --dry-run`,
+gator policy upgrade --all --dry-run
+
+# Output results as JSON
+gator policy upgrade --all -o json`,
 		RunE: runUpgrade,
 	}
 
 	cmd.Flags().BoolVar(&upgradeAll, "all", false, "Upgrade all installed policies")
+	cmd.Flags().StringSliceVar(&upgradeBundles, "bundle", nil, "Upgrade all policies in a bundle (may be specified multiple times)")
 	cmd.Flags().StringVar(&upgradeEnforcementAction, "enforcement-action", "", "Override enforcement action (deny, warn, dryrun)")
-	cmd.Flags().BoolVar(&upgradeDryRun, "dry-run", false, "Preview changes without applying")
+	cmd.Flags().BoolVar(&upgradeDryRun, "dry-run", false, "Preview changes without applying (requires cluster access \u2014 uses server-side dry run)")
+	cmd.Flags().StringVarP(&upgradeOutput, "output", "o", "", "Output format: table (default) or json")
 
 	return cmd
 }
@@ -48,8 +58,8 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
 	// Validate arguments
-	if !upgradeAll && len(args) == 0 {
-		return fmt.Errorf("specify policy name(s) or use --all to upgrade all policies")
+	if !upgradeAll && len(upgradeBundles) == 0 && len(args) == 0 {
+		return fmt.Errorf("specify policy name(s), use --bundle, or use --all to upgrade all policies")
 	}
 
 	// Validate enforcement action
@@ -58,6 +68,11 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		if action != "deny" && action != "warn" && action != "dryrun" {
 			return fmt.Errorf("invalid enforcement action: %s (must be deny, warn, or dryrun)", upgradeEnforcementAction)
 		}
+	}
+
+	// Validate output format early
+	if upgradeOutput != "" && upgradeOutput != "table" && upgradeOutput != "json" {
+		return fmt.Errorf("invalid output format: %s (must be table or json)", upgradeOutput)
 	}
 
 	// Load catalog
@@ -83,9 +98,30 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 	// Print header (for dry-run, we print after we know what will be upgraded)
 
+	// Resolve bundle policies if --bundle is specified
+	policyNames := args
+	if len(upgradeBundles) > 0 {
+		seen := make(map[string]bool)
+		for _, name := range policyNames {
+			seen[name] = true
+		}
+		for _, b := range upgradeBundles {
+			bundlePolicies, err := cat.ResolveBundlePolicies(b)
+			if err != nil {
+				return err
+			}
+			for _, name := range bundlePolicies {
+				if !seen[name] {
+					seen[name] = true
+					policyNames = append(policyNames, name)
+				}
+			}
+		}
+	}
+
 	// Build upgrade options
 	opts := client.UpgradeOptions{
-		Policies:          args,
+		Policies:          policyNames,
 		All:               upgradeAll,
 		EnforcementAction: upgradeEnforcementAction,
 		DryRun:            upgradeDryRun,

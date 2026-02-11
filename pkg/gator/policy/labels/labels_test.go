@@ -19,7 +19,7 @@ func TestAddManagedLabels(t *testing.T) {
 		},
 	}
 
-	AddManagedLabels(obj, "v1.2.3", "test-bundle")
+	AddManagedLabels(obj, "v1.2.3", "test-bundle", "https://github.com/open-policy-agent/gatekeeper-library")
 
 	labels := obj.GetLabels()
 	assert.Equal(t, ManagedByValue, labels[LabelManagedBy])
@@ -27,7 +27,7 @@ func TestAddManagedLabels(t *testing.T) {
 
 	annotations := obj.GetAnnotations()
 	assert.Equal(t, "v1.2.3", annotations[AnnotationVersion])
-	assert.Equal(t, SourceValue, annotations[AnnotationSource])
+	assert.Equal(t, "https://github.com/open-policy-agent/gatekeeper-library", annotations[AnnotationSource])
 	assert.NotEmpty(t, annotations[AnnotationInstalledAt])
 
 	// Verify installedAt is valid time
@@ -46,7 +46,7 @@ func TestAddManagedLabels_WithoutBundle(t *testing.T) {
 		},
 	}
 
-	AddManagedLabels(obj, "v1.0.0", "")
+	AddManagedLabels(obj, "v1.0.0", "", "test-source")
 
 	labels := obj.GetLabels()
 	assert.Equal(t, ManagedByValue, labels[LabelManagedBy])
@@ -68,7 +68,7 @@ func TestAddManagedLabels_PreservesExistingLabels(t *testing.T) {
 		},
 	}
 
-	AddManagedLabels(obj, "v1.0.0", "")
+	AddManagedLabels(obj, "v1.0.0", "", "test-source")
 
 	labels := obj.GetLabels()
 	assert.Equal(t, "existing-value", labels["existing-label"])
@@ -85,7 +85,7 @@ func TestIsManagedByGator(t *testing.T) {
 		{
 			name:        "managed by gator (both label and annotation)",
 			labels:      map[string]string{LabelManagedBy: ManagedByValue},
-			annotations: map[string]string{AnnotationSource: SourceValue},
+			annotations: map[string]string{AnnotationSource: "gatekeeper-library"},
 			expected:    true,
 		},
 		{
@@ -97,13 +97,13 @@ func TestIsManagedByGator(t *testing.T) {
 		{
 			name:        "annotation only (missing label)",
 			labels:      nil,
-			annotations: map[string]string{AnnotationSource: SourceValue},
+			annotations: map[string]string{AnnotationSource: "gatekeeper-library"},
 			expected:    false,
 		},
 		{
 			name:        "managed by other",
 			labels:      map[string]string{LabelManagedBy: "helm"},
-			annotations: map[string]string{AnnotationSource: SourceValue},
+			annotations: map[string]string{AnnotationSource: "gatekeeper-library"},
 			expected:    false,
 		},
 		{

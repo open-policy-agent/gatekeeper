@@ -107,8 +107,10 @@ func EnsureCatalog(ctx context.Context, cache *Cache, fetcher Fetcher) (*PolicyC
 		return nil, err
 	}
 
-	// Save to cache (best effort)
-	_ = cache.SaveCatalog(data)
+	// Save to cache (warn on failure, non-fatal)
+	if err := cache.SaveCatalog(data); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save catalog to cache: %v\n", err)
+	}
 
 	return catalog, nil
 }

@@ -45,7 +45,7 @@ space.
 
 ## The `gator policy` subcommand
 
-`Feature State`: Gatekeeper version v3.19+ (alpha)
+`Feature State`: Gatekeeper version v3.22+ (alpha)
 
 `gator policy` provides a brew-inspired interface for managing Gatekeeper policies
 from the official [gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library).

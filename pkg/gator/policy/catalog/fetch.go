@@ -20,6 +20,9 @@ import (
 const (
 	DefaultCatalogURL = "https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/catalog.yaml"
 
+	// DefaultRepository is the default repository URL for the policy catalog.
+	DefaultRepository = "https://github.com/open-policy-agent/gatekeeper-library"
+
 	// DefaultTimeout is the default timeout for HTTP requests.
 	DefaultTimeout = 30 * time.Second
 

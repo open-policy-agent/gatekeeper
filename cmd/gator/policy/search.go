@@ -13,6 +13,7 @@ import (
 
 var (
 	searchCategory string
+	searchBundle   string
 	searchOutput   string
 )
 
@@ -27,6 +28,9 @@ gator policy search labels
 # Search with category filter
 gator policy search security --category=pod-security
 
+# Search within a bundle
+gator policy search container --bundle=pod-security-baseline
+
 # Output as JSON
 gator policy search labels --output=json`,
 		Args: cobra.ExactArgs(1),
@@ -34,6 +38,7 @@ gator policy search labels --output=json`,
 	}
 
 	cmd.Flags().StringVar(&searchCategory, "category", "", "Filter by category (e.g., general, pod-security)")
+	cmd.Flags().StringVar(&searchBundle, "bundle", "", "Filter to policies within a bundle")
 	cmd.Flags().StringVarP(&searchOutput, "output", "o", "table", "Output format: table, json")
 
 	return cmd
@@ -62,10 +67,28 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Build bundle filter set if --bundle is specified
+	var bundleFilter map[string]bool
+	if searchBundle != "" {
+		bundlePolicies, err := cat.ResolveBundlePolicies(searchBundle)
+		if err != nil {
+			return err
+		}
+		bundleFilter = make(map[string]bool, len(bundlePolicies))
+		for _, name := range bundlePolicies {
+			bundleFilter[name] = true
+		}
+	}
+
 	// Search policies
 	var results []output.SearchResult
 	for i := range cat.Policies {
 		policy := &cat.Policies[i]
+		// Filter by bundle if specified
+		if bundleFilter != nil && !bundleFilter[policy.Name] {
+			continue
+		}
+
 		// Filter by category if specified
 		if searchCategory != "" && !strings.EqualFold(policy.Category, searchCategory) {
 			continue

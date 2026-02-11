@@ -30,7 +30,6 @@ func newGenerateCatalogCommand() *cobra.Command {
 		outputPath     string
 		catalogName    string
 		catalogVersion string
-		repository     string
 		bundlesFile    string
 		baseURL        string
 		validate       bool
@@ -47,7 +46,6 @@ func newGenerateCatalogCommand() *cobra.Command {
 				outputPath:     outputPath,
 				catalogName:    catalogName,
 				catalogVersion: catalogVersion,
-				repository:     repository,
 				bundlesFile:    bundlesFile,
 				baseURL:        baseURL,
 				validate:       validate,
@@ -59,7 +57,6 @@ func newGenerateCatalogCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "catalog.yaml", "Output path for the generated catalog")
 	cmd.Flags().StringVar(&catalogName, "name", "gatekeeper-library", "Name of the catalog")
 	cmd.Flags().StringVar(&catalogVersion, "version", "v1.0.0", "Version of the catalog")
-	cmd.Flags().StringVar(&repository, "repository", "https://github.com/open-policy-agent/gatekeeper-library", "Repository URL")
 	cmd.Flags().StringVar(&bundlesFile, "bundles", "", "Path to bundles definition file (optional)")
 	cmd.Flags().StringVar(&baseURL, "base-url", "", "Base URL for template/constraint paths (e.g., https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master)")
 	cmd.Flags().BoolVar(&validate, "validate", true, "Validate the generated catalog")
@@ -72,7 +69,6 @@ type generateCatalogOptions struct {
 	outputPath     string
 	catalogName    string
 	catalogVersion string
-	repository     string
 	bundlesFile    string
 	baseURL        string
 	validate       bool
@@ -97,7 +93,7 @@ func runGenerateCatalog(opts *generateCatalogOptions) error {
 		LibraryPath:    absPath,
 		CatalogName:    opts.catalogName,
 		CatalogVersion: opts.catalogVersion,
-		Repository:     opts.repository,
+		Repository:     catalog.DefaultRepository,
 		BundlesFile:    opts.bundlesFile,
 		BaseURL:        opts.baseURL,
 	})

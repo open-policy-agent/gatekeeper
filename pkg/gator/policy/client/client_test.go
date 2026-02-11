@@ -35,7 +35,7 @@ func TestK8sClient_ListManagedTemplates(t *testing.T) {
 				},
 				"annotations": map[string]interface{}{
 					labels.AnnotationVersion:     "v1.2.0",
-					labels.AnnotationSource:      labels.SourceValue,
+					labels.AnnotationSource:      catalog.DefaultRepository,
 					labels.AnnotationInstalledAt: "2026-01-08T10:00:00Z",
 				},
 			},
@@ -158,8 +158,7 @@ func TestGatekeeperNotInstalledError(t *testing.T) {
 	err := &GatekeeperNotInstalledError{}
 
 	assert.Contains(t, err.Error(), "Gatekeeper CRDs not found")
-	assert.Contains(t, err.Error(), "kubectl apply")
-	assert.Contains(t, err.Error(), "helm install")
+	assert.Contains(t, err.Error(), "https://open-policy-agent.github.io/gatekeeper/website/docs/install")
 }
 
 func TestGetConstraintResource(t *testing.T) {
@@ -229,6 +228,13 @@ func (c *FakeClient) InstallTemplate(_ context.Context, template *unstructured.U
 func (c *FakeClient) InstallConstraint(_ context.Context, constraint *unstructured.Unstructured) error {
 	c.constraints[constraint.GetName()] = constraint
 	return nil
+}
+
+func (c *FakeClient) GetConstraint(_ context.Context, _ schema.GroupVersionResource, name string) (*unstructured.Unstructured, error) {
+	if cr, ok := c.constraints[name]; ok {
+		return cr, nil
+	}
+	return nil, k8serrors.NewNotFound(schema.GroupResource{Group: "constraints.gatekeeper.sh", Resource: "constraints"}, name)
 }
 
 func (c *FakeClient) DeleteTemplate(_ context.Context, name string) error {
@@ -384,7 +390,7 @@ func TestUninstall(t *testing.T) {
 			labels.LabelManagedBy: labels.ManagedByValue,
 		})
 		tmpl.SetAnnotations(map[string]string{
-			labels.AnnotationSource: labels.SourceValue,
+			labels.AnnotationSource: catalog.DefaultRepository,
 		})
 		fakeClient.templates["test-policy"] = tmpl
 
@@ -468,7 +474,7 @@ func TestUpgrade(t *testing.T) {
 		})
 		tmpl.SetAnnotations(map[string]string{
 			labels.AnnotationVersion: "v1.0.0",
-			labels.AnnotationSource:  labels.SourceValue,
+			labels.AnnotationSource:  catalog.DefaultRepository,
 		})
 		fakeClient.templates["test-policy"] = tmpl
 
@@ -504,7 +510,7 @@ metadata:
 		})
 		tmpl.SetAnnotations(map[string]string{
 			labels.AnnotationVersion: "v2.0.0",
-			labels.AnnotationSource:  labels.SourceValue,
+			labels.AnnotationSource:  catalog.DefaultRepository,
 		})
 		fakeClient.templates["test-policy"] = tmpl
 
@@ -607,12 +613,12 @@ func TestInstallBundlePlusPositionalPolicies(t *testing.T) {
 	cat := &catalog.PolicyCatalog{
 		Policies: []catalog.Policy{
 			{
-				Name:           "bundle-policy",
-				Version:        "v1.0.0",
-				Description:    "Policy in bundle",
-				Category:       "general",
-				TemplatePath:   "templates/bundle-policy.yaml",
-				ConstraintPath: "constraints/bundle-policy.yaml",
+				Name:              "bundle-policy",
+				Version:           "v1.0.0",
+				Description:       "Policy in bundle",
+				Category:          "general",
+				TemplatePath:      "templates/bundle-policy.yaml",
+				BundleConstraints: map[string]string{"test-bundle": "constraints/bundle-policy.yaml"},
 			},
 			{
 				Name:         "additional-policy",
@@ -658,7 +664,7 @@ metadata:
 	// Install bundle AND additional policy
 	opts := &InstallOptions{
 		Policies: []string{"additional-policy"},
-		Bundle:   "test-bundle",
+		Bundles:  []string{"test-bundle"},
 	}
 
 	result, err := Install(context.Background(), fakeClient, fetcher, cat, opts)
@@ -681,12 +687,12 @@ func TestUpgradeWithBundleContext(t *testing.T) {
 	cat := &catalog.PolicyCatalog{
 		Policies: []catalog.Policy{
 			{
-				Name:           "bundle-policy",
-				Version:        "v2.0.0",
-				Description:    "Updated bundle policy",
-				Category:       "general",
-				TemplatePath:   "templates/bundle-policy.yaml",
-				ConstraintPath: "constraints/bundle-policy.yaml",
+				Name:              "bundle-policy",
+				Version:           "v2.0.0",
+				Description:       "Updated bundle policy",
+				Category:          "general",
+				TemplatePath:      "templates/bundle-policy.yaml",
+				BundleConstraints: map[string]string{"test-bundle": "constraints/bundle-policy.yaml"},
 			},
 		},
 		Bundles: []catalog.Bundle{
@@ -708,7 +714,7 @@ func TestUpgradeWithBundleContext(t *testing.T) {
 	})
 	tmpl.SetAnnotations(map[string]string{
 		labels.AnnotationVersion: "v1.0.0",
-		labels.AnnotationSource:  labels.SourceValue,
+		labels.AnnotationSource:  catalog.DefaultRepository,
 	})
 	fakeClient.templates["bundle-policy"] = tmpl
 
@@ -739,3 +745,490 @@ metadata:
 	assert.Equal(t, "v1.0.0", result.Upgraded[0].FromVersion)
 	assert.Equal(t, "v2.0.0", result.Upgraded[0].ToVersion)
 }
+
+func TestInstallSetEnforcementAction(t *testing.T) {
+	cat := &catalog.PolicyCatalog{
+		Policies: []catalog.Policy{
+			{
+				Name:              "test-policy",
+				Version:           "v1.0.0",
+				TemplatePath:      "templates/test.yaml",
+				BundleConstraints: map[string]string{"test-bundle": "constraints/test.yaml"},
+			},
+		},
+		Bundles: []catalog.Bundle{
+			{Name: "test-bundle", Policies: []string{"test-policy"}},
+		},
+	}
+
+	fakeClient := NewFakeClient()
+	fetcher := &FakeFetcher{
+		content: map[string][]byte{
+			"templates/test.yaml": []byte(`apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: test-policy
+`),
+			"constraints/test.yaml": []byte(`apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: TestPolicy
+metadata:
+  name: test-constraint
+spec:
+  enforcementAction: deny
+`),
+		},
+	}
+
+	opts := &InstallOptions{
+		Bundles:           []string{"test-bundle"},
+		EnforcementAction: "warn",
+	}
+
+	result, err := Install(context.Background(), fakeClient, fetcher, cat, opts)
+	require.NoError(t, err)
+	assert.Len(t, result.Installed, 1)
+	assert.Equal(t, 1, result.ConstraintsInstalled)
+
+	// Verify constraint has overridden enforcement action
+	constraint := fakeClient.constraints["test-constraint"]
+	require.NotNil(t, constraint)
+	action, _, _ := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
+	assert.Equal(t, "warn", action)
+}
+
+func TestInstallConstraintConflict(t *testing.T) {
+	cat := &catalog.PolicyCatalog{
+		Policies: []catalog.Policy{
+			{
+				Name:              "test-policy",
+				Version:           "v1.0.0",
+				TemplatePath:      "templates/test.yaml",
+				BundleConstraints: map[string]string{"test-bundle": "constraints/test.yaml"},
+			},
+		},
+		Bundles: []catalog.Bundle{
+			{Name: "test-bundle", Policies: []string{"test-policy"}},
+		},
+	}
+
+	fakeClient := NewFakeClient()
+	// Pre-install an unmanaged constraint (no gator labels)
+	fakeClient.constraints["test-constraint"] = &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestPolicy",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+			},
+		},
+	}
+
+	fetcher := &FakeFetcher{
+		content: map[string][]byte{
+			"templates/test.yaml": []byte(`apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: test-policy
+`),
+			"constraints/test.yaml": []byte(`apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: TestPolicy
+metadata:
+  name: test-constraint
+`),
+		},
+	}
+
+	opts := &InstallOptions{
+		Bundles: []string{"test-bundle"},
+	}
+
+	result, err := Install(context.Background(), fakeClient, fetcher, cat, opts)
+	require.NoError(t, err) // Install returns result with failure, not error
+	assert.NotNil(t, result.ConflictErr)
+	assert.Len(t, result.Failed, 1)
+}
+
+func TestInstallPreservesExistingEnforcementAction(t *testing.T) {
+	cat := &catalog.PolicyCatalog{
+		Policies: []catalog.Policy{
+			{
+				Name:              "test-policy",
+				Version:           "v2.0.0",
+				TemplatePath:      "templates/test.yaml",
+				BundleConstraints: map[string]string{"test-bundle": "constraints/test.yaml"},
+			},
+		},
+		Bundles: []catalog.Bundle{
+			{Name: "test-bundle", Policies: []string{"test-policy"}},
+		},
+	}
+
+	fakeClient := NewFakeClient()
+
+	// Pre-install a managed constraint with "warn" enforcement
+	managedConstraint := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestPolicy",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"labels": map[string]interface{}{
+					labels.LabelManagedBy: labels.ManagedByValue,
+				},
+				"annotations": map[string]interface{}{
+					labels.AnnotationSource: catalog.DefaultRepository,
+				},
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "warn",
+			},
+		},
+	}
+	fakeClient.constraints["test-constraint"] = managedConstraint
+
+	// Pre-install the template as managed at v1.0.0 (so it's treated as an upgrade)
+	tmpl := &unstructured.Unstructured{}
+	tmpl.SetName("test-policy")
+	tmpl.SetLabels(map[string]string{
+		labels.LabelManagedBy: labels.ManagedByValue,
+	})
+	tmpl.SetAnnotations(map[string]string{
+		labels.AnnotationVersion: "v1.0.0",
+		labels.AnnotationSource:  catalog.DefaultRepository,
+	})
+	fakeClient.templates["test-policy"] = tmpl
+
+	fetcher := &FakeFetcher{
+		content: map[string][]byte{
+			"templates/test.yaml": []byte(`apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: test-policy
+`),
+			"constraints/test.yaml": []byte(`apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: TestPolicy
+metadata:
+  name: test-constraint
+spec:
+  enforcementAction: deny
+`),
+		},
+	}
+
+	// Install WITHOUT specifying enforcement action — should preserve "warn"
+	opts := &InstallOptions{
+		Bundles: []string{"test-bundle"},
+	}
+
+	result, err := Install(context.Background(), fakeClient, fetcher, cat, opts)
+	require.NoError(t, err)
+	assert.Len(t, result.Installed, 1)
+
+	// Verify the constraint preserved "warn" from the existing constraint
+	constraint := fakeClient.constraints["test-constraint"]
+	require.NotNil(t, constraint)
+	action, _, _ := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
+	assert.Equal(t, "warn", action)
+}
+
+func TestInstallDuplicateBundleAndPositional(t *testing.T) {
+	cat := &catalog.PolicyCatalog{
+		Policies: []catalog.Policy{
+			{
+				Name:              "policy-a",
+				Version:           "v1.0.0",
+				TemplatePath:      "templates/policy-a.yaml",
+				BundleConstraints: map[string]string{"test-bundle": "constraints/policy-a.yaml"},
+			},
+		},
+		Bundles: []catalog.Bundle{
+			{Name: "test-bundle", Policies: []string{"policy-a"}},
+		},
+	}
+
+	fakeClient := NewFakeClient()
+	fetcher := &FakeFetcher{
+		content: map[string][]byte{
+			"templates/policy-a.yaml": []byte(`apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: policy-a
+`),
+			"constraints/policy-a.yaml": []byte(`apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: PolicyA
+metadata:
+  name: policy-a-constraint
+`),
+		},
+	}
+
+	// Specify same policy via both bundle AND positional — should deduplicate
+	opts := &InstallOptions{
+		Policies: []string{"policy-a"},
+		Bundles:  []string{"test-bundle"},
+	}
+
+	result, err := Install(context.Background(), fakeClient, fetcher, cat, opts)
+	require.NoError(t, err)
+	assert.Len(t, result.Installed, 1)
+	assert.Equal(t, 1, result.TemplatesInstalled)
+}
+
+// --- #25: uninstall.go unit tests ---
+
+func TestUninstallDryRun(t *testing.T) {
+	fakeClient := NewFakeClient()
+	tmpl := &unstructured.Unstructured{}
+	tmpl.SetName("test-policy")
+	tmpl.SetLabels(map[string]string{
+		labels.LabelManagedBy: labels.ManagedByValue,
+	})
+	tmpl.SetAnnotations(map[string]string{
+		labels.AnnotationSource: catalog.DefaultRepository,
+	})
+	fakeClient.templates["test-policy"] = tmpl
+
+	opts := UninstallOptions{
+		Policies: []string{"test-policy"},
+		DryRun:   true,
+	}
+
+	result, err := Uninstall(context.Background(), fakeClient, opts)
+	require.NoError(t, err)
+	assert.Len(t, result.Uninstalled, 1)
+
+	// Verify template was NOT actually deleted
+	_, err = fakeClient.GetTemplate(context.Background(), "test-policy")
+	assert.NoError(t, err)
+}
+
+func TestUninstallGatekeeperNotInstalled(t *testing.T) {
+	fakeClient := NewFakeClient()
+	fakeClient.gatekeeperInstalled = false
+
+	opts := UninstallOptions{
+		Policies: []string{"test-policy"},
+	}
+
+	_, err := Uninstall(context.Background(), fakeClient, opts)
+	require.Error(t, err)
+	var notInstalledErr *GatekeeperNotInstalledError
+	assert.ErrorAs(t, err, &notInstalledErr)
+}
+
+func TestUninstallMultiplePolicies(t *testing.T) {
+	fakeClient := NewFakeClient()
+	for _, name := range []string{"policy1", "policy2", "policy3"} {
+		tmpl := &unstructured.Unstructured{}
+		tmpl.SetName(name)
+		tmpl.SetLabels(map[string]string{
+			labels.LabelManagedBy: labels.ManagedByValue,
+		})
+		tmpl.SetAnnotations(map[string]string{
+			labels.AnnotationSource: catalog.DefaultRepository,
+		})
+		fakeClient.templates[name] = tmpl
+	}
+
+	opts := UninstallOptions{
+		Policies: []string{"policy1", "policy2", "policy3"},
+	}
+
+	result, err := Uninstall(context.Background(), fakeClient, opts)
+	require.NoError(t, err)
+	assert.Len(t, result.Uninstalled, 3)
+	assert.Empty(t, result.Failed)
+}
+
+func TestUninstallMixedResults(t *testing.T) {
+	fakeClient := NewFakeClient()
+	// One managed policy
+	tmpl := &unstructured.Unstructured{}
+	tmpl.SetName("managed-policy")
+	tmpl.SetLabels(map[string]string{
+		labels.LabelManagedBy: labels.ManagedByValue,
+	})
+	tmpl.SetAnnotations(map[string]string{
+		labels.AnnotationSource: catalog.DefaultRepository,
+	})
+	fakeClient.templates["managed-policy"] = tmpl
+
+	opts := UninstallOptions{
+		Policies: []string{"managed-policy", "nonexistent-policy"},
+	}
+
+	result, err := Uninstall(context.Background(), fakeClient, opts)
+	require.NoError(t, err)
+	assert.Len(t, result.Uninstalled, 1)
+	assert.Equal(t, "managed-policy", result.Uninstalled[0])
+	assert.Len(t, result.NotFound, 1)
+	assert.Equal(t, "nonexistent-policy", result.NotFound[0])
+}
+
+// --- #30: client.go coverage improvements ---
+
+func TestK8sClient_InstallConstraint(t *testing.T) {
+	scheme := runtime.NewScheme()
+	fakeClient := dynamicfake.NewSimpleDynamicClient(scheme)
+	k8sClient := &K8sClient{dynamicClient: fakeClient}
+
+	constraint := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "K8sRequiredLabels",
+			"metadata": map[string]interface{}{
+				"name": "require-labels",
+			},
+		},
+	}
+
+	// Install new constraint (create path)
+	err := k8sClient.InstallConstraint(context.Background(), constraint)
+	require.NoError(t, err)
+
+	// Verify it was created
+	gvr := schema.GroupVersionResource{
+		Group:    "constraints.gatekeeper.sh",
+		Version:  "v1beta1",
+		Resource: "k8srequiredlabels",
+	}
+	result, err := fakeClient.Resource(gvr).Get(context.Background(), "require-labels", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "require-labels", result.GetName())
+}
+
+func TestK8sClient_GetConstraint(t *testing.T) {
+	scheme := runtime.NewScheme()
+	fakeClient := dynamicfake.NewSimpleDynamicClient(scheme)
+	k8sClient := &K8sClient{dynamicClient: fakeClient}
+
+	gvr := schema.GroupVersionResource{
+		Group:    "constraints.gatekeeper.sh",
+		Version:  "v1beta1",
+		Resource: "k8srequiredlabels",
+	}
+
+	// Pre-create constraint using the correct GVR
+	constraint := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "K8sRequiredLabels",
+			"metadata": map[string]interface{}{
+				"name": "require-labels",
+			},
+		},
+	}
+	_, err := fakeClient.Resource(gvr).Create(context.Background(), constraint, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	// Get existing constraint
+	result, err := k8sClient.GetConstraint(context.Background(), gvr, "require-labels")
+	require.NoError(t, err)
+	assert.Equal(t, "require-labels", result.GetName())
+
+	// Get non-existent constraint
+	_, err = k8sClient.GetConstraint(context.Background(), gvr, "nonexistent")
+	assert.Error(t, err)
+}
+
+func TestK8sClient_DeleteConstraint(t *testing.T) {
+	scheme := runtime.NewScheme()
+	fakeClient := dynamicfake.NewSimpleDynamicClient(scheme)
+	k8sClient := &K8sClient{dynamicClient: fakeClient}
+
+	gvr := schema.GroupVersionResource{
+		Group:    "constraints.gatekeeper.sh",
+		Version:  "v1beta1",
+		Resource: "k8srequiredlabels",
+	}
+
+	// Pre-create constraint
+	constraint := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "K8sRequiredLabels",
+			"metadata": map[string]interface{}{
+				"name": "require-labels",
+			},
+		},
+	}
+	_, err := fakeClient.Resource(gvr).Create(context.Background(), constraint, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	// Delete existing constraint
+	err = k8sClient.DeleteConstraint(context.Background(), gvr, "require-labels")
+	require.NoError(t, err)
+
+	// Delete non-existent should not error
+	err = k8sClient.DeleteConstraint(context.Background(), gvr, "nonexistent")
+	require.NoError(t, err)
+}
+
+func TestIsCRDNotRegisteredError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{name: "nil error", err: nil, expected: false},
+		{name: "no matches error", err: fmt.Errorf("no matches for kind \"ConstraintTemplate\""), expected: true},
+		{name: "resource not found server error", err: fmt.Errorf("the server could not find the requested resource"), expected: true},
+		{name: "other error", err: fmt.Errorf("connection refused"), expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isCRDNotRegisteredError(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestConstraintGVR(t *testing.T) {
+	gvr := constraintGVR("K8sRequiredLabels")
+	assert.Equal(t, "constraints.gatekeeper.sh", gvr.Group)
+	assert.Equal(t, "v1beta1", gvr.Version)
+	assert.Equal(t, "k8srequiredlabels", gvr.Resource)
+}
+
+func TestSetEnforcementAction(t *testing.T) {
+	t.Run("set action on existing spec", func(t *testing.T) {
+		constraint := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+				"kind":       "TestPolicy",
+				"metadata": map[string]interface{}{
+					"name": "test",
+				},
+				"spec": map[string]interface{}{
+					"enforcementAction": "deny",
+				},
+			},
+		}
+
+		err := setEnforcementAction(constraint, "warn")
+		require.NoError(t, err)
+
+		action, _, _ := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
+		assert.Equal(t, "warn", action)
+	})
+
+	t.Run("set action on missing spec", func(t *testing.T) {
+		constraint := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+				"kind":       "TestPolicy",
+				"metadata": map[string]interface{}{
+					"name": "test",
+				},
+			},
+		}
+
+		err := setEnforcementAction(constraint, "dryrun")
+		require.NoError(t, err)
+
+		action, _, _ := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
+		assert.Equal(t, "dryrun", action)
+	})
+}
+

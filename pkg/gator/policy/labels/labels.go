@@ -21,12 +21,11 @@ const (
 
 	// ManagedByValue is the value for the managed-by label.
 	ManagedByValue = "gator"
-	// SourceValue is the default source value.
-	SourceValue = "gatekeeper-library"
 )
 
 // AddManagedLabels adds gator management labels and annotations to a resource.
-func AddManagedLabels(obj *unstructured.Unstructured, version, bundle string) {
+// The source parameter identifies the catalog repository (e.g., catalog.DefaultRepository).
+func AddManagedLabels(obj *unstructured.Unstructured, version, bundle, source string) {
 	labels := obj.GetLabels()
 	if labels == nil {
 		labels = make(map[string]string)
@@ -42,7 +41,7 @@ func AddManagedLabels(obj *unstructured.Unstructured, version, bundle string) {
 		annotations = make(map[string]string)
 	}
 	annotations[AnnotationVersion] = version
-	annotations[AnnotationSource] = SourceValue
+	annotations[AnnotationSource] = source
 	annotations[AnnotationInstalledAt] = time.Now().UTC().Format(time.RFC3339)
 	obj.SetAnnotations(annotations)
 }

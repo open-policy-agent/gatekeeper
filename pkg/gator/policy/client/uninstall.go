@@ -89,8 +89,7 @@ func uninstallPolicy(ctx context.Context, k8sClient Client, policyName string, d
 
 	// Delete template
 	// Note: When the ConstraintTemplate is deleted, Gatekeeper removes the associated
-	// Constraint CRD, which orphans any Constraint CRs (they remain in etcd but become
-	// unknown kinds). This is acceptable behavior - the constraints won't be enforced.
+	// Constraint CRD. Kubernetes garbage-collects any Constraint CRs when the CRD is deleted.
 	if !dryRun {
 		if err := k8sClient.DeleteTemplate(ctx, policyName); err != nil {
 			return fmt.Errorf("deleting template: %w", err)

@@ -213,3 +213,95 @@ EOF
     # Restore
     export GATOR_CATALOG_URL="${CATALOG_URL}"
 }
+
+@test "gator policy generate-catalog with invalid path fails" {
+    run ${GATOR} policy generate-catalog --library-path=/nonexistent/path
+    [ "$status" -ne 0 ]
+    [[ "$output" =~ "does not exist" ]] || [[ "$output" =~ "not found" ]] || [[ "$output" =~ "library" ]]
+}
+
+@test "gator policy generate-catalog from library" {
+    if [[ "${GATEKEEPER_LIBRARY_PATH:-}" == "" ]]; then
+        skip "GATEKEEPER_LIBRARY_PATH not set"
+    fi
+
+    run ${GATOR} policy generate-catalog \
+        --library-path="${GATEKEEPER_LIBRARY_PATH}" \
+        --output=/tmp/test-catalog.yaml \
+        --validate
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "policies" ]] || [[ "$output" =~ "Catalog" ]]
+
+    # Verify file was created
+    [ -f /tmp/test-catalog.yaml ]
+
+    # Verify it's valid YAML with expected fields
+    grep -q "apiVersion" /tmp/test-catalog.yaml
+    grep -q "PolicyCatalog" /tmp/test-catalog.yaml
+
+    rm -f /tmp/test-catalog.yaml
+}
+
+@test "gator policy generate-catalog with base-url converts paths" {
+    if [[ "${GATEKEEPER_LIBRARY_PATH:-}" == "" ]]; then
+        skip "GATEKEEPER_LIBRARY_PATH not set"
+    fi
+
+    run ${GATOR} policy generate-catalog \
+        --library-path="${GATEKEEPER_LIBRARY_PATH}" \
+        --output=/tmp/test-catalog-url.yaml \
+        --base-url=https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master \
+        --validate
+    [ "$status" -eq 0 ]
+
+    # Verify paths are converted to URLs
+    grep -q "https://raw.githubusercontent.com" /tmp/test-catalog-url.yaml
+
+    rm -f /tmp/test-catalog-url.yaml
+}
+
+@test "gator policy generate-catalog with bundles file" {
+    if [[ "${GATEKEEPER_LIBRARY_PATH:-}" == "" ]]; then
+        skip "GATEKEEPER_LIBRARY_PATH not set"
+    fi
+
+    # Create a temporary bundles file
+    cat > /tmp/test-bundles.yaml <<EOF
+bundles:
+  - name: test-bundle
+    description: Test bundle for E2E
+    policies:
+      - k8srequiredlabels
+EOF
+
+    run ${GATOR} policy generate-catalog \
+        --library-path="${GATEKEEPER_LIBRARY_PATH}" \
+        --output=/tmp/test-catalog-bundles.yaml \
+        --bundles=/tmp/test-bundles.yaml \
+        --validate
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "bundle" ]] || [[ "$output" =~ "1 bundles" ]]
+
+    rm -f /tmp/test-catalog-bundles.yaml /tmp/test-bundles.yaml
+}
+
+@test "gator policy generate-catalog with custom name and version" {
+    if [[ "${GATEKEEPER_LIBRARY_PATH:-}" == "" ]]; then
+        skip "GATEKEEPER_LIBRARY_PATH not set"
+    fi
+
+    run ${GATOR} policy generate-catalog \
+        --library-path="${GATEKEEPER_LIBRARY_PATH}" \
+        --output=/tmp/test-catalog-custom.yaml \
+        --name=my-custom-catalog \
+        --version=v2.5.0 \
+        --validate
+    [ "$status" -eq 0 ]
+
+    # Verify custom metadata
+    grep -q "my-custom-catalog" /tmp/test-catalog-custom.yaml
+    grep -q "v2.5.0" /tmp/test-catalog-custom.yaml
+
+    rm -f /tmp/test-catalog-custom.yaml
+}
+

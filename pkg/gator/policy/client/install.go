@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/labels"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/yaml"
 )
 
@@ -21,8 +23,8 @@ const (
 type InstallOptions struct {
 	// Policies is the list of policy names to install.
 	Policies []string
-	// Bundle is the bundle name to install.
-	Bundle string
+	// Bundles is the list of bundle names to install.
+	Bundles []string
 	// EnforcementAction overrides the enforcement action for constraints.
 	EnforcementAction string
 	// DryRun if true, only prints what would be done.
@@ -57,13 +59,13 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 
 	// Determine which policies to install
 	var policyNames []string
-	bundleName := ""
 	seen := make(map[string]bool)
+	// policyBundle tracks which bundle a policy was resolved from (first match wins).
+	policyBundle := make(map[string]string)
 
-	// If bundle is specified, resolve bundle policies first
-	if opts.Bundle != "" {
-		bundleName = opts.Bundle
-		bundlePolicies, err := cat.ResolveBundlePolicies(opts.Bundle)
+	// If bundles are specified, resolve bundle policies first
+	for _, bundleName := range opts.Bundles {
+		bundlePolicies, err := cat.ResolveBundlePolicies(bundleName)
 		if err != nil {
 			return nil, fmt.Errorf("resolving bundle policies: %w", err)
 		}
@@ -71,6 +73,7 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 			if !seen[p] {
 				seen[p] = true
 				policyNames = append(policyNames, p)
+				policyBundle[p] = bundleName
 			}
 		}
 	}
@@ -102,15 +105,6 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		}
 	}
 
-	// Build set of bundle policies for determining if constraints should be installed
-	bundlePolicies := make(map[string]bool)
-	if opts.Bundle != "" {
-		bundlePolicyList, _ := cat.ResolveBundlePolicies(opts.Bundle)
-		for _, p := range bundlePolicyList {
-			bundlePolicies[p] = true
-		}
-	}
-
 	// Install each policy
 	for _, policyName := range policyNames {
 		policy := cat.GetPolicy(policyName)
@@ -121,12 +115,9 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 			return result, nil
 		}
 
-		// Determine if this policy should install constraints
-		// Only bundle policies get constraints, additional positional policies get template-only
-		installBundle := ""
-		if bundlePolicies[policyName] {
-			installBundle = bundleName
-		}
+		// Determine if this policy should install constraints.
+		// Only bundle-resolved policies get constraints; positional policies get template-only.
+		installBundle := policyBundle[policyName]
 
 		skipped, err := installPolicy(ctx, k8sClient, fetcher, policy, installBundle, opts, result)
 		if err != nil {
@@ -185,7 +176,7 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	}
 
 	// Add labels and annotations
-	labels.AddManagedLabels(template, policy.Version, bundleName)
+	labels.AddManagedLabels(template, policy.Version, bundleName, catalog.DefaultRepository)
 
 	// Install or update template if not already at same version
 	if !opts.DryRun && !templateAlreadyInstalled {
@@ -194,23 +185,24 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 		}
 	}
 
-	// Install constraint if bundle and constraintPath exists
-	if bundleName != "" && policy.ConstraintPath != "" {
-		if err := installConstraint(ctx, k8sClient, fetcher, policy, bundleName, opts, result, template); err != nil {
+	// Install constraint if bundle has a constraint path defined
+	constraintPath := policy.BundleConstraints[bundleName]
+	if bundleName != "" && constraintPath != "" {
+		if err := installConstraint(ctx, k8sClient, fetcher, policy, constraintPath, bundleName, opts, result, template); err != nil {
 			return false, err
 		}
 	}
 
 	// Return whether this policy was skipped (already at same version)
-	if templateAlreadyInstalled && (bundleName == "" || policy.ConstraintPath == "") {
+	if templateAlreadyInstalled && (bundleName == "" || constraintPath == "") {
 		return true, nil
 	}
 
 	return false, nil
 }
 
-func installConstraint(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts *InstallOptions, result *InstallResult, template *unstructured.Unstructured) error {
-	constraintData, err := fetcher.FetchContent(ctx, policy.ConstraintPath)
+func installConstraint(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, constraintPath string, bundleName string, opts *InstallOptions, result *InstallResult, template *unstructured.Unstructured) error {
+	constraintData, err := fetcher.FetchContent(ctx, constraintPath)
 	if err != nil {
 		return fmt.Errorf("fetching constraint: %w", err)
 	}
@@ -228,19 +220,39 @@ func installConstraint(ctx context.Context, k8sClient Client, fetcher catalog.Fe
 	}
 
 	// Add labels
-	labels.AddManagedLabels(constraint, policy.Version, bundleName)
+	labels.AddManagedLabels(constraint, policy.Version, bundleName, catalog.DefaultRepository)
 
 	// Install constraint
 	if !opts.DryRun {
 		// Wait for the template status to show created=true
-		// Use the template name from the parsed YAML, not the catalog policy name
 		if err := k8sClient.WaitForTemplateReady(ctx, template.GetName(), DefaultReconcileTimeout); err != nil {
 			return fmt.Errorf("waiting for template ready: %w", err)
 		}
-		// Wait for the constraint CRD to be available (created by Gatekeeper after the template is installed)
-		// Gatekeeper needs time to reconcile the ConstraintTemplate and generate the CRD
+		// Wait for the constraint CRD to be available
 		if err := k8sClient.WaitForConstraintCRD(ctx, constraint.GetKind(), DefaultReconcileTimeout); err != nil {
 			return fmt.Errorf("waiting for constraint CRD: %w", err)
+		}
+
+		// Check if constraint already exists and is not managed by gator
+		gvr := constraintGVR(constraint.GetKind())
+		existing, err := k8sClient.GetConstraint(ctx, gvr, constraint.GetName())
+		if err == nil {
+			if !labels.IsManagedByGator(existing) {
+				return &ConflictError{
+					ResourceKind: constraint.GetKind(),
+					ResourceName: constraint.GetName(),
+				}
+			}
+			// Preserve existing enforcement action if not explicitly overridden.
+			// This ensures upgrades don't silently revert a user's enforcement setting.
+			if opts.EnforcementAction == "" {
+				existingAction, _, _ := unstructured.NestedString(existing.Object, "spec", "enforcementAction")
+				if existingAction != "" {
+					if err := setEnforcementAction(constraint, existingAction); err != nil {
+						return err
+					}
+				}
+			}
 		}
 
 		if err := k8sClient.InstallConstraint(ctx, constraint); err != nil {
@@ -264,17 +276,22 @@ func setEnforcementAction(constraint *unstructured.Unstructured, action string) 
 	return unstructured.SetNestedMap(constraint.Object, spec, "spec")
 }
 
+// constraintGVR returns the GroupVersionResource for a constraint kind.
+func constraintGVR(kind string) schema.GroupVersionResource {
+	return schema.GroupVersionResource{
+		Group:    "constraints.gatekeeper.sh",
+		Version:  "v1beta1",
+		Resource: strings.ToLower(kind),
+	}
+}
+
 // GatekeeperNotInstalledError is returned when Gatekeeper CRDs are not found.
 type GatekeeperNotInstalledError struct{}
 
 func (e *GatekeeperNotInstalledError) Error() string {
 	return `Gatekeeper CRDs not found in cluster.
 
-Install Gatekeeper first:
-  kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
-
-Or with Helm:
-  helm install gatekeeper/gatekeeper --name-template=gatekeeper`
+See the installation guide: https://open-policy-agent.github.io/gatekeeper/website/docs/install`
 }
 
 // ConflictError is returned when a resource exists but is not managed by gator.

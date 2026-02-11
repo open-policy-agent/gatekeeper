@@ -10,7 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var updateInsecure bool
+var (
+	updateInsecure bool
+	updateOutput   string
+)
 
 func newUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -24,6 +27,7 @@ gator policy update`,
 	}
 
 	cmd.Flags().BoolVar(&updateInsecure, "insecure", false, "Allow plain HTTP catalog URLs (not recommended)")
+	cmd.Flags().StringVarP(&updateOutput, "output", "o", "", "Output format: table (default) or json")
 
 	return cmd
 }
@@ -31,6 +35,11 @@ gator policy update`,
 func runUpdate(cmd *cobra.Command, _ []string) error {
 	cmd.SilenceUsage = true
 	ctx := cmd.Context()
+
+	// Validate output format early
+	if updateOutput != "" && updateOutput != "table" && updateOutput != "json" {
+		return fmt.Errorf("invalid output format: %s (must be table or json)", updateOutput)
+	}
 
 	catalogURL := catalog.GetCatalogURL()
 	fmt.Fprintf(os.Stdout, "Fetching catalog from %s...\n", catalogURL)
