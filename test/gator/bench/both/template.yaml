@@ -1,0 +1,44 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedrepos
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedRepos
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            repos:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sallowedrepos
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not strings.any_prefix_match(container.image, input.parameters.repos)
+          msg := sprintf("container <%v> has an invalid image repo <%v>, allowed repos are %v", [container.name, container.image, input.parameters.repos])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          not strings.any_prefix_match(container.image, input.parameters.repos)
+          msg := sprintf("initContainer <%v> has an invalid image repo <%v>, allowed repos are %v", [container.name, container.image, input.parameters.repos])
+        }
+      code:
+        - engine: K8sNativeValidation
+          source:
+            validations:
+              - expression: "object.spec.containers.all(c, variables.repos.exists(repo, c.image.startsWith(repo)))"
+                messageExpression: "'container ' + variables.failedContainer + ' has an invalid image repo, allowed repos are ' + variables.repos.join(', ')"
+            variables:
+              - name: repos
+                expression: "has(variables.params.repos) ? variables.params.repos : []"
+              - name: failedContainer
+                expression: "object.spec.containers.filter(c, !variables.repos.exists(repo, c.image.startsWith(repo))).map(c, c.name).join(', ')"

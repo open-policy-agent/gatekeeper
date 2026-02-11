@@ -40,7 +40,7 @@ teardown_file() {
   CLEAN_CMD="${CLEAN_CMD}; rm ${cert}"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "get_ca_cert ${cert}"
 
-  kubectl run temp --image=curlimages/curl -- tail -f /dev/null
+  kubectl get pod temp >/dev/null 2>&1 || kubectl run temp --image=curlimages/curl -- tail -f /dev/null
   kubectl wait --for=condition=Ready --timeout=60s pod temp
   kubectl cp ${cert} temp:/tmp/cacert
 
@@ -81,6 +81,17 @@ teardown_file() {
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicy gatekeeper-k8srequiredlabelsvap"
 
+    # Verify VAP metrics - CEL templates and VAP status
+    kubectl get pod temp >/dev/null 2>&1 || kubectl run temp --image=curlimages/curl -- tail -f /dev/null
+    kubectl wait --for=condition=Ready --timeout=60s pod temp
+    local pod_ip="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l gatekeeper.sh/operation=audit -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
+
+    # Verify constraint_templates_with_cel metric shows at least 1
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "cel_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep -E '^gatekeeper_constraint_templates_with_cel ' | awk '{print \$2}' | tr -d '\r'); [ -n \"\$cel_count\" ] && [ \"\$cel_count\" -gt 0 ]"
+
+    # Verify validating_admission_policies metric with status=active shows at least 1
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep -E '^gatekeeper_validating_admission_policies\{status=\"active\"\}' | awk '{print \$2}' | tr -d '\r'); [ -n \"\$vap_count\" ] && [ \"\$vap_count\" -gt 0 ]"
+
     local vap_json=$(kubectl get ValidatingAdmissionPolicy gatekeeper-k8srequiredlabelsvap -o json)
     
     # Check for gatekeeper_internal_match_global_excluded_namespaces in matchConditions
@@ -106,6 +117,9 @@ teardown_file() {
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+
+    # Verify VAPB metrics with status=active shows at least 2 (we created 2 bindings)
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vapb_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep -E '^gatekeeper_validating_admission_policy_bindings\{status=\"active\"\}' | awk '{print \$2}' | tr -d '\r'); [ -n \"\$vapb_count\" ] && [ \"\$vapb_count\" -gt 1 ]"
     
     run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
     assert_match 'Warning' "${output}"
@@ -126,9 +140,15 @@ teardown_file() {
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml
 
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vapb_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep -E '^gatekeeper_validating_admission_policy_bindings\{status=\"active\"\}' | awk '{print \$2}' | tr -d '\r'); [ -z \"\$vapb_count\" ] || [ \"\$vapb_count\" -eq 0 ]"
+
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
     # wait for k8s to register deletion with eventual consistency
     sleep 5
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep -E '^gatekeeper_validating_admission_policies\{status=\"active\"\}' | awk '{print \$2}' | tr -d '\r'); [ -z \"\$vap_count\" ] || [ \"\$vap_count\" -eq 0 ]"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "cel_ct_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep -E '^gatekeeper_constraint_templates_with_cel ' | awk '{print \$2}' | tr -d '\r'); [ -z \"\$cel_ct_count\" ] || [ \"\$cel_ct_count\" -eq 0 ]"
+
+    kubectl delete pod temp --ignore-not-found
   fi
 }
 
@@ -263,7 +283,7 @@ teardown_file() {
 }
 
 @test "waiting for namespaces to be synced using metrics endpoint" {
-  kubectl run temp --image=curlimages/curl -- tail -f /dev/null
+  kubectl get pod temp >/dev/null 2>&1 || kubectl run temp --image=curlimages/curl -- tail -f /dev/null
   kubectl wait --for=condition=Ready --timeout=60s pod temp
 
   num_namespaces=$(kubectl get ns -o json | jq '.items | length')
@@ -523,7 +543,7 @@ EOF
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get provider dummy-provider -o jsonpath='{.status.byPod}' | grep -v '\\[\\]'"
 
   # metrics test
-  kubectl run temp --image=curlimages/curl -- tail -f /dev/null
+  kubectl get pod temp >/dev/null 2>&1 || kubectl run temp --image=curlimages/curl -- tail -f /dev/null
   kubectl wait --for=condition=Ready --timeout=60s pod temp
 
   local pod_ip="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l gatekeeper.sh/operation=webhook -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
