@@ -60,17 +60,7 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/bin
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          
-          # Install kind
-          curl -Lo $GITHUB_WORKSPACE/bin/kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
-          chmod +x $GITHUB_WORKSPACE/bin/kind
-          
-          # Install kubectl
-          curl -Lo $GITHUB_WORKSPACE/bin/kubectl "https://dl.k8s.io/release/v${{ matrix.KUBERNETES_VERSION }}/bin/linux/amd64/kubectl"
-          chmod +x $GITHUB_WORKSPACE/bin/kubectl
-          
-          # Install jq
-          sudo apt-get update && sudo apt-get install -y jq
+          make e2e-dependencies KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
           
           # Verify installations
           kind version
