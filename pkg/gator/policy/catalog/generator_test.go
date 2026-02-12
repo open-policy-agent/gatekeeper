@@ -456,15 +456,13 @@ func TestConvertPathsToURLs(t *testing.T) {
 	catalog := &PolicyCatalog{
 		Policies: []Policy{
 			{
-				Name:                 "test-policy",
-				TemplatePath:         "library/general/test/template.yaml",
-				BundleConstraints:    map[string]string{"test-bundle": "library/general/test/samples/constraint.yaml"},
-				SampleConstraintPath: "library/general/test/samples/constraint.yaml",
+				Name:              "test-policy",
+				TemplatePath:      "library/general/test/template.yaml",
+				BundleConstraints: map[string]string{"test-bundle": "library/general/test/samples/constraint.yaml"},
 			},
 			{
-				Name:                 "already-url",
-				TemplatePath:         "https://example.com/template.yaml",
-				SampleConstraintPath: "",
+				Name:         "already-url",
+				TemplatePath: "https://example.com/template.yaml",
 			},
 		},
 	}
@@ -514,23 +512,36 @@ func TestConvertPathsToURLs_TrailingSlash(t *testing.T) {
 	}
 }
 
-func TestFindConstraintPath_NoSamplesDir(t *testing.T) {
+func TestFindBundleConstraints_NoSamplesDir(t *testing.T) {
 	tempDir := t.TempDir()
 	policyDir := filepath.Join(tempDir, "library", "general", "test-policy")
 	if err := os.MkdirAll(policyDir, 0o755); err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
 	}
 
-	result := findConstraintPath(policyDir, tempDir)
-	if result != "" {
-		t.Errorf("Expected empty result when no samples dir, got %q", result)
+	result := findBundleConstraints(policyDir, tempDir, []string{"test-bundle"})
+	if result != nil {
+		t.Errorf("Expected nil result when no samples dir, got %v", result)
 	}
 }
 
-func TestFindConstraintPath_NoConstraintFiles(t *testing.T) {
+func TestFindBundleConstraints_NoBundles(t *testing.T) {
 	tempDir := t.TempDir()
 	policyDir := filepath.Join(tempDir, "library", "general", "test-policy")
-	samplesDir := filepath.Join(policyDir, "samples")
+	if err := os.MkdirAll(policyDir, 0o755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+
+	result := findBundleConstraints(policyDir, tempDir, nil)
+	if result != nil {
+		t.Errorf("Expected nil result when no bundles, got %v", result)
+	}
+}
+
+func TestFindBundleConstraints_NoConstraintFiles(t *testing.T) {
+	tempDir := t.TempDir()
+	policyDir := filepath.Join(tempDir, "library", "general", "test-policy")
+	samplesDir := filepath.Join(policyDir, "samples", "example")
 	if err := os.MkdirAll(samplesDir, 0o755); err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
 	}
@@ -541,20 +552,20 @@ kind: ConfigMap
 metadata:
   name: test
 `
-	if err := os.WriteFile(filepath.Join(samplesDir, "configmap.yaml"), []byte(nonConstraint), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(samplesDir, "constraint.yaml"), []byte(nonConstraint), 0o600); err != nil {
 		t.Fatalf("Failed to write file: %v", err)
 	}
 
-	result := findConstraintPath(policyDir, tempDir)
-	if result != "" {
-		t.Errorf("Expected empty result when no constraint files, got %q", result)
+	result := findBundleConstraints(policyDir, tempDir, []string{"test-bundle"})
+	if result != nil {
+		t.Errorf("Expected nil result when no constraint files, got %v", result)
 	}
 }
 
-func TestFindConstraintPath_NestedSubdirectories(t *testing.T) {
+func TestFindBundleConstraints_SingleConstraint(t *testing.T) {
 	tempDir := t.TempDir()
 	policyDir := filepath.Join(tempDir, "library", "general", "test-policy")
-	nestedDir := filepath.Join(policyDir, "samples", "nested-example")
+	nestedDir := filepath.Join(policyDir, "samples", "example")
 	if err := os.MkdirAll(nestedDir, 0o755); err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
 	}
@@ -568,19 +579,73 @@ metadata:
 		t.Fatalf("Failed to write file: %v", err)
 	}
 
-	result := findConstraintPath(policyDir, tempDir)
-	if result == "" {
-		t.Error("Expected to find constraint in nested directory")
+	result := findBundleConstraints(policyDir, tempDir, []string{"test-bundle"})
+	if result == nil {
+		t.Fatal("Expected to find constraint, got nil")
 	}
-	if !strings.Contains(result, "nested-example") {
-		t.Errorf("Expected path to contain 'nested-example', got %q", result)
+	if len(result) != 1 {
+		t.Fatalf("Expected 1 bundle constraint, got %d", len(result))
+	}
+	if _, ok := result["test-bundle"]; !ok {
+		t.Error("Expected test-bundle key in result")
 	}
 }
 
-func TestFindConstraintPath_YmlExtension(t *testing.T) {
+func TestFindBundleConstraints_PerBundleDiscovery(t *testing.T) {
+	tempDir := t.TempDir()
+	policyDir := filepath.Join(tempDir, "library", "pod-security", "capabilities")
+	baselineDir := filepath.Join(policyDir, "samples", "psp-capabilities-baseline")
+	restrictedDir := filepath.Join(policyDir, "samples", "psp-capabilities-restricted")
+	if err := os.MkdirAll(baselineDir, 0o755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	if err := os.MkdirAll(restrictedDir, 0o755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+
+	baselineConstraint := `apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPCapabilities
+metadata:
+  name: psp-capabilities-baseline
+`
+	restrictedConstraint := `apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPCapabilities
+metadata:
+  name: psp-capabilities-restricted
+`
+	if err := os.WriteFile(filepath.Join(baselineDir, "constraint.yaml"), []byte(baselineConstraint), 0o600); err != nil {
+		t.Fatalf("Failed to write file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(restrictedDir, "constraint.yaml"), []byte(restrictedConstraint), 0o600); err != nil {
+		t.Fatalf("Failed to write file: %v", err)
+	}
+
+	result := findBundleConstraints(policyDir, tempDir, []string{"pod-security-baseline", "pod-security-restricted"})
+	if result == nil {
+		t.Fatal("Expected bundle constraints, got nil")
+	}
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 bundle constraints, got %d", len(result))
+	}
+
+	// Baseline should map to the baseline constraint
+	if !strings.Contains(result["pod-security-baseline"], "baseline") {
+		t.Errorf("Expected baseline bundle to map to baseline constraint, got %q", result["pod-security-baseline"])
+	}
+	// Restricted should map to the restricted constraint
+	if !strings.Contains(result["pod-security-restricted"], "restricted") {
+		t.Errorf("Expected restricted bundle to map to restricted constraint, got %q", result["pod-security-restricted"])
+	}
+	// They should be different paths
+	if result["pod-security-baseline"] == result["pod-security-restricted"] {
+		t.Error("Expected different constraint paths for baseline and restricted")
+	}
+}
+
+func TestFindBundleConstraints_YmlExtension(t *testing.T) {
 	tempDir := t.TempDir()
 	policyDir := filepath.Join(tempDir, "library", "general", "test-policy")
-	samplesDir := filepath.Join(policyDir, "samples")
+	samplesDir := filepath.Join(policyDir, "samples", "example")
 	if err := os.MkdirAll(samplesDir, 0o755); err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
 	}
@@ -594,9 +659,9 @@ metadata:
 		t.Fatalf("Failed to write file: %v", err)
 	}
 
-	result := findConstraintPath(policyDir, tempDir)
-	if result == "" {
-		t.Error("Expected to find constraint with .yml extension")
+	result := findBundleConstraints(policyDir, tempDir, []string{"test-bundle"})
+	if result == nil {
+		t.Fatal("Expected to find constraint with .yml extension")
 	}
 }
 

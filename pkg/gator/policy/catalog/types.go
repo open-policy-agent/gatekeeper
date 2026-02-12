@@ -57,8 +57,6 @@ type Policy struct {
 	// Different bundles may require different constraint configurations for the same template
 	// (e.g., baseline vs restricted PSS profiles need different constraint values).
 	BundleConstraints map[string]string `json:"bundleConstraints,omitempty" yaml:"bundleConstraints,omitempty"`
-	// SampleConstraintPath is the URL or relative path to an example constraint YAML for reference.
-	SampleConstraintPath string `json:"sampleConstraintPath,omitempty" yaml:"sampleConstraintPath,omitempty"`
 	// DocumentationURL links to external documentation for this policy.
 	DocumentationURL string `json:"documentationUrl,omitempty" yaml:"documentationUrl,omitempty"`
 	// Bundles lists which bundles include this policy (reverse reference for discovery).

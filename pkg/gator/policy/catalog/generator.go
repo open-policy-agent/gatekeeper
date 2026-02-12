@@ -168,7 +168,6 @@ func parsePolicyFromTemplate(templatePath, libraryRoot string) (*Policy, error) 
 
 	// Look for constraint files in samples directory
 	templateDir := filepath.Dir(templatePath)
-	sampleConstraintPath := findConstraintPath(templateDir, libraryRoot)
 
 	// Get documentation URL
 	docURL := ""
@@ -188,27 +187,22 @@ func parsePolicyFromTemplate(templatePath, libraryRoot string) (*Policy, error) 
 		}
 	}
 
-	// Build BundleConstraints: map each bundle to the constraint path.
-	// For now, all bundles share the same sample constraint path.
-	// TODO: support per-bundle constraint files in the library.
-	var bundleConstraints map[string]string
-	if sampleConstraintPath != "" && len(bundles) > 0 {
-		bundleConstraints = make(map[string]string, len(bundles))
-		for _, b := range bundles {
-			bundleConstraints[b] = sampleConstraintPath
-		}
-	}
+	// Build BundleConstraints by discovering per-bundle constraint files.
+	// The library convention is that sample directories with names containing
+	// a bundle keyword (e.g., "baseline", "restricted") provide bundle-specific
+	// constraint configurations. If no bundle-specific directory is found,
+	// the first constraint file discovered is used as a fallback.
+	bundleConstraints := findBundleConstraints(templateDir, libraryRoot, bundles)
 
 	policy := &Policy{
-		Name:                 template.Metadata.Name,
-		Version:              version,
-		Description:          description,
-		Category:             category,
-		TemplatePath:         relPath,
-		BundleConstraints:    bundleConstraints,
-		SampleConstraintPath: sampleConstraintPath,
-		DocumentationURL:     docURL,
-		Bundles:              bundles,
+		Name:              template.Metadata.Name,
+		Version:           version,
+		Description:       description,
+		Category:          category,
+		TemplatePath:      relPath,
+		BundleConstraints: bundleConstraints,
+		DocumentationURL:  docURL,
+		Bundles:           bundles,
 	}
 
 	return policy, nil
@@ -232,44 +226,93 @@ func extractCategory(relPath string) string {
 	return "general"
 }
 
-// findConstraintPath looks for constraint files in the samples directory.
-// Returns the relative path to the first constraint file found, used as the sample constraint
-// and as the default constraint path for bundle installations.
-func findConstraintPath(templateDir, libraryRoot string) string {
-	samplesDir := filepath.Join(templateDir, "samples")
-	if _, err := os.Stat(samplesDir); os.IsNotExist(err) {
-		return ""
+// findBundleConstraints discovers per-bundle constraint files in the samples directory.
+// It maps each bundle to its constraint file by matching sample directory names
+// to bundle keywords. For example, bundle "pod-security-baseline" matches a sample
+// directory named "psp-capabilities-baseline" (contains "baseline").
+// If no bundle-specific match is found, the first constraint file is used as fallback.
+// Returns nil if no bundles or no constraint files are found.
+func findBundleConstraints(templateDir, libraryRoot string, bundles []string) map[string]string {
+	if len(bundles) == 0 {
+		return nil
 	}
 
-	var result string
-
-	// Walk samples directory to find constraint files
-	_ = filepath.Walk(samplesDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// Skip files with errors - non-critical for catalog generation
-			return nil
-		}
-		if info.IsDir() {
-			return nil
-		}
-
-		if strings.HasSuffix(info.Name(), ".yaml") || strings.HasSuffix(info.Name(), ".yml") {
-			data, readErr := os.ReadFile(path)
-			if readErr != nil {
-				// Skip unreadable files - non-critical for catalog generation
-				return nil
-			}
-
-			// Check if it's a constraint
-			if isConstraintFile(data) {
-				relPath, _ := filepath.Rel(libraryRoot, path)
-				if result == "" {
-					result = relPath
-				}
-			}
-		}
+	samplesDir := filepath.Join(templateDir, "samples")
+	if _, err := os.Stat(samplesDir); os.IsNotExist(err) {
 		return nil
-	})
+	}
+
+	// Scan all sample subdirectories for constraint files, indexed by dir name.
+	// constraintsByDir maps sample directory name → relative constraint path.
+	constraintsByDir := make(map[string]string)
+	var fallbackPath string
+
+	entries, err := os.ReadDir(samplesDir)
+	if err != nil {
+		return nil
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dirPath := filepath.Join(samplesDir, entry.Name())
+		constraintFile := filepath.Join(dirPath, "constraint.yaml")
+		if _, statErr := os.Stat(constraintFile); statErr != nil {
+			// Try .yml extension
+			constraintFile = filepath.Join(dirPath, "constraint.yml")
+			if _, statErr = os.Stat(constraintFile); statErr != nil {
+				continue
+			}
+		}
+
+		data, readErr := os.ReadFile(constraintFile)
+		if readErr != nil {
+			continue
+		}
+		if !isConstraintFile(data) {
+			continue
+		}
+
+		relPath, relErr := filepath.Rel(libraryRoot, constraintFile)
+		if relErr != nil {
+			continue
+		}
+
+		constraintsByDir[entry.Name()] = relPath
+		if fallbackPath == "" {
+			fallbackPath = relPath
+		}
+	}
+
+	if len(constraintsByDir) == 0 {
+		return nil
+	}
+
+	// Match bundles to sample directories.
+	// Extract the distinguishing keyword from bundle name (last segment after "pod-security-").
+	// e.g., "pod-security-baseline" → "baseline", "pod-security-restricted" → "restricted"
+	result := make(map[string]string, len(bundles))
+	for _, bundle := range bundles {
+		// Extract keyword: use the last hyphen-separated segment of the bundle name
+		keyword := bundle
+		if idx := strings.LastIndex(bundle, "-"); idx >= 0 {
+			keyword = bundle[idx+1:]
+		}
+
+		// Look for a sample dir whose name contains the keyword
+		matched := false
+		for dirName, cPath := range constraintsByDir {
+			if strings.Contains(strings.ToLower(dirName), strings.ToLower(keyword)) {
+				result[bundle] = cPath
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			result[bundle] = fallbackPath
+		}
+	}
 
 	return result
 }
@@ -466,9 +509,6 @@ func convertPathsToURLs(catalog *PolicyCatalog, baseURL string) {
 			if cPath != "" && !strings.HasPrefix(cPath, "http") {
 				policy.BundleConstraints[bundle] = baseURL + "/" + cPath
 			}
-		}
-		if policy.SampleConstraintPath != "" && !strings.HasPrefix(policy.SampleConstraintPath, "http") {
-			policy.SampleConstraintPath = baseURL + "/" + policy.SampleConstraintPath
 		}
 	}
 }
