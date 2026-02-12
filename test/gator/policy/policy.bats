@@ -9,7 +9,7 @@
 
 GATOR="${GATOR:-./bin/gator}"
 # Pinned catalog URL for deterministic tests.
-CATALOG_URL="https://raw.githubusercontent.com/sozercan/gatekeeper-library/4b1845711d08eb22edf25c7e1a5cdeda67ab2d65/catalog.yaml"
+CATALOG_URL="https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/44ebe8b51c0383b375406869106c13955219bcd9/catalog.yaml"
 
 setup_file() {
     export GATOR_CATALOG_URL="${CATALOG_URL}"
