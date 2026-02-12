@@ -62,7 +62,7 @@ gator policy
     --output, -o <file>         # Output file path (default: "catalog.yaml")
     --name <name>               # Catalog name (default: "gatekeeper-library")
     --version <ver>             # Catalog version (default: "v1.0.0")
-    --repository <url>          # Repository URL
+  --base-url <url>            # Convert local template/constraint paths to URLs
     --bundles <file>            # Bundles definition file (optional)
     --validate                  # Validate generated catalog (default: true)
 ```

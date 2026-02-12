@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
 	// CatalogFileName is the name of the cached catalog file.
 	CatalogFileName = "catalog.yaml"
+	// CatalogSourceFileName is the name of the cached catalog source URL file.
+	CatalogSourceFileName = "catalog.source"
 	// ConfigFileName is the name of the user config file (future use).
 	ConfigFileName = "config.yaml"
 )
@@ -53,9 +56,23 @@ func (c *Cache) CatalogPath() string {
 	return filepath.Join(c.dir, CatalogFileName)
 }
 
+// CatalogSourcePath returns the path to the cached catalog source URL file.
+func (c *Cache) CatalogSourcePath() string {
+	return filepath.Join(c.dir, CatalogSourceFileName)
+}
+
 // SaveCatalog saves catalog data to the cache.
-func (c *Cache) SaveCatalog(data []byte) error {
-	return os.WriteFile(c.CatalogPath(), data, 0o600)
+func (c *Cache) SaveCatalog(data []byte, sourceURL string) error {
+	sourceURL = strings.TrimSpace(sourceURL)
+	if sourceURL == "" {
+		return fmt.Errorf("catalog source URL is required")
+	}
+
+	if err := os.WriteFile(c.CatalogPath(), data, 0o600); err != nil {
+		return err
+	}
+
+	return os.WriteFile(c.CatalogSourcePath(), []byte(sourceURL+"\n"), 0o600)
 }
 
 // LoadCatalogData reads the cached catalog data.
@@ -73,6 +90,39 @@ func (c *Cache) LoadCatalog() (*PolicyCatalog, error) {
 		return nil, fmt.Errorf("reading cached catalog: %w", err)
 	}
 	return ParseCatalog(data)
+}
+
+// LoadCatalogSource reads the source URL used to cache the catalog.
+func (c *Cache) LoadCatalogSource() (string, error) {
+	data, err := os.ReadFile(c.CatalogSourcePath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("no cached catalog source found, run 'gator policy update' first")
+		}
+		return "", fmt.Errorf("reading cached catalog source: %w", err)
+	}
+
+	sourceURL := strings.TrimSpace(string(data))
+	if sourceURL == "" {
+		return "", fmt.Errorf("cached catalog source is empty, run 'gator policy update' first")
+	}
+
+	return sourceURL, nil
+}
+
+// LoadCatalogWithSource reads and parses the cached catalog and its source URL.
+func (c *Cache) LoadCatalogWithSource() (*PolicyCatalog, string, error) {
+	cat, err := c.LoadCatalog()
+	if err != nil {
+		return nil, "", err
+	}
+
+	sourceURL, err := c.LoadCatalogSource()
+	if err != nil {
+		return nil, "", err
+	}
+
+	return cat, sourceURL, nil
 }
 
 // CatalogExists checks if a cached catalog exists.
@@ -108,7 +158,7 @@ func EnsureCatalog(ctx context.Context, cache *Cache, fetcher Fetcher) (*PolicyC
 	}
 
 	// Save to cache (warn on failure, non-fatal)
-	if err := cache.SaveCatalog(data); err != nil {
+	if err := cache.SaveCatalog(data, catalogURL); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to save catalog to cache: %v\n", err)
 	}
 

@@ -36,6 +36,20 @@ func (p *JSONPrinter) PrintSearchResults(w io.Writer, results []SearchResult) er
 	return p.writeJSON(w, output)
 }
 
+// PrintUpdateResult outputs catalog update results as JSON.
+func (p *JSONPrinter) PrintUpdateResult(w io.Writer, result *UpdateResult) error {
+	output := struct {
+		APIVersion string        `json:"apiVersion"`
+		Kind       string        `json:"kind"`
+		Result     *UpdateResult `json:"result"`
+	}{
+		APIVersion: JSONOutputVersion,
+		Kind:       "UpdateResult",
+		Result:     result,
+	}
+	return p.writeJSON(w, output)
+}
+
 // PrintMessage outputs a message as JSON.
 func (p *JSONPrinter) PrintMessage(w io.Writer, message string) error {
 	output := struct {

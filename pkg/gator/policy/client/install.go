@@ -9,6 +9,7 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/labels"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/yaml"
@@ -172,6 +173,8 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 			if existingVersion == policy.Version {
 				templateAlreadyInstalled = true
 			}
+		} else if !apierrors.IsNotFound(err) {
+			return false, fmt.Errorf("checking existing template: %w", err)
 		}
 	}
 
@@ -301,6 +304,6 @@ type ConflictError struct {
 }
 
 func (e *ConflictError) Error() string {
-	return fmt.Sprintf("%s '%s' already exists but is not managed by gator (missing label 'gatekeeper.sh/managed-by: gator')",
+	return fmt.Sprintf("%s '%s' already exists but is not managed by gator (expected label 'gatekeeper.sh/managed-by: gator' and annotation 'gatekeeper.sh/policy-source')",
 		e.ResourceKind, e.ResourceName)
 }

@@ -219,7 +219,7 @@ metadata:
 bundles: []
 policies: []
 `)
-	err = cache.SaveCatalog(catalogData)
+	err = cache.SaveCatalog(catalogData, "https://example.com/catalog.yaml")
 	require.NoError(t, err)
 
 	// Now catalog exists
@@ -229,6 +229,15 @@ policies: []
 	cat, err := cache.LoadCatalog()
 	require.NoError(t, err)
 	assert.Equal(t, "cached-test", cat.Metadata.Name)
+
+	sourceURL, err := cache.LoadCatalogSource()
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/catalog.yaml", sourceURL)
+
+	loadedCat, loadedSourceURL, err := cache.LoadCatalogWithSource()
+	require.NoError(t, err)
+	assert.Equal(t, "cached-test", loadedCat.Metadata.Name)
+	assert.Equal(t, "https://example.com/catalog.yaml", loadedSourceURL)
 }
 
 func TestGetCatalogURL(t *testing.T) {

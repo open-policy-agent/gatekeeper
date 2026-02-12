@@ -79,6 +79,14 @@ type UpgradeEntry struct {
 	ToVersion   string `json:"toVersion"`
 }
 
+// UpdateResult represents the result of a catalog update operation for output.
+type UpdateResult struct {
+	CatalogVersion string         `json:"catalogVersion"`
+	PolicyCount    int            `json:"policyCount"`
+	BundleCount    int            `json:"bundleCount"`
+	Upgradable     []UpgradeEntry `json:"upgradable,omitempty"`
+}
+
 // Printer defines the interface for outputting results.
 type Printer interface {
 	// PrintPolicies outputs a list of installed policies.
@@ -91,6 +99,8 @@ type Printer interface {
 	PrintUninstallResult(w io.Writer, result *UninstallResult) error
 	// PrintUpgradeResult outputs the result of an upgrade operation.
 	PrintUpgradeResult(w io.Writer, result *UpgradeResult) error
+	// PrintUpdateResult outputs the result of a catalog update operation.
+	PrintUpdateResult(w io.Writer, result *UpdateResult) error
 	// PrintMessage outputs a simple message.
 	PrintMessage(w io.Writer, message string) error
 }

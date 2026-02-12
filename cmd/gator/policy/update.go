@@ -7,6 +7,7 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/client"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/output"
 	"github.com/spf13/cobra"
 )
 
@@ -36,13 +37,15 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	cmd.SilenceUsage = true
 	ctx := cmd.Context()
 
-	// Validate output format early
-	if updateOutput != "" && updateOutput != "table" && updateOutput != "json" {
-		return fmt.Errorf("invalid output format: %s (must be table or json)", updateOutput)
+	// Create printer
+	printer, err := output.NewPrinter(output.Format(updateOutput))
+	if err != nil {
+		return err
 	}
 
 	catalogURL := catalog.GetCatalogURL()
-	fmt.Fprintf(os.Stdout, "Fetching catalog from %s...\n", catalogURL)
+	// Progress message to stderr so it doesn't pollute structured output
+	fmt.Fprintf(os.Stderr, "Fetching catalog from %s...\n", catalogURL)
 
 	// Fetch catalog
 	fetcher := catalog.NewHTTPFetcher(catalog.DefaultTimeout)
@@ -71,12 +74,16 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("initializing cache: %w", err)
 	}
 
-	if err := cache.SaveCatalog(data); err != nil {
+	if err := cache.SaveCatalog(data, catalogURL); err != nil {
 		return fmt.Errorf("saving catalog to cache: %w", err)
 	}
 
-	fmt.Fprintf(os.Stdout, "Updated catalog to version %s (%d policies, %d bundles)\n",
-		cat.Metadata.Version, len(cat.Policies), len(cat.Bundles))
+	// Build update result
+	result := &output.UpdateResult{
+		CatalogVersion: cat.Metadata.Version,
+		PolicyCount:    len(cat.Policies),
+		BundleCount:    len(cat.Bundles),
+	}
 
 	// Check for upgradable policies if cluster is accessible
 	k8sClient, err := client.NewK8sClient()
@@ -84,15 +91,15 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 		installed, err := k8sClient.ListManagedTemplates(ctx)
 		if err == nil && len(installed) > 0 {
 			upgradable := client.GetUpgradablePolicies(installed, cat)
-			if len(upgradable) > 0 {
-				fmt.Fprintf(os.Stdout, "\n%d policies have updates available:\n", len(upgradable))
-				for _, change := range upgradable {
-					fmt.Fprintf(os.Stdout, "  %s  %s → %s\n", change.Name, change.FromVersion, change.ToVersion)
-				}
-				fmt.Fprintln(os.Stdout, "\nRun 'gator policy upgrade --all' to upgrade.")
+			for _, change := range upgradable {
+				result.Upgradable = append(result.Upgradable, output.UpgradeEntry{
+					Name:        change.Name,
+					FromVersion: change.FromVersion,
+					ToVersion:   change.ToVersion,
+				})
 			}
 		}
 	}
 
-	return nil
+	return printer.PrintUpdateResult(os.Stdout, result)
 }

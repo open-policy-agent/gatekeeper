@@ -111,9 +111,6 @@ gator policy install k8srequiredlabels
 # Install multiple policies
 gator policy install k8srequiredlabels k8scontainerlimits
 
-# Install at a specific version
-gator policy install k8srequiredlabels@v1.2.0
-
 # Install a bundle (templates + constraints)
 gator policy install --bundle pod-security-baseline
 

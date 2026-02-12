@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	gatorpolicy "github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/client"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/output"
@@ -47,7 +48,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("checking Gatekeeper installation: %w", err)
 	}
 	if !installed {
-		return fmt.Errorf("gatekeeper CRDs not found in cluster")
+		return gatorpolicy.NewClusterError("gatekeeper CRDs not found in cluster")
 	}
 
 	// List managed policies

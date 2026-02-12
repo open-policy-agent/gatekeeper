@@ -63,6 +63,22 @@ func (p *TablePrinter) PrintSearchResults(w io.Writer, results []SearchResult) e
 	return nil
 }
 
+// PrintUpdateResult outputs catalog update results as a human-readable table.
+func (p *TablePrinter) PrintUpdateResult(w io.Writer, result *UpdateResult) error {
+	fmt.Fprintf(w, "Updated catalog to version %s (%d policies, %d bundles)\n",
+		result.CatalogVersion, result.PolicyCount, result.BundleCount)
+
+	if len(result.Upgradable) > 0 {
+		fmt.Fprintf(w, "\n%d policies have updates available:\n", len(result.Upgradable))
+		for _, change := range result.Upgradable {
+			fmt.Fprintf(w, "  %s  %s → %s\n", change.Name, change.FromVersion, change.ToVersion)
+		}
+		fmt.Fprintln(w, "\nRun 'gator policy upgrade --all' to upgrade.")
+	}
+
+	return nil
+}
+
 // PrintMessage outputs a simple message.
 func (p *TablePrinter) PrintMessage(w io.Writer, message string) error {
 	_, err := fmt.Fprintln(w, message)

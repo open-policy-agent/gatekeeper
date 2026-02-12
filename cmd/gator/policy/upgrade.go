@@ -83,7 +83,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("initializing cache: %w", err)
 	}
 
-	cat, err := cache.LoadCatalog()
+	cat, catalogSourceURL, err := cache.LoadCatalogWithSource()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "\nRun 'gator policy update' to refresh the catalog.")
 		return fmt.Errorf("loading catalog: %w", err)
@@ -95,8 +95,8 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating Kubernetes client: %w", err)
 	}
 
-	// Create fetcher for templates/constraints with the catalog URL as base
-	fetcher := catalog.NewHTTPFetcherWithBaseURL(catalog.DefaultTimeout, catalog.GetCatalogURL())
+	// Create fetcher for templates/constraints with the cached catalog source URL as base
+	fetcher := catalog.NewHTTPFetcherWithBaseURL(catalog.DefaultTimeout, catalogSourceURL)
 
 	// Resolve bundle policies if --bundle is specified
 	policyNames := args

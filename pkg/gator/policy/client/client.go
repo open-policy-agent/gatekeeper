@@ -134,6 +134,9 @@ func (c *K8sClient) ListManagedTemplates(ctx context.Context) ([]InstalledPolicy
 
 	policies := make([]InstalledPolicy, 0, len(list.Items))
 	for _, item := range list.Items {
+		if !labels.IsManagedByGator(&item) {
+			continue
+		}
 		policies = append(policies, InstalledPolicy{
 			Name:        item.GetName(),
 			Version:     labels.GetPolicyVersion(&item),

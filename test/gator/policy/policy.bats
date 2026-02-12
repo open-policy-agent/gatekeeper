@@ -8,8 +8,8 @@
 #
 
 GATOR="${GATOR:-./bin/gator}"
-# Temp location for testing
-CATALOG_URL="https://raw.githubusercontent.com/sozercan/gatekeeper-library/refs/heads/bundles/catalog.yaml"
+# Pinned catalog URL for deterministic tests.
+CATALOG_URL="https://raw.githubusercontent.com/sozercan/gatekeeper-library/4b1845711d08eb22edf25c7e1a5cdeda67ab2d65/catalog.yaml"
 
 setup_file() {
     export GATOR_CATALOG_URL="${CATALOG_URL}"
