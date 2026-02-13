@@ -185,6 +185,54 @@ func TestMatch(t *testing.T) {
 			wantMatch: false,
 		},
 		{
+			name:   "match api version",
+			object: makeObject(schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "kind"}, "", "name"),
+			matcher: Match{
+				Kinds: []Kinds{
+					{
+						APIGroups:   []string{"group"},
+						Kinds:       []string{"kind"},
+						APIVersions: []string{"v1"},
+					},
+				},
+			},
+			namespace: nil,
+			source:    types.SourceTypeOriginal,
+			wantMatch: true,
+		},
+		{
+			name:   "match api version mismatch",
+			object: makeObject(schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "kind"}, "", "name"),
+			matcher: Match{
+				Kinds: []Kinds{
+					{
+						APIGroups:   []string{"group"},
+						Kinds:       []string{"kind"},
+						APIVersions: []string{"v2"},
+					},
+				},
+			},
+			namespace: nil,
+			source:    types.SourceTypeOriginal,
+			wantMatch: false,
+		},
+		{
+			name:   "match api version wildcard",
+			object: makeObject(schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "kind"}, "", "name"),
+			matcher: Match{
+				Kinds: []Kinds{
+					{
+						APIGroups:   []string{"group"},
+						Kinds:       []string{"kind"},
+						APIVersions: []string{"*"},
+					},
+				},
+			},
+			namespace: nil,
+			source:    types.SourceTypeOriginal,
+			wantMatch: true,
+		},
+		{
 			name:   "namespace matches",
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name"),
 			matcher: Match{
