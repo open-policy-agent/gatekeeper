@@ -39,13 +39,17 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-var debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
+var (
+	debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
+	remoteCluster   = flag.Bool("enable-remote-cluster", false, "(alpha) Enable remote cluster mode where Gatekeeper operates against a target cluster specified via --kubeconfig while running in the local cluster. Mutually exclusive with --debug-use-fake-pod.")
+)
 
 type Injector interface {
 	InjectTracker(tracker *readiness.Tracker)
@@ -167,28 +171,57 @@ func (g *defaultPodGetter) GetPod(ctx context.Context) (*corev1.Pod, error) {
 
 // AddToManager adds all Controllers to the Manager.
 func AddToManager(m manager.Manager, deps *Dependencies) error {
-	if deps.GetPod == nil {
-		podGetter := &defaultPodGetter{
-			scheme: m.GetScheme(),
-			client: m.GetClient(),
-		}
-		deps.GetPod = podGetter.GetPod
+	if *remoteCluster && *debugUseFakePod {
+		return fmt.Errorf("--enable-remote-cluster and --debug-use-fake-pod are mutually exclusive")
 	}
-	if *debugUseFakePod {
-		err := os.Setenv("POD_NAME", "no-pod")
-		if err != nil {
-			return err
-		}
 
-		fakePodGetter := func(_ context.Context) (*corev1.Pod, error) {
-			pod := fakes.Pod(
-				fakes.WithNamespace(util.GetNamespace()),
-				fakes.WithName(util.GetPodName()),
-			)
-
-			return pod, nil
+	if *remoteCluster {
+		kubeconfigFlag := flag.Lookup("kubeconfig")
+		if kubeconfigFlag == nil || kubeconfigFlag.Value.String() == "" {
+			return fmt.Errorf("--enable-remote-cluster requires --kubeconfig to be specified pointing to the target cluster")
 		}
-		deps.GetPod = fakePodGetter
+		// In remote cluster mode, the pod doesn't exist in the target cluster. Skip setting OwnerReferences.
+		util.SetSkipPodOwnerRef(true)
+	}
+
+	if deps.GetPod == nil {
+		if *debugUseFakePod {
+			err := os.Setenv("POD_NAME", "no-pod")
+			if err != nil {
+				return err
+			}
+
+			fakePodGetter := func(_ context.Context) (*corev1.Pod, error) {
+				pod := fakes.Pod(
+					fakes.WithNamespace(util.GetNamespace()),
+					fakes.WithName(util.GetPodName()),
+				)
+
+				return pod, nil
+			}
+			deps.GetPod = fakePodGetter
+		} else {
+			// In remote cluster mode, use InClusterConfig to connect to local cluster.
+			var podClient client.Client
+			if *remoteCluster {
+				mgmtConfig, err := rest.InClusterConfig()
+				if err != nil {
+					return fmt.Errorf("--enable-remote-cluster requires in-cluster config for local cluster: %w", err)
+				}
+				podClient, err = client.New(mgmtConfig, client.Options{Scheme: m.GetScheme()})
+				if err != nil {
+					return fmt.Errorf("creating management cluster client: %w", err)
+				}
+			} else {
+				podClient = m.GetClient()
+			}
+
+			podGetter := &defaultPodGetter{
+				scheme: m.GetScheme(),
+				client: podClient,
+			}
+			deps.GetPod = podGetter.GetPod
+		}
 	}
 
 	// Adding the CacheManager as a runnable;
