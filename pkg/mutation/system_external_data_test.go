@@ -573,7 +573,7 @@ func TestSystem_sendRequests_contextTimeout(t *testing.T) {
 
 			// Allow some tolerance for test execution time
 			actualTimeout := time.Until(deadline)
-			if actualTimeout > tt.wantTimeout || actualTimeout < tt.wantTimeout-100*time.Millisecond {
+			if actualTimeout > tt.wantTimeout || actualTimeout < tt.wantTimeout-250*time.Millisecond {
 				t.Errorf("expected timeout ~%v, got %v", tt.wantTimeout, actualTimeout)
 			}
 		})

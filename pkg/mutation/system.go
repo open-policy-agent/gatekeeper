@@ -144,6 +144,10 @@ func (s *System) GetConflicts(id types.ID) map[types.ID]bool {
 // Mutate applies the mutation in place to the given object. Returns
 // true if applying Mutators caused any changes to the object.
 func (s *System) Mutate(ctx context.Context, mutable *types.Mutable) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 
