@@ -165,7 +165,7 @@ func (in *AssignImageSpec) DeepCopyInto(out *AssignImageSpec) {
 	*out = *in
 	if in.ApplyTo != nil {
 		in, out := &in.ApplyTo, &out.ApplyTo
-		*out = make([]match.ApplyTo, len(*in))
+		*out = make([]match.MutationApplyTo, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -341,7 +341,7 @@ func (in *AssignSpec) DeepCopyInto(out *AssignSpec) {
 	*out = *in
 	if in.ApplyTo != nil {
 		in, out := &in.ApplyTo, &out.ApplyTo
-		*out = make([]match.ApplyTo, len(*in))
+		*out = make([]match.MutationApplyTo, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -513,7 +513,7 @@ func (in *ModifySetSpec) DeepCopyInto(out *ModifySetSpec) {
 	*out = *in
 	if in.ApplyTo != nil {
 		in, out := &in.ApplyTo, &out.ApplyTo
-		*out = make([]match.ApplyTo, len(*in))
+		*out = make([]match.MutationApplyTo, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

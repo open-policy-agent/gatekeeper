@@ -422,7 +422,7 @@ func Convert_unversioned_AssignMetadataStatus_To_v1_AssignMetadataStatus(in *unv
 }
 
 func autoConvert_v1_AssignSpec_To_unversioned_AssignSpec(in *AssignSpec, out *unversioned.AssignSpec, s conversion.Scope) error {
-	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
+	out.ApplyTo = *(*[]match.MutationApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.Match = in.Match
 	out.Location = in.Location
 	if err := Convert_v1_Parameters_To_unversioned_Parameters(&in.Parameters, &out.Parameters, s); err != nil {
@@ -437,7 +437,7 @@ func Convert_v1_AssignSpec_To_unversioned_AssignSpec(in *AssignSpec, out *unvers
 }
 
 func autoConvert_unversioned_AssignSpec_To_v1_AssignSpec(in *unversioned.AssignSpec, out *AssignSpec, s conversion.Scope) error {
-	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
+	out.ApplyTo = *(*[]match.MutationApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.Match = in.Match
 	out.Location = in.Location
 	if err := Convert_unversioned_Parameters_To_v1_Parameters(&in.Parameters, &out.Parameters, s); err != nil {
@@ -624,7 +624,7 @@ func Convert_unversioned_ModifySetParameters_To_v1_ModifySetParameters(in *unver
 }
 
 func autoConvert_v1_ModifySetSpec_To_unversioned_ModifySetSpec(in *ModifySetSpec, out *unversioned.ModifySetSpec, s conversion.Scope) error {
-	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
+	out.ApplyTo = *(*[]match.MutationApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.Match = in.Match
 	out.Location = in.Location
 	if err := Convert_v1_ModifySetParameters_To_unversioned_ModifySetParameters(&in.Parameters, &out.Parameters, s); err != nil {
@@ -639,7 +639,7 @@ func Convert_v1_ModifySetSpec_To_unversioned_ModifySetSpec(in *ModifySetSpec, ou
 }
 
 func autoConvert_unversioned_ModifySetSpec_To_v1_ModifySetSpec(in *unversioned.ModifySetSpec, out *ModifySetSpec, s conversion.Scope) error {
-	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
+	out.ApplyTo = *(*[]match.MutationApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.Match = in.Match
 	out.Location = in.Location
 	if err := Convert_unversioned_ModifySetParameters_To_v1_ModifySetParameters(&in.Parameters, &out.Parameters, s); err != nil {

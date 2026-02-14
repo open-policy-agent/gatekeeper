@@ -19,10 +19,12 @@ const (
 func assignImage(domain, path, tag, location string) *unversioned.AssignImage {
 	result := &unversioned.AssignImage{
 		Spec: unversioned.AssignImageSpec{
-			ApplyTo: []match.ApplyTo{{
-				Groups:   []string{"*"},
-				Versions: []string{"*"},
-				Kinds:    []string{"*"},
+			ApplyTo: []match.MutationApplyTo{{
+				ApplyTo: match.ApplyTo{
+					Groups:   []string{"*"},
+					Versions: []string{"*"},
+					Kinds:    []string{"*"},
+				},
 			}},
 			Location: location,
 			Parameters: unversioned.AssignImageParameters{

@@ -19,10 +19,12 @@ const (
 func modifyset(value interface{}, location string) *unversioned.ModifySet {
 	return &unversioned.ModifySet{
 		Spec: unversioned.ModifySetSpec{
-			ApplyTo: []match.ApplyTo{{
-				Groups:   []string{"*"},
-				Versions: []string{"*"},
-				Kinds:    []string{"*"},
+			ApplyTo: []match.MutationApplyTo{{
+				ApplyTo: match.ApplyTo{
+					Groups:   []string{"*"},
+					Versions: []string{"*"},
+					Kinds:    []string{"*"},
+				},
 			}},
 			Location: location,
 			Parameters: unversioned.ModifySetParameters{

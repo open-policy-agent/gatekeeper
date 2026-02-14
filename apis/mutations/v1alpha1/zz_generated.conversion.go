@@ -428,7 +428,7 @@ func Convert_unversioned_AssignImageParameters_To_v1alpha1_AssignImageParameters
 }
 
 func autoConvert_v1alpha1_AssignImageSpec_To_unversioned_AssignImageSpec(in *AssignImageSpec, out *unversioned.AssignImageSpec, s conversion.Scope) error {
-	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
+	out.ApplyTo = *(*[]match.MutationApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.Match = in.Match
 	out.Location = in.Location
 	if err := Convert_v1alpha1_AssignImageParameters_To_unversioned_AssignImageParameters(&in.Parameters, &out.Parameters, s); err != nil {
@@ -443,7 +443,7 @@ func Convert_v1alpha1_AssignImageSpec_To_unversioned_AssignImageSpec(in *AssignI
 }
 
 func autoConvert_unversioned_AssignImageSpec_To_v1alpha1_AssignImageSpec(in *unversioned.AssignImageSpec, out *AssignImageSpec, s conversion.Scope) error {
-	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
+	out.ApplyTo = *(*[]match.MutationApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.Match = in.Match
 	out.Location = in.Location
 	if err := Convert_unversioned_AssignImageParameters_To_v1alpha1_AssignImageParameters(&in.Parameters, &out.Parameters, s); err != nil {
@@ -602,7 +602,7 @@ func Convert_unversioned_AssignMetadataStatus_To_v1alpha1_AssignMetadataStatus(i
 }
 
 func autoConvert_v1alpha1_AssignSpec_To_unversioned_AssignSpec(in *AssignSpec, out *unversioned.AssignSpec, s conversion.Scope) error {
-	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
+	out.ApplyTo = *(*[]match.MutationApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.Match = in.Match
 	out.Location = in.Location
 	if err := Convert_v1alpha1_Parameters_To_unversioned_Parameters(&in.Parameters, &out.Parameters, s); err != nil {
@@ -617,7 +617,7 @@ func Convert_v1alpha1_AssignSpec_To_unversioned_AssignSpec(in *AssignSpec, out *
 }
 
 func autoConvert_unversioned_AssignSpec_To_v1alpha1_AssignSpec(in *unversioned.AssignSpec, out *AssignSpec, s conversion.Scope) error {
-	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
+	out.ApplyTo = *(*[]match.MutationApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.Match = in.Match
 	out.Location = in.Location
 	if err := Convert_unversioned_Parameters_To_v1alpha1_Parameters(&in.Parameters, &out.Parameters, s); err != nil {
@@ -804,7 +804,7 @@ func Convert_unversioned_ModifySetParameters_To_v1alpha1_ModifySetParameters(in 
 }
 
 func autoConvert_v1alpha1_ModifySetSpec_To_unversioned_ModifySetSpec(in *ModifySetSpec, out *unversioned.ModifySetSpec, s conversion.Scope) error {
-	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
+	out.ApplyTo = *(*[]match.MutationApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.Match = in.Match
 	out.Location = in.Location
 	if err := Convert_v1alpha1_ModifySetParameters_To_unversioned_ModifySetParameters(&in.Parameters, &out.Parameters, s); err != nil {
@@ -819,7 +819,7 @@ func Convert_v1alpha1_ModifySetSpec_To_unversioned_ModifySetSpec(in *ModifySetSp
 }
 
 func autoConvert_unversioned_ModifySetSpec_To_v1alpha1_ModifySetSpec(in *unversioned.ModifySetSpec, out *ModifySetSpec, s conversion.Scope) error {
-	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
+	out.ApplyTo = *(*[]match.MutationApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.Match = in.Match
 	out.Location = in.Location
 	if err := Convert_unversioned_ModifySetParameters_To_v1alpha1_ModifySetParameters(&in.Parameters, &out.Parameters, s); err != nil {
