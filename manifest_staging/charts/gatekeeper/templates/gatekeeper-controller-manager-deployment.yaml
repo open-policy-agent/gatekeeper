@@ -70,6 +70,8 @@ spec:
         {{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}
         - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
         - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
+        {{ if hasKey .Values "logLevelKey" }}- --log-level-key={{ .Values.logLevelKey }}{{- end }}
+        {{ if hasKey .Values "logLevelEncoder" }}- --log-level-encoder={{ .Values.logLevelEncoder }}{{- end }}
         - --exempt-namespace={{ .Release.Namespace }}
         
         {{- if not .Values.controllerManager.disableWebhookOperation }}
@@ -108,6 +110,7 @@ spec:
         {{- if and (has "stackdriver" .Values.metricsBackends) (hasKey .Values "stackdriverMetricInterval") }}
         - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
         {{- end }}
+        {{ if hasKey .Values "metricsAddr" }}- --metrics-addr={{ .Values.metricsAddr }}{{- end }}
         {{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}
         
@@ -142,6 +145,16 @@ spec:
         {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
         - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}
+        {{ if hasKey .Values "readinessRetries" }}- --readiness-retries={{ .Values.readinessRetries }}{{- end }}
+        {{ if hasKey .Values "enablePprof" }}- --enable-pprof={{ .Values.enablePprof }}{{- end }}
+        {{ if hasKey .Values "pprofPort" }}- --pprof-port={{ .Values.pprofPort }}{{- end }}
+        {{ if hasKey .Values "disableEnforcementActionValidation" }}- --disable-enforcementaction-validation={{ .Values.disableEnforcementActionValidation }}{{- end }}
+        {{ if hasKey .Values "enableReferentialRules" }}- --enable-referential-rules={{ .Values.enableReferentialRules }}{{- end }}
+        {{ if hasKey .Values.controllerManager "host" }}- --host={{ .Values.controllerManager.host }}{{- end }}
+        {{ if hasKey .Values.controllerManager "certDir" }}- --cert-dir={{ .Values.controllerManager.certDir }}{{- end }}
+        {{ if hasKey .Values.controllerManager "certServiceName" }}- --cert-service-name={{ .Values.controllerManager.certServiceName }}{{- end }}
+        {{ if hasKey .Values.controllerManager "clientCAName" }}- --client-ca-name={{ .Values.controllerManager.clientCAName }}{{- end }}
+        {{ if hasKey .Values.controllerManager "clientCNName" }}- --client-cn-name={{ .Values.controllerManager.clientCNName }}{{- end }}
         command:
         - /manager
         env:

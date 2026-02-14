@@ -88,6 +88,8 @@ spec:
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION
             - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
+            - HELMSUBST_LOG_LEVEL_KEY
+            - HELMSUBST_LOG_LEVEL_ENCODER
             - --exempt-namespace={{ .Release.Namespace }}
             - HELMSUBST_CONTROLLER_MANAGER_OPERATIONS
             - --enable-external-data={{ .Values.enableExternalData }}
@@ -105,6 +107,7 @@ spec:
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
+            - HELMSUBST_METRICS_ADDR
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
             - HELMSUBST_MUTATION_ENABLED_ARG
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
@@ -115,6 +118,16 @@ spec:
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
             - HELMSUBST_DEPLOYMENT_DEFAULT_WAIT_VAPB_GENERATION
+            - HELMSUBST_READINESS_RETRIES
+            - HELMSUBST_ENABLE_PPROF
+            - HELMSUBST_PPROF_PORT
+            - HELMSUBST_DISABLE_ENFORCEMENTACTION_VALIDATION
+            - HELMSUBST_ENABLE_REFERENTIAL_RULES
+            - HELMSUBST_CONTROLLER_MANAGER_HOST
+            - HELMSUBST_CONTROLLER_MANAGER_CERT_DIR
+            - HELMSUBST_CONTROLLER_MANAGER_CERT_SERVICE_NAME
+            - HELMSUBST_CONTROLLER_MANAGER_CLIENT_CA_NAME
+            - HELMSUBST_CONTROLLER_MANAGER_CLIENT_CN_NAME
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -199,6 +212,7 @@ spec:
             - --enable-external-data={{ .Values.enableExternalData }}
             - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - HELMSUBST_METRICS_BACKEND_ARG
+            - HELMSUBST_METRICS_ADDR
             - HELMSUBST_DEPLOYMENT_AUDIT_LOGFILE
             - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
@@ -209,6 +223,12 @@ spec:
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_SUFFIXES
             - HELMSUBST_DEPLOYMENT_DEFAULT_WAIT_VAPB_GENERATION
+            - HELMSUBST_LOG_LEVEL_KEY
+            - HELMSUBST_LOG_LEVEL_ENCODER
+            - HELMSUBST_READINESS_RETRIES
+            - HELMSUBST_ENABLE_PPROF
+            - HELMSUBST_PPROF_PORT
+            - HELMSUBST_AUDIT_API_CACHE_DIR
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
