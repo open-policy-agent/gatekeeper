@@ -453,6 +453,60 @@ __required_labels_audit_test() {
   [[ "$events" -ge 1 ]]
 }
 
+@test "constraint label metrics test" {
+  local audit_pod="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l control-plane=audit-controller -o jsonpath='{.items[0].metadata.name}')"
+  if [[ -z "${audit_pod}" ]]; then
+    echo "ERROR: Could not find audit pod"
+    return 1
+  fi
+  
+  local flag_was_enabled="1"
+  local flag_check=$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod ${audit_pod} -o jsonpath='{.spec.containers[0].args}' | grep 'enable-constraint-label-metrics=true' || echo "")
+  if [[ -z "${flag_check}" ]]; then
+    flag_was_enabled="0"
+    echo "Enabling constraint label metrics flag..."
+    local deployment="gatekeeper-audit"
+    kubectl -n ${GATEKEEPER_NAMESPACE} patch deployment ${deployment} --type='json' -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/containers/0/args/-",
+        "value": "--enable-constraint-label-metrics=true"
+      }
+    ]'
+    
+    kubectl -n ${GATEKEEPER_NAMESPACE} rollout status deployment/${deployment} --timeout=120s
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl -n ${GATEKEEPER_NAMESPACE} wait --for=condition=Ready --timeout=60s pod -l control-plane=audit-controller"
+    
+    echo "Waiting for audit to run with new flag (65 seconds)..."
+    sleep 65
+  fi
+
+  kubectl delete pod temp-metrics --ignore-not-found=true 2>/dev/null || true
+  kubectl run temp-metrics --image=curlimages/curl -- tail -f /dev/null
+  kubectl wait --for=condition=Ready --timeout=60s pod temp-metrics
+
+  local pod_ip="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l control-plane=audit-controller -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec temp-metrics -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_violations_per_constraint'"
+  
+  kubectl delete pod temp-metrics
+  
+  if [[ "${flag_was_enabled}" == "0" ]]; then
+    echo "Restoring original deployment state..."
+    # Find the index of the flag to remove
+    local args_json=$(kubectl -n ${GATEKEEPER_NAMESPACE} get deployment gatekeeper-audit -o json | jq -c '.spec.template.spec.containers[0].args')
+    local flag_index=$(echo "${args_json}" | jq 'map(. == "--enable-constraint-label-metrics=true") | index(true)')
+    if [[ "${flag_index}" != "null" ]]; then
+      kubectl -n ${GATEKEEPER_NAMESPACE} patch deployment gatekeeper-audit --type='json' -p="[
+        {
+          \"op\": \"remove\",
+          \"path\": \"/spec/template/spec/containers/0/args/${flag_index}\"
+        }
+      ]"
+    fi
+    kubectl -n ${GATEKEEPER_NAMESPACE} rollout status deployment/gatekeeper-audit --timeout=120s
+  fi
+}
+
 __namespace_exclusion_test() {
   local exclusion_config="$1"
   local excluded_namespace="$2"
