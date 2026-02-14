@@ -76,6 +76,12 @@ spec:
   caBundle: <caBundle> # CA bundle to use for TLS verification.
 ```
 
+When used by the mutating webhook, the effective external data request timeout is the smaller of:
+- the remaining admission webhook request deadline
+- the provider `spec.timeout` (or Gatekeeper's default timeout when unset)
+
+For example, if the webhook has 1s remaining and `spec.timeout` is 10s, the provider request is capped at ~1s.
+
 #### `ProviderRequest`
 
 `ProviderRequest` is the API request that is sent to the external data provider.
