@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"context"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
@@ -51,6 +52,6 @@ func BenchmarkSystem_Mutate(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		u := &unstructured.Unstructured{}
 
-		_, _ = s.Mutate(&types.Mutable{Object: u})
+		_, _ = s.Mutate(context.Background(), &types.Mutable{Object: u})
 	}
 }

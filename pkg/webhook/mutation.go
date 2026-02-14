@@ -196,7 +196,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		Source:    mutationtypes.SourceTypeOriginal,
 		Operation: req.Operation,
 	}
-	mutated, err := h.mutationSystem.Mutate(mutable)
+	mutated, err := h.mutationSystem.Mutate(ctx, mutable)
 	if err != nil {
 		h.log.Error(err, "failed to mutate object", "object", string(req.Object.Raw))
 		return admission.Errored(int32(http.StatusInternalServerError), err)

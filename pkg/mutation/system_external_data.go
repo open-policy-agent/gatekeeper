@@ -18,7 +18,7 @@ import (
 )
 
 // resolvePlaceholders resolves all external data placeholders in the given object.
-func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
+func (s *System) resolvePlaceholders(ctx context.Context, obj *unstructured.Unstructured) error {
 	providerKeys := make(map[string]sets.Set[string])
 
 	// recurse object to find all existing external data placeholders
@@ -54,14 +54,14 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 		return fmt.Errorf("failed to get client TLS certificate: %w", err)
 	}
 
-	externalData, errors := s.sendRequests(providerKeys, clientCert)
+	externalData, errors := s.sendRequests(ctx, providerKeys, clientCert)
 	return s.mutateWithExternalData(obj, externalData, errors)
 }
 
 const defaultExternalDataRequestTimeout = 5 * time.Second
 
 // sendRequests sends requests to all providers in parallel.
-func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]error) {
+func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.Set[string], clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]error) {
 	var (
 		wg    sync.WaitGroup
 		mutex sync.RWMutex
@@ -95,10 +95,10 @@ func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCe
 			if timeout <= 0 {
 				timeout = defaultExternalDataRequestTimeout
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			reqCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
-			resp, _, err := fn(ctx, &provider, keys, clientCert)
+			resp, _, err := fn(reqCtx, &provider, keys, clientCert)
 
 			mutex.Lock()
 			defer mutex.Unlock()
