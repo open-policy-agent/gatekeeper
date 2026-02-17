@@ -128,6 +128,8 @@ spec:
             - HELMSUBST_CONTROLLER_MANAGER_CERT_SERVICE_NAME
             - HELMSUBST_CONTROLLER_MANAGER_CLIENT_CA_NAME
             - HELMSUBST_CONTROLLER_MANAGER_CLIENT_CN_NAME
+            - HELMSUBST_SHUTDOWN_DELAY
+            - HELMSUBST_ENABLE_REMOTE_CLUSTER
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -229,6 +231,9 @@ spec:
             - HELMSUBST_ENABLE_PPROF
             - HELMSUBST_PPROF_PORT
             - HELMSUBST_AUDIT_API_CACHE_DIR
+            - HELMSUBST_ENABLE_REFERENTIAL_RULES
+            - HELMSUBST_SHUTDOWN_DELAY
+            - HELMSUBST_ENABLE_REMOTE_CLUSTER
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:

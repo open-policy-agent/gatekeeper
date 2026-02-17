@@ -155,6 +155,8 @@ spec:
         {{ if hasKey .Values.controllerManager "certServiceName" }}- --cert-service-name={{ .Values.controllerManager.certServiceName }}{{- end }}
         {{ if hasKey .Values.controllerManager "clientCAName" }}- --client-ca-name={{ .Values.controllerManager.clientCAName }}{{- end }}
         {{ if hasKey .Values.controllerManager "clientCNName" }}- --client-cn-name={{ .Values.controllerManager.clientCNName }}{{- end }}
+        {{ if hasKey .Values "shutdownDelay" }}- --shutdown-delay={{ .Values.shutdownDelay }}{{- end }}
+        {{ if hasKey .Values "enableRemoteCluster" }}- --enable-remote-cluster={{ .Values.enableRemoteCluster }}{{- end }}
         command:
         - /manager
         env:

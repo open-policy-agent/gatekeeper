@@ -418,4 +418,8 @@ var replacements = map[string]string{
 	"- HELMSUBST_CONTROLLER_MANAGER_CLIENT_CN_NAME": `{{ if hasKey .Values.controllerManager "clientCNName" }}- --client-cn-name={{ .Values.controllerManager.clientCNName }}{{- end }}`,
 
 	"- HELMSUBST_AUDIT_API_CACHE_DIR": `{{ if hasKey .Values.audit "apiCacheDir" }}- --api-cache-dir={{ .Values.audit.apiCacheDir }}{{- end }}`,
+
+	"- HELMSUBST_SHUTDOWN_DELAY": `{{ if hasKey .Values "shutdownDelay" }}- --shutdown-delay={{ .Values.shutdownDelay }}{{- end }}`,
+
+	"- HELMSUBST_ENABLE_REMOTE_CLUSTER": `{{ if hasKey .Values "enableRemoteCluster" }}- --enable-remote-cluster={{ .Values.enableRemoteCluster }}{{- end }}`,
 }

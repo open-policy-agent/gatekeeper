@@ -150,6 +150,9 @@ spec:
         {{ if hasKey .Values "enablePprof" }}- --enable-pprof={{ .Values.enablePprof }}{{- end }}
         {{ if hasKey .Values "pprofPort" }}- --pprof-port={{ .Values.pprofPort }}{{- end }}
         {{ if hasKey .Values.audit "apiCacheDir" }}- --api-cache-dir={{ .Values.audit.apiCacheDir }}{{- end }}
+        {{ if hasKey .Values "enableReferentialRules" }}- --enable-referential-rules={{ .Values.enableReferentialRules }}{{- end }}
+        {{ if hasKey .Values "shutdownDelay" }}- --shutdown-delay={{ .Values.shutdownDelay }}{{- end }}
+        {{ if hasKey .Values "enableRemoteCluster" }}- --enable-remote-cluster={{ .Values.enableRemoteCluster }}{{- end }}
         command:
         - /manager
         env:
