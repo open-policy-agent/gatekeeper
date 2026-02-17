@@ -17,7 +17,7 @@ permissions:
 jobs:
   license-lint:
     name: "license-lint"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
