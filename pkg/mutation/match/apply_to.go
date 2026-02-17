@@ -3,10 +3,12 @@ package match
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 // AppliesTo checks if any item the given slice of ApplyTo applies to the given object.
@@ -33,6 +35,19 @@ func AppliesToMutation(applyTo []MutationApplyTo, gvk schema.GroupVersionKind) b
 func AppliesOperationTo(applyTo []MutationApplyTo, operation admissionv1.Operation) bool {
 	for _, apply := range applyTo {
 		if apply.MatchesOperation(operation) {
+			return true
+		}
+	}
+	return false
+}
+
+// AppliesGVKAndOperation checks if at least one entry in the given slice of
+// MutationApplyTo matches BOTH the given GVK and the given operation. This
+// prevents false positives where one entry matches GVK and a different entry
+// matches the operation.
+func AppliesGVKAndOperation(applyTo []MutationApplyTo, gvk schema.GroupVersionKind, operation admissionv1.Operation) bool {
+	for _, apply := range applyTo {
+		if apply.Matches(gvk) && apply.MatchesOperation(operation) {
 			return true
 		}
 	}
@@ -109,8 +124,7 @@ func (a *MutationApplyTo) Matches(gvk schema.GroupVersionKind) bool {
 
 // MatchesOperation returns true if the operation is contained in the MutationApplyTo's
 // operations list. If no operations are specified, all operations are allowed
-// for backward compatibility (consistent with how empty groups/versions/kinds
-// work in ApplyTo - empty means match all).
+// for backward compatibility.
 // If operation is empty (e.g., in audit/expansion contexts), returns true
 // to maintain backward compatibility with non-admission flows.
 func (a *MutationApplyTo) MatchesOperation(operation admissionv1.Operation) bool {
@@ -120,8 +134,9 @@ func (a *MutationApplyTo) MatchesOperation(operation admissionv1.Operation) bool
 		return true
 	}
 
-	// If no operations specified, allow all operations for backward compatibility
-	// This is consistent with how empty groups/versions/kinds work (empty = match all)
+	// If no operations specified, allow all operations for backward compatibility.
+	// Note: this differs from groups/versions/kinds where empty means no match.
+	// Empty operations means "no operation filtering" to preserve existing behavior.
 	if len(a.Operations) == 0 {
 		return true
 	}
@@ -137,24 +152,36 @@ func (a *MutationApplyTo) MatchesOperation(operation admissionv1.Operation) bool
 }
 
 // validOperations defines the set of valid admission operations.
-var validOperations = map[admissionregistrationv1.OperationType]bool{
-	admissionregistrationv1.Create:       true,
-	admissionregistrationv1.Update:       true,
-	admissionregistrationv1.Delete:       true,
-	admissionregistrationv1.Connect:      true,
-	admissionregistrationv1.OperationAll: true,
-}
+var validOperations = sets.New[admissionregistrationv1.OperationType](
+	admissionregistrationv1.Create,
+	admissionregistrationv1.Update,
+	admissionregistrationv1.Delete,
+	admissionregistrationv1.Connect,
+	admissionregistrationv1.OperationAll,
+)
 
 // ValidateOperations validates that all operations in the MutationApplyTo
 // are valid Kubernetes admission operations (CREATE, UPDATE, DELETE, CONNECT, *).
-// Returns an error if any invalid operation is found.
+// It collates all errors and returns them together, following the Kubernetes
+// validation pattern.
 func ValidateOperations(applyTo []MutationApplyTo) error {
+	var errs []string
 	for i, apply := range applyTo {
+		hasWildcard := false
 		for _, op := range apply.Operations {
-			if !validOperations[op] {
-				return fmt.Errorf("invalid operation %q in applyTo[%d].operations: must be one of CREATE, UPDATE, DELETE, CONNECT, *", op, i)
+			if !validOperations.Has(op) {
+				errs = append(errs, fmt.Sprintf("invalid operation %q in applyTo[%d].operations: must be one of CREATE, UPDATE, DELETE, CONNECT, *", op, i))
+			}
+			if op == admissionregistrationv1.OperationAll {
+				hasWildcard = true
 			}
 		}
+		if hasWildcard && len(apply.Operations) > 1 {
+			errs = append(errs, fmt.Sprintf("wildcard \"*\" in applyTo[%d].operations must not be combined with other operations", i))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
 	return nil
 }

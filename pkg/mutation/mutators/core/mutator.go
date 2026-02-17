@@ -130,12 +130,12 @@ func CheckKeyNotChanged(p parser.Path) error {
 
 func MatchWithApplyTo(mut *types.Mutable, applies []match.MutationApplyTo, mat *match.Match) (bool, error) {
 	gvk := mut.Object.GetObjectKind().GroupVersionKind()
-	if !match.AppliesToMutation(applies, gvk) {
-		return false, nil
-	}
 
-	// Check if the operation is allowed by the ApplyTo configuration
-	if !match.AppliesOperationTo(applies, mut.Operation) {
+	// Check that at least one applyTo entry matches BOTH GVK and operation.
+	// These checks must be combined on the same entry to avoid false positives
+	// (e.g., entry[0] matches Pod+CREATE and entry[1] matches Deployment+UPDATE
+	// should not allow Pod+UPDATE).
+	if !match.AppliesGVKAndOperation(applies, gvk, mut.Operation) {
 		return false, nil
 	}
 

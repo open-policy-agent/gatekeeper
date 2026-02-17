@@ -90,7 +90,7 @@ applyTo:
 
 > **Note:** The Gatekeeper mutation webhook currently only processes `CREATE` and `UPDATE` operations. While `DELETE` and `CONNECT` are valid values for the `operations` field, they will not trigger mutations because the webhook does not handle these operation types. Support for `DELETE` and `CONNECT` may be added in future releases.
 
-**Backward Compatibility:** If the `operations` field is not specified or is empty, the mutation applies to all operations (CREATE, UPDATE, DELETE, and CONNECT). This is consistent with how empty `groups`, `kinds`, and `versions` fields work in `applyTo` - empty means match all.
+**Backward Compatibility:** If the `operations` field is not specified or is empty, the mutation applies to all operations (CREATE, UPDATE, DELETE, and CONNECT). This means no operation filtering is applied, preserving the existing behavior for mutators that do not specify operations.
 
 **Common Use Cases:**
 - `operations: ["CREATE"]` - Ideal for setting initial values that shouldn't change on updates (e.g., environment variables with immutable constraints)
