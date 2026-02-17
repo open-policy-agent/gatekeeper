@@ -334,6 +334,13 @@ func TestReconcile(t *testing.T) {
 	transform.VapAPIEnabled = ptr.To[bool](true)
 	transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
 
+	// Override the default VAPB generation wait time to speed up tests.
+	// The production default is 30s, but tests only need to verify the
+	// wait behavior works, not that it waits a specific duration.
+	origWait := *constraint.DefaultWaitForVAPBGeneration
+	constraint.DefaultWaitForVAPBGeneration = ptr.To[int](2)
+	t.Cleanup(func() { constraint.DefaultWaitForVAPBGeneration = ptr.To[int](origWait) })
+
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
 
