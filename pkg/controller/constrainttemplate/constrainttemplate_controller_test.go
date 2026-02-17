@@ -338,8 +338,8 @@ func TestReconcile(t *testing.T) {
 	// The production default is 30s, but tests only need to verify the
 	// wait behavior works, not that it waits a specific duration.
 	origWait := *constraint.DefaultWaitForVAPBGeneration
-	constraint.DefaultWaitForVAPBGeneration = ptr.To[int](2)
-	t.Cleanup(func() { constraint.DefaultWaitForVAPBGeneration = ptr.To[int](origWait) })
+	*constraint.DefaultWaitForVAPBGeneration = 2
+	t.Cleanup(func() { *constraint.DefaultWaitForVAPBGeneration = origWait })
 
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
