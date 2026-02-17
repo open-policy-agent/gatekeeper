@@ -331,8 +331,8 @@ func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	transform.VapAPIEnabled = ptr.To[bool](true)
-	transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+	transform.SetVapAPIEnabled(ptr.To[bool](true))
+	transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
 
 	// Override the default VAPB generation wait time to speed up tests.
 	// The production default is 30s, but tests only need to verify the
@@ -396,7 +396,7 @@ func TestReconcile(t *testing.T) {
 		logger.Info("Running test: Vap should be created with v1beta1")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
@@ -865,7 +865,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreatedV1"
 
 		logger.Info("Running test: Vap should be created with v1")
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -943,7 +943,7 @@ func TestReconcile(t *testing.T) {
 		}
 		cache.UpsertConfig(webhookName, webhookConfig)
 
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		ro := []admissionregistrationv1.OperationType{
 			admissionregistrationv1.Create,
 			admissionregistrationv1.Update,
@@ -1010,7 +1010,7 @@ func TestReconcile(t *testing.T) {
 		}
 		cache.UpsertConfig(webhookName, webhookConfig)
 
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		ro := []admissionregistrationv1.OperationType{
 			admissionregistrationv1.OperationAll,
 		}
@@ -1079,7 +1079,7 @@ func TestReconcile(t *testing.T) {
 		}
 		cache.UpsertConfig(webhookName, webhookConfig)
 
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		ro := []admissionregistrationv1.OperationType{
 			admissionregistrationv1.Create,
 			admissionregistrationv1.Update,
@@ -1144,7 +1144,7 @@ func TestReconcile(t *testing.T) {
 		}
 		cache.UpsertConfig(webhookName, webhookConfig)
 
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		ro := []admissionregistrationv1.OperationType{
 			admissionregistrationv1.Delete,
 		}
@@ -1211,7 +1211,7 @@ func TestReconcile(t *testing.T) {
 			admissionregistrationv1.Update,
 		}
 
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -1240,7 +1240,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should be created with v1 with some delay after constraint CRD is available", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedV1"
 		logger.Info("Running test: VapBinding should be created with v1 with some delay after constraint CRD is available")
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -1298,7 +1298,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should be created with v1 without warnings in enforcementPointsStatus", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedV1EnforcementPointsStatus"
 		logger.Info("Running test: VapBinding should be created with v1 without warnings in enforcementPointsStatus")
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -1364,7 +1364,7 @@ func TestReconcile(t *testing.T) {
 		logger.Info("Running test: VAP v1beta1 should be recreated when deleted")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
@@ -1420,7 +1420,7 @@ func TestReconcile(t *testing.T) {
 		logger.Info("Running test: VAP v1 should be recreated when deleted")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
@@ -1477,7 +1477,7 @@ func TestReconcile(t *testing.T) {
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		// Create the constraint first
@@ -1550,7 +1550,7 @@ func TestReconcile(t *testing.T) {
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		// Create the constraint first
