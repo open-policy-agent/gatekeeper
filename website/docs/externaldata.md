@@ -47,6 +47,8 @@ The following external data providers are maintained by the community:
 - [ratify](https://github.com/deislabs/ratify)
 - [cosign-gatekeeper-provider](https://github.com/sigstore/cosign-gatekeeper-provider)
 - [GitHub artifact attestations OPA provider](https://github.com/github/artifact-attestations-opa-provider)
+- [JFrog verify evidence OPA provider](https://github.com/jfrog/jfrog-opa-policy)
+
 
 ### Sample providers
 
@@ -73,6 +75,12 @@ spec:
   timeout: <timeout> # timeout value in seconds (e.g., 1). this is the timeout on the Provider custom resource, not the provider implementation.
   caBundle: <caBundle> # CA bundle to use for TLS verification.
 ```
+
+When used by the mutating webhook, the effective external data request timeout is the smaller of:
+- the remaining admission webhook request deadline
+- the provider `spec.timeout` (or Gatekeeper's default timeout when unset)
+
+For example, if the webhook has 1s remaining and `spec.timeout` is 10s, the provider request is capped at ~1s.
 
 #### `ProviderRequest`
 

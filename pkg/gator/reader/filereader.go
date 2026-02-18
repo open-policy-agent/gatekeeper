@@ -6,11 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/oci"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-var allowedExtensions = []string{".yaml", ".yml", ".json"}
+var allowedExtensions = []string{gator.ExtYAML, gator.ExtYML, gator.ExtJSON}
 
 func ReadSources(filenames []string, images []string, tempDir string) ([]*unstructured.Unstructured, error) {
 	var sources []*source

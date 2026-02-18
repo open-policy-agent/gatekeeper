@@ -1,0 +1,563 @@
+name: remote_cluster_e2e
+on:
+  push:
+    branches:
+      - master
+      - release-*
+    paths:
+      - "pkg/util/remote_cluster*.go"
+      - "pkg/controller/controller.go"
+      - "apis/status/**"
+      - "pkg/controller/**/**.go"
+      - "pkg/webhook/**"
+      - "main.go"
+      - "test/bats/tests/remote-cluster/**"
+      - ".github/workflows/remote-cluster-e2e.yaml"
+  pull_request:
+    paths:
+      - "pkg/util/remote_cluster*.go"
+      - "pkg/controller/controller.go"
+      - "apis/status/**"
+      - "pkg/controller/**/**.go"
+      - "pkg/webhook/**"
+      - "main.go"
+      - "test/bats/tests/remote-cluster/**"
+      - ".github/workflows/remote-cluster-e2e.yaml"
+
+permissions: read-all
+
+env:
+  GATEKEEPER_NAMESPACE: gatekeeper-system
+  MANAGEMENT_CLUSTER: management
+  NESTED_CLUSTER: nested
+  GATEKEEPER_IMAGE: gatekeeper:remote-e2e
+
+jobs:
+  remote_cluster_e2e:
+    name: "Remote Cluster E2E (Kind) - K8s ${{ matrix.KUBERNETES_VERSION }}"
+    runs-on: oracle-vm-8cpu-32gb-x86-64
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        KUBERNETES_VERSION: ["1.31.6", "1.32.3", "1.33.2"] # Latest available versions of Kubernetes at - https://hub.docker.com/r/kindest/node/tags
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: "1.25"
+          check-latest: true
+
+      - name: Install dependencies
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+          make e2e-dependencies KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
+          
+          # Verify installations
+          kind version
+          kubectl version --client
+
+      - name: Create management cluster (runs Gatekeeper)
+        run: |
+          kind create cluster --name ${{ env.MANAGEMENT_CLUSTER }} \
+            --image kindest/node:v${{ matrix.KUBERNETES_VERSION }} \
+            --wait 120s
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} cluster-info
+
+      - name: Create nested cluster (target for policies)
+        run: |
+          kind create cluster --name ${{ env.NESTED_CLUSTER }} \
+            --image kindest/node:v${{ matrix.KUBERNETES_VERSION }} \
+            --wait 120s
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} cluster-info
+
+      - name: Get cluster IPs for inter-cluster communication
+        id: cluster-ips
+        run: |
+          MGMT_IP=$(docker inspect ${{ env.MANAGEMENT_CLUSTER }}-control-plane -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+          NESTED_IP=$(docker inspect ${{ env.NESTED_CLUSTER }}-control-plane -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+          
+          # Validate IPs were retrieved successfully
+          [[ -n "$MGMT_IP" ]] || { echo "Failed to get management cluster IP"; exit 1; }
+          [[ -n "$NESTED_IP" ]] || { echo "Failed to get nested cluster IP"; exit 1; }
+          
+          echo "mgmt_ip=$MGMT_IP" >> $GITHUB_OUTPUT
+          echo "nested_ip=$NESTED_IP" >> $GITHUB_OUTPUT
+          echo "Management cluster IP: $MGMT_IP"
+          echo "Nested cluster IP: $NESTED_IP"
+
+      - name: Generate kubeconfig for nested cluster (with internal IP)
+        run: |
+          kind get kubeconfig --name ${{ env.NESTED_CLUSTER }} | \
+            sed "s|https://127.0.0.1:[0-9]*|https://${{ steps.cluster-ips.outputs.nested_ip }}:6443|g" \
+            > /tmp/nested-kubeconfig.yaml
+          echo "Generated kubeconfig with internal IP"
+          grep server /tmp/nested-kubeconfig.yaml
+
+      - name: Generate TLS certificates for webhook
+        run: |
+          mkdir -p /tmp/gk-certs
+          MGMT_IP="${{ steps.cluster-ips.outputs.mgmt_ip }}"
+          
+          # Generate CA
+          openssl genrsa -out /tmp/gk-certs/ca.key 2048
+          openssl req -x509 -new -nodes -key /tmp/gk-certs/ca.key \
+            -subj "/CN=gatekeeper-ca" -days 365 -out /tmp/gk-certs/ca.crt
+          
+          # Generate server cert with SANs
+          openssl genrsa -out /tmp/gk-certs/tls.key 2048
+          cat > /tmp/gk-certs/csr.conf <<EOF
+          [req]
+          req_extensions = v3_req
+          distinguished_name = dn
+          [dn]
+          [v3_req]
+          basicConstraints = CA:FALSE
+          keyUsage = digitalSignature, keyEncipherment
+          extendedKeyUsage = serverAuth
+          subjectAltName = @alt_names
+          [alt_names]
+          DNS.1 = gatekeeper-webhook-service.${{ env.GATEKEEPER_NAMESPACE }}.svc
+          IP.1 = ${MGMT_IP}
+          EOF
+          # Remove leading whitespace from the config file
+          sed -i 's/^          //' /tmp/gk-certs/csr.conf
+          
+          openssl req -new -key /tmp/gk-certs/tls.key \
+            -subj "/CN=gatekeeper-webhook" \
+            -out /tmp/gk-certs/tls.csr \
+            -config /tmp/gk-certs/csr.conf
+          
+          openssl x509 -req -in /tmp/gk-certs/tls.csr \
+            -CA /tmp/gk-certs/ca.crt -CAkey /tmp/gk-certs/ca.key \
+            -CAcreateserial -out /tmp/gk-certs/tls.crt -days 365 \
+            -extensions v3_req -extfile /tmp/gk-certs/csr.conf
+          
+          echo "TLS certificates generated successfully"
+          openssl x509 -in /tmp/gk-certs/tls.crt -text -noout | grep -A1 "Subject Alternative Name"
+
+      - name: Build Gatekeeper image
+        run: |
+          make docker-buildx IMG=${{ env.GATEKEEPER_IMAGE }}
+
+      - name: Load image into management cluster
+        run: |
+          kind load docker-image ${{ env.GATEKEEPER_IMAGE }} --name ${{ env.MANAGEMENT_CLUSTER }}
+          echo "Image loaded into management cluster"
+
+      - name: Deploy CRDs to nested cluster
+        run: |
+          for f in config/crd/bases/*.yaml; do
+            [[ "$(basename "$f")" == _* ]] && continue
+            kubectl --context kind-${{ env.NESTED_CLUSTER }} apply -f "$f"
+          done
+          
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} wait \
+            --for=condition=established --timeout=60s \
+            crd/constrainttemplates.templates.gatekeeper.sh
+          
+          echo "CRDs deployed to nested cluster"
+
+      - name: Create gatekeeper-system namespace in both clusters
+        run: |
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} create namespace ${{ env.GATEKEEPER_NAMESPACE }}
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} create namespace ${{ env.GATEKEEPER_NAMESPACE }}
+
+      - name: Create secrets in management cluster
+        run: |
+          # Kubeconfig secret for accessing nested cluster
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} create secret generic nested-kubeconfig \
+            --from-file=kubeconfig=/tmp/nested-kubeconfig.yaml \
+            -n ${{ env.GATEKEEPER_NAMESPACE }}
+          
+          # TLS certificate secret
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} create secret generic gatekeeper-webhook-server-cert \
+            --from-file=tls.crt=/tmp/gk-certs/tls.crt \
+            --from-file=tls.key=/tmp/gk-certs/tls.key \
+            --from-file=ca.crt=/tmp/gk-certs/ca.crt \
+            -n ${{ env.GATEKEEPER_NAMESPACE }}
+          
+          echo "Secrets created"
+
+      - name: Deploy Gatekeeper to management cluster
+        run: |
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} apply -f - <<EOF
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: gatekeeper-admin
+            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: gatekeeper-manager-role
+            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
+          rules:
+          - apiGroups: [""]
+            resources: ["pods"]
+            verbs: ["get"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: gatekeeper-manager-rolebinding
+            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: gatekeeper-manager-role
+          subjects:
+          - kind: ServiceAccount
+            name: gatekeeper-admin
+            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: gatekeeper-controller-manager
+            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
+            labels:
+              control-plane: controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                control-plane: controller-manager
+            template:
+              metadata:
+                labels:
+                  control-plane: controller-manager
+              spec:
+                serviceAccountName: gatekeeper-admin
+                containers:
+                - name: manager
+                  image: ${{ env.GATEKEEPER_IMAGE }}
+                  imagePullPolicy: IfNotPresent
+                  args:
+                  - --enable-remote-cluster
+                  - --kubeconfig=/etc/kubeconfig/kubeconfig
+                  - --disable-cert-rotation
+                  - --port=8443
+                  - --operation=webhook
+                  - --operation=status
+                  - --operation=mutation-webhook
+                  - --operation=mutation-status
+                  - --operation=generate
+                  - --log-level=DEBUG
+                  env:
+                  - name: POD_NAME
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: metadata.name
+                  - name: POD_NAMESPACE
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: metadata.namespace
+                  ports:
+                  - containerPort: 8443
+                    protocol: TCP
+                  volumeMounts:
+                  - name: kubeconfig
+                    mountPath: /etc/kubeconfig
+                    readOnly: true
+                  - name: cert
+                    mountPath: /certs
+                    readOnly: true
+                  readinessProbe:
+                    httpGet:
+                      path: /readyz
+                      port: 9090
+                    initialDelaySeconds: 5
+                  livenessProbe:
+                    httpGet:
+                      path: /healthz
+                      port: 9090
+                    initialDelaySeconds: 15
+                volumes:
+                - name: kubeconfig
+                  secret:
+                    secretName: nested-kubeconfig
+                - name: cert
+                  secret:
+                    secretName: gatekeeper-webhook-server-cert
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: gatekeeper-webhook-service
+            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
+          spec:
+            type: NodePort
+            selector:
+              control-plane: controller-manager
+            ports:
+            - port: 443
+              targetPort: 8443
+              nodePort: 30443
+          EOF
+          
+          echo "Gatekeeper deployment created"
+
+      - name: Configure webhook in nested cluster
+        run: |
+          MGMT_IP="${{ steps.cluster-ips.outputs.mgmt_ip }}"
+          CA_BUNDLE=$(base64 -w0 < /tmp/gk-certs/ca.crt)
+          
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} apply -f - <<EOF
+          apiVersion: admissionregistration.k8s.io/v1
+          kind: ValidatingWebhookConfiguration
+          metadata:
+            name: gatekeeper-validating-webhook-configuration
+          webhooks:
+          - name: validation.gatekeeper.sh
+            admissionReviewVersions: ["v1", "v1beta1"]
+            clientConfig:
+              url: https://${MGMT_IP}:30443/v1/admit
+              caBundle: ${CA_BUNDLE}
+            rules:
+            - apiGroups: ["*"]
+              apiVersions: ["*"]
+              operations: ["CREATE", "UPDATE"]
+              resources: ["namespaces"]
+            failurePolicy: Fail
+            sideEffects: None
+            timeoutSeconds: 10
+            namespaceSelector:
+              matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: NotIn
+                values: ["kube-system", "kube-public", "kube-node-lease", "${{ env.GATEKEEPER_NAMESPACE }}"]
+          EOF
+          
+          echo "Webhook configured in nested cluster"
+
+      - name: Wait for Gatekeeper pod to be ready
+        run: |
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} -n ${{ env.GATEKEEPER_NAMESPACE }} \
+            wait --for=condition=Ready --timeout=120s pod -l control-plane=controller-manager
+          
+          echo "Gatekeeper pod is ready"
+
+      - name: Verify Gatekeeper pod is healthy (no crash loops)
+        run: |
+          PHASE=$(kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get pods \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager \
+            -o jsonpath='{.items[0].status.phase}')
+          
+          RESTARTS=$(kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get pods \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager \
+            -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}')
+          
+          echo "Pod phase: $PHASE"
+          echo "Restart count: $RESTARTS"
+          
+          [[ "$PHASE" == "Running" ]] || { echo "Pod not running"; exit 1; }
+          [[ "$RESTARTS" -lt 3 ]] || { echo "Too many restarts"; exit 1; }
+
+      - name: Deploy ConstraintTemplate to nested cluster
+        run: |
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} apply -f test/bats/tests/remote-cluster/k8srequiredlabels_template.yaml
+          
+          # Wait for CRD to be created
+          for i in {1..60}; do
+            if kubectl --context kind-${{ env.NESTED_CLUSTER }} get crd k8srequiredlabels.constraints.gatekeeper.sh &>/dev/null; then
+              echo "Constraint CRD created successfully"
+              break
+            fi
+            echo "Waiting for constraint CRD... ($i/60)"
+            sleep 2
+          done
+          
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get crd k8srequiredlabels.constraints.gatekeeper.sh
+
+      - name: Verify ConstraintTemplatePodStatus has NO OwnerReferences
+        run: |
+          # Wait for status to be created
+          for i in {1..60}; do
+            NAME=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses \
+              -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [[ -n "$NAME" ]]; then
+              echo "ConstraintTemplatePodStatus found: $NAME"
+              break
+            fi
+            echo "Waiting for ConstraintTemplatePodStatus... ($i/60)"
+            sleep 2
+          done
+          
+          # Check no OwnerReferences
+          REFS=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.ownerReferences}')
+          
+          echo "OwnerReferences: '$REFS'"
+          
+          if [[ -z "$REFS" || "$REFS" == "null" ]]; then
+            echo "✓ No OwnerReferences - GC churn prevented"
+          else
+            echo "✗ OwnerReferences found - this will cause GC churn!"
+            exit 1
+          fi
+
+      - name: Deploy Constraint to nested cluster
+        run: |
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} apply -f test/bats/tests/remote-cluster/k8srequiredlabels_constraint.yaml
+          
+          # Wait for constraint to be enforced
+          for i in {1..60}; do
+            ENFORCED=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get k8srequiredlabels require-test-label \
+              -o jsonpath='{.status.byPod[0].enforced}' 2>/dev/null || echo "")
+            if [[ "$ENFORCED" == "true" ]]; then
+              echo "Constraint is enforced"
+              break
+            fi
+            echo "Waiting for constraint to be enforced... ($i/60)"
+            sleep 2
+          done
+          
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get k8srequiredlabels require-test-label -o yaml
+
+      - name: Verify ConstraintPodStatus has NO OwnerReferences
+        run: |
+          # Wait for status to be created
+          for i in {1..60}; do
+            NAME=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constraintpodstatuses \
+              -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [[ -n "$NAME" ]]; then
+              echo "ConstraintPodStatus found: $NAME"
+              break
+            fi
+            echo "Waiting for ConstraintPodStatus... ($i/60)"
+            sleep 2
+          done
+          
+          # Check no OwnerReferences
+          REFS=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constraintpodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.ownerReferences}')
+          
+          echo "OwnerReferences: '$REFS'"
+          
+          if [[ -z "$REFS" || "$REFS" == "null" ]]; then
+            echo "✓ No OwnerReferences - GC churn prevented"
+          else
+            echo "✗ OwnerReferences found - this will cause GC churn!"
+            exit 1
+          fi
+
+      - name: Test webhook REJECTS non-compliant resource
+        run: |
+          # Try to create namespace without required label - should fail
+          if kubectl --context kind-${{ env.NESTED_CLUSTER }} create ns test-ns-reject 2>&1; then
+            echo "✗ Namespace was created but should have been rejected!"
+            exit 1
+          else
+            echo "✓ Webhook correctly rejected non-compliant namespace"
+          fi
+
+      - name: Test webhook ALLOWS compliant resource
+        run: |
+          # Create namespace with required label - should succeed
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} apply -f - <<EOF
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: test-ns-allow
+            labels:
+              test-label: "yes"
+          EOF
+          
+          echo "✓ Webhook correctly allowed compliant namespace"
+
+      - name: Verify status resources are stable (no GC churn)
+        run: |
+          # Get the specific resource name first to avoid ordering issues
+          STATUS_NAME=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.name}')
+          
+          echo "Checking stability of: $STATUS_NAME"
+          
+          # Get UID for that specific resource
+          UID1=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses/"$STATUS_NAME" \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.metadata.uid}')
+          
+          echo "Initial UID: $UID1"
+          sleep 10
+          
+          UID2=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses/"$STATUS_NAME" \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.metadata.uid}')
+          
+          echo "UID after 10s: $UID2"
+          
+          if [[ "$UID1" == "$UID2" ]]; then
+            echo "✓ Status resource is stable (same UID)"
+          else
+            echo "✗ Status resource was recreated (GC churn detected)!"
+            exit 1
+          fi
+
+      - name: Save logs
+        if: ${{ always() }}
+        run: |
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} logs \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager \
+            --tail=-1 > logs-controller.json || true
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplates -o yaml > target-constrainttemplates.yaml || true
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o yaml > target-ctpodstatuses.yaml || true
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get constraintpodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o yaml > target-cpodstatuses.yaml || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: ${{ always() }}
+        with:
+          name: remote-cluster-logs-${{ matrix.KUBERNETES_VERSION }}
+          path: |
+            logs-*.json
+            target-*.yaml
+
+      - name: Debug info on failure
+        if: failure()
+        run: |
+          echo "=== Management Cluster Pods ==="
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get pods -A || true
+          
+          echo ""
+          echo "=== Gatekeeper Logs ==="
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} logs \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} deployment/gatekeeper-controller-manager \
+            --tail=200 || true
+          
+          echo ""
+          echo "=== Nested Cluster CRDs ==="
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get crds | grep gatekeeper || true
+          
+          echo ""
+          echo "=== ConstraintTemplates ==="
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplates -o yaml || true
+          
+          echo ""
+          echo "=== Constraints ==="
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get k8srequiredlabels -o yaml || true
+          
+          echo ""
+          echo "=== Status Resources ==="
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplatepodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o yaml || true
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get constraintpodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o yaml || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          kind delete cluster --name ${{ env.MANAGEMENT_CLUSTER }} || true
+          kind delete cluster --name ${{ env.NESTED_CLUSTER }} || true
+          rm -rf /tmp/gk-certs /tmp/nested-kubeconfig.yaml || true

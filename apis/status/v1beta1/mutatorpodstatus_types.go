@@ -98,8 +98,11 @@ func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtim
 		PodLabel:         pod.Name,
 	})
 
-	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-		return nil, err
+	// Skip OwnerReference in remote cluster mode
+	if !util.ShouldSkipPodOwnerRef() {
+		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+			return nil, err
+		}
 	}
 
 	return obj, nil

@@ -43,6 +43,187 @@ Note: The `gator verify` command was first called `gator test`. These names were
 changed to better align `gator` with other projects in the open-policy-agent
 space.
 
+## The `gator policy` subcommand
+
+`Feature State`: Gatekeeper version v3.22+ (alpha)
+
+`gator policy` provides a brew-inspired interface for managing Gatekeeper policies
+from the official [gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library).
+It enables users to discover, install, upgrade, and manage ConstraintTemplates and
+Constraints in their Kubernetes clusters.
+
+### Commands Overview
+
+| Command | Description | Requires Cluster |
+|---------|-------------|------------------|
+| `search` | Search available policies | No (uses cached catalog) |
+| `list` | List installed policies | Yes |
+| `install` | Install policies/bundles | Yes |
+| `uninstall` | Remove policies | Yes |
+| `update` | Refresh catalog | No |
+| `upgrade` | Upgrade policies | Yes |
+| `generate-catalog` | Generate catalog from gatekeeper-library | No |
+
+### Installation Model
+
+- **Individual policy install**: Installs ConstraintTemplate only
+- **Bundle install**: Installs ConstraintTemplates AND pre-configured Constraints
+
+```shell
+# Template only
+gator policy install k8srequiredlabels
+
+# Bundle includes templates + constraints
+gator policy install --bundle pod-security-baseline
+```
+
+### Usage Examples
+
+#### Update the catalog
+
+Before using other commands, update the local catalog cache:
+
+```shell
+gator policy update
+```
+
+This fetches the latest policy catalog from gatekeeper-library.
+
+#### Search for policies
+
+```shell
+# Search by name or description
+gator policy search labels
+
+# Filter by category
+gator policy search security --category=pod-security
+
+# Output as JSON
+gator policy search labels --output=json
+```
+
+#### Install policies
+
+```shell
+# Install a single policy (template only)
+gator policy install k8srequiredlabels
+
+# Install multiple policies
+gator policy install k8srequiredlabels k8scontainerlimits
+
+# Install a bundle (templates + constraints)
+gator policy install --bundle pod-security-baseline
+
+# Install with warn enforcement (for safe rollout)
+gator policy install --bundle pod-security-baseline --enforcement-action=warn
+
+# Preview changes without applying
+gator policy install --bundle pod-security-baseline --dry-run
+```
+
+#### List installed policies
+
+```shell
+# Table output (default)
+gator policy list
+
+# JSON output
+gator policy list --output=json
+```
+
+#### Upgrade policies
+
+```shell
+# Upgrade a specific policy
+gator policy upgrade k8srequiredlabels
+
+# Upgrade all installed policies
+gator policy upgrade --all
+
+# Preview upgrades
+gator policy upgrade --all --dry-run
+```
+
+#### Uninstall policies
+
+```shell
+# Uninstall a policy
+gator policy uninstall k8srequiredlabels
+
+# Preview uninstall
+gator policy uninstall k8srequiredlabels --dry-run
+```
+
+#### Generate a catalog (for library maintainers)
+
+The `generate-catalog` command scans a gatekeeper-library directory and generates
+a catalog.yaml file. This is primarily used by gatekeeper-library maintainers.
+
+```shell
+# Generate catalog from gatekeeper-library
+gator policy generate-catalog --library-path=/path/to/gatekeeper-library
+
+# Generate with custom output path
+gator policy generate-catalog --library-path=. --output=catalog.yaml
+
+# Generate with bundles file
+gator policy generate-catalog --library-path=. --bundles=bundles.yaml
+
+# Generate with custom version
+gator policy generate-catalog --library-path=. --version=v1.2.0
+```
+
+### Bundles
+
+Bundles are curated sets of policies with pre-configured constraints:
+
+| Bundle | Description |
+|--------|-------------|
+| `pod-security-baseline` | Pod Security Standards - Baseline level |
+| `pod-security-restricted` | Pod Security Standards - Restricted level |
+
+### Resource Management
+
+All managed resources receive tracking metadata:
+
+```yaml
+metadata:
+  labels:
+    gatekeeper.sh/managed-by: gator
+    gatekeeper.sh/bundle: pod-security-baseline  # If installed via bundle
+  annotations:
+    gatekeeper.sh/policy-version: v1.0.0
+    gatekeeper.sh/policy-source: gatekeeper-library
+    gatekeeper.sh/installed-at: "2026-01-08T10:30:00Z"
+```
+
+### Conflict Resolution
+
+| Scenario | Behavior |
+|----------|----------|
+| Resource doesn't exist | Install it |
+| Resource exists, managed by gator | Update if version differs |
+| Resource exists, NOT managed by gator | **Error** - refuse to modify |
+| Resource exists, same version | Skip (already installed) |
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | General error (network, invalid args) |
+| 2 | Cluster error (not found, permission denied) |
+| 3 | Conflict (resource exists, not managed by gator) |
+| 4 | Partial success (some resources failed) |
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GATOR_HOME` | Cache directory | `~/.config/gator/` |
+| `GATOR_CATALOG_URL` | Catalog source URL | gatekeeper-library catalog |
+| `KUBECONFIG` | Kubernetes config | `~/.kube/config` |
+
 ### Usage
 
 :::note
@@ -627,6 +808,371 @@ templatename3:
 - /v1:Service
 ```
 
+
+
+## The `gator bench` subcommand
+
+`gator bench` measures the performance of Gatekeeper policy evaluation. It loads ConstraintTemplates, Constraints, and Kubernetes resources, then repeatedly evaluates the resources against the constraints to gather latency and throughput metrics.
+
+:::note
+`gator bench` measures **compute-only** policy evaluation latency, which does not include network round-trip time, TLS overhead, or Kubernetes API server processing. Real-world webhook latency will be higher. Use these metrics for relative comparisons between policy versions, not as absolute production latency predictions.
+:::
+
+This command is useful for:
+- **Policy developers**: Testing policy performance before deployment
+- **Platform teams**: Comparing Rego vs CEL engine performance
+- **CI/CD pipelines**: Detecting performance regressions between releases
+
+### Usage
+
+```shell
+gator bench --filename=policies/
+```
+
+#### Flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--filename` | `-f` | | File or directory containing ConstraintTemplates, Constraints, and resources. Repeatable. |
+| `--image` | `-i` | | OCI image URL containing policies. Repeatable. |
+| `--engine` | `-e` | `cel` | Policy engine to benchmark: `rego`, `cel`, or `all` |
+| `--iterations` | `-n` | `1000` | Number of benchmark iterations. Use ≥1000 for reliable P99 percentiles. |
+| `--warmup` | | `10` | Warmup iterations before measurement |
+| `--concurrency` | `-c` | `1` | Number of concurrent goroutines for parallel evaluation |
+| `--output` | `-o` | `table` | Output format: `table`, `json`, or `yaml` |
+| `--memory` | | `false` | Enable memory profiling (estimates only, not GC-cycle accurate) |
+| `--save` | | | Save results to file for future comparison |
+| `--compare` | | | Compare against a baseline file |
+| `--threshold` | | `10` | Regression threshold percentage (for CI/CD) |
+| `--min-threshold` | | `0` | Minimum absolute latency difference to consider (e.g., `100µs`). Useful for fast policies where percentage changes may be noise. |
+| `--stats` | | `false` | Gather detailed statistics from constraint framework |
+
+### Examples
+
+#### Basic Benchmark
+
+```shell
+gator bench --filename=policies/
+```
+
+Output:
+```
+=== Benchmark Results: Rego Engine ===
+
+Configuration:
+  Templates:      5
+  Constraints:    10
+  Objects:        50
+  Iterations:     1000
+  Total Reviews:  50000
+
+Timing:
+  Setup Duration:  25.00ms
+    └─ Client Creation:       0.05ms
+    └─ Template Compilation:  20.00ms
+    └─ Constraint Loading:    3.00ms
+    └─ Data Loading:          1.95ms
+  Total Duration:  25.00s
+  Throughput:      2000.00 reviews/sec
+
+Latency (per review):
+  Min:   200.00µs
+  Max:   5.00ms
+  Mean:  500.00µs
+  P50:   450.00µs
+  P95:   1.20ms
+  P99:   2.50ms
+
+Results:
+  Violations Found:  1500
+```
+
+#### Concurrent Benchmarking
+
+Simulate parallel load to test contention behavior:
+
+```shell
+gator bench --filename=policies/ --concurrency=4
+```
+
+This runs 4 parallel goroutines each executing reviews concurrently.
+
+```
+=== Benchmark Results: Rego Engine ===
+
+Configuration:
+  Templates:      5
+  Constraints:    10
+  Objects:        50
+  Iterations:     1000
+  Concurrency:    4
+  Total Reviews:  50000
+...
+```
+
+#### Compare Rego vs CEL Engines
+
+```shell
+gator bench --filename=policies/ --engine=all
+```
+
+This runs benchmarks for both engines and displays a comparison table:
+
+```
+=== Engine Comparison ===
+
+Metric         Rego        CEL
+------         ------      ------
+Templates      5           5
+Constraints    10          10
+Setup Time     25.00ms     15.00ms
+Throughput     2000/sec    3500/sec
+Mean Latency   500.00µs    285.00µs
+P95 Latency    1.20ms      600.00µs
+P99 Latency    2.50ms      900.00µs
+Violations     150         150
+
+Performance: CEL is 1.75x faster than Rego
+```
+
+:::note
+Templates without CEL code will be skipped when benchmarking the CEL engine.
+A warning will be displayed indicating which templates were skipped.
+:::
+
+:::caution
+The CEL engine does not support referential constraints. Referential data loading
+is skipped entirely when benchmarking with CEL—this is expected behavior, not an error.
+If you have policies that rely on referential data (e.g., checking if a namespace exists),
+those constraints will not be fully exercised during CEL benchmarks. An informational note
+will be displayed indicating that referential data is not supported by the CEL engine.
+:::
+
+#### Memory Profiling
+
+```shell
+gator bench --filename=policies/ --memory
+```
+
+Adds memory statistics to the output:
+
+```
+Memory (estimated):
+  Allocs/Review:  3000
+  Bytes/Review:   150.00 KB
+  Total Allocs:   15000000
+  Total Bytes:    732.42 MB
+```
+
+:::caution
+Memory statistics are estimates based on `runtime.MemStats` captured before and after benchmark runs. They do not account for garbage collection cycles that may occur during benchmarking. For production memory analysis, use Go's pprof profiler.
+:::
+
+#### Save and Compare Baselines
+
+Save benchmark results as a baseline:
+
+```shell
+gator bench --filename=policies/ --memory --save=baseline.json
+```
+
+Compare future runs against the baseline:
+
+```shell
+gator bench --filename=policies/ --memory --compare=baseline.json
+```
+
+Output includes a comparison table:
+
+```
+=== Baseline Comparison: Rego Engine ===
+
+Metric         Baseline     Current      Delta   Status
+------         --------     -------      -----   ------
+P50 Latency    450.00µs     460.00µs     +2.2%   ✓
+P95 Latency    1.20ms       1.25ms       +4.2%   ✓
+P99 Latency    2.50ms       2.60ms       +4.0%   ✓
+Mean Latency   500.00µs     510.00µs     +2.0%   ✓
+Throughput     2000/sec     1960/sec     -2.0%   ✓
+Allocs/Review  3000         3050         +1.7%   ✓
+Bytes/Review   150.00 KB    152.00 KB    +1.3%   ✓
+
+✓ No significant regressions (threshold: 10.0%)
+```
+
+For fast policies (< 1ms), small percentage changes may be noise. Use `--min-threshold` to set an absolute minimum difference:
+
+```shell
+gator bench --filename=policies/ --compare=baseline.json --threshold=10 --min-threshold=100µs
+```
+
+This marks a metric as passing if either:
+- The percentage change is within the threshold (10%), OR
+- The absolute difference is less than the min-threshold (100µs)
+
+### CI/CD Integration
+
+Use `gator bench` in CI/CD pipelines to detect performance regressions automatically.
+
+#### GitHub Actions Example
+
+```yaml
+name: Policy Benchmark
+
+on:
+  pull_request:
+    paths:
+      - 'policies/**'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: .
+        continue-on-error: true  # First run won't have baseline
+
+      - name: Install gator
+        run: |
+          go install github.com/open-policy-agent/gatekeeper/v3/cmd/gator@latest
+
+      - name: Run benchmark
+        run: |
+          if [ -f baseline.json ]; then
+            # Use min-threshold to avoid flaky failures on fast policies
+            gator bench -f policies/ --memory \
+              --compare=baseline.json \
+              --threshold=10 \
+              --min-threshold=100µs
+          else
+            gator bench -f policies/ --memory --save=baseline.json
+          fi
+
+      - name: Upload baseline
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: baseline.json
+```
+
+:::tip
+Use `--min-threshold` in CI to prevent flaky failures. For policies that evaluate in under 1ms, a 10% regression might only be 50µs of noise from system jitter.
+:::
+
+#### Exit Codes
+
+| Exit Code | Meaning |
+|-----------|---------|
+| `0` | Benchmark completed successfully, no regressions detected |
+| `1` | Error occurred, or regression threshold exceeded (when using `--compare`) |
+
+When `--compare` is used with `--threshold`, the command exits with code `1` if any metric regresses beyond the threshold. This enables CI/CD pipelines to fail builds that introduce performance regressions.
+
+### Understanding Metrics
+
+| Metric | Description |
+|--------|-------------|
+| **P50/P95/P99 Latency** | Percentile latencies per review. P99 of 2ms means 99% of reviews complete in ≤2ms. Use ≥1000 iterations for reliable P99. |
+| **Mean Latency** | Average time per review |
+| **Throughput** | Reviews processed per second |
+| **Allocs/Review** | Memory allocations per review (with `--memory`). Estimate only. |
+| **Bytes/Review** | Bytes allocated per review (with `--memory`). Estimate only. |
+| **Setup Duration** | Time to load templates, constraints, and data |
+
+#### Setup Duration Breakdown
+
+Setup duration includes:
+- **Client Creation**: Initializing the constraint client
+- **Template Compilation**: Compiling Rego/CEL code in ConstraintTemplates
+- **Constraint Loading**: Adding constraints to the client
+- **Data Loading**: Loading all Kubernetes resources into the data cache
+
+:::note
+Data loading adds all provided resources to the constraint client's cache. This is intentional behavior that matches how Gatekeeper evaluates referential constraints—policies that reference other cluster resources (e.g., checking if a namespace exists) need this cached data available during evaluation.
+:::
+
+#### Performance Guidance
+
+- **P99 latency < 100ms** is recommended for production admission webhooks
+- **CEL is typically faster than Rego** for equivalent policies
+- **High memory allocations** may indicate inefficient policy patterns
+- **Setup time** matters for cold starts; consider template compilation cost
+- **Concurrency testing** (`--concurrency=N`) reveals contention issues not visible in sequential runs
+
+### Performance Characteristics
+
+The following characteristics are based on architectural differences between policy engines and general benchmarking principles. Actual numbers will vary based on policy complexity, hardware, and workload.
+
+:::tip
+These insights were generated using the data gathering scripts in the Gatekeeper repository:
+- [`test/gator/bench/scripts/gather-data.sh`](https://github.com/open-policy-agent/gatekeeper/blob/master/test/gator/bench/scripts/gather-data.sh) - Collects benchmark data across different scenarios
+- [`test/gator/bench/scripts/analyze-data.sh`](https://github.com/open-policy-agent/gatekeeper/blob/master/test/gator/bench/scripts/analyze-data.sh) - Analyzes and summarizes the collected data
+
+You can run these scripts locally to validate these characteristics on your own hardware.
+:::
+
+#### CEL vs Rego
+
+| Characteristic | CEL | Rego |
+|----------------|-----|------|
+| **Evaluation Speed** | 1.5-3x faster | Baseline |
+| **Memory per Review** | 20-30% less | Baseline |
+| **Setup/Compilation** | 2-3x slower | Faster |
+| **Best For** | Long-running processes | Cold starts |
+
+**Why the difference?**
+- CEL compiles to more efficient bytecode, resulting in faster evaluation
+- Rego has lighter upfront compilation cost but slower per-evaluation overhead
+- For admission webhooks (long-running), CEL's evaluation speed advantage compounds over time
+
+#### Concurrency Scaling
+
+:::note
+The `--concurrency` flag simulates parallel policy evaluation similar to how Kubernetes admission webhooks handle concurrent requests. In production, Gatekeeper processes multiple admission requests simultaneously, making concurrent benchmarking essential for realistic performance testing.
+:::
+
+- **Linear scaling** up to 4-8 concurrent workers
+- **Diminishing returns** beyond CPU core count
+- **Increased P99 variance** at high concurrency due to contention
+- **Recommendation**: Use 4-8 workers for load testing; match production replica count
+
+```
+Concurrency   Typical Efficiency
+1             100% (baseline)
+2             85-95%
+4             70-85%
+8             50-70%
+16+           <50% (diminishing returns)
+```
+
+#### Benchmarking Best Practices
+
+| Practice | Recommendation | Why |
+|----------|----------------|-----|
+| **Iterations** | ≥1000 | Required for statistically meaningful P99 percentiles |
+| **Warmup** | 10 iterations | Go runtime stabilizes quickly; more warmup has minimal impact |
+| **Multiple Runs** | 3-5 runs | Expect 2-8% variance between identical runs |
+| **P99 vs Mean** | Focus on P99 for SLAs | P99 has higher variance (~8%) than mean (~2%) |
+| **CI Thresholds** | Use `--min-threshold` | Prevents flaky failures from natural variance |
+
+#### Interpreting Results
+
+**Healthy patterns:**
+- P95/P99 within 2-5x of P50 (consistent performance)
+- Memory allocations stable across runs
+- Throughput scales with concurrency up to core count
+
+**Warning signs:**
+- P99 > 10x P50 (high tail latency, possible GC pressure)
+- Memory growing with iteration count (potential leak)
+- Throughput decreasing at low concurrency (contention issue)
+- Large variance between runs (noisy environment or unstable policy)
 
 
 ## Bundling Policy into OCI Artifacts

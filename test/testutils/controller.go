@@ -31,10 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var (
-	vendorCRDPath = []string{"vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"}
-	gkCRDPath     = []string{"config", "crd", "bases"}
-)
+var gkCRDPath = []string{"config", "crd", "bases"}
 
 // ConstantRetry makes 3,000 attempts at a rate of 100 per second. Since this
 // is a test instance and not a "real" cluster, this is fine and there's no need
@@ -130,7 +127,6 @@ func StartControlPlane(m *testing.M, cfg **rest.Config, testerDepth int) {
 	}
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join(append(walkbacks, vendorCRDPath...)...),
 			filepath.Join(append(walkbacks, gkCRDPath...)...),
 		},
 		ErrorIfCRDPathMissing: true,

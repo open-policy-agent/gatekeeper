@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.25-trixie@sha256:a02d35efc036053fdf0da8c15919276bf777a80cbfda6a35c5e9f087e652adfc AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-trixie@sha256:889885d7cc1275935e3f9920aabadc5fadbe873f633d92a746f1bc401dd40f69 AS builder
 
 ARG TARGETPLATFORM
 ARG TARGETOS
@@ -15,9 +15,12 @@ ENV GO111MODULE=on \
 COPY . /go/src/github.com/open-policy-agent/gatekeeper
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper/cmd/gator
 
-RUN go build -mod vendor -a -ldflags "${LDFLAGS}" -o /gator
+RUN \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -a -ldflags "${LDFLAGS}" -o /gator
 
-FROM --platform=$BUILDPLATFORM gcr.io/distroless/static-debian12@sha256:87bce11be0af225e4ca761c40babb06d6d559f5767fbf7dc3c47f0f1a466b92c AS build
+FROM --platform=$BUILDPLATFORM gcr.io/distroless/static-debian12@sha256:20bc6c0bc4d625a22a8fde3e55f6515709b32055ef8fb9cfbddaa06d1760f838 AS build
 USER 65532:65532
 COPY --from=builder --chown=65532:65532 /gator /gator
 ENTRYPOINT ["/gator"]

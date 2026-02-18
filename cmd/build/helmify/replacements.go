@@ -161,17 +161,21 @@ var replacements = map[string]string{
 
 	"HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
 
-	"HELMSUBST_MUTATING_WEBHOOK_MATCHEXPRESSION_METADATANAME": `key: kubernetes.io/metadata.name
-      operator: NotIn
-      values:
-      - {{ .Release.Namespace }}`,
-
 	"- HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
-    {{- range $key, $value := .Values.mutatingWebhookExemptNamespacesLabels}}
+    {{- /* 1. Get mandatory exemption from helper */ -}}
+    {{- $defaults := include "gatekeeper.mandatoryNamespaceExemption" . | fromYaml -}}
+    {{- /* 2. Merge user values with mandatory exemption. */ -}}
+    {{- $merged := merge (deepCopy .Values.mutatingWebhookExemptNamespacesLabels) $defaults -}}
+    {{- range $key, $value := $merged }}
     - key: {{ $key }}
       operator: NotIn
       values:
-      {{- range $value }}
+      {{- /* Ensure current namespace is in the list for the metadata key */ -}}
+      {{- $list := $value -}}
+      {{- if eq $key "kubernetes.io/metadata.name" }}
+        {{- $list = append $value $.Release.Namespace | uniq -}}
+      {{- end }}
+      {{- range $list }}
       - {{ . }}
       {{- end }}
     {{- end }}`,
@@ -220,11 +224,20 @@ var replacements = map[string]string{
       - {{ .Release.Namespace }}`,
 
 	"- HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
-    {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
+    {{- /* 1. Get mandatory exemption from helper */ -}}
+    {{- $defaults := include "gatekeeper.mandatoryNamespaceExemption" . | fromYaml -}}
+    {{- /* 2. Merge user values with mandatory exemption. */ -}}
+    {{- $merged := merge (deepCopy .Values.validatingWebhookExemptNamespacesLabels) $defaults -}}
+    {{- range $key, $value := $merged }}
     - key: {{ $key }}
       operator: NotIn
       values:
-      {{- range $value }}
+      {{- /* Ensure current namespace is in the list for the metadata key */ -}}
+      {{- $list := $value -}}
+      {{- if eq $key "kubernetes.io/metadata.name" }}
+        {{- $list = append $value $.Release.Namespace | uniq -}}
+      {{- end }}
+      {{- range $list }}
       - {{ . }}
       {{- end }}
     {{- end }}`,
@@ -329,6 +342,18 @@ var replacements = map[string]string{
 	"- HELMSUBST_METRICS_BACKEND_ARG": `
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
+        {{- end }}
+        {{- if and (has "opentelemetry" .Values.metricsBackends) (hasKey .Values "otlpEndpoint") }}
+        - --otlp-endpoint={{ .Values.otlpEndpoint }}
+        {{- end }}
+        {{- if and (has "opentelemetry" .Values.metricsBackends) (hasKey .Values "otlpMetricInterval") }}
+        - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
+        {{- end }}
+        {{- if and (has "stackdriver" .Values.metricsBackends) (hasKey .Values "stackdriverOnlyWhenAvailable") }}
+        - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
+        {{- end }}
+        {{- if and (has "stackdriver" .Values.metricsBackends) (hasKey .Values "stackdriverMetricInterval") }}
+        - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
         {{- end }}`,
 
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES": `

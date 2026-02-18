@@ -1,0 +1,20 @@
+# Constraint: Block Privileged Containers
+#
+# This constraint blocks all privileged containers.
+# Part of the pod-security-baseline-mock bundle for testing.
+
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: TestPrivilegedContainer
+metadata:
+  name: psp-privileged-container
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+  parameters:
+    exemptImages: []

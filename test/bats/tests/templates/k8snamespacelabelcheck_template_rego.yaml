@@ -1,0 +1,38 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8snamespacelabelcheckrego
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sNamespaceLabelCheckRego
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            requiredLabel:
+              type: string
+              description: "Label that must exist on the namespace"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8snamespacelabelcheckrego
+
+        is_namespaced {
+          input.review.object.metadata.namespace
+        }
+
+        violation[{"msg": msg}] {
+          is_namespaced
+          not input.review.namespaceObject
+          msg := "namespaceObject is null - namespace data not available"
+        }
+
+        violation[{"msg": msg}] {
+          is_namespaced
+          input.review.namespaceObject
+          required_label := input.parameters.requiredLabel
+          not input.review.namespaceObject.metadata.labels[required_label]
+          msg := sprintf("Namespace '%s' does not have required label: %s", [input.review.namespaceObject.metadata.name, required_label])
+        }

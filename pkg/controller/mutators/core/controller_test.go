@@ -16,6 +16,7 @@ limitations under the License.
 package core
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -37,7 +38,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -191,7 +191,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("System mutates a resource", func(t *testing.T) {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
-		_, err := mSys.Mutate(&types.Mutable{Object: u, Source: types.SourceTypeDefault})
+		_, err := mSys.Mutate(context.Background(), &types.Mutable{Object: u, Source: types.SourceTypeDefault})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -217,7 +217,7 @@ func TestReconcile(t *testing.T) {
 			u := &unstructured.Unstructured{}
 			u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 
-			_, err := mSys.Mutate(&types.Mutable{Object: u, Source: types.SourceTypeOriginal})
+			_, err := mSys.Mutate(context.Background(), &types.Mutable{Object: u, Source: types.SourceTypeOriginal})
 			if err != nil {
 				t.Fatal(err)
 			}

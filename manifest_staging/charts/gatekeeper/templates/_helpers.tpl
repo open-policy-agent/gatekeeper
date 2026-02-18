@@ -196,3 +196,13 @@ Extra env vars for audit pods
 {{- toYaml .Values.audit.extraEnvs }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Mandatory namespace exemption for Gatekeeper.
+Used in the NamespaceSelector of the Gatekeeper validating and mutating webhook to ensure
+deployed namespace is exempted.
+*/}}
+{{- define "gatekeeper.mandatoryNamespaceExemption" -}}
+"kubernetes.io/metadata.name":
+  - {{ .Release.Namespace }}
+{{- end -}}

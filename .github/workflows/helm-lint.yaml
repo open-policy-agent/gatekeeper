@@ -14,12 +14,12 @@ permissions: read-all
 jobs:
   helm_lint_test:
     name: "Helm lint"
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-2cpu-8gb-x86-64
     timeout-minutes: 15
 
     steps:
     - name: Check out code into the Go module directory
-      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     
     - name: Set up Helm
       uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1

@@ -21,7 +21,7 @@ AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
 GENERATE_VAP ?= true
 GENERATE_VAPBINDING ?= true
-SYNC_VAP_ENFORCEMENT_SCOPE ?= false
+SYNC_VAP_ENFORCEMENT_SCOPE ?= true
 
 VERSION := v3.22.0-beta.0
 
@@ -180,11 +180,26 @@ endif
 
 all: lint test manager
 
-# Run tests
+# Run tests with coverage
+.PHONY: native-test
 native-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test -mod vendor ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
+	go test ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
+
+# Run tests with race detector
+.PHONY: native-race-test
+native-race-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	GO111MODULE=on \
+	go test ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
+
+# Run benchmarks only (no unit tests)
+.PHONY: native-bench-test
+native-bench-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	GO111MODULE=on \
+	go test ./pkg/... ./apis/... ./cmd/gator/... -bench . -run "^$$"
 
 .PHONY: benchmark-test
 benchmark-test:
@@ -204,7 +219,7 @@ test-e2e-owner-ref:
 	@bash test/with-admission-plugin/test-e2e-owner-ref.sh
 
 .PHONY: test-gator
-test-gator: gator test-gator-verify test-gator-test test-gator-expand
+test-gator: gator test-gator-verify test-gator-test test-gator-expand test-gator-policy
 
 .PHONY: test-gator-containerized
 test-gator-containerized: __test-image
@@ -222,6 +237,14 @@ test-gator-test: gator
 .PHONY: test-gator-expand
 test-gator-expand: gator
 	bats test/gator/expand
+
+.PHONY: test-gator-policy
+test-gator-policy: gator
+	go test -cover -race ./pkg/gator/policy/...
+
+.PHONY: test-gator-policy-e2e
+test-gator-policy-e2e: gator
+	bats test/gator/policy/policy.bats
 
 e2e-dependencies:
 	# Download and install kind
@@ -327,19 +350,19 @@ e2e-reader-build-image:
 
 # Build manager binary
 manager: generate
-	GO111MODULE=on go build -mod vendor -o bin/manager -ldflags $(LDFLAGS)
+	GO111MODULE=on go build -o bin/manager -ldflags $(LDFLAGS)
 
 # Build manager binary
 manager-osx: generate
-	GO111MODULE=on go build -mod vendor -o bin/manager GOOS=darwin -ldflags $(LDFLAGS)
+	GO111MODULE=on go build -o bin/manager GOOS=darwin -ldflags $(LDFLAGS)
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate manifests
-	GO111MODULE=on go run -mod vendor ./main.go
+	GO111MODULE=on go run ./main.go
 
 # Install CRDs into a cluster
 install: manifests
-	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
+	docker run -v $(shell pwd)/config:/config \
 		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		/config/crd | kubectl apply -f -
 
@@ -351,7 +374,6 @@ ifeq ($(ENABLE_GENERATOR_EXPANSION),true)
 endif
 	docker run \
 		-v $(shell pwd)/config:/config \
-		-v $(shell pwd)/vendor:/vendor \
 		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		/config/overlays/dev | kubectl apply -f -
 
@@ -364,6 +386,9 @@ manifests: __controller-gen
 		paths="./apis/..." \
 		paths="./pkg/..." \
 		output:crd:artifacts:config=config/crd/bases
+	@# Copy constraint template CRD from frameworks module
+	go mod download github.com/open-policy-agent/frameworks/constraint
+	cp $$(go list -m -f '{{.Dir}}' github.com/open-policy-agent/frameworks/constraint)/deploy/crds.yaml config/crd/bases/constrainttemplate-customresourcedefinition.yaml
 	./build/update-match-schema.sh
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
@@ -547,7 +572,7 @@ promote-staging-manifest:
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
-	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
+	docker run -v $(shell pwd)/config:/config \
 		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		/config/overlays/dev | kubectl delete -f -
 
@@ -584,11 +609,6 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20250729155826-ada80794ea8f
-
-.PHONY: vendor
-vendor:
-	go mod vendor
-	go mod tidy
 
 .PHONY: gator
 gator: bin/gator-$(GOOS)-$(GOARCH)

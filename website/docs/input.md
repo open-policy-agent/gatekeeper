@@ -7,7 +7,8 @@ The data that's passed to Gatekeeper for review is in the form of an `input.revi
 - `dryRun`: Describes if the request was invoked by `kubectl --dry-run`. This cannot be populated by Kubernetes for audit.
 - `kind`: The resource `kind`, `group`, `version` of the request object under evaluation.
 - `name`: The name of the request object under evaluation. It may be empty if the deployment expects the API server to generate a name for the requested resource.
-- `namespace`: The namespace of the request object under evaluation. Empty for cluster scoped objects.
+- `namespace`: The namespace name of the request object under evaluation. Empty for cluster scoped objects.
+- `namespaceObject`: The full Namespace object (including metadata, labels, and annotations) for the request object under evaluation. This is `null` for cluster-scoped resources. Available in Rego as `input.review.namespaceObject` and in CEL as the `namespaceObject` variable.
 - `object`: The request object under evaluation to be created or modified.
 - `oldObject`: The original state of the request object under evaluation. This is only available for UPDATE operations.
 - `operation`: The operation for the request (e.g. CREATE, UPDATE). This cannot be populated by Kubernetes for audit.

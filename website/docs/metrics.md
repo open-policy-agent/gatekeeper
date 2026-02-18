@@ -130,6 +130,34 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Distribution`
 
+- Name: `gatekeeper_constraint_templates_with_cel`
+
+    Description: `Number of constraint templates with CEL engine`
+
+    Aggregation: `LastValue`
+
+### ValidatingAdmissionPolicy
+
+- Name: `gatekeeper_validating_admission_policies`
+
+    Description: `Number of ValidatingAdmissionPolicy resources by generation status`
+
+    Tags:
+
+    - `status`: [`active`, `error`] (active = successfully generated, error = generation failed)
+
+    Aggregation: `LastValue`
+
+- Name: `gatekeeper_validating_admission_policy_bindings`
+
+    Description: `Number of ValidatingAdmissionPolicyBinding resources by generation status`
+
+    Tags:
+
+    - `status`: [`active`, `error`] (active = successfully generated, error = generation failed)
+
+    Aggregation: `LastValue`
+
 ### Expansion Template
 
 - Name: `gatekeeper_expansion_templates`
@@ -315,3 +343,31 @@ Below are the list of metrics provided by Gatekeeper:
     Description: `Incremental counter for all provider errors occurring over time`
 
     Aggregation: `Count`
+
+## Metric Backends
+
+This section covers how to configure different metric backends to export the metrics. 
+
+- set `--metrics-backend`. Backend used for metrics. e.g. prometheus, stackdriver, opentelemetry. This flag can be declared more than once. Omitting will default to supporting prometheus.
+
+### Prometheus
+
+Gatekeeper exposes Prometheus metrics by default on port `8888` at the `/metrics` path. You can configure a Prometheus instance to scrape this endpoint. This is the default exporter.
+
+- set `--prometheus-port`. Prometheus port for metrics backend.
+
+### OpenTelemetry
+
+Gatekeeper can be configured to export metrics to an OpenTelemetry collector. This is useful for integrating with a variety of observability backends that support OpenTelemetry.
+
+- set `--otlp-endpoint`. OpenTelemetry exporter endpoint (HTTP exporter only).
+
+- set `--otlp-metric-interval`. Interval to read metrics for OpenTelemetry exporter. Defaulted to 10 secs if unspecified.
+
+### Stackdriver
+
+Gatekeeper can be configured to export metrics to Google Cloud's operations suite (formerly Stackdriver). This allows for monitoring Gatekeeper's performance and behavior within the Google Cloud ecosystem.
+
+- set `--stackdriver-only-when-available`. Only attempt to start the stackdriver exporter if credentials are available.
+
+- set `--stackdriver-metric-interval`. Interval to read metrics for stackdriver exporter. Defaulted to 10 secs if unspecified.

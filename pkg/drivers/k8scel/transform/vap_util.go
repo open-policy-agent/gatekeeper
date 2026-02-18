@@ -17,6 +17,24 @@ var VapAPIEnabled *bool
 
 var GroupVersion *schema.GroupVersion
 
+// SetVapAPIEnabled sets the VapAPIEnabled flag in a thread-safe manner.
+// Use this instead of directly assigning transform.VapAPIEnabled when the
+// value may be read concurrently (e.g., by a running controller).
+func SetVapAPIEnabled(enabled *bool) {
+	vapMux.Lock()
+	defer vapMux.Unlock()
+	VapAPIEnabled = enabled
+}
+
+// SetGroupVersion sets the GroupVersion in a thread-safe manner.
+// Use this instead of directly assigning transform.GroupVersion when the
+// value may be read concurrently (e.g., by a running controller).
+func SetGroupVersion(gv *schema.GroupVersion) {
+	vapMux.Lock()
+	defer vapMux.Unlock()
+	GroupVersion = gv
+}
+
 func IsVapAPIEnabled(log *logr.Logger) (bool, *schema.GroupVersion) {
 	vapMux.RLock()
 	if VapAPIEnabled != nil {
