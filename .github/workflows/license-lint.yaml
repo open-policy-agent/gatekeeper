@@ -17,7 +17,7 @@ permissions:
 jobs:
   license-lint:
     name: "license-lint"
-    runs-on: ubuntu-latest
+    runs-on: oracle-vm-2cpu-8gb-x86-64
     timeout-minutes: 5
     permissions:
       contents: read

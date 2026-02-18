@@ -28,7 +28,7 @@ permissions: read-all
 jobs:
   gator_test:
     name: "Test Gator"
-    runs-on: ubuntu-latest-4-cores
+    runs-on: oracle-vm-4cpu-16gb-x86-64
     timeout-minutes: 5
     steps:
       - name: Harden Runner
@@ -50,7 +50,7 @@ jobs:
 
   gator_bench_test:
     name: "Gator Bench E2E"
-    runs-on: ubuntu-latest-4-cores
+    runs-on: oracle-vm-4cpu-16gb-x86-64
     timeout-minutes: 10
     steps:
       - name: Harden Runner

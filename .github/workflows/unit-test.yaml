@@ -28,7 +28,7 @@ permissions: read-all
 jobs:
   test:
     name: "Unit test with coverage"
-    runs-on: ubuntu-latest-4-cores
+    runs-on: oracle-vm-4cpu-16gb-x86-64
     timeout-minutes: 15
     steps:
       - name: Harden Runner
@@ -63,7 +63,7 @@ jobs:
 
   race-test:
     name: "Race detector"
-    runs-on: ubuntu-latest-4-cores
+    runs-on: oracle-vm-4cpu-16gb-x86-64
     timeout-minutes: 20
     steps:
       - name: Harden Runner
@@ -91,7 +91,7 @@ jobs:
 
   bench-test:
     name: "Benchmarks"
-    runs-on: ubuntu-latest-4-cores
+    runs-on: oracle-vm-4cpu-16gb-x86-64
     timeout-minutes: 10
     steps:
       - name: Harden Runner

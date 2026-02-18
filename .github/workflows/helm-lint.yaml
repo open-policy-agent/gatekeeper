@@ -14,7 +14,7 @@ permissions: read-all
 jobs:
   helm_lint_test:
     name: "Helm lint"
-    runs-on: ubuntu-latest
+    runs-on: oracle-vm-2cpu-8gb-x86-64
     timeout-minutes: 15
 
     steps:

@@ -14,7 +14,7 @@ permissions: read-all
 jobs:
   tagged-release:
     name: "Tagged Release"
-    runs-on: ubuntu-latest-8-cores
+    runs-on: oracle-vm-8cpu-32gb-x86-64
     permissions:
       contents: write
       packages: write

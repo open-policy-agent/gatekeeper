@@ -35,7 +35,7 @@ env:
 jobs:
   remote_cluster_e2e:
     name: "Remote Cluster E2E (Kind) - K8s ${{ matrix.KUBERNETES_VERSION }}"
-    runs-on: ubuntu-latest-8-cores
+    runs-on: oracle-vm-8cpu-32gb-x86-64
     timeout-minutes: 30
     strategy:
       fail-fast: false
