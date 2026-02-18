@@ -219,7 +219,7 @@ test-e2e-owner-ref:
 	@bash test/with-admission-plugin/test-e2e-owner-ref.sh
 
 .PHONY: test-gator
-test-gator: gator test-gator-verify test-gator-test test-gator-expand
+test-gator: gator test-gator-verify test-gator-test test-gator-expand test-gator-policy
 
 .PHONY: test-gator-containerized
 test-gator-containerized: __test-image
@@ -237,6 +237,14 @@ test-gator-test: gator
 .PHONY: test-gator-expand
 test-gator-expand: gator
 	bats test/gator/expand
+
+.PHONY: test-gator-policy
+test-gator-policy: gator
+	go test -cover -race ./pkg/gator/policy/...
+
+.PHONY: test-gator-policy-e2e
+test-gator-policy-e2e: gator
+	bats test/gator/policy/policy.bats
 
 e2e-dependencies:
 	# Download and install kind
