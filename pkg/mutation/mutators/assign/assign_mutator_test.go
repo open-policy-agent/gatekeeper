@@ -16,6 +16,7 @@ import (
 	path "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/stretchr/testify/require"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -781,7 +782,7 @@ func TestApplyTo(t *testing.T) {
 				Version: test.version,
 				Kind:    test.kind,
 			})
-			matches, err := mutator.Matches(&types.Mutable{Object: obj, Source: types.SourceTypeDefault, Operation: "CREATE"})
+			matches, err := mutator.Matches(&types.Mutable{Object: obj, Source: types.SourceTypeDefault, Operation: admissionv1.Create})
 			require.NoError(t, err)
 			if matches != test.matchExpected {
 				t.Errorf("Matches() = %t, expected %t", matches, test.matchExpected)

@@ -324,6 +324,22 @@ func TestValidateOperations(t *testing.T) {
 			wantErr: true,
 			errMsg:  "invalid operation \"create\"",
 		},
+		{
+			name:    "wildcard with CREATE is rejected",
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.OperationAll, admissionregistrationv1.Create}},
+			},
+			wantErr: true,
+			errMsg:  "wildcard \"*\" in applyTo[0].operations must not be combined with other operations",
+		},
+		{
+			name:    "wildcard with multiple ops is rejected",
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.OperationAll, admissionregistrationv1.Update}},
+			},
+			wantErr: true,
+			errMsg:  "wildcard \"*\" in applyTo[0].operations must not be combined with other operations",
+		},
 	}
 
 	for _, tt := range tests {
