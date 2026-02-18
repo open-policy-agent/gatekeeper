@@ -1,6 +1,7 @@
 package expand
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
@@ -93,7 +94,7 @@ func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*expansion.Re
 		Username:  "",
 		Source:    types.SourceTypeOriginal,
 	}
-	if _, err := er.mutSystem.Mutate(base); err != nil {
+	if _, err := er.mutSystem.Mutate(context.Background(), base); err != nil {
 		return nil, fmt.Errorf("error mutating base resource %s: %w", resource.GetName(), err)
 	}
 
