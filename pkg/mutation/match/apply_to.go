@@ -31,16 +31,6 @@ func AppliesToMutation(applyTo []MutationApplyTo, gvk schema.GroupVersionKind) b
 	return false
 }
 
-// AppliesOperationTo checks if any item in the given slice of MutationApplyTo allows the given operation.
-func AppliesOperationTo(applyTo []MutationApplyTo, operation admissionv1.Operation) bool {
-	for _, apply := range applyTo {
-		if apply.MatchesOperation(operation) {
-			return true
-		}
-	}
-	return false
-}
-
 // AppliesGVKAndOperation checks if at least one entry in the given slice of
 // MutationApplyTo matches BOTH the given GVK and the given operation. This
 // prevents false positives where one entry matches GVK and a different entry
