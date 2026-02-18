@@ -180,11 +180,26 @@ endif
 
 all: lint test manager
 
-# Run tests
+# Run tests with coverage
+.PHONY: native-test
 native-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
+	go test ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
+
+# Run tests with race detector
+.PHONY: native-race-test
+native-race-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	GO111MODULE=on \
+	go test ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
+
+# Run benchmarks only (no unit tests)
+.PHONY: native-bench-test
+native-bench-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	GO111MODULE=on \
+	go test ./pkg/... ./apis/... ./cmd/gator/... -bench . -run "^$$"
 
 .PHONY: benchmark-test
 benchmark-test:

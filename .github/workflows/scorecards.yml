@@ -20,7 +20,7 @@ permissions: read-all
 jobs:
   analysis:
     name: Scorecard analysis
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-2cpu-8gb-x86-64
     permissions:
       # Needed to upload the results to code-scanning dashboard.
       security-events: write

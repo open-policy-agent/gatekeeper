@@ -10,7 +10,7 @@ jobs:
   benchmark:
     name: "Benchmark"
     if: github.event.issue.pull_request && github.event.comment.body == '/benchmark'
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-4cpu-16gb-x86-64
     timeout-minutes: 60
     permissions:
       contents: write
