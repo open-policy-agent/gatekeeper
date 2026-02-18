@@ -180,11 +180,26 @@ endif
 
 all: lint test manager
 
-# Run tests
+# Run tests with coverage
+.PHONY: native-test
 native-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
+	go test ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
+
+# Run tests with race detector
+.PHONY: native-race-test
+native-race-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	GO111MODULE=on \
+	go test ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
+
+# Run benchmarks only (no unit tests)
+.PHONY: native-bench-test
+native-bench-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	GO111MODULE=on \
+	go test ./pkg/... ./apis/... ./cmd/gator/... -bench . -run "^$$"
 
 .PHONY: benchmark-test
 benchmark-test:
@@ -204,7 +219,7 @@ test-e2e-owner-ref:
 	@bash test/with-admission-plugin/test-e2e-owner-ref.sh
 
 .PHONY: test-gator
-test-gator: gator test-gator-verify test-gator-test test-gator-expand
+test-gator: gator test-gator-verify test-gator-test test-gator-expand test-gator-policy
 
 .PHONY: test-gator-containerized
 test-gator-containerized: __test-image
@@ -222,6 +237,14 @@ test-gator-test: gator
 .PHONY: test-gator-expand
 test-gator-expand: gator
 	bats test/gator/expand
+
+.PHONY: test-gator-policy
+test-gator-policy: gator
+	go test -cover -race ./pkg/gator/policy/...
+
+.PHONY: test-gator-policy-e2e
+test-gator-policy-e2e: gator
+	bats test/gator/policy/policy.bats
 
 e2e-dependencies:
 	# Download and install kind

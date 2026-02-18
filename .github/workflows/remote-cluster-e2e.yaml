@@ -35,7 +35,7 @@ env:
 jobs:
   remote_cluster_e2e:
     name: "Remote Cluster E2E (Kind) - K8s ${{ matrix.KUBERNETES_VERSION }}"
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-8cpu-32gb-x86-64
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -43,7 +43,7 @@ jobs:
         KUBERNETES_VERSION: ["1.31.6", "1.32.3", "1.33.2"] # Latest available versions of Kubernetes at - https://hub.docker.com/r/kindest/node/tags
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e3f713f2d8f53843e71c69a996d56f51aa9adfb9 # v2.14.1
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
         with:
           egress-policy: audit
 
