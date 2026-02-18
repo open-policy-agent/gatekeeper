@@ -1,6 +1,7 @@
 package expansion
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -202,7 +203,7 @@ func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 			Username:  base.Username,
 			Source:    mutationtypes.SourceTypeGenerated,
 		}
-		_, err := s.mutationSystem.Mutate(mutable)
+		_, err := s.mutationSystem.Mutate(context.Background(), mutable)
 		if err != nil {
 			return nil, fmt.Errorf("failed to mutate resultant resource %s: %w", res.Obj.GetName(), err)
 		}
