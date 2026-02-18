@@ -1,6 +1,7 @@
 package match
 
 import (
+	"strings"
 	"testing"
 
 	admissionv1 "k8s.io/api/admission/v1"
@@ -333,28 +334,10 @@ func TestValidateOperations(t *testing.T) {
 				return
 			}
 			if tt.wantErr && tt.errMsg != "" {
-				if err == nil || !contains([]string{err.Error()}, tt.errMsg) {
-					// Check if error message contains expected substring
-					if err != nil && !containsSubstring(err.Error(), tt.errMsg) {
-						t.Errorf("ValidateOperations() error = %v, want error containing %q", err, tt.errMsg)
-					}
+				if err == nil || !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("ValidateOperations() error = %v, want error containing %q", err, tt.errMsg)
 				}
 			}
 		})
 	}
-}
-
-// containsSubstring checks if s contains substr.
-func containsSubstring(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
