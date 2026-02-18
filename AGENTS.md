@@ -293,7 +293,7 @@ When contributing to Gatekeeper, maintain clear and human-friendly communication
 ## CI/CD & Validation
 
 **GitHub Actions Workflows:**
-- **`workflow.yaml`** - Main CI pipeline, tests across Kubernetes 1.32-1.34
+- **`workflow.yaml`** - Main CI pipeline, tests across Kubernetes 1.33-1.35
 - **`unit-test.yaml`** - Dedicated unit test execution
 - **`lint.yaml`** - Code quality and formatting checks
 - **All workflows must pass** before merge approval
