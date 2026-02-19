@@ -43,6 +43,187 @@ Note: The `gator verify` command was first called `gator test`. These names were
 changed to better align `gator` with other projects in the open-policy-agent
 space.
 
+## The `gator policy` subcommand
+
+`Feature State`: Gatekeeper version v3.22+ (alpha)
+
+`gator policy` provides a brew-inspired interface for managing Gatekeeper policies
+from the official [gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library).
+It enables users to discover, install, upgrade, and manage ConstraintTemplates and
+Constraints in their Kubernetes clusters.
+
+### Commands Overview
+
+| Command | Description | Requires Cluster |
+|---------|-------------|------------------|
+| `search` | Search available policies | No (uses cached catalog) |
+| `list` | List installed policies | Yes |
+| `install` | Install policies/bundles | Yes |
+| `uninstall` | Remove policies | Yes |
+| `update` | Refresh catalog | No |
+| `upgrade` | Upgrade policies | Yes |
+| `generate-catalog` | Generate catalog from gatekeeper-library | No |
+
+### Installation Model
+
+- **Individual policy install**: Installs ConstraintTemplate only
+- **Bundle install**: Installs ConstraintTemplates AND pre-configured Constraints
+
+```shell
+# Template only
+gator policy install k8srequiredlabels
+
+# Bundle includes templates + constraints
+gator policy install --bundle pod-security-baseline
+```
+
+### Usage Examples
+
+#### Update the catalog
+
+Before using other commands, update the local catalog cache:
+
+```shell
+gator policy update
+```
+
+This fetches the latest policy catalog from gatekeeper-library.
+
+#### Search for policies
+
+```shell
+# Search by name or description
+gator policy search labels
+
+# Filter by category
+gator policy search security --category=pod-security
+
+# Output as JSON
+gator policy search labels --output=json
+```
+
+#### Install policies
+
+```shell
+# Install a single policy (template only)
+gator policy install k8srequiredlabels
+
+# Install multiple policies
+gator policy install k8srequiredlabels k8scontainerlimits
+
+# Install a bundle (templates + constraints)
+gator policy install --bundle pod-security-baseline
+
+# Install with warn enforcement (for safe rollout)
+gator policy install --bundle pod-security-baseline --enforcement-action=warn
+
+# Preview changes without applying
+gator policy install --bundle pod-security-baseline --dry-run
+```
+
+#### List installed policies
+
+```shell
+# Table output (default)
+gator policy list
+
+# JSON output
+gator policy list --output=json
+```
+
+#### Upgrade policies
+
+```shell
+# Upgrade a specific policy
+gator policy upgrade k8srequiredlabels
+
+# Upgrade all installed policies
+gator policy upgrade --all
+
+# Preview upgrades
+gator policy upgrade --all --dry-run
+```
+
+#### Uninstall policies
+
+```shell
+# Uninstall a policy
+gator policy uninstall k8srequiredlabels
+
+# Preview uninstall
+gator policy uninstall k8srequiredlabels --dry-run
+```
+
+#### Generate a catalog (for library maintainers)
+
+The `generate-catalog` command scans a gatekeeper-library directory and generates
+a catalog.yaml file. This is primarily used by gatekeeper-library maintainers.
+
+```shell
+# Generate catalog from gatekeeper-library
+gator policy generate-catalog --library-path=/path/to/gatekeeper-library
+
+# Generate with custom output path
+gator policy generate-catalog --library-path=. --output=catalog.yaml
+
+# Generate with bundles file
+gator policy generate-catalog --library-path=. --bundles=bundles.yaml
+
+# Generate with custom version
+gator policy generate-catalog --library-path=. --version=v1.2.0
+```
+
+### Bundles
+
+Bundles are curated sets of policies with pre-configured constraints:
+
+| Bundle | Description |
+|--------|-------------|
+| `pod-security-baseline` | Pod Security Standards - Baseline level |
+| `pod-security-restricted` | Pod Security Standards - Restricted level |
+
+### Resource Management
+
+All managed resources receive tracking metadata:
+
+```yaml
+metadata:
+  labels:
+    gatekeeper.sh/managed-by: gator
+    gatekeeper.sh/bundle: pod-security-baseline  # If installed via bundle
+  annotations:
+    gatekeeper.sh/policy-version: v1.0.0
+    gatekeeper.sh/policy-source: gatekeeper-library
+    gatekeeper.sh/installed-at: "2026-01-08T10:30:00Z"
+```
+
+### Conflict Resolution
+
+| Scenario | Behavior |
+|----------|----------|
+| Resource doesn't exist | Install it |
+| Resource exists, managed by gator | Update if version differs |
+| Resource exists, NOT managed by gator | **Error** - refuse to modify |
+| Resource exists, same version | Skip (already installed) |
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | General error (network, invalid args) |
+| 2 | Cluster error (not found, permission denied) |
+| 3 | Conflict (resource exists, not managed by gator) |
+| 4 | Partial success (some resources failed) |
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GATOR_HOME` | Cache directory | `~/.config/gator/` |
+| `GATOR_CATALOG_URL` | Catalog source URL | gatekeeper-library catalog |
+| `KUBECONFIG` | Kubernetes config | `~/.kube/config` |
+
 ### Usage
 
 :::note

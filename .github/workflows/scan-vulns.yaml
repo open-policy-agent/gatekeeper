@@ -28,7 +28,7 @@ permissions: read-all
 jobs:
   govulncheck:
     name: "Run govulncheck"
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-4cpu-16gb-x86-64
     timeout-minutes: 15
     steps:
       - name: Harden Runner
@@ -44,7 +44,7 @@ jobs:
 
   scan_vulnerabilities:
     name: "[Trivy] Scan for vulnerabilities"
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-4cpu-16gb-x86-64
     timeout-minutes: 15
     steps:
       - name: Harden Runner

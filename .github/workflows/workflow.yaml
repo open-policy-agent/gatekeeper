@@ -28,7 +28,7 @@ permissions: read-all
 jobs:
   build_test:
     name: "Build and Test"
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-8cpu-32gb-x86-64
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -90,7 +90,7 @@ jobs:
 
   helm_build_test:
     name: "[Helm] Build and Test"
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-8cpu-32gb-x86-64
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -162,7 +162,7 @@ jobs:
 
   build_test_generator_expansion:
     name: "[Generator Resource Expansion] Build and Test"
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-8cpu-32gb-x86-64
     timeout-minutes: 15
 
     steps:
@@ -219,7 +219,7 @@ jobs:
 
   e2e_test_with_OwnerReferencesPermissionEnforcement_admission_plugin:
     name: "[E2E] Test with OwnerReferencesPermissionEnforcement admission plugin"
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-8cpu-32gb-x86-64
     timeout-minutes: 15
     steps:
       - name: Harden Runner

@@ -14,7 +14,7 @@ env:
 jobs:
   pre-release:
     name: "Pre Release"
-    runs-on: "ubuntu-22.04"
+    runs-on: oracle-vm-8cpu-32gb-x86-64
     if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
     timeout-minutes: 30
     permissions:

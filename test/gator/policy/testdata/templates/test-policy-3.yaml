@@ -1,0 +1,16 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: testpolicy3
+spec:
+  crd:
+    spec:
+      names:
+        kind: TestPolicy3
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package testpolicy3
+        violation[{"msg": msg}] {
+          msg := "test violation 3"
+        }
