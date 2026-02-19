@@ -332,7 +332,7 @@ func TestReconcile(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	transform.SetVapAPIEnabled(ptr.To[bool](true))
-	transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
+	transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 
 	// Override the default VAPB generation wait time to speed up tests.
 	// The production default is 30s, but tests only need to verify the
@@ -390,20 +390,19 @@ func TestReconcile(t *testing.T) {
 		})
 	})
 
-	t.Run("Vap should be created with v1beta1", func(t *testing.T) {
+	t.Run("Vap should be created with default version", func(t *testing.T) {
 		suffix := "VapShouldBeCreatedV1Beta1"
 
-		logger.Info("Running test: Vap should be created with v1beta1")
+		logger.Info("Running test: Vap should be created with default version")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
 			// check if vap resource exists now
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				return err
@@ -427,7 +426,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// check if vap resource exists now
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				if !apierrors.IsNotFound(err) {
@@ -454,7 +453,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// check if vap resource exists now
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				if !apierrors.IsNotFound(err) {
@@ -523,7 +522,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// check if vap resource exists now
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				if !apierrors.IsNotFound(err) {
@@ -550,7 +549,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// check if vap resource exists now
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				if !apierrors.IsNotFound(err) {
@@ -576,7 +575,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// check if vap resource exists now
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 			vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				return err
@@ -636,7 +635,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// check if vapbinding resource exists now
-			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
@@ -671,7 +670,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// check if vapbinding resource exists now
-			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
@@ -756,7 +755,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
@@ -802,7 +801,7 @@ func TestReconcile(t *testing.T) {
 				return err
 			}
 			// check if vapbinding resource exists now
-			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				// Since tests retries 3000 times at 100 retries per second, adding sleep makes sure that this test gets covarage time > 30s to cover the default wait.
 				time.Sleep(10 * time.Millisecond)
@@ -847,7 +846,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// check if vapbinding resource exists now
-			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
@@ -1358,13 +1357,12 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VAP v1beta1 should be recreated when deleted", func(t *testing.T) {
+	t.Run("VAP default version should be recreated when deleted", func(t *testing.T) {
 		suffix := "VapV1Beta1ShouldBeRecreated"
 
-		logger.Info("Running test: VAP v1beta1 should be recreated when deleted")
+		logger.Info("Running test: VAP default version should be recreated when deleted")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
@@ -1373,7 +1371,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				return err
 			}
@@ -1384,7 +1382,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		// Delete the VAP resource directly to simulate external deletion
-		vapToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+		vapToDelete := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 		err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
 		if err != nil {
 			t.Fatal(err)
@@ -1399,7 +1397,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
 			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
 				return err
 			}
@@ -1470,14 +1468,13 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("VAPB v1beta1 should be recreated when deleted", func(t *testing.T) {
+	t.Run("VAPB default version should be recreated when deleted", func(t *testing.T) {
 		suffix := "VapbV1Beta1ShouldBeRecreated"
 
-		logger.Info("Running test: VAPB v1beta1 should be recreated when deleted")
+		logger.Info("Running test: VAPB default version should be recreated when deleted")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		// Create the constraint first
@@ -1496,7 +1493,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-			vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
 				return err
 			}
@@ -1507,7 +1504,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		// Delete the VAPB resource directly to simulate external deletion
-		vapbToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+		vapbToDelete := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 		err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
 		if err != nil {
 			t.Fatal(err)
@@ -1522,7 +1519,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
 			return true
 		}, func() error {
-			vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+			vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
 				return err
 			}
