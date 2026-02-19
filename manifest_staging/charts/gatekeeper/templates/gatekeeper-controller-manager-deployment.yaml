@@ -157,6 +157,7 @@ spec:
         {{ if hasKey .Values.controllerManager "clientCNName" }}- --client-cn-name={{ .Values.controllerManager.clientCNName }}{{- end }}
         {{ if hasKey .Values "shutdownDelay" }}- --shutdown-delay={{ .Values.shutdownDelay }}{{- end }}
         {{ if hasKey .Values "enableRemoteCluster" }}- --enable-remote-cluster={{ .Values.enableRemoteCluster }}{{- end }}
+        {{ if hasKey .Values "kubeconfig" }}- --kubeconfig={{ .Values.kubeconfig }}{{- end }}
         command:
         - /manager
         env:

@@ -130,6 +130,7 @@ spec:
             - HELMSUBST_CONTROLLER_MANAGER_CLIENT_CN_NAME
             - HELMSUBST_SHUTDOWN_DELAY
             - HELMSUBST_ENABLE_REMOTE_CLUSTER
+            - HELMSUBST_KUBECONFIG
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -234,6 +235,7 @@ spec:
             - HELMSUBST_ENABLE_REFERENTIAL_RULES
             - HELMSUBST_SHUTDOWN_DELAY
             - HELMSUBST_ENABLE_REMOTE_CLUSTER
+            - HELMSUBST_KUBECONFIG
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:

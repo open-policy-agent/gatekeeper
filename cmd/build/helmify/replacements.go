@@ -422,4 +422,6 @@ var replacements = map[string]string{
 	"- HELMSUBST_SHUTDOWN_DELAY": `{{ if hasKey .Values "shutdownDelay" }}- --shutdown-delay={{ .Values.shutdownDelay }}{{- end }}`,
 
 	"- HELMSUBST_ENABLE_REMOTE_CLUSTER": `{{ if hasKey .Values "enableRemoteCluster" }}- --enable-remote-cluster={{ .Values.enableRemoteCluster }}{{- end }}`,
+
+	"- HELMSUBST_KUBECONFIG": `{{ if hasKey .Values "kubeconfig" }}- --kubeconfig={{ .Values.kubeconfig }}{{- end }}`,
 }
