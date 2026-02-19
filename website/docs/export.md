@@ -160,12 +160,12 @@ The following table describes each property in the `status.byPod` section:
         spec:
           containers:
           - name: go-sub
-            image: fake-subscriber:latest
-            imagePullPolicy: Never
+            image: ghcr.io/open-policy-agent/fake-subscriber:latest
+            imagePullPolicy: IfNotPresent
     ```
 
     :::important
-    Please make sure `fake-subscriber` image is built and available in your cluster. Dockerfile to build image for `fake-subscriber` is under [gatekeeper/test/export/fake-subscriber](https://github.com/open-policy-agent/gatekeeper/tree/master/test/export/fake-subscriber).
+    The `fake-subscriber` image is published as part of each Gatekeeper release at `ghcr.io/open-policy-agent/fake-subscriber`. To build a custom version locally, use the Dockerfile at [gatekeeper/test/export/fake-subscriber](https://github.com/open-policy-agent/gatekeeper/tree/master/test/export/fake-subscriber).
     :::
 
 #### Configure Gatekeeper with Export enabled with Dapr
@@ -278,7 +278,7 @@ The following table describes each property in the `status.byPod` section:
     ```
 
     :::warning
-    The reader sidecar image `ghcr.io/open-policy-agent/fake-reader:latest` and the provided default configurations are intended for demonstration and quickstart purposes only. They are not recommended for production environments. For production use, it is advised to create and configure a custom sidecar image tailored to your specific requirements.
+    The reader sidecar image `ghcr.io/open-policy-agent/fake-reader` is published as part of each Gatekeeper release and is intended for demonstration and quickstart purposes only. It is not recommended for production environments. For production use, it is advised to create and configure a custom sidecar image tailored to your specific requirements.
     :::
 
     ```shell

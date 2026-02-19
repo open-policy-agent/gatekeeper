@@ -8,6 +8,8 @@ env:
   IMAGE_REPO: openpolicyagent/gatekeeper
   CRD_IMAGE_REPO: openpolicyagent/gatekeeper-crds
   GATOR_IMAGE_REPO: openpolicyagent/gator
+  FAKE_READER_IMAGE_REPO: ghcr.io/open-policy-agent/fake-reader
+  FAKE_SUBSCRIBER_IMAGE_REPO: ghcr.io/open-policy-agent/fake-subscriber
 
 permissions: read-all
 
@@ -101,6 +103,26 @@ jobs:
               OUTPUT_TYPE=type=registry \
               GENERATE_ATTESTATIONS=true \
               PUSH_TO_GHCR=true
+          fi
+
+          # fake-reader (GHCR-only)
+          if ! docker manifest inspect ${{ env.FAKE_READER_IMAGE_REPO }}:${TAG} > /dev/null 2>&1
+          then
+            make docker-buildx-fake-reader-release \
+              VERSION=${TAG} \
+              PLATFORM="linux/amd64,linux/arm64" \
+              OUTPUT_TYPE=type=registry \
+              GENERATE_ATTESTATIONS=true
+          fi
+
+          # fake-subscriber (GHCR-only)
+          if ! docker manifest inspect ${{ env.FAKE_SUBSCRIBER_IMAGE_REPO }}:${TAG} > /dev/null 2>&1
+          then
+            make docker-buildx-fake-subscriber-release \
+              VERSION=${TAG} \
+              PLATFORM="linux/amd64,linux/arm64" \
+              OUTPUT_TYPE=type=registry \
+              GENERATE_ATTESTATIONS=true
           fi
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
