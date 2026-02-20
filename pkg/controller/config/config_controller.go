@@ -289,7 +289,9 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 			gvksToSync = append(gvksToSync, entry.ToGroupVersionKind())
 		}
 
-		newExcluder.Add(instance.Spec.Match)
+		if err := newExcluder.Add(instance.Spec.Match); err != nil {
+			return reconcile.Result{}, fmt.Errorf("error adding match entries to excluder: %w", err)
+		}
 		statsEnabled = instance.Spec.Readiness.StatsEnabled
 	}
 
