@@ -112,6 +112,7 @@ spec:
         {{- if and (has "stackdriver" .Values.metricsBackends) (hasKey .Values "stackdriverMetricInterval") }}
         - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
         {{- end }}
+        {{ if hasKey .Values "metricsAddr" }}- --metrics-addr={{ .Values.metricsAddr }}{{- end }}
         
         {{- if .Values.audit.logFile}}
         - --log-file={{ .Values.audit.logFile }}
@@ -143,6 +144,16 @@ spec:
         {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
         - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}
+        {{ if hasKey .Values "logLevelKey" }}- --log-level-key={{ .Values.logLevelKey }}{{- end }}
+        {{ if hasKey .Values "logLevelEncoder" }}- --log-level-encoder={{ .Values.logLevelEncoder }}{{- end }}
+        {{ if hasKey .Values "readinessRetries" }}- --readiness-retries={{ .Values.readinessRetries }}{{- end }}
+        {{ if hasKey .Values "enablePprof" }}- --enable-pprof={{ .Values.enablePprof }}{{- end }}
+        {{ if hasKey .Values "pprofPort" }}- --pprof-port={{ .Values.pprofPort }}{{- end }}
+        {{ if hasKey .Values.audit "apiCacheDir" }}- --api-cache-dir={{ .Values.audit.apiCacheDir }}{{- end }}
+        {{ if hasKey .Values "enableReferentialRules" }}- --enable-referential-rules={{ .Values.enableReferentialRules }}{{- end }}
+        {{ if hasKey .Values "shutdownDelay" }}- --shutdown-delay={{ .Values.shutdownDelay }}{{- end }}
+        {{ if hasKey .Values "enableRemoteCluster" }}- --enable-remote-cluster={{ .Values.enableRemoteCluster }}{{- end }}
+        {{ if hasKey .Values "kubeconfig" }}- --kubeconfig={{ .Values.kubeconfig }}{{- end }}
         command:
         - /manager
         env:
