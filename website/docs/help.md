@@ -114,6 +114,20 @@ If you want to contribute to Helm chart, Gatekeeper auto-generates versioned Hel
 
 If you want to contribute code, check out the [Developers](developers.md) guide to get started.
 
+### API and Feature Maturity Stages
+
+When contributing new features or APIs, please be aware of Gatekeeper's maturity stage requirements:
+
+- **Alpha** features must be behind feature flags and clearly documented as experimental
+- **Beta** features should be well-tested, enabled by default, and production-ready
+- **GA** features require comprehensive testing, backward compatibility guarantees, and performance SLOs
+
+See the [Feature/API Stage Requirements](https://github.com/open-policy-agent/gatekeeper/blob/master/docs/Backwards_Compatibility.md#featureapi-stage-requirements) 
+section in our Backwards Compatibility document for detailed requirements at each stage.
+
+When modifying existing APIs or features, please consult the [Backwards Compatibility](https://github.com/open-policy-agent/gatekeeper/blob/master/docs/Backwards_Compatibility.md) 
+guide to ensure changes meet our stability guarantees.
+
 ## Contributing Templates
 
 If you'd like to contribute a Constraint Template to the [Gatekeeper Policy Library](https://open-policy-agent.github.io/gatekeeper-library/website/), you can find documentation on how to do that [here in the library's README](https://github.com/open-policy-agent/gatekeeper-library?tab=readme-ov-file#how-to-contribute-to-the-library).
