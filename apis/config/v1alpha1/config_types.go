@@ -73,8 +73,12 @@ func (e *SyncOnlyEntry) ToGroupVersionKind() schema.GroupVersionKind {
 }
 
 type MatchEntry struct {
-	Processes          []string            `json:"processes,omitempty"`
-	ExcludedNamespaces []wildcard.Wildcard `json:"excludedNamespaces,omitempty"`
+	Processes          []string              `json:"processes,omitempty"`
+	ExcludedNamespaces []wildcard.Wildcard   `json:"excludedNamespaces,omitempty"`
+	APIGroups          []string              `json:"apiGroups,omitempty"`
+	APIVersions        []string              `json:"apiVersions,omitempty"`
+	Kinds              []string              `json:"kinds,omitempty"`
+	NamespaceSelector  *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
 }
 
 type ReadinessSpec struct {
