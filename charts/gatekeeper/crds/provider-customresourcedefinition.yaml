@@ -14,7 +14,6 @@ spec:
     listKind: ProviderList
     plural: providers
     singular: provider
-  preserveUnknownFields: false
   scope: Cluster
   versions:
   - deprecated: true
@@ -118,7 +117,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: Provider is the Schema for the providers API
+        description: Provider is the Schema for the providers API.
         properties:
           apiVersion:
             description: |-
