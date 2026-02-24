@@ -11,25 +11,65 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Goals and Non-Goals](#goals-and-non-goals)
-3. [Background](#background)
-4. [Proposal](#proposal)
-5. [API Design](#api-design)
-6. [Controller Architecture](#controller-architecture)
-7. [Scope Synchronization](#scope-synchronization)
-8. [Ownership and Lifecycle](#ownership-and-lifecycle)
-9. [Kubernetes Version Compatibility](#kubernetes-version-compatibility)
-10. [Security Considerations](#security-considerations)
-11. [Known Limitations](#known-limitations)
-12. [Open Questions](#open-questions)
-13. [Future Work](#future-work)
-14. [Alternatives Considered](#alternatives-considered)
+2. [Motivation](#motivation)
+3. [Goals and Non-Goals](#goals-and-non-goals)
+4. [User Stories](#user-stories)
+5. [Background](#background)
+6. [Proposal](#proposal)
+7. [API Design](#api-design)
+8. [Controller Architecture](#controller-architecture)
+9. [Scope Synchronization](#scope-synchronization)
+10. [Ownership and Lifecycle](#ownership-and-lifecycle)
+11. [Kubernetes Version Compatibility](#kubernetes-version-compatibility)
+12. [Security Considerations](#security-considerations)
+13. [Performance Considerations](#performance-considerations)
+14. [Known Limitations](#known-limitations)
+15. [Open Questions](#open-questions)
+16. [Graduation Criteria](#graduation-criteria)
+17. [Test Plan](#test-plan)
+18. [Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy)
+19. [Monitoring Requirements](#monitoring-requirements)
+20. [Scalability](#scalability)
+21. [Troubleshooting](#troubleshooting)
+22. [Drawbacks](#drawbacks)
+23. [Future Work](#future-work)
+24. [Alternatives Considered](#alternatives-considered)
+25. [Implementation Plan](#implementation-plan)
+26. [Reference](#reference)
 
 ---
 
 ## Overview
 
 This document describes adding MutatingAdmissionPolicy (MAP) management to Gatekeeper. This feature introduces `MAPTemplate` and `MutationConstraint` CRDs to manage MAP, MutatingAdmissionPolicyBinding (MAPB), and param resources.
+
+---
+
+## Motivation
+
+Kubernetes introduced MutatingAdmissionPolicy (KEP-3962) as a native, in-process
+alternative to mutation webhooks. MAP moves mutation logic into the API server
+process, eliminating the network round-trip, TLS overhead, and single-point-of-failure
+characteristics of external webhooks.
+
+Gatekeeper's current mutation system (Assign, AssignMetadata, ModifySet, AssignImage)
+relies on a mutating admission webhook. While functional, this architecture has
+inherent limitations:
+
+1. **Latency**: Every mutation requires a network round-trip from the API server to
+   the Gatekeeper webhook, adding latency per admission request
+2. **Availability**: If Gatekeeper is unavailable, mutation policies either block
+   admission (`Fail`) or silently skip (`Ignore`) — neither is ideal
+3. **Operational complexity**: TLS certificate rotation, webhook configuration
+   management, and network policies add operational burden
+4. **Scalability**: Webhook-based mutation becomes a bottleneck under high admission
+   throughput
+
+MAP eliminates these limitations by evaluating CEL expressions directly in the
+API server process. However, raw MAP resources lack the template/instance
+separation and scope synchronization that Gatekeeper provides. This design brings
+Gatekeeper's proven ConstraintTemplate/Constraint UX pattern to MAP, enabling
+reusable, parameterized mutation policies with automatic scope enforcement.
 
 ---
 
@@ -52,6 +92,36 @@ This document describes adding MutatingAdmissionPolicy (MAP) management to Gatek
 3. Providing fallback if MAP generation fails
 4. Extending gator CLI for MAP testing (future work)
 5. Migration tooling from existing mutators to MAP
+
+---
+
+## User Stories
+
+### Story 1: Platform Team Enforcing Image Pull Policy
+
+As a platform team lead, I want to define a reusable mutation template that sets
+`imagePullPolicy: Always` on all containers, so that different teams can apply it
+to their namespaces with per-namespace parameters, without relying on webhook
+infrastructure.
+
+### Story 2: Security Engineer Ensuring Scope Consistency
+
+As a security engineer, I want MAP policies to automatically respect the same
+namespace exclusions configured on Gatekeeper's mutation webhook, so that I don't
+have to manually duplicate scope configuration across two mutation systems.
+
+### Story 3: Cluster Admin Migrating from Webhook Mutation
+
+As a cluster admin, I want to gradually migrate mutation policies from Gatekeeper's
+webhook to MAP, so that I can reduce webhook latency and eliminate a failure point
+while maintaining the same policy-as-code UX my teams are familiar with.
+
+### Story 4: Policy Author Creating Parameterized Mutations
+
+As a policy author, I want to write a single MAPTemplate that injects resource
+limits into containers, and allow each team to create MutationConstraint instances
+with their own limit values, so that I maintain a single source of truth for the
+mutation logic while enabling per-team customization.
 
 ---
 
@@ -953,6 +1023,106 @@ System-injected matchConditions use the reserved `gatekeeper-internal-` prefix.
 User-provided matchConditions with this prefix are rejected at MAPTemplate creation time
 to prevent shadowing of scope exclusion conditions.
 
+### Admission Interception Scope
+
+Kubernetes distinguishes between **admission webhooks** and **in-process admission
+policies** (VAP/MAP) in what resources they can intercept:
+
+| Mechanism | Can target `admissionregistration.k8s.io`? | Can target Gatekeeper CRDs? |
+|---|---|---|
+| Admission webhooks (ValidatingWebhookConfiguration) | ✅ Yes | ✅ Yes |
+| ValidatingAdmissionPolicy / MutatingAdmissionPolicy | ❌ No (prevented to avoid self-locking) | ✅ Yes |
+
+**Implications for this design**:
+
+- **MAPTemplate governance via webhook**: Gatekeeper's existing validating admission
+  webhook can intercept MAPTemplate creation (in `templates.gatekeeper.sh`) and perform
+  SubjectAccessReview checks. This is the mechanism for the privilege escalation
+  mitigation described above.
+- **MAPTemplate governance via ConstraintTemplate**: Users can write ConstraintTemplate
+  policies that validate MAPTemplate resources, since Gatekeeper's webhook evaluates
+  constraints against any resource it intercepts.
+- **Generated MAP/MAPB resources cannot be guarded by VAP/MAP**: The generated
+  MutatingAdmissionPolicy and MutatingAdmissionPolicyBinding resources (in
+  `admissionregistration.k8s.io`) cannot be intercepted by other VAPs or MAPs. This is
+  acceptable because Gatekeeper generates these resources itself — external validation
+  of the generated output is not required.
+- **No circular dependency**: Gatekeeper does not need to validate its own generated
+  MAPs via webhook. The Kubernetes API server validates CEL expressions at MAP creation
+  time, and errors are surfaced in MAPTemplate status.
+
+---
+
+## Performance Considerations
+
+### API Call Analysis
+
+Each MAPTemplate reconciliation generates the following API calls:
+
+| Step | API Call | Type |
+|------|----------|------|
+| 1 | `Get MAPTemplate` | Read |
+| 2 | `Get/Create/Update CRD` | Read + Write |
+| 3 | `Update MAPTemplate annotations` (retry-on-conflict) | Write |
+| 4 | `Get/Create/Update MAP` | Read + Write |
+| 5 | `Update MAPTemplatePodStatus` | Write |
+| | **Total per reconciliation** | **6-10 calls** |
+
+Each MutationConstraint reconciliation:
+
+| Step | API Call | Type |
+|------|----------|------|
+| 1 | `Get MutationConstraint` | Read |
+| 2 | `Get MAPTemplate` | Read |
+| 3 | `Get/Create/Update MAPB` | Read + Write |
+| 4 | `Update MutationConstraintPodStatus` | Write |
+| | **Total per reconciliation** | **5-7 calls** |
+
+### Scope Sync Impact
+
+A Config or webhook configuration change triggers reconciliation of all
+MAPTemplates. With T templates and C constraints per template:
+
+- **API calls per scope sync**: T × (6-10) for templates. Constraints are
+  triggered only on MAP create/delete, not on scope-sync updates — MAPBs
+  reference the MAP by name, so MAP content changes don't require MAPB
+  re-generation.
+- **Mitigation**: Generation-counter no-op detection skips MAP writes when
+  content hasn't changed, reducing the typical scope sync to T × 2
+  (Get + no-op check) + status updates only for templates whose MAP spec
+  actually changed.
+
+### Resource Count at Scale
+
+| Cluster Size | Templates (T) | Constraints (C) | Pods (P) | User Objects | Total Objects |
+|---|---|---|---|---|---|
+| Small | 10 | 20 | 3 | 30 | 160 |
+| Medium | 50 | 100 | 3 | 150 | 800 |
+| Large | 200 | 400 | 5 | 600 | 4,200 |
+
+Formula: T + C + T (CRDs) + T (MAPs) + C (MAPBs) + P×T (template pod statuses) +
+P×C (constraint pod statuses).
+
+### Memory Overhead
+
+- Each dynamically watched GVK creates one in-memory informer with its own
+  reflector and cache. Estimated overhead per GVK: ~2-5 MB depending on
+  instance count.
+- Status aggregation lists are O(P) per reconciliation — bounded by pod count.
+- Event channel: 1024 capacity × ~200 bytes per event ≈ 200 KB fixed overhead.
+
+### Admission Latency
+
+MAP CEL expressions are evaluated by the Kubernetes API server, not Gatekeeper.
+This design does not directly impact admission webhook latency. However:
+
+- **reinvocationPolicy: IfNeeded** may cause the API server to re-evaluate MAPs
+  after other mutations, adding one additional evaluation pass.
+- During scope sync, frequent MAP updates may transiently increase API server
+  admission processing time.
+- CEL evaluation cost is bounded by the API server's built-in CEL cost budget
+  (currently 10^7 cost units per policy).
+
 ---
 
 ## Known Limitations
@@ -1056,6 +1226,254 @@ reconciliation when relevant fields change.
 
 ---
 
+## Graduation Criteria
+
+### Alpha (v1alpha1)
+
+- MAPTemplate and MutationConstraint CRDs defined and installable
+- MAPTemplate controller generates MAP, CRD, and manages lifecycle
+- MutationConstraint controller generates MAPB and manages lifecycle
+- Scope synchronization from Config and mutation webhook configuration
+- Status aggregation controllers for MAPTemplate and MutationConstraint
+- Owner reference-based garbage collection
+- API version detection (v1alpha1/v1beta1/v1)
+- matchCondition name protection (`gatekeeper-internal-` prefix rejection)
+- Unit tests for all controller paths (creation, update, deletion)
+- Integration tests with envtest for controller reconciliation
+- *(Optional)* Initial e2e tests with BATS for full lifecycle
+- *(Optional)* Basic MAP/MAPB generation success/failure metrics
+- Documentation for MAPTemplate authoring and MutationConstraint usage
+
+### Beta (v1beta1)
+
+All alpha criteria (including any optional alpha items not yet completed), plus:
+
+- All open questions resolved (parameterNotFoundAction default, coexistence
+  strategy, webhook config controller deduplication)
+- Monitoring and metrics implemented:
+  - MAP/MAPB generation success/failure counters
+  - Reconciliation latency histograms
+  - Resource count gauges (MAPTemplates, MutationConstraints, MAPs, MAPBs)
+- Scalability testing validated at 100+ MAPTemplates with 200+ MutationConstraints
+- Upgrade/downgrade testing completed
+- Conflict detection warnings for overlapping Gatekeeper mutators and MAP policies
+- Security review completed
+- E2E tests with BATS for full lifecycle
+- Performance benchmarks established (target: MAP generation <500ms p99)
+- *(Optional)* SubjectAccessReview admission webhook for MAPTemplate creation
+  (privilege escalation mitigation — can rely on RBAC + documentation if webhook
+  is deferred)
+- *(Optional)* Troubleshooting runbook published
+- *(Optional)* Gator CLI support for MAPTemplate/MutationConstraint testing
+
+### GA (v1)
+
+All beta criteria (including any optional beta items not yet completed), plus:
+
+- At least 2 releases at beta maturity
+- Real-world usage validated by production deployments
+- All beta feedback and bug reports addressed
+- *(Optional)* CRD version conversion strategy implemented (only required if
+  schema changed between alpha and beta)
+- *(Optional)* MAP policies published in gatekeeper-library
+- *(Optional)* Performance validated at scale (200+ templates, 1000+ constraints)
+
+---
+
+## Test Plan
+
+### Unit Tests
+
+| Component | Test Scenarios |
+|-----------|---------------|
+| MAPTemplate controller | CRD generation, MAP construction, scope injection, annotation handling, deletion flow, API version detection, matchCondition name validation |
+| MutationConstraint controller | MAPB construction, BlockMAPBGeneration delay handling, owner reference wiring, deletion flow, IfWatching guard |
+| MAPTemplateStatus controller | Pod status aggregation, stale status filtering, UID mismatch handling |
+| MutationConstraintStatus controller | Dynamic GVK handling, EventPacker/UnpackRequest, status aggregation |
+| MutationWebhookConfigController | Webhook config extraction, change detection, event triggering |
+| Scope injection | Excluded namespaces, exempt namespaces (prefix/suffix/exact), webhook selector merging, cluster-scoped resource handling |
+
+### Integration Tests
+
+Using envtest (controller-runtime test framework):
+
+- Full MAPTemplate lifecycle: create → verify CRD + MAP generated → update →
+  verify MAP updated → delete → verify cleanup
+- Full MutationConstraint lifecycle: create → verify MAPB generated → delete →
+  verify MAPB deleted
+- Scope sync: change Config excluded namespaces → verify MAP matchConditions updated
+- Multi-instance: multiple MutationConstraints for same MAPTemplate → verify
+  independent MAPBs
+- Cascade deletion: delete MAPTemplate → verify all MutationConstraints and
+  MAPBs cleaned up
+- BlockMAPBGeneration: verify MAPB not generated during delay window, generated
+  after expiry
+- Status aggregation: multi-pod status → verify aggregated status on parent resource
+- API unavailability: MAP API not available → verify graceful error in status
+
+### E2E Tests
+
+Using BATS with kind cluster:
+
+- Create MAPTemplate + MutationConstraint → verify mutation applies to target
+  resources
+- Scope exclusion: verify mutations don't apply to excluded namespaces
+- Template update: modify MAPTemplate → verify MAP updated, mutations reflect changes
+- Constraint deletion: delete MutationConstraint → verify MAPB removed, mutation stops
+- Template deletion cascade: delete MAPTemplate → verify all child resources
+  cleaned up
+
+---
+
+## Upgrade / Downgrade Strategy
+
+### Upgrade
+
+MAPTemplate and MutationConstraint are new CRDs. Upgrading Gatekeeper to a version
+that includes MAP support:
+
+- Adds new CRDs (MAPTemplate, MAPTemplatePodStatus, MutationConstraintPodStatus)
+  to the cluster — no impact on existing resources
+- Starts the MAPTemplate and MutationConstraint controllers if
+  `operations.Generate` is assigned
+- No MAPs are generated until a user creates a MAPTemplate — fully opt-in
+- Existing Gatekeeper mutation webhook continues to function unchanged
+
+### Downgrade
+
+Downgrading Gatekeeper to a version without MAP support:
+
+- MAPTemplate and MutationConstraint CRDs remain in the cluster (CRDs are not
+  removed on Gatekeeper uninstall by default)
+- Generated MAP and MAPB resources remain in the cluster and continue to be
+  enforced by the Kubernetes API server — they are independent of Gatekeeper
+- **Action required**: Administrators should delete MAPTemplate resources before
+  downgrade, or manually delete orphaned MAP/MAPB resources afterward
+- Deterministic naming (`gatekeeper-<name>`) enables easy identification of
+  Gatekeeper-generated resources:
+  ```bash
+  kubectl get mutatingadmissionpolicies -o name | grep '^mutatingadmissionpolicy.*/gatekeeper-'
+  kubectl get mutatingadmissionpolicybindings -o name | grep '^mutatingadmissionpolicybinding.*/gatekeeper-'
+  ```
+
+### Kubernetes Version Upgrade
+
+When the cluster Kubernetes version changes (e.g., 1.33 → 1.34):
+
+- `IsMAPAPIEnabled()` result is cached until Gatekeeper restart (known limitation)
+- After Gatekeeper restart, the new API version (e.g., v1beta1) is detected
+  automatically
+- Existing MAP resources created with v1alpha1 continue to work — Kubernetes
+  handles API version conversion
+- No manual migration required for MAP resources across Kubernetes versions
+
+---
+
+## Monitoring Requirements
+
+> **Note**: Monitoring is required for beta graduation and encouraged for alpha.
+
+### Metrics (Beta Requirement)
+
+| Metric Name | Type | Labels | Description |
+|---|---|---|---|
+| `gatekeeper_map_generation_count` | Counter | `status={success,error}`, `template` | MAP generation attempts |
+| `gatekeeper_mapb_generation_count` | Counter | `status={success,error}`, `template`, `constraint` | MAPB generation attempts |
+| `gatekeeper_map_templates` | Gauge | `status={active,error}` | MAPTemplate count by status |
+| `gatekeeper_mutation_constraints` | Gauge | `template`, `status={active,error}` | MutationConstraint count by template and status |
+
+### Health Indicators
+
+- **MAPTemplate status**: `status.byPod[].mapGenerationStatus.state` = `"generated"`
+  indicates healthy MAP generation
+- **MutationConstraint status**: `status.byPod[].mapbGenerationStatus.state` =
+  `"generated"` indicates healthy MAPB generation
+- **Error surfacing**: Non-empty `status.byPod[].errors` indicates generation failures
+
+---
+
+## Scalability
+
+### API Server Impact
+
+- **New watches**: MAPTemplate controller adds watches on MAPTemplate,
+  MAPTemplatePodStatus, CRD (filtered by owner), and MutatingAdmissionPolicy
+  (filtered by owner).
+- **New writes**: Per reconciliation cycle, 6-10 writes (see
+  [Performance Considerations](#performance-considerations)).
+- **Scope sync burst**: Config change triggers T × 1 event sends + T
+  reconciliations. At 200 templates, this produces ~200 reconciliations over
+  1-5 seconds, each making 2-10 API calls depending on whether MAP content
+  changed.
+
+### Resource Usage
+
+| Component | CPU (idle) | CPU (scope sync) | Memory |
+|---|---|---|---|
+| MAPTemplate controller | Negligible | ~100m per 100 templates | ~50 MB base + ~2-5 MB per watched GVK |
+| MutationConstraint controller | Negligible | ~50m per 100 constraints | Shared with MAPTemplate controller |
+
+---
+
+## Troubleshooting
+
+### MAP Not Generated
+
+1. **Check MAPTemplate status**:
+   `kubectl get maptemplate <name> -o jsonpath='{.status}'`
+   - `byPod[].errors` — CRD or MAP creation errors
+   - `byPod[].mapGenerationStatus.state` — should be `"generated"`
+2. **Verify MAP API availability**: Check if `MutatingAdmissionPolicy` API exists
+   on the cluster
+   (`kubectl api-resources | grep mutatingadmissionpolicies`)
+3. **Check controller logs**: Filter for `maptemplate` controller with the template
+   name
+4. **Verify RBAC**: Ensure Gatekeeper's service account has permissions on
+   `mutatingadmissionpolicies` in `admissionregistration.k8s.io`
+
+### MAPB Not Generated
+
+1. **Check MutationConstraint status**: Inspect the MutationConstraint instance's
+   `status.byPod`
+   - `mapbGenerationStatus.state` = `"waiting"` — BlockMAPBGeneration delay not
+     yet expired
+   - `mapbGenerationStatus.state` = `"error"` — see `message` for details
+2. **Check BlockMAPBGeneration annotations**:
+   `kubectl get maptemplate <name> -o jsonpath='{.metadata.annotations}'`
+   - `gatekeeper.sh/block-mapb-generation-until` — RFC3339 timestamp
+   - `gatekeeper.sh/mapb-generation-state` — should be `"unblocked"` after delay
+3. **Verify MAPTemplate exists**: MAPB generation requires the corresponding
+   MAPTemplate
+
+### Scope Not Syncing
+
+1. **Check Config resource**: `kubectl get config config -o yaml` — verify
+   `spec.match` section
+2. **Check mutation webhook config**:
+   `kubectl get mutatingwebhookconfigurations gatekeeper-mutating-webhook-configuration -o yaml`
+3. **Check controller logs**: Look for `MutationWebhookConfigController`
+   reconciliation events
+4. **Verify event channel**: If MAPTemplates are not re-reconciling after Config
+   changes, the event channel may be full (check for `sendEventWithRetry`
+   warnings in logs)
+
+### Mutations Not Applying
+
+1. **Verify MAP exists**:
+   `kubectl get mutatingadmissionpolicies gatekeeper-<template-name>`
+2. **Check MAP matchConstraints**: Ensure the resource you're testing matches the
+   MAP's `resourceRules`, `namespaceSelector`, and `objectSelector`
+3. **Check matchConditions**: Scope exclusion conditions may be filtering out the
+   resource
+4. **Test CEL expressions**: Invalid CEL may cause the MAP to be rejected by the
+   API server — check
+   `kubectl get mutatingadmissionpolicies gatekeeper-<name> -o yaml` for
+   validation errors
+5. **Check MAPB**: Verify the binding exists and references the correct policy
+   and param
+
+---
+
 ## Future Work
 
 1. **Gator CLI**: Test MAPTemplate/MutationConstraint resources
@@ -1096,6 +1514,31 @@ mode-dependent. A separate CRD provides clearer semantics and independent versio
 
 ---
 
+## Drawbacks
+
+1. **Resource amplification**: Each MAPTemplate/MutationConstraint pair creates 5
+   cluster objects plus per-pod status resources. At scale this significantly
+   increases the total object count and API server storage requirements.
+
+2. **New attack surface**: Unlike validation (which can only block), mutation can
+   modify resources. MAPTemplate authoring requires cluster-admin-equivalent trust,
+   expanding Gatekeeper's attack surface.
+
+3. **Two parallel mutation systems**: Users may run Gatekeeper's webhook mutation
+   and MAP mutation simultaneously, creating confusion about which system is
+   applying mutations and potential for conflicting transformations.
+
+5. **Increased controller complexity**: Four new controllers (MAPTemplate,
+   MutationConstraint, MAPTemplateStatus, MutationConstraintStatus) plus a new
+   webhook config controller increase Gatekeeper's operational and maintenance
+   complexity.
+
+6. **Indirect observability**: Because MAP CEL is evaluated by the API server (not
+   Gatekeeper), mutation failures and performance issues must be diagnosed through
+   API server logs and metrics rather than Gatekeeper's own observability stack.
+
+---
+
 ## Implementation Plan
 
 | Phase | Scope |
@@ -1112,7 +1555,7 @@ mode-dependent. A separate CRD provides clearer semantics and independent versio
 
 ---
 
-## References
+## Reference
 
 - [KEP-3962: Mutating Admission Policies](https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/3962-mutating-admission-policies)
 - [Gatekeeper VAP Integration](https://open-policy-agent.github.io/gatekeeper/website/docs/validating-admission-policy/)
