@@ -32,7 +32,7 @@ func TestWebhookAssign(t *testing.T) {
 	v := &mutationsunversioned.Assign{
 		ObjectMeta: metav1.ObjectMeta{Name: "AddFoo"},
 		Spec: mutationsunversioned.AssignSpec{
-			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Pod"}}},
+			ApplyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Pod"}}}},
 			Location: "spec.value",
 			Parameters: mutationsunversioned.Parameters{
 				Assign: makeValue("foo"),

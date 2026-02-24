@@ -25,7 +25,7 @@ type aiTestConfig struct {
 
 	location  string
 	pathTests []mutationsunversioned.PathTest
-	applyTo   []match.ApplyTo
+	applyTo   []match.MutationApplyTo
 }
 
 func newAIMutator(cfg *aiTestConfig) *Mutator {
@@ -128,7 +128,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate tag",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				tag:      ":new",
 			},
@@ -138,7 +138,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate path and tag with empty image",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				path:     "library/busybox",
 				tag:      ":new",
@@ -149,7 +149,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate path and tag with missing image",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				path:     "library/busybox",
 				tag:      ":new",
@@ -160,7 +160,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate path",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				path:     "new/repo",
 			},
@@ -170,7 +170,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate domain",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				domain:   "myreg.io",
 			},
@@ -180,7 +180,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "add domain",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				domain:   "myreg.io",
 			},
@@ -190,7 +190,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "add tag",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				tag:      ":latest",
 			},
@@ -200,7 +200,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "add digest",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				tag:      "@sha256:12345678901234567890123456789012",
 			},
@@ -210,7 +210,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate all field",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				domain:   "myreg.io",
 				path:     "newlib/newbox",
@@ -222,7 +222,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate path, domain not set",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				path:     "newlib/newbox",
 			},
@@ -232,7 +232,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate path and tag, no domain set",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				path:     "newlib/newbox",
 				tag:      ":latest",
@@ -243,7 +243,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate tag to digest",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				tag:      "@sha256:12345678901234567890123456789012",
 			},
@@ -253,7 +253,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate domain with bad imageref with no domain still converges",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				domain:   "myreg.io",
 			},
@@ -263,7 +263,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate domain with bad imageref with domain still converges",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				domain:   "myreg.io",
 			},
@@ -273,7 +273,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate path and tag colon in imageref's domain still converges",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				path:     "repo/app",
 				tag:      ":latest",
@@ -284,7 +284,7 @@ func TestMutate(t *testing.T) {
 		{
 			name: "mutate path to domain-like string with domain set",
 			cfg: &aiTestConfig{
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 				location: `spec.containers[name:foo].image`,
 				domain:   "myreg.io",
 				path:     "my.special.repo/a.b/c",
@@ -322,7 +322,7 @@ func TestMutatorForAssignImage(t *testing.T) {
 				path:     "new/app",
 				tag:      ":latest",
 				location: "spec.containers[name:foo].image",
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 			},
 		},
 		{
@@ -332,7 +332,7 @@ func TestMutatorForAssignImage(t *testing.T) {
 				path:     "new/app",
 				tag:      ":latest",
 				location: "metadata.labels.image",
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 			},
 			errFn: func(err error) bool {
 				return errors.As(err, &metadataRootError{})
@@ -345,7 +345,7 @@ func TestMutatorForAssignImage(t *testing.T) {
 				path:     "new/app",
 				tag:      ":latest",
 				location: "spec.containers[name:foo]",
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 			},
 			errFn: func(err error) bool {
 				return errors.As(err, &listTerminalError{})
@@ -358,7 +358,7 @@ func TestMutatorForAssignImage(t *testing.T) {
 				path:     "new/app",
 				tag:      ":latest",
 				location: "/x/y/zx[)",
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 			},
 			errFn: func(err error) bool {
 				return strings.Contains(err.Error(), "invalid location format")
@@ -371,7 +371,7 @@ func TestMutatorForAssignImage(t *testing.T) {
 				path:     "a.b.c/repo",
 				tag:      ":latest",
 				location: "spec.containers[name:foo].image",
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				applyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}}},
 			},
 			errFn: func(err error) bool {
 				return errors.As(err, &domainLikePathError{})

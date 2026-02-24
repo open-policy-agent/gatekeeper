@@ -53,6 +53,7 @@ applyTo:
 - groups: [""]
   kinds: ["Pod"]
   versions: ["v1"]
+  operations: ["CREATE"]  # Optional: specify which operations to mutate
 match:
   scope: Namespaced | Cluster
   kinds:
@@ -67,6 +68,36 @@ match:
 Note that the `applyTo` field is required for all mutators except `AssignMetadata`, which does not have the `applyTo` field. 
 `applyTo` allows Gatekeeper to understand the schema of the objects being modified, so that it can detect when two mutators disagree as
 to a kind's schema, which can cause non-convergent mutations. Also, the `applyTo` section does not accept globs.
+
+##### Operations Field
+
+The `operations` field in `applyTo` allows you to specify which Kubernetes admission operations should trigger the mutation. 
+This provides granular control over when mutations are applied, helping to avoid issues with immutable fields during resource updates.
+
+```yaml
+applyTo:
+- groups: [""]
+  kinds: ["Pod"]
+  versions: ["v1"]
+  operations: ["CREATE"]  # Only mutate on resource creation
+```
+
+**Supported operations:**
+- `CREATE` - Apply mutation when resources are created
+- `UPDATE` - Apply mutation when resources are updated  
+- `DELETE` - Apply mutation when resources are deleted
+- `CONNECT` - Apply mutation for connect operations (e.g., `kubectl exec`, `kubectl port-forward`)
+
+> **Note:** The Gatekeeper mutation webhook currently only processes `CREATE` and `UPDATE` operations. While `DELETE` and `CONNECT` are valid values for the `operations` field, they will not trigger mutations because the webhook does not handle these operation types. Support for `DELETE` and `CONNECT` may be added in future releases.
+
+**Backward Compatibility:** If the `operations` field is not specified or is empty, the mutation applies to all operations (CREATE, UPDATE, DELETE, and CONNECT). This means no operation filtering is applied, preserving the existing behavior for mutators that do not specify operations.
+
+**Common Use Cases:**
+- `operations: ["CREATE"]` - Ideal for setting initial values that shouldn't change on updates (e.g., environment variables with immutable constraints)
+- `operations: ["UPDATE"]` - For mutations that should only apply when resources are modified
+- `operations: ["CREATE", "UPDATE"]` - Apply to both creation and updates (this is what the webhook currently supports)
+
+> **Important Consideration:** When using `operations: ["CREATE"]` only, the mutation will not apply to resources that already exist before the mutator is deployed. If those resources are later updated (e.g., for label changes or finalizer removal), the mutation will not be applied, and the previously mutated values remain unchanged. However, if the mutator is later deleted or modified, resources created under the old mutator may no longer match the new policy, which could cause issues if the field was set differently than what the user originally specified. Users should be aware that `operations: ["CREATE"]` effectively makes the mutated fields read-only for the mutation lifecycle.
 
 The `match` section is common to all mutators. It supports the following match criteria:
 - scope - the scope (Namespaced | Cluster) of the mutated resource
@@ -326,6 +357,32 @@ spec:
   parameters:
     assign:
       value: Always
+```
+
+### Using the operations field to control mutation timing
+
+Setting environment variables only on Pod creation to avoid issues with immutable fields:
+
+```yaml
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: demo-env-create-only
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+    operations: ["CREATE"]  # Only apply on resource creation
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "spec.containers[name:*].env[name:DEPLOYMENT_TIMESTAMP].value"
+  parameters:
+    assign:
+      value: "2024-01-01T00:00:00Z"
 ```
 
 ### Adding a `network` sidecar to a Pod

@@ -45,7 +45,7 @@ spec:
                   which will be expanded.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
+                    ApplyTo determines what GVKs the resource applies to.
                     Globs are not allowed.
                   properties:
                     groups:

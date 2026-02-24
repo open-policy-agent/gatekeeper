@@ -83,8 +83,9 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
-                    Globs are not allowed.
+                    MutationApplyTo extends ApplyTo with operation filtering for mutations.
+                    This type is used by mutation resources (Assign, AssignImage, ModifySet)
+                    to specify which GVKs and admission operations trigger the mutation.
                   properties:
                     groups:
                       items:
@@ -92,6 +93,20 @@ spec:
                       type: array
                     kinds:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
+                        this mutation. If empty, all operations are allowed for backward compatibility.
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - DELETE
+                        - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -437,8 +452,9 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
-                    Globs are not allowed.
+                    MutationApplyTo extends ApplyTo with operation filtering for mutations.
+                    This type is used by mutation resources (Assign, AssignImage, ModifySet)
+                    to specify which GVKs and admission operations trigger the mutation.
                   properties:
                     groups:
                       items:
@@ -446,6 +462,20 @@ spec:
                       type: array
                     kinds:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
+                        this mutation. If empty, all operations are allowed for backward compatibility.
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - DELETE
+                        - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -791,8 +821,9 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
-                    Globs are not allowed.
+                    MutationApplyTo extends ApplyTo with operation filtering for mutations.
+                    This type is used by mutation resources (Assign, AssignImage, ModifySet)
+                    to specify which GVKs and admission operations trigger the mutation.
                   properties:
                     groups:
                       items:
@@ -800,6 +831,20 @@ spec:
                       type: array
                     kinds:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
+                        this mutation. If empty, all operations are allowed for backward compatibility.
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - DELETE
+                        - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -1167,8 +1212,9 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
-                    Globs are not allowed.
+                    MutationApplyTo extends ApplyTo with operation filtering for mutations.
+                    This type is used by mutation resources (Assign, AssignImage, ModifySet)
+                    to specify which GVKs and admission operations trigger the mutation.
                   properties:
                     groups:
                       items:
@@ -1176,6 +1222,20 @@ spec:
                       type: array
                     kinds:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
+                        this mutation. If empty, all operations are allowed for backward compatibility.
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - DELETE
+                        - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -3473,7 +3533,7 @@ spec:
                   which will be expanded.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
+                    ApplyTo determines what GVKs the resource applies to.
                     Globs are not allowed.
                   properties:
                     groups:
@@ -3588,7 +3648,7 @@ spec:
                   which will be expanded.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
+                    ApplyTo determines what GVKs the resource applies to.
                     Globs are not allowed.
                   properties:
                     groups:
@@ -3802,8 +3862,9 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
-                    Globs are not allowed.
+                    MutationApplyTo extends ApplyTo with operation filtering for mutations.
+                    This type is used by mutation resources (Assign, AssignImage, ModifySet)
+                    to specify which GVKs and admission operations trigger the mutation.
                   properties:
                     groups:
                       items:
@@ -3811,6 +3872,20 @@ spec:
                       type: array
                     kinds:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
+                        this mutation. If empty, all operations are allowed for backward compatibility.
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - DELETE
+                        - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -4125,8 +4200,9 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
-                    Globs are not allowed.
+                    MutationApplyTo extends ApplyTo with operation filtering for mutations.
+                    This type is used by mutation resources (Assign, AssignImage, ModifySet)
+                    to specify which GVKs and admission operations trigger the mutation.
                   properties:
                     groups:
                       items:
@@ -4134,6 +4210,20 @@ spec:
                       type: array
                     kinds:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
+                        this mutation. If empty, all operations are allowed for backward compatibility.
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - DELETE
+                        - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
@@ -4448,8 +4538,9 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
-                    Globs are not allowed.
+                    MutationApplyTo extends ApplyTo with operation filtering for mutations.
+                    This type is used by mutation resources (Assign, AssignImage, ModifySet)
+                    to specify which GVKs and admission operations trigger the mutation.
                   properties:
                     groups:
                       items:
@@ -4457,6 +4548,20 @@ spec:
                       type: array
                     kinds:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
+                        this mutation. If empty, all operations are allowed for backward compatibility.
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - DELETE
+                        - CONNECT
+                        - '*'
                         type: string
                       type: array
                     versions:
