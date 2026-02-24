@@ -1092,17 +1092,6 @@ MAPTemplates. With T templates and C constraints per template:
   (Get + no-op check) + status updates only for templates whose MAP spec
   actually changed.
 
-### Resource Count at Scale
-
-| Cluster Size | Templates (T) | Constraints (C) | Pods (P) | User Objects | Total Objects |
-|---|---|---|---|---|---|
-| Small | 10 | 20 | 3 | 30 | 160 |
-| Medium | 50 | 100 | 3 | 150 | 800 |
-| Large | 200 | 400 | 5 | 600 | 4,200 |
-
-Formula: T + C + T (CRDs) + T (MAPs) + C (MAPBs) + P×T (template pod statuses) +
-P×C (constraint pod statuses).
-
 ### Memory Overhead
 
 - Each dynamically watched GVK creates one in-memory informer with its own
@@ -1252,7 +1241,6 @@ All alpha criteria (including any optional alpha items not yet completed), plus:
   strategy, webhook config controller deduplication)
 - Monitoring and metrics implemented:
   - MAP/MAPB generation success/failure counters
-  - Reconciliation latency histograms
   - Resource count gauges (MAPTemplates, MutationConstraints, MAPs, MAPBs)
 - Scalability testing validated at 100+ MAPTemplates with 200+ MutationConstraints
 - Upgrade/downgrade testing completed
