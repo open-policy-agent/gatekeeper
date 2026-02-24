@@ -41,7 +41,7 @@ spec:
       {{- end }}
       containers:
         - name: kubectl-label
-          image: "{{ .Values.postInstall.labelNamespace.image.repository }}:{{ .Values.postInstall.labelNamespace.image.tag }}"
+          image: {{ printf "%s/%s:%s" .Values.postInstall.labelNamespace.image.registry .Values.postInstall.labelNamespace.image.repository .Values.postInstall.labelNamespace.image.tag }}
           imagePullPolicy: {{ .Values.postInstall.labelNamespace.image.pullPolicy }}
           args:
             - label
@@ -62,7 +62,7 @@ spec:
             {{- toYaml .Values.postInstall.securityContext | nindent 12 }}
         {{- if .Values.postInstall.labelNamespace.extraNamespaces }}
         - name: kubectl-label-extra
-          image: "{{ .Values.postInstall.labelNamespace.image.repository }}:{{ .Values.postInstall.labelNamespace.image.tag }}"
+          image: {{ printf "%s/%s:%s" .Values.postInstall.labelNamespace.image.registry .Values.postInstall.labelNamespace.image.repository .Values.postInstall.labelNamespace.image.tag }}
           imagePullPolicy: {{ .Values.postInstall.labelNamespace.image.pullPolicy }}
           args:
             - label
