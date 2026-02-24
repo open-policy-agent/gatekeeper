@@ -383,91 +383,116 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
-	var providerCache *frameworksexternaldata.ProviderCache
-	args := []rego.Arg{rego.Tracing(false), rego.DisableBuiltins(disabledBuiltins.ToSlice()...)}
-	mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
-	if *externaldata.ExternalDataEnabled {
-		providerCache = frameworksexternaldata.NewCache()
-		args = append(args, rego.AddExternalDataProviderCache(providerCache))
-		mutationOpts.ProviderCache = providerCache
+	needsOPAClient := operations.IsAssigned(operations.Audit) || operations.IsAssigned(operations.Webhook) || *externaldata.ExternalDataEnabled
+	needsMutationSystem := operations.IsAssigned(operations.MutationWebhook) || operations.IsAssigned(operations.MutationController) || operations.IsAssigned(operations.MutationStatus) || *expansion.ExpansionEnabled
+	needsExpansionSystem := *expansion.ExpansionEnabled
+	needsProviderCache := *externaldata.ExternalDataEnabled
 
-		switch {
-		case *externaldataProviderResponseCacheTTL > 0:
-			providerResponseCache := frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
-			args = append(args, rego.AddExternalDataProviderResponseCache(providerResponseCache))
-		case *externaldataProviderResponseCacheTTL == 0:
-			setupLog.Info("external data provider response cache is disabled")
-		default:
-			err := fmt.Errorf("invalid value for external-data-provider-response-cache-ttl: %d", *externaldataProviderResponseCacheTTL)
-			setupLog.Error(err, "unable to create external data provider response cache")
-			return err
-		}
+	var providerCache *frameworksexternaldata.ProviderCache
+	var client *constraintclient.Client
+	var mutationSystem *mutation.System
+	var expansionSystem *expansion.System
+	var certWatcher *certwatcher.CertWatcher
+
+	if needsProviderCache {
+		providerCache = frameworksexternaldata.NewCache()
 
 		certFile := filepath.Join(*certDir, certName)
 		keyFile := filepath.Join(*certDir, keyName)
 
 		// certWatcher is used to watch for changes to Gatekeeper's certificate and key files.
-		certWatcher, err := certwatcher.New(certFile, keyFile)
+		var err error
+		certWatcher, err = certwatcher.New(certFile, keyFile)
 		if err != nil {
 			setupLog.Error(err, "unable to create client cert watcher")
 			return err
 		}
 
-		setupLog.Info("setting up client cert watcher")
 		if err := mgr.Add(certWatcher); err != nil {
 			setupLog.Error(err, "unable to register client cert watcher")
 			return err
 		}
-
-		// register the client cert watcher to the driver
-		args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
-
-		// register the client cert watcher to the mutation system
-		mutationOpts.ClientCertWatcher = certWatcher
 	}
 
-	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
+	if needsOPAClient {
+		args := []rego.Arg{rego.Tracing(false), rego.DisableBuiltins(disabledBuiltins.ToSlice()...)}
+		
+		if needsProviderCache {
+			args = append(args, rego.AddExternalDataProviderCache(providerCache))
 
-	if *enableK8sCel {
-		k8sDriver, err := k8scel.New()
+			switch {
+			case *externaldataProviderResponseCacheTTL > 0:
+				providerResponseCache := frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
+				args = append(args, rego.AddExternalDataProviderResponseCache(providerResponseCache))
+			case *externaldataProviderResponseCacheTTL == 0:
+				setupLog.Info("external data provider response cache is disabled")
+			default:
+				err := fmt.Errorf("invalid value for external-data-provider-response-cache-ttl: %d", *externaldataProviderResponseCacheTTL)
+				setupLog.Error(err, "unable to create external data provider response cache")
+				return err
+			}
+
+			// register the client cert watcher to the driver
+			args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
+		}
+
+		cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
+
+		if *enableK8sCel {
+			k8sDriver, err := k8scel.New()
+			if err != nil {
+				setupLog.Error(err, "unable to set up K8s native driver")
+				return err
+			}
+			cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
+		}
+
+		externs := rego.Externs()
+		if *enableReferential {
+			externs = rego.Externs("inventory")
+		}
+		args = append(args, externs)
+
+		driver, err := rego.New(args...)
 		if err != nil {
-			setupLog.Error(err, "unable to set up K8s native driver")
+			setupLog.Error(err, "unable to set up Driver")
 			return err
 		}
-		cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
+		cfArgs = append(cfArgs, constraintclient.Driver(driver))
+
+		eps := []string{}
+		if operations.IsAssigned(operations.Audit) {
+			eps = append(eps, util.AuditEnforcementPoint)
+		}
+		if operations.IsAssigned(operations.Webhook) {
+			eps = append(eps, util.WebhookEnforcementPoint)
+		}
+
+		cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
+
+		client, err = constraintclient.NewClient(cfArgs...)
+		if err != nil {
+			setupLog.Error(err, "unable to set up OPA client")
+			return err
+		}
 	}
 
-	externs := rego.Externs()
-	if *enableReferential {
-		externs = rego.Externs("inventory")
-	}
-	args = append(args, externs)
-
-	driver, err := rego.New(args...)
-	if err != nil {
-		setupLog.Error(err, "unable to set up Driver")
-		return err
-	}
-	cfArgs = append(cfArgs, constraintclient.Driver(driver))
-
-	eps := []string{}
-	if operations.IsAssigned(operations.Audit) {
-		eps = append(eps, util.AuditEnforcementPoint)
-	}
-	if operations.IsAssigned(operations.Webhook) {
-		eps = append(eps, util.WebhookEnforcementPoint)
+	if needsMutationSystem {
+		mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
+		
+		if needsProviderCache {
+			mutationOpts.ProviderCache = providerCache
+			// register the client cert watcher to the mutation system
+			mutationOpts.ClientCertWatcher = certWatcher
+		}
+		
+		mutationSystem = mutation.NewSystem(mutationOpts)
 	}
 
-	cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
-
-	client, err := constraintclient.NewClient(cfArgs...)
-	if err != nil {
-		setupLog.Error(err, "unable to set up OPA client")
-		return err
+	if needsExpansionSystem {
+		expansionSystem = expansion.NewSystem(mutationSystem)
 	}
 
-	mutationSystem := mutation.NewSystem(mutationOpts)
-	expansionSystem := expansion.NewSystem(mutationSystem)
 	exportSystem := export.NewSystem()
 
 	c := mgr.GetCache()
@@ -498,37 +523,39 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	processExcluder := process.Get()
 
 	// Setup all Controllers
-	setupLog.Info("setting up controllers")
+	var cm *cachemanager.CacheManager
+	var events chan event.GenericEvent
+	if operations.IsAssigned(operations.Audit) || operations.IsAssigned(operations.Webhook) {
+		// Events ch will be used to receive events from dynamic watches registered
+		// via the registrar below.
+		events = make(chan event.GenericEvent, 1024)
+		reg, err := wm.NewRegistrar(
+			cachemanager.RegistrarName,
+			events)
+		if err != nil {
+			setupLog.Error(err, "unable to set up watch registrar for cache manager")
+			return err
+		}
 
-	// Events ch will be used to receive events from dynamic watches registered
-	// via the registrar below.
-	events := make(chan event.GenericEvent, 1024)
-	reg, err := wm.NewRegistrar(
-		cachemanager.RegistrarName,
-		events)
-	if err != nil {
-		setupLog.Error(err, "unable to set up watch registrar for cache manager")
-		return err
-	}
+		syncMetricsCache := syncutil.NewMetricsCache()
+		cm, err = cachemanager.NewCacheManager(&cachemanager.Config{
+			CfClient:         client,
+			SyncMetricsCache: syncMetricsCache,
+			Tracker:          tracker,
+			ProcessExcluder:  processExcluder,
+			Registrar:        reg,
+			Reader:           mgr.GetCache(),
+		})
+		if err != nil {
+			setupLog.Error(err, "unable to create cache manager")
+			return err
+		}
 
-	syncMetricsCache := syncutil.NewMetricsCache()
-	cm, err := cachemanager.NewCacheManager(&cachemanager.Config{
-		CfClient:         client,
-		SyncMetricsCache: syncMetricsCache,
-		Tracker:          tracker,
-		ProcessExcluder:  processExcluder,
-		Registrar:        reg,
-		Reader:           mgr.GetCache(),
-	})
-	if err != nil {
-		setupLog.Error(err, "unable to create cache manager")
-		return err
-	}
-
-	err = mgr.Add(pruner.NewExpectationsPruner(cm, tracker))
-	if err != nil {
-		setupLog.Error(err, "adding expectations pruner to manager")
-		return err
+		err = mgr.Add(pruner.NewExpectationsPruner(cm, tracker))
+		if err != nil {
+			setupLog.Error(err, "adding expectations pruner to manager")
+			return err
+		}
 	}
 
 	opts := controller.Dependencies{
