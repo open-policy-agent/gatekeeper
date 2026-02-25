@@ -11,8 +11,8 @@ env:
 permissions: read-all
 
 jobs:
-  publish-export-images:
-    name: "Publish Export Demo Images"
+  publish-sample-images:
+    name: "Publish Sample Images"
     runs-on: oracle-vm-8cpu-32gb-x86-64
     permissions:
       contents: read
