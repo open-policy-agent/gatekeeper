@@ -18,7 +18,7 @@ permissions: read-all
 
 jobs:
   deploy:
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-2cpu-8gb-x86-64
     permissions:
       contents: write
     defaults:
@@ -62,7 +62,7 @@ jobs:
           destination_dir: ./website
 
   check_typos:
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-2cpu-8gb-x86-64
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
@@ -71,6 +71,6 @@ jobs:
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v3.5.2
 
-      - uses: crate-ci/typos@78bc6fb2c0d734235d57a2d6b9de923cc325ebdd # v1.43.4
+      - uses: crate-ci/typos@57b11c6b7e54c402ccd9cda953f1072ec4f78e33 # v1.43.5
         with:
           files: ./website/docs ./website/versioned_docs

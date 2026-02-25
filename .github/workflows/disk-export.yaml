@@ -15,7 +15,7 @@ permissions: read-all
 jobs:
   disk_test:
     name: "Disk export test"
-    runs-on: ubuntu-22.04
+    runs-on: oracle-vm-8cpu-32gb-x86-64
     timeout-minutes: 15
     steps:
     - name: Harden Runner
