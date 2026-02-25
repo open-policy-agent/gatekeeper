@@ -226,6 +226,20 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
+- Name: `gatekeeper_violations_per_constraint`
+
+    Description: `Total number of audited violations per constraint (only available when --enable-constraint-label-metrics=true)`
+
+    Tags:
+
+    - `enforcement_action`: [`deny`, `dryrun`, `warn`]
+
+    - `constraint`: The name of the constraint that generated violations
+
+    Aggregation: `LastValue`
+
+    **Note**: This metric is only exported when the `--enable-constraint-label-metrics` flag is set to `true`. It provides granular per-constraint violation tracking but may significantly increase metric cardinality in environments with many constraints. Use this feature with caution in large-scale deployments.
+
 - Name: `gatekeeper_audit_duration_seconds`
 
     Description: `Latency of audit operation in seconds`

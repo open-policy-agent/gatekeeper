@@ -93,6 +93,7 @@ spec:
         {{ if .Values.additionalMutatingWebhookConfigsToRotateCerts | empty | not }}- --additional-mutating-webhook-configs-to-rotate-certs={{ .Values.additionalMutatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+        - --enable-constraint-label-metrics={{ .Values.enableConstraintLabelMetrics }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}

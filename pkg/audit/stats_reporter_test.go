@@ -18,13 +18,35 @@ import (
 
 func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
 	var err error
-	r, err = newStatsReporter()
+	r, err = newStatsReporter(false) // disable constraint labels for backward compatibility tests
 	assert.NoError(t, err)
 	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
 	meter := mp.Meter("test")
 
 	_, err = meter.Int64ObservableGauge(violationsMetricName, metric.WithInt64Callback(r.observeTotalViolations))
+	assert.NoError(t, err)
+	auditDurationM, err = meter.Float64Histogram(auditDurationMetricName)
+	assert.NoError(t, err)
+	_, err = meter.Float64ObservableGauge(lastRunStartTimeMetricName, metric.WithFloat64Callback(r.observeRunStart))
+	assert.NoError(t, err)
+	_, err = meter.Float64ObservableGauge(lastRunEndTimeMetricName, metric.WithFloat64Callback(r.observeRunEnd))
+	assert.NoError(t, err)
+
+	return rdr, r
+}
+
+func initializeTestInstrumentsWithConstraintLabels(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *reporter) {
+	var err error
+	r, err = newStatsReporter(true) // enable constraint labels for new tests
+	assert.NoError(t, err)
+	rdr = sdkmetric.NewPeriodicReader(new(testmetric.FnExporter))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr))
+	meter := mp.Meter("test")
+
+	_, err = meter.Int64ObservableGauge(violationsMetricName, metric.WithInt64Callback(r.observeTotalViolations))
+	assert.NoError(t, err)
+	_, err = meter.Int64ObservableGauge(violationsPerConstraintMetricName, metric.WithInt64Callback(r.observeTotalViolationsWithConstraint))
 	assert.NoError(t, err)
 	auditDurationM, err = meter.Float64Histogram(auditDurationMetricName)
 	assert.NoError(t, err)
@@ -198,6 +220,97 @@ func TestReporter_observeRunEnd(t *testing.T) {
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
 			fmt.Println(rm.ScopeMetrics[0])
 			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[1], metricdatatest.IgnoreTimestamp())
+		})
+	}
+}
+
+func TestReporter_observeTotalViolationsWithConstraint(t *testing.T) {
+	tests := []struct {
+		name        string
+		ctx         context.Context
+		expectedErr error
+	}{
+		{
+			name:        "reporting total violations with constraint labels",
+			ctx:         context.Background(),
+			expectedErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			constraintViolations := map[util.KindVersionName]int64{
+				{Kind: "TestKind", Version: "v1", Name: "test-constraint-1"}: 5,
+				{Kind: "TestKind", Version: "v1", Name: "test-constraint-2"}: 3,
+			}
+			constraintEnforcementActions := map[util.KindVersionName]util.EnforcementAction{
+				{Kind: "TestKind", Version: "v1", Name: "test-constraint-1"}: util.Deny,
+				{Kind: "TestKind", Version: "v1", Name: "test-constraint-2"}: util.Warn,
+			}
+
+			rdr, r := initializeTestInstrumentsWithConstraintLabels(t)
+			
+			// Report both aggregated and per-constraint violations
+			assert.NoError(t, r.reportTotalViolations(util.Deny, 5))
+			assert.NoError(t, r.reportTotalViolations(util.Warn, 3))
+			assert.NoError(t, r.reportTotalViolationsPerConstraint(constraintViolations, constraintEnforcementActions))
+
+			rm := &metricdata.ResourceMetrics{}
+			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
+
+			// Verify we have metrics
+			assert.NotEmpty(t, rm.ScopeMetrics)
+			assert.NotEmpty(t, rm.ScopeMetrics[0].Metrics)
+			
+			// Find the violations_per_constraint metric
+			var perConstraintMetric *metricdata.Metrics
+			var aggregatedMetric *metricdata.Metrics
+			for i := range rm.ScopeMetrics[0].Metrics {
+				if rm.ScopeMetrics[0].Metrics[i].Name == violationsPerConstraintMetricName {
+					perConstraintMetric = &rm.ScopeMetrics[0].Metrics[i]
+				}
+				if rm.ScopeMetrics[0].Metrics[i].Name == violationsMetricName {
+					aggregatedMetric = &rm.ScopeMetrics[0].Metrics[i]
+				}
+			}
+			
+			// Verify both metrics exist
+			assert.NotNil(t, aggregatedMetric, "violations metric should be present")
+			assert.NotNil(t, perConstraintMetric, "violations_per_constraint metric should be present")
+			
+			// Verify per-constraint metric has constraint labels
+			gaugeData, ok := perConstraintMetric.Data.(metricdata.Gauge[int64])
+			assert.True(t, ok, "Expected Gauge data type")
+			assert.Len(t, gaugeData.DataPoints, 2)
+			
+			// Verify each data point has both enforcement_action and constraint labels
+			for _, dp := range gaugeData.DataPoints {
+				hasEnforcementAction := false
+				hasConstraint := false
+				for _, attr := range dp.Attributes.ToSlice() {
+					if attr.Key == enforcementActionKey {
+						hasEnforcementAction = true
+					}
+					if attr.Key == constraintKey {
+						hasConstraint = true
+					}
+				}
+				assert.True(t, hasEnforcementAction, "Data point missing enforcement_action label")
+				assert.True(t, hasConstraint, "Data point missing constraint label")
+			}
+			
+			// Verify aggregated metric has only enforcement_action labels
+			aggGaugeData, ok := aggregatedMetric.Data.(metricdata.Gauge[int64])
+			assert.True(t, ok, "Expected Gauge data type for aggregated metric")
+			for _, dp := range aggGaugeData.DataPoints {
+				hasConstraint := false
+				for _, attr := range dp.Attributes.ToSlice() {
+					if attr.Key == constraintKey {
+						hasConstraint = true
+					}
+				}
+				assert.False(t, hasConstraint, "Aggregated metric should not have constraint label")
+			}
 		})
 	}
 }
