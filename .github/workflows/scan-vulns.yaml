@@ -82,14 +82,8 @@ jobs:
           make docker-buildx-crds \
             CRD_IMG=gatekeeper-crds:latest
 
-          make docker-buildx-fake-reader
-
-          make docker-buildx-fake-subscriber
-
       - name: Run trivy on images
         run: |
-          for img in "gatekeeper-e2e:latest" "gatekeeper-crds:latest" \
-                     "ghcr.io/open-policy-agent/fake-reader:latest" \
-                     "ghcr.io/open-policy-agent/fake-subscriber:latest"; do
+          for img in "gatekeeper-e2e:latest" "gatekeeper-crds:latest"; do
               trivy image --ignore-unfixed --pkg-types="os,library" "${img}"
           done

@@ -4,10 +4,6 @@ on:
     tags:
       - 'v*'
 
-env:
-  FAKE_READER_IMAGE_REPO: ghcr.io/open-policy-agent/fake-reader
-  FAKE_SUBSCRIBER_IMAGE_REPO: ghcr.io/open-policy-agent/fake-subscriber
-
 permissions: read-all
 
 jobs:
@@ -28,10 +24,6 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      - name: Get tag
-        run: |
-          echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-
       - name: Login to GitHub Container Registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
@@ -41,22 +33,14 @@ jobs:
 
       - name: Publish fake-reader image
         run: |
-          if ! docker manifest inspect ${{ env.FAKE_READER_IMAGE_REPO }}:${TAG} > /dev/null 2>&1
-          then
-            make docker-buildx-fake-reader-release \
-              VERSION=${TAG} \
-              PLATFORM="linux/amd64,linux/arm64" \
-              OUTPUT_TYPE=type=registry \
-              GENERATE_ATTESTATIONS=true
-          fi
+          make docker-buildx-fake-reader-release \
+            PLATFORM="linux/amd64,linux/arm64" \
+            OUTPUT_TYPE=type=registry \
+            GENERATE_ATTESTATIONS=true
 
       - name: Publish fake-subscriber image
         run: |
-          if ! docker manifest inspect ${{ env.FAKE_SUBSCRIBER_IMAGE_REPO }}:${TAG} > /dev/null 2>&1
-          then
-            make docker-buildx-fake-subscriber-release \
-              VERSION=${TAG} \
-              PLATFORM="linux/amd64,linux/arm64" \
-              OUTPUT_TYPE=type=registry \
-              GENERATE_ATTESTATIONS=true
-          fi
+          make docker-buildx-fake-subscriber-release \
+            PLATFORM="linux/amd64,linux/arm64" \
+            OUTPUT_TYPE=type=registry \
+            GENERATE_ATTESTATIONS=true

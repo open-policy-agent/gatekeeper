@@ -542,7 +542,7 @@ docker-buildx-fake-reader-release: docker-buildx-builder
 		$(_ATTESTATIONS) \
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
-		-t ${GHCR_FAKE_READER_REPOSITORY}:${VERSION} \
+		-t ${GHCR_FAKE_READER_REPOSITORY}:latest \
 		-f test/export/fake-reader/Dockerfile test/export/fake-reader
 
 # Build fake-subscriber image
@@ -559,7 +559,7 @@ docker-buildx-fake-subscriber-release: docker-buildx-builder
 		$(_ATTESTATIONS) \
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
-		-t ${GHCR_FAKE_SUBSCRIBER_REPOSITORY}:${VERSION} \
+		-t ${GHCR_FAKE_SUBSCRIBER_REPOSITORY}:latest \
 		-f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
 
 # Update manager_image_patch.yaml with image tag
@@ -578,7 +578,6 @@ release-manifest:
 	@sed -i "s/release: $(VERSION)/release: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
 	@sed -i "s/tag: $(VERSION)/tag: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
 	@sed -i 's/Current release version: `$(VERSION)`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
-	@sed -i "s|ghcr.io/open-policy-agent/fake-reader:$(VERSION)|ghcr.io/open-policy-agent/fake-reader:${NEWVERSION}|" ./cmd/build/helmify/static/values.yaml
 	@sed -i -e 's/^VERSION := $(VERSION)/VERSION := ${NEWVERSION}/' ./Makefile
 	export
 	$(MAKE) manifests
