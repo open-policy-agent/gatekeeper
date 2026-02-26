@@ -161,7 +161,7 @@ The following table describes each property in the `status.byPod` section:
           containers:
           - name: go-sub
             image: ghcr.io/open-policy-agent/fake-subscriber:latest
-            imagePullPolicy: IfNotPresent
+            imagePullPolicy: Always
     ```
 
     :::important
