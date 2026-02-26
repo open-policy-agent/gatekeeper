@@ -1317,6 +1317,74 @@ func TestRetryFailedConnections(t *testing.T) {
 	}
 }
 
+func TestRetryFailedConnectionsConcurrent(t *testing.T) {
+	t.Run("concurrent retries keep state consistent", func(t *testing.T) {
+		writer := &Writer{
+			mu:                sync.RWMutex{},
+			openConnections:   make(map[string]Connection),
+			closedConnections: make(map[string]FailedConnection),
+			cleanupDone:       make(chan struct{}),
+			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+				// Always fail so that connections stay in the retry queue and
+				// we exercise the backoff and bookkeeping logic under
+				// concurrent access.
+				return fmt.Errorf("forced failure")
+			},
+		}
+
+		now := time.Now()
+
+		// Seed multiple failed connections that are all eligible for retry.
+		const failedConnections = 5
+		for i := 0; i < failedConnections; i++ {
+			name := fmt.Sprintf("conn-concurrent-%d", i)
+			writer.closedConnections[name] = FailedConnection{
+				Connection: Connection{
+					Path:                t.TempDir(),
+					MaxAuditResults:     5,
+					ClosedConnectionTTL: maxConnectionAge,
+				},
+				FailedAt:    now.Add(-1 * time.Minute),
+				RetryCount:  0,
+				NextRetryAt: now.Add(-1 * time.Second),
+			}
+		}
+
+		var wg sync.WaitGroup
+		const workers = 8
+
+		// Invoke retryFailedConnections from multiple goroutines to simulate
+		// the background cleanup loop racing with other callers in a
+		// multi-threaded environment. The Writer's internal locking should
+		// ensure a consistent view of the retry state without panics.
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				writer.retryFailedConnections()
+			}()
+		}
+
+		wg.Wait()
+
+		writer.mu.RLock()
+		defer writer.mu.RUnlock()
+
+		if len(writer.closedConnections) == 0 {
+			t.Fatalf("expected failed connections to remain after retries, got 0")
+		}
+
+		for name, fc := range writer.closedConnections {
+			if fc.RetryCount == 0 {
+				t.Errorf("expected RetryCount for %s to be incremented, got 0", name)
+			}
+			if !fc.NextRetryAt.After(now) {
+				t.Errorf("expected NextRetryAt for %s to be in the future, got %v", name, fc.NextRetryAt)
+			}
+		}
+	})
+}
+
 func TestBackgroundCleanupLifecycle(t *testing.T) {
 	t.Run("Background cleanup starts on first CreateConnection", func(t *testing.T) {
 		writer := &Writer{

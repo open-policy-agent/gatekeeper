@@ -304,3 +304,135 @@ func TestSystem_closeConnection(t *testing.T) {
 		})
 	}
 }
+
+// concurrentTestDriver is a simple driver implementation used to verify that
+// the export system behaves correctly when accessed from multiple goroutines.
+type concurrentTestDriver struct {
+	mu              sync.Mutex
+	publishCalls    int
+	createCalls     int
+	updateCalls     int
+	closeCalls      int
+	failPublish     bool
+	failCreate      bool
+	failUpdate      bool
+	failClose       bool
+}
+
+func (d *concurrentTestDriver) Publish(_ context.Context, _ string, _ interface{}, _ string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.publishCalls++
+	if d.failPublish {
+		return assert.AnError
+	}
+	return nil
+}
+
+func (d *concurrentTestDriver) CloseConnection(_ string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.closeCalls++
+	if d.failClose {
+		return assert.AnError
+	}
+	return nil
+}
+
+func (d *concurrentTestDriver) UpdateConnection(_ context.Context, _ string, _ interface{}) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.updateCalls++
+	if d.failUpdate {
+		return assert.AnError
+	}
+	return nil
+}
+
+func (d *concurrentTestDriver) CreateConnection(_ context.Context, _ string, _ interface{}) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.createCalls++
+	if d.failCreate {
+		return assert.AnError
+	}
+	return nil
+}
+
+func TestSystem_ConcurrentAccess(t *testing.T) {
+	ctx := context.Background()
+
+	// Preserve the original drivers so this test does not affect others.
+	origDrivers := SupportedDrivers
+	t.Cleanup(func() {
+		SupportedDrivers = origDrivers
+	})
+
+	const driverName = "concurrent-test-driver"
+	testDrv := &concurrentTestDriver{}
+	SupportedDrivers = map[string]driver.Driver{
+		driverName: testDrv,
+	}
+
+	sys := NewSystem()
+
+	const (
+		connectionName = "conn-concurrent"
+		publishers     = 16
+		upserters      = 16
+		closers        = 8
+	)
+
+	var wg sync.WaitGroup
+
+	// Run multiple goroutines that concurrently upsert, publish to, and close
+	// the same logical connection. This exercises the internal locking on the
+	// System type and ensures there are no data races when used from a
+	// multi-threaded environment.
+
+	for i := 0; i < upserters; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			cfg := map[string]interface{}{
+				"component": i,
+			}
+			if err := sys.UpsertConnection(ctx, cfg, connectionName, driverName); err != nil {
+				t.Errorf("UpsertConnection failed: %v", err)
+			}
+		}(i)
+	}
+
+	for i := 0; i < publishers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Publish may legitimately fail if the connection has not yet
+			// been created or has been closed; we only assert that it does
+			// not panic and that the system remains usable.
+			_ = sys.Publish(ctx, connectionName, "subject", nil)
+		}()
+	}
+
+	for i := 0; i < closers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = sys.CloseConnection(connectionName)
+		}()
+	}
+
+	wg.Wait()
+
+	// Ensure internal mapping is in a valid state (either the connection is
+	// present and mapped to the expected driver, or it has been fully removed).
+	sys.mux.RLock()
+	defer sys.mux.RUnlock()
+
+	if len(sys.connectionToDriver) > 1 {
+		t.Fatalf("expected at most one connection, got %d", len(sys.connectionToDriver))
+	}
+	if d, ok := sys.connectionToDriver[connectionName]; ok && d != driverName {
+		t.Fatalf("connection mapped to unexpected driver, got %q, want %q", d, driverName)
+	}
+}
