@@ -6,6 +6,8 @@ GATOR_REPOSITORY ?= openpolicyagent/gator
 GHCR_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper
 GHCR_CRD_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper-crds
 GHCR_GATOR_REPOSITORY ?= ghcr.io/open-policy-agent/gator
+GHCR_FAKE_READER_REPOSITORY ?= ghcr.io/open-policy-agent/fake-reader
+GHCR_FAKE_SUBSCRIBER_REPOSITORY ?= ghcr.io/open-policy-agent/fake-subscriber
 
 IMG := $(REPOSITORY):latest
 CRD_IMG := $(CRD_REPOSITORY):latest
@@ -525,6 +527,40 @@ docker-buildx-gator-release: docker-buildx-builder
 		-t ${GATOR_REPOSITORY}:${VERSION} \
 		$(if $(filter true,$(PUSH_TO_GHCR)),-t ${GHCR_GATOR_REPOSITORY}:${VERSION}) \
 		-f gator.Dockerfile .
+
+# Build fake-reader image
+docker-buildx-fake-reader: docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t ${GHCR_FAKE_READER_REPOSITORY}:latest \
+		-f test/export/fake-reader/Dockerfile test/export/fake-reader
+
+docker-buildx-fake-reader-release: docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t ${GHCR_FAKE_READER_REPOSITORY}:latest \
+		-f test/export/fake-reader/Dockerfile test/export/fake-reader
+
+# Build fake-subscriber image
+docker-buildx-fake-subscriber: docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t ${GHCR_FAKE_SUBSCRIBER_REPOSITORY}:latest \
+		-f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
+
+docker-buildx-fake-subscriber-release: docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t ${GHCR_FAKE_SUBSCRIBER_REPOSITORY}:latest \
+		-f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
 
 # Update manager_image_patch.yaml with image tag
 patch-image:
