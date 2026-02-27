@@ -1317,6 +1317,96 @@ func TestRetryFailedConnections(t *testing.T) {
 	}
 }
 
+func TestCloseConnectionConcurrentWithRetry(t *testing.T) {
+	t.Run("CloseConnection and retryFailedConnections share consistent state", func(t *testing.T) {
+		writer := &Writer{
+			mu:                sync.RWMutex{},
+			openConnections:   make(map[string]Connection),
+			closedConnections: make(map[string]FailedConnection),
+			cleanupDone:       make(chan struct{}),
+			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+				// Force a failure so CloseConnection will enqueue the
+				// connection into closedConnections for retry handling.
+				return fmt.Errorf("forced failure")
+			},
+		}
+
+		ctx := context.Background()
+		tmpDir := t.TempDir()
+		config := map[string]interface{}{
+			"path":            tmpDir,
+			"maxAuditResults": 5.0,
+		}
+
+		const connectionName = "concurrent-close-retry"
+
+		if err := writer.CreateConnection(ctx, connectionName, config); err != nil {
+			t.Fatalf("CreateConnection() error = %v", err)
+		}
+
+		var wg sync.WaitGroup
+		const (
+			closeWorkers = 4
+			retryWorkers = 4
+			iterations   = 10
+		)
+
+		// Run CloseConnection in multiple goroutines while concurrently
+		// invoking retryFailedConnections. This exercises the interaction
+		// between enqueueing failed connections and the retry loop using
+		// the actual Writer methods.
+		for i := 0; i < closeWorkers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := 0; j < iterations; j++ {
+					_ = writer.CloseConnection(connectionName)
+				}
+			}()
+		}
+
+		for i := 0; i < retryWorkers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := 0; j < iterations; j++ {
+					writer.retryFailedConnections()
+				}
+			}()
+		}
+
+		wg.Wait()
+
+		writer.mu.RLock()
+		defer writer.mu.RUnlock()
+
+		// The original connection should no longer be present in
+		// openConnections regardless of the interleaving.
+		if _, exists := writer.openConnections[connectionName]; exists {
+			t.Errorf("expected %q to be removed from openConnections", connectionName)
+		}
+
+		// At most one failed connection entry should exist for this logical
+		// connection, because CloseConnection only enqueues it once on the
+		// first failure.
+		if len(writer.closedConnections) > 1 {
+			t.Fatalf("expected at most one failed connection entry, got %d", len(writer.closedConnections))
+		}
+
+		for name, fc := range writer.closedConnections {
+			if fc.FailedAt.IsZero() {
+				t.Errorf("expected FailedAt to be set for %q", name)
+			}
+			if fc.NextRetryAt.IsZero() {
+				t.Errorf("expected NextRetryAt to be set for %q", name)
+			}
+			if fc.ClosedConnectionTTL == 0 {
+				t.Errorf("expected ClosedConnectionTTL to be non-zero for %q", name)
+			}
+		}
+	})
+}
+
 func TestBackgroundCleanupLifecycle(t *testing.T) {
 	t.Run("Background cleanup starts on first CreateConnection", func(t *testing.T) {
 		writer := &Writer{
