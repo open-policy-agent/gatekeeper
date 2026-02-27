@@ -37,6 +37,7 @@ type ConnectionSpec struct {
 
 // ConnectionStatus defines the observed state of Connection.
 type ConnectionStatus struct {
+	// +optional
 	ByPod []statusv1alpha1.ConnectionPodStatusStatus `json:"byPod,omitempty"`
 }
 

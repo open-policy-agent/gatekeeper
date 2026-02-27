@@ -35,15 +35,22 @@ const ConstraintsGroup = "constraints.gatekeeper.sh"
 type ConstraintPodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// +optional
 	ID string `json:"id,omitempty"`
 	// Storing the constraint UID allows us to detect drift, such as
 	// when a constraint has been recreated after its CRD was deleted
 	// out from under it, interrupting the watch
-	ConstraintUID           types.UID                `json:"constraintUID,omitempty"`
-	Operations              []string                 `json:"operations,omitempty"`
-	Enforced                bool                     `json:"enforced,omitempty"`
-	Errors                  []Error                  `json:"errors,omitempty"`
-	ObservedGeneration      int64                    `json:"observedGeneration,omitempty"`
+	// +optional
+	ConstraintUID types.UID `json:"constraintUID,omitempty"`
+	// +optional
+	Operations []string `json:"operations,omitempty"`
+	// +optional
+	Enforced bool `json:"enforced,omitempty"`
+	// +optional
+	Errors []Error `json:"errors,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// +optional
 	EnforcementPointsStatus []EnforcementPointStatus `json:"enforcementPointsStatus,omitempty"`
 }
 

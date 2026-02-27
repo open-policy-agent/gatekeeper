@@ -32,12 +32,18 @@ import (
 // ConnectionPodStatusStatus defines the observed state of ConnectionPodStatus.
 type ConnectionPodStatusStatus struct {
 	// ID is the unique identifier for the pod that wrote the status
-	ID                 string    `json:"id,omitempty"`
-	ConnectionUID      types.UID `json:"connectionUID,omitempty"`
-	Operations         []string  `json:"operations,omitempty"`
-	ObservedGeneration int64     `json:"observedGeneration,omitempty"`
+	// +optional
+	ID string `json:"id,omitempty"`
+	// +optional
+	ConnectionUID types.UID `json:"connectionUID,omitempty"`
+	// +optional
+	Operations []string `json:"operations,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Indicator for alive connection with at least one successful publish
-	Active bool               `json:"active,omitempty"`
+	// +optional
+	Active bool `json:"active,omitempty"`
+	// +optional
 	Errors []*ConnectionError `json:"errors,omitempty"`
 }
 
@@ -55,6 +61,7 @@ const (
 
 // +kubebuilder:object:root=true
 // ConnectionPodStatus is the Schema for the connectionpodstatuses API.
+// +kubebuilder:subresource:status
 type ConnectionPodStatus struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

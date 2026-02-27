@@ -83,6 +83,7 @@ type ReadinessSpec struct {
 
 // ConfigStatus defines the observed state of Config.
 type ConfigStatus struct { // Important: Run "make" to regenerate code after modifying this file
+	// +optional
 	ByPod []status.ConfigPodStatusStatus `json:"byPod,omitempty"`
 }
 

@@ -35,15 +35,21 @@ const MutationsGroup = "mutations.gatekeeper.sh"
 type MutatorPodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// +optional
 	ID string `json:"id,omitempty"`
 	// Storing the mutator UID allows us to detect drift, such as
 	// when a mutator has been recreated after its CRD was deleted
 	// out from under it, interrupting the watch
-	MutatorUID         types.UID      `json:"mutatorUID,omitempty"`
-	Operations         []string       `json:"operations,omitempty"`
-	Enforced           bool           `json:"enforced,omitempty"`
-	Errors             []MutatorError `json:"errors,omitempty"`
-	ObservedGeneration int64          `json:"observedGeneration,omitempty"`
+	// +optional
+	MutatorUID types.UID `json:"mutatorUID,omitempty"`
+	// +optional
+	Operations []string `json:"operations,omitempty"`
+	// +optional
+	Enforced bool `json:"enforced,omitempty"`
+	// +optional
+	Errors []MutatorError `json:"errors,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // MutatorError represents a single error caught while adding a mutator to a system.

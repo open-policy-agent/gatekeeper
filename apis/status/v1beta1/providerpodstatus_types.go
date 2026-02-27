@@ -32,17 +32,25 @@ import (
 type ProviderPodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// +optional
 	ID string `json:"id,omitempty"`
 	// Storing the provider UID allows us to detect drift, such as
 	// when a provider has been recreated after its CRD was deleted
 	// out from under it, interrupting the watch
-	ProviderUID         types.UID        `json:"providerUID,omitempty"`
-	Operations          []string         `json:"operations,omitempty"`
-	Active              bool             `json:"active,omitempty"`
-	Errors              []*ProviderError `json:"errors,omitempty"`
-	ObservedGeneration  int64            `json:"observedGeneration,omitempty"`
-	LastTransitionTime  *metav1.Time     `json:"lastTransitionTime,omitempty"`
-	LastCacheUpdateTime *metav1.Time     `json:"lastCacheUpdateTime,omitempty"`
+	// +optional
+	ProviderUID types.UID `json:"providerUID,omitempty"`
+	// +optional
+	Operations []string `json:"operations,omitempty"`
+	// +optional
+	Active bool `json:"active,omitempty"`
+	// +optional
+	Errors []*ProviderError `json:"errors,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// +optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+	// +optional
+	LastCacheUpdateTime *metav1.Time `json:"lastCacheUpdateTime,omitempty"`
 }
 
 // ProviderError represents a single error caught while managing providers.
@@ -67,6 +75,7 @@ const (
 
 // +kubebuilder:object:root=true
 // ProviderPodStatus is the Schema for the providerpodstatuses API.
+// +kubebuilder:subresource:status
 type ProviderPodStatus struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
