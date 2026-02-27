@@ -1317,51 +1317,61 @@ func TestRetryFailedConnections(t *testing.T) {
 	}
 }
 
-func TestRetryFailedConnectionsConcurrent(t *testing.T) {
-	t.Run("concurrent retries keep state consistent", func(t *testing.T) {
+func TestCloseConnectionConcurrentWithRetry(t *testing.T) {
+	t.Run("CloseConnection and retryFailedConnections share consistent state", func(t *testing.T) {
 		writer := &Writer{
 			mu:                sync.RWMutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
 			closeAndRemoveFilesWithRetry: func(_ Connection) error {
-				// Always fail so that connections stay in the retry queue and
-				// we exercise the backoff and bookkeeping logic under
-				// concurrent access.
+				// Force a failure so CloseConnection will enqueue the
+				// connection into closedConnections for retry handling.
 				return fmt.Errorf("forced failure")
 			},
 		}
 
-		now := time.Now()
+		ctx := context.Background()
+		tmpDir := t.TempDir()
+		config := map[string]interface{}{
+			"path":            tmpDir,
+			"maxAuditResults": 5.0,
+		}
 
-		// Seed multiple failed connections that are all eligible for retry.
-		const failedConnections = 5
-		for i := 0; i < failedConnections; i++ {
-			name := fmt.Sprintf("conn-concurrent-%d", i)
-			writer.closedConnections[name] = FailedConnection{
-				Connection: Connection{
-					Path:                t.TempDir(),
-					MaxAuditResults:     5,
-					ClosedConnectionTTL: maxConnectionAge,
-				},
-				FailedAt:    now.Add(-1 * time.Minute),
-				RetryCount:  0,
-				NextRetryAt: now.Add(-1 * time.Second),
-			}
+		const connectionName = "concurrent-close-retry"
+
+		if err := writer.CreateConnection(ctx, connectionName, config); err != nil {
+			t.Fatalf("CreateConnection() error = %v", err)
 		}
 
 		var wg sync.WaitGroup
-		const workers = 8
+		const (
+			closeWorkers = 4
+			retryWorkers = 4
+			iterations   = 10
+		)
 
-		// Invoke retryFailedConnections from multiple goroutines to simulate
-		// the background cleanup loop racing with other callers in a
-		// multi-threaded environment. The Writer's internal locking should
-		// ensure a consistent view of the retry state without panics.
-		for i := 0; i < workers; i++ {
+		// Run CloseConnection in multiple goroutines while concurrently
+		// invoking retryFailedConnections. This exercises the interaction
+		// between enqueueing failed connections and the retry loop using
+		// the actual Writer methods.
+		for i := 0; i < closeWorkers; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				writer.retryFailedConnections()
+				for j := 0; j < iterations; j++ {
+					_ = writer.CloseConnection(connectionName)
+				}
+			}()
+		}
+
+		for i := 0; i < retryWorkers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := 0; j < iterations; j++ {
+					writer.retryFailedConnections()
+				}
 			}()
 		}
 
@@ -1370,16 +1380,28 @@ func TestRetryFailedConnectionsConcurrent(t *testing.T) {
 		writer.mu.RLock()
 		defer writer.mu.RUnlock()
 
-		if len(writer.closedConnections) == 0 {
-			t.Fatalf("expected failed connections to remain after retries, got 0")
+		// The original connection should no longer be present in
+		// openConnections regardless of the interleaving.
+		if _, exists := writer.openConnections[connectionName]; exists {
+			t.Errorf("expected %q to be removed from openConnections", connectionName)
+		}
+
+		// At most one failed connection entry should exist for this logical
+		// connection, because CloseConnection only enqueues it once on the
+		// first failure.
+		if len(writer.closedConnections) > 1 {
+			t.Fatalf("expected at most one failed connection entry, got %d", len(writer.closedConnections))
 		}
 
 		for name, fc := range writer.closedConnections {
-			if fc.RetryCount == 0 {
-				t.Errorf("expected RetryCount for %s to be incremented, got 0", name)
+			if fc.FailedAt.IsZero() {
+				t.Errorf("expected FailedAt to be set for %q", name)
 			}
-			if !fc.NextRetryAt.After(now) {
-				t.Errorf("expected NextRetryAt for %s to be in the future, got %v", name, fc.NextRetryAt)
+			if fc.NextRetryAt.IsZero() {
+				t.Errorf("expected NextRetryAt to be set for %q", name)
+			}
+			if fc.ClosedConnectionTTL == 0 {
+				t.Errorf("expected ClosedConnectionTTL to be non-zero for %q", name)
 			}
 		}
 	})

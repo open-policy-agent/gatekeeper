@@ -305,57 +305,37 @@ func TestSystem_closeConnection(t *testing.T) {
 	}
 }
 
-// concurrentTestDriver is a simple driver implementation used to verify that
-// the export system behaves correctly when accessed from multiple goroutines.
+// concurrentTestDriver is a minimal thread-safe driver implementation used to
+// verify that the export system behaves correctly when accessed from multiple
+// goroutines. It tracks how many times Publish is called so the test can
+// assert that publishers actually reached the driver.
 type concurrentTestDriver struct {
-	mu              sync.Mutex
-	publishCalls    int
-	createCalls     int
-	updateCalls     int
-	closeCalls      int
-	failPublish     bool
-	failCreate      bool
-	failUpdate      bool
-	failClose       bool
+	mu           sync.Mutex
+	publishCalls int
 }
 
 func (d *concurrentTestDriver) Publish(_ context.Context, _ string, _ interface{}, _ string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.publishCalls++
-	if d.failPublish {
-		return assert.AnError
-	}
 	return nil
 }
 
 func (d *concurrentTestDriver) CloseConnection(_ string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.closeCalls++
-	if d.failClose {
-		return assert.AnError
-	}
 	return nil
 }
 
 func (d *concurrentTestDriver) UpdateConnection(_ context.Context, _ string, _ interface{}) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.updateCalls++
-	if d.failUpdate {
-		return assert.AnError
-	}
 	return nil
 }
 
 func (d *concurrentTestDriver) CreateConnection(_ context.Context, _ string, _ interface{}) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.createCalls++
-	if d.failCreate {
-		return assert.AnError
-	}
 	return nil
 }
 
@@ -423,6 +403,15 @@ func TestSystem_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
+
+	// Ensure at least one publish reached the driver so we know publishers
+	// were able to observe a usable connection during concurrent access.
+	testDrv.mu.Lock()
+	publishCount := testDrv.publishCalls
+	testDrv.mu.Unlock()
+	if publishCount == 0 {
+		t.Fatalf("expected at least one successful Publish call, got %d", publishCount)
+	}
 
 	// Ensure internal mapping is in a valid state (either the connection is
 	// present and mapped to the expected driver, or it has been fully removed).
