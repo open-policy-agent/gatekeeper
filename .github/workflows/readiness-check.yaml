@@ -1,0 +1,184 @@
+name: readiness_check
+on:
+  workflow_call:
+    inputs:
+      kubernetes_version:
+        description: 'Kubernetes version to test against'
+        required: false
+        default: '1.33.0'
+        type: string
+      gatekeeper_namespace:
+        description: 'Namespace where Gatekeeper is deployed'
+        required: false
+        default: 'gatekeeper-system'
+        type: string
+      timeout:
+        description: 'Total timeout for readiness verification'
+        required: false
+        default: '5m'
+        type: string
+      max_retries:
+        description: 'Maximum verification attempts'
+        required: false
+        default: '15'
+        type: string
+      stability_window:
+        description: 'Time to verify stable readiness'
+        required: false
+        default: '60s'
+        type: string
+
+permissions: read-all
+
+jobs:
+  readiness_verification:
+    name: "Verify Gatekeeper Readiness"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Check out code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Set up Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: "1.24"
+          check-latest: true
+
+      - name: Build readiness checker
+        run: |
+          go build -o bin/readiness-check ./cmd/readiness-check
+          chmod +x bin/readiness-check
+
+      - name: Verify Gatekeeper Controller Readiness
+        run: |
+          echo "🔍 Verifying Gatekeeper controller readiness..."
+          
+          # Get controller pod IP and port
+          CONTROLLER_POD=$(kubectl get pods -n ${{ inputs.gatekeeper_namespace }} \
+            -l control-plane=controller-manager \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          
+          if [[ -z "$CONTROLLER_POD" ]]; then
+            echo "❌ No Gatekeeper controller pod found in namespace ${{ inputs.gatekeeper_namespace }}"
+            exit 1
+          fi
+          
+          echo "📍 Found controller pod: $CONTROLLER_POD"
+          
+          # Port-forward to the readiness endpoint
+          kubectl port-forward -n ${{ inputs.gatekeeper_namespace }} pod/$CONTROLLER_POD 9090:9090 &
+          PF_PID=$!
+          
+          # Wait for port-forward to be ready
+          echo "⏳ Waiting for port-forward to be established..."
+          sleep 3
+          
+          # Cleanup function
+          cleanup() {
+            echo "🧹 Cleaning up port-forward..."
+            kill $PF_PID 2>/dev/null || true
+            wait $PF_PID 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          
+          # Verify readiness using our custom checker
+          echo "🏥 Running comprehensive readiness verification..."
+          ./bin/readiness-check \
+            --endpoint=http://localhost:9090/readyz \
+            --total-timeout=${{ inputs.timeout }} \
+            --max-retries=${{ inputs.max_retries }} \
+            --stability-window=${{ inputs.stability_window }} \
+            --verbose
+          
+          echo "✅ Controller readiness verification completed successfully"
+
+      - name: Verify Gatekeeper Audit Readiness
+        run: |
+          echo "🔍 Verifying Gatekeeper audit readiness..."
+          
+          # Get audit pod IP and port
+          AUDIT_POD=$(kubectl get pods -n ${{ inputs.gatekeeper_namespace }} \
+            -l control-plane=audit-controller \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          
+          if [[ -z "$AUDIT_POD" ]]; then
+            echo "ℹ️ No Gatekeeper audit pod found in namespace ${{ inputs.gatekeeper_namespace }}, skipping audit check"
+            exit 0
+          fi
+          
+          echo "📍 Found audit pod: $AUDIT_POD"
+          
+          # Port-forward to the readiness endpoint (use different local port)
+          kubectl port-forward -n ${{ inputs.gatekeeper_namespace }} pod/$AUDIT_POD 9091:9090 &
+          PF_PID=$!
+          
+          # Wait for port-forward to be ready
+          echo "⏳ Waiting for port-forward to be established..."
+          sleep 3
+          
+          # Cleanup function
+          cleanup() {
+            echo "🧹 Cleaning up port-forward..."
+            kill $PF_PID 2>/dev/null || true
+            wait $PF_PID 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          
+          # Verify readiness using our custom checker
+          echo "🏥 Running comprehensive readiness verification..."
+          ./bin/readiness-check \
+            --endpoint=http://localhost:9091/readyz \
+            --total-timeout=${{ inputs.timeout }} \
+            --max-retries=${{ inputs.max_retries }} \
+            --stability-window=${{ inputs.stability_window }} \
+            --verbose
+          
+          echo "✅ Audit readiness verification completed successfully"
+
+      - name: Generate Readiness Report
+        if: always()
+        run: |
+          echo "📊 Generating readiness verification report..."
+          
+          cat > readiness-report.md << 'EOF'
+          # Gatekeeper Readiness Verification Report
+          
+          **Date:** $(date -u)
+          **Kubernetes Version:** ${{ inputs.kubernetes_version }}
+          **Namespace:** ${{ inputs.gatekeeper_namespace }}
+          
+          ## Configuration
+          - **Timeout:** ${{ inputs.timeout }}
+          - **Max Retries:** ${{ inputs.max_retries }}
+          - **Stability Window:** ${{ inputs.stability_window }}
+          
+          ## Pod Status
+          ```bash
+          kubectl get pods -n ${{ inputs.gatekeeper_namespace }} -o wide
+          ```
+          
+          $(kubectl get pods -n ${{ inputs.gatekeeper_namespace }} -o wide 2>/dev/null || echo "No pods found")
+          
+          ## Health Endpoints
+          - Controller: http://localhost:9090/readyz
+          - Audit: http://localhost:9091/readyz
+          
+          ## Related Issues
+          - [Issue #4060: CI: Check for readiness probe status in CI](https://github.com/open-policy-agent/gatekeeper/issues/4060)
+          - [Issue #4055: Readiness probe failed - multiple restarts solve the problem](https://github.com/open-policy-agent/gatekeeper/issues/4055)
+          EOF
+          
+          echo "📋 Readiness report generated at readiness-report.md"
+
+      - name: Upload Readiness Report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: readiness-report-${{ inputs.kubernetes_version }}-${{ inputs.gatekeeper_namespace }}
+          path: readiness-report.md
