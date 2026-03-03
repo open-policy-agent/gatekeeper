@@ -133,15 +133,34 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 			},
 			expectedData: map[fakes.CfDataKey]interface{}{{Gvk: configMapGVK, Key: "default/config-test-1"}: nil},
 		},
+		{
+			name: "handle nil cfClient gracefully",
+			cm: &CacheManager{
+				cfClient:         nil,
+				syncMetricsCache: syncutil.NewMetricsCache(),
+				gvksToDeleteFromCache: func() *watch.Set {
+					gvksToDelete := watch.NewSet()
+					gvksToDelete.Add(configMapGVK)
+					return gvksToDelete
+				}(),
+			},
+			expectedData: nil,
+		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			cfClient, ok := tc.cm.cfClient.(*fakes.FakeCfClient)
-			require.True(t, ok)
-
 			tc.cm.wipeCacheIfNeeded(context.Background())
-			require.True(t, cfClient.Contains(tc.expectedData))
+
+			// Only check cfClient contents if it's not nil
+			if tc.cm.cfClient != nil {
+				cfClient, ok := tc.cm.cfClient.(*fakes.FakeCfClient)
+				require.True(t, ok)
+				require.True(t, cfClient.Contains(tc.expectedData))
+			} else {
+				// For nil cfClient case, just verify expectedData is also nil
+				require.Nil(t, tc.expectedData)
+			}
 		})
 	}
 }
@@ -242,6 +261,23 @@ func TestCacheManager_AddObject(t *testing.T) {
 			expectSyncMetric:     true,
 			expectedMetricStatus: metrics.ErrorStatus,
 		},
+		{
+			name: "AddObject ignores processing if cfClient is nil",
+			cm: &CacheManager{
+				cfClient: nil,
+				watchedSet: func() *watch.Set {
+					ws := watch.NewSet()
+					ws.Add(pod.GroupVersionKind())
+
+					return ws
+				}(),
+				tracker:          readiness.NewTracker(mgr.GetAPIReader(), false, false, false),
+				syncMetricsCache: syncutil.NewMetricsCache(),
+				processExcluder:  process.Get(),
+			},
+			expectedData:     nil,
+			expectSyncMetric: false,
+		},
 	}
 
 	for _, tc := range tcs {
@@ -259,10 +295,14 @@ func TestCacheManager_AddObject(t *testing.T) {
 func assertExpecations(t *testing.T, cm *CacheManager, instance *unstructured.Unstructured, expectedData map[fakes.CfDataKey]interface{}, expectSyncMetric bool, expectedMetricStatus *metrics.Status) {
 	t.Helper()
 
-	cfClient, ok := cm.cfClient.(*fakes.FakeCfClient)
-	require.True(t, ok)
+	if cm.cfClient == nil {
+		require.Nil(t, expectedData)
+	} else {
+		cfClient, ok := cm.cfClient.(*fakes.FakeCfClient)
+		require.True(t, ok)
 
-	require.True(t, cfClient.Contains(expectedData))
+		require.True(t, cfClient.Contains(expectedData))
+	}
 
 	syncKey := syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName())
 
@@ -351,6 +391,23 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 				}(),
 			},
 			expectedData:     map[fakes.CfDataKey]interface{}{},
+			expectSyncMetric: false,
+		},
+		{
+			name: "RemoveObject ignores processing if cfClient is nil",
+			cm: &CacheManager{
+				cfClient: nil,
+				watchedSet: func() *watch.Set {
+					ws := watch.NewSet()
+					ws.Add(pod.GroupVersionKind())
+
+					return ws
+				}(),
+				tracker:          tracker,
+				syncMetricsCache: syncutil.NewMetricsCache(),
+				processExcluder:  process.Get(),
+			},
+			expectedData:     nil,
 			expectSyncMetric: false,
 		},
 	}
@@ -778,4 +835,41 @@ func (f *fakeRegistrar) ReplaceWatch(_ context.Context, _ []schema.GroupVersionK
 	}
 
 	return nil
+}
+
+func Test_normalizeCFDataClient(t *testing.T) {
+	tcs := []struct {
+		name      string
+		input     CFDataClient
+		expectNil bool
+	}{
+		{
+			name:      "untyped nil returns nil",
+			input:     nil,
+			expectNil: true,
+		},
+		{
+			name:      "typed nil returns nil",
+			input:     (*fakes.FakeCfClient)(nil),
+			expectNil: true,
+		},
+		{
+			name:      "non-nil client returns non-nil",
+			input:     &fakes.FakeCfClient{},
+			expectNil: false,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := normalizeCFDataClient(tc.input)
+
+			if tc.expectNil {
+				require.Nil(t, result, "expected nil result")
+			} else {
+				require.NotNil(t, result, "expected non-nil result")
+				require.IsType(t, &fakes.FakeCfClient{}, result, "expected FakeCfClient type")
+			}
+		})
+	}
 }
