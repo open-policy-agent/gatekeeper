@@ -33,14 +33,14 @@ jobs:
 
       - name: Publish fake-reader image
         run: |
-          make docker-buildx-fake-reader-release \
+          make docker-buildx-fake-reader \
             PLATFORM="linux/amd64,linux/arm64" \
             OUTPUT_TYPE=type=registry \
             GENERATE_ATTESTATIONS=true
 
       - name: Publish fake-subscriber image
         run: |
-          make docker-buildx-fake-subscriber-release \
+          make docker-buildx-fake-subscriber \
             PLATFORM="linux/amd64,linux/arm64" \
             OUTPUT_TYPE=type=registry \
             GENERATE_ATTESTATIONS=true

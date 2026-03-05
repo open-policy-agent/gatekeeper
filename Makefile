@@ -537,24 +537,8 @@ docker-buildx-fake-reader: docker-buildx-builder
 		-t ${GHCR_FAKE_READER_REPOSITORY}:latest \
 		-f test/export/fake-reader/Dockerfile test/export/fake-reader
 
-docker-buildx-fake-reader-release: docker-buildx-builder
-	docker buildx build \
-		$(_ATTESTATIONS) \
-		--platform="$(PLATFORM)" \
-		--output=$(OUTPUT_TYPE) \
-		-t ${GHCR_FAKE_READER_REPOSITORY}:latest \
-		-f test/export/fake-reader/Dockerfile test/export/fake-reader
-
 # Build fake-subscriber image
 docker-buildx-fake-subscriber: docker-buildx-builder
-	docker buildx build \
-		$(_ATTESTATIONS) \
-		--platform="$(PLATFORM)" \
-		--output=$(OUTPUT_TYPE) \
-		-t ${GHCR_FAKE_SUBSCRIBER_REPOSITORY}:latest \
-		-f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
-
-docker-buildx-fake-subscriber-release: docker-buildx-builder
 	docker buildx build \
 		$(_ATTESTATIONS) \
 		--platform="$(PLATFORM)" \
