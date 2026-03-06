@@ -98,6 +98,9 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
 	}
 
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.openConnections[connectionName] = Connection{
 		Path:                path,
 		MaxAuditResults:     int(maxResults),
@@ -107,14 +110,17 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 }
 
 func (r *Writer) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
-	conn, exists := r.openConnections[connectionName]
-	if !exists {
-		return fmt.Errorf("connection %s for disk driver not found", connectionName)
-	}
-
 	path, maxResults, ttl, err := unmarshalConfig(config)
 	if err != nil {
 		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	conn, exists := r.openConnections[connectionName]
+	if !exists {
+		return fmt.Errorf("connection %s for disk driver not found", connectionName)
 	}
 
 	if conn.Path != path {
@@ -133,6 +139,9 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 }
 
 func (r *Writer) CloseConnection(connectionName string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	conn, ok := r.openConnections[connectionName]
 	if !ok {
 		return fmt.Errorf("connection %s not found for disk driver", connectionName)
@@ -161,6 +170,9 @@ func (r *Writer) CloseConnection(connectionName string) error {
 }
 
 func (r *Writer) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	conn, ok := r.openConnections[connectionName]
 	if !ok {
 		return fmt.Errorf("invalid connection: %s not found for disk driver", connectionName)
