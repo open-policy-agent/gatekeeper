@@ -47,7 +47,7 @@ type FailedConnection struct {
 }
 
 type Writer struct {
-	mu                           sync.RWMutex
+	mu                           sync.Mutex
 	openConnections              map[string]Connection
 	closedConnections            map[string]FailedConnection
 	cleanupDone                  chan struct{}
