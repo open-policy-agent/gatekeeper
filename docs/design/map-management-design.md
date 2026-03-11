@@ -20,7 +20,7 @@
 8. [Controller Architecture](#controller-architecture)
 9. [Scope Synchronization](#scope-synchronization)
 10. [Ownership and Lifecycle](#ownership-and-lifecycle)
-11. [Kubernetes Version Compatibility](#kubernetes-version-compatibility)1
+11. [Kubernetes Version Compatibility](#kubernetes-version-compatibility)
 12. [Security Considerations](#security-considerations)
 13. [Performance Considerations](#performance-considerations)
 14. [Known Limitations](#known-limitations)
@@ -235,10 +235,10 @@ type MAPPolicy struct {
 
 	// Variables defines named CEL expressions that can be referenced in
 	// other expressions (mutations, matchConditions). Gatekeeper prepends
-	// its own variables at reconcile time (params, anyObject) — user-defined
+	// its own variables at reconcile time (anyObject, params) — user-defined
 	// variables must not collide with these reserved names. The MAPTemplate
 	// controller validates at reconcile time that no user-defined variable
-	// uses the name "params", "anyObject", or the reserved "gatekeeper-"
+	// uses the name "params", "anyObject", or the reserved "gatekeeper_"
 	// prefix, and rejects the MAPTemplate with an error in
 	// status.byPod[].errors if a collision is detected.
 	// +optional
@@ -246,7 +246,7 @@ type MAPPolicy struct {
 
 	// MatchConditions is a list of CEL conditions that must be met for the
 	// policy to apply. Gatekeeper injects additional conditions with the
-	// reserved "gatekeeper-internal-" prefix for scope exclusions and
+	// reserved "gatekeeper_internal_" prefix for scope exclusions and
 	// per-instance kind filtering.
 	// User-provided names with this prefix are rejected at creation time.
 	// +optional
@@ -514,7 +514,10 @@ spec:
         openAPIV3Schema:
           # spec.match — kinds (for per-instance kind filtering via MAP matchCondition),
           #   namespaceSelector, labelSelector (→ MAPB matchResources),
-          #   namespaces, excludedNamespaces, scope
+          #   namespaces, excludedNamespaces
+          #   Note: match.scope is not supported as a per-instance field. Scope filtering
+          #   is handled through MAP matchConstraints.resourceRules (inherited from mutation
+          #   webhook config rules, which include Rule.Scope), matching the existing VAP pattern.
           # spec.parameters — from template validation schema (user params)
           # spec.parameterNotFoundAction — enum: Allow|Deny, default: Allow
           # status.byPod — x-kubernetes-preserve-unknown-fields (aggregated status)
@@ -572,10 +575,10 @@ spec:
     apiVersion: mutationconstraints.gatekeeper.sh/v1alpha1
     kind: K8sAlwaysPullImages                     # from template.spec.crd.spec.names.kind
   variables:                                       # Gatekeeper-injected (prepended to user variables)
-    - name: params
-      expression: "!has(params.spec) ? null : !has(params.spec.parameters) ? null: params.spec.parameters"
     - name: anyObject                              # coerces object/oldObject for DELETE support
       expression: 'has(request.operation) && request.operation == "DELETE" && object == null ? oldObject : object'
+    - name: params
+      expression: "!has(params.spec) ? null : !has(params.spec.parameters) ? null: params.spec.parameters"
   matchConstraints:                                # Gatekeeper-computed
     resourceRules:                                 # intersection(template.resourceRules, webhookConfig.rules)
       - apiGroups: [""]                            # template specified pods; webhook covers pods → intersection = pods
@@ -588,7 +591,7 @@ spec:
     # --- Gatekeeper-injected: per-instance match filtering (same as VAP AllMatchersV1Beta1) ---
     # These four conditions read from params.spec.match.* on the MutationConstraint
     # instance, enabling per-instance scoping within a shared MAP.
-    - name: gatekeeper-internal-match-kinds
+    - name: gatekeeper_internal_match_kinds
       expression: |
         !has(params.spec) ? true: (
           !has(params.spec.match) ? true: (
@@ -600,7 +603,7 @@ spec:
             )
           )
         )
-    - name: gatekeeper-internal-match-namespaces
+    - name: gatekeeper_internal_match_namespaces
       expression: |
         !has(params.spec) ? true: (
           !has(params.spec.match) ? true: (
@@ -617,7 +620,7 @@ spec:
             )
           )
         )
-    - name: gatekeeper-internal-match-excluded-namespaces
+    - name: gatekeeper_internal_match_excluded_namespaces
       expression: |
         !has(params.spec) ? true: (
           !has(params.spec.match) ? true: (
@@ -634,7 +637,7 @@ spec:
             )
           )
         )
-    - name: gatekeeper-internal-match-name
+    - name: gatekeeper_internal_match_name
       expression: |
         !has(params.spec) ? true: (
           !has(params.spec.match) ? true: (
@@ -648,18 +651,51 @@ spec:
             )
           )
         )
-    # --- Gatekeeper-injected: consolidated namespace exclusions ---
-    # Combines Config.spec.match.excludedNamespaces, --exempt-namespace,
-    # --exempt-namespace-prefix, and --exempt-namespace-suffix into one condition.
-    - name: gatekeeper-internal-namespace-exclusions
+    # --- Gatekeeper-injected: global namespace exclusions (from Config resource) ---
+    # Excludes namespaces listed in Config.spec.match[].excludedNamespaces.
+    # Handles Namespace objects by checking obj.metadata.name (same as VAP
+    # matchGlobalExcludedNamespacesGlob pattern in cel_snippets.go).
+    - name: gatekeeper_internal_match_global_excluded_namespaces
       expression: |
         [object, oldObject].exists(obj,
           obj != null && (
-            !has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
-              !(obj.metadata.namespace in ['excluded-ns']) &&
-              !(obj.metadata.namespace in ['exempt-ns-1']) &&
-              !obj.metadata.namespace.startsWith('exempt-prefix-') &&
-              !obj.metadata.namespace.endsWith('-exempt-suffix')
+            (has(obj.kind) && obj.kind == "Namespace" && has(obj.metadata.name)) ? (
+              !['excluded-ns'].exists(nsMatcher,
+                (string(obj.metadata.name).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+              )
+            ) : (
+              !has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
+                !['excluded-ns'].exists(nsMatcher,
+                  (string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+                )
+              )
+            )
+          )
+        )
+    # --- Gatekeeper-injected: global namespace exemptions (from --exempt-namespace flags) ---
+    # Excludes namespaces matching --exempt-namespace, --exempt-namespace-prefix,
+    # --exempt-namespace-suffix flags. Requires admission.gatekeeper.sh/ignore label
+    # on Namespace objects (same as VAP matchGlobalExemptedNamespacesGlob pattern).
+    # Note: The mutation webhook's namespaceSelector already excludes namespaces with
+    # the admission.gatekeeper.sh/ignore label, and this is synced to MAP's
+    # matchConstraints.namespaceSelector. This CEL condition provides defense-in-depth
+    # for Namespace objects (which are not filtered by namespaceSelector).
+    - name: gatekeeper_internal_match_global_exempted_namespaces
+      expression: |
+        [object, oldObject].exists(obj,
+          obj != null && (
+            (has(obj.kind) && obj.kind == "Namespace" && has(obj.metadata.name)) ? (
+              !['exempt-ns-1', 'exempt-prefix-*', '*-exempt-suffix'].exists(nsMatcher,
+                (string(obj.metadata.name).matches("^" + string(nsMatcher).replace("*", ".*") + "$")) &&
+                has(obj.metadata.labels) &&
+                ("admission.gatekeeper.sh/ignore" in obj.metadata.labels)
+              )
+            ) : (
+              !has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
+                !['exempt-ns-1', 'exempt-prefix-*', '*-exempt-suffix'].exists(nsMatcher,
+                  (string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+                )
+              )
             )
           )
         )
@@ -707,16 +743,19 @@ as its entry guard. Unlike the ConstraintTemplate controller (which uses
 `HasValidationOperations()` — checking Audit/Status/Webhook), MAPTemplate controllers
 are generation-only and have no policy evaluation or audit role.
 
-**CEL Expression Validation**: The MAPTemplate controller performs **basic CEL syntax
-validation** at reconcile time using `cel.Compile()` to catch syntax errors (typos,
-malformed expressions) early, before the MAP is submitted to the API server. This
-provides immediate feedback in `status.byPod[].errors` without waiting for the
-asynchronous MAP creation to fail.
+**CEL Expression Validation**: The MAPTemplate controller performs **CEL syntax
+validation** at reconcile time using the Kubernetes CEL environment to catch syntax
+errors (typos, malformed expressions) early, before the MAP is submitted to the API
+server. The Kubernetes CEL environment is used (rather than a generic CEL compiler)
+because MAP expressions use Kubernetes-specific CEL extensions such as apply
+configuration syntax (`Object{...}`). This provides immediate feedback in
+`status.byPod[].errors` without waiting for the asynchronous MAP creation to fail.
 
 - **Syntax validation**: The controller compiles each CEL expression in
   `spec.policy.mutations`, `spec.policy.matchConditions`, and `spec.policy.variables`
-  to detect parse errors. Expressions with syntax errors cause the MAPTemplate to
-  report an error in `status.byPod[].errors` and skip MAP generation.
+  using the Kubernetes CEL environment to detect parse errors. Expressions with syntax
+  errors cause the MAPTemplate to report an error in `status.byPod[].errors` and skip
+  MAP generation.
 - **No type-checking**: The controller does **not** perform CEL type-checking against
   the Kubernetes resource schema — this is deferred to the API server at MAP creation
   time, since the API server has the authoritative type information.
@@ -752,13 +791,19 @@ as `constrainttemplate_controller.go`):
 1. Receive MAPTemplate event
 2. Detect available Kubernetes MAP API version (cached, same as IsVapAPIEnabled pattern)
 3. If MAP API is unavailable → set error in status, return early (no CRD or MAP generated)
-4. Validate matchCondition names (reject gatekeeper-internal-* prefix in user conditions)
-5. Validate variable names (reject collisions with reserved names: params, anyObject, gatekeeper-* prefix)
-6. Perform basic CEL syntax validation on all expressions (mutations, matchConditions, variables)
-7. Generate MutationConstraint CRD from template.spec.crd (with owner reference to MAPTemplate)
-8. Set BlockMAPBGeneration annotations on MAPTemplate (two annotations — see below)
-9. Register dynamic watch via watcher.AddWatch(gvk) AND statusWatcher.AddWatch(gvk)
-10. Compute MAP matchConstraints.resourceRules:
+4. Validate that metadata.name == strings.ToLower(spec.crd.spec.names.kind) (same convention as
+   ConstraintTemplate, enforced by the frameworks library for CT but validated in controller for MAP)
+5. Validate matchCondition names (reject gatekeeper_internal_* prefix in user conditions)
+6. Validate variable names (reject collisions with reserved names: params, anyObject, gatekeeper_* prefix)
+7. Perform CEL syntax validation using the Kubernetes CEL environment on all expressions
+   (mutations, matchConditions, variables). This provides Kubernetes-aware type checking
+   and supports Kubernetes CEL extensions (e.g., apply configuration syntax). Semantic
+   validation (full type-checking, cost analysis) is deferred to the API server at MAP
+   creation time.
+8. Generate MutationConstraint CRD from template.spec.crd (with owner reference to MAPTemplate)
+9. Set BlockMAPBGeneration annotations on MAPTemplate
+10. Register dynamic watch via watcher.AddWatch(gvk) AND statusWatcher.AddWatch(gvk)
+11. Compute MAP matchConstraints.resourceRules:
     a. Get webhookConfig rules from mutation webhook config cache
     b. If template.spec.policy.resourceRules is set:
        - Compute intersection(template.resourceRules, webhookConfig.rules)
@@ -767,26 +812,29 @@ as `constrainttemplate_controller.go`):
     c. If template.spec.policy.resourceRules is omitted:
        - Use webhookConfig.rules as-is (broad fallback, same as VAP)
     d. Set namespaceSelector, objectSelector, matchPolicy from webhookConfig
-11. Build MutatingAdmissionPolicy from template.spec.policy:
+12. Build MutatingAdmissionPolicy from template.spec.policy:
     - Copy mutations, failurePolicy, reinvocationPolicy, user variables, user matchConditions
-    - Prepend Gatekeeper variables (params, anyObject)
-    - Inject gatekeeper-internal per-instance match conditions from spec.match
+    - Prepend Gatekeeper variables (anyObject, params) — matching AllVariablesV1Beta1() order
+    - Inject gatekeeper_internal per-instance match conditions from spec.match
       (same CEL patterns as VAP AllMatchersV1Beta1() in cel_snippets.go):
-      * gatekeeper-internal-match-kinds — filters by params.spec.match.kinds
-      * gatekeeper-internal-match-namespaces — includes params.spec.match.namespaces (glob)
-      * gatekeeper-internal-match-excluded-namespaces — excludes params.spec.match.excludedNamespaces (glob)
-      * gatekeeper-internal-match-name — filters by params.spec.match.name (glob)
-    - Inject single consolidated `gatekeeper-internal-namespace-exclusions` matchCondition
-      (combines Config excludedNamespaces + --exempt-namespace + prefix/suffix flags)
-    - Set matchConstraints from step 10
-12. Create/Update MAP with owner reference to MAPTemplate
-13. After MAP **creation or deletion only**, trigger MutationConstraint reconciliation for
+      * gatekeeper_internal_match_excluded_namespaces — excludes params.spec.match.excludedNamespaces (glob)
+      * gatekeeper_internal_match_namespaces — includes params.spec.match.namespaces (glob)
+      * gatekeeper_internal_match_name — filters by params.spec.match.name (glob)
+      * gatekeeper_internal_match_kinds — filters by params.spec.match.kinds
+    - Inject two global namespace exclusion matchConditions:
+      * gatekeeper_internal_match_global_excluded_namespaces — Config excludedNamespaces
+        (with Namespace object handling)
+      * gatekeeper_internal_match_global_exempted_namespaces — --exempt-namespace/prefix/suffix
+        flags (with Namespace object handling + admission.gatekeeper.sh/ignore label check)
+    - Set matchConstraints from step 11
+13. Create/Update MAP with owner reference to MAPTemplate
+14. After MAP **creation or deletion only**, trigger MutationConstraint reconciliation for
     all instances of this kind (triggering MAPB generation or re-evaluation of the
     BlockMAPBGeneration delay). MAP **updates do not** trigger MutationConstraint
     reconciliation — this mirrors the existing VAP pattern where `triggerConstraintEvents()`
     fires only on VAP create/delete, not on update (scope sync updates to the MAP spec
     do not require MAPB re-generation since MAPBs reference the MAP by name, not by content).
-14. Update MAPTemplate pod status
+15. Update MAPTemplate pod status
 ```
 
 **Reconciliation (deletion path)**:
@@ -875,7 +923,11 @@ Both controllers follow these patterns from the CT/constraint architecture.
 See [Ownership and Lifecycle](#ownership-and-lifecycle) for the full ownership chain
 and deletion cascade semantics.
 
-**CRD caching race mitigation**: MAPTemplate sets two annotations:
+**CRD caching race mitigation**: MAPTemplate controller sets two annotations on the
+**MAPTemplate object** (not on the generated CRD), matching the existing VAP pattern
+where `BlockVAPBGenerationUntilAnnotation` and `VAPBGenerationAnnotation` are set on
+the ConstraintTemplate object. The MutationConstraint controller reads these annotations
+from the MAPTemplate when determining whether to proceed with MAPB generation:
 - `gatekeeper.sh/block-mapb-generation-until` — RFC3339 timestamp = `now + 30s`
 - `gatekeeper.sh/mapb-generation-state` — initially `"blocked"`, flipped to `"unblocked"`
   once expired. Retry-on-conflict for concurrent access.
@@ -899,9 +951,10 @@ state is `"unblocked"` and the delay check is skipped on subsequent reconciliati
 MutationConstraint controller processes via `IfWatching(gvk, fn)` guard +
 `EventPackerMapFunc`/`UnpackRequest` for GVK encoding.
 
-**MutationConstraint re-triggering**: After MAP create/update/delete, MAPTemplate lists all
+**MutationConstraint re-triggering**: After MAP create/delete, MAPTemplate lists all
 MutationConstraint instances and sends `GenericEvent` for each (via
-`triggerMutationConstraintEvents()`). Necessary
+`triggerMutationConstraintEvents()`). MAP **updates do not** trigger re-listing
+(MAPBs reference the MAP by name, not by content). Necessary
 because MAPB generation depends on MAP existence and the BlockMAPBGeneration delay
 countdown starts from MAP creation.
 
@@ -1017,9 +1070,9 @@ A **new** controller (separate from the existing VAP `WebhookConfigController`) 
 
 **Reconciliation flow**:
 1. Fetch `MutatingWebhookConfiguration` (if deleted → remove cache entry → trigger all MAPTemplates)
-2. Find Gatekeeper's mutation webhook entry by name (`--mutating-webhook-configuration-name`,
-   default: `"gatekeeper-mutating-webhook-configuration"` — mirrors `--validating-webhook-configuration-name`
-   defined in `pkg/webhook/common.go`)
+2. Find Gatekeeper's mutation webhook entry by name (uses the existing
+   `--mutating-webhook-configuration-name` flag, default:
+   `"gatekeeper-mutating-webhook-configuration"` — already defined in `pkg/webhook/common.go`)
 3. Extract `namespaceSelector`, `objectSelector`, `rules`, `matchPolicy`, `matchConditions`
 4. Compare with `WebhookConfigCache` — only trigger MAPTemplate reconciliation if changed
 
@@ -1037,38 +1090,46 @@ Gatekeeper automatically injects scope restrictions into generated MAPs:
 
 | Source | Injected As |
 |--------|-------------|
-| Config.spec.match.excludedNamespaces, `--exempt-namespace`, `--exempt-namespace-prefix`, `--exempt-namespace-suffix` flags | Single matchCondition CEL expression (`gatekeeper-internal-namespace-exclusions`) combining all namespace exclusion checks |
-| Webhook namespaceSelector | MAP matchConstraints.namespaceSelector |
+| Config.spec.match.excludedNamespaces | `gatekeeper_internal_match_global_excluded_namespaces` matchCondition (with Namespace object handling) |
+| `--exempt-namespace`, `--exempt-namespace-prefix`, `--exempt-namespace-suffix` flags | `gatekeeper_internal_match_global_exempted_namespaces` matchCondition (with Namespace object handling + `admission.gatekeeper.sh/ignore` label check) |
+| Webhook namespaceSelector | MAP matchConstraints.namespaceSelector (includes `admission.gatekeeper.sh/ignore: DoesNotExist` from mutation webhook config) |
 | Webhook objectSelector | MAP matchConstraints.objectSelector |
 | Webhook rules | MAP matchConstraints.resourceRules (intersected with template.resourceRules if set; webhook rules used as-is if template omits resourceRules) |
-| MutationConstraint instances' match.kinds | `gatekeeper-internal-match-kinds` matchCondition (per-instance kind filtering at evaluation time) |
-| MutationConstraint instances' match.namespaces | `gatekeeper-internal-match-namespaces` matchCondition (per-instance namespace inclusion, glob) |
-| MutationConstraint instances' match.excludedNamespaces | `gatekeeper-internal-match-excluded-namespaces` matchCondition (per-instance namespace exclusion, glob) |
-| MutationConstraint instances' match.name | `gatekeeper-internal-match-name` matchCondition (per-instance resource name filtering, glob) |
+| MutationConstraint instances' match.kinds | `gatekeeper_internal_match_kinds` matchCondition (per-instance kind filtering at evaluation time) |
+| MutationConstraint instances' match.namespaces | `gatekeeper_internal_match_namespaces` matchCondition (per-instance namespace inclusion, glob) |
+| MutationConstraint instances' match.excludedNamespaces | `gatekeeper_internal_match_excluded_namespaces` matchCondition (per-instance namespace exclusion, glob) |
+| MutationConstraint instances' match.name | `gatekeeper_internal_match_name` matchCondition (per-instance resource name filtering, glob) |
 | MutationConstraint instances' match.namespaceSelector | MAPB matchResources.namespaceSelector (native K8s label selector) |
 | MutationConstraint instances' match.labelSelector | MAPB matchResources.objectSelector (native K8s label selector) |
 
 **matchCondition Limits and CEL Cost Budget**: The Kubernetes API enforces a limit of
 **64 matchConditions** per admission policy and a CEL cost budget of $10^7$ cost units
-per policy evaluation. Gatekeeper consolidates all namespace exclusions (from Config,
-`--exempt-namespace`, `--exempt-namespace-prefix`, `--exempt-namespace-suffix`) into a
-**single** `gatekeeper-internal-namespace-exclusions` matchCondition that combines all
-checks in one CEL expression, rather than injecting one matchCondition per exclusion
-source. This minimizes the number of Gatekeeper-injected matchConditions
-and keeps the CEL cost well within budget.
+per policy evaluation. Gatekeeper injects two global namespace exclusion matchConditions
+(one for Config excludedNamespaces, one for exempt namespace flags), matching the existing
+VAP pattern with `matchGlobalExcludedNamespacesGlob` and `matchGlobalExemptedNamespacesGlob`
+in `cel_snippets.go`. Each condition consolidates multiple namespace patterns into a single
+CEL expression, minimizing the total Gatekeeper-injected matchCondition count (6 total:
+4 per-instance + 2 global) and keeping the CEL cost well within budget.
 
 **Note**: Scope sync sources are the **mutation webhook** configuration, not the
 validating webhook. The existing VAP integration syncs from the validating webhook
 because VAP replaces validation. MAP replaces mutation, so it should sync from the
-mutating webhook (`--mutating-webhook-configuration-name`, default:
-`"gatekeeper-mutating-webhook-configuration"` — see `pkg/webhook/common.go`).
+mutating webhook (uses the existing `--mutating-webhook-configuration-name` flag, default:
+`"gatekeeper-mutating-webhook-configuration"` — already defined in `pkg/webhook/common.go`).
+Both the mutating and validating webhooks use `namespaceSelector` with
+`admission.gatekeeper.sh/ignore: DoesNotExist`, so namespaces with this label are
+excluded from MAP at the API server level via the synced `matchConstraints.namespaceSelector`.
 
-**Cluster-scoped resource handling**: All Gatekeeper-injected namespace exclusion
-matchConditions use the VAP-proven pattern of checking
+**Cluster-scoped resource handling**: Per-instance namespace exclusion matchConditions
+use the VAP-proven pattern of checking
 `!has(obj.metadata.namespace) || obj.metadata.namespace == ""` before applying
 namespace-based filtering. Cluster-scoped resources (which have no namespace) always
-pass these conditions and are never incorrectly excluded. See the
-`matchGlobalExcludedNamespacesGlob` pattern in
+pass these conditions and are never incorrectly excluded. Global namespace exclusion
+matchConditions additionally handle **Namespace objects** by checking
+`obj.kind == "Namespace"` and filtering by `obj.metadata.name` instead of
+`obj.metadata.namespace` — this ensures Namespace resources in excluded namespaces
+are correctly filtered. See the `matchGlobalExcludedNamespacesGlob` and
+`matchGlobalExemptedNamespacesGlob` patterns in
 `pkg/drivers/k8scel/transform/cel_snippets.go` for the existing implementation.
 The generated MAP example in [Generated Resources](#generated-resources) demonstrates
 this pattern.
@@ -1198,7 +1259,7 @@ rules:
 
 ### matchCondition Name Protection
 
-System-injected matchConditions use the reserved `gatekeeper-internal-` prefix.
+System-injected matchConditions use the reserved `gatekeeper_internal_` prefix.
 User-provided matchConditions with this prefix are rejected at MAPTemplate creation time
 to prevent shadowing of scope exclusion conditions.
 
@@ -1363,11 +1424,25 @@ blips, CRD cache eviction, cascade deletion ordering).
 However, this diverges from the Kubernetes default and could surprise users who expect
 MAP behavior to match the upstream API semantics.
 
+**Security rationale for `Allow` default**: Unlike validation (where `Deny` on missing
+params safely blocks potentially non-compliant resources), mutation with `Deny` on
+missing params would block ALL admission requests to matched resources when the
+MutationConstraint is temporarily unavailable — effectively an accidental denial-of-service
+on cluster operations. Since mutations are additive (they modify resources rather than
+block them), a missing mutation is generally less dangerous than blocked admission.
+The `Allow` default ensures cluster stability by treating missing params as "skip this
+mutation" rather than "block all matched resources." Users who need stricter guarantees
+can explicitly set `parameterNotFoundAction: Deny` on their MutationConstraint instances.
+
 **Options**:
-1. **Keep `Allow` default** (current design) — prioritizes stability, opt-in to `Deny`
-2. **Match Kubernetes default (`Deny`)** — upstream-consistent, risk of transient outages
-3. **Global flag** — `--default-parameter-not-found-action=Allow|Deny`, per-instance override
-4. **Require explicit value** — make it required on MutationConstraint CRD
+1. **Keep `Allow` default** (current design) — prioritizes cluster stability and safety,
+   opt-in to `Deny` per-instance. Diverges from upstream Kubernetes default.
+2. **Match Kubernetes default (`Deny`)** — upstream-consistent, but risks transient cluster
+   outages during CRD cache eviction, etcd blips, or MutationConstraint deletion ordering.
+3. **Global flag** — `--default-parameter-not-found-action=Allow|Deny`, with per-instance
+   override. Provides maximum flexibility but adds configuration surface area.
+4. **Require explicit value** — make it required on MutationConstraint CRD, forcing users
+   to make a conscious choice. No implicit default to diverge from or defend.
 
 ### MAPTemplate Update Semantics
 
@@ -1417,7 +1492,7 @@ reconciliation when relevant fields change.
 - Status aggregation controllers for MAPTemplate and MutationConstraint
 - Owner reference-based garbage collection
 - API version detection (v1alpha1/v1beta1/v1)
-- matchCondition name protection (`gatekeeper-internal-` prefix rejection)
+- matchCondition name protection (`gatekeeper_internal_` prefix rejection)
 - Unit tests for all controller paths (creation, update, deletion)
 - Integration tests with envtest for controller reconciliation
 - *(Optional)* Initial e2e tests with BATS for full lifecycle
@@ -1465,12 +1540,12 @@ All beta criteria (including any optional beta items not yet completed), plus:
 
 | Component | Test Scenarios |
 |-----------|---------------|
-| MAPTemplate controller | CRD generation, MAP construction, scope injection, annotation handling, deletion flow, API version detection, matchCondition name validation, resourceRules intersection with webhook config, empty-intersection rejection, all four gatekeeper-internal per-instance matchConditions injection (AllMatchersV1Beta1 pattern) |
+| MAPTemplate controller | CRD generation, MAP construction, scope injection, annotation handling (on MAPTemplate object), deletion flow, API version detection, name validation (metadata.name == lowercase kind), matchCondition name validation (`gatekeeper_internal_` prefix rejection), variable ordering (anyObject, params), resourceRules intersection with webhook config, empty-intersection rejection, all four per-instance matchConditions injection (AllMatchersV1Beta1 pattern), two global namespace exclusion matchConditions (excluded + exempted with label check), Namespace object handling in global conditions |
 | MutationConstraint controller | MAPB construction, BlockMAPBGeneration delay handling, owner reference wiring, deletion flow, IfWatching guard |
 | MAPTemplateStatus controller | Pod status aggregation, stale status filtering, UID mismatch handling |
 | MutationConstraintStatus controller | Dynamic GVK handling, EventPacker/UnpackRequest, status aggregation |
 | MutationWebhookConfigController | Webhook config extraction, change detection, event triggering |
-| Scope injection | Excluded namespaces, exempt namespaces (prefix/suffix/exact), webhook selector injection, resourceRules intersection semantics (narrow-only, reject empty intersection), all four gatekeeper-internal per-instance matchConditions (match-kinds, match-namespaces, match-excluded-namespaces, match-name), cluster-scoped resource handling |
+| Scope injection | Excluded namespaces (with Namespace object handling), exempt namespaces (prefix/suffix/exact, with Namespace object handling + admission.gatekeeper.sh/ignore label check), webhook selector injection, resourceRules intersection semantics (narrow-only, reject empty intersection), all four per-instance matchConditions (match_excluded_namespaces, match_namespaces, match_name, match_kinds), cluster-scoped resource handling |
 
 ### Integration Tests
 
@@ -1645,18 +1720,18 @@ When the cluster Kubernetes version changes (e.g., 1.33 → 1.34):
    `namespaceSelector`, and `objectSelector`. If the template sets `resourceRules`
    that don't cover your target resource, the MAP won't intercept it.
 3. **Check matchConditions**: Scope exclusion conditions or the four per-instance
-   `gatekeeper-internal-*` matchConditions may be filtering out the resource. Verify
+   `gatekeeper_internal_*` matchConditions may be filtering out the resource. Verify
    that the MutationConstraint's `match.kinds` includes the target resource's GVK,
    `match.namespaces` includes the target namespace (if set), `match.excludedNamespaces`
    does not exclude it, and `match.name` matches the resource name (if set).
 4. **Check for intersection errors**: If MAPTemplate status shows "template resourceRules
    do not intersect with webhook scope", the template's `resourceRules` target resources
    outside the mutation webhook's configured scope.
-4. **Test CEL expressions**: Invalid CEL may cause the MAP to be rejected by the
+5. **Test CEL expressions**: Invalid CEL may cause the MAP to be rejected by the
    API server — check
    `kubectl get mutatingadmissionpolicies gatekeeper-<name> -o yaml` for
    validation errors
-5. **Check MAPB**: Verify the binding exists and references the correct policy
+6. **Check MAPB**: Verify the binding exists and references the correct policy
    and param
 
 ---
@@ -1730,7 +1805,7 @@ mode-dependent. A separate CRD provides clearer semantics and independent versio
 | Phase | Scope |
 |-------|-------|
 | 1a | **CRD Definitions**: MAPTemplate CRD, MutationConstraint CRD, MAPTemplatePodStatus CRD, MutationConstraintPodStatus CRD. RBAC rules for all new resource types. |
-| 1b | **MAPTemplate Controller Core**: Reconciler with deletion handling (explicit MAP/CRD delete + watch removal + status cleanup), MutationConstraint CRD generation with owner references, MAP generation with owner references, API version detection (`IsMAPAPIEnabled`) with admission rejection when MAP API unavailable, matchCondition name validation (`gatekeeper-internal-` prefix rejection), variable name collision validation (`params`, `anyObject`, `gatekeeper-*` prefix), basic CEL syntax validation via `cel.Compile()`, MAPB generation delay (two annotations: timestamp + state), resourceRules intersection with webhook config rules (reject empty intersection), all four per-instance matchCondition injections from `AllMatchersV1Beta1()` pattern (`match-kinds`, `match-namespaces`, `match-excluded-namespaces`, `match-name`). |
+| 1b | **MAPTemplate Controller Core**: Reconciler with deletion handling (explicit MAP/CRD delete + watch removal + status cleanup), MutationConstraint CRD generation with owner references, MAP generation with owner references, API version detection (`IsMAPAPIEnabled`) with admission rejection when MAP API unavailable, name validation (`metadata.name == strings.ToLower(crd.spec.names.kind)`), matchCondition name validation (`gatekeeper_internal_` prefix rejection), variable name collision validation (`params`, `anyObject`, `gatekeeper_*` prefix), CEL syntax validation via Kubernetes CEL environment, MAPB generation delay (two annotations on MAPTemplate: timestamp + state), resourceRules intersection with webhook config rules (reject empty intersection), all four per-instance matchCondition injections from `AllMatchersV1Beta1()` pattern (`match_excluded_namespaces`, `match_namespaces`, `match_name`, `match_kinds`), two global namespace exclusion matchConditions (`match_global_excluded_namespaces` with Namespace object handling, `match_global_exempted_namespaces` with Namespace object handling + `admission.gatekeeper.sh/ignore` label check). |
 | 1c | **MutationConstraint Controller Core**: Subordinate controller initialization from MAPTemplate controller's `newReconciler()`, dynamic watch registration via WatchManager (two registrars: watcher + statusWatcher), `EventPacker` pattern for MutationConstraint events, `IfWatching` guard, MAPB generation with owner references, deletion handling (explicit MAPB delete + status cleanup). |
 | 1d | **Status Aggregation Controllers**: MAPTemplateStatus controller with direct `source.Kind` watches, MutationConstraintStatus controller with `source.Channel` + `IfWatching` for dynamic GVKs, `MAPTemplateEventInjector` interface, shared utility package (`pkg/policygeneration/`). |
 | 1e | **Phase 1 Testing**: Unit tests for all Phase 1 components (CRD generation, MAP/MAPB construction, deletion flows, status aggregation, event packing, annotation handling). |
