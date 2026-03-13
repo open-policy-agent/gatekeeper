@@ -1266,7 +1266,7 @@ func TestRetryFailedConnections(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			writer := &Writer{
-				mu:                sync.RWMutex{},
+				mu:                sync.Mutex{},
 				openConnections:   make(map[string]Connection),
 				closedConnections: make(map[string]FailedConnection),
 				cleanupDone:       make(chan struct{}),
@@ -1280,16 +1280,16 @@ func TestRetryFailedConnections(t *testing.T) {
 
 			writer.retryFailedConnections()
 
-			writer.mu.RLock()
+			writer.mu.Lock()
 			actualLen := len(writer.closedConnections)
-			writer.mu.RUnlock()
+			writer.mu.Unlock()
 
 			if actualLen != tt.expectedClosedConnsLen {
 				t.Errorf("expected %d closed connections, got %d", tt.expectedClosedConnsLen, actualLen)
 			}
 
 			if tt.validateResult != nil {
-				writer.mu.RLock()
+				writer.mu.Lock()
 				writerCopy := &Writer{
 					closedConnections: make(map[string]FailedConnection),
 					cleanupStopped:    writer.cleanupStopped,
@@ -1297,14 +1297,14 @@ func TestRetryFailedConnections(t *testing.T) {
 				for k, v := range writer.closedConnections {
 					writerCopy.closedConnections[k] = v
 				}
-				writer.mu.RUnlock()
+				writer.mu.Unlock()
 
 				tt.validateResult(t, writerCopy)
 			}
 
-			writer.mu.RLock()
+			writer.mu.Lock()
 			cleanupStopped := writer.cleanupStopped
-			writer.mu.RUnlock()
+			writer.mu.Unlock()
 
 			if cleanupStopped {
 				select {
@@ -1320,7 +1320,7 @@ func TestRetryFailedConnections(t *testing.T) {
 func TestBackgroundCleanupLifecycle(t *testing.T) {
 	t.Run("Background cleanup starts on first CreateConnection", func(t *testing.T) {
 		writer := &Writer{
-			mu:                sync.RWMutex{},
+			mu:                sync.Mutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
@@ -1345,10 +1345,10 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 
 		time.Sleep(100 * time.Millisecond)
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		_, exists := writer.openConnections["test-conn"]
 		cleanupStopped := writer.cleanupStopped
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if !exists {
 			t.Error("Connection was not created")
@@ -1368,7 +1368,7 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 
 	t.Run("Background cleanup stops when all connections are closed", func(t *testing.T) {
 		writer := &Writer{
-			mu:                sync.RWMutex{},
+			mu:                sync.Mutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
@@ -1398,9 +1398,9 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 
 		writer.retryFailedConnections()
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		cleanupStopped := writer.cleanupStopped
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if !cleanupStopped {
 			t.Error("Expected cleanup to be stopped after all connections closed")
@@ -1415,7 +1415,7 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 
 	t.Run("Background cleanup restarts after being stopped", func(t *testing.T) {
 		writer := &Writer{
-			mu:                sync.RWMutex{},
+			mu:                sync.Mutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
@@ -1445,9 +1445,9 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 
 		writer.retryFailedConnections()
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		cleanupStopped := writer.cleanupStopped
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if !cleanupStopped {
 			t.Error("Expected cleanup to be stopped after first phase")
@@ -1464,9 +1464,9 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 
 		_ = writer.CloseConnection("test-conn-2")
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		cleanupStoppedAfterRestart := writer.cleanupStopped
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if cleanupStoppedAfterRestart {
 			t.Error("Expected cleanup to be restarted, but it's still stopped")
@@ -1494,7 +1494,7 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 func TestCloseConnectionWithFailedRetries(t *testing.T) {
 	t.Run("Failed close adds connection to closedConnections", func(t *testing.T) {
 		writer := &Writer{
-			mu:                sync.RWMutex{},
+			mu:                sync.Mutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
@@ -1514,9 +1514,9 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			t.Error("Expected CloseConnection to return an error")
 		}
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		_, existsInOpen := writer.openConnections["failing-conn"]
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if !closedConnectionExists(writer, "failing-conn") {
 			t.Error("Expected connection to be in closedConnections")
@@ -1546,7 +1546,7 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 	t.Run("Background cleanup retries failed connections", func(t *testing.T) {
 		callCount := 0
 		writer := &Writer{
-			mu:                sync.RWMutex{},
+			mu:                sync.Mutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
@@ -1579,17 +1579,17 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			t.Errorf("Expected 1 call to closeAndRemoveFilesWithRetry, got %d", callCount)
 		}
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		_, exists := writer.closedConnections["retry-conn"]
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if !exists {
 			t.Error("Connection should still be in closedConnections after failed retry")
 		}
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		failedConn := writer.closedConnections["retry-conn"]
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if failedConn.RetryCount != 1 {
 			t.Errorf("Expected RetryCount to be 1, got %d", failedConn.RetryCount)
@@ -1606,9 +1606,9 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			t.Errorf("Expected 2 calls to closeAndRemoveFilesWithRetry, got %d", callCount)
 		}
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		failedConn = writer.closedConnections["retry-conn"]
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		failedConn.NextRetryAt = now.Add(-1 * time.Second)
 		writer.mu.Lock()
@@ -1621,9 +1621,9 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			t.Errorf("Expected 3 calls to closeAndRemoveFilesWithRetry, got %d", callCount)
 		}
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		_, exists = writer.closedConnections["retry-conn"]
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if exists {
 			t.Error("Connection should have been removed from closedConnections after successful retry")
@@ -1632,7 +1632,7 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 
 	t.Run("Connections are removed after max retry attempts", func(t *testing.T) {
 		writer := &Writer{
-			mu:                sync.RWMutex{},
+			mu:                sync.Mutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
@@ -1656,9 +1656,9 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 
 		writer.retryFailedConnections()
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		_, exists := writer.closedConnections["max-retries-conn"]
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if exists {
 			t.Error("Connection should have been removed after exceeding max retry attempts")
@@ -1667,7 +1667,7 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 
 	t.Run("Expired connections are removed", func(t *testing.T) {
 		writer := &Writer{
-			mu:                sync.RWMutex{},
+			mu:                sync.Mutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
@@ -1691,9 +1691,9 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 
 		writer.retryFailedConnections()
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		_, exists := writer.closedConnections["expired-conn"]
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if exists {
 			t.Error("Expired connection should have been removed")
@@ -1702,8 +1702,8 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 }
 
 func closedConnectionExists(writer *Writer, connName string) bool {
-	writer.mu.RLock()
-	defer writer.mu.RUnlock()
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
 	for name := range writer.closedConnections {
 		if strings.Contains(name, connName) {
 			return true
@@ -1713,8 +1713,8 @@ func closedConnectionExists(writer *Writer, connName string) bool {
 }
 
 func getClosedConnections(writer *Writer, connName string) []FailedConnection {
-	writer.mu.RLock()
-	defer writer.mu.RUnlock()
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
 	var conns []FailedConnection
 	for name := range writer.closedConnections {
 		if strings.Contains(name, connName) {
@@ -1805,7 +1805,7 @@ func TestConnectionTTL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			writer := &Writer{
-				mu:                sync.RWMutex{},
+				mu:                sync.Mutex{},
 				openConnections:   make(map[string]Connection),
 				closedConnections: make(map[string]FailedConnection),
 				cleanupDone:       make(chan struct{}),
@@ -1824,9 +1824,9 @@ func TestConnectionTTL(t *testing.T) {
 			}
 
 			if !tt.expectError {
-				writer.mu.RLock()
+				writer.mu.Lock()
 				conn, exists := writer.openConnections["test-conn"]
-				writer.mu.RUnlock()
+				writer.mu.Unlock()
 
 				if !exists {
 					t.Fatal("Connection was not created")
@@ -1843,7 +1843,7 @@ func TestConnectionTTL(t *testing.T) {
 func TestTTLBasedConnectionRemoval(t *testing.T) {
 	t.Run("Connection removed after custom TTL expires", func(t *testing.T) {
 		writer := &Writer{
-			mu:                sync.RWMutex{},
+			mu:                sync.Mutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
@@ -1862,9 +1862,9 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 			t.Fatalf("Failed to create connection: %v", err)
 		}
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		conn := writer.openConnections["short-ttl-conn"]
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		conn.ClosedConnectionTTL = 100 * time.Millisecond
 
@@ -1885,9 +1885,9 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 
 		writer.retryFailedConnections()
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		_, stillExists := writer.closedConnections["short-ttl-conn"]
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if stillExists {
 			t.Error("Connection should have been removed after TTL expiration")
@@ -1896,7 +1896,7 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 
 	t.Run("Connection with longer TTL remains in queue", func(t *testing.T) {
 		writer := &Writer{
-			mu:                sync.RWMutex{},
+			mu:                sync.Mutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
@@ -1915,11 +1915,11 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create connection: %v", err)
 		}
-		writer.mu.RLock()
+		writer.mu.Lock()
 		conn := writer.openConnections["long-ttl-conn"]
 		conn.ClosedConnectionTTL = 10 * time.Second
 		writer.openConnections["long-ttl-conn"] = conn
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		err = writer.CloseConnection("long-ttl-conn")
 		if err == nil {
@@ -1937,7 +1937,7 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 
 	t.Run("Multiple connections with different TTLs", func(t *testing.T) {
 		writer := &Writer{
-			mu:                sync.RWMutex{},
+			mu:                sync.Mutex{},
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
@@ -1974,9 +1974,9 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 		_ = writer.CloseConnection("short-conn")
 		_ = writer.CloseConnection("long-conn")
 
-		writer.mu.RLock()
+		writer.mu.Lock()
 		shortCount := len(writer.closedConnections)
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if shortCount != 2 {
 			t.Errorf("Expected 2 connections in closedConnections, got %d", shortCount)
@@ -1985,9 +1985,9 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		writer.retryFailedConnections()
-		writer.mu.RLock()
+		writer.mu.Lock()
 		finalCount := len(writer.closedConnections)
-		writer.mu.RUnlock()
+		writer.mu.Unlock()
 
 		if closedConnectionExists(writer, "short-conn") {
 			t.Error("Short TTL connection should have been removed")
@@ -1997,6 +1997,123 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 		}
 		if finalCount != 1 {
 			t.Errorf("Expected 1 connection remaining, got %d", finalCount)
+		}
+	})
+}
+
+// TestConcurrentPublishUpdateCloseConnection exercises concurrent Publish,
+// UpdateConnection, CloseConnection, and CreateConnection calls on the disk
+// driver to validate the mutex-based synchronization and prevent data-race
+// regressions. This test is meant to be run with -race to catch races.
+func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
+	t.Run("concurrent Publish, UpdateConnection, CloseConnection, and CreateConnection", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		writer := &Writer{
+			mu:                sync.Mutex{},
+			openConnections:   make(map[string]Connection),
+			closedConnections: make(map[string]FailedConnection),
+			cleanupDone:       make(chan struct{}),
+			closeAndRemoveFilesWithRetry: func(conn Connection) error {
+				// Simulate cleanup work; always succeed.
+				return nil
+			},
+		}
+
+		ctx := context.Background()
+		config := map[string]interface{}{
+			"path":            tmpDir,
+			"maxAuditResults": 5.0,
+		}
+
+		const connectionName = "concurrent-test"
+
+		// Create the initial connection so Publish / Update have something to work with.
+		if err := writer.CreateConnection(ctx, connectionName, config); err != nil {
+			t.Fatalf("CreateConnection() error = %v", err)
+		}
+
+		var wg sync.WaitGroup
+		const (
+			publishers = 8
+			updaters   = 4
+			closers    = 4
+			creators   = 4
+			iterations = 20
+		)
+
+		// Publishers – call Publish concurrently.
+		for i := 0; i < publishers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := 0; j < iterations; j++ {
+					// Publish may fail when the connection is closed or has no file;
+					// we only care that it does not panic or race.
+					_ = writer.Publish(ctx, connectionName, util.ExportMsg{
+						Message: "test-violation",
+					}, "audit")
+				}
+			}()
+		}
+
+		// Updaters – call UpdateConnection concurrently.
+		for i := 0; i < updaters; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				updateCfg := map[string]interface{}{
+					"path":            tmpDir,
+					"maxAuditResults": 10.0,
+				}
+				for j := 0; j < iterations; j++ {
+					_ = writer.UpdateConnection(ctx, connectionName, updateCfg)
+				}
+			}()
+		}
+
+		// Closers – call CloseConnection concurrently.
+		for i := 0; i < closers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := 0; j < iterations; j++ {
+					_ = writer.CloseConnection(connectionName)
+				}
+			}()
+		}
+
+		// Creators – re-create the connection concurrently so that Publish / Update
+		// can observe a live connection amid closes.
+		for i := 0; i < creators; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := 0; j < iterations; j++ {
+					_ = writer.CreateConnection(ctx, connectionName, config)
+				}
+			}()
+		}
+
+		wg.Wait()
+
+		// Validate that the internal state is consistent: openConnections should
+		// contain at most one entry for our connection name, and the Writer
+		// should remain usable.
+		writer.mu.Lock()
+		connCount := len(writer.openConnections)
+		_, hasConn := writer.openConnections[connectionName]
+		writer.mu.Unlock()
+
+		if connCount > 1 {
+			t.Fatalf("expected at most 1 open connection, got %d", connCount)
+		}
+
+		// If the connection still exists it should be usable; if not, creating
+		// a fresh one must succeed – validating that Writer is in a clean state.
+		if !hasConn {
+			if err := writer.CreateConnection(ctx, connectionName, config); err != nil {
+				t.Fatalf("CreateConnection() after concurrent test error = %v", err)
+			}
 		}
 	})
 }
