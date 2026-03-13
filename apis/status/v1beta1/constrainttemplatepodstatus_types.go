@@ -29,12 +29,18 @@ import (
 // ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus.
 type ConstraintTemplatePodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
-	ID                  string                             `json:"id,omitempty"`
-	TemplateUID         types.UID                          `json:"templateUID,omitempty"`
-	Operations          []string                           `json:"operations,omitempty"`
-	ObservedGeneration  int64                              `json:"observedGeneration,omitempty"`
-	Errors              []*templatesv1beta1.CreateCRDError `json:"errors,omitempty"`
-	VAPGenerationStatus *VAPGenerationStatus               `json:"vapGenerationStatus,omitempty"`
+	// +optional
+	ID string `json:"id,omitempty"`
+	// +optional
+	TemplateUID types.UID `json:"templateUID,omitempty"`
+	// +optional
+	Operations []string `json:"operations,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// +optional
+	Errors []*templatesv1beta1.CreateCRDError `json:"errors,omitempty"`
+	// +optional
+	VAPGenerationStatus *VAPGenerationStatus `json:"vapGenerationStatus,omitempty"`
 }
 
 // VAPGenerationStatus represents the status of VAP generation.
