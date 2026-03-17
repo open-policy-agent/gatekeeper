@@ -37,7 +37,7 @@ ORAS_VERSION ?= 1.2.3
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.17.4
 NODE_VERSION ?= 24-bullseye-slim
-YQ_VERSION ?= 4.35.2
+YQ_VERSION ?= 4.52.4
 
 HELM_ARGS ?=
 HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
