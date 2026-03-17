@@ -11,6 +11,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
+	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
@@ -21,11 +22,15 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func makeTemplateWithRegoAndCELEngine(vapGenerationVal *bool) *templates.ConstraintTemplate {
@@ -767,6 +772,241 @@ func TestEventPackerMapFuncFromOwnerRefs_IgnoredOwner(t *testing.T) {
 
 // ptrBool returns a pointer to the provided bool.
 func ptrBool(b bool) *bool { return &b }
+
+// fakeReader is a configurable fake client.Reader for testing.
+type fakeReader struct {
+	objects map[types.NamespacedName]client.Object
+	getErr  error
+}
+
+func (f *fakeReader) Get(_ context.Context, key types.NamespacedName, obj client.Object, _ ...client.GetOption) error {
+	if f.getErr != nil {
+		return f.getErr
+	}
+	stored, ok := f.objects[key]
+	if !ok {
+		return apierrors.NewNotFound(schema.GroupResource{}, key.Name)
+	}
+	// Copy stored object data into the output parameter.
+	switch dst := obj.(type) {
+	case *templatesv1beta1.ConstraintTemplate:
+		src, ok := stored.(*templatesv1beta1.ConstraintTemplate)
+		if !ok {
+			return fmt.Errorf("type mismatch: expected *templatesv1beta1.ConstraintTemplate, got %T", stored)
+		}
+		*dst = *src
+	case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+		src, ok := stored.(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
+		if !ok {
+			return fmt.Errorf("type mismatch: expected *admissionregistrationv1.ValidatingAdmissionPolicyBinding, got %T", stored)
+		}
+		*dst = *src
+	default:
+		return fmt.Errorf("fakeReader does not support type %T", obj)
+	}
+	return nil
+}
+
+func (f *fakeReader) List(_ context.Context, _ client.ObjectList, _ ...client.ListOption) error {
+	return nil
+}
+
+// trackingWriter records Delete calls for assertions.
+type trackingWriter struct {
+	fakeWriter
+	deletedObjects []client.Object
+	createdObjects []client.Object
+}
+
+func (t *trackingWriter) Delete(_ context.Context, obj client.Object, _ ...client.DeleteOption) error {
+	t.deletedObjects = append(t.deletedObjects, obj)
+	return nil
+}
+
+func (t *trackingWriter) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
+	t.createdObjects = append(t.createdObjects, obj)
+	return nil
+}
+
+// fakeReporter implements StatsReporter for testing.
+type fakeReporter struct{}
+
+func (f *fakeReporter) reportConstraints(_ context.Context, _ tags, _ int64) error   { return nil }
+func (f *fakeReporter) ReportVAPBStatus(_ types.NamespacedName, _ metrics.VAPStatus) {}
+func (f *fakeReporter) DeleteVAPBStatus(_ types.NamespacedName)                      {}
+
+func TestManageVAPB_CleansUpStaleVAPB(t *testing.T) {
+	// Regression test for https://github.com/open-policy-agent/gatekeeper/issues/4441
+	// When vap.k8s.io is removed from scopedEnforcementActions, the stale VAPB must be deleted.
+
+	// Set up the VAP API as enabled with v1 group version.
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	origEnabled := transform.VapAPIEnabled
+	origGV := transform.GroupVersion
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(origEnabled)
+		transform.SetGroupVersion(origGV)
+	})
+
+	// Ensure DefaultGenerateVAPB is true (default).
+	origDefault := *DefaultGenerateVAPB
+	*DefaultGenerateVAPB = true
+	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+
+	// Constraint with scoped enforcement — only webhook + audit, no vap.k8s.io.
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.WebhookEnforcementPoint},
+							map[string]interface{}{"name": util.AuditEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// A stale VAPB that should be cleaned up.
+	staleVAPB := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-test-constraint",
+		},
+	}
+
+	// A minimal ConstraintTemplate (needed because manageVAPB does reader.Get for it).
+	ct := &templatesv1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkind",
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "testkind"}:                   ct,
+			{Name: "gatekeeper-test-constraint"}: staleVAPB,
+		},
+	}
+
+	writer := &trackingWriter{}
+
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+	}
+
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   runtime.NewScheme(),
+	}
+
+	_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 1 {
+		t.Fatalf("expected 1 VAPB to be deleted, got %d", len(writer.deletedObjects))
+	}
+
+	deletedVAPB, ok := writer.deletedObjects[0].(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
+	if !ok {
+		t.Fatalf("deleted object is not a ValidatingAdmissionPolicyBinding, got %T", writer.deletedObjects[0])
+	}
+	if deletedVAPB.Name != "gatekeeper-test-constraint" {
+		t.Errorf("expected deleted VAPB name 'gatekeeper-test-constraint', got %q", deletedVAPB.Name)
+	}
+}
+
+func TestManageVAPB_NoStaleVAPB_NoDelete(t *testing.T) {
+	// When vap.k8s.io is removed and no VAPB exists, Delete should not be called.
+
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	origEnabled := transform.VapAPIEnabled
+	origGV := transform.GroupVersion
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(origEnabled)
+		transform.SetGroupVersion(origGV)
+	})
+
+	origDefault := *DefaultGenerateVAPB
+	*DefaultGenerateVAPB = true
+	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.WebhookEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ct := &templatesv1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkind",
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "testkind"}: ct,
+			// No stale VAPB — the reader will return NotFound for VAPB lookup.
+		},
+	}
+
+	writer := &trackingWriter{}
+
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+	}
+
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   runtime.NewScheme(),
+	}
+
+	_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 0 {
+		t.Fatalf("expected no VAPB deletions when no stale VAPB exists, got %d", len(writer.deletedObjects))
+	}
+}
 
 type fakeWriter struct {
 	updateErr error

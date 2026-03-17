@@ -540,11 +540,10 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		log.Error(err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 		return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 	}
-	isAPIEnabled := false
-	var groupVersion *schema.GroupVersion
-	if shouldGenerateVAPB {
-		isAPIEnabled, groupVersion = transform.IsVapAPIEnabled(&log)
-	}
+	// Always check VAP API availability regardless of shouldGenerateVAPB.
+	// groupVersion is needed by both the generation path and the cleanup path
+	// to properly manage VAPB lifecycle (fixes #4441).
+	isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
 	if shouldGenerateVAPB {
 		if !isAPIEnabled {
 			log.Error(ErrValidatingAdmissionPolicyAPIDisabled, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName())
