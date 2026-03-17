@@ -879,10 +879,17 @@ func TestManageVAPB_CleansUpStaleVAPB(t *testing.T) {
 		},
 	}
 
-	// A stale VAPB that should be cleaned up.
+	// A stale VAPB owned by this constraint — should be cleaned up.
 	staleVAPB := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "gatekeeper-test-constraint",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestKind",
+				Name:       "test-constraint",
+				UID:        "12345",
+				Controller: ptr.To(true),
+			}},
 		},
 	}
 
@@ -1005,6 +1012,98 @@ func TestManageVAPB_NoStaleVAPB_NoDelete(t *testing.T) {
 
 	if len(writer.deletedObjects) != 0 {
 		t.Fatalf("expected no VAPB deletions when no stale VAPB exists, got %d", len(writer.deletedObjects))
+	}
+}
+
+func TestManageVAPB_SkipsDeleteIfNotOwner(t *testing.T) {
+	// Regression test: a VAPB owned by a different constraint kind with the same name
+	// must NOT be deleted by this constraint's cleanup path.
+
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	origEnabled := transform.VapAPIEnabled
+	origGV := transform.GroupVersion
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(origEnabled)
+		transform.SetGroupVersion(origGV)
+	})
+
+	origDefault := *DefaultGenerateVAPB
+	*DefaultGenerateVAPB = true
+	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+
+	// This constraint does NOT use vap.k8s.io.
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKindB",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "other-uid-67890",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.WebhookEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// VAPB with same name but owned by a DIFFERENT constraint (TestKindA/test-constraint).
+	vapbOwnedByOther := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-test-constraint",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestKindA",
+				Name:       "test-constraint",
+				UID:        "original-uid-12345",
+				Controller: ptr.To(true),
+			}},
+		},
+	}
+
+	ct := &templatesv1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkindb",
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "testkindb"}:                  ct,
+			{Name: "gatekeeper-test-constraint"}: vapbOwnedByOther,
+		},
+	}
+
+	writer := &trackingWriter{}
+
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+	}
+
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   runtime.NewScheme(),
+	}
+
+	_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 0 {
+		t.Fatalf("expected no VAPB deletions when VAPB is owned by a different constraint, got %d", len(writer.deletedObjects))
 	}
 }
 

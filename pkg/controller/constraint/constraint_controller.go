@@ -46,6 +46,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -664,12 +665,19 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			currentVapBinding = nil
 		}
 		if currentVapBinding != nil {
-			log.Info("deleting vapbinding")
-			if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
-				r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
-				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
+			// Only delete the VAPB if it is owned by this constraint instance.
+			// Two constraints of different kinds but the same name share a VAPB name;
+			// without this check we could delete a VAPB belonging to another kind.
+			if !metav1.IsControlledBy(currentVapBinding, instance) {
+				log.Info("vapbinding exists but is not owned by this constraint, skipping delete", "vapBindingName", vapBindingName)
+			} else {
+				log.Info("deleting vapbinding")
+				if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
+					r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
+				}
+				cleanEnforcementPointStatus(status, util.VAPEnforcementPoint)
 			}
-			cleanEnforcementPointStatus(status, util.VAPEnforcementPoint)
 		}
 		r.reporter.DeleteVAPBStatus(vapBindingKey)
 	}
