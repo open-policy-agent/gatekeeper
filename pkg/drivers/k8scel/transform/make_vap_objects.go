@@ -287,7 +287,7 @@ func ConstraintToBinding(constraint *unstructured.Unstructured, actions []string
 
 	binding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("gatekeeper-%s", constraint.GetName()),
+			Name: fmt.Sprintf("gatekeeper-%s-%s", strings.ToLower(constraint.GetKind()), constraint.GetName()),
 		},
 		Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
 			PolicyName: fmt.Sprintf("gatekeeper-%s", strings.ToLower(constraint.GetKind())),
