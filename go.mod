@@ -22,7 +22,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/contrib/detectors/aws/ec2 v1.21.1
-	go.opentelemetry.io/contrib/detectors/gcp v1.38.0
+	go.opentelemetry.io/contrib/detectors/gcp v1.39.0
 	go.opentelemetry.io/otel v1.40.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.40.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.62.0
@@ -35,7 +35,7 @@ require (
 	golang.org/x/oauth2 v0.34.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/time v0.14.0
-	google.golang.org/grpc v1.78.0
+	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.2
@@ -52,7 +52,7 @@ require (
 )
 
 require (
-	cel.dev/expr v0.24.0 // indirect
+	cel.dev/expr v0.25.1 // indirect
 	cloud.google.com/go/auth v0.7.2 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.3 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
