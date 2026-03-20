@@ -218,6 +218,57 @@ function ServicesSection() {
   );
 }
 
+const Adoptions = [
+  {
+    name: 'JFrog',
+    text: 'JFrog provides an External Data Provider for Gatekeeper, enabling admission-time policy decisions that query JFrog for container-image metadata such as vulnerability scan results and license compliance.',
+    website: 'https://open-policy-agent.github.io/gatekeeper/website/docs/externaldata/',
+  },
+  {
+    name: 'Agent Sandbox',
+    text: 'A Kubernetes SIG project that uses Gatekeeper policies to enforce security boundaries for AI agent workloads.',
+    website: 'https://github.com/kubernetes-sigs/agent-sandbox/tree/main/examples/policy',
+  },
+  {
+    name: 'GitHub Artifact Attestations OPA Provider',
+    text: 'A Gatekeeper External Data Provider that verifies GitHub Artifact Attestations, enabling admission-time supply chain security checks for container images.',
+    website: 'https://github.com/github/artifact-attestations-opa-provider',
+  },
+  {
+    name: 'Ratify',
+    text: 'An External Data Provider for Gatekeeper that verifies supply chain artifacts such as signatures, SBOMs, and attestations before admitting container images.',
+    website: 'https://ratify.dev/',
+  },
+];
+
+function AdoptionSection() {
+  return (
+    <div className={clsx(styles.section)}>
+      <div className="container">
+        <Heading as="h2" className={clsx('margin-bottom--lg', 'text--center')}>
+          Adoption and Integration
+        </Heading>
+        <div className="row">
+          {Adoptions.map((adoption) => (
+            <div className="col col--6 padding-bottom--lg" key={adoption.name}>
+              <a href={adoption.website}>
+                <div className="card">
+                  <div className="card__header">
+                    <Heading as="h3">{adoption.name}</Heading>
+                  </div>
+                  <p className="card__body">
+                    {adoption.text}
+                  </p>
+                </div>
+              </a>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const {siteConfig} = useDocusaurusContext();
   return (
@@ -229,6 +280,7 @@ export default function Home() {
         <ContributingCompanies />
         <HomepageFeatures />
         <ServicesSection />
+        <AdoptionSection />
       </main>
     </Layout>
   );
