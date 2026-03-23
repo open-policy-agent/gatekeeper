@@ -54,15 +54,21 @@ func newReconciler(
 	newMutationObj func() client.Object,
 	mutatorFor func(client.Object) (types.Mutator, error),
 	events chan event.GenericEvent,
+	reporter ctrlmutators.StatsReporter,
 ) *Reconciler {
+	if reporter == nil {
+		reporter = ctrlmutators.NewStatsReporter()
+	}
+	cache := ctrlmutators.NewMutationCache()
+	reporter.RegisterTally(cache.TallyStatus, cache.TallyConflict)
 	r := &Reconciler{
 		system:         mutationSystem,
 		Client:         mgr.GetClient(),
 		tracker:        tracker,
 		getPod:         getPod,
 		scheme:         mgr.GetScheme(),
-		reporter:       ctrlmutators.NewStatsReporter(),
-		cache:          ctrlmutators.NewMutationCache(),
+		reporter:       reporter,
+		cache:          cache,
 		gvk:            mutationsv1.GroupVersion.WithKind(kind),
 		newMutationObj: newMutationObj,
 		mutatorFor:     mutatorFor,
@@ -232,16 +238,6 @@ func (r *Reconciler) reportMutator(_ types.ID, ingestionStatus ctrlmutators.Muta
 		if err := r.reporter.ReportMutatorIngestionRequest(ingestionStatus, time.Since(startTime)); err != nil {
 			r.log.Error(err, "failed to report mutator ingestion request")
 		}
-	}
-
-	for status, count := range r.cache.TallyStatus() {
-		if err := r.reporter.ReportMutatorsStatus(status, count); err != nil {
-			r.log.Error(err, "failed to report mutator status request")
-		}
-	}
-
-	if err := r.reporter.ReportMutatorsInConflict(r.cache.TallyConflict()); err != nil {
-		r.log.Error(err, "failed to report mutators in conflict request")
 	}
 }
 

@@ -147,7 +147,7 @@ func TestReconcile(t *testing.T) {
 	}
 	events := make(chan event.GenericEvent, 1024)
 
-	rec := newReconciler(mgr, mSys, tracker, func(_ context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events)
+	rec := newReconciler(mgr, mSys, tracker, func(_ context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events, nil)
 	adder := Adder{Events: events}
 
 	err = adder.add(mgr, rec)
