@@ -4,7 +4,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import Heading from '@theme/Heading';
-import Translate, {translate} from '@docusaurus/Translate';
+import Translate, { translate } from '@docusaurus/Translate';
 import styles from './styles.module.css';
 
 function HeroBanner() {
@@ -113,14 +113,14 @@ const FeatureList = [
     description: (
       <>
         Browse the policy library to find existing policies that fit
-        your use case. Each policy in the library can be extended and 
+        your use case. Each policy in the library can be extended and
         customized to fit your needs.
       </>
     ),
   },
 ];
 
-function Feature({Svg, title, description}) {
+function Feature({ Svg, title, description }) {
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center">
@@ -218,8 +218,72 @@ function ServicesSection() {
   );
 }
 
+const Adoptions = [
+  {
+    thumbnail: 'img/jfrog_logo.svg',
+    name: 'JFrog',
+    text: 'JFrog provides an External Data Provider for Gatekeeper, enabling admission-time policy decisions that query JFrog for container-image metadata such as vulnerability scan results and license compliance.',
+    website: 'https://github.com/jfrog/jfrog-opa-policy',
+  },
+  {
+    thumbnail: 'img/kubernetes_sigs_logo.svg',
+    name: 'Agent Sandbox',
+    text: 'A Kubernetes SIG project that uses Gatekeeper policies to enforce security boundaries for AI agent workloads.',
+    website: 'https://github.com/kubernetes-sigs/agent-sandbox/tree/main/examples/policy',
+  },
+  {
+    thumbnail: 'img/github_logo.png',
+    name: 'GitHub Artifact Attestations OPA Provider',
+    text: 'A Gatekeeper External Data Provider that verifies GitHub Artifact Attestations, enabling admission-time supply chain security checks for container images.',
+    website: 'https://github.com/github/artifact-attestations-opa-provider',
+  },
+  {
+    thumbnail: 'img/ratify_logo.svg',
+    name: 'Ratify',
+    text: 'An External Data Provider for Gatekeeper that verifies supply chain artifacts such as signatures, SBOMs, and attestations before admitting container images.',
+    website: 'https://ratify.dev/',
+  },
+];
+
+function AdoptionSection() {
+  return (
+    <div className={clsx(styles.section)}>
+      <div className="container">
+        <Heading as="h2" className={clsx('margin-bottom--lg', 'text--center')}>
+          Adoption and Integration
+        </Heading>
+        <div className="row">
+          {Adoptions.map((adoption) => (
+            <div className="col col--6 padding-bottom--lg" key={adoption.name}>
+              <a href={adoption.website}>
+                <div className="card">
+                  <div className="card__header">
+                    <div className="avatar">
+                      <img
+                        alt={adoption.name}
+                        src={adoption.thumbnail}
+                        className={styles.serviceLogo}
+                      />
+                      <div className="avatar__intro padding-top--sm">
+                        <div className="avatar__name">{adoption.name}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="card__body">
+                    {adoption.text}
+                  </p>
+                </div>
+              </a>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
-  const {siteConfig} = useDocusaurusContext();
+  const { siteConfig } = useDocusaurusContext();
   return (
     <Layout
       title={`${siteConfig.title}`}
@@ -229,6 +293,7 @@ export default function Home() {
         <ContributingCompanies />
         <HomepageFeatures />
         <ServicesSection />
+        <AdoptionSection />
       </main>
     </Layout>
   );
