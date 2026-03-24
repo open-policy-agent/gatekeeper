@@ -197,12 +197,6 @@ spec:
         - containerPort: {{ .Values.audit.healthPort }}
           name: healthz
           protocol: TCP
-        - containerPort: 8888
-          name: metrics
-          protocol: TCP
-        - containerPort: 9090
-          name: healthz
-          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
