@@ -225,6 +225,115 @@ func TestApplyTo_Matches_WithOperations(t *testing.T) {
 	}
 }
 
+func TestAppliesGVKAndOperation(t *testing.T) {
+	podGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+	deployGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+
+	tests := []struct {
+		name      string
+		applyTo   []MutationApplyTo
+		gvk       schema.GroupVersionKind
+		operation admissionv1.Operation
+		want      bool
+	}{
+		{
+			name: "single entry matches both GVK and operation",
+			applyTo: []MutationApplyTo{
+				{
+					ApplyTo:    ApplyTo{Groups: []string{""}, Kinds: []string{"Pod"}, Versions: []string{"v1"}},
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+				},
+			},
+			gvk:       podGVK,
+			operation: admissionv1.Create,
+			want:      true,
+		},
+		{
+			name: "single entry matches GVK but not operation",
+			applyTo: []MutationApplyTo{
+				{
+					ApplyTo:    ApplyTo{Groups: []string{""}, Kinds: []string{"Pod"}, Versions: []string{"v1"}},
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+				},
+			},
+			gvk:       podGVK,
+			operation: admissionv1.Update,
+			want:      false,
+		},
+		{
+			name: "cross-entry false positive: GVK matches entry[0], operation matches entry[1]",
+			applyTo: []MutationApplyTo{
+				{
+					ApplyTo:    ApplyTo{Groups: []string{""}, Kinds: []string{"Pod"}, Versions: []string{"v1"}},
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+				},
+				{
+					ApplyTo:    ApplyTo{Groups: []string{"apps"}, Kinds: []string{"Deployment"}, Versions: []string{"v1"}},
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Update},
+				},
+			},
+			gvk:       podGVK,
+			operation: admissionv1.Update,
+			want:      false,
+		},
+		{
+			name: "cross-entry: correct entry matches both",
+			applyTo: []MutationApplyTo{
+				{
+					ApplyTo:    ApplyTo{Groups: []string{""}, Kinds: []string{"Pod"}, Versions: []string{"v1"}},
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+				},
+				{
+					ApplyTo:    ApplyTo{Groups: []string{"apps"}, Kinds: []string{"Deployment"}, Versions: []string{"v1"}},
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Update},
+				},
+			},
+			gvk:       deployGVK,
+			operation: admissionv1.Update,
+			want:      true,
+		},
+		{
+			name: "empty operations matches any operation for backward compatibility",
+			applyTo: []MutationApplyTo{
+				{
+					ApplyTo: ApplyTo{Groups: []string{""}, Kinds: []string{"Pod"}, Versions: []string{"v1"}},
+				},
+			},
+			gvk:       podGVK,
+			operation: admissionv1.Update,
+			want:      true,
+		},
+		{
+			name: "empty operation string (audit/expansion context) matches",
+			applyTo: []MutationApplyTo{
+				{
+					ApplyTo:    ApplyTo{Groups: []string{""}, Kinds: []string{"Pod"}, Versions: []string{"v1"}},
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+				},
+			},
+			gvk:       podGVK,
+			operation: "",
+			want:      true,
+		},
+		{
+			name:      "no applyTo entries matches nothing",
+			applyTo:   []MutationApplyTo{},
+			gvk:       podGVK,
+			operation: admissionv1.Create,
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := AppliesGVKAndOperation(tt.applyTo, tt.gvk, tt.operation)
+			if got != tt.want {
+				t.Errorf("AppliesGVKAndOperation() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestValidateOperations(t *testing.T) {
 	tests := []struct {
 		name    string
