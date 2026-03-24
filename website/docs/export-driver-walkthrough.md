@@ -68,10 +68,10 @@ func (r *Foo) CreateConnection(ctx context.Context, connectionName string, confi
 }
 ```
 
-This newly added driver's `Connections` exported variable must be added to the map of `SupportedDrivers` in [system.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/export/provider/system.go). For example,
+This newly added driver's `Connections` exported variable must be added to the map of `supportedDrivers` in [system.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/export/system.go). For example,
 
 ```go
-var SupportedDrivers = map[string]driver.Driver{
+var supportedDrivers = map[string]driver.Driver{
 	dapr.Name: dapr.Connections,
   foo.Name: foo.Connections,
 }
@@ -95,4 +95,4 @@ spec:
     key: value
 ```
 
-> The `data.driver` field must exist and must match one of the keys of the `SupportedDrivers` map that was defined earlier to use the corresponding driver. The `data.config` field in the configuration can vary depending on the driver being used. For dapr driver, `data.config` must be `component: "pubsub"`.
+> The `data.driver` field must exist and must match one of the keys of the `supportedDrivers` map that was defined earlier to use the corresponding driver. The `data.config` field in the configuration can vary depending on the driver being used. For dapr driver, `data.config` must be `component: "pubsub"`.
