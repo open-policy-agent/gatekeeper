@@ -95,4 +95,4 @@ spec:
     key: value
 ```
 
-> The `data.driver` field must exist and must match one of the keys of the `supportedDrivers` map that was defined earlier to use the corresponding driver. The `data.config` field in the configuration can vary depending on the driver being used. For dapr driver, `data.config` must be `component: "pubsub"`.
+> The `spec.driver` field must exist and must match one of the keys of the `supportedDrivers` map that was defined earlier to use the corresponding driver. The `spec.config` field in the configuration can vary depending on the driver being used. For dapr driver, `spec.config` must be `component: "pubsub"`.
