@@ -6,6 +6,7 @@ import (
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1alpha1"
+	ctrlmutators "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/mutators"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/mutators/core"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators"
@@ -33,6 +34,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	events := make(chan event.GenericEvent, eventQueueSize)
 	scheme := mgr.GetScheme()
 
+	reporter := ctrlmutators.NewStatsReporter()
+
 	assign := core.Adder{
 		Tracker:        a.Tracker,
 		GetPod:         a.GetPod,
@@ -50,7 +53,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssign(unversioned)
 		},
-		Events: events,
+		Events:   events,
+		Reporter: reporter,
 	}
 	if err := assign.Add(mgr); err != nil {
 		return err
@@ -73,7 +77,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForModifySet(unversioned)
 		},
-		Events: events,
+		Events:   events,
+		Reporter: reporter,
 	}
 	if err := modifySet.Add(mgr); err != nil {
 		return err
@@ -96,7 +101,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssignImage(unversioned)
 		},
-		Events: events,
+		Events:   events,
+		Reporter: reporter,
 	}
 	if err := assignImage.Add(mgr); err != nil {
 		return err
@@ -119,6 +125,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssignMetadata(unversioned)
 		},
+		Reporter: reporter,
 	}
 	return assignMetadata.Add(mgr)
 }
