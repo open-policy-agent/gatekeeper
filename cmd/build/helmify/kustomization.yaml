@@ -4,11 +4,10 @@ commonLabels:
   chart: '{{ template "gatekeeper.name" . }}'
   release: "{{ .Release.Name }}"
   heritage: "{{ .Release.Service }}"
-bases:
+resources:
   - "../../../config/default"
 patchesStrategicMerge:
   - kustomize-for-helm.yaml
-  - delete-ports.yaml
 patchesJson6902:
   - target:
       group: apiextensions.k8s.io
@@ -142,6 +141,10 @@ patchesJson6902:
         path: /spec/template/spec/containers/0/securityContext/runAsUser
       - op: remove
         path: /spec/template/spec/containers/0/securityContext/seccompProfile
+      - op: remove
+        path: /spec/template/spec/containers/0/ports/3
+      - op: remove
+        path: /spec/template/spec/containers/0/ports/2
   - target:
       kind: Deployment
       name: gatekeeper-controller-manager
@@ -173,6 +176,12 @@ patchesJson6902:
         path: /spec/template/spec/containers/0/securityContext/runAsUser
       - op: remove
         path: /spec/template/spec/containers/0/securityContext/seccompProfile
+      - op: remove
+        path: /spec/template/spec/containers/0/ports/5
+      - op: remove
+        path: /spec/template/spec/containers/0/ports/4
+      - op: remove
+        path: /spec/template/spec/containers/0/ports/3
   - target:
       kind: Service
       name: webhook-service
