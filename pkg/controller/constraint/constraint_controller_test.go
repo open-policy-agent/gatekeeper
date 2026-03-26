@@ -841,13 +841,11 @@ func TestManageVAPB_CleansUpStaleVAPB(t *testing.T) {
 
 	// Set up the VAP API as enabled with v1 group version.
 	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	origEnabled := transform.VapAPIEnabled
-	origGV := transform.GroupVersion
 	transform.SetVapAPIEnabled(ptr.To(true))
 	transform.SetGroupVersion(&gv)
 	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(origEnabled)
-		transform.SetGroupVersion(origGV)
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
 	})
 
 	// Ensure DefaultGenerateVAPB is true (default).
@@ -943,13 +941,11 @@ func TestManageVAPB_NoStaleVAPB_NoDelete(t *testing.T) {
 	// When vap.k8s.io is removed and no VAPB exists, Delete should not be called.
 
 	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	origEnabled := transform.VapAPIEnabled
-	origGV := transform.GroupVersion
 	transform.SetVapAPIEnabled(ptr.To(true))
 	transform.SetGroupVersion(&gv)
 	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(origEnabled)
-		transform.SetGroupVersion(origGV)
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
 	})
 
 	origDefault := *DefaultGenerateVAPB
@@ -1020,13 +1016,11 @@ func TestManageVAPB_SkipsDeleteIfNotOwner(t *testing.T) {
 	// must NOT be deleted by this constraint's cleanup path.
 
 	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	origEnabled := transform.VapAPIEnabled
-	origGV := transform.GroupVersion
 	transform.SetVapAPIEnabled(ptr.To(true))
 	transform.SetGroupVersion(&gv)
 	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(origEnabled)
-		transform.SetGroupVersion(origGV)
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
 	})
 
 	origDefault := *DefaultGenerateVAPB
@@ -1211,13 +1205,11 @@ func TestCleanupLegacyVAPB(t *testing.T) {
 	// owned by the same constraint must be cleaned up.
 
 	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	origEnabled := transform.VapAPIEnabled
-	origGV := transform.GroupVersion
 	transform.SetVapAPIEnabled(ptr.To(true))
 	transform.SetGroupVersion(&gv)
 	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(origEnabled)
-		transform.SetGroupVersion(origGV)
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
 	})
 
 	instance := &unstructured.Unstructured{
@@ -1280,13 +1272,11 @@ func TestCleanupLegacyVAPB_SkipsIfNotOwner(t *testing.T) {
 	// Legacy VAPB owned by a different constraint must NOT be deleted.
 
 	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	origEnabled := transform.VapAPIEnabled
-	origGV := transform.GroupVersion
 	transform.SetVapAPIEnabled(ptr.To(true))
 	transform.SetGroupVersion(&gv)
 	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(origEnabled)
-		transform.SetGroupVersion(origGV)
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
 	})
 
 	instance := &unstructured.Unstructured{

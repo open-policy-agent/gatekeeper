@@ -546,9 +546,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		log.Error(err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 		return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 	}
-	// Always check VAP API availability regardless of shouldGenerateVAPB.
-	// groupVersion is needed by both the generation path and the cleanup path
-	// to properly manage VAPB lifecycle (fixes #4441).
+
 	isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
 	if shouldGenerateVAPB {
 		if !isAPIEnabled {
@@ -740,14 +738,8 @@ func (c *ConstraintsCache) reportTotalConstraints(ctx context.Context, reporter 
 	}
 }
 
-// cleanupLegacyVAPB deletes the old-format VAPB (gatekeeper-<name>) that was
-// created before the naming convention was changed to include the Kind
-// (gatekeeper-<kind>-<name>). It only deletes VAPBs owned by the given
-// constraint to avoid cross-kind interference. Errors are logged but not
-// returned since legacy cleanup is best-effort.
-//
 // TODO(v3.25.0): Remove this function and all call sites once users have had
-// two releases to upgrade (introduced in v3.23.0).
+// releases to upgrade (introduced in v3.23.0).
 func (r *ReconcileConstraint) cleanupLegacyVAPB(ctx context.Context, instance *unstructured.Unstructured, groupVersion *schema.GroupVersion) {
 	oldName := legacyVAPBindingName(instance.GetName())
 	newName := getVAPBindingName(instance.GetKind(), instance.GetName())
@@ -756,10 +748,13 @@ func (r *ReconcileConstraint) cleanupLegacyVAPB(ctx context.Context, instance *u
 	}
 	legacyBinding, err := vapBindingForVersion(*groupVersion)
 	if err != nil {
+		log.Error(err, "could not get legacy VAPB API version", "legacyVAPBName", oldName)
 		return
 	}
 	if err := r.reader.Get(ctx, types.NamespacedName{Name: oldName}, legacyBinding); err != nil {
-		// Not found or any error — nothing to clean up.
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "failed to get legacy vapbinding", "legacyVAPBName", oldName)
+		}
 		return
 	}
 	if !metav1.IsControlledBy(legacyBinding, instance) {
