@@ -86,7 +86,7 @@ func newAssign(name, location, value string) *mutationsv1.Assign {
 		},
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: mutationsv1.AssignSpec{
-			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}},
+			ApplyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}}},
 			Location: location,
 			Parameters: mutationsv1.Parameters{
 				Assign: makeValue(value),
@@ -102,7 +102,7 @@ func TestReconcile(t *testing.T) {
 			Name: "assign-test-obj",
 		},
 		Spec: mutationsv1.AssignSpec{
-			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}},
+			ApplyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}}},
 			Location: "spec.test",
 			Parameters: mutationsv1.Parameters{
 				Assign: makeValue("works"),
