@@ -1101,6 +1101,92 @@ func TestManageVAPB_SkipsDeleteIfNotOwner(t *testing.T) {
 	}
 }
 
+func TestManageVAPB_CleansEnforcementStatusWhenNoVAPBExists(t *testing.T) {
+	// When vap.k8s.io is removed and no VAPB exists, enforcement point status
+	// from a previous reconcile must still be cleaned up.
+
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	origDefault := *DefaultGenerateVAPB
+	*DefaultGenerateVAPB = true
+	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.WebhookEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ct := &templatesv1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkind",
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "testkind"}: ct,
+		},
+	}
+
+	writer := &trackingWriter{}
+
+	// Simulate stale enforcement point status from a previous reconcile.
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
+			EnforcementPointsStatus: []constraintstatusv1beta1.EnforcementPointStatus{
+				{
+					EnforcementPoint:   util.VAPEnforcementPoint,
+					State:              "generated",
+					ObservedGeneration: 1,
+				},
+			},
+		},
+	}
+
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   runtime.NewScheme(),
+	}
+
+	_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+
+	// Enforcement point status for VAP must be cleaned even though no VAPB existed.
+	for _, ep := range status.Status.EnforcementPointsStatus {
+		if ep.EnforcementPoint == util.VAPEnforcementPoint {
+			t.Fatalf("expected VAP enforcement point status to be cleaned, but it still exists: %+v", ep)
+		}
+	}
+}
+
 type fakeWriter struct {
 	updateErr error
 }
@@ -1333,6 +1419,29 @@ func TestGetVAPBindingName(t *testing.T) {
 	expected := "gatekeeper-k8srequiredlabels-my-policy"
 	if name != expected {
 		t.Errorf("expected %q, got %q", expected, name)
+	}
+}
+
+func TestGetVAPBindingName_Truncation(t *testing.T) {
+	// Kind and name that together exceed the 253-char K8s limit.
+	longKind := strings.Repeat("a", 63)
+	longName := strings.Repeat("b", 253)
+	name := getVAPBindingName(longKind, longName)
+	if len(name) > 253 {
+		t.Errorf("expected name length <= 253, got %d: %s", len(name), name)
+	}
+	// Verify deterministic: same input produces same output.
+	name2 := getVAPBindingName(longKind, longName)
+	if name != name2 {
+		t.Errorf("expected deterministic name, got %q and %q", name, name2)
+	}
+	// Short names should not be truncated.
+	shortName := getVAPBindingName("Kind", "my-constraint")
+	if strings.Contains(shortName, "-") && len(shortName) <= 253 {
+		expectedShort := "gatekeeper-kind-my-constraint"
+		if shortName != expectedShort {
+			t.Errorf("expected %q, got %q", expectedShort, shortName)
+		}
 	}
 }
 
