@@ -54,11 +54,13 @@ func IsVapAPIEnabled(log *logr.Logger) (bool, *schema.GroupVersion) {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		log.Info("IsVapAPIEnabled GetConfig", "error", err)
+		// Do not cache failure — allow retry on next reconcile
 		return false, nil
 	}
 	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		log.Info("IsVapAPIEnabled NewForConfig", "error", err)
+		// Do not cache failure — allow retry on next reconcile
 		return false, nil
 	}
 
@@ -96,6 +98,7 @@ func IsVapAPIEnabled(log *logr.Logger) (bool, *schema.GroupVersion) {
 
 	if discoveryErr != nil {
 		log.Error(discoveryErr, "error checking VAP API availability, will retry")
+		// Discovery failed — do not cache, allow retry on next reconcile
 		return false, nil
 	}
 

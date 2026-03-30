@@ -17,7 +17,6 @@ package constraint
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -52,7 +51,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -340,9 +338,8 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 	} else {
 		r.log.Info("handling constraint delete", "instance", instance)
-		r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: getVAPBindingName(instance.GetKind(), instance.GetName())})
-		// Also clean up metric key for the legacy (pre-Kind) VAPB name.
-		r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: legacyVAPBindingName(instance.GetName())})
+		r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())})
+		r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: transform.LegacyVAPBindingName(instance.GetName())})
 		if _, err := r.cfClient.RemoveConstraint(ctx, instance); err != nil {
 			if errors.Is(err, constraintclient.ErrMissingConstraint) {
 				return reconcile.Result{}, err
@@ -397,7 +394,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				}
 				if hasVAP {
 					// Delete new-format VAPB (gatekeeper-<kind>-<name>).
-					vapBindingName := getVAPBindingName(instance.GetKind(), instance.GetName())
+					vapBindingName := transform.GetVAPBindingName(instance.GetKind(), instance.GetName())
 					newVapBinding, err := vapBindingForVersion(*groupVersion)
 					if err != nil {
 						return reconcile.Result{}, err
@@ -537,7 +534,7 @@ func (r *ReconcileConstraint) reportErrorOnConstraintStatus(ctx context.Context,
 
 func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction util.EnforcementAction, instance *unstructured.Unstructured, status *constraintstatusv1beta1.ConstraintPodStatus) (time.Duration, error) {
 	noDelay := time.Duration(0)
-	vapBindingKey := types.NamespacedName{Name: getVAPBindingName(instance.GetKind(), instance.GetName())}
+	vapBindingKey := types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}
 	if !operations.IsAssigned(operations.Generate) {
 		log.Info("generate operation is not assigned, ValidatingAdmissionPolicyBinding resource will not be generated")
 		r.reporter.DeleteVAPBStatus(vapBindingKey)
@@ -616,7 +613,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
 			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
 		}
-		vapBindingName := getVAPBindingName(instance.GetKind(), instance.GetName())
+		vapBindingName := transform.GetVAPBindingName(instance.GetKind(), instance.GetName())
 		log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 		if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
 			if !apierrors.IsNotFound(err) {
@@ -670,7 +667,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
 			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicyBinding API version")
 		}
-		vapBindingName := getVAPBindingName(instance.GetKind(), instance.GetName())
+		vapBindingName := transform.GetVAPBindingName(instance.GetKind(), instance.GetName())
 		log.Info("check if vapbinding exists", "vapBindingName", vapBindingName)
 		if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, currentVapBinding); err != nil {
 			if !apierrors.IsNotFound(err) && !errors.As(err, &discoveryErr) && !meta.IsNoMatchError(err) {
@@ -693,8 +690,8 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 					}
 				}
 			}
+			cleanEnforcementPointStatus(status, util.VAPEnforcementPoint)
 		}
-		cleanEnforcementPointStatus(status, util.VAPEnforcementPoint)
 
 		// Migration: also clean up legacy VAPB (old format without Kind).
 		r.cleanupLegacyVAPB(ctx, instance, groupVersion)
@@ -756,8 +753,8 @@ func (r *ReconcileConstraint) cleanupLegacyVAPB(ctx context.Context, instance *u
 	if groupVersion == nil {
 		return
 	}
-	oldName := legacyVAPBindingName(instance.GetName())
-	newName := getVAPBindingName(instance.GetKind(), instance.GetName())
+	oldName := transform.LegacyVAPBindingName(instance.GetName())
+	newName := transform.GetVAPBindingName(instance.GetKind(), instance.GetName())
 	if oldName == newName {
 		return
 	}
@@ -878,24 +875,6 @@ func cleanEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodSt
 			return
 		}
 	}
-}
-
-func getVAPBindingName(kind, constraintName string) string {
-	name := fmt.Sprintf("gatekeeper-%s-%s", strings.ToLower(kind), constraintName)
-	if len(name) <= validation.DNS1123SubdomainMaxLength {
-		return name
-	}
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:8]
-	return name[:validation.DNS1123SubdomainMaxLength-len(hash)-1] + "-" + hash
-}
-
-// legacyVAPBindingName returns the old-format VAPB name that did not include
-// the constraint Kind. Used during migration to clean up old VAPBs.
-//
-// TODO(v3.25.0): Remove this function once users have had two releases to
-// upgrade (introduced in v3.23.0).
-func legacyVAPBindingName(constraintName string) string {
-	return fmt.Sprintf("gatekeeper-%s", constraintName)
 }
 
 func eventPackerMapFuncFromOwnerRefs() handler.MapFunc {
