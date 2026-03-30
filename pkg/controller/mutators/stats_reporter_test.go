@@ -38,15 +38,29 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r S
 
 func findMetricByName(t *testing.T, rm *metricdata.ResourceMetrics, name string) metricdata.Metrics {
 	t.Helper()
+
+	var (
+		result metricdata.Metrics
+		found  bool
+	)
+
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
 			if m.Name == name {
-				return m
+				if found {
+					t.Fatalf("multiple metrics found with name %q", name)
+				}
+				result = m
+				found = true
 			}
 		}
 	}
-	t.Fatalf("metric %q not found", name)
-	return metricdata.Metrics{}
+
+	if !found {
+		t.Fatalf("metric %q not found", name)
+	}
+
+	return result
 }
 
 func TestReportMutatorIngestionRequest(t *testing.T) {
