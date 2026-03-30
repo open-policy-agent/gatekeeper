@@ -54,22 +54,17 @@ func IsVapAPIEnabled(log *logr.Logger) (bool, *schema.GroupVersion) {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		log.Info("IsVapAPIEnabled GetConfig", "error", err)
-		// Do not cache failure — allow retry on next reconcile
 		return false, nil
 	}
 	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		log.Info("IsVapAPIEnabled NewForConfig", "error", err)
-		// Do not cache failure — allow retry on next reconcile
 		return false, nil
 	}
 
 	checkGroupVersion := func(gv schema.GroupVersion) (bool, *schema.GroupVersion, error) {
 		resList, err := clientset.Discovery().ServerResourcesForGroupVersion(gv.String())
 		if err != nil {
-			// A NotFound error means the GroupVersion is not served — this is
-			// definitive, not transient. Treat it the same as "GV found but
-			// resource absent" by returning nil error.
 			if apierrors.IsNotFound(err) {
 				return false, nil, nil
 			}
@@ -100,12 +95,10 @@ func IsVapAPIEnabled(log *logr.Logger) (bool, *schema.GroupVersion) {
 	}
 
 	if discoveryErr != nil {
-		// Discovery failed — do not cache, allow retry on next reconcile
 		log.Error(discoveryErr, "error checking VAP API availability, will retry")
 		return false, nil
 	}
 
-	// Discovery succeeded but VAP API not found — cache this result
 	log.Info("ValidatingAdmissionPolicy API not found in cluster")
 	VapAPIEnabled = new(bool)
 	*VapAPIEnabled = false
