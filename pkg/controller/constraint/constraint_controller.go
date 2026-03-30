@@ -685,8 +685,12 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			} else {
 				log.Info("deleting vapbinding", "vapBindingName", vapBindingName)
 				if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
-					r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
-					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
+					if apierrors.IsNotFound(err) {
+						log.Info("vapbinding already deleted", "vapBindingName", vapBindingName)
+					} else {
+						r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+						return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
+					}
 				}
 			}
 		}
