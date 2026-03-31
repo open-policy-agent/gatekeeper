@@ -51,6 +51,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -762,7 +763,7 @@ func (r *ReconcileConstraint) cleanupLegacyVAPB(ctx context.Context, instance *u
 	}
 	oldName := transform.LegacyVAPBindingName(instance.GetName())
 	newName := transform.GetVAPBindingName(instance.GetKind(), instance.GetName())
-	if oldName == newName {
+	if oldName == newName || len(oldName) > validation.DNS1123SubdomainMaxLength {
 		return
 	}
 	legacyBinding, err := vapBindingForVersion(*groupVersion)
