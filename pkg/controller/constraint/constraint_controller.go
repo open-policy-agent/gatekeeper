@@ -553,6 +553,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 	}
 
 	isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
+	generationPathSetStatus := false
 	if shouldGenerateVAPB {
 		if !isAPIEnabled {
 			log.Error(ErrValidatingAdmissionPolicyAPIDisabled, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName())
@@ -570,6 +571,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			case errors.Is(err, celSchema.ErrCELEngineMissing):
 				updateEnforcementPointStatus(status, util.VAPEnforcementPoint, ErrGenerateVAPBState, err.Error(), instance.GetGeneration())
 				r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+				generationPathSetStatus = true
 				shouldGenerateVAPB = false
 			case err != nil:
 				log.Error(err, "could not determine if ConstraintTemplate is configured to generate ValidatingAdmissionPolicy", "constraint", instance.GetName(), "constraint_template", unversionedCT.GetName())
@@ -690,6 +692,11 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 					}
 				}
 			}
+		}
+
+		// Clean stale enforcement point status unless it was set
+		// by the generation path in this reconcile.
+		if !generationPathSetStatus {
 			cleanEnforcementPointStatus(status, util.VAPEnforcementPoint)
 		}
 

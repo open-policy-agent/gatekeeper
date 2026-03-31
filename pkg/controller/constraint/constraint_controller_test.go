@@ -1101,105 +1101,151 @@ func TestManageVAPB_SkipsDeleteIfNotOwner(t *testing.T) {
 	}
 }
 
-func TestManageVAPB_CleansEnforcementStatusWhenVAPBExistsButNotOwned(t *testing.T) {
+func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
+	tests := []struct {
+		name              string
+		useVAPEnforcement bool
+		regoOnlyTemplate  bool
+		initialEPState    string
+		expectEPCleaned   bool
+		expectEPState     string
+	}{
+		{
+			name:              "stale generated status cleaned when no VAPB exists",
+			useVAPEnforcement: false,
+			initialEPState:    GeneratedVAPBState,
+			expectEPCleaned:   true,
+		},
+		{
+			name:              "stale error status cleaned when vap.k8s.io removed",
+			useVAPEnforcement: false,
+			initialEPState:    ErrGenerateVAPBState,
+			expectEPCleaned:   true,
+		},
+		{
+			name:              "error status preserved for rego-only template with vap.k8s.io",
+			useVAPEnforcement: true,
+			regoOnlyTemplate:  true,
+			initialEPState:    "",
+			expectEPCleaned:   false,
+			expectEPState:     ErrGenerateVAPBState,
+		},
+	}
 
-	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	transform.SetVapAPIEnabled(ptr.To(true))
-	transform.SetGroupVersion(&gv)
-	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(nil)
-		transform.SetGroupVersion(nil)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+			transform.SetVapAPIEnabled(ptr.To(true))
+			transform.SetGroupVersion(&gv)
+			t.Cleanup(func() {
+				transform.SetVapAPIEnabled(nil)
+				transform.SetGroupVersion(nil)
+			})
 
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+			origDefault := *DefaultGenerateVAPB
+			*DefaultGenerateVAPB = true
+			t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
 
-	instance := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
-			"kind":       "TestKind",
-			"metadata": map[string]interface{}{
-				"name": "test-constraint",
-				"uid":  "12345",
-			},
-			"spec": map[string]interface{}{
-				"enforcementAction": "scoped",
-				"scopedEnforcementActions": []interface{}{
-					map[string]interface{}{
-						"action": "deny",
-						"enforcementPoints": []interface{}{
-							map[string]interface{}{"name": util.WebhookEnforcementPoint},
+			epName := util.WebhookEnforcementPoint
+			if tt.useVAPEnforcement {
+				epName = util.VAPEnforcementPoint
+			}
+
+			instance := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+					"kind":       "TestKind",
+					"metadata": map[string]interface{}{
+						"name": "test-constraint",
+						"uid":  "12345",
+					},
+					"spec": map[string]interface{}{
+						"enforcementAction": "scoped",
+						"scopedEnforcementActions": []interface{}{
+							map[string]interface{}{
+								"action": "deny",
+								"enforcementPoints": []interface{}{
+									map[string]interface{}{"name": epName},
+								},
+							},
 						},
 					},
 				},
-			},
-		},
-	}
+			}
 
-	// VAPB exists but is owned by a different constraint.
-	vapbOwnedByOther := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "gatekeeper-testkind-test-constraint",
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: "constraints.gatekeeper.sh/v1beta1",
-				Kind:       "TestKind",
-				Name:       "other-constraint",
-				UID:        "other-uid",
-				Controller: ptr.To(true),
-			}},
-		},
-	}
+			s := runtime.NewScheme()
+			var ct *templatesv1beta1.ConstraintTemplate
 
-	ct := &templatesv1beta1.ConstraintTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "testkind",
-		},
-	}
+			if tt.regoOnlyTemplate {
+				if err := templatesv1beta1.AddToScheme(s); err != nil {
+					t.Fatal(err)
+				}
+				regoOnlyCT := makeTemplateWithRegoEngine()
+				ct = &templatesv1beta1.ConstraintTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "testkind"},
+				}
+				if err := s.Convert(regoOnlyCT, ct, nil); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				ct = &templatesv1beta1.ConstraintTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "testkind"},
+				}
+			}
 
-	reader := &fakeReader{
-		objects: map[types.NamespacedName]client.Object{
-			{Name: "testkind"}:                             ct,
-			{Name: "gatekeeper-testkind-test-constraint"}:  vapbOwnedByOther,
-		},
-	}
-
-	writer := &trackingWriter{}
-
-	// Simulate stale enforcement point status from a previous reconcile.
-	status := &constraintstatusv1beta1.ConstraintPodStatus{
-		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
-			EnforcementPointsStatus: []constraintstatusv1beta1.EnforcementPointStatus{
-				{
-					EnforcementPoint:   util.VAPEnforcementPoint,
-					State:              "generated",
-					ObservedGeneration: 1,
+			reader := &fakeReader{
+				objects: map[types.NamespacedName]client.Object{
+					{Name: "testkind"}: ct,
 				},
-			},
-		},
-	}
+			}
 
-	r := &ReconcileConstraint{
-		reader:   reader,
-		writer:   writer,
-		log:      logf.Log.WithName("test"),
-		reporter: &fakeReporter{},
-		scheme:   runtime.NewScheme(),
-	}
+			status := &constraintstatusv1beta1.ConstraintPodStatus{
+				Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+			}
+			if tt.initialEPState != "" {
+				status.Status.EnforcementPointsStatus = []constraintstatusv1beta1.EnforcementPointStatus{
+					{
+						EnforcementPoint:   util.VAPEnforcementPoint,
+						State:              tt.initialEPState,
+						ObservedGeneration: 1,
+					},
+				}
+			}
 
-	_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
-	if err != nil {
-		t.Fatalf("manageVAPB returned unexpected error: %v", err)
-	}
+			r := &ReconcileConstraint{
+				reader:   reader,
+				writer:   &trackingWriter{},
+				log:      logf.Log.WithName("test"),
+				reporter: &fakeReporter{},
+				scheme:   s,
+			}
 
-	if len(writer.deletedObjects) != 0 {
-		t.Fatalf("expected no deletions, got %d", len(writer.deletedObjects))
-	}
+			_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+			if err != nil {
+				t.Fatalf("manageVAPB returned unexpected error: %v", err)
+			}
 
-	for _, ep := range status.Status.EnforcementPointsStatus {
-		if ep.EnforcementPoint == util.VAPEnforcementPoint {
-			t.Fatalf("expected VAP enforcement point status to be cleaned, but it still exists: %+v", ep)
-		}
+			var foundEP *constraintstatusv1beta1.EnforcementPointStatus
+			for i, ep := range status.Status.EnforcementPointsStatus {
+				if ep.EnforcementPoint == util.VAPEnforcementPoint {
+					foundEP = &status.Status.EnforcementPointsStatus[i]
+					break
+				}
+			}
+
+			if tt.expectEPCleaned {
+				if foundEP != nil {
+					t.Fatalf("expected EP status to be cleaned, but found: %+v", *foundEP)
+				}
+			} else {
+				if foundEP == nil {
+					t.Fatal("expected EP status to be preserved, but it was removed")
+				}
+				if foundEP.State != tt.expectEPState {
+					t.Fatalf("expected EP state %q, got %q", tt.expectEPState, foundEP.State)
+				}
+			}
+		})
 	}
 }
 
