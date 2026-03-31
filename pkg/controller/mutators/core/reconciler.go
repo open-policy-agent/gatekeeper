@@ -56,11 +56,10 @@ func newReconciler(
 	events chan event.GenericEvent,
 	reporter ctrlmutators.StatsReporter,
 ) *Reconciler {
-	if reporter == nil {
-		reporter = ctrlmutators.NewStatsReporter()
-	}
 	cache := ctrlmutators.NewMutationCache()
-	reporter.RegisterTally(cache.TallyStatus, cache.TallyConflict)
+	if reporter != nil {
+		reporter.RegisterTally(cache.TallyStatus, cache.TallyConflict)
+	}
 	r := &Reconciler{
 		system:         mutationSystem,
 		Client:         mgr.GetClient(),

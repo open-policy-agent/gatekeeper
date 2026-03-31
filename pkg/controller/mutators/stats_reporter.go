@@ -119,6 +119,9 @@ func (r *reporter) RegisterTally(statusFn func() map[MutatorIngestionStatus]int,
 	r.conflictFns = append(r.conflictFns, conflictFn)
 }
 
+// observeMutatorsStatus reports the current number of mutators by status.
+// Note: statusFns are called while r.mu is held.
+// Registered functions must not call back into this reporter.
 func (r *reporter) observeMutatorsStatus(_ context.Context, observer metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -138,6 +141,9 @@ func (r *reporter) observeMutatorsStatus(_ context.Context, observer metric.Int6
 	return nil
 }
 
+// observeMutatorsInConflict reports the current number of conflicting mutators.
+// Note: conflictFns are called while r.mu is held.
+// Registered functions must not call back into this reporter.
 func (r *reporter) observeMutatorsInConflict(_ context.Context, observer metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

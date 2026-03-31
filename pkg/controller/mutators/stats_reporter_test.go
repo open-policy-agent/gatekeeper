@@ -173,10 +173,12 @@ func TestReporterAggregatesAcrossRegisteredCaches(t *testing.T) {
 	assignCache := NewMutationCache()
 	modifySetCache := NewMutationCache()
 	assignMetaCache := NewMutationCache()
+	assignImageCache := NewMutationCache()
 
 	r.RegisterTally(assignCache.TallyStatus, assignCache.TallyConflict)
 	r.RegisterTally(modifySetCache.TallyStatus, modifySetCache.TallyConflict)
 	r.RegisterTally(assignMetaCache.TallyStatus, assignMetaCache.TallyConflict)
+	r.RegisterTally(assignImageCache.TallyStatus, assignImageCache.TallyConflict)
 
 	for i := 0; i < 4; i++ {
 		assignCache.Upsert(types.ID{Group: "mutations.gatekeeper.sh", Kind: "Assign", Name: fmt.Sprintf("assign-%d", i)}, MutatorStatusActive, false)
@@ -185,12 +187,13 @@ func TestReporterAggregatesAcrossRegisteredCaches(t *testing.T) {
 		modifySetCache.Upsert(types.ID{Group: "mutations.gatekeeper.sh", Kind: "ModifySet", Name: fmt.Sprintf("modifyset-%d", i)}, MutatorStatusActive, false)
 	}
 	assignMetaCache.Upsert(types.ID{Group: "mutations.gatekeeper.sh", Kind: "AssignMetadata", Name: "assignmeta-0"}, MutatorStatusActive, false)
+	assignImageCache.Upsert(types.ID{Group: "mutations.gatekeeper.sh", Kind: "AssignImage", Name: "assignimage-0"}, MutatorStatusActive, false)
 
 	want := metricdata.Metrics{
 		Name: mutatorsMetricName,
 		Data: metricdata.Gauge[int64]{
 			DataPoints: []metricdata.DataPoint[int64]{
-				{Attributes: attribute.NewSet(attribute.String(statusKey, string(MutatorStatusActive))), Value: 7},
+				{Attributes: attribute.NewSet(attribute.String(statusKey, string(MutatorStatusActive))), Value: 8},
 				{Attributes: attribute.NewSet(attribute.String(statusKey, string(MutatorStatusError))), Value: 0},
 			},
 		},
