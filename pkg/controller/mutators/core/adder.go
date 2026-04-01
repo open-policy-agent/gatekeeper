@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	ctrlmutators "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/mutators"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/mutatorstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
@@ -44,12 +45,13 @@ type Adder struct {
 	// If multiple controllers listen to EventsSource, then
 	// each controller gets a copy of each event.
 	EventsSource source.Source
+	Reporter     ctrlmutators.StatsReporter
 }
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor, a.Events)
+	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor, a.Events, a.Reporter)
 	return a.add(mgr, r)
 }
 
