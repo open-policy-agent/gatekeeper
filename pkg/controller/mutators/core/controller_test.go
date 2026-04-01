@@ -27,6 +27,7 @@ import (
 	mutationsinternal "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1"
 	podstatus "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	ctrlmutators "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/mutators"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/mutatorstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
@@ -147,7 +148,7 @@ func TestReconcile(t *testing.T) {
 	}
 	events := make(chan event.GenericEvent, 1024)
 
-	rec := newReconciler(mgr, mSys, tracker, func(_ context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events)
+	rec := newReconciler(mgr, mSys, tracker, func(_ context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events, ctrlmutators.NewStatsReporter())
 	adder := Adder{Events: events}
 
 	err = adder.add(mgr, rec)

@@ -38,15 +38,14 @@ const (
 // StatsReporter reports mutator-related controller metrics.
 type StatsReporter interface {
 	ReportMutatorIngestionRequest(ms MutatorIngestionStatus, d time.Duration) error
-	ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error
-	ReportMutatorsInConflict(n int) error
+	RegisterTally(statusFn func() map[MutatorIngestionStatus]int, conflictFn func() int)
 }
 
 // reporter implements StatsReporter interface.
 type reporter struct {
-	mu                  sync.RWMutex
-	mutatorStatusReport map[MutatorIngestionStatus]int
-	mutatorsInConflict  int
+	mu          sync.RWMutex
+	statusFns   []func() map[MutatorIngestionStatus]int
+	conflictFns []func() int
 }
 
 func init() {
@@ -113,40 +112,46 @@ func (r *reporter) ReportMutatorIngestionRequest(ms MutatorIngestionStatus, d ti
 	return nil
 }
 
-// ReportMutatorsStatus reports the number of mutators of a specific status that are present in the
-// mutation System.
-func (r *reporter) ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error {
+func (r *reporter) RegisterTally(statusFn func() map[MutatorIngestionStatus]int, conflictFn func() int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	if r.mutatorStatusReport == nil {
-		r.mutatorStatusReport = make(map[MutatorIngestionStatus]int)
-	}
-	r.mutatorStatusReport[ms] = n
-	return nil
+	r.statusFns = append(r.statusFns, statusFn)
+	r.conflictFns = append(r.conflictFns, conflictFn)
 }
 
+// observeMutatorsStatus reports the current number of mutators by status.
+// Note: statusFns are called while r.mu is held.
+// Registered functions must not call back into this reporter.
 func (r *reporter) observeMutatorsStatus(_ context.Context, observer metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for status, count := range r.mutatorStatusReport {
+
+	totals := map[MutatorIngestionStatus]int{
+		MutatorStatusActive: 0,
+		MutatorStatusError:  0,
+	}
+	for _, fn := range r.statusFns {
+		for status, count := range fn() {
+			totals[status] += count
+		}
+	}
+	for status, count := range totals {
 		observer.Observe(int64(count), metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
 	return nil
 }
 
-// ReportMutatorsInConflict reports the number of mutators that have schema
-// conflicts with other mutators in the mutation system.
-func (r *reporter) ReportMutatorsInConflict(n int) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mutatorsInConflict = n
-	return nil
-}
-
+// observeMutatorsInConflict reports the current number of conflicting mutators.
+// Note: conflictFns are called while r.mu is held.
+// Registered functions must not call back into this reporter.
 func (r *reporter) observeMutatorsInConflict(_ context.Context, observer metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	observer.Observe(int64(r.mutatorsInConflict))
+
+	total := 0
+	for _, fn := range r.conflictFns {
+		total += fn()
+	}
+	observer.Observe(int64(total))
 	return nil
 }
