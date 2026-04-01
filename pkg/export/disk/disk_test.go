@@ -2041,22 +2041,25 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 			iterations = 20
 		)
 
-		// Publishers – call Publish concurrently.
 		for i := 0; i < publishers; i++ {
 			wg.Add(1)
-			go func() {
+			go func(idx int) {
 				defer wg.Done()
 				for j := 0; j < iterations; j++ {
-					// Publish may fail when the connection is closed or has no file;
-					// we only care that it does not panic or race.
+					_ = writer.Publish(ctx, connectionName, util.ExportMsg{
+						Message: util.AuditStartedMsg,
+						ID:      fmt.Sprintf("audit-%d-%d", idx, j),
+					}, "audit")
 					_ = writer.Publish(ctx, connectionName, util.ExportMsg{
 						Message: "test-violation",
 					}, "audit")
+					_ = writer.Publish(ctx, connectionName, util.ExportMsg{
+						Message: util.AuditCompletedMsg,
+					}, "audit")
 				}
-			}()
+			}(i)
 		}
 
-		// Updaters – call UpdateConnection concurrently.
 		for i := 0; i < updaters; i++ {
 			wg.Add(1)
 			go func() {
@@ -2071,7 +2074,6 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 			}()
 		}
 
-		// Closers – call CloseConnection concurrently.
 		for i := 0; i < closers; i++ {
 			wg.Add(1)
 			go func() {
@@ -2082,8 +2084,6 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 			}()
 		}
 
-		// Creators – re-create the connection concurrently so that Publish / Update
-		// can observe a live connection amid closes.
 		for i := 0; i < creators; i++ {
 			wg.Add(1)
 			go func() {
@@ -2096,9 +2096,6 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 
 		wg.Wait()
 
-		// Validate that the internal state is consistent: openConnections should
-		// contain at most one entry for our connection name, and the Writer
-		// should remain usable.
 		writer.mu.Lock()
 		connCount := len(writer.openConnections)
 		_, hasConn := writer.openConnections[connectionName]
@@ -2108,8 +2105,6 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 			t.Fatalf("expected at most 1 open connection, got %d", connCount)
 		}
 
-		// If the connection still exists it should be usable; if not, creating
-		// a fresh one must succeed – validating that Writer is in a clean state.
 		if !hasConn {
 			if err := writer.CreateConnection(ctx, connectionName, config); err != nil {
 				t.Fatalf("CreateConnection() after concurrent test error = %v", err)

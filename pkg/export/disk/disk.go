@@ -116,15 +116,25 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	}
 
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	conn, exists := r.openConnections[connectionName]
 	if !exists {
+		r.mu.Unlock()
 		return fmt.Errorf("connection %s for disk driver not found", connectionName)
 	}
 
+	var needsCleanup bool
 	if conn.Path != path {
+		delete(r.openConnections, connectionName)
+		needsCleanup = true
+	}
+	r.mu.Unlock()
+
+	if needsCleanup {
 		if err := r.closeAndRemoveFilesWithRetry(conn); err != nil {
+			// Re-add connection on failure so it is not lost.
+			r.mu.Lock()
+			r.openConnections[connectionName] = conn
+			r.mu.Unlock()
 			return fmt.Errorf("error updating connection %s, %w", connectionName, err)
 		}
 		conn.Path = path
@@ -134,23 +144,26 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	conn.MaxAuditResults = int(maxResults)
 	conn.ClosedConnectionTTL = ttl
 
+	r.mu.Lock()
 	r.openConnections[connectionName] = conn
+	r.mu.Unlock()
 	return nil
 }
 
 func (r *Writer) CloseConnection(connectionName string) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	conn, ok := r.openConnections[connectionName]
 	if !ok {
+		r.mu.Unlock()
 		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
-	defer delete(r.openConnections, connectionName)
+	delete(r.openConnections, connectionName)
+	r.mu.Unlock()
+
 	err := r.closeAndRemoveFilesWithRetry(conn)
 	if err != nil {
 		now := time.Now()
-		// Store the failed connection with retry metadata with a unique key to avoid conflicts.
+		r.mu.Lock()
 		r.closedConnections[connectionName+now.String()] = FailedConnection{
 			Connection:  conn,
 			FailedAt:    now,
@@ -162,13 +175,18 @@ func (r *Writer) CloseConnection(connectionName string) error {
 			r.cleanupDone = make(chan struct{})
 			r.cleanupStopped = false
 		}
+		done := r.cleanupDone
 		r.cleanupOnce.Do(func() {
-			go r.backgroundCleanup()
+			go r.backgroundCleanup(done)
 		})
+		r.mu.Unlock()
 	}
 	return err
 }
 
+// Publish holds the global lock for its entire body because Connection values
+// share a *os.File pointer; releasing the lock mid-method would let concurrent
+// publishers race on the same file descriptor. 
 func (r *Writer) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -391,7 +409,10 @@ func unmarshalConfig(config interface{}) (string, float64, time.Duration, error)
 }
 
 // backgroundCleanup runs periodically to retry closing failed connections.
-func (r *Writer) backgroundCleanup() {
+// done is captured at goroutine launch time so the goroutine selects on an
+// immutable reference, avoiding a data race when CloseConnection reassigns
+// r.cleanupDone.
+func (r *Writer) backgroundCleanup(done <-chan struct{}) {
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 
@@ -399,7 +420,7 @@ func (r *Writer) backgroundCleanup() {
 		select {
 		case <-ticker.C:
 			r.retryFailedConnections()
-		case <-r.cleanupDone:
+		case <-done:
 			log.Info("Background cleanup stopped")
 			return
 		}
@@ -409,10 +430,10 @@ func (r *Writer) backgroundCleanup() {
 // retryFailedConnections attempts to close connections that previously failed to close.
 func (r *Writer) retryFailedConnections() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	now := time.Now()
 	var toRemove []string
+	var toRetry []string
 
 	for name, failedConn := range r.closedConnections {
 		if now.Sub(failedConn.FailedAt) > failedConn.ClosedConnectionTTL {
@@ -431,27 +452,59 @@ func (r *Writer) retryFailedConnections() {
 			continue
 		}
 
-		err := r.closeAndRemoveFilesWithRetry(failedConn.Connection)
-		if err == nil {
-			log.Info("Successfully closed previously failed connection", "connection", name)
-			toRemove = append(toRemove, name)
-		} else {
-			log.Info("Failed to close connection on retry", "connection", name, "error", err, "attempt", failedConn.RetryCount+1)
-
-			failedConn.RetryCount++
-			delay := time.Duration(float64(baseRetryDelay) * math.Pow(retryBackoffFactor, float64(failedConn.RetryCount)))
-			if maxRetryDelay > 0 && delay > maxRetryDelay {
-				delay = maxRetryDelay
-			}
-			// Apply jitter to the retry delay
-			delay = wait.Jitter(delay, Jitter)
-			failedConn.NextRetryAt = now.Add(delay)
-			r.closedConnections[name] = failedConn
-		}
+		toRetry = append(toRetry, name)
 	}
 
 	for _, name := range toRemove {
 		delete(r.closedConnections, name)
+	}
+
+	// Collect connections that need retry and release the lock before I/O.
+	type retryItem struct {
+		name string
+		conn FailedConnection
+	}
+	items := make([]retryItem, 0, len(toRetry))
+	for _, name := range toRetry {
+		items = append(items, retryItem{name: name, conn: r.closedConnections[name]})
+	}
+	r.mu.Unlock()
+
+	// Perform I/O outside the lock.
+	type retryResult struct {
+		name string
+		conn FailedConnection
+		ok   bool
+	}
+	results := make([]retryResult, 0, len(items))
+	for _, item := range items {
+		err := r.closeAndRemoveFilesWithRetry(item.conn.Connection)
+		if err == nil {
+			log.Info("Successfully closed previously failed connection", "connection", item.name)
+			results = append(results, retryResult{name: item.name, ok: true})
+		} else {
+			log.Info("Failed to close connection on retry", "connection", item.name, "error", err, "attempt", item.conn.RetryCount+1)
+			item.conn.RetryCount++
+			delay := time.Duration(float64(baseRetryDelay) * math.Pow(retryBackoffFactor, float64(item.conn.RetryCount)))
+			if maxRetryDelay > 0 && delay > maxRetryDelay {
+				delay = maxRetryDelay
+			}
+			delay = wait.Jitter(delay, Jitter)
+			item.conn.NextRetryAt = now.Add(delay)
+			results = append(results, retryResult{name: item.name, conn: item.conn})
+		}
+	}
+
+	// Re-acquire lock to update state.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, res := range results {
+		if res.ok {
+			delete(r.closedConnections, res.name)
+		} else {
+			r.closedConnections[res.name] = res.conn
+		}
 	}
 
 	if len(r.closedConnections) > 0 {
