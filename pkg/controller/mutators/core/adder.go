@@ -40,12 +40,8 @@ type Adder struct {
 	// are set by the API server.
 	MutatorFor func(client.Object) (types.Mutator, error)
 	// Events enables queueing other Mutators for updates.
-	Events chan event.GenericEvent
-	// EventsSource watches for events broadcast to Events.
-	// If multiple controllers listen to EventsSource, then
-	// each controller gets a copy of each event.
-	EventsSource source.Source
-	Reporter     ctrlmutators.StatsReporter
+	Events   chan event.GenericEvent
+	Reporter ctrlmutators.StatsReporter
 }
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -91,8 +87,10 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 		return err
 	}
 
-	if a.EventsSource != nil {
-		// Watch for enqueued events.
+	if a.Events != nil {
+		// Watch for enqueued events from conflict propagation.
+		// Filter to only process events matching this controller's kind,
+		// since all mutator controllers share the same events channel.
 		err = c.Watch(
 			source.Channel(a.Events,
 				handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
