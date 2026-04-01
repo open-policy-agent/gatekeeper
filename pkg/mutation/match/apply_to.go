@@ -21,16 +21,6 @@ func AppliesTo(applyTo []ApplyTo, gvk schema.GroupVersionKind) bool {
 	return false
 }
 
-// AppliesToMutation checks if any item the given slice of MutationApplyTo applies to the given object.
-func AppliesToMutation(applyTo []MutationApplyTo, gvk schema.GroupVersionKind) bool {
-	for _, apply := range applyTo {
-		if apply.Matches(gvk) {
-			return true
-		}
-	}
-	return false
-}
-
 // AppliesGVKAndOperation checks if at least one entry in the given slice of
 // MutationApplyTo matches BOTH the given GVK and the given operation. This
 // prevents false positives where one entry matches GVK and a different entry
@@ -61,6 +51,9 @@ type MutationApplyTo struct {
 	ApplyTo `json:",inline"`
 	// Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
 	// this mutation. If empty, all operations are allowed for backward compatibility.
+	// NOTE: The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations.
+	// DELETE and CONNECT are accepted values but will not trigger mutations because the webhook
+	// does not handle these operation types. Support may be added in future releases.
 	// +kubebuilder:validation:items:Enum=CREATE;UPDATE;DELETE;CONNECT;*
 	Operations []admissionregistrationv1.OperationType `json:"operations,omitempty"`
 }
@@ -98,18 +91,6 @@ func (a *ApplyTo) Matches(gvk schema.GroupVersionKind) bool {
 	}
 
 	return true
-}
-
-// Flatten returns the set of GroupVersionKinds this MutationApplyTo matches.
-// The GVKs are not guaranteed to be sorted or unique.
-func (a *MutationApplyTo) Flatten() []schema.GroupVersionKind {
-	return a.ApplyTo.Flatten()
-}
-
-// Matches returns true if the Object's Group, Version, and Kind are contained
-// in the MutationApplyTo's match lists.
-func (a *MutationApplyTo) Matches(gvk schema.GroupVersionKind) bool {
-	return a.ApplyTo.Matches(gvk)
 }
 
 // MatchesOperation returns true if the operation is contained in the MutationApplyTo's
@@ -158,7 +139,12 @@ func ValidateOperations(applyTo []MutationApplyTo) error {
 	var errs []string
 	for i, apply := range applyTo {
 		hasWildcard := false
+		seen := sets.New[admissionregistrationv1.OperationType]()
 		for _, op := range apply.Operations {
+			if seen.Has(op) {
+				errs = append(errs, fmt.Sprintf("duplicate operation %q in applyTo[%d].operations", op, i))
+			}
+			seen.Insert(op)
 			if !validOperations.Has(op) {
 				errs = append(errs, fmt.Sprintf("invalid operation %q in applyTo[%d].operations: must be one of CREATE, UPDATE, DELETE, CONNECT, *", op, i))
 			}
