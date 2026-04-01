@@ -40,7 +40,7 @@ jobs:
         with:
           go-version: "1.25"
           check-latest: true
-      - uses: golang/govulncheck-action@31f7c5463448f83528bd771c2d978d940080c9fd
+      - uses: golang/govulncheck-action@31f7c5463448f83528bd771c2d978d940080c9fd # unreleased, includes fix for golang/go#75908
 
   scan_vulnerabilities:
     name: "[Trivy] Scan for vulnerabilities"
