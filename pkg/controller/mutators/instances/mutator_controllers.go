@@ -13,12 +13,10 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	corev1 "k8s.io/api/core/v1"
-	apiTypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -43,31 +41,28 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	modifySetCh := make(chan event.GenericEvent, eventQueueSize)
 	assignImageCh := make(chan event.GenericEvent, eventQueueSize)
 
-	// Fan-out: broadcast every conflict event to all per-controller channels.
+	// Route each conflict event to the appropriate controller channel by kind.
+	// Non-blocking sends ensure a slow controller doesn't stall others.
+	// Dropped events are safe — reconcilers re-check conflicts on every natural resync.
 	go func() {
 		for evt := range events {
-			assignCh <- evt
-			modifySetCh <- evt
-			assignImageCh <- evt
+			var ch chan event.GenericEvent
+			switch evt.Object.GetObjectKind().GroupVersionKind().Kind {
+			case "Assign":
+				ch = assignCh
+			case "ModifySet":
+				ch = modifySetCh
+			case "AssignImage":
+				ch = assignImageCh
+			default:
+				continue
+			}
+			select {
+			case ch <- evt:
+			default:
+			}
 		}
 	}()
-
-	// kindFilterSource creates a source.Channel with a handler that only enqueues
-	// events matching the specified kind, discarding the rest.
-	kindFilterSource := func(ch <-chan event.GenericEvent, kind string) source.Source {
-		return source.Channel(ch,
-			handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
-				if obj.GetObjectKind().GroupVersionKind().Kind != kind {
-					return nil
-				}
-				return []reconcile.Request{{
-					NamespacedName: apiTypes.NamespacedName{
-						Namespace: obj.GetNamespace(),
-						Name:      obj.GetName(),
-					},
-				}}
-			}))
-	}
 
 	reporter := ctrlmutators.NewStatsReporter()
 
@@ -89,7 +84,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			return mutators.MutatorForAssign(unversioned)
 		},
 		Events:       events,
-		EventsSource: kindFilterSource(assignCh, "Assign"),
+		EventsSource: source.Channel(assignCh, &handler.EnqueueRequestForObject{}),
 		Reporter:     reporter,
 	}
 	if err := assign.Add(mgr); err != nil {
@@ -114,7 +109,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			return mutators.MutatorForModifySet(unversioned)
 		},
 		Events:       events,
-		EventsSource: kindFilterSource(modifySetCh, "ModifySet"),
+		EventsSource: source.Channel(modifySetCh, &handler.EnqueueRequestForObject{}),
 		Reporter:     reporter,
 	}
 	if err := modifySet.Add(mgr); err != nil {
@@ -139,7 +134,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			return mutators.MutatorForAssignImage(unversioned)
 		},
 		Events:       events,
-		EventsSource: kindFilterSource(assignImageCh, "AssignImage"),
+		EventsSource: source.Channel(assignImageCh, &handler.EnqueueRequestForObject{}),
 		Reporter:     reporter,
 	}
 	if err := assignImage.Add(mgr); err != nil {

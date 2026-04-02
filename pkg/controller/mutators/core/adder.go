@@ -41,9 +41,12 @@ type Adder struct {
 	MutatorFor func(client.Object) (types.Mutator, error)
 	// Events enables queueing other Mutators for updates.
 	Events chan event.GenericEvent
-	// EventsSource is a shared source.Channel that fans out events from Events
-	// to all controllers that watch it. Each c.Watch(EventsSource) call registers
-	// a destination in the internal fan-out, so all controllers receive every event.
+	// EventsSource is the source watched by this controller for generic update
+	// events related to other mutators. It should correspond to Events for this
+	// controller's wiring; it is not assumed to be a single shared source.Channel
+	// with internal fan-out to every controller. Any cross-controller fan-out is
+	// handled by the caller when constructing the per-controller Events and
+	// EventsSource values.
 	EventsSource source.Source
 	Reporter     ctrlmutators.StatsReporter
 }
