@@ -405,12 +405,10 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 						if !apierrors.IsNotFound(err) {
 							return reconcile.Result{}, err
 						}
-					} else if metav1.IsControlledBy(newVapBinding, instance) {
+					} else {
 						if err := r.writer.Delete(ctx, newVapBinding); err != nil && !apierrors.IsNotFound(err) {
 							return reconcile.Result{}, err
 						}
-					} else {
-						log.Info("vapbinding exists but is not owned by this constraint, skipping delete", "vapBindingName", vapBindingName)
 					}
 					// Migration: also delete legacy VAPB (gatekeeper-<name>).
 					r.cleanupLegacyVAPB(ctx, instance, groupVersion)
@@ -784,6 +782,7 @@ func (r *ReconcileConstraint) cleanupLegacyVAPB(ctx context.Context, instance *u
 	log.Info("cleaning up legacy vapbinding", "legacyVAPBName", oldName, "newVAPBName", newName)
 	if err := r.writer.Delete(ctx, legacyBinding); err != nil && !apierrors.IsNotFound(err) {
 		log.Error(err, "failed to delete legacy vapbinding", "legacyVAPBName", oldName)
+		return
 	}
 	r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: oldName})
 }

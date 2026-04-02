@@ -335,7 +335,9 @@ func GetVAPBindingName(kind, constraintName string) string {
 		return name
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:8]
-	return name[:validation.DNS1123SubdomainMaxLength-len(hash)-1] + "-" + hash
+	truncated := name[:validation.DNS1123SubdomainMaxLength-len(hash)-1]
+	truncated = strings.TrimRight(truncated, "-.")
+	return truncated + "-" + hash
 }
 
 // LegacyVAPBindingName returns the old-format VAPB name that did not include
