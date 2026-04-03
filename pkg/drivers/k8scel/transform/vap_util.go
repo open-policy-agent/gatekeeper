@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/logr"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -53,41 +54,59 @@ func IsVapAPIEnabled(log *logr.Logger) (bool, *schema.GroupVersion) {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		log.Info("IsVapAPIEnabled GetConfig", "error", err)
-		VapAPIEnabled = new(bool)
-		*VapAPIEnabled = false
+		// Do not cache failure — allow retry on next reconcile
 		return false, nil
 	}
 	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		log.Info("IsVapAPIEnabled NewForConfig", "error", err)
-		*VapAPIEnabled = false
+		// Do not cache failure — allow retry on next reconcile
 		return false, nil
 	}
 
-	checkGroupVersion := func(gv schema.GroupVersion) (bool, *schema.GroupVersion) {
+	checkGroupVersion := func(gv schema.GroupVersion) (bool, *schema.GroupVersion, error) {
 		resList, err := clientset.Discovery().ServerResourcesForGroupVersion(gv.String())
-		if err == nil {
-			for i := 0; i < len(resList.APIResources); i++ {
-				if resList.APIResources[i].Name == "validatingadmissionpolicies" {
-					VapAPIEnabled = new(bool)
-					*VapAPIEnabled = true
-					GroupVersion = &gv
-					return true, GroupVersion
-				}
+		if err != nil {
+			// A NotFound error means the GroupVersion is not served — this is
+			// definitive, not transient. Treat it the same as "GV found but
+			// resource absent" by returning nil error.
+			if apierrors.IsNotFound(err) {
+				return false, nil, nil
+			}
+			return false, nil, err
+		}
+		for i := 0; i < len(resList.APIResources); i++ {
+			if resList.APIResources[i].Name == "validatingadmissionpolicies" {
+				VapAPIEnabled = new(bool)
+				*VapAPIEnabled = true
+				GroupVersion = &gv
+				return true, GroupVersion, nil
 			}
 		}
+		return false, nil, nil
+	}
+
+	var discoveryErr error
+	if ok, gvk, err := checkGroupVersion(admissionregistrationv1.SchemeGroupVersion); ok {
+		return true, gvk
+	} else if err != nil {
+		discoveryErr = err
+	}
+
+	if ok, gvk, err := checkGroupVersion(admissionregistrationv1beta1.SchemeGroupVersion); ok {
+		return true, gvk
+	} else if err != nil {
+		discoveryErr = err
+	}
+
+	if discoveryErr != nil {
+		// Discovery failed — do not cache, allow retry on next reconcile
+		log.Error(discoveryErr, "error checking VAP API availability, will retry")
 		return false, nil
 	}
 
-	if ok, gvk := checkGroupVersion(admissionregistrationv1.SchemeGroupVersion); ok {
-		return true, gvk
-	}
-
-	if ok, gvk := checkGroupVersion(admissionregistrationv1beta1.SchemeGroupVersion); ok {
-		return true, gvk
-	}
-
-	log.Error(err, "error checking VAP API availability", "IsVapAPIEnabled", "false")
+	// Discovery succeeded but VAP API not found — cache this result
+	log.Info("ValidatingAdmissionPolicy API not found in cluster")
 	VapAPIEnabled = new(bool)
 	*VapAPIEnabled = false
 	return false, nil
