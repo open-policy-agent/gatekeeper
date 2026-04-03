@@ -29,6 +29,37 @@ type Adder struct {
 	GetPod         func(context.Context) (*corev1.Pod, error)
 }
 
+func routeConflictEvents(ctx context.Context, events <-chan event.GenericEvent, assignCh, modifySetCh, assignImageCh chan<- event.GenericEvent) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case evt, ok := <-events:
+			if !ok {
+				return nil
+			}
+
+			var ch chan<- event.GenericEvent
+			switch evt.Object.GetObjectKind().GroupVersionKind().Kind {
+			case "Assign":
+				ch = assignCh
+			case "ModifySet":
+				ch = modifySetCh
+			case "AssignImage":
+				ch = assignImageCh
+			default:
+				continue
+			}
+
+			select {
+			case <-ctx.Done():
+				return nil
+			case ch <- evt:
+			}
+		}
+	}
+}
+
 // Add creates all mutation controllers and adds them to the manager.
 func (a *Adder) Add(mgr manager.Manager) error {
 	// events is shared across all mutators that can affect the implied schema
@@ -41,28 +72,11 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	modifySetCh := make(chan event.GenericEvent, eventQueueSize)
 	assignImageCh := make(chan event.GenericEvent, eventQueueSize)
 
-	// Route each conflict event to the appropriate controller channel by kind.
-	// Non-blocking sends ensure a slow controller doesn't stall others.
-	// Dropped events are safe — reconcilers re-check conflicts on every natural resync.
-	go func() {
-		for evt := range events {
-			var ch chan event.GenericEvent
-			switch evt.Object.GetObjectKind().GroupVersionKind().Kind {
-			case "Assign":
-				ch = assignCh
-			case "ModifySet":
-				ch = modifySetCh
-			case "AssignImage":
-				ch = assignImageCh
-			default:
-				continue
-			}
-			select {
-			case ch <- evt:
-			default:
-			}
-		}
-	}()
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		return routeConflictEvents(ctx, events, assignCh, modifySetCh, assignImageCh)
+	})); err != nil {
+		return err
+	}
 
 	reporter := ctrlmutators.NewStatsReporter()
 
