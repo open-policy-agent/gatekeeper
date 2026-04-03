@@ -186,7 +186,7 @@ func (r *Writer) CloseConnection(connectionName string) error {
 
 // Publish holds the global lock for its entire body because Connection values
 // share a *os.File pointer; releasing the lock mid-method would let concurrent
-// publishers race on the same file descriptor. 
+// publishers race on the same file descriptor.
 func (r *Writer) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -477,21 +477,21 @@ func (r *Writer) retryFailedConnections() {
 		ok   bool
 	}
 	results := make([]retryResult, 0, len(items))
-	for _, item := range items {
-		err := r.closeAndRemoveFilesWithRetry(item.conn.Connection)
+	for i := range items {
+		err := r.closeAndRemoveFilesWithRetry(items[i].conn.Connection)
 		if err == nil {
-			log.Info("Successfully closed previously failed connection", "connection", item.name)
-			results = append(results, retryResult{name: item.name, ok: true})
+			log.Info("Successfully closed previously failed connection", "connection", items[i].name)
+			results = append(results, retryResult{name: items[i].name, ok: true})
 		} else {
-			log.Info("Failed to close connection on retry", "connection", item.name, "error", err, "attempt", item.conn.RetryCount+1)
-			item.conn.RetryCount++
-			delay := time.Duration(float64(baseRetryDelay) * math.Pow(retryBackoffFactor, float64(item.conn.RetryCount)))
+			log.Info("Failed to close connection on retry", "connection", items[i].name, "error", err, "attempt", items[i].conn.RetryCount+1)
+			items[i].conn.RetryCount++
+			delay := time.Duration(float64(baseRetryDelay) * math.Pow(retryBackoffFactor, float64(items[i].conn.RetryCount)))
 			if maxRetryDelay > 0 && delay > maxRetryDelay {
 				delay = maxRetryDelay
 			}
 			delay = wait.Jitter(delay, Jitter)
-			item.conn.NextRetryAt = now.Add(delay)
-			results = append(results, retryResult{name: item.name, conn: item.conn})
+			items[i].conn.NextRetryAt = now.Add(delay)
+			results = append(results, retryResult{name: items[i].name, conn: items[i].conn})
 		}
 	}
 
@@ -499,11 +499,11 @@ func (r *Writer) retryFailedConnections() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for _, res := range results {
-		if res.ok {
-			delete(r.closedConnections, res.name)
+	for i := range results {
+		if results[i].ok {
+			delete(r.closedConnections, results[i].name)
 		} else {
-			r.closedConnections[res.name] = res.conn
+			r.closedConnections[results[i].name] = results[i].conn
 		}
 	}
 
