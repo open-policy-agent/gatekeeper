@@ -60,6 +60,7 @@ func PullImage(imgURL string, tempDir string) (string, func(), error) {
 	if err != nil {
 		return "", closeFn, fmt.Errorf("creating remote repository for %q: %w", imgURL, err)
 	}
+	// Preserve the oras v1 behavior for local test registries on loopback hosts.
 	repo.PlainHTTP = shouldUsePlainHTTP(ref.Registry)
 	repo.Client = &auth.Client{
 		Client:     http.DefaultClient,
