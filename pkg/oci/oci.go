@@ -3,8 +3,11 @@ package oci
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
 	"os"
+	"strings"
 
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content/file"
@@ -25,18 +28,21 @@ func PullImage(imgURL string, tempDir string) (string, func(), error) {
 	ctx := context.Background()
 	path, err := os.MkdirTemp(tempDir, tempFilePrefix)
 	if err != nil {
-		return "", nil, fmt.Errorf("creating temporary policy directory at path %q: %w", path, err)
+		return "", nil, fmt.Errorf("creating temporary policy directory under path %q: %w", tempDir, err)
 	}
+	cleanupPath := func() { os.RemoveAll(path) }
 
 	credStore, err := credentials.NewStoreFromDocker(credentials.StoreOptions{
 		DetectDefaultNativeStore: true,
 	})
 	if err != nil {
+		cleanupPath()
 		return "", nil, fmt.Errorf("new auth client: %w", err)
 	}
 
 	fileStore, err := file.New(path)
 	if err != nil {
+		cleanupPath()
 		return "", nil, fmt.Errorf("creating file store at path %q: %w", path, err)
 	}
 
@@ -47,13 +53,14 @@ func PullImage(imgURL string, tempDir string) (string, func(), error) {
 
 	ref, err := registry.ParseReference(imgURL)
 	if err != nil {
-		return "", closeFn, fmt.Errorf("pulling artifact: %w", err)
+		return "", closeFn, fmt.Errorf("parsing OCI reference %q: %w", imgURL, err)
 	}
 
 	repo, err := remote.NewRepository(ref.Registry + "/" + ref.Repository)
 	if err != nil {
-		return "", closeFn, fmt.Errorf("pulling artifact: %w", err)
+		return "", closeFn, fmt.Errorf("creating remote repository for %q: %w", imgURL, err)
 	}
+	repo.PlainHTTP = shouldUsePlainHTTP(ref.Registry)
 	repo.Client = &auth.Client{
 		Client:     http.DefaultClient,
 		Cache:      auth.NewCache(),
@@ -62,8 +69,26 @@ func PullImage(imgURL string, tempDir string) (string, func(), error) {
 
 	_, err = oras.Copy(ctx, repo, ref.ReferenceOrDefault(), fileStore, "", oras.DefaultCopyOptions)
 	if err != nil {
-		return "", closeFn, fmt.Errorf("pulling artifact: %w", err)
+		return "", closeFn, fmt.Errorf("pulling artifact %q: %w", imgURL, err)
 	}
 
 	return path, closeFn, nil
+}
+
+// shouldUsePlainHTTP returns true when the registry host is a loopback
+// address (localhost, 127.x.x.x, ::1), which typically serves plain HTTP.
+func shouldUsePlainHTTP(registryHost string) bool {
+	host, _, err := net.SplitHostPort(registryHost)
+	if err != nil {
+		host = registryHost
+	}
+	// Strip IPv6 brackets that remain when no port is present (e.g. "[::1]").
+	host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
+	if host == "localhost" {
+		return true
+	}
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return addr.IsLoopback()
+	}
+	return false
 }
