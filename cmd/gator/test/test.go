@@ -56,12 +56,12 @@ var (
 )
 
 const (
-	flagNameFilename = "filename"
-	flagNameOutput   = "output"
-	flagNameImage    = "image"
-	flagNameInsecure = "insecure"
-	flagNameTempDir  = "tempdir"
-	flagNameVerbose  = "verbose"
+	flagNameFilename  = "filename"
+	flagNameOutput    = "output"
+	flagNameImage     = "image"
+	flagNamePlainHTTP = "plain-http"
+	flagNameTempDir   = "tempdir"
+	flagNameVerbose   = "verbose"
 
 	stringJSON          = "json"
 	stringYAML          = "yaml"
@@ -77,7 +77,7 @@ func init() {
 	Cmd.Flags().BoolVarP(&flagGatherStats, "stats", "", false, "include performance stats returned from the Constraint Framework.")
 	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "enable-k8s-native-validation", "", true, "enable the validating admission policy driver")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().BoolVarP(&flagInsecure, flagNameInsecure, "", false, "use plain HTTP for OCI image pulls (not recommended)")
+	Cmd.Flags().BoolVar(&flagInsecure, flagNamePlainHTTP, false, "use plain HTTP for OCI image pulls (not recommended)")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 	Cmd.Flags().BoolVarP(&flagDenyOnly, "deny-only", "", false, "output only denied constraints")
 	Cmd.Flags().BoolVarP(&flagVerbose, flagNameVerbose, "v", false, "print extended test output")

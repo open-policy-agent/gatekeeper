@@ -18,6 +18,12 @@ match_substring () {
   fi
 }
 
+strip_warning_lines () {
+  output_text="${1}"
+
+  printf '%s\n' "$output_text" | sed '/^WARNING: /d'
+}
+
 # match_yaml_msg checks that the gator test full yaml output (arg1)
 # contains the `msg: ` field and then matches that `msg` field against the
 # "want" message (arg2).  Multiple error messages can be checked by passing in
@@ -28,8 +34,9 @@ match_yaml_msg () {
   yaml_output="${1}"
   want_msg="${2}"
   violation_index="${3:-0}"
+  filtered_yaml_output=$(strip_warning_lines "$yaml_output")
 
-  if ! got=$(echo -n "$yaml_output" | yq eval ".[${violation_index}].result.msg" - --exit-status); then
+  if ! got=$(echo -n "$filtered_yaml_output" | yq eval ".[$violation_index].result.msg" - --exit-status); then
     printf "ERROR: failed to evaluate output\n"
     printf "GOT: %s\n" "$yaml_output"
     exit 1
@@ -228,8 +235,9 @@ match_yaml_msg () {
   oras push $img1 ./templates/$media_type ./constraints/$media_type
   popd
 
-  run bin/gator test --insecure --image=$img1 --filename="$violating_ns" -o=yaml
+  run bin/gator test --plain-http --image=$img1 --filename="$violating_ns" -o=yaml
   [ "$status" -eq 1 ]
+  match_substring "${output[*]}" "WARNING: pulling \"$img1\" over plain HTTP"
   want_msg="you must provide labels: {\"geo\"}"
   match_yaml_msg "${output[*]}" "${want_msg}"
 
@@ -244,8 +252,10 @@ match_yaml_msg () {
   [ "$status" -eq 0 ]
   popd
 
-  run bin/gator test --insecure --image=$img2 --image=$img3 -o=yaml < "$violating_ns"
+  run bin/gator test --plain-http --image=$img2 --image=$img3 -o=yaml < "$violating_ns"
   [ "$status" -eq 1 ]
+  match_substring "${output[*]}" "WARNING: pulling \"$img2\" over plain HTTP"
+  match_substring "${output[*]}" "WARNING: pulling \"$img3\" over plain HTTP"
   want_msg="you must provide labels: {\"geo\"}"
   match_yaml_msg "${output[*]}" "${want_msg}"
 }

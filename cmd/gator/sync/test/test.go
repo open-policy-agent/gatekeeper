@@ -26,17 +26,17 @@ var (
 )
 
 const (
-	flagNameFilename = "filename"
-	flagNameImage    = "image"
-	flagNameInsecure = "insecure"
-	flagNameForce    = "force-omit-gvk-manifest"
-	flagNameTempDir  = "tempdir"
+	flagNameFilename  = "filename"
+	flagNameImage     = "image"
+	flagNamePlainHTTP = "plain-http"
+	flagNameForce     = "force-omit-gvk-manifest"
+	flagNameTempDir   = "tempdir"
 )
 
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "n", []string{}, "a file or directory containing Kubernetes resources. Can be specified multiple times.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().BoolVarP(&flagInsecure, flagNameInsecure, "", false, "use plain HTTP for OCI image pulls (not recommended)")
+	Cmd.Flags().BoolVar(&flagInsecure, flagNamePlainHTTP, false, "use plain HTTP for OCI image pulls (not recommended)")
 	Cmd.Flags().BoolVarP(&flagOmitGVKManifest, flagNameForce, "f", false, "Do not require a GVK manifest; if one is not provided, assume all GVKs listed in the requirements "+
 		"and configs are supported by the cluster under test. If this assumption isn't true, the given config may cause errors or templates may not be enforced correctly even after passing this test.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))

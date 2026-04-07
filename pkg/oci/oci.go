@@ -59,6 +59,9 @@ func PullImage(imgURL string, tempDir string, allowPlainHTTP bool) (string, func
 	}
 
 	repo.PlainHTTP = allowPlainHTTP
+	if allowPlainHTTP {
+		fmt.Fprintf(os.Stderr, "WARNING: pulling %q over plain HTTP\n", imgURL)
+	}
 	repo.Client = &auth.Client{
 		Client:     http.DefaultClient,
 		Cache:      auth.NewCache(),

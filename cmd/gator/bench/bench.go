@@ -82,7 +82,7 @@ var (
 const (
 	flagNameFilename     = "filename"
 	flagNameImage        = "image"
-	flagNameInsecure     = "insecure"
+	flagNamePlainHTTP    = "plain-http"
 	flagNameTempDir      = "tempdir"
 	flagNameEngine       = "engine"
 	flagNameIterations   = "iterations"
@@ -102,7 +102,7 @@ func init() {
 		"a file or directory containing ConstraintTemplates, Constraints, and resources to benchmark. Can be specified multiple times.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{},
 		"a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().BoolVar(&flagInsecure, flagNameInsecure, false,
+	Cmd.Flags().BoolVar(&flagInsecure, flagNamePlainHTTP, false,
 		"use plain HTTP for OCI image pulls (not recommended)")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "",
 		"temporary directory to download and unpack images to.")
