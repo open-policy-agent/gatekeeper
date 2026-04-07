@@ -2,6 +2,7 @@ package mutators
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -33,6 +34,33 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r S
 	assert.NoError(t, err)
 
 	return rdr, r
+}
+
+func findMetricByName(t *testing.T, rm *metricdata.ResourceMetrics, name string) metricdata.Metrics {
+	t.Helper()
+
+	var (
+		result metricdata.Metrics
+		found  bool
+	)
+
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name == name {
+				if found {
+					t.Fatalf("multiple metrics found with name %q", name)
+				}
+				result = m
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		t.Fatalf("metric %q not found", name)
+	}
+
+	return result
 }
 
 func TestReportMutatorIngestionRequest(t *testing.T) {
@@ -129,16 +157,78 @@ func TestReportMutatorsStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rdr, r := initializeTestInstruments(t)
-			for status, count := range tt.c.TallyStatus() {
-				assert.NoError(t, r.ReportMutatorsStatus(status, count))
-			}
+			r.RegisterTally(tt.c.TallyStatus, tt.c.TallyConflict)
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
 
-			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+			metricdatatest.AssertEqual(t, tt.want, findMetricByName(t, rm, mutatorsMetricName), metricdatatest.IgnoreTimestamp())
 		})
 	}
+}
+
+func TestReporterAggregatesAcrossRegisteredCaches(t *testing.T) {
+	rdr, r := initializeTestInstruments(t)
+
+	assignCache := NewMutationCache()
+	modifySetCache := NewMutationCache()
+	assignMetaCache := NewMutationCache()
+	assignImageCache := NewMutationCache()
+
+	r.RegisterTally(assignCache.TallyStatus, assignCache.TallyConflict)
+	r.RegisterTally(modifySetCache.TallyStatus, modifySetCache.TallyConflict)
+	r.RegisterTally(assignMetaCache.TallyStatus, assignMetaCache.TallyConflict)
+	r.RegisterTally(assignImageCache.TallyStatus, assignImageCache.TallyConflict)
+
+	for i := 0; i < 4; i++ {
+		assignCache.Upsert(types.ID{Group: "mutations.gatekeeper.sh", Kind: "Assign", Name: fmt.Sprintf("assign-%d", i)}, MutatorStatusActive, false)
+	}
+	for i := 0; i < 2; i++ {
+		modifySetCache.Upsert(types.ID{Group: "mutations.gatekeeper.sh", Kind: "ModifySet", Name: fmt.Sprintf("modifyset-%d", i)}, MutatorStatusActive, false)
+	}
+	assignMetaCache.Upsert(types.ID{Group: "mutations.gatekeeper.sh", Kind: "AssignMetadata", Name: "assignmeta-0"}, MutatorStatusActive, false)
+	assignImageCache.Upsert(types.ID{Group: "mutations.gatekeeper.sh", Kind: "AssignImage", Name: "assignimage-0"}, MutatorStatusActive, false)
+
+	want := metricdata.Metrics{
+		Name: mutatorsMetricName,
+		Data: metricdata.Gauge[int64]{
+			DataPoints: []metricdata.DataPoint[int64]{
+				{Attributes: attribute.NewSet(attribute.String(statusKey, string(MutatorStatusActive))), Value: 8},
+				{Attributes: attribute.NewSet(attribute.String(statusKey, string(MutatorStatusError))), Value: 0},
+			},
+		},
+	}
+
+	rm := &metricdata.ResourceMetrics{}
+	assert.NoError(t, rdr.Collect(context.Background(), rm))
+	metricdatatest.AssertEqual(t, want, findMetricByName(t, rm, mutatorsMetricName), metricdatatest.IgnoreTimestamp())
+}
+
+func TestReporterAggregatesConflictsAcrossCaches(t *testing.T) {
+	rdr, r := initializeTestInstruments(t)
+
+	cache1 := NewMutationCache()
+	cache2 := NewMutationCache()
+	r.RegisterTally(cache1.TallyStatus, cache1.TallyConflict)
+	r.RegisterTally(cache2.TallyStatus, cache2.TallyConflict)
+
+	// 1 conflict in cache1, 2 conflicts in cache2
+	cache1.Upsert(types.ID{Kind: "Assign", Name: "a1"}, MutatorStatusActive, true)
+	cache2.Upsert(types.ID{Kind: "ModifySet", Name: "m1"}, MutatorStatusActive, true)
+	cache2.Upsert(types.ID{Kind: "ModifySet", Name: "m2"}, MutatorStatusActive, true)
+
+	want := metricdata.Metrics{
+		Name: mutatorsConflictingCountMetricsName,
+		Data: metricdata.Gauge[int64]{
+			DataPoints: []metricdata.DataPoint[int64]{
+				{Value: 3},
+			},
+		},
+	}
+
+	rm := &metricdata.ResourceMetrics{}
+	assert.NoError(t, rdr.Collect(context.Background(), rm))
+	metricdatatest.AssertEqual(t, want, findMetricByName(t, rm, mutatorsConflictingCountMetricsName), metricdatatest.IgnoreTimestamp())
 }
 
 func TestReportMutatorsInConflict(t *testing.T) {
@@ -181,12 +271,12 @@ func TestReportMutatorsInConflict(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rdr, r := initializeTestInstruments(t)
-			assert.NoError(t, r.ReportMutatorsInConflict(tt.c.TallyConflict()))
+			r.RegisterTally(tt.c.TallyStatus, tt.c.TallyConflict)
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
 
-			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+			metricdatatest.AssertEqual(t, tt.want, findMetricByName(t, rm, mutatorsConflictingCountMetricsName), metricdatatest.IgnoreTimestamp())
 		})
 	}
 }

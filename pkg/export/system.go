@@ -10,7 +10,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/driver"
 )
 
-var SupportedDrivers = map[string]driver.Driver{
+var supportedDrivers = map[string]driver.Driver{
 	dapr.Name: dapr.Connections,
 	disk.Name: disk.Connections,
 }
@@ -36,7 +36,7 @@ func (s *System) Publish(_ context.Context, connectionName string, subject strin
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 	if dName, ok := s.connectionToDriver[connectionName]; ok {
-		return SupportedDrivers[dName].Publish(context.Background(), connectionName, msg, subject)
+		return supportedDrivers[dName].Publish(context.Background(), connectionName, msg, subject)
 	}
 	return fmt.Errorf("connection is not initialized, name: %s ", connectionName)
 }
@@ -48,11 +48,11 @@ func (s *System) UpsertConnection(ctx context.Context, config interface{}, conne
 	if oldDriver, ok := s.connectionToDriver[connectionName]; ok {
 		// If the provider is the same, update the existing connection.
 		if oldDriver == newDriver {
-			return SupportedDrivers[newDriver].UpdateConnection(ctx, connectionName, config)
+			return supportedDrivers[newDriver].UpdateConnection(ctx, connectionName, config)
 		}
 	}
 	// Check if the provider is supported.
-	if d, ok := SupportedDrivers[newDriver]; ok {
+	if d, ok := supportedDrivers[newDriver]; ok {
 		err := d.CreateConnection(ctx, connectionName, config)
 		if err != nil {
 			return err
@@ -80,7 +80,7 @@ func (s *System) closeConnection(connectionName string) error {
 		// connection should be deleted from the map before closing it to make sure old connection is not accessible if close fails
 		// also avoids not respecting the latest connection with the same name if close fails
 		delete(s.connectionToDriver, connectionName)
-		if conn, ok := SupportedDrivers[driverName]; ok {
+		if conn, ok := supportedDrivers[driverName]; ok {
 			err := conn.CloseConnection(connectionName)
 			if err != nil {
 				return err

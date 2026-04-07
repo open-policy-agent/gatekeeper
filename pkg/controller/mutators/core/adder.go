@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	ctrlmutators "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/mutators"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/mutatorstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
@@ -40,16 +41,18 @@ type Adder struct {
 	MutatorFor func(client.Object) (types.Mutator, error)
 	// Events enables queueing other Mutators for updates.
 	Events chan event.GenericEvent
-	// EventsSource watches for events broadcast to Events.
-	// If multiple controllers listen to EventsSource, then
-	// each controller gets a copy of each event.
+	// EventsSource is this controller's inbound watch source for generic update
+	// events related to other mutators. Callers may derive it from Events via
+	// per-controller routing or fan-out, but Events itself may be shared across
+	// controllers while each controller receives its own EventsSource.
 	EventsSource source.Source
+	Reporter     ctrlmutators.StatsReporter
 }
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor, a.Events)
+	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor, a.Events, a.Reporter)
 	return a.add(mgr, r)
 }
 
@@ -90,20 +93,7 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 	}
 
 	if a.EventsSource != nil {
-		// Watch for enqueued events.
-		err = c.Watch(
-			source.Channel(a.Events,
-				handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
-					if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
-						return nil
-					}
-					return []reconcile.Request{{
-						NamespacedName: apitypes.NamespacedName{
-							Namespace: obj.GetNamespace(),
-							Name:      obj.GetName(),
-						},
-					}}
-				})))
+		err = c.Watch(a.EventsSource)
 	}
 
 	return err
