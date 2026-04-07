@@ -41,9 +41,10 @@ type Adder struct {
 	MutatorFor func(client.Object) (types.Mutator, error)
 	// Events enables queueing other Mutators for updates.
 	Events chan event.GenericEvent
-	// EventsSource watches for events broadcast to Events.
-	// If multiple controllers listen to EventsSource, then
-	// each controller gets a copy of each event.
+	// EventsSource is this controller's inbound watch source for generic update
+	// events related to other mutators. Callers may derive it from Events via
+	// per-controller routing or fan-out, but Events itself may be shared across
+	// controllers while each controller receives its own EventsSource.
 	EventsSource source.Source
 	Reporter     ctrlmutators.StatsReporter
 }
@@ -92,20 +93,7 @@ func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 	}
 
 	if a.EventsSource != nil {
-		// Watch for enqueued events.
-		err = c.Watch(
-			source.Channel(a.Events,
-				handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
-					if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
-						return nil
-					}
-					return []reconcile.Request{{
-						NamespacedName: apitypes.NamespacedName{
-							Namespace: obj.GetNamespace(),
-							Name:      obj.GetName(),
-						},
-					}}
-				})))
+		err = c.Watch(a.EventsSource)
 	}
 
 	return err
