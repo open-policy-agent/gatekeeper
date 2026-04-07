@@ -228,7 +228,7 @@ match_yaml_msg () {
   oras push $img1 ./templates/$media_type ./constraints/$media_type
   popd
 
-  run bin/gator test --image=$img1 --filename="$violating_ns" -o=yaml
+  run bin/gator test --insecure --image=$img1 --filename="$violating_ns" -o=yaml
   [ "$status" -eq 1 ]
   want_msg="you must provide labels: {\"geo\"}"
   match_yaml_msg "${output[*]}" "${want_msg}"
@@ -244,10 +244,25 @@ match_yaml_msg () {
   [ "$status" -eq 0 ]
   popd
 
-  run bin/gator test --image=$img2 --image=$img3 -o=yaml < "$violating_ns"
+  run bin/gator test --insecure --image=$img2 --image=$img3 -o=yaml < "$violating_ns"
   [ "$status" -eq 1 ]
   want_msg="you must provide labels: {\"geo\"}"
   match_yaml_msg "${output[*]}" "${want_msg}"
+}
+
+@test "reject OCI images from plain HTTP registries by default" {
+  artifacts_dir="$BATS_TEST_DIRNAME"/../oci-artifacts/
+  violating_ns="$BATS_TEST_DIRNAME"/fixtures/manifests/no-policies/violating-ns.yaml
+  media_type=:application/vnd.oci.image.layer.v1.tar+gzip
+  img=localhost:5000/http-only-bundle:v1
+
+  pushd "$artifacts_dir"
+  oras push $img ./templates/$media_type ./constraints/$media_type
+  popd
+
+  run bin/gator test --image=$img --filename="$violating_ns" -o=yaml
+  [ "$status" -eq 1 ]
+  match_substring "${output[*]}" "pulling artifact"
 }
 
 @test "observe open api v3 defaults being applied" {

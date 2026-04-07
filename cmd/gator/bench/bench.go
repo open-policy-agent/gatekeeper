@@ -64,6 +64,7 @@ Supports both Rego and CEL policy engines for comparison.`,
 var (
 	flagFilenames    []string
 	flagImages       []string
+	flagInsecure     bool
 	flagTempDir      string
 	flagEngine       string
 	flagIterations   int
@@ -81,6 +82,7 @@ var (
 const (
 	flagNameFilename     = "filename"
 	flagNameImage        = "image"
+	flagNameInsecure     = "insecure"
 	flagNameTempDir      = "tempdir"
 	flagNameEngine       = "engine"
 	flagNameIterations   = "iterations"
@@ -100,6 +102,8 @@ func init() {
 		"a file or directory containing ConstraintTemplates, Constraints, and resources to benchmark. Can be specified multiple times.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{},
 		"a URL to an OCI image containing policies. Can be specified multiple times.")
+	Cmd.Flags().BoolVar(&flagInsecure, flagNameInsecure, false,
+		"use plain HTTP for OCI image pulls (not recommended)")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "",
 		"temporary directory to download and unpack images to.")
 	Cmd.Flags().StringVarP(&flagEngine, flagNameEngine, "e", string(bench.EngineCEL),
@@ -180,20 +184,21 @@ func run(_ *cobra.Command, _ []string) {
 
 	// Run benchmark
 	opts := &bench.Opts{
-		Filenames:    flagFilenames,
-		Images:       flagImages,
-		TempDir:      flagTempDir,
-		Engine:       engine,
-		Iterations:   flagIterations,
-		Warmup:       flagWarmup,
-		Concurrency:  flagConcurrency,
-		GatherStats:  flagStats,
-		Memory:       flagMemory,
-		Save:         flagSave,
-		Baseline:     flagCompare,
-		Threshold:    flagThreshold,
-		MinThreshold: flagMinThreshold,
-		Writer:       os.Stderr,
+		Filenames:      flagFilenames,
+		Images:         flagImages,
+		TempDir:        flagTempDir,
+		AllowPlainHTTP: flagInsecure,
+		Engine:         engine,
+		Iterations:     flagIterations,
+		Warmup:         flagWarmup,
+		Concurrency:    flagConcurrency,
+		GatherStats:    flagStats,
+		Memory:         flagMemory,
+		Save:           flagSave,
+		Baseline:       flagCompare,
+		Threshold:      flagThreshold,
+		MinThreshold:   flagMinThreshold,
+		Writer:         os.Stderr,
 	}
 
 	results, err := bench.Run(opts)
