@@ -1199,7 +1199,7 @@ oras push localhost:5000/gator/policy-bundle:v1 ./constraints/:application/vnd.o
 ```
 
 Because `localhost:5000` is a plain HTTP registry in this example, add
-`--plain-http` to the `gator` pull command when consuming the artifact.
+`--plain-http` to the `gator` command when consuming the artifact.
 
 This expects that the `constraints` and `template_library` directories are at
 the path that this command is being run from.
