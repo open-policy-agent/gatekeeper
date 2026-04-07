@@ -42,7 +42,7 @@ var (
 	flagFormat    string
 	flagOutput    string
 	flagImages    []string
-	flagInsecure  bool
+	flagPlainHTTP bool
 	flagTempDir   string
 )
 
@@ -65,12 +65,12 @@ func init() {
 	Cmd.Flags().StringVarP(&flagFormat, flagNameFormat, "f", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", "Output file path. If the file already exists, it will be overwritten.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().BoolVar(&flagInsecure, flagNamePlainHTTP, false, "use plain HTTP for OCI image pulls (not recommended)")
+	Cmd.Flags().BoolVar(&flagPlainHTTP, flagNamePlainHTTP, false, "use plain HTTP for OCI image pulls (not recommended)")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 }
 
 func run(_ *cobra.Command, _ []string) {
-	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, flagInsecure)
+	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, flagPlainHTTP)
 	if err != nil {
 		util.ErrFatalf("reading: %v", err)
 	}

@@ -20,7 +20,7 @@ var Cmd = &cobra.Command{
 var (
 	flagFilenames       []string
 	flagImages          []string
-	flagInsecure        bool
+	flagPlainHTTP       bool
 	flagOmitGVKManifest bool
 	flagTempDir         string
 )
@@ -36,14 +36,14 @@ const (
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "n", []string{}, "a file or directory containing Kubernetes resources. Can be specified multiple times.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().BoolVar(&flagInsecure, flagNamePlainHTTP, false, "use plain HTTP for OCI image pulls (not recommended)")
+	Cmd.Flags().BoolVar(&flagPlainHTTP, flagNamePlainHTTP, false, "use plain HTTP for OCI image pulls (not recommended)")
 	Cmd.Flags().BoolVarP(&flagOmitGVKManifest, flagNameForce, "f", false, "Do not require a GVK manifest; if one is not provided, assume all GVKs listed in the requirements "+
 		"and configs are supported by the cluster under test. If this assumption isn't true, the given config may cause errors or templates may not be enforced correctly even after passing this test.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 }
 
 func run(_ *cobra.Command, _ []string) {
-	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, flagInsecure)
+	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, flagPlainHTTP)
 	if err != nil {
 		cmdutils.ErrFatalf("reading: %v", err)
 	}

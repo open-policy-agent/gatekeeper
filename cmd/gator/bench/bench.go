@@ -64,7 +64,7 @@ Supports both Rego and CEL policy engines for comparison.`,
 var (
 	flagFilenames    []string
 	flagImages       []string
-	flagInsecure     bool
+	flagPlainHTTP    bool
 	flagTempDir      string
 	flagEngine       string
 	flagIterations   int
@@ -102,7 +102,7 @@ func init() {
 		"a file or directory containing ConstraintTemplates, Constraints, and resources to benchmark. Can be specified multiple times.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{},
 		"a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().BoolVar(&flagInsecure, flagNamePlainHTTP, false,
+	Cmd.Flags().BoolVar(&flagPlainHTTP, flagNamePlainHTTP, false,
 		"use plain HTTP for OCI image pulls (not recommended)")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "",
 		"temporary directory to download and unpack images to.")
@@ -187,7 +187,7 @@ func run(_ *cobra.Command, _ []string) {
 		Filenames:      flagFilenames,
 		Images:         flagImages,
 		TempDir:        flagTempDir,
-		AllowPlainHTTP: flagInsecure,
+		AllowPlainHTTP: flagPlainHTTP,
 		Engine:         engine,
 		Iterations:     flagIterations,
 		Warmup:         flagWarmup,

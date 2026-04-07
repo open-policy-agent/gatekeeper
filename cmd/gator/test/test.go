@@ -48,7 +48,7 @@ var (
 	flagIncludeTrace bool
 	flagGatherStats  bool
 	flagImages       []string
-	flagInsecure     bool
+	flagPlainHTTP    bool
 	flagTempDir      string
 	flagEnableK8sCel bool
 	flagDenyOnly     bool
@@ -77,14 +77,14 @@ func init() {
 	Cmd.Flags().BoolVarP(&flagGatherStats, "stats", "", false, "include performance stats returned from the Constraint Framework.")
 	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "enable-k8s-native-validation", "", true, "enable the validating admission policy driver")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().BoolVar(&flagInsecure, flagNamePlainHTTP, false, "use plain HTTP for OCI image pulls (not recommended)")
+	Cmd.Flags().BoolVar(&flagPlainHTTP, flagNamePlainHTTP, false, "use plain HTTP for OCI image pulls (not recommended)")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 	Cmd.Flags().BoolVarP(&flagDenyOnly, "deny-only", "", false, "output only denied constraints")
 	Cmd.Flags().BoolVarP(&flagVerbose, flagNameVerbose, "v", false, "print extended test output")
 }
 
 func run(_ *cobra.Command, _ []string) {
-	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, flagInsecure)
+	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, flagPlainHTTP)
 	if err != nil {
 		cmdutils.ErrFatalf("reading: %v", err)
 	}
