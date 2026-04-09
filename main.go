@@ -305,6 +305,15 @@ func innerMain() int {
 		return 1
 	}
 
+	if len(webhooks) > 0 {
+		tlsChecker := webhook.NewTLSChecker(*certDir, *port)
+		setupLog.Info("setting up TLS readiness probe")
+		if err := mgr.AddReadyzCheck("tls-check", tlsChecker); err != nil {
+			setupLog.Error(err, "unable to create tls readiness check")
+			return 1
+		}
+	}
+
 	// only setup healthcheck when flag is set and available webhook count > 0
 	if len(webhooks) > 0 && *enableTLSHealthcheck {
 		tlsChecker := webhook.NewTLSChecker(*certDir, *port)
