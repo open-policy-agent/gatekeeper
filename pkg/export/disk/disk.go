@@ -133,14 +133,20 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 }
 
 func (r *Writer) CloseConnection(connectionName string) error {
+	r.mu.Lock()
 	conn, ok := r.openConnections[connectionName]
 	if !ok {
+		r.mu.Unlock()
 		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
-	defer delete(r.openConnections, connectionName)
+	delete(r.openConnections, connectionName)
+	r.mu.Unlock()
+
 	err := r.closeAndRemoveFilesWithRetry(conn)
 	if err != nil {
 		now := time.Now()
+
+		r.mu.Lock()
 		// Store the failed connection with retry metadata with a unique key to avoid conflicts.
 		r.closedConnections[connectionName+now.String()] = FailedConnection{
 			Connection:  conn,
@@ -156,6 +162,7 @@ func (r *Writer) CloseConnection(connectionName string) error {
 		r.cleanupOnce.Do(func() {
 			go r.backgroundCleanup()
 		})
+		r.mu.Unlock()
 	}
 	return err
 }
