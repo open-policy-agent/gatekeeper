@@ -406,7 +406,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 							return reconcile.Result{}, err
 						}
 					} else {
-						if err := r.writer.Delete(ctx, newVapBinding); err != nil && !apierrors.IsNotFound(err) {
+						if err := r.deleteVAPBIfOwned(ctx, newVapBinding, instance, vapBindingName); err != nil {
 							return reconcile.Result{}, err
 						}
 					}
@@ -552,6 +552,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		log.Error(err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 		return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 	}
+	intendsVAPB := shouldGenerateVAPB
 
 	isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
 	generationPathSetStatus := false
@@ -680,18 +681,9 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			currentVapBinding = nil
 		}
 		if currentVapBinding != nil {
-			if !metav1.IsControlledBy(currentVapBinding, instance) {
-				log.Info("vapbinding exists but is not owned by this constraint, skipping delete", "vapBindingName", vapBindingName)
-			} else {
-				log.Info("deleting vapbinding", "vapBindingName", vapBindingName)
-				if err := r.writer.Delete(ctx, currentVapBinding); err != nil {
-					if apierrors.IsNotFound(err) {
-						log.Info("vapbinding already deleted", "vapBindingName", vapBindingName)
-					} else {
-						r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
-						return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
-					}
-				}
+			if err := r.deleteVAPBIfOwned(ctx, currentVapBinding, instance, vapBindingName); err != nil {
+				r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 		}
 
@@ -705,9 +697,28 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		// should not block VAPB delete or status cleanup.
 		_ = r.cleanupLegacyVAPB(ctx, instance, groupVersion)
 
-		r.reporter.DeleteVAPBStatus(vapBindingKey)
+		if !intendsVAPB {
+			r.reporter.DeleteVAPBStatus(vapBindingKey)
+		}
 	}
 	return noDelay, r.writer.Update(ctx, status)
+}
+
+func (r *ReconcileConstraint) deleteVAPBIfOwned(ctx context.Context, vapBinding client.Object, instance *unstructured.Unstructured, vapBindingName string) error {
+	if !vapBindingControlledByConstraint(vapBinding, instance) {
+		log.Info("vapbinding exists but is not owned by this constraint, skipping delete", "vapBindingName", vapBindingName)
+		return nil
+	}
+
+	log.Info("deleting vapbinding", "vapBindingName", vapBindingName)
+	if err := r.writer.Delete(ctx, vapBinding); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("vapbinding already deleted", "vapBindingName", vapBindingName)
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func NewConstraintsCache() *ConstraintsCache {
@@ -779,7 +790,7 @@ func (r *ReconcileConstraint) cleanupLegacyVAPB(ctx context.Context, instance *u
 		}
 		return nil
 	}
-	if !legacyVAPBControlledByConstraint(legacyBinding, instance) {
+	if !vapBindingControlledByConstraint(legacyBinding, instance) {
 		log.Info("legacy vapbinding exists but is not owned by this constraint, skipping cleanup", "legacyVAPBName", oldName)
 		return nil
 	}
@@ -792,7 +803,7 @@ func (r *ReconcileConstraint) cleanupLegacyVAPB(ctx context.Context, instance *u
 	return nil
 }
 
-func legacyVAPBControlledByConstraint(binding metav1.Object, instance *unstructured.Unstructured) bool {
+func vapBindingControlledByConstraint(binding metav1.Object, instance *unstructured.Unstructured) bool {
 	if instance.GetUID() != "" {
 		return metav1.IsControlledBy(binding, instance)
 	}
