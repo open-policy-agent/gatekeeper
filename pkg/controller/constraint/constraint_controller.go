@@ -411,7 +411,9 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 						}
 					}
 					// Migration: also delete legacy VAPB (gatekeeper-<name>).
-					r.cleanupLegacyVAPB(ctx, instance, groupVersion)
+					if err := r.cleanupLegacyVAPB(ctx, instance, groupVersion); err != nil {
+						return reconcile.Result{}, err
+					}
 				}
 			}
 		}
@@ -656,9 +658,9 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		updateEnforcementPointStatus(status, util.VAPEnforcementPoint, GeneratedVAPBState, "", instance.GetGeneration())
 		r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusActive)
 
-		// Migration: clean up legacy VAPB (old format: gatekeeper-<name>) if it exists
-		// and is owned by this constraint. New format is gatekeeper-<kind>-<name>.
-		r.cleanupLegacyVAPB(ctx, instance, groupVersion)
+		// Migration cleanup is best-effort during normal reconcile. Failures here
+		// should not block VAPB create or update.
+		_ = r.cleanupLegacyVAPB(ctx, instance, groupVersion)
 	}
 	// do not generate vapbinding resources
 	// remove if exists
@@ -699,8 +701,9 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			cleanEnforcementPointStatus(status, util.VAPEnforcementPoint)
 		}
 
-		// Migration: also clean up legacy VAPB (old format without Kind).
-		r.cleanupLegacyVAPB(ctx, instance, groupVersion)
+		// Migration cleanup is best-effort during normal reconcile. Failures here
+		// should not block VAPB delete or status cleanup.
+		_ = r.cleanupLegacyVAPB(ctx, instance, groupVersion)
 
 		r.reporter.DeleteVAPBStatus(vapBindingKey)
 	}
@@ -755,36 +758,68 @@ func (c *ConstraintsCache) reportTotalConstraints(ctx context.Context, reporter 
 
 // TODO(v3.25.0): Remove this function and all call sites once users have had
 // releases to upgrade (introduced in v3.23.0).
-func (r *ReconcileConstraint) cleanupLegacyVAPB(ctx context.Context, instance *unstructured.Unstructured, groupVersion *schema.GroupVersion) {
+func (r *ReconcileConstraint) cleanupLegacyVAPB(ctx context.Context, instance *unstructured.Unstructured, groupVersion *schema.GroupVersion) error {
 	if groupVersion == nil {
-		return
+		return nil
 	}
 	oldName := transform.LegacyVAPBindingName(instance.GetName())
 	newName := transform.GetVAPBindingName(instance.GetKind(), instance.GetName())
 	if oldName == newName || len(oldName) > validation.DNS1123SubdomainMaxLength {
-		return
+		return nil
 	}
 	legacyBinding, err := vapBindingForVersion(*groupVersion)
 	if err != nil {
 		log.Error(err, "could not get legacy VAPB API version", "legacyVAPBName", oldName)
-		return
+		return err
 	}
 	if err := r.reader.Get(ctx, types.NamespacedName{Name: oldName}, legacyBinding); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "failed to get legacy vapbinding", "legacyVAPBName", oldName)
+			return err
 		}
-		return
+		return nil
 	}
-	if !metav1.IsControlledBy(legacyBinding, instance) {
+	if !legacyVAPBControlledByConstraint(legacyBinding, instance) {
 		log.Info("legacy vapbinding exists but is not owned by this constraint, skipping cleanup", "legacyVAPBName", oldName)
-		return
+		return nil
 	}
 	log.Info("cleaning up legacy vapbinding", "legacyVAPBName", oldName, "newVAPBName", newName)
 	if err := r.writer.Delete(ctx, legacyBinding); err != nil && !apierrors.IsNotFound(err) {
 		log.Error(err, "failed to delete legacy vapbinding", "legacyVAPBName", oldName)
-		return
+		return err
 	}
 	r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: oldName})
+	return nil
+}
+
+func legacyVAPBControlledByConstraint(binding metav1.Object, instance *unstructured.Unstructured) bool {
+	if instance.GetUID() != "" {
+		return metav1.IsControlledBy(binding, instance)
+	}
+
+	ownerRef := metav1.GetControllerOfNoCopy(binding)
+	if ownerRef == nil {
+		return false
+	}
+
+	ownerGV, err := schema.ParseGroupVersion(ownerRef.APIVersion)
+	if err != nil {
+		// This path is only a best-effort fallback for synthetic delete reconciles
+		// where the constraint UID is unavailable. If the controller ownerRef is
+		// malformed, skip cleanup rather than failing reconcile or risking deletion
+		// of a VAPB we cannot confidently attribute to this constraint.
+		log.Error(err, "failed to parse controller owner APIVersion for legacy vapbinding, skipping cleanup fallback",
+			"ownerAPIVersion", ownerRef.APIVersion,
+			"ownerKind", ownerRef.Kind,
+			"ownerName", ownerRef.Name,
+			"constraint", instance.GetName(),
+			"constraintKind", instance.GetKind(),
+		)
+		return false
+	}
+
+	gvk := instance.GroupVersionKind()
+	return ownerGV.Group == gvk.Group && ownerRef.Kind == gvk.Kind && ownerRef.Name == instance.GetName()
 }
 
 func vapBindingForVersion(gvk schema.GroupVersion) (client.Object, error) {
