@@ -232,14 +232,6 @@ func getMatchEntryConfig() []configv1alpha1.MatchEntry {
 	}
 }
 
-func cloneBoolPtr(value *bool) *bool {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
-}
-
 func cloneGroupVersionPtr(value *schema.GroupVersion) *schema.GroupVersion {
 	if value == nil {
 		return nil
@@ -250,12 +242,9 @@ func cloneGroupVersionPtr(value *schema.GroupVersion) *schema.GroupVersion {
 
 func setVAPTestGlobals(t *testing.T, groupVersion *schema.GroupVersion) {
 	t.Helper()
-
-	originalEnabled := cloneBoolPtr(transform.VapAPIEnabled)
-	originalGroupVersion := cloneGroupVersionPtr(transform.GroupVersion)
 	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(originalEnabled)
-		transform.SetGroupVersion(originalGroupVersion)
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
 	})
 
 	transform.SetVapAPIEnabled(ptr.To[bool](true))
