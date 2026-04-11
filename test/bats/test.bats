@@ -114,9 +114,9 @@ teardown_file() {
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml"
     
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label"
 
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label-scoped"
 
     # Verify VAPB metrics with status=active shows at least 2 (we created 2 bindings)
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vapb_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep -E '^gatekeeper_validating_admission_policy_bindings\{status=\"active\"\}' | awk '{print \$2}' | tr -d '\r'); [ -n \"\$vapb_count\" ] && [ \"\$vapb_count\" -gt 1 ]"
@@ -127,13 +127,13 @@ teardown_file() {
     assert_failure
     kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
 
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label"
 
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label"
 
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label-scoped"
 
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label-scoped"
 
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/good_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
