@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
 )
 
@@ -287,7 +289,7 @@ func ConstraintToBinding(constraint *unstructured.Unstructured, actions []string
 
 	binding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("gatekeeper-%s", constraint.GetName()),
+			Name: GetVAPBindingName(constraint.GetKind(), constraint.GetName()),
 		},
 		Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
 			PolicyName: fmt.Sprintf("gatekeeper-%s", strings.ToLower(constraint.GetKind())),
@@ -325,4 +327,24 @@ func ConstraintToBinding(constraint *unstructured.Unstructured, actions []string
 		binding.Spec.MatchResources.NamespaceSelector = namespaceSelector
 	}
 	return binding, nil
+}
+
+func GetVAPBindingName(kind, constraintName string) string {
+	name := fmt.Sprintf("gatekeeper-%s-%s", strings.ToLower(kind), constraintName)
+	if len(name) <= validation.DNS1123SubdomainMaxLength {
+		return name
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:8]
+	truncated := name[:validation.DNS1123SubdomainMaxLength-len(hash)-1]
+	truncated = strings.TrimRight(truncated, "-.")
+	return truncated + "-" + hash
+}
+
+// LegacyVAPBindingName returns the old-format VAPB name that did not include
+// the constraint Kind. Used during migration to clean up old VAPBs.
+//
+// TODO(v3.25.0): Remove this function once users have had two releases to
+// upgrade (introduced in v3.23.0).
+func LegacyVAPBindingName(constraintName string) string {
+	return fmt.Sprintf("gatekeeper-%s", constraintName)
 }
