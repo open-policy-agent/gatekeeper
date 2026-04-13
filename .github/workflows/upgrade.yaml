@@ -26,7 +26,7 @@ jobs:
         HELM_VERSION: ["3.14.1"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d # v2.16.1
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
         with:
           egress-policy: audit
 
@@ -99,7 +99,7 @@ jobs:
           kubectl logs -n gatekeeper-system -l run=dummy-provider --tail=-1 > logs-${{ matrix.HELM_VERSION }}-dummy-provider-post-upgrade.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ always() }}
         with:
           name: logs
