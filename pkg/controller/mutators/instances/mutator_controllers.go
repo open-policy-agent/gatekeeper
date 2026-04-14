@@ -15,7 +15,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // eventQueueSize is how many events to queue before blocking.
@@ -27,12 +29,54 @@ type Adder struct {
 	GetPod         func(context.Context) (*corev1.Pod, error)
 }
 
+func routeConflictEvents(ctx context.Context, events <-chan event.GenericEvent, assignCh, modifySetCh, assignImageCh chan<- event.GenericEvent) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case evt, ok := <-events:
+			if !ok {
+				return nil
+			}
+
+			var ch chan<- event.GenericEvent
+			switch evt.Object.GetObjectKind().GroupVersionKind().Kind {
+			case "Assign":
+				ch = assignCh
+			case "ModifySet":
+				ch = modifySetCh
+			case "AssignImage":
+				ch = assignImageCh
+			default:
+				continue
+			}
+
+			select {
+			case <-ctx.Done():
+				return nil
+			case ch <- evt:
+			}
+		}
+	}
+}
+
 // Add creates all mutation controllers and adds them to the manager.
 func (a *Adder) Add(mgr manager.Manager) error {
 	// events is shared across all mutators that can affect the implied schema
 	// of kinds to be mutated, since these mutators can set each other into conflict
 	events := make(chan event.GenericEvent, eventQueueSize)
 	scheme := mgr.GetScheme()
+
+	// Per-controller channels for fan-out of conflict events.
+	assignCh := make(chan event.GenericEvent, eventQueueSize)
+	modifySetCh := make(chan event.GenericEvent, eventQueueSize)
+	assignImageCh := make(chan event.GenericEvent, eventQueueSize)
+
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		return routeConflictEvents(ctx, events, assignCh, modifySetCh, assignImageCh)
+	})); err != nil {
+		return err
+	}
 
 	reporter := ctrlmutators.NewStatsReporter()
 
@@ -53,8 +97,9 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssign(unversioned)
 		},
-		Events:   events,
-		Reporter: reporter,
+		Events:       events,
+		EventsSource: source.Channel(assignCh, &handler.EnqueueRequestForObject{}),
+		Reporter:     reporter,
 	}
 	if err := assign.Add(mgr); err != nil {
 		return err
@@ -77,8 +122,9 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForModifySet(unversioned)
 		},
-		Events:   events,
-		Reporter: reporter,
+		Events:       events,
+		EventsSource: source.Channel(modifySetCh, &handler.EnqueueRequestForObject{}),
+		Reporter:     reporter,
 	}
 	if err := modifySet.Add(mgr); err != nil {
 		return err
@@ -101,8 +147,9 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			}
 			return mutators.MutatorForAssignImage(unversioned)
 		},
-		Events:   events,
-		Reporter: reporter,
+		Events:       events,
+		EventsSource: source.Channel(assignImageCh, &handler.EnqueueRequestForObject{}),
+		Reporter:     reporter,
 	}
 	if err := assignImage.Add(mgr); err != nil {
 		return err
