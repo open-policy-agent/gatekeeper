@@ -156,12 +156,23 @@ jobs:
           PLATFORMS: "linux-amd64 linux-arm64 darwin-amd64 darwin-arm64"
 
       - name: Create GitHub release
-        uses: marvinpinto/action-automatic-releases@919008cf3f741b179569b7a6fb4d8860689ab7f0 # v1.2.1
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          prerelease: false
-          files: |
-            _dist/sha256sums.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eo pipefail
+
+          PRERELEASE_FLAG=""
+          if [[ "${TAG}" == *"-beta."* || "${TAG}" == *"-rc."* ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          # create release
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --generate-notes \
+            --verify-tag \
+            ${PRERELEASE_FLAG} \
+            _dist/sha256sums.txt \
             _dist/*.tar.gz
 
       - name: Publish Helm chart
