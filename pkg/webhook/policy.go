@@ -364,7 +364,7 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return true, nil
 	}
 
-	if len(req.Name) > 63 {
+	if req.Kind.Group != "status.gatekeeper.sh" && len(req.Name) > 63 {
 		return false, fmt.Errorf("resource cannot have metadata.name larger than 63 char; length: %d", len(req.Name))
 	}
 

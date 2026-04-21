@@ -15,6 +15,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -657,6 +658,93 @@ func Test_ConstrainTemplate_Name(t *testing.T) {
 	got, err := h.validateGatekeeperResources(context.Background(), review)
 	require.False(t, got)
 	require.ErrorContains(t, err, "resource cannot have metadata.name larger than 63 char")
+}
+
+func Test_StatusResource_Name(t *testing.T) {
+	h := &validationHandler{log: log}
+
+	tests := []struct {
+		name      string
+		operation admissionv1.Operation
+	}{
+		{
+			name:      "create",
+			operation: admissionv1.Create,
+		},
+		{
+			name:      "update",
+			operation: admissionv1.Update,
+		},
+		{
+			name:      "delete",
+			operation: admissionv1.Delete,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status := &statusv1beta1.ConstraintTemplatePodStatus{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: statusv1beta1.GroupVersion.String(),
+					Kind:       "ConstraintTemplatePodStatus",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      nameLargerThan63,
+					Namespace: "gatekeeper-system",
+				},
+			}
+
+			b, err := convertToRawExtension(status)
+			require.NoError(t, err)
+
+			review := &admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Kind:      metav1.GroupVersionKind(statusv1beta1.GroupVersion.WithKind("ConstraintTemplatePodStatus")),
+					Operation: tt.operation,
+					Name:      status.Name,
+				},
+			}
+			if tt.operation == admissionv1.Delete {
+				review.OldObject = *b
+			} else {
+				review.Object = *b
+			}
+
+			got, err := h.validateGatekeeperResources(context.Background(), review)
+			require.False(t, got)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func Test_StatusResource_NamedDelete(t *testing.T) {
+	h := &validationHandler{log: log}
+	status := &statusv1beta1.ConstraintPodStatus{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: statusv1beta1.GroupVersion.String(),
+			Kind:       "ConstraintPodStatus",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nameLargerThan63,
+			Namespace: "gatekeeper-system",
+		},
+	}
+
+	b, err := convertToRawExtension(status)
+	require.NoError(t, err)
+
+	review := &admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Kind:      metav1.GroupVersionKind(statusv1beta1.GroupVersion.WithKind("ConstraintPodStatus")),
+			Operation: admissionv1.Delete,
+			Name:      status.Name,
+			OldObject: *b,
+		},
+	}
+
+	got, err := h.validateGatekeeperResources(context.Background(), review)
+	require.False(t, got)
+	require.NoError(t, err)
 }
 
 func Test_NonGkResource_Name(t *testing.T) {
