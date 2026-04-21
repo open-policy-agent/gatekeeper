@@ -336,10 +336,10 @@ func (am *Manager) audit(ctx context.Context) error {
 			am.log.Error(err, "Auditing")
 		}
 
-		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, &auditExportPublishingState)
 	} else {
 		am.log.Info("Auditing via discovery client")
-		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, &auditExportPublishingState)
 		if err != nil {
 			return err
 		}
@@ -373,7 +373,7 @@ func (am *Manager) auditResources(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	auditExportPublishingState auditExportPublishingState,
+	auditExportPublishingState *auditExportPublishingState,
 ) error {
 	// delete all from cache dir before starting audit
 	err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
@@ -670,7 +670,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	auditExportPublishingState auditExportPublishingState,
+	auditExportPublishingState *auditExportPublishingState,
 ) error {
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
@@ -889,7 +889,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	auditExportPublishingState auditExportPublishingState,
+	auditExportPublishingState *auditExportPublishingState,
 ) {
 	for _, r := range res {
 		constraint := r.Constraint
