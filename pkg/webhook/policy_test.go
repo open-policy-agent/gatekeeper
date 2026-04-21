@@ -494,6 +494,7 @@ func TestExpandedResourceUsesAdmissionOperation(t *testing.T) {
 	}
 
 	deployment := expansionfixtures.LoadFixture(expansionfixtures.DeploymentNginx, t)
+	require.NotNil(t, deployment)
 	deploymentJSON, err := deployment.MarshalJSON()
 	require.NoError(t, err)
 
@@ -538,6 +539,16 @@ func TestExpandedResourceUsesAdmissionOperation(t *testing.T) {
 			require.Equal(t, tt.allowed, resp.Allowed)
 		})
 	}
+}
+
+func TestCreateReviewForResultantPreservesOperation(t *testing.T) {
+	resultant := createReviewForResultant(
+		expansionfixtures.LoadFixture(expansionfixtures.PodNoMutate, t),
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		admissionv1.Create,
+	)
+
+	require.Equal(t, admissionv1.Create, resultant.Operation)
 }
 
 func TestExcludedNamespaces(t *testing.T) {
