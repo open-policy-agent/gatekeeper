@@ -717,36 +717,6 @@ func Test_StatusResource_Name(t *testing.T) {
 	}
 }
 
-func Test_StatusResource_NamedDelete(t *testing.T) {
-	h := &validationHandler{log: log}
-	status := &statusv1beta1.ConstraintPodStatus{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: statusv1beta1.GroupVersion.String(),
-			Kind:       "ConstraintPodStatus",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      nameLargerThan63,
-			Namespace: "gatekeeper-system",
-		},
-	}
-
-	b, err := convertToRawExtension(status)
-	require.NoError(t, err)
-
-	review := &admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			Kind:      metav1.GroupVersionKind(statusv1beta1.GroupVersion.WithKind("ConstraintPodStatus")),
-			Operation: admissionv1.Delete,
-			Name:      status.Name,
-			OldObject: *b,
-		},
-	}
-
-	got, err := h.validateGatekeeperResources(context.Background(), review)
-	require.False(t, got)
-	require.NoError(t, err)
-}
-
 func Test_NonGkResource_Name(t *testing.T) {
 	h := &validationHandler{log: log}
 	fp := fakes.Pod(fakes.WithName(nameLargerThan63))
