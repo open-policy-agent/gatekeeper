@@ -32,11 +32,11 @@ func NewSystem() *System {
 	}
 }
 
-func (s *System) Publish(_ context.Context, connectionName string, subject string, msg interface{}) error {
+func (s *System) Publish(ctx context.Context, connectionName string, subject string, msg interface{}) error {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 	if dName, ok := s.connectionToDriver[connectionName]; ok {
-		return supportedDrivers[dName].Publish(context.Background(), connectionName, msg, subject)
+		return supportedDrivers[dName].Publish(ctx, connectionName, msg, subject)
 	}
 	return fmt.Errorf("connection is not initialized, name: %s ", connectionName)
 }
