@@ -20,45 +20,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTLSProbeHost(t *testing.T) {
+func TestTLSProbeHosts(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
 		host string
-		want string
+		want []string
 	}{
 		{
-			name: "defaults to ipv4 loopback",
+			name: "defaults to both loopbacks",
 			host: "",
-			want: "127.0.0.1",
+			want: []string{"127.0.0.1", "::1"},
 		},
 		{
 			name: "maps wildcard ipv4 to loopback",
 			host: "0.0.0.0",
-			want: "127.0.0.1",
+			want: []string{"127.0.0.1"},
 		},
 		{
 			name: "maps wildcard ipv6 to loopback",
 			host: "::",
-			want: "::1",
+			want: []string{"::1"},
 		},
 		{
 			name: "unwraps bracketed ipv6",
 			host: "[::1]",
-			want: "::1",
+			want: []string{"::1"},
 		},
 		{
 			name: "preserves explicit host",
 			host: "127.0.0.2",
-			want: "127.0.0.2",
+			want: []string{"127.0.0.2"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tt.want, tlsProbeHost(tt.host))
+			require.Equal(t, tt.want, tlsProbeHosts(tt.host))
 		})
 	}
 }
@@ -68,6 +68,15 @@ func TestNewTLSChecker_UsesConfiguredHost(t *testing.T) {
 
 	certDir, port := startTestTLSServer(t, "127.0.0.2")
 	checker := NewTLSChecker(certDir, "127.0.0.2", port)
+
+	require.NoError(t, checker(nil))
+}
+
+func TestNewTLSChecker_EmptyHostFallsBackToIPv6Loopback(t *testing.T) {
+	t.Parallel()
+
+	certDir, port := startTestTLSServer(t, "::1")
+	checker := NewTLSChecker(certDir, "", port)
 
 	require.NoError(t, checker(nil))
 }
@@ -95,7 +104,10 @@ func TestNewTLSChecker_UsesRequestContextCancellation(t *testing.T) {
 	port, err := strconv.Atoi(portStr)
 	require.NoError(t, err)
 
-	checker := NewTLSChecker(t.TempDir(), host, port)
+	certDir := t.TempDir()
+	_ = writeTestServingCert(t, certDir, host)
+
+	checker := NewTLSChecker(certDir, host, port)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
@@ -127,9 +139,12 @@ func startTestTLSServer(t *testing.T, host string) (string, int) {
 		_ = listener.Close()
 	})
 
-	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ok"))
-	})}
+	server := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("ok"))
+		}),
+		ReadHeaderTimeout: time.Second,
+	}
 	go func() {
 		_ = server.Serve(listener)
 	}()

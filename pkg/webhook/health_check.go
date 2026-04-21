@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -28,7 +29,11 @@ func NewTLSChecker(certDir, host string, port int) func(*http.Request) error {
 	// fail if the cert was rotated in between
 	tr.DisableKeepAlives = true
 	insecureClient := &http.Client{Transport: tr}
-	probeURL := fmt.Sprintf("https://%s", net.JoinHostPort(tlsProbeHost(host), strconv.Itoa(port)))
+	probeHosts := tlsProbeHosts(host)
+	probeURLs := make([]string, 0, len(probeHosts))
+	for _, probeHost := range probeHosts {
+		probeURLs = append(probeURLs, fmt.Sprintf("https://%s", net.JoinHostPort(probeHost, strconv.Itoa(port))))
+	}
 
 	returnFunc := func(r *http.Request) error {
 		ctx := context.Background()
@@ -36,29 +41,6 @@ func NewTLSChecker(certDir, host string, port int) func(*http.Request) error {
 			ctx = r.Context()
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
-		if err != nil {
-			newErr := fmt.Errorf("unable to create probe request: %w", err)
-			tlsCheckerLog.Error(newErr, "error creating https request for webhook server")
-			return newErr
-		}
-
-		resp, err := insecureClient.Do(req)
-		if err != nil {
-			newErr := fmt.Errorf("unable to connect to server: %w", err)
-			tlsCheckerLog.Error(newErr, "error in connecting to webhook server with https")
-			return newErr
-		}
-		defer resp.Body.Close()
-		// explicitly discard the body to avoid any memory leak
-		_, _ = io.Copy(io.Discard, resp.Body)
-
-		if resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
-			newErr := fmt.Errorf("webhook does not serve TLS certificate")
-			tlsCheckerLog.Error(newErr, "error in connecting to webhook server with https")
-			return newErr
-		}
-		serverCerts := resp.TLS.PeerCertificates
 		certPath := filepath.Join(certDir, "tls.crt")
 		keyPath := filepath.Join(certDir, "tls.key")
 		loadCert, err := tls.LoadX509KeyPair(certPath, keyPath)
@@ -67,40 +49,71 @@ func NewTLSChecker(certDir, host string, port int) func(*http.Request) error {
 			tlsCheckerLog.Error(newErr, "error in loading certificate")
 			return newErr
 		}
-		// compare certificate in resp and the certificate in certDir
-		if len(serverCerts) != len(loadCert.Certificate) {
-			newErr := fmt.Errorf("server certificate chain length does not match certificate in certDir, %d vs %d", len(serverCerts), len(loadCert.Certificate))
-			tlsCheckerLog.Error(newErr, "certificate chain mismatch")
-			return newErr
-		}
-		for i, serverCert := range serverCerts {
-			if !bytes.Equal(serverCert.Raw, loadCert.Certificate[i]) {
-				newErr := fmt.Errorf("server certificate %d does not match certificate %d in certDir", i, i)
-				tlsCheckerLog.Error(newErr, "certificate chain mismatch")
-				return newErr
+
+		var errs []error
+		for _, probeURL := range probeURLs {
+			if err := probeTLSURL(ctx, insecureClient, probeURL, loadCert.Certificate); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", probeURL, err))
+				continue
 			}
+
+			return nil
 		}
 
-		return nil
+		newErr := fmt.Errorf("unable to verify webhook TLS endpoint: %w", errors.Join(errs...))
+		tlsCheckerLog.Error(newErr, "error in checking webhook server with https")
+		return newErr
 	}
 	return returnFunc
 }
 
-func tlsProbeHost(host string) string {
+func probeTLSURL(ctx context.Context, insecureClient *http.Client, probeURL string, expectedCerts [][]byte) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
+	if err != nil {
+		return fmt.Errorf("unable to create probe request: %w", err)
+	}
+
+	resp, err := insecureClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("unable to connect to server: %w", err)
+	}
+	defer resp.Body.Close()
+	// explicitly discard the body to avoid any memory leak
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
+		return fmt.Errorf("webhook does not serve TLS certificate")
+	}
+
+	serverCerts := resp.TLS.PeerCertificates
+	// compare certificate in resp and the certificate in certDir
+	if len(serverCerts) != len(expectedCerts) {
+		return fmt.Errorf("server certificate chain length does not match certificate in certDir, %d vs %d", len(serverCerts), len(expectedCerts))
+	}
+	for i, serverCert := range serverCerts {
+		if !bytes.Equal(serverCert.Raw, expectedCerts[i]) {
+			return fmt.Errorf("server certificate %d does not match certificate %d in certDir", i, i)
+		}
+	}
+
+	return nil
+}
+
+func tlsProbeHosts(host string) []string {
 	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
 		host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
 	}
 
 	if host == "" {
-		return "127.0.0.1"
+		return []string{"127.0.0.1", "::1"}
 	}
 
 	if ip := net.ParseIP(host); ip != nil && ip.IsUnspecified() {
 		if ip.To4() != nil {
-			return "127.0.0.1"
+			return []string{"127.0.0.1"}
 		}
-		return "::1"
+		return []string{"::1"}
 	}
 
-	return host
+	return []string{host}
 }
