@@ -358,6 +358,9 @@ func unmarshalConfig(config interface{}) (string, float64, time.Duration, error)
 	if !maxResultsOk {
 		return "", 0.0, 0, fmt.Errorf("missing or invalid 'maxAuditResults'")
 	}
+	if maxResults < 0 {
+		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be negative")
+	}
 	if maxResults > maxAllowedAuditRuns {
 		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
 	}
