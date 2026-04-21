@@ -227,7 +227,8 @@ package operationcheck
 
 violation[{"msg": msg}] {
 	input.review.kind.kind == "Pod"
-	not input.review.operation == "DELETE"
+	input.review.operation != "DELETE"
+	input.review.operation != "UPDATE"
 	msg := sprintf("unexpected operation for expanded resource: %v", [input.review.operation])
 }`},
 					},
@@ -507,6 +508,11 @@ func TestExpandedResourceUsesAdmissionOperation(t *testing.T) {
 			name:      "create denies generated pod",
 			operation: admissionv1.Create,
 			allowed:   false,
+		},
+		{
+			name:      "update allows generated pod",
+			operation: admissionv1.Update,
+			allowed:   true,
 		},
 		{
 			name:      "delete allows generated pod",
