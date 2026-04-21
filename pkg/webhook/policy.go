@@ -631,7 +631,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	}
 
 	for _, res := range resultants {
-		resultantResp, err := h.review(ctx, createReviewForResultant(res.Obj, review.Namespace), review.Namespace, trace, dump)
+		resultantResp, err := h.review(ctx, createReviewForResultant(res.Obj, review.Namespace, req.Operation), review.Namespace, trace, dump)
 		if err != nil {
 			return nil, fmt.Errorf("error reviewing resultant resource: %w", err)
 		}
@@ -702,11 +702,12 @@ func (h *validationHandler) createReviewForRequest(ctx context.Context, req *adm
 	return review, nil
 }
 
-func createReviewForResultant(obj *unstructured.Unstructured, ns *corev1.Namespace) *target.AugmentedUnstructured {
+func createReviewForResultant(obj *unstructured.Unstructured, ns *corev1.Namespace, operation admissionv1.Operation) *target.AugmentedUnstructured {
 	return &target.AugmentedUnstructured{
 		Object:    *obj,
 		Namespace: ns,
 		Source:    mutationtypes.SourceTypeGenerated,
+		Operation: operation,
 	}
 }
 
