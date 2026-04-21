@@ -11,6 +11,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
+	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
@@ -21,11 +22,15 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func makeTemplateWithRegoAndCELEngine(vapGenerationVal *bool) *templates.ConstraintTemplate {
@@ -768,6 +773,643 @@ func TestEventPackerMapFuncFromOwnerRefs_IgnoredOwner(t *testing.T) {
 // ptrBool returns a pointer to the provided bool.
 func ptrBool(b bool) *bool { return &b }
 
+// fakeReader is a configurable fake client.Reader for testing.
+type fakeReader struct {
+	objects map[types.NamespacedName]client.Object
+	getErr  error
+	getErrs map[types.NamespacedName]error
+}
+
+func (f *fakeReader) Get(_ context.Context, key types.NamespacedName, obj client.Object, _ ...client.GetOption) error {
+	if err, ok := f.getErrs[key]; ok {
+		return err
+	}
+	if f.getErr != nil {
+		return f.getErr
+	}
+	stored, ok := f.objects[key]
+	if !ok {
+		return apierrors.NewNotFound(schema.GroupResource{}, key.Name)
+	}
+	// Copy stored object data into the output parameter.
+	switch dst := obj.(type) {
+	case *templatesv1beta1.ConstraintTemplate:
+		src, ok := stored.(*templatesv1beta1.ConstraintTemplate)
+		if !ok {
+			return fmt.Errorf("type mismatch: expected *templatesv1beta1.ConstraintTemplate, got %T", stored)
+		}
+		*dst = *src
+	case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+		src, ok := stored.(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
+		if !ok {
+			return fmt.Errorf("type mismatch: expected *admissionregistrationv1.ValidatingAdmissionPolicyBinding, got %T", stored)
+		}
+		*dst = *src
+	default:
+		return fmt.Errorf("fakeReader does not support type %T", obj)
+	}
+	return nil
+}
+
+func (f *fakeReader) List(_ context.Context, _ client.ObjectList, _ ...client.ListOption) error {
+	return nil
+}
+
+// trackingWriter records Delete calls for assertions.
+type trackingWriter struct {
+	fakeWriter
+	deletedObjects []client.Object
+	createdObjects []client.Object
+}
+
+func (t *trackingWriter) Delete(_ context.Context, obj client.Object, _ ...client.DeleteOption) error {
+	t.deletedObjects = append(t.deletedObjects, obj)
+	return nil
+}
+
+func (t *trackingWriter) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
+	t.createdObjects = append(t.createdObjects, obj)
+	return nil
+}
+
+// fakeReporter implements StatsReporter for testing.
+type fakeReporter struct {
+	vapbStatuses map[types.NamespacedName]metrics.VAPStatus
+}
+
+func (f *fakeReporter) reportConstraints(_ context.Context, _ tags, _ int64) error { return nil }
+
+func (f *fakeReporter) ReportVAPBStatus(name types.NamespacedName, status metrics.VAPStatus) {
+	if f.vapbStatuses == nil {
+		f.vapbStatuses = make(map[types.NamespacedName]metrics.VAPStatus)
+	}
+	f.vapbStatuses[name] = status
+}
+
+func (f *fakeReporter) DeleteVAPBStatus(name types.NamespacedName) {
+	delete(f.vapbStatuses, name)
+}
+
+func TestManageVAPB_CleansUpStaleVAPB(t *testing.T) {
+	// Regression test for https://github.com/open-policy-agent/gatekeeper/issues/4441
+	// When vap.k8s.io is removed from scopedEnforcementActions, the stale VAPB must be deleted.
+
+	// Set up the VAP API as enabled with v1 group version.
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	// Ensure DefaultGenerateVAPB is true (default).
+	origDefault := *DefaultGenerateVAPB
+	*DefaultGenerateVAPB = true
+	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+
+	// Constraint with scoped enforcement — only webhook + audit, no vap.k8s.io.
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.WebhookEnforcementPoint},
+							map[string]interface{}{"name": util.AuditEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// A stale VAPB owned by this constraint — should be cleaned up.
+	staleVAPB := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-testkind-test-constraint",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestKind",
+				Name:       "test-constraint",
+				UID:        "12345",
+				Controller: ptr.To(true),
+			}},
+		},
+	}
+
+	// A minimal ConstraintTemplate (needed because manageVAPB does reader.Get for it).
+	ct := &templatesv1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkind",
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "testkind"}: ct,
+			{Name: "gatekeeper-testkind-test-constraint"}: staleVAPB,
+		},
+	}
+
+	writer := &trackingWriter{}
+
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+	}
+
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   runtime.NewScheme(),
+	}
+
+	_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 1 {
+		t.Fatalf("expected 1 VAPB to be deleted, got %d", len(writer.deletedObjects))
+	}
+
+	deletedVAPB, ok := writer.deletedObjects[0].(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
+	if !ok {
+		t.Fatalf("deleted object is not a ValidatingAdmissionPolicyBinding, got %T", writer.deletedObjects[0])
+	}
+	if deletedVAPB.Name != "gatekeeper-testkind-test-constraint" {
+		t.Errorf("expected deleted VAPB name 'gatekeeper-testkind-test-constraint', got %q", deletedVAPB.Name)
+	}
+}
+
+func TestManageVAPB_NoStaleVAPB_NoDelete(t *testing.T) {
+	// When vap.k8s.io is removed and no VAPB exists, Delete should not be called.
+
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	origDefault := *DefaultGenerateVAPB
+	*DefaultGenerateVAPB = true
+	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.WebhookEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ct := &templatesv1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkind",
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "testkind"}: ct,
+			// No stale VAPB — the reader will return NotFound for VAPB lookup.
+		},
+	}
+
+	writer := &trackingWriter{}
+
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+	}
+
+	reporter := &fakeReporter{
+		vapbStatuses: map[types.NamespacedName]metrics.VAPStatus{
+			{Name: "gatekeeper-testkind-test-constraint"}: metrics.VAPStatusError,
+		},
+	}
+
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: reporter,
+		scheme:   runtime.NewScheme(),
+	}
+
+	_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 0 {
+		t.Fatalf("expected no VAPB deletions when no stale VAPB exists, got %d", len(writer.deletedObjects))
+	}
+
+	if _, exists := reporter.vapbStatuses[types.NamespacedName{Name: "gatekeeper-testkind-test-constraint"}]; exists {
+		t.Fatal("expected VAPB metric to be deleted when constraint no longer intends to use VAP")
+	}
+}
+
+func TestManageVAPB_SkipsDeleteIfNotOwner(t *testing.T) {
+	// Regression test: a VAPB owned by a different constraint kind with the same name
+	// must NOT be deleted by this constraint's cleanup path.
+
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	origDefault := *DefaultGenerateVAPB
+	*DefaultGenerateVAPB = true
+	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+
+	// This constraint does NOT use vap.k8s.io.
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKindB",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "other-uid-67890",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.WebhookEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// VAPB with same name but owned by a DIFFERENT constraint (TestKindA/test-constraint).
+	vapbOwnedByOther := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-testkindb-test-constraint",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestKindA",
+				Name:       "test-constraint",
+				UID:        "original-uid-12345",
+				Controller: ptr.To(true),
+			}},
+		},
+	}
+
+	ct := &templatesv1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testkindb",
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "testkindb"}:                            ct,
+			{Name: "gatekeeper-testkindb-test-constraint"}: vapbOwnedByOther,
+		},
+	}
+
+	writer := &trackingWriter{}
+
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+	}
+
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   runtime.NewScheme(),
+	}
+
+	_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 0 {
+		t.Fatalf("expected no VAPB deletions when VAPB is owned by a different constraint, got %d", len(writer.deletedObjects))
+	}
+}
+
+func TestDeleteVAPBIfOwned_FallsBackToOwnerCoordinatesWhenUIDMissing(t *testing.T) {
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+			},
+		},
+	}
+
+	vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-testkind-test-constraint",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestKind",
+				Name:       "test-constraint",
+				UID:        "original-uid-12345",
+				Controller: ptr.To(true),
+			}},
+		},
+	}
+
+	writer := &trackingWriter{}
+	r := &ReconcileConstraint{
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+	}
+
+	if err := r.deleteVAPBIfOwned(context.Background(), vapBinding, instance, vapBinding.GetName()); err != nil {
+		t.Fatalf("deleteVAPBIfOwned returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 1 {
+		t.Fatalf("expected 1 VAPB to be deleted when UID is missing but owner coordinates match, got %d", len(writer.deletedObjects))
+	}
+}
+
+func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
+	tests := []struct {
+		name              string
+		useVAPEnforcement bool
+		regoOnlyTemplate  bool
+		initialEPState    string
+		expectEPCleaned   bool
+		expectEPState     string
+	}{
+		{
+			name:              "stale generated status cleaned when no VAPB exists",
+			useVAPEnforcement: false,
+			initialEPState:    GeneratedVAPBState,
+			expectEPCleaned:   true,
+		},
+		{
+			name:              "stale error status cleaned when vap.k8s.io removed",
+			useVAPEnforcement: false,
+			initialEPState:    ErrGenerateVAPBState,
+			expectEPCleaned:   true,
+		},
+		{
+			name:              "error status preserved for rego-only template with vap.k8s.io",
+			useVAPEnforcement: true,
+			regoOnlyTemplate:  true,
+			initialEPState:    "",
+			expectEPCleaned:   false,
+			expectEPState:     ErrGenerateVAPBState,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+			transform.SetVapAPIEnabled(ptr.To(true))
+			transform.SetGroupVersion(&gv)
+			t.Cleanup(func() {
+				transform.SetVapAPIEnabled(nil)
+				transform.SetGroupVersion(nil)
+			})
+
+			origDefault := *DefaultGenerateVAPB
+			*DefaultGenerateVAPB = true
+			t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+
+			epName := util.WebhookEnforcementPoint
+			if tt.useVAPEnforcement {
+				epName = util.VAPEnforcementPoint
+			}
+
+			instance := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+					"kind":       "TestKind",
+					"metadata": map[string]interface{}{
+						"name": "test-constraint",
+						"uid":  "12345",
+					},
+					"spec": map[string]interface{}{
+						"enforcementAction": "scoped",
+						"scopedEnforcementActions": []interface{}{
+							map[string]interface{}{
+								"action": "deny",
+								"enforcementPoints": []interface{}{
+									map[string]interface{}{"name": epName},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			s := runtime.NewScheme()
+			var ct *templatesv1beta1.ConstraintTemplate
+
+			if tt.regoOnlyTemplate {
+				if err := templatesv1beta1.AddToScheme(s); err != nil {
+					t.Fatal(err)
+				}
+				regoOnlyCT := makeTemplateWithRegoEngine()
+				ct = &templatesv1beta1.ConstraintTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "testkind"},
+				}
+				if err := s.Convert(regoOnlyCT, ct, nil); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				ct = &templatesv1beta1.ConstraintTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "testkind"},
+				}
+			}
+
+			reader := &fakeReader{
+				objects: map[types.NamespacedName]client.Object{
+					{Name: "testkind"}: ct,
+				},
+			}
+
+			status := &constraintstatusv1beta1.ConstraintPodStatus{
+				Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+			}
+			if tt.initialEPState != "" {
+				status.Status.EnforcementPointsStatus = []constraintstatusv1beta1.EnforcementPointStatus{
+					{
+						EnforcementPoint:   util.VAPEnforcementPoint,
+						State:              tt.initialEPState,
+						ObservedGeneration: 1,
+					},
+				}
+			}
+
+			r := &ReconcileConstraint{
+				reader:   reader,
+				writer:   &trackingWriter{},
+				log:      logf.Log.WithName("test"),
+				reporter: &fakeReporter{},
+				scheme:   s,
+			}
+
+			_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+			if err != nil {
+				t.Fatalf("manageVAPB returned unexpected error: %v", err)
+			}
+
+			var foundEP *constraintstatusv1beta1.EnforcementPointStatus
+			for i, ep := range status.Status.EnforcementPointsStatus {
+				if ep.EnforcementPoint == util.VAPEnforcementPoint {
+					foundEP = &status.Status.EnforcementPointsStatus[i]
+					break
+				}
+			}
+
+			if tt.expectEPCleaned {
+				if foundEP != nil {
+					t.Fatalf("expected EP status to be cleaned, but found: %+v", *foundEP)
+				}
+			} else {
+				if foundEP == nil {
+					t.Fatal("expected EP status to be preserved, but it was removed")
+				}
+				if foundEP.State != tt.expectEPState {
+					t.Fatalf("expected EP state %q, got %q", tt.expectEPState, foundEP.State)
+				}
+			}
+		})
+	}
+}
+
+func TestManageVAPB_PreservesErrorMetricWhenGenerationFails(t *testing.T) {
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	origDefault := *DefaultGenerateVAPB
+	*DefaultGenerateVAPB = true
+	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.VAPEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s := runtime.NewScheme()
+	if err := templatesv1beta1.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
+	regoOnlyCT := makeTemplateWithRegoEngine()
+	ct := &templatesv1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "testkind"},
+	}
+	if err := s.Convert(regoOnlyCT, ct, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	staleVAPB := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-testkind-test-constraint",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestKind",
+				Name:       "test-constraint",
+				UID:        "12345",
+				Controller: ptr.To(true),
+			}},
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "testkind"}: ct,
+			{Name: "gatekeeper-testkind-test-constraint"}: staleVAPB,
+		},
+	}
+
+	writer := &trackingWriter{}
+	reporter := &fakeReporter{}
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
+	}
+
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: reporter,
+		scheme:   s,
+	}
+
+	_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 1 {
+		t.Fatalf("expected stale VAPB to be deleted, got %d deletions", len(writer.deletedObjects))
+	}
+
+	vapBindingKey := types.NamespacedName{Name: "gatekeeper-testkind-test-constraint"}
+	if got := reporter.vapbStatuses[vapBindingKey]; got != metrics.VAPStatusError {
+		t.Fatalf("expected VAPB metric status %q after generation failure, got %q", metrics.VAPStatusError, got)
+	}
+}
+
 type fakeWriter struct {
 	updateErr error
 }
@@ -864,5 +1506,288 @@ func TestEventPackerMapFuncFromOwnerRefs_MultipleOwners(t *testing.T) {
 	}
 	if unpacked.Name != "foo-name" {
 		t.Fatalf("unexpected name: %s", unpacked.Name)
+	}
+}
+
+func TestCleanupLegacyVAPB(t *testing.T) {
+	// When a new-format VAPB has been created, the old-format (legacy) VAPB
+	// owned by the same constraint must be cleaned up.
+
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "12345",
+			},
+		},
+	}
+
+	// Legacy VAPB (old format without Kind) owned by this constraint.
+	legacyVAPB := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-test-constraint",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestKind",
+				Name:       "test-constraint",
+				UID:        "12345",
+				Controller: ptr.To(true),
+			}},
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "gatekeeper-test-constraint"}: legacyVAPB,
+		},
+	}
+
+	writer := &trackingWriter{}
+
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   runtime.NewScheme(),
+	}
+
+	if err := r.cleanupLegacyVAPB(context.Background(), instance, &gv); err != nil {
+		t.Fatalf("cleanupLegacyVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 1 {
+		t.Fatalf("expected 1 legacy VAPB to be deleted, got %d", len(writer.deletedObjects))
+	}
+
+	deletedVAPB, ok := writer.deletedObjects[0].(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
+	if !ok {
+		t.Fatalf("deleted object is not a ValidatingAdmissionPolicyBinding, got %T", writer.deletedObjects[0])
+	}
+	if deletedVAPB.Name != "gatekeeper-test-constraint" {
+		t.Errorf("expected deleted VAPB name 'gatekeeper-test-constraint', got %q", deletedVAPB.Name)
+	}
+}
+
+func TestCleanupLegacyVAPB_SkipsIfNotOwner(t *testing.T) {
+	// Legacy VAPB owned by a different constraint must NOT be deleted.
+
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKindB",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "other-uid-67890",
+			},
+		},
+	}
+
+	// Legacy VAPB owned by a DIFFERENT constraint kind.
+	legacyVAPB := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-test-constraint",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestKindA",
+				Name:       "test-constraint",
+				UID:        "original-uid-12345",
+				Controller: ptr.To(true),
+			}},
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "gatekeeper-test-constraint"}: legacyVAPB,
+		},
+	}
+
+	writer := &trackingWriter{}
+
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   runtime.NewScheme(),
+	}
+
+	if err := r.cleanupLegacyVAPB(context.Background(), instance, &gv); err != nil {
+		t.Fatalf("cleanupLegacyVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 0 {
+		t.Fatalf("expected no legacy VAPB deletions when owned by different constraint, got %d", len(writer.deletedObjects))
+	}
+}
+
+func TestCleanupLegacyVAPB_FallsBackToOwnerCoordinatesWhenUIDMissing(t *testing.T) {
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+			},
+		},
+	}
+
+	legacyVAPB := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-test-constraint",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestKind",
+				Name:       "test-constraint",
+				UID:        "original-uid-12345",
+				Controller: ptr.To(true),
+			}},
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "gatekeeper-test-constraint"}: legacyVAPB,
+		},
+	}
+
+	writer := &trackingWriter{}
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   runtime.NewScheme(),
+	}
+
+	if err := r.cleanupLegacyVAPB(context.Background(), instance, &gv); err != nil {
+		t.Fatalf("cleanupLegacyVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 1 {
+		t.Fatalf("expected 1 legacy VAPB to be deleted when UID is missing but owner coordinates match, got %d", len(writer.deletedObjects))
+	}
+}
+
+func TestCleanupLegacyVAPB_SkipsFallbackWhenOwnerCoordinatesDoNotMatch(t *testing.T) {
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+			},
+		},
+	}
+
+	legacyVAPB := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-test-constraint",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "OtherKind",
+				Name:       "test-constraint",
+				UID:        "original-uid-12345",
+				Controller: ptr.To(true),
+			}},
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "gatekeeper-test-constraint"}: legacyVAPB,
+		},
+	}
+
+	writer := &trackingWriter{}
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   runtime.NewScheme(),
+	}
+
+	if err := r.cleanupLegacyVAPB(context.Background(), instance, &gv); err != nil {
+		t.Fatalf("cleanupLegacyVAPB returned unexpected error: %v", err)
+	}
+
+	if len(writer.deletedObjects) != 0 {
+		t.Fatalf("expected no legacy VAPB deletions when UID is missing and owner coordinates do not match, got %d", len(writer.deletedObjects))
+	}
+}
+
+func TestGetVAPBindingName(t *testing.T) {
+	// New format includes Kind.
+	name := transform.GetVAPBindingName("K8sRequiredLabels", "my-policy")
+	expected := "gatekeeper-k8srequiredlabels-my-policy"
+	if name != expected {
+		t.Errorf("expected %q, got %q", expected, name)
+	}
+}
+
+func TestGetVAPBindingName_Truncation(t *testing.T) {
+	// Kind and name that together exceed the 253-char K8s limit.
+	longKind := strings.Repeat("a", 63)
+	longName := strings.Repeat("b", 253)
+	name := transform.GetVAPBindingName(longKind, longName)
+	if len(name) > 253 {
+		t.Errorf("expected name length <= 253, got %d: %s", len(name), name)
+	}
+	// Verify deterministic: same input produces same output.
+	name2 := transform.GetVAPBindingName(longKind, longName)
+	if name != name2 {
+		t.Errorf("expected deterministic name, got %q and %q", name, name2)
+	}
+	// Short names should not be truncated.
+	shortName := transform.GetVAPBindingName("Kind", "my-constraint")
+	if strings.Contains(shortName, "-") && len(shortName) <= 253 {
+		expectedShort := "gatekeeper-kind-my-constraint"
+		if shortName != expectedShort {
+			t.Errorf("expected %q, got %q", expectedShort, shortName)
+		}
+	}
+}
+
+func TestLegacyVAPBindingName(t *testing.T) {
+	name := transform.LegacyVAPBindingName("my-policy")
+	expected := "gatekeeper-my-policy"
+	if name != expected {
+		t.Errorf("expected %q, got %q", expected, name)
 	}
 }
