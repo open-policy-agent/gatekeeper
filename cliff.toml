@@ -1,0 +1,67 @@
+# git-cliff configuration for Gatekeeper release notes.
+# Generates categorized release notes from conventional commits.
+
+[remote.github]
+owner = "open-policy-agent"
+repo = "gatekeeper"
+# token via GITHUB_TOKEN env var in CI
+
+[changelog]
+header = ""
+body = """
+{%- macro remote_url() -%}
+  https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro -%}
+
+{% for group, commits in commits | filter(attribute="merge_commit", value=false) | group_by(attribute="group") %}
+## {{ group | striptags | trim | upper_first }}
+
+{% for commit in commits -%}
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | upper_first | trim }}\
+{% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.remote.pr_number }}))\
+{% endif %} ([{{ commit.author.name }}]({{ self::remote_url() }}/commit/{{ commit.id }}))
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+footer = ""
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+# Ensure breaking-change commits are never silently skipped by a commit_parser.
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9].*"
+topo_order = false
+sort_commits = "oldest"
+
+# Strip inline PR references like "(#1234)" from commit messages since the
+# GitHub API provides proper PR links via commit.remote.pr_number.
+commit_preprocessors = [
+  { pattern = '\s*\(#\d+\)', replace = "" },
+]
+
+# mirrors the list in .github/semantic.yml.
+# HTML comment prefixes (<!-- N -->) control group display order.
+# any commit not matching a rule will be under "Other Changes".
+commit_parsers = [
+  { message = "^feat", group = "<!-- 00 -->🚀 Features" },
+  { message = "^fix", group = "<!-- 01 -->🐛 Bug Fixes" },
+  { message = "^perf", group = "<!-- 02 -->⚡ Performance" },
+  { message = "^refactor", group = "<!-- 03 -->♻️ Refactors" },
+  { message = "^revert", group = "<!-- 04 -->⏪ Reverts" },
+  { message = "^docs", group = "<!-- 05 -->📚 Documentation" },
+  { message = "^test", group = "<!-- 06 -->✅ Tests" },
+  { message = "^style", group = "<!-- 07 -->💅 Styling" },
+  { message = "^build", group = "<!-- 08 -->🏗️ Build System" },
+  { message = "^ci", group = "<!-- 09 -->🤖 Continuous Integration" },
+  # dependency bumps: both "chore(deps)" and dependabot's "chore: bump ..." pattern.
+  { message = "^chore\\(deps\\)", group = "<!-- 10 -->📦 Dependencies" },
+  { message = "(?i)^chore.*: bump ", group = "<!-- 10 -->📦 Dependencies" },
+  # skip release prep commits
+  { message = "^chore: [Pp]repare v", skip = true },
+  { message = "^chore", group = "<!-- 11 -->🧹 Chores" },
+  { message = ".*", group = "<!-- 12 -->Other Changes" },
+]
