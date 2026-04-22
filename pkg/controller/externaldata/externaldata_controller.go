@@ -16,6 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -216,12 +217,19 @@ func (r *Reconciler) updateOrCreatePodStatus(ctx context.Context, provider *exte
 		return fmt.Errorf("getting ProviderPodStatus in name %s, namespace %s: %w", provider.GetName(), provider.GetNamespace(), err)
 	}
 
-	if errorChanged(status.Status.Errors, providerErrors) {
+	oldStatus := status.Status
+	errorsChanged := errorChanged(status.Status.Errors, providerErrors)
+	if errorsChanged {
 		status.Status.LastTransitionTime = util.Now()
 	}
 
-	setStatus(status, providerErrors)
+	updateLastCacheTime := shouldCreate || errorsChanged || status.Status.ObservedGeneration != provider.GetGeneration()
+	setStatus(status, providerErrors, updateLastCacheTime)
 	status.Status.ObservedGeneration = provider.GetGeneration()
+
+	if !shouldCreate && apiequality.Semantic.DeepEqual(status.Status, oldStatus) {
+		return nil
+	}
 
 	if shouldCreate {
 		return r.Create(ctx, status)
@@ -259,11 +267,13 @@ func (r *Reconciler) deleteStatus(ctx context.Context, providerName string) erro
 	return nil
 }
 
-func setStatus(status *statusv1beta1.ProviderPodStatus, providerErrors []*statusv1beta1.ProviderError) {
+func setStatus(status *statusv1beta1.ProviderPodStatus, providerErrors []*statusv1beta1.ProviderError, updateLastCacheTime bool) {
 	if len(providerErrors) == 0 {
 		status.Status.Errors = nil
 		status.Status.Active = true
-		status.Status.LastCacheUpdateTime = util.Now()
+		if updateLastCacheTime {
+			status.Status.LastCacheUpdateTime = util.Now()
+		}
 		return
 	}
 
