@@ -76,6 +76,16 @@ func TestCreateConnection(t *testing.T) {
 			err:         fmt.Errorf("error creating connection conn4: maxAuditResults cannot be greater than the maximum allowed audit runs: 5"),
 			expectError: true,
 		},
+		{
+			name:           "Negative maxAuditResults",
+			connectionName: "conn5",
+			config: map[string]interface{}{
+				"path":            tmpPath,
+				"maxAuditResults": -1.0,
+			},
+			err:         fmt.Errorf("error creating connection conn5: maxAuditResults cannot be negative"),
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -214,6 +224,16 @@ func TestUpdateConnection(t *testing.T) {
 			},
 			expectError: true,
 			err:         fmt.Errorf("error updating connection conn1: maxAuditResults cannot be greater than the maximum allowed audit runs: 5"),
+		},
+		{
+			name:           "Negative maxAuditResults",
+			connectionName: "conn1",
+			config: map[string]interface{}{
+				"path":            t.TempDir(),
+				"maxAuditResults": -1.0,
+			},
+			expectError: true,
+			err:         fmt.Errorf("error updating connection conn1: maxAuditResults cannot be negative"),
 		},
 	}
 
