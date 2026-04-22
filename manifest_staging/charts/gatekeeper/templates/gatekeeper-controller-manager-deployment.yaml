@@ -68,8 +68,10 @@ spec:
         - --log-denies={{ .Values.logDenies }}
         {{ if hasKey .Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}
         {{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}
-        - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
-        - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
+        - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace
+          }}
+        - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary
+          .Values.controllerManager.logLevel .Values.logLevel }}
         {{ if hasKey .Values "logLevelKey" }}- --log-level-key={{ .Values.logLevelKey }}{{- end }}
         {{ if hasKey .Values "logLevelEncoder" }}- --log-level-encoder={{ .Values.logLevelEncoder }}{{- end }}
         - --exempt-namespace={{ .Release.Namespace }}
@@ -81,17 +83,21 @@ spec:
         - --operation=generate
         {{- end }}
         - --enable-external-data={{ .Values.enableExternalData }}
-        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
+        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion
+          }}
         - --log-mutations={{ .Values.logMutations }}
         - --mutation-annotations={{ .Values.mutationAnnotations }}
-        - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
+        - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation
+          }}
         - --max-serving-threads={{ .Values.maxServingThreads }}
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
-        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName
+          }}
         {{ if .Values.additionalValidatingWebhookConfigsToRotateCerts | empty | not }}- --additional-validating-webhook-configs-to-rotate-certs={{ .Values.additionalValidatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         {{ if .Values.additionalMutatingWebhookConfigsToRotateCerts | empty | not }}- --additional-mutating-webhook-configs-to-rotate-certs={{ .Values.additionalMutatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
-        - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
+        - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL
+          }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         

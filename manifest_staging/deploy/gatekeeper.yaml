@@ -101,7 +101,8 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main]`.'
+                description: 'Location describes the path to be mutated, for example:
+                  `spec.containers[name: main]`.'
                 type: string
               match:
                 description: |-
@@ -157,14 +158,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -210,14 +213,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -289,7 +294,8 @@ spec:
                     description: Assign.value holds the value to be assigned
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider to be used for mutation.
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
@@ -316,20 +322,25 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data provider.
+                            description: Provider is the name of the external data
+                              provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified metadata field.
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
                             type: string
                         type: object
                       value:
-                        description: Value is a constant value that will be assigned to `location`
+                        description: Value is a constant value that will be assigned
+                          to `location`
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                   pathTests:
@@ -347,7 +358,8 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either MustExist or MustNotExist in the original object
+                          description: Condition describes whether the path either
+                            MustExist or MustNotExist in the original object
                           enum:
                           - MustExist
                           - MustNotExist
@@ -363,13 +375,15 @@ spec:
             properties:
               byPod:
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -455,7 +469,8 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main]`.'
+                description: 'Location describes the path to be mutated, for example:
+                  `spec.containers[name: main]`.'
                 type: string
               match:
                 description: |-
@@ -511,14 +526,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -564,14 +581,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -643,7 +662,8 @@ spec:
                     description: Assign.value holds the value to be assigned
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider to be used for mutation.
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
@@ -670,20 +690,25 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data provider.
+                            description: Provider is the name of the external data
+                              provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified metadata field.
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
                             type: string
                         type: object
                       value:
-                        description: Value is a constant value that will be assigned to `location`
+                        description: Value is a constant value that will be assigned
+                          to `location`
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                   pathTests:
@@ -701,7 +726,8 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either MustExist or MustNotExist in the original object
+                          description: Condition describes whether the path either
+                            MustExist or MustNotExist in the original object
                           enum:
                           - MustExist
                           - MustNotExist
@@ -717,13 +743,15 @@ spec:
             properties:
               byPod:
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -809,7 +837,8 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main]`.'
+                description: 'Location describes the path to be mutated, for example:
+                  `spec.containers[name: main]`.'
                 type: string
               match:
                 description: |-
@@ -865,14 +894,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -918,14 +949,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -997,7 +1030,8 @@ spec:
                     description: Assign.value holds the value to be assigned
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider to be used for mutation.
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
@@ -1024,20 +1058,25 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data provider.
+                            description: Provider is the name of the external data
+                              provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified metadata field.
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
                             type: string
                         type: object
                       value:
-                        description: Value is a constant value that will be assigned to `location`
+                        description: Value is a constant value that will be assigned
+                          to `location`
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                   pathTests:
@@ -1055,7 +1094,8 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either MustExist or MustNotExist in the original object
+                          description: Condition describes whether the path either
+                            MustExist or MustNotExist in the original object
                           enum:
                           - MustExist
                           - MustNotExist
@@ -1071,13 +1111,15 @@ spec:
             properties:
               byPod:
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -1185,7 +1227,8 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main].image`.'
+                description: 'Location describes the path to be mutated, for example:
+                  `spec.containers[name: main].image`.'
                 type: string
               match:
                 description: |-
@@ -1241,14 +1284,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -1294,14 +1339,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -1375,7 +1422,8 @@ spec:
                       slash should not be included.
                     type: string
                   assignPath:
-                    description: AssignPath sets the domain component on an image string.
+                    description: AssignPath sets the domain component on an image
+                      string.
                     type: string
                   assignTag:
                     description: |-
@@ -1397,7 +1445,8 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either MustExist or MustNotExist in the original object
+                          description: Condition describes whether the path either
+                            MustExist or MustNotExist in the original object
                           enum:
                           - MustExist
                           - MustNotExist
@@ -1413,13 +1462,15 @@ spec:
             properties:
               byPod:
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -1555,14 +1606,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -1608,14 +1661,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -1686,7 +1741,8 @@ spec:
                     description: Assign.value holds the value to be assigned
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider to be used for mutation.
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
@@ -1713,20 +1769,25 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data provider.
+                            description: Provider is the name of the external data
+                              provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified metadata field.
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
                             type: string
                         type: object
                       value:
-                        description: Value is a constant value that will be assigned to `location`
+                        description: Value is a constant value that will be assigned
+                          to `location`
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                 type: object
@@ -1739,13 +1800,15 @@ spec:
                   INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
                   Important: Run "make" to regenerate code after modifying this file
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -1859,14 +1922,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -1912,14 +1977,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -1990,7 +2057,8 @@ spec:
                     description: Assign.value holds the value to be assigned
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider to be used for mutation.
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
@@ -2017,20 +2085,25 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data provider.
+                            description: Provider is the name of the external data
+                              provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified metadata field.
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
                             type: string
                         type: object
                       value:
-                        description: Value is a constant value that will be assigned to `location`
+                        description: Value is a constant value that will be assigned
+                          to `location`
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                 type: object
@@ -2043,13 +2116,15 @@ spec:
                   INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
                   Important: Run "make" to regenerate code after modifying this file
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -2163,14 +2238,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -2216,14 +2293,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -2294,7 +2373,8 @@ spec:
                     description: Assign.value holds the value to be assigned
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider to be used for mutation.
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
@@ -2321,20 +2401,25 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data provider.
+                            description: Provider is the name of the external data
+                              provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified metadata field.
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
                             type: string
                         type: object
                       value:
-                        description: Value is a constant value that will be assigned to `location`
+                        description: Value is a constant value that will be assigned
+                          to `location`
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                 type: object
@@ -2347,13 +2432,15 @@ spec:
                   INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
                   Important: Run "make" to regenerate code after modifying this file
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -2532,7 +2619,8 @@ spec:
                 description: Configuration for syncing k8s objects
                 properties:
                   syncOnly:
-                    description: If non-empty, only entries on this list will be replicated into OPA
+                    description: If non-empty, only entries on this list will be replicated
+                      into OPA
                     items:
                       properties:
                         group:
@@ -2548,11 +2636,13 @@ spec:
                 description: Configuration for validation
                 properties:
                   traces:
-                    description: List of requests to trace. Both "user" and "kinds" must be specified
+                    description: List of requests to trace. Both "user" and "kinds"
+                      must be specified
                     items:
                       properties:
                         dump:
-                          description: Also dump the state of OPA with the trace. Set to `All` to dump everything.
+                          description: Also dump the state of OPA with the trace.
+                            Set to `All` to dump everything.
                           type: string
                         kind:
                           description: Only trace requests of the following GroupVersionKind
@@ -2632,7 +2722,8 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ConnectionPodStatus is the Schema for the connectionpodstatuses API.
+        description: ConnectionPodStatus is the Schema for the connectionpodstatuses
+          API.
         properties:
           apiVersion:
             description: |-
@@ -2655,7 +2746,8 @@ spec:
             description: No spec field is defined here, as this is a status-only resource.
             properties:
               active:
-                description: Indicator for alive connection with at least one successful publish
+                description: Indicator for alive connection with at least one successful
+                  publish
                 type: boolean
               connectionUID:
                 description: |-
@@ -2676,7 +2768,8 @@ spec:
                   type: object
                 type: array
               id:
-                description: ID is the unique identifier for the pod that wrote the status
+                description: ID is the unique identifier for the pod that wrote the
+                  status
                 type: string
               observedGeneration:
                 format: int64
@@ -2735,7 +2828,8 @@ spec:
               config:
                 x-kubernetes-preserve-unknown-fields: true
               driver:
-                description: Driver is the name of one of the expected drivers i.e. dapr, disk
+                description: Driver is the name of one of the expected drivers i.e.
+                  dapr, disk
                 type: string
             required:
             - config
@@ -2746,10 +2840,12 @@ spec:
             properties:
               byPod:
                 items:
-                  description: ConnectionPodStatusStatus defines the observed state of ConnectionPodStatus.
+                  description: ConnectionPodStatusStatus defines the observed state
+                    of ConnectionPodStatus.
                   properties:
                     active:
-                      description: Indicator for alive connection with at least one successful publish
+                      description: Indicator for alive connection with at least one
+                        successful publish
                       type: boolean
                     connectionUID:
                       description: |-
@@ -2770,7 +2866,8 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: ID is the unique identifier for the pod that wrote the status
+                      description: ID is the unique identifier for the pod that wrote
+                        the status
                       type: string
                     observedGeneration:
                       format: int64
@@ -2808,7 +2905,8 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ConstraintPodStatus is the Schema for the constraintpodstatuses API.
+        description: ConstraintPodStatus is the Schema for the constraintpodstatuses
+          API.
         properties:
           apiVersion:
             description: |-
@@ -2840,7 +2938,8 @@ spec:
                 type: boolean
               enforcementPointsStatus:
                 items:
-                  description: EnforcementPointStatus represents the status of a single enforcement point.
+                  description: EnforcementPointStatus represents the status of a single
+                    enforcement point.
                   properties:
                     enforcementPoint:
                       type: string
@@ -2858,7 +2957,8 @@ spec:
                 type: array
               errors:
                 items:
-                  description: Error represents a single error caught while adding a constraint to engine.
+                  description: Error represents a single error caught while adding
+                    a constraint to engine.
                   properties:
                     code:
                       type: string
@@ -2905,7 +3005,8 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses API.
+        description: ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses
+          API.
         properties:
           apiVersion:
             description: |-
@@ -2925,11 +3026,13 @@ spec:
           metadata:
             type: object
           status:
-            description: ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus.
+            description: ConstraintTemplatePodStatusStatus defines the observed state
+              of ConstraintTemplatePodStatus.
             properties:
               errors:
                 items:
-                  description: CreateCRDError represents a single error caught during parsing, compiling, etc.
+                  description: CreateCRDError represents a single error caught during
+                    parsing, compiling, etc.
                   properties:
                     code:
                       type: string
@@ -2943,7 +3046,8 @@ spec:
                   type: object
                 type: array
               id:
-                description: 'Important: Run "make" to regenerate code after modifying this file'
+                description: 'Important: Run "make" to regenerate code after modifying
+                  this file'
                 type: string
               observedGeneration:
                 format: int64
@@ -2994,7 +3098,8 @@ spec:
   - name: v1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplate is the Schema for the constrainttemplates API
+        description: ConstraintTemplate is the Schema for the constrainttemplates
+          API
         properties:
           apiVersion:
             description: |-
@@ -3017,13 +3122,15 @@ spec:
             description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate.
             properties:
               crd:
-                description: CRD defines the custom resource definition specification for the constraint.
+                description: CRD defines the custom resource definition specification
+                  for the constraint.
                 properties:
                   spec:
                     description: CRDSpec defines the spec for the CRD.
                     properties:
                       names:
-                        description: Names defines the naming conventions for the constraint kind.
+                        description: Names defines the naming conventions for the
+                          constraint kind.
                         properties:
                           kind:
                             type: string
@@ -3035,7 +3142,8 @@ spec:
                       validation:
                         default:
                           legacySchema: false
-                        description: Validation defines the schema for constraint parameters.
+                        description: Validation defines the schema for constraint
+                          parameters.
                         properties:
                           legacySchema:
                             default: false
@@ -3048,17 +3156,20 @@ spec:
                 type: object
               targets:
                 items:
-                  description: Target defines the target handler and policy for the constraint template.
+                  description: Target defines the target handler and policy for the
+                    constraint template.
                   properties:
                     code:
                       description: |-
                         The source code options for the constraint template. "Rego" can only
                         be specified in one place (either here or in the "rego" field)
                       items:
-                        description: Code defines the policy source code for a specific engine.
+                        description: Code defines the policy source code for a specific
+                          engine.
                         properties:
                           engine:
-                            description: 'The engine used to evaluate the code. Example: "Rego". Required.'
+                            description: 'The engine used to evaluate the code. Example:
+                              "Rego". Required.'
                             type: string
                           source:
                             description: The source code for the template. Required.
@@ -3104,7 +3215,8 @@ spec:
                   properties:
                     errors:
                       items:
-                        description: CreateCRDError represents a single error caught during parsing, compiling, etc.
+                        description: CreateCRDError represents a single error caught
+                          during parsing, compiling, etc.
                         properties:
                           code:
                             type: string
@@ -3118,7 +3230,8 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: a unique identifier for the pod that wrote the status
+                      description: a unique identifier for the pod that wrote the
+                        status
                       type: string
                     observedGeneration:
                       format: int64
@@ -3137,7 +3250,8 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplate is the Schema for the constrainttemplates API
+        description: ConstraintTemplate is the Schema for the constrainttemplates
+          API
         properties:
           apiVersion:
             description: |-
@@ -3160,13 +3274,15 @@ spec:
             description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate.
             properties:
               crd:
-                description: CRD defines the custom resource definition specification for the constraint.
+                description: CRD defines the custom resource definition specification
+                  for the constraint.
                 properties:
                   spec:
                     description: CRDSpec defines the spec for the CRD.
                     properties:
                       names:
-                        description: Names defines the naming conventions for the constraint kind.
+                        description: Names defines the naming conventions for the
+                          constraint kind.
                         properties:
                           kind:
                             type: string
@@ -3178,7 +3294,8 @@ spec:
                       validation:
                         default:
                           legacySchema: true
-                        description: Validation defines the schema for constraint parameters.
+                        description: Validation defines the schema for constraint
+                          parameters.
                         properties:
                           legacySchema:
                             default: true
@@ -3191,17 +3308,20 @@ spec:
                 type: object
               targets:
                 items:
-                  description: Target defines the target handler and policy for the constraint template.
+                  description: Target defines the target handler and policy for the
+                    constraint template.
                   properties:
                     code:
                       description: |-
                         The source code options for the constraint template. "Rego" can only
                         be specified in one place (either here or in the "rego" field)
                       items:
-                        description: Code defines the policy source code for a specific engine.
+                        description: Code defines the policy source code for a specific
+                          engine.
                         properties:
                           engine:
-                            description: 'The engine used to evaluate the code. Example: "Rego". Required.'
+                            description: 'The engine used to evaluate the code. Example:
+                              "Rego". Required.'
                             type: string
                           source:
                             description: The source code for the template. Required.
@@ -3247,7 +3367,8 @@ spec:
                   properties:
                     errors:
                       items:
-                        description: CreateCRDError represents a single error caught during parsing, compiling, etc.
+                        description: CreateCRDError represents a single error caught
+                          during parsing, compiling, etc.
                         properties:
                           code:
                             type: string
@@ -3261,7 +3382,8 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: a unique identifier for the pod that wrote the status
+                      description: a unique identifier for the pod that wrote the
+                        status
                       type: string
                     observedGeneration:
                       format: int64
@@ -3280,7 +3402,8 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplate is the Schema for the constrainttemplates API
+        description: ConstraintTemplate is the Schema for the constrainttemplates
+          API
         properties:
           apiVersion:
             description: |-
@@ -3303,13 +3426,15 @@ spec:
             description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate.
             properties:
               crd:
-                description: CRD defines the custom resource definition specification for the constraint.
+                description: CRD defines the custom resource definition specification
+                  for the constraint.
                 properties:
                   spec:
                     description: CRDSpec defines the spec for the CRD.
                     properties:
                       names:
-                        description: Names defines the naming conventions for the constraint kind.
+                        description: Names defines the naming conventions for the
+                          constraint kind.
                         properties:
                           kind:
                             type: string
@@ -3321,7 +3446,8 @@ spec:
                       validation:
                         default:
                           legacySchema: true
-                        description: Validation defines the schema for constraint parameters.
+                        description: Validation defines the schema for constraint
+                          parameters.
                         properties:
                           legacySchema:
                             default: true
@@ -3334,17 +3460,20 @@ spec:
                 type: object
               targets:
                 items:
-                  description: Target defines the target handler and policy for the constraint template.
+                  description: Target defines the target handler and policy for the
+                    constraint template.
                   properties:
                     code:
                       description: |-
                         The source code options for the constraint template. "Rego" can only
                         be specified in one place (either here or in the "rego" field)
                       items:
-                        description: Code defines the policy source code for a specific engine.
+                        description: Code defines the policy source code for a specific
+                          engine.
                         properties:
                           engine:
-                            description: 'The engine used to evaluate the code. Example: "Rego". Required.'
+                            description: 'The engine used to evaluate the code. Example:
+                              "Rego". Required.'
                             type: string
                           source:
                             description: The source code for the template. Required.
@@ -3390,7 +3519,8 @@ spec:
                   properties:
                     errors:
                       items:
-                        description: CreateCRDError represents a single error caught during parsing, compiling, etc.
+                        description: CreateCRDError represents a single error caught
+                          during parsing, compiling, etc.
                         properties:
                           code:
                             type: string
@@ -3404,7 +3534,8 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: a unique identifier for the pod that wrote the status
+                      description: a unique identifier for the pod that wrote the
+                        status
                       type: string
                     observedGeneration:
                       format: int64
@@ -3520,7 +3651,8 @@ spec:
             properties:
               byPod:
                 items:
-                  description: ExpansionTemplatePodStatusStatus defines the observed state of ExpansionTemplatePodStatus.
+                  description: ExpansionTemplatePodStatusStatus defines the observed
+                    state of ExpansionTemplatePodStatus.
                   properties:
                     errors:
                       items:
@@ -3534,7 +3666,8 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: 'Important: Run "make" to regenerate code after modifying this file'
+                      description: 'Important: Run "make" to regenerate code after
+                        modifying this file'
                       type: string
                     observedGeneration:
                       format: int64
@@ -3635,7 +3768,8 @@ spec:
             properties:
               byPod:
                 items:
-                  description: ExpansionTemplatePodStatusStatus defines the observed state of ExpansionTemplatePodStatus.
+                  description: ExpansionTemplatePodStatusStatus defines the observed
+                    state of ExpansionTemplatePodStatus.
                   properties:
                     errors:
                       items:
@@ -3649,7 +3783,8 @@ spec:
                         type: object
                       type: array
                     id:
-                      description: 'Important: Run "make" to regenerate code after modifying this file'
+                      description: 'Important: Run "make" to regenerate code after
+                        modifying this file'
                       type: string
                     observedGeneration:
                       format: int64
@@ -3693,7 +3828,8 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ExpansionTemplatePodStatus is the Schema for the expansiontemplatepodstatuses API.
+        description: ExpansionTemplatePodStatus is the Schema for the expansiontemplatepodstatuses
+          API.
         properties:
           apiVersion:
             description: |-
@@ -3713,7 +3849,8 @@ spec:
           metadata:
             type: object
           status:
-            description: ExpansionTemplatePodStatusStatus defines the observed state of ExpansionTemplatePodStatus.
+            description: ExpansionTemplatePodStatusStatus defines the observed state
+              of ExpansionTemplatePodStatus.
             properties:
               errors:
                 items:
@@ -3727,7 +3864,8 @@ spec:
                   type: object
                 type: array
               id:
-                description: 'Important: Run "make" to regenerate code after modifying this file'
+                description: 'Important: Run "make" to regenerate code after modifying
+                  this file'
                 type: string
               observedGeneration:
                 format: int64
@@ -3820,7 +3958,8 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main].args`.'
+                description: 'Location describes the path to be mutated, for example:
+                  `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: |-
@@ -3876,14 +4015,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -3929,14 +4070,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -4006,7 +4149,8 @@ spec:
                 properties:
                   operation:
                     default: merge
-                    description: Operation describes whether values should be merged in ("merge"), or pruned ("prune"). Default value is "merge"
+                    description: Operation describes whether values should be merged
+                      in ("merge"), or pruned ("prune"). Default value is "merge"
                     enum:
                     - merge
                     - prune
@@ -4029,7 +4173,8 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either MustExist or MustNotExist in the original object
+                          description: Condition describes whether the path either
+                            MustExist or MustNotExist in the original object
                           enum:
                           - MustExist
                           - MustNotExist
@@ -4039,7 +4184,8 @@ spec:
                       type: object
                     type: array
                   values:
-                    description: Values describes the values provided to the operation as `values.fromList`.
+                    description: Values describes the values provided to the operation
+                      as `values.fromList`.
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                 type: object
@@ -4049,13 +4195,15 @@ spec:
             properties:
               byPod:
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -4143,7 +4291,8 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main].args`.'
+                description: 'Location describes the path to be mutated, for example:
+                  `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: |-
@@ -4199,14 +4348,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -4252,14 +4403,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -4329,7 +4482,8 @@ spec:
                 properties:
                   operation:
                     default: merge
-                    description: Operation describes whether values should be merged in ("merge"), or pruned ("prune"). Default value is "merge"
+                    description: Operation describes whether values should be merged
+                      in ("merge"), or pruned ("prune"). Default value is "merge"
                     enum:
                     - merge
                     - prune
@@ -4352,7 +4506,8 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either MustExist or MustNotExist in the original object
+                          description: Condition describes whether the path either
+                            MustExist or MustNotExist in the original object
                           enum:
                           - MustExist
                           - MustNotExist
@@ -4362,7 +4517,8 @@ spec:
                       type: object
                     type: array
                   values:
-                    description: Values describes the values provided to the operation as `values.fromList`.
+                    description: Values describes the values provided to the operation
+                      as `values.fromList`.
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                 type: object
@@ -4372,13 +4528,15 @@ spec:
             properties:
               byPod:
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -4466,7 +4624,8 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main].args`.'
+                description: 'Location describes the path to be mutated, for example:
+                  `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: |-
@@ -4522,14 +4681,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -4575,14 +4736,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -4652,7 +4815,8 @@ spec:
                 properties:
                   operation:
                     default: merge
-                    description: Operation describes whether values should be merged in ("merge"), or pruned ("prune"). Default value is "merge"
+                    description: Operation describes whether values should be merged
+                      in ("merge"), or pruned ("prune"). Default value is "merge"
                     enum:
                     - merge
                     - prune
@@ -4675,7 +4839,8 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either MustExist or MustNotExist in the original object
+                          description: Condition describes whether the path either
+                            MustExist or MustNotExist in the original object
                           enum:
                           - MustExist
                           - MustNotExist
@@ -4685,7 +4850,8 @@ spec:
                       type: object
                     type: array
                   values:
-                    description: Values describes the values provided to the operation as `values.fromList`.
+                    description: Values describes the values provided to the operation
+                      as `values.fromList`.
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                 type: object
@@ -4695,13 +4861,15 @@ spec:
             properties:
               byPod:
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -4784,7 +4952,8 @@ spec:
                 type: boolean
               errors:
                 items:
-                  description: MutatorError represents a single error caught while adding a mutator to a system.
+                  description: MutatorError represents a single error caught while
+                    adding a mutator to a system.
                   properties:
                     message:
                       type: string
@@ -4863,7 +5032,8 @@ spec:
                 type: boolean
               errors:
                 items:
-                  description: ProviderError represents a single error caught while managing providers.
+                  description: ProviderError represents a single error caught while
+                    managing providers.
                   properties:
                     errorTimestamp:
                       format: date-time
@@ -4928,7 +5098,8 @@ spec:
   scope: Cluster
   versions:
   - deprecated: true
-    deprecationWarning: externaldata.gatekeeper.sh/v1alpha1 is deprecated. Use externaldata.gatekeeper.sh/v1beta1 instead.
+    deprecationWarning: externaldata.gatekeeper.sh/v1alpha1 is deprecated. Use externaldata.gatekeeper.sh/v1beta1
+      instead.
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -4963,7 +5134,8 @@ spec:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the url for the provider. URL is prefixed with https://.
+                description: URL is the url for the provider. URL is prefixed with
+                  https://.
                 type: string
             type: object
           status:
@@ -4972,13 +5144,15 @@ spec:
               byPod:
                 description: ByPod is the status of the provider by pod
                 items:
-                  description: ProviderPodStatusStatus defines the observed state of ProviderPodStatus.
+                  description: ProviderPodStatusStatus defines the observed state
+                    of ProviderPodStatus.
                   properties:
                     active:
                       type: boolean
                     errors:
                       items:
-                        description: ProviderError represents a single error caught while managing providers.
+                        description: ProviderError represents a single error caught
+                          while managing providers.
                         properties:
                           errorTimestamp:
                             format: date-time
@@ -5059,7 +5233,8 @@ spec:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the url for the provider. URL is prefixed with https://.
+                description: URL is the url for the provider. URL is prefixed with
+                  https://.
                 type: string
             type: object
           status:
@@ -5068,13 +5243,15 @@ spec:
               byPod:
                 description: ByPod is the status of the provider by pod
                 items:
-                  description: ProviderPodStatusStatus defines the observed state of ProviderPodStatus.
+                  description: ProviderPodStatusStatus defines the observed state
+                    of ProviderPodStatus.
                   properties:
                     active:
                       type: boolean
                     errors:
                       items:
-                        description: ProviderError represents a single error caught while managing providers.
+                        description: ProviderError represents a single error caught
+                          while managing providers.
                         properties:
                           errorTimestamp:
                             format: date-time
@@ -5142,7 +5319,9 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: SyncSet defines which resources Gatekeeper will cache. The union of all SyncSets plus the syncOnly field of Gatekeeper's Config resource defines the sets of resources that will be synced.
+        description: SyncSet defines which resources Gatekeeper will cache. The union
+          of all SyncSets plus the syncOnly field of Gatekeeper's Config resource
+          defines the sets of resources that will be synced.
         properties:
           apiVersion:
             description: |-
