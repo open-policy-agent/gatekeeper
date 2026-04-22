@@ -18,7 +18,7 @@ body = """
 
 {% for commit in commits -%}
 - {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | upper_first | trim }}\
-{% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.remote.pr_number }}))\
+{% if commit.remote.pr_number %} [#{{ commit.remote.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.remote.pr_number }})\
 {% endif %} ([{{ commit.author.name }}]({{ self::remote_url() }}/commit/{{ commit.id }}))
 {% endfor %}
 {% endfor %}
@@ -37,10 +37,9 @@ tag_pattern = "v[0-9].*"
 topo_order = false
 sort_commits = "oldest"
 
-# Strip inline PR references like "(#1234)" from commit messages since the
-# GitHub API provides proper PR links via commit.remote.pr_number.
+# strip multiple lines
 commit_preprocessors = [
-  { pattern = '\s*\(#\d+\)', replace = "" },
+  { pattern = '\n[\s\S]*', replace = "" },
 ]
 
 # mirrors the list in .github/semantic.yml.
