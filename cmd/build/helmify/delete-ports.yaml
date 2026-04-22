@@ -10,10 +10,13 @@ spec:
         - name: manager
           ports:
             - containerPort: 8888
+              protocol: TCP
               $patch: delete
             - containerPort: 8443
+              protocol: TCP
               $patch: delete
             - containerPort: 9090
+              protocol: TCP
               $patch: delete
 ---
 kind: Deployment
@@ -28,6 +31,8 @@ spec:
         - name: manager
           ports:
             - containerPort: 8888
+              protocol: TCP
               $patch: delete
             - containerPort: 9090
+              protocol: TCP
               $patch: delete

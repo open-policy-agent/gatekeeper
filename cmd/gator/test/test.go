@@ -89,7 +89,7 @@ func run(_ *cobra.Command, _ []string) {
 		cmdutils.ErrFatalf("no input data identified")
 	}
 
-	var printBuf bytes.Buffer
+	printBuf := gator.NewPrintBuffer(gator.DefaultPrintBufferLimit)
 
 	var opts []gator.Opt
 	if flagIncludeTrace {
@@ -102,7 +102,7 @@ func run(_ *cobra.Command, _ []string) {
 		opts = append(opts, test.WithK8sCEL(flagGatherStats))
 	}
 	if flagVerbose {
-		opts = append(opts, gator.WithPrintHook(&printBuf))
+		opts = append(opts, gator.WithPrintHook(printBuf))
 	}
 
 	responses, err := test.Test(unstrucs, opts...)
