@@ -8,6 +8,7 @@ env:
   IMAGE_REPO: openpolicyagent/gatekeeper
   CRD_IMAGE_REPO: openpolicyagent/gatekeeper-crds
   GATOR_IMAGE_REPO: openpolicyagent/gator
+  CHANGELOG_FILE: CHANGES.md
 
 permissions: read-all
 
@@ -163,7 +164,7 @@ jobs:
           config: cliff.toml
           args: --latest --strip header --no-exec
         env:
-          OUTPUT: CHANGES.md
+          OUTPUT: ${{ env.CHANGELOG_FILE }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -181,7 +182,7 @@ jobs:
           # create release
           gh release create "${TAG}" \
             --title "${TAG}" \
-            --notes-file CHANGES.md \
+            --notes-file "${CHANGELOG_FILE}" \
             --verify-tag \
             ${PRERELEASE_FLAG} \
             _dist/sha256sums.txt \

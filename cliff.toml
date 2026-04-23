@@ -46,21 +46,21 @@ commit_preprocessors = [
 # HTML comment prefixes (<!-- N -->) control group display order.
 # any commit not matching a rule will be under "Other Changes".
 commit_parsers = [
-  { message = "^feat", group = "<!-- 00 -->🚀 Features" },
-  { message = "^fix", group = "<!-- 01 -->🐛 Bug Fixes" },
-  { message = "^perf", group = "<!-- 02 -->⚡ Performance" },
-  { message = "^refactor", group = "<!-- 03 -->♻️ Refactors" },
-  { message = "^revert", group = "<!-- 04 -->⏪ Reverts" },
-  { message = "^docs", group = "<!-- 05 -->📚 Documentation" },
-  { message = "^test", group = "<!-- 06 -->✅ Tests" },
-  { message = "^style", group = "<!-- 07 -->💅 Styling" },
-  { message = "^build", group = "<!-- 08 -->🏗️ Build System" },
-  { message = "^ci", group = "<!-- 09 -->🤖 Continuous Integration" },
+  { message = "^feat", group = "<!-- 00 -->Features" },
+  { message = "^fix", group = "<!-- 01 -->Bug Fixes" },
+  { message = "^perf", group = "<!-- 02 -->Performance" },
+  { message = "^refactor", group = "<!-- 03 -->Refactors" },
+  { message = "^revert", group = "<!-- 04 -->Reverts" },
+  { message = "^docs", group = "<!-- 05 -->Documentation" },
+  { message = "^test", group = "<!-- 06 -->Tests" },
+  { message = "^style", group = "<!-- 07 -->Styling" },
+  { message = "^build", group = "<!-- 08 -->Build System" },
+  { message = "^ci", group = "<!-- 09 -->Continuous Integration" },
   # dependency bumps: both "chore(deps)" and dependabot's "chore: bump ..." pattern.
-  { message = "^chore\\(deps\\)", group = "<!-- 10 -->📦 Dependencies" },
-  { message = "(?i)^chore.*: bump ", group = "<!-- 10 -->📦 Dependencies" },
+  { message = "^chore\\(deps\\)", group = "<!-- 10 -->Dependencies" },
+  { message = "(?i)^chore.*: bump ", group = "<!-- 10 -->Dependencies" },
   # skip release prep commits
   { message = "^chore: [Pp]repare v", skip = true },
-  { message = "^chore", group = "<!-- 11 -->🧹 Chores" },
+  { message = "^chore", group = "<!-- 11 -->Chores" },
   { message = ".*", group = "<!-- 12 -->Other Changes" },
 ]
