@@ -98,14 +98,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -151,14 +153,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -229,7 +233,8 @@ spec:
                     description: Assign.value holds the value to be assigned
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider to be used for mutation.
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
@@ -256,20 +261,25 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data provider.
+                            description: Provider is the name of the external data
+                              provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified metadata field.
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
                             type: string
                         type: object
                       value:
-                        description: Value is a constant value that will be assigned to `location`
+                        description: Value is a constant value that will be assigned
+                          to `location`
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                 type: object
@@ -282,13 +292,15 @@ spec:
                   INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
                   Important: Run "make" to regenerate code after modifying this file
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -402,14 +414,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -455,14 +469,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -533,7 +549,8 @@ spec:
                     description: Assign.value holds the value to be assigned
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider to be used for mutation.
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
@@ -560,20 +577,25 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data provider.
+                            description: Provider is the name of the external data
+                              provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified metadata field.
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
                             type: string
                         type: object
                       value:
-                        description: Value is a constant value that will be assigned to `location`
+                        description: Value is a constant value that will be assigned
+                          to `location`
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                 type: object
@@ -586,13 +608,15 @@ spec:
                   INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
                   Important: Run "make" to regenerate code after modifying this file
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
@@ -706,14 +730,16 @@ spec:
                       requirements of the selector.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -759,14 +785,16 @@ spec:
                       namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -837,7 +865,8 @@ spec:
                     description: Assign.value holds the value to be assigned
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider to be used for mutation.
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
@@ -864,20 +893,25 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data provider.
+                            description: Provider is the name of the external data
+                              provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified metadata field.
+                        description: FromMetadata assigns a value from the specified
+                          metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            description: Field specifies which metadata field provides
+                              the assigned value. Valid fields are `namespace` and
+                              `name`.
                             type: string
                         type: object
                       value:
-                        description: Value is a constant value that will be assigned to `location`
+                        description: Value is a constant value that will be assigned
+                          to `location`
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                 type: object
@@ -890,13 +924,15 @@ spec:
                   INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
                   Important: Run "make" to regenerate code after modifying this file
                 items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+                  description: MutatorPodStatusStatus defines the observed state of
+                    MutatorPodStatus.
                   properties:
                     enforced:
                       type: boolean
                     errors:
                       items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
+                        description: MutatorError represents a single error caught
+                          while adding a mutator to a system.
                         properties:
                           message:
                             type: string
