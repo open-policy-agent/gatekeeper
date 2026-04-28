@@ -32,7 +32,7 @@ jobs:
             sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
       - name: Harden Runner
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:
           egress-policy: audit
 
@@ -159,7 +159,7 @@ jobs:
           PLATFORMS: "linux-amd64 linux-arm64 darwin-amd64 darwin-arm64"
 
       - name: Generate release notes with git-cliff
-        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72 # v4.7.1
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
         with:
           config: cliff.toml
           args: --latest --strip header --no-exec
