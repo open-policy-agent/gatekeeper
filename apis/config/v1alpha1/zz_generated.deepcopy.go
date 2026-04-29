@@ -22,6 +22,7 @@ package v1alpha1
 import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -158,6 +159,26 @@ func (in *MatchEntry) DeepCopyInto(out *MatchEntry) {
 		in, out := &in.ExcludedNamespaces, &out.ExcludedNamespaces
 		*out = make([]wildcard.Wildcard, len(*in))
 		copy(*out, *in)
+	}
+	if in.APIGroups != nil {
+		in, out := &in.APIGroups, &out.APIGroups
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.APIVersions != nil {
+		in, out := &in.APIVersions, &out.APIVersions
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.Kinds != nil {
+		in, out := &in.Kinds, &out.Kinds
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.NamespaceSelector != nil {
+		in, out := &in.NamespaceSelector, &out.NamespaceSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
 	}
 }
 
