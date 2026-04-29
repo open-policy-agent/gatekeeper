@@ -187,6 +187,48 @@ Below is the mapping of Gatekeeper's `enforcementActions` to `validatingAdmissio
 | `warn` | `Warn` |
 | `dryrun` | `Audit` |
 
+## Configuring VAP Operations
+
+When Gatekeeper generates a ValidatingAdmissionPolicy (VAP) from a ConstraintTemplate, the VAP's `operations` are determined by the **intersection** of:
+
+1. The operations configured on Gatekeeper's **validating webhook** (e.g., `CREATE`, `UPDATE`, and optionally `DELETE`)
+2. The `operations` specified in the ConstraintTemplate's `targets[].operations` field
+
+The `targets[].operations` field is **optional**. When omitted, the generated VAP inherits the webhook's operations directly with no intersection filtering.
+
+When `targets[].operations` is specified, it can be set in the ConstraintTemplate as follows:
+
+```yaml
+spec:
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      operations: ["CREATE", "UPDATE", "DELETE"]
+      code:
+        - engine: K8sNativeValidation
+          source:
+            ...
+```
+
+This means a ConstraintTemplate that targets `DELETE` will only produce a VAP with `DELETE` in its resource rules if the webhook is also configured to handle `DELETE` operations.
+
+### Enabling DELETE for VAP policies
+
+By default, Gatekeeper's webhook only handles `CREATE` and `UPDATE`. To use `DELETE` in a ConstraintTemplate's operations and have it reflected in the generated VAP, you must enable delete operations on the webhook.
+
+**Helm:**
+
+```yaml
+enableDeleteOperations: true
+```
+
+For other methods, see [Customizing Admission Behavior](customize-admission.md#enable-validation-of-delete-operations).
+
+:::warning
+If there is **partial overlap** between the ConstraintTemplate's operations and the webhook's operations (e.g., the CT specifies `CREATE` and `DELETE` but the webhook only has `CREATE` and `UPDATE`), the VAP is still generated using only the intersecting operations (`CREATE` in this example). A non-fatal warning is logged to indicate the mismatch.
+
+If there is **no overlap** at all (e.g., CT has only `DELETE` but the webhook only has `CREATE` and `UPDATE`), the VAP resource **will not be generated**.
+:::
+
 ## FAQs
 
 <details>
