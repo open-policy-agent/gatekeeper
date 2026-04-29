@@ -542,7 +542,7 @@ func testAssignMutation(
 	assign := mutationsunversioned.Assign{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: mutationsunversioned.AssignSpec{
-			ApplyTo:  []match.ApplyTo{{Groups: []string{group}, Versions: []string{version}, Kinds: []string{kind}}},
+			ApplyTo:  []match.MutationApplyTo{{ApplyTo: match.ApplyTo{Groups: []string{group}, Versions: []string{version}, Kinds: []string{kind}}}},
 			Location: location,
 			Parameters: mutationsunversioned.Parameters{
 				Assign: makeValue(value),
