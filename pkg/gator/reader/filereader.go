@@ -13,7 +13,7 @@ import (
 
 var allowedExtensions = []string{gator.ExtYAML, gator.ExtYML, gator.ExtJSON}
 
-func ReadSources(filenames []string, images []string, tempDir string) ([]*unstructured.Unstructured, error) {
+func ReadSources(filenames []string, images []string, tempDir string, allowPlainHTTP bool) ([]*unstructured.Unstructured, error) {
 	var sources []*source
 
 	// Read from --filename flag
@@ -24,7 +24,7 @@ func ReadSources(filenames []string, images []string, tempDir string) ([]*unstru
 	sources = append(sources, s...)
 
 	// Read from --image flag
-	s, err = readImages(images, tempDir)
+	s, err = readImages(images, tempDir, allowPlainHTTP)
 	if err != nil {
 		return nil, fmt.Errorf("pulling image: %w", err)
 	}
@@ -45,8 +45,8 @@ func ReadSources(filenames []string, images []string, tempDir string) ([]*unstru
 	return sourcesToUnstruct(sources), nil
 }
 
-func readImage(image string, tempDir string) ([]*source, error) {
-	dirPath, closeHandler, err := oci.PullImage(image, tempDir)
+func readImage(image string, tempDir string, allowPlainHTTP bool) ([]*source, error) {
+	dirPath, closeHandler, err := oci.PullImage(image, tempDir, allowPlainHTTP)
 	if closeHandler != nil {
 		defer closeHandler()
 	}
@@ -65,10 +65,10 @@ func readImage(image string, tempDir string) ([]*source, error) {
 	return sources, nil
 }
 
-func readImages(images []string, tempDir string) ([]*source, error) {
+func readImages(images []string, tempDir string, allowPlainHTTP bool) ([]*source, error) {
 	var sources []*source
 	for _, image := range images {
-		s, err := readImage(image, tempDir)
+		s, err := readImage(image, tempDir, allowPlainHTTP)
 		if err != nil {
 			return nil, err
 		}
