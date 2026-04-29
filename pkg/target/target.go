@@ -145,6 +145,10 @@ func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (*gkRevi
 
 	review.namespace = obj.Namespace
 	review.source = obj.Source
+	review.Operation = obj.Operation
+	if obj.Operation == admissionv1.Delete {
+		review.OldObject = review.Object
+	}
 
 	return review, nil
 }

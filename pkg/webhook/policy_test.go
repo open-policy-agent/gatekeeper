@@ -17,6 +17,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	expansionfixtures "github.com/open-policy-agent/gatekeeper/v3/pkg/expansion/fixtures"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -195,6 +196,57 @@ func validRegoTemplateConstraint() *unstructured.Unstructured {
 		Kind:    "K8sGoodRego",
 	})
 	u.SetName("constraint")
+
+	return u
+}
+
+func operationSensitiveTemplate() *templates.ConstraintTemplate {
+	return &templates.ConstraintTemplate{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: templatesv1beta1.SchemeGroupVersion.String(),
+			Kind:       "ConstraintTemplate",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "k8soperationcheck",
+		},
+		Spec: templates.ConstraintTemplateSpec{
+			CRD: templates.CRD{
+				Spec: templates.CRDSpec{
+					Names: templates.Names{
+						Kind: "K8sOperationCheck",
+					},
+				},
+			},
+			Targets: []templates.Target{{
+				Target: target.Name,
+				Code: []templates.Code{{
+					Engine: "Rego",
+					Source: &templates.Anything{
+						Value: map[string]interface{}{"rego": `
+package operationcheck
+
+violation[{"msg": msg}] {
+	input.review.kind.kind == "Pod"
+	input.review.operation != "DELETE"
+	input.review.operation != "UPDATE"
+	msg := sprintf("unexpected operation for expanded resource: %v", [input.review.operation])
+}`},
+					},
+				}},
+			}},
+		},
+	}
+}
+
+func operationSensitiveConstraint() *unstructured.Unstructured {
+	u := &unstructured.Unstructured{}
+
+	u.SetGroupVersionKind(k8schema.GroupVersionKind{
+		Group:   constraints.Group,
+		Version: "v1beta1",
+		Kind:    "K8sOperationCheck",
+	})
+	u.SetName("check-generated-operation")
 
 	return u
 }
@@ -417,6 +469,92 @@ func TestReviewDefaultNS(t *testing.T) {
 
 	maxThreads = 1
 	t.Run("with max threads", testFn)
+}
+
+func TestExpandedResourceUsesAdmissionOperation(t *testing.T) {
+	ctx := context.Background()
+	opa, err := makeOpaClient()
+	require.NoError(t, err)
+	_, err = opa.AddTemplate(ctx, operationSensitiveTemplate())
+	require.NoError(t, err)
+	_, err = opa.AddConstraint(ctx, operationSensitiveConstraint())
+	require.NoError(t, err)
+
+	expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
+	require.NoError(t, expSystem.UpsertTemplate(expansionfixtures.LoadTemplate(expansionfixtures.TempExpDeploymentExpandsPods, t)))
+
+	handler := validationHandler{
+		opa:             opa,
+		expansionSystem: expSystem,
+		webhookHandler: webhookHandler{
+			client:          &nsGetter{},
+			reader:          &nsGetter{},
+			processExcluder: process.New(),
+		},
+		log: log,
+	}
+
+	deployment := expansionfixtures.LoadFixture(expansionfixtures.DeploymentNginx, t)
+	require.NotNil(t, deployment)
+	deploymentJSON, err := deployment.MarshalJSON()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name      string
+		operation admissionv1.Operation
+		allowed   bool
+	}{
+		{
+			name:      "create denies generated pod",
+			operation: admissionv1.Create,
+			allowed:   false,
+		},
+		{
+			name:      "update allows generated pod",
+			operation: admissionv1.Update,
+			allowed:   true,
+		},
+		{
+			name:      "delete allows generated pod",
+			operation: admissionv1.Delete,
+			allowed:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Kind: metav1.GroupVersionKind{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+					Name:      "nginx-deployment",
+					Namespace: "default",
+					Operation: tt.operation,
+				},
+			}
+			if tt.operation == admissionv1.Delete {
+				req.OldObject = runtime.RawExtension{Raw: deploymentJSON}
+			} else {
+				req.Object = runtime.RawExtension{Raw: deploymentJSON}
+			}
+
+			resp := handler.Handle(ctx, req)
+			require.Equal(t, tt.allowed, resp.Allowed)
+		})
+	}
+}
+
+func TestCreateReviewForResultantPreservesOperation(t *testing.T) {
+	resultant := createReviewForResultant(
+		expansionfixtures.LoadFixture(expansionfixtures.PodNoMutate, t),
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		admissionv1.Create,
+	)
+
+	require.Equal(t, admissionv1.Create, resultant.Operation)
 }
 
 func TestExcludedNamespaces(t *testing.T) {

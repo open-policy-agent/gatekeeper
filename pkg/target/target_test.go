@@ -654,6 +654,22 @@ func unmatchedRawData() []byte {
 	return objData
 }
 
+func TestAugmentedUnstructuredToAdmissionRequestPreservesOperation(t *testing.T) {
+	review, err := augmentedUnstructuredToAdmissionRequest(AugmentedUnstructured{
+		Object:    *makeResource(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}, "example"),
+		Operation: admissionv1.Delete,
+	})
+	if err != nil {
+		t.Fatalf("augmentedUnstructuredToAdmissionRequest() error = %v", err)
+	}
+	if review.Operation != admissionv1.Delete {
+		t.Fatalf("operation = %v, want %v", review.Operation, admissionv1.Delete)
+	}
+	if review.OldObject.Raw == nil {
+		t.Fatal("old object = nil, want populated raw object for delete")
+	}
+}
+
 func TestMatcher_Match(t *testing.T) {
 	nsData, _ := json.Marshal(makeResource(schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, "foo").Object)
 
