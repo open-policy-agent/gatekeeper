@@ -192,7 +192,12 @@ func kindsMatch(match *Match, target *Matchable) (bool, error) {
 		}
 
 		groupMatches := len(kk.APIGroups) == 0 || contains(kk.APIGroups, Wildcard) || contains(kk.APIGroups, gvk.Group)
-		if groupMatches {
+		if !groupMatches {
+			continue
+		}
+
+		versionMatches := len(kk.APIVersions) == 0 || contains(kk.APIVersions, Wildcard) || contains(kk.APIVersions, gvk.Version)
+		if versionMatches {
 			return true, nil
 		}
 	}
