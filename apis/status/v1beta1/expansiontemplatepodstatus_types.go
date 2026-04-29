@@ -13,11 +13,16 @@ import (
 // ExpansionTemplatePodStatusStatus defines the observed state of ExpansionTemplatePodStatus.
 type ExpansionTemplatePodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
-	ID                 string                    `json:"id,omitempty"`
-	TemplateUID        types.UID                 `json:"templateUID,omitempty"`
-	Operations         []string                  `json:"operations,omitempty"`
-	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
-	Errors             []*ExpansionTemplateError `json:"errors,omitempty"`
+	// +optional
+	ID string `json:"id,omitempty"`
+	// +optional
+	TemplateUID types.UID `json:"templateUID,omitempty"`
+	// +optional
+	Operations []string `json:"operations,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// +optional
+	Errors []*ExpansionTemplateError `json:"errors,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
