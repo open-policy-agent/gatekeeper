@@ -366,7 +366,10 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return true, nil
 	}
 
-	if len(req.Name) > 63 {
+	// Status resource names are generated from the controller pod name plus the
+	// backing object identity (for example, template or constraint name), so
+	// valid status object names can exceed 63 characters.
+	if req.Kind.Group != "status.gatekeeper.sh" && len(req.Name) > 63 {
 		return false, fmt.Errorf("resource cannot have metadata.name larger than 63 char; length: %d", len(req.Name))
 	}
 
