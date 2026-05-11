@@ -176,7 +176,7 @@ var replacements = map[string]string{
         {{- $list = append $value $.Release.Namespace | uniq -}}
       {{- end }}
       {{- range $list }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}`,
 
@@ -238,7 +238,7 @@ var replacements = map[string]string{
         {{- $list = append $value $.Release.Namespace | uniq -}}
       {{- end }}
       {{- range $list }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}`,
 
