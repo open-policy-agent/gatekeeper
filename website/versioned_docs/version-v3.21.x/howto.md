@@ -5,6 +5,10 @@ title: How to use Gatekeeper
 
 Gatekeeper uses the [OPA Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/master/constraint) to describe and enforce policy. Look there for more detailed information on their semantics and advanced usage.
 
+This page covers validation policies. Validation uses `ConstraintTemplate` and `Constraint` resources to evaluate Kubernetes objects and can then deny, warn, dry-run, audit, or report violations.
+
+To modify resources during admission instead, use [mutation policies](mutation.md).
+
 ## Constraint Templates
 
 Before you can define a constraint, you must first define a [`ConstraintTemplate`](constrainttemplates.md), which describes both the [Rego](https://www.openpolicyagent.org/docs/latest/#rego) that enforces the constraint and the schema of the constraint. The schema of the constraint allows an admin to fine-tune the behavior of a constraint, much like arguments to a function.
@@ -139,4 +143,3 @@ kubectl get constraints
 
 ### Input Review
 You can view information on the `input.review` object that Gatekeeper takes as input [here](./input.md)
-

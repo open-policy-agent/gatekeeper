@@ -3,9 +3,13 @@ id: constrainttemplates
 title: Constraint Templates
 ---
 
-ConstraintTemplates define a way to validate some set of Kubernetes objects in Gatekeeper's Kubernetes [admission controller](https://kubernetes.io/blog/2019/03/21/a-guide-to-kubernetes-admission-controllers/).  They are made of two main elements:
+ConstraintTemplates define a way to validate some set of Kubernetes objects in Gatekeeper's Kubernetes [admission controller](https://kubernetes.io/blog/2019/03/21/a-guide-to-kubernetes-admission-controllers/).
 
-1. [Rego](https://www.openpolicyagent.org/docs/latest/#rego) code that defines a policy violation
+They are part of Gatekeeper's validation policy model. Mutation policies use separate [mutator resources](mutation.md).
+
+ConstraintTemplates are made of two main elements:
+
+1. Rego or CEL policy code in `spec.targets[]` fields that defines a policy violation; see [field precedence](#field-precedence-in-constrainttemplate)
 2. The schema of the accompanying `Constraint` object, which represents an instantiation of a `ConstraintTemplate`
 
 
@@ -253,4 +257,3 @@ spec:
 ConstraintTemplates support multiple ways to define policy code with the following precedence rules: (1) The legacy `spec.targets[].rego` field takes precedence over any Rego engine defined in `spec.targets[].code[]`. (2) When multiple engines are defined in the `code` array, only one engine is evaluated—the `K8sNativeValidation` (CEL) engine has higher priority than the `Rego` engine with no fallback mechanism. **Best practice:** Use the `code` array exclusively and define policy logic in only one engine (either Rego for complex policies with referential constraints and external data, or CEL for simpler validations) to avoid confusion about which policy will be evaluated.
 
 For more information on CEL integration and engine precedence, see the [Integration with Kubernetes Validating Admission Policy](validating-admission-policy.md) documentation.
-

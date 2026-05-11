@@ -5,7 +5,9 @@ title: Mutation
 
 `Feature State`: Gatekeeper version v3.10+ (stable)
 
-The mutation feature allows Gatekeeper modify Kubernetes resources at request time based on customizable mutation policies.
+The mutation feature allows Gatekeeper to modify Kubernetes resources at request time based on customizable mutation policies.
+
+Mutation policies are separate from validation constraints. They use mutation-specific CRDs instead of `ConstraintTemplate` and `Constraint` resources. If you need to reject, warn, dry-run, audit, or report non-compliant resources without changing them, use [validation constraints](howto.md) instead.
 
 ## Mutation CRDs
 
