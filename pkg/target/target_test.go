@@ -1214,3 +1214,25 @@ func TestHandleReviewForDelete(t *testing.T) {
 		})
 	}
 }
+
+func TestAugmentedUnstructuredDeleteUsesOldObject(t *testing.T) {
+	t.Parallel()
+
+	review, err := augmentedUnstructuredToAdmissionRequest(AugmentedUnstructured{
+		Object:    *makeResource(schema.GroupVersionKind{Group: "some", Kind: "Thing"}, "foo"),
+		Operation: admissionv1.Delete,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if review.Operation != admissionv1.Delete {
+		t.Fatalf("operation = %q, want %q", review.Operation, admissionv1.Delete)
+	}
+	if review.OldObject.Raw == nil {
+		t.Fatal("oldObject must contain the deleted object")
+	}
+	if review.Object.Raw != nil {
+		t.Fatalf("object must be empty before DELETE review normalization, got %q", string(review.Object.Raw))
+	}
+}
