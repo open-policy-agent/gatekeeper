@@ -2,6 +2,8 @@ module github.com/open-policy-agent/gatekeeper/v3
 
 go 1.25.0
 
+toolchain go1.25.10
+
 require (
 	cloud.google.com/go/trace v1.10.11
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.44.0
