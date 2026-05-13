@@ -276,7 +276,8 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
-  annotations: HELMSUBST_SECRET_ANNOTATIONS
+  annotations:
+    HELMSUBST_SECRET_ANNOTATIONS: ""
   name: gatekeeper-webhook-server-cert
   namespace: gatekeeper-system
 ---
@@ -286,7 +287,8 @@ metadata:
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-mutating-webhook-configuration
-  annotations: HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS
+  annotations:
+    HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS: ""
 webhooks:
 - clientConfig:
     service:
@@ -315,7 +317,8 @@ metadata:
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-validating-webhook-configuration
-  annotations: HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS
+  annotations:
+    HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS: ""
 webhooks:
 - clientConfig:
     service:

@@ -188,6 +188,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		logging.LogStatsEntries(
 			h.opa,
 			h.log.WithValues(
+				logging.Semantic, true,
 				logging.Process, "admission",
 				logging.EventType, "review_response_stats",
 				logging.ResourceGroup, req.Kind.Group,
@@ -274,6 +275,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 		}
 		if *logDenies {
 			h.log.WithValues(
+				logging.Semantic, true,
 				logging.Process, "admission",
 				logging.Details, r.Metadata["details"],
 				logging.EventType, "violation",
