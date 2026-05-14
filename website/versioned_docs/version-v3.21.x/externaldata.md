@@ -176,6 +176,60 @@ Response example: [[`"my-key"`, `"my-value"`, `""`], [`"another-key"`, `42`, `""
 Example template:
 https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/policy/template.yaml
 
+### Testing policies that use `external_data`
+
+The `external_data` built-in is registered by Gatekeeper, so the standard `opa test` command does not know about it by default. To unit test Rego that calls `external_data`, add the built-in's signature to an OPA capabilities file and mock it with the [`with` keyword](https://www.openpolicyagent.org/docs/latest/policy-testing/#data-and-function-mocking) in your tests.
+
+Start from the `capabilities.json` file for the OPA version you use, then add this entry to the `builtins` list:
+
+```json
+{
+  "name": "external_data",
+  "decl": {
+    "args": [
+      {
+        "type": "object"
+      }
+    ],
+    "result": {
+      "type": "object"
+    },
+    "type": "function"
+  }
+}
+```
+
+Run tests with the updated capabilities file:
+
+```shell
+opa test --capabilities capabilities.json .
+```
+
+In the test file, define a mock function that returns the same response shape Gatekeeper provides and replace `external_data` with that function:
+
+```rego
+package k8sexternaldata
+
+mock_external_data(request) = response {
+  request.provider == "dummy-provider"
+  request.keys == ["bad-image"]
+  response := {
+    "errors": [["bad-image", "not allowed"]],
+    "responses": [],
+    "status_code": 200,
+    "system_error": "",
+  }
+}
+
+test_violation {
+  review := {"review": {"object": {"spec": {"template": {"spec": {"containers": [{"image": "bad-image"}]}}}}}}
+  results := violation with input as review with external_data as mock_external_data
+  count(results) == 1
+}
+```
+
+You can add more `mock_external_data` rules to return different responses for different keys, including provider errors or system errors.
+
 ## External data for Gatekeeper mutating webhook
 
 External data can be used in conjunction with [Gatekeeper mutating webhook](mutation.md).
