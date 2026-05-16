@@ -14,7 +14,7 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
 )
 
-var DefaultFailurePolicy = flag.String("default-failure-policy", string(admissionv1.Fail), "(beta) Failure policy to use when a K8sNativeValidation source omits failurePolicy. Allowed values are Fail or Ignore.")
+var DefaultFailurePolicy = flag.String("default-failure-policy-for-cel-engine", string(admissionv1.Fail), "(beta) Failure policy to use when a K8sNativeValidation source omits failurePolicy. Allowed values are Fail or Ignore.")
 
 const (
 	// Name is the name of the driver.
