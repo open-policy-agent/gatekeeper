@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"flag"
 	"fmt"
 	"strings"
 
@@ -12,6 +13,8 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/policy/validating"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
 )
+
+var DefaultFailurePolicy = flag.String("default-failure-policy", string(admissionv1.Fail), "(beta) Failure policy to use when a K8sNativeValidation source omits failurePolicy. Allowed values are Fail or Ignore.")
 
 const (
 	// Name is the name of the driver.
@@ -197,38 +200,40 @@ func (in *Source) GetMessageExpressions() ([]cel.ExpressionAccessor, error) {
 }
 
 func (in *Source) GetFailurePolicy() (*admissionv1.FailurePolicyType, error) {
-	if in.FailurePolicy == nil {
-		return nil, nil
+	failurePolicy := in.FailurePolicy
+	if failurePolicy == nil {
+		failurePolicy = DefaultFailurePolicy
 	}
 
 	var out admissionv1.FailurePolicyType
 
-	switch *in.FailurePolicy {
+	switch *failurePolicy {
 	case string(admissionv1.Fail):
 		out = admissionv1.Fail
 	case string(admissionv1.Ignore):
 		out = admissionv1.Ignore
 	default:
-		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *in.FailurePolicy)
+		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *failurePolicy)
 	}
 
 	return &out, nil
 }
 
 func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType, error) {
-	var out admissionv1beta1.FailurePolicyType
-	if in.FailurePolicy == nil {
-		out = admissionv1beta1.Fail
-		return &out, nil
+	failurePolicy := in.FailurePolicy
+	if failurePolicy == nil {
+		failurePolicy = DefaultFailurePolicy
 	}
 
-	switch *in.FailurePolicy {
+	var out admissionv1beta1.FailurePolicyType
+
+	switch *failurePolicy {
 	case string(admissionv1.Fail):
 		out = admissionv1beta1.Fail
 	case string(admissionv1.Ignore):
 		out = admissionv1beta1.Ignore
 	default:
-		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *in.FailurePolicy)
+		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *failurePolicy)
 	}
 
 	return &out, nil

@@ -120,6 +120,8 @@ For some policies, you may want admission requests to be handled by the K8s Vali
 The K8s Validating Admission Controller requires both the Validating Admission Policy (VAP) and Validating Admission Policy Binding (VAPB) resources to exist to enforce a policy. Gatekeeper can be configured to generate both of these resources. To generate VAP Bindings for all Constraints, ensure the Gatekeeper 
 `--default-create-vap-binding-for-constraints` flag is set to `true`. To generate VAP as part of all Constraint Templates with the VAP CEL engine `K8sNativeValidation`, ensure the Gatekeeper `--default-create-vap-for-templates=true` flag is set to `true`. By default both flags are set to `true` now that the feature is in beta.
 
+If a K8sNativeValidation source omits `failurePolicy`, Gatekeeper uses `--default-failure-policy`, which defaults to `Fail`, for both Gatekeeper's CEL evaluation and generated VAP resources.
+
 To override the `--default-create-vap-for-templates` flag's behavior for a constraint template, set `generateVAP` to `true` explicitly under the K8sNativeValidation engine's `source` in the constraint template. 
 
 ```yaml

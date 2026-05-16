@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	admissionv1 "k8s.io/api/admissionregistration/v1"
+	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/utils/ptr"
 )
 
@@ -179,6 +181,42 @@ func TestValidationErrors(t *testing.T) {
 				t.Errorf("got %v; wanted %v", err, test.expectedErr)
 			}
 		})
+	}
+}
+
+func TestDefaultFailurePolicy(t *testing.T) {
+	original := *DefaultFailurePolicy
+	t.Cleanup(func() { *DefaultFailurePolicy = original })
+
+	source := &Source{}
+	*DefaultFailurePolicy = string(admissionv1.Ignore)
+
+	failurePolicy, err := source.GetFailurePolicy()
+	if err != nil {
+		t.Fatalf("GetFailurePolicy() returned an unexpected error: %v", err)
+	}
+	if failurePolicy == nil || *failurePolicy != admissionv1.Ignore {
+		t.Fatalf("GetFailurePolicy() = %v, want %s", failurePolicy, admissionv1.Ignore)
+	}
+
+	v1beta1FailurePolicy, err := source.GetV1Beta1FailurePolicy()
+	if err != nil {
+		t.Fatalf("GetV1Beta1FailurePolicy() returned an unexpected error: %v", err)
+	}
+	if v1beta1FailurePolicy == nil || *v1beta1FailurePolicy != admissionv1beta1.Ignore {
+		t.Fatalf("GetV1Beta1FailurePolicy() = %v, want %s", v1beta1FailurePolicy, admissionv1beta1.Ignore)
+	}
+}
+
+func TestDefaultFailurePolicyIsValidated(t *testing.T) {
+	original := *DefaultFailurePolicy
+	t.Cleanup(func() { *DefaultFailurePolicy = original })
+
+	source := &Source{}
+	*DefaultFailurePolicy = "Unsupported"
+
+	if err := source.Validate(); !errors.Is(err, ErrBadFailurePolicy) {
+		t.Fatalf("Validate() error = %v, want %v", err, ErrBadFailurePolicy)
 	}
 }
 
