@@ -178,57 +178,41 @@ https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/du
 
 ### Testing policies that use `external_data`
 
-The `external_data` built-in is registered by Gatekeeper, so the standard `opa test` command does not know about it by default. To unit test Rego that calls `external_data`, add the built-in's signature to an OPA capabilities file and mock it with the [`with` keyword](https://www.openpolicyagent.org/docs/latest/policy-testing/#data-and-function-mocking) in your tests.
+The `external_data` built-in is registered by Gatekeeper, so the standard `opa test` command does not know about it by default. For unit tests, define a test-only `external_data` function in a `*_test.rego` file in the same package as the policy under test. OPA compiles the policy and test files together, so the test-only function is used while tests run and is not included in the ConstraintTemplate you deploy to Gatekeeper.
 
-Start from the `capabilities.json` file for the OPA version you use, then add this entry to the `builtins` list:
-
-```json
-{
-  "name": "external_data",
-  "decl": {
-    "args": [
-      {
-        "type": "object"
-      }
-    ],
-    "result": {
-      "type": "object"
-    },
-    "type": "function"
-  }
-}
-```
-
-Run tests with the updated capabilities file:
-
-```shell
-opa test --capabilities capabilities.json .
-```
-
-In the test file, define a mock function that returns the same response shape Gatekeeper provides and replace `external_data` with that function:
+For example, keep the policy's call to `external_data` in the ConstraintTemplate, and add the mock responses in the test file:
 
 ```rego
 package k8sexternaldata
 
-mock_external_data(request) = response {
+test_input_not_allow {
+  review := {"review": {"object": {"spec": {"template": {"spec": {"containers": [{"image": "error_image"}]}}}}}}
+  results := violation with input as review
+  count(results) == 1
+}
+
+external_data(request) = response {
   request.provider == "dummy-provider"
-  request.keys == ["bad-image"]
+  request.keys == ["system_error_image"]
   response := {
-    "errors": [["bad-image", "not allowed"]],
-    "responses": [],
+    "status_code": 504,
+    "system_error": "provider not responding",
+  }
+}
+
+external_data(request) = response {
+  request.provider == "dummy-provider"
+  request.keys != ["system_error_image"]
+  response := {
+    "errors": [[key, "not allowed"] | key := request.keys[_]; key == "error_image"],
+    "responses": [[key, "allowed"] | key := request.keys[_]; key != "error_image"],
     "status_code": 200,
     "system_error": "",
   }
 }
-
-test_violation {
-  review := {"review": {"object": {"spec": {"template": {"spec": {"containers": [{"image": "bad-image"}]}}}}}}
-  results := violation with input as review with external_data as mock_external_data
-  count(results) == 1
-}
 ```
 
-You can add more `mock_external_data` rules to return different responses for different keys, including provider errors or system errors.
+Add more `external_data` rules to return different responses for different key sets, including provider errors or system errors. If you prefer to mock `external_data` with the [`with` keyword](https://www.openpolicyagent.org/docs/latest/policy-testing/#data-and-function-mocking), add the `external_data` built-in signature to an OPA capabilities file and run tests with `opa test --capabilities capabilities.json .`.
 
 ## External data for Gatekeeper mutating webhook
 
