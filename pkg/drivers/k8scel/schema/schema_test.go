@@ -184,12 +184,12 @@ func TestValidationErrors(t *testing.T) {
 	}
 }
 
-func TestDefaultFailurePolicy(t *testing.T) {
-	original := *DefaultFailurePolicy
-	t.Cleanup(func() { *DefaultFailurePolicy = original })
+func TestDefaultFailurePolicyForK8sNativeValidation(t *testing.T) {
+	original := *DefaultFailurePolicyForK8sNativeValidation
+	t.Cleanup(func() { *DefaultFailurePolicyForK8sNativeValidation = original })
 
 	source := &Source{}
-	*DefaultFailurePolicy = string(admissionv1.Ignore)
+	*DefaultFailurePolicyForK8sNativeValidation = string(admissionv1.Ignore)
 
 	failurePolicy, err := source.GetFailurePolicy()
 	if err != nil {
@@ -208,15 +208,25 @@ func TestDefaultFailurePolicy(t *testing.T) {
 	}
 }
 
-func TestDefaultFailurePolicyIsValidated(t *testing.T) {
-	original := *DefaultFailurePolicy
-	t.Cleanup(func() { *DefaultFailurePolicy = original })
+func TestDefaultFailurePolicyForK8sNativeValidationIsValidatedAtStartup(t *testing.T) {
+	original := *DefaultFailurePolicyForK8sNativeValidation
+	t.Cleanup(func() { *DefaultFailurePolicyForK8sNativeValidation = original })
 
-	source := &Source{}
-	*DefaultFailurePolicy = "Unsupported"
+	*DefaultFailurePolicyForK8sNativeValidation = "Unsupported"
 
-	if err := source.Validate(); !errors.Is(err, ErrBadFailurePolicy) {
-		t.Fatalf("Validate() error = %v, want %v", err, ErrBadFailurePolicy)
+	if err := ValidateDefaultFailurePolicyForK8sNativeValidation(); !errors.Is(err, ErrBadFailurePolicy) {
+		t.Fatalf("ValidateDefaultFailurePolicyForK8sNativeValidation() error = %v, want %v", err, ErrBadFailurePolicy)
+	}
+}
+
+func TestSourceValidateDoesNotValidateDefaultFailurePolicyForK8sNativeValidation(t *testing.T) {
+	original := *DefaultFailurePolicyForK8sNativeValidation
+	t.Cleanup(func() { *DefaultFailurePolicyForK8sNativeValidation = original })
+
+	*DefaultFailurePolicyForK8sNativeValidation = "Unsupported"
+
+	if err := (&Source{}).Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
 	}
 }
 

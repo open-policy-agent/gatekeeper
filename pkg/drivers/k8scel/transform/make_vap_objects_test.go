@@ -243,10 +243,10 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 	}
 }
 
-func TestTemplateToPolicyDefinitionUsesDefaultFailurePolicy(t *testing.T) {
-	original := *schema.DefaultFailurePolicy
-	t.Cleanup(func() { *schema.DefaultFailurePolicy = original })
-	*schema.DefaultFailurePolicy = string(admissionregistrationv1.Ignore)
+func TestTemplateToPolicyDefinitionUsesDefaultFailurePolicyForK8sNativeValidation(t *testing.T) {
+	original := *schema.DefaultFailurePolicyForK8sNativeValidation
+	t.Cleanup(func() { *schema.DefaultFailurePolicyForK8sNativeValidation = original })
+	*schema.DefaultFailurePolicyForK8sNativeValidation = string(admissionregistrationv1.Ignore)
 
 	source := &schema.Source{
 		Validations: []schema.Validation{

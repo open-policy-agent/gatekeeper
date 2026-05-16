@@ -50,6 +50,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
@@ -208,6 +209,11 @@ func innerMain() int {
 		logger := crzap.New(opts...)
 		ctrl.SetLogger(logger)
 		klog.SetLogger(logger)
+	}
+
+	if err := celSchema.ValidateDefaultFailurePolicyForK8sNativeValidation(); err != nil {
+		setupLog.Error(err, "Invalid default K8sNativeValidation failure policy")
+		return 1
 	}
 
 	if *mutation.DeprecatedMutationEnabled {

@@ -14,7 +14,7 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
 )
 
-var DefaultFailurePolicy = flag.String("default-failure-policy-for-cel-engine", string(admissionv1.Fail), "(beta) Failure policy to use when a K8sNativeValidation source omits failurePolicy. Allowed values are Fail or Ignore.")
+var DefaultFailurePolicyForK8sNativeValidation = flag.String("default-k8s-native-validation-failure-policy", string(admissionv1.Fail), "(beta) Failure policy to use when a K8sNativeValidation source omits failurePolicy. Allowed values are Fail or Ignore.")
 
 const (
 	// Name is the name of the driver.
@@ -70,7 +70,7 @@ func (in *Source) Validate() error {
 	if err := in.validateVariables(); err != nil {
 		return err
 	}
-	if _, err := in.GetFailurePolicy(); err != nil {
+	if err := validateFailurePolicy(in.FailurePolicy); err != nil {
 		return err
 	}
 
@@ -202,7 +202,7 @@ func (in *Source) GetMessageExpressions() ([]cel.ExpressionAccessor, error) {
 func (in *Source) GetFailurePolicy() (*admissionv1.FailurePolicyType, error) {
 	failurePolicy := in.FailurePolicy
 	if failurePolicy == nil {
-		failurePolicy = DefaultFailurePolicy
+		failurePolicy = DefaultFailurePolicyForK8sNativeValidation
 	}
 
 	var out admissionv1.FailurePolicyType
@@ -222,7 +222,7 @@ func (in *Source) GetFailurePolicy() (*admissionv1.FailurePolicyType, error) {
 func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType, error) {
 	failurePolicy := in.FailurePolicy
 	if failurePolicy == nil {
-		failurePolicy = DefaultFailurePolicy
+		failurePolicy = DefaultFailurePolicyForK8sNativeValidation
 	}
 
 	var out admissionv1beta1.FailurePolicyType
@@ -237,6 +237,23 @@ func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType
 	}
 
 	return &out, nil
+}
+
+func ValidateDefaultFailurePolicyForK8sNativeValidation() error {
+	return validateFailurePolicy(DefaultFailurePolicyForK8sNativeValidation)
+}
+
+func validateFailurePolicy(failurePolicy *string) error {
+	if failurePolicy == nil {
+		return nil
+	}
+
+	switch *failurePolicy {
+	case string(admissionv1.Fail), string(admissionv1.Ignore):
+		return nil
+	default:
+		return fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *failurePolicy)
+	}
 }
 
 // MustToUnstructured() is a convenience method for converting to unstructured.
