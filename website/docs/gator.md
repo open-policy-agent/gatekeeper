@@ -228,6 +228,8 @@ metadata:
 
 :::note
 Flag `enable-k8s-native-validation` enables ConstraintTemplate containing "validating admission policy styled CEL". By default, this flag is enabled and set to `true`.
+
+Flag `default-k8s-native-validation-failure-policy` sets the default failure policy for K8sNativeValidation sources that omit `failurePolicy`. It defaults to `Fail` and accepts `Fail` or `Ignore`; set it to match Gatekeeper's runtime default when testing policies shift-left.
 :::
 
 #### Specifying inputs
@@ -317,6 +319,8 @@ gator test --filename=manifests-and-policies/ --output=json
 
 :::note
 Flag `enable-k8s-native-validation` enables ConstraintTemplate containing "validating admission policy styled CEL". By default, this flag is enabled and set to `true`.
+
+Flag `default-k8s-native-validation-failure-policy` sets the default failure policy for K8sNativeValidation sources that omit `failurePolicy`. It defaults to `Fail` and accepts `Fail` or `Ignore`; set it to match Gatekeeper's runtime default when verifying policies shift-left.
 :::
 
 ### Writing Test Suites
@@ -836,6 +840,7 @@ gator bench --filename=policies/
 | `--filename` | `-f` | | File or directory containing ConstraintTemplates, Constraints, and resources. Repeatable. |
 | `--image` | `-i` | | OCI image URL containing policies. Repeatable. |
 | `--engine` | `-e` | `cel` | Policy engine to benchmark: `rego`, `cel`, or `all` |
+| `--default-k8s-native-validation-failure-policy` | | `Fail` | Default failure policy for K8sNativeValidation sources that omit `failurePolicy`: `Fail` or `Ignore` |
 | `--iterations` | `-n` | `1000` | Number of benchmark iterations. Use ≥1000 for reliable P99 percentiles. |
 | `--warmup` | | `10` | Warmup iterations before measurement |
 | `--concurrency` | `-c` | `1` | Number of concurrent goroutines for parallel evaluation |

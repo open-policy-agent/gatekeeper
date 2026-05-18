@@ -127,6 +127,10 @@ spec:
           }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
         
+        {{- if hasKey .Values "defaultK8sNativeValidationFailurePolicy"}}
+        - --default-k8s-native-validation-failure-policy={{ .Values.defaultK8sNativeValidationFailurePolicy }}
+        {{- end }}
+        
         {{- if hasKey .Values "defaultCreateVAPForTemplates"}}
         - --default-create-vap-for-templates={{ .Values.defaultCreateVAPForTemplates }}
         {{- end }}

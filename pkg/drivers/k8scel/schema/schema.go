@@ -14,7 +14,16 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
 )
 
-var DefaultFailurePolicyForK8sNativeValidation = flag.String("default-k8s-native-validation-failure-policy", string(admissionv1.Fail), "(beta) Failure policy to use when a K8sNativeValidation source omits failurePolicy. Allowed values are Fail or Ignore.")
+const (
+	// DefaultFailurePolicyForK8sNativeValidationFlag is the CLI flag name for the K8sNativeValidation failure policy default.
+	DefaultFailurePolicyForK8sNativeValidationFlag = "default-k8s-native-validation-failure-policy"
+	// DefaultFailurePolicyForK8sNativeValidationDefault is the default failure policy for K8sNativeValidation sources that omit failurePolicy.
+	DefaultFailurePolicyForK8sNativeValidationDefault = string(admissionv1.Fail)
+	// DefaultFailurePolicyForK8sNativeValidationUsage describes the K8sNativeValidation failure policy default flag.
+	DefaultFailurePolicyForK8sNativeValidationUsage = "(beta) Failure policy to use when a K8sNativeValidation source omits failurePolicy. Allowed values are Fail or Ignore."
+)
+
+var DefaultFailurePolicyForK8sNativeValidation = flag.String(DefaultFailurePolicyForK8sNativeValidationFlag, DefaultFailurePolicyForK8sNativeValidationDefault, DefaultFailurePolicyForK8sNativeValidationUsage)
 
 const (
 	// Name is the name of the driver.
@@ -241,6 +250,14 @@ func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType
 
 func ValidateDefaultFailurePolicyForK8sNativeValidation() error {
 	return validateFailurePolicy(DefaultFailurePolicyForK8sNativeValidation)
+}
+
+func SetDefaultFailurePolicyForK8sNativeValidation(failurePolicy string) error {
+	if err := validateFailurePolicy(&failurePolicy); err != nil {
+		return err
+	}
+	*DefaultFailurePolicyForK8sNativeValidation = failurePolicy
+	return nil
 }
 
 func validateFailurePolicy(failurePolicy *string) error {
