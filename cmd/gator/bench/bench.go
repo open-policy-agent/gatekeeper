@@ -7,7 +7,6 @@ import (
 	"time"
 
 	cmdutils "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/util"
-	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/bench"
 	"github.com/spf13/cobra"
 )
@@ -79,8 +78,6 @@ var (
 	flagMinThreshold time.Duration
 )
 
-var flagDefaultFailurePolicyForK8sNativeValidation string
-
 const (
 	flagNameFilename     = "filename"
 	flagNameImage        = "image"
@@ -127,14 +124,9 @@ func init() {
 		"regression threshold percentage for comparison. Exit code 1 if exceeded.")
 	Cmd.Flags().DurationVar(&flagMinThreshold, flagNameMinThreshold, 0,
 		"minimum absolute latency difference to consider a regression (e.g., 1ms). Prevents false positives on fast policies where small absolute changes appear as large percentages.")
-	Cmd.Flags().StringVar(&flagDefaultFailurePolicyForK8sNativeValidation, celSchema.DefaultFailurePolicyForK8sNativeValidationFlag, celSchema.DefaultFailurePolicyForK8sNativeValidationDefault, celSchema.DefaultFailurePolicyForK8sNativeValidationUsage)
 }
 
 func run(_ *cobra.Command, _ []string) {
-	if err := celSchema.SetDefaultFailurePolicyForK8sNativeValidation(flagDefaultFailurePolicyForK8sNativeValidation); err != nil {
-		cmdutils.ErrFatalf("invalid default K8sNativeValidation failure policy: %v", err)
-	}
-
 	// Validate engine flag
 	engine, err := parseEngine(flagEngine)
 	if err != nil {
