@@ -27,7 +27,7 @@ SYNC_VAP_ENFORCEMENT_SCOPE ?= true
 
 VERSION := v3.23.0-beta.0
 
-KIND_VERSION ?= 0.29.0
+KIND_VERSION ?= 0.30.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.33.0
