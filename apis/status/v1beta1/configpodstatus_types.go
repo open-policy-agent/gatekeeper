@@ -72,11 +72,8 @@ func NewConfigStatusForPod(pod *corev1.Pod, configNamespace string, configName s
 		PodLabel:        pod.Name,
 	})
 
-	// Skip OwnerReference in remote cluster mode
-	if !util.ShouldSkipPodOwnerRef() {
-		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-			return nil, err
-		}
+	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+		return nil, err
 	}
 
 	return obj, nil

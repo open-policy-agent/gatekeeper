@@ -76,9 +76,13 @@ Use remote cluster mode when:
 --kubeconfig=/path/to/target.yaml  # Kubeconfig for target cluster
 ```
 
+### How It Works
+
+Status resources live on the management cluster alongside the Gatekeeper pod, with OwnerReferences pointing to the pod. This enables automatic garbage collection — when a pod restarts, Kubernetes cleans up its old status resources automatically.
+
 ### RBAC Requirements
 
-Gatekeeper needs permissions to read Pods in the **local cluster** (to resolve its own pod identity):
+Gatekeeper needs permissions on the **management/local cluster** to resolve its pod identity and manage status resources:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -90,13 +94,21 @@ rules:
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["get"]
+- apiGroups: ["status.gatekeeper.sh"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ```
 
-### Orphan Resource Cleanup
+### Migration from Previous Versions
 
-In remote cluster mode, status resources don't have OwnerReferences (since the pod doesn't exist in the target cluster). When Gatekeeper pods restart, their old status resources become orphaned.
+If upgrading from a version where `--enable-remote-cluster` stored status resources on the target cluster, you may have orphaned status resources on the target cluster. Run the following to clean them up:
 
-To find orphaned status resources, compare the `gatekeeper.sh/pod` label against running pods. You should check all status resource types: `constrainttemplatepodstatuses`, `constraintpodstatuses`, `mutatorpodstatuses`, `expansiontemplatepodstatuses`, `configpodstatuses`, `providerpodstatuses`, and `connectionpodstatuses`.
+```bash
+kubectl delete constrainttemplatepodstatuses,constraintpodstatuses,mutatorpodstatuses,expansiontemplatepodstatuses,configpodstatuses,providerpodstatuses,connectionpodstatuses \
+  -n gatekeeper-system --all --context <target-cluster-context>
+```
+
+This is a one-time cleanup. After upgrading, status resources are automatically managed on the management cluster.
 
 ```bash
 # List all pod names referenced in status resources (repeat for each status type)
