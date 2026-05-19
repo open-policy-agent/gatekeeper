@@ -11,6 +11,7 @@ disableValidatingWebhook: false
 validatingWebhookName: gatekeeper-validating-webhook-configuration
 validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
+defaultFailurePolicy: Fail
 validatingWebhookAnnotations: {}
 validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookObjectSelector: {}

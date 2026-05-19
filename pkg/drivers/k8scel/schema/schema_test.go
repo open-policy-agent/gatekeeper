@@ -7,6 +7,8 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"k8s.io/utils/ptr"
+	admissionv1 "k8s.io/api/admissionregistration/v1"
+	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 )
 
 func TestValidationErrors(t *testing.T) {
@@ -275,6 +277,110 @@ func TestHasCELEngine(t *testing.T) {
 			got := HasCELEngine(tt.template)
 			if got != tt.expected {
 				t.Errorf("HasCELEngine() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetFailurePolicy(t *testing.T) {
+	originalDefault := *DefaultFailurePolicy
+	defer func() {
+		*DefaultFailurePolicy = originalDefault
+	}()
+
+	tests := []struct {
+		name                 string
+		source               *Source
+		defaultFailurePolicy string
+		expected             admissionv1.FailurePolicyType
+	}{
+		{
+			name:                 "Uses specified failure policy Fail",
+			source:               &Source{FailurePolicy: ptr.To[string]("Fail")},
+			defaultFailurePolicy: "Ignore",
+			expected:             admissionv1.Fail,
+		},
+		{
+			name:                 "Uses specified failure policy Ignore",
+			source:               &Source{FailurePolicy: ptr.To[string]("Ignore")},
+			defaultFailurePolicy: "Fail",
+			expected:             admissionv1.Ignore,
+		},
+		{
+			name:                 "Falls back to DefaultFailurePolicy (Fail)",
+			source:               &Source{FailurePolicy: nil},
+			defaultFailurePolicy: "Fail",
+			expected:             admissionv1.Fail,
+		},
+		{
+			name:                 "Falls back to DefaultFailurePolicy (Ignore)",
+			source:               &Source{FailurePolicy: nil},
+			defaultFailurePolicy: "Ignore",
+			expected:             admissionv1.Ignore,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			*DefaultFailurePolicy = tt.defaultFailurePolicy
+			got, err := tt.source.GetFailurePolicy()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got == nil || *got != tt.expected {
+				t.Errorf("GetFailurePolicy() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetV1Beta1FailurePolicy(t *testing.T) {
+	originalDefault := *DefaultFailurePolicy
+	defer func() {
+		*DefaultFailurePolicy = originalDefault
+	}()
+
+	tests := []struct {
+		name                 string
+		source               *Source
+		defaultFailurePolicy string
+		expected             admissionv1beta1.FailurePolicyType
+	}{
+		{
+			name:                 "Uses specified failure policy Fail",
+			source:               &Source{FailurePolicy: ptr.To[string]("Fail")},
+			defaultFailurePolicy: "Ignore",
+			expected:             admissionv1beta1.Fail,
+		},
+		{
+			name:                 "Uses specified failure policy Ignore",
+			source:               &Source{FailurePolicy: ptr.To[string]("Ignore")},
+			defaultFailurePolicy: "Fail",
+			expected:             admissionv1beta1.Ignore,
+		},
+		{
+			name:                 "Falls back to DefaultFailurePolicy (Fail)",
+			source:               &Source{FailurePolicy: nil},
+			defaultFailurePolicy: "Fail",
+			expected:             admissionv1beta1.Fail,
+		},
+		{
+			name:                 "Falls back to DefaultFailurePolicy (Ignore)",
+			source:               &Source{FailurePolicy: nil},
+			defaultFailurePolicy: "Ignore",
+			expected:             admissionv1beta1.Ignore,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			*DefaultFailurePolicy = tt.defaultFailurePolicy
+			got, err := tt.source.GetV1Beta1FailurePolicy()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got == nil || *got != tt.expected {
+				t.Errorf("GetV1Beta1FailurePolicy() = %v, want %v", got, tt.expected)
 			}
 		})
 	}

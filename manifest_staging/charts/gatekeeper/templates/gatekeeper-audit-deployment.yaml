@@ -83,6 +83,7 @@ spec:
         {{- if not .Values.audit.disableStatusOperation }}
         - --operation=status
         {{- end }}
+        {{ if hasKey .Values "defaultFailurePolicy" }}- --default-failure-policy={{ .Values.defaultFailurePolicy }}{{- end }}
         {{ if hasKey .Values "enableViolationExport" }}
         - --enable-violation-export={{ .Values.enableViolationExport }}
         {{- end }}

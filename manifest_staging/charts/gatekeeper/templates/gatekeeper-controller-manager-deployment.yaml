@@ -82,6 +82,7 @@ spec:
         {{- if not .Values.controllerManager.disableGenerateOperation }}
         - --operation=generate
         {{- end }}
+        {{ if hasKey .Values "defaultFailurePolicy" }}- --default-failure-policy={{ .Values.defaultFailurePolicy }}{{- end }}
         - --enable-external-data={{ .Values.enableExternalData }}
         - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion
           }}

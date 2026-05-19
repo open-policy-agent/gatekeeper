@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"flag"
 	"fmt"
 	"strings"
 
@@ -24,6 +25,8 @@ const (
 	// ObjectName is the VAP variable that describes either an object or (on DELETE requests) oldObject.
 	ObjectName = "anyObject"
 )
+
+var DefaultFailurePolicy = flag.String("default-failure-policy", "Fail", "Default failure policy for ConstraintTemplate and ValidatingAdmissionPolicy. Can be set to 'Fail' or 'Ignore'.")
 
 type Validation struct {
 	// A CEL expression. Maps to ValidationAdmissionPolicy's `spec.validations`.
@@ -198,7 +201,13 @@ func (in *Source) GetMessageExpressions() ([]cel.ExpressionAccessor, error) {
 
 func (in *Source) GetFailurePolicy() (*admissionv1.FailurePolicyType, error) {
 	if in.FailurePolicy == nil {
-		return nil, nil
+		var out admissionv1.FailurePolicyType
+		if DefaultFailurePolicy != nil && *DefaultFailurePolicy == string(admissionv1.Ignore) {
+			out = admissionv1.Ignore
+		} else {
+			out = admissionv1.Fail
+		}
+		return &out, nil
 	}
 
 	var out admissionv1.FailurePolicyType
@@ -218,7 +227,11 @@ func (in *Source) GetFailurePolicy() (*admissionv1.FailurePolicyType, error) {
 func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType, error) {
 	var out admissionv1beta1.FailurePolicyType
 	if in.FailurePolicy == nil {
-		out = admissionv1beta1.Fail
+		if DefaultFailurePolicy != nil && *DefaultFailurePolicy == string(admissionv1beta1.Ignore) {
+			out = admissionv1beta1.Ignore
+		} else {
+			out = admissionv1beta1.Fail
+		}
 		return &out, nil
 	}
 
