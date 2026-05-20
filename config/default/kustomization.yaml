@@ -12,7 +12,7 @@ namePrefix: gatekeeper-
 commonLabels:
   gatekeeper.sh/system: "yes"
 
-bases:
+resources:
 - ../crd
 - ../rbac
 - ../manager

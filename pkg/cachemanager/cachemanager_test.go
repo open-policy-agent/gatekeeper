@@ -133,15 +133,26 @@ func TestCacheManager_wipeCacheIfNeeded(t *testing.T) {
 			},
 			expectedData: map[fakes.CfDataKey]interface{}{{Gvk: configMapGVK, Key: "default/config-test-1"}: nil},
 		},
+		{
+			name: "handle noop cfClient gracefully",
+			cm: &CacheManager{
+				cfClient:         &noopCFDataClient{},
+				syncMetricsCache: syncutil.NewMetricsCache(),
+				gvksToDeleteFromCache: func() *watch.Set {
+					gvksToDelete := watch.NewSet()
+					gvksToDelete.Add(configMapGVK)
+					return gvksToDelete
+				}(),
+			},
+		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			cfClient, ok := tc.cm.cfClient.(*fakes.FakeCfClient)
-			require.True(t, ok)
-
 			tc.cm.wipeCacheIfNeeded(context.Background())
-			require.True(t, cfClient.Contains(tc.expectedData))
+			if cfClient, ok := tc.cm.cfClient.(*fakes.FakeCfClient); ok {
+				require.True(t, cfClient.Contains(tc.expectedData))
+			}
 		})
 	}
 }
@@ -242,6 +253,23 @@ func TestCacheManager_AddObject(t *testing.T) {
 			expectSyncMetric:     true,
 			expectedMetricStatus: metrics.ErrorStatus,
 		},
+		{
+			name: "AddObject is a no-op with noop cfClient",
+			cm: &CacheManager{
+				cfClient: &noopCFDataClient{},
+				watchedSet: func() *watch.Set {
+					ws := watch.NewSet()
+					ws.Add(pod.GroupVersionKind())
+
+					return ws
+				}(),
+				tracker:          readiness.NewTracker(mgr.GetAPIReader(), false, false, false),
+				syncMetricsCache: syncutil.NewMetricsCache(),
+				processExcluder:  process.Get(),
+			},
+			expectSyncMetric:     true,
+			expectedMetricStatus: metrics.ActiveStatus,
+		},
 	}
 
 	for _, tc := range tcs {
@@ -251,18 +279,17 @@ func TestCacheManager_AddObject(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			assertExpecations(t, tc.cm, &unstructured.Unstructured{Object: unstructuredPod}, tc.expectedData, tc.expectSyncMetric, &tc.expectedMetricStatus)
+			assertExpectations(t, tc.cm, &unstructured.Unstructured{Object: unstructuredPod}, tc.expectedData, tc.expectSyncMetric, &tc.expectedMetricStatus)
 		})
 	}
 }
 
-func assertExpecations(t *testing.T, cm *CacheManager, instance *unstructured.Unstructured, expectedData map[fakes.CfDataKey]interface{}, expectSyncMetric bool, expectedMetricStatus *metrics.Status) {
+func assertExpectations(t *testing.T, cm *CacheManager, instance *unstructured.Unstructured, expectedData map[fakes.CfDataKey]interface{}, expectSyncMetric bool, expectedMetricStatus *metrics.Status) {
 	t.Helper()
 
-	cfClient, ok := cm.cfClient.(*fakes.FakeCfClient)
-	require.True(t, ok)
-
-	require.True(t, cfClient.Contains(expectedData))
+	if cfClient, ok := cm.cfClient.(*fakes.FakeCfClient); ok {
+		require.True(t, cfClient.Contains(expectedData))
+	}
 
 	syncKey := syncutil.GetKeyForSyncMetrics(instance.GetNamespace(), instance.GetName())
 
@@ -353,13 +380,29 @@ func TestCacheManager_RemoveObject(t *testing.T) {
 			expectedData:     map[fakes.CfDataKey]interface{}{},
 			expectSyncMetric: false,
 		},
+		{
+			name: "RemoveObject is a no-op with noop cfClient",
+			cm: &CacheManager{
+				cfClient: &noopCFDataClient{},
+				watchedSet: func() *watch.Set {
+					ws := watch.NewSet()
+					ws.Add(pod.GroupVersionKind())
+
+					return ws
+				}(),
+				tracker:          tracker,
+				syncMetricsCache: syncutil.NewMetricsCache(),
+				processExcluder:  process.Get(),
+			},
+			expectSyncMetric: false,
+		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			require.NoError(t, tc.cm.RemoveObject(context.Background(), &unstructured.Unstructured{Object: unstructuredPod}))
 
-			assertExpecations(t, tc.cm, &unstructured.Unstructured{Object: unstructuredPod}, tc.expectedData, tc.expectSyncMetric, nil)
+			assertExpectations(t, tc.cm, &unstructured.Unstructured{Object: unstructuredPod}, tc.expectedData, tc.expectSyncMetric, nil)
 		})
 	}
 }

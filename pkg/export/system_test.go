@@ -16,7 +16,7 @@ var testSystem *System
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	SupportedDrivers = map[string]driver.Driver{
+	supportedDrivers = map[string]driver.Driver{
 		dapr.Name: dapr.FakeConn,
 	}
 	testSystem = NewSystem()
@@ -25,13 +25,13 @@ func TestMain(m *testing.M) {
 			"component": "pubsub",
 		},
 	}
-	for name, fakeConn := range SupportedDrivers {
+	for name, fakeConn := range supportedDrivers {
 		testSystem.connectionToDriver[name] = name
 		_ = fakeConn.CreateConnection(ctx, name, cfg[name])
 	}
 	r := m.Run()
 	for name, fakeConn := range testSystem.connectionToDriver {
-		_ = SupportedDrivers[fakeConn].CloseConnection(name)
+		_ = supportedDrivers[fakeConn].CloseConnection(name)
 	}
 
 	if r != 0 {
@@ -79,7 +79,7 @@ func TestSystem_UpsertConnection(t *testing.T) {
 			newDriver:      dapr.Name,
 			setup: func(s *System) error {
 				s.connectionToDriver = map[string]string{}
-				SupportedDrivers[dapr.Name] = dapr.FakeConn
+				supportedDrivers[dapr.Name] = dapr.FakeConn
 				return nil
 			},
 			wantErr: false,
@@ -91,8 +91,8 @@ func TestSystem_UpsertConnection(t *testing.T) {
 			newDriver:      dapr.Name,
 			setup: func(s *System) error {
 				s.connectionToDriver["conn1"] = dapr.Name
-				SupportedDrivers[dapr.Name] = dapr.FakeConn
-				return SupportedDrivers[dapr.Name].CreateConnection(ctx, "conn1", map[string]interface{}{"component": "pubsub"})
+				supportedDrivers[dapr.Name] = dapr.FakeConn
+				return supportedDrivers[dapr.Name].CreateConnection(ctx, "conn1", map[string]interface{}{"component": "pubsub"})
 			},
 			wantErr: false,
 		},
@@ -111,9 +111,9 @@ func TestSystem_UpsertConnection(t *testing.T) {
 			newDriver:      dapr.Name,
 			setup: func(s *System) error {
 				s.connectionToDriver["conn4"] = testdriver.Name
-				SupportedDrivers[dapr.Name] = dapr.FakeConn
-				SupportedDrivers[testdriver.Name] = testdriver.FakeConn
-				return SupportedDrivers[testdriver.Name].CreateConnection(ctx, "conn4", "config4")
+				supportedDrivers[dapr.Name] = dapr.FakeConn
+				supportedDrivers[testdriver.Name] = testdriver.FakeConn
+				return supportedDrivers[testdriver.Name].CreateConnection(ctx, "conn4", "config4")
 			},
 			wantErr: false,
 		},
@@ -150,7 +150,7 @@ func TestSystem_CloseConnection(t *testing.T) {
 			name: "close existing connection",
 			setup: func(s *System) {
 				s.connectionToDriver["test-connection"] = dapr.Name
-				SupportedDrivers[dapr.Name] = dapr.FakeConn
+				supportedDrivers[dapr.Name] = dapr.FakeConn
 				_ = dapr.FakeConn.CreateConnection(context.TODO(), "test-connection", map[string]interface{}{"component": "pubsub"})
 			},
 			connectionName: "test-connection",
@@ -257,7 +257,7 @@ func TestSystem_closeConnection(t *testing.T) {
 			name: "close existing connection with supported driver",
 			setup: func(s *System) {
 				s.connectionToDriver["conn1"] = dapr.Name
-				SupportedDrivers[dapr.Name] = dapr.FakeConn
+				supportedDrivers[dapr.Name] = dapr.FakeConn
 				_ = dapr.FakeConn.CreateConnection(ctx, "conn1", map[string]interface{}{"component": "pubsub"})
 			},
 			args:                args{connectionName: "conn1"},
@@ -268,7 +268,7 @@ func TestSystem_closeConnection(t *testing.T) {
 			name: "close connection with unsupported driver",
 			setup: func(s *System) {
 				s.connectionToDriver["conn2"] = "unsupported"
-				// Do not add to SupportedDrivers
+				// Do not add to supportedDrivers
 			},
 			args:                args{connectionName: "conn2"},
 			wantErr:             false,
@@ -278,8 +278,8 @@ func TestSystem_closeConnection(t *testing.T) {
 			name: "close connection returns error from driver",
 			setup: func(s *System) {
 				s.connectionToDriver["conn3"] = testdriver.ErrName
-				SupportedDrivers[testdriver.ErrName] = testdriver.FakeErrConn
-				_ = SupportedDrivers[testdriver.ErrName].CreateConnection(ctx, "conn3", "config3")
+				supportedDrivers[testdriver.ErrName] = testdriver.FakeErrConn
+				_ = supportedDrivers[testdriver.ErrName].CreateConnection(ctx, "conn3", "config3")
 			},
 			args:                args{connectionName: "conn3"},
 			wantErr:             true,

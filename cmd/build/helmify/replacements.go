@@ -110,7 +110,7 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION": `{{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}`,
 
-	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
+	`HELMSUBST_SECRET_ANNOTATIONS: ""`: `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG": `{{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}`,
 
@@ -159,7 +159,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_MUTATING_WEBHOOK_REINVOCATION_POLICY": `{{ .Values.mutatingWebhookReinvocationPolicy }}`,
 
-	"HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
+	`HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS: ""`: `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
     {{- /* 1. Get mandatory exemption from helper */ -}}
@@ -176,7 +176,7 @@ var replacements = map[string]string{
         {{- $list = append $value $.Release.Namespace | uniq -}}
       {{- end }}
       {{- range $list }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}`,
 
@@ -216,7 +216,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.validatingWebhookFailurePolicy }}`,
 
-	"HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
+	`HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS: ""`: `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_MATCHEXPRESSION_METADATANAME": `key: kubernetes.io/metadata.name
       operator: NotIn
@@ -238,7 +238,7 @@ var replacements = map[string]string{
         {{- $list = append $value $.Release.Namespace | uniq -}}
       {{- end }}
       {{- range $list }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}`,
 

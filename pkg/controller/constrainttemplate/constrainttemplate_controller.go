@@ -678,6 +678,7 @@ func logAction(template namedObj, a action) {
 	logger.Info(
 		fmt.Sprintf("template was %s", string(a)),
 		logging.EventType, fmt.Sprintf("template_%s", string(a)),
+		logging.Semantic, true,
 		logging.TemplateName, template.GetName(),
 	)
 }
@@ -686,6 +687,7 @@ func logError(name string) {
 	logger.Info(
 		"unable to ingest template",
 		logging.EventType, "template_ingest_error",
+		logging.Semantic, true,
 		logging.TemplateName, name,
 	)
 }

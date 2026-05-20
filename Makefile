@@ -6,6 +6,8 @@ GATOR_REPOSITORY ?= openpolicyagent/gator
 GHCR_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper
 GHCR_CRD_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper-crds
 GHCR_GATOR_REPOSITORY ?= ghcr.io/open-policy-agent/gator
+GHCR_FAKE_READER_REPOSITORY ?= ghcr.io/open-policy-agent/fake-reader
+GHCR_FAKE_SUBSCRIBER_REPOSITORY ?= ghcr.io/open-policy-agent/fake-subscriber
 
 IMG := $(REPOSITORY):latest
 CRD_IMG := $(CRD_REPOSITORY):latest
@@ -23,19 +25,19 @@ GENERATE_VAP ?= true
 GENERATE_VAPBINDING ?= true
 SYNC_VAP_ENFORCEMENT_SCOPE ?= true
 
-VERSION := v3.22.0-beta.0
+VERSION := v3.23.0-beta.0
 
-KIND_VERSION ?= 0.29.0
+KIND_VERSION ?= 0.30.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.33.0
-KUSTOMIZE_VERSION ?= 3.8.9
-BATS_VERSION ?= 1.12.0
-ORAS_VERSION ?= 1.2.3
+KUSTOMIZE_VERSION ?= 5.6.0
+BATS_VERSION ?= 1.13.0
+ORAS_VERSION ?= 1.3.1
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.17.4
 NODE_VERSION ?= 24-bullseye-slim
-YQ_VERSION ?= 4.35.2
+YQ_VERSION ?= 4.52.4
 
 HELM_ARGS ?=
 HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
@@ -398,7 +400,7 @@ manifests: __controller-gen
 		/gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
 	docker run --rm -v $(shell pwd):/gatekeeper \
 		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-		--load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
+		--load-restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.
@@ -525,6 +527,24 @@ docker-buildx-gator-release: docker-buildx-builder
 		-t ${GATOR_REPOSITORY}:${VERSION} \
 		$(if $(filter true,$(PUSH_TO_GHCR)),-t ${GHCR_GATOR_REPOSITORY}:${VERSION}) \
 		-f gator.Dockerfile .
+
+# Build fake-reader image
+docker-buildx-fake-reader: docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t ${GHCR_FAKE_READER_REPOSITORY}:latest \
+		-f test/export/fake-reader/Dockerfile test/export/fake-reader
+
+# Build fake-subscriber image
+docker-buildx-fake-subscriber: docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t ${GHCR_FAKE_SUBSCRIBER_REPOSITORY}:latest \
+		-f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
 
 # Update manager_image_patch.yaml with image tag
 patch-image:
