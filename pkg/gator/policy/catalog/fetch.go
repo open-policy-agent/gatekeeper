@@ -174,7 +174,8 @@ func (f *HTTPFetcher) FetchContent(ctx context.Context, contentPath string) ([]b
 		// to prevent path traversal attacks (e.g., ../../../etc/passwd)
 		cleanPath := filepath.Clean(fullPath)
 		cleanBase := filepath.Clean(catalogDir)
-		if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) && cleanPath != cleanBase {
+		relPath, err := filepath.Rel(cleanBase, cleanPath)
+		if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || filepath.IsAbs(relPath) {
 			return nil, fmt.Errorf("content path escapes catalog directory: %s", contentPath)
 		}
 
