@@ -1236,3 +1236,51 @@ func TestAugmentedUnstructuredDeleteUsesOldObject(t *testing.T) {
 		t.Fatalf("object must be empty before DELETE review normalization, got %q", string(review.Object.Raw))
 	}
 }
+
+func TestAugmentedUnstructuredNonDeletePreservesObject(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name          string
+		operation     admissionv1.Operation
+		wantOperation admissionv1.Operation
+	}{
+		{
+			name:          "create operation preserved",
+			operation:     admissionv1.Create,
+			wantOperation: admissionv1.Create,
+		},
+		{
+			name:          "update operation preserved",
+			operation:     admissionv1.Update,
+			wantOperation: admissionv1.Update,
+		},
+		{
+			name:          "missing operation stays empty",
+			operation:     "",
+			wantOperation: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			review, err := augmentedUnstructuredToAdmissionRequest(AugmentedUnstructured{
+				Object:    *makeResource(schema.GroupVersionKind{Group: "some", Kind: "Thing"}, "foo"),
+				Operation: tc.operation,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if review.Operation != tc.wantOperation {
+				t.Fatalf("operation = %q, want %q", review.Operation, tc.wantOperation)
+			}
+			if review.OldObject.Raw != nil {
+				t.Fatalf("oldObject must be empty for non-delete operation")
+			}
+			if review.Object.Raw == nil {
+				t.Fatalf("object must preserve the input object")
+			}
+		})
+	}
+}
