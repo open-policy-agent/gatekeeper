@@ -783,46 +783,47 @@ func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []str
 		return files, err
 	}
 	defer dir.Close()
+
 	for {
 		names, err := dir.Readdirnames(batchSize)
-                if len(names) > 0 {
-                        files = append(files, names...)
-                }
-                if err == nil {
-                        continue
-                }
-                if errors.Is(err, io.EOF) {
-                        break
-                }
-                return files, err
-        }
-        return files, nil
+		if len(names) > 0 {
+			files = append(files, names...)
+		}
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		return files, err
+	}
+	return files, nil
 }
 
 func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
-        dir, err := os.Open(directory)
-        if err != nil {
-                return err
-        }
-        defer dir.Close()
-        for {
-                names, err := dir.Readdirnames(batchSize)
-                if len(names) > 0 {
-                        for _, n := range names {
-                                if err := os.RemoveAll(path.Join(directory, n)); err != nil {
-                                        return err
-                                }
-                        }
-                }
-                if err == nil {
-                        continue
-                }
-                if errors.Is(err, io.EOF) {
-                        break
-                }
-                return err
-        }
-        return nil
+	dir, err := os.Open(directory)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	for {
+		names, err := dir.Readdirnames(batchSize)
+		if len(names) > 0 {
+			for _, n := range names {
+				if err := os.RemoveAll(path.Join(directory, n)); err != nil {
+					return err
+				}
+			}
+		}
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		return err
+	}
+	return nil
 }
 
 func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructured, error) {
