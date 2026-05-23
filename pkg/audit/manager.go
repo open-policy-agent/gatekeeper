@@ -786,9 +786,13 @@ func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []str
 
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if len(names) > 0 {
-			files = append(files, names...)
+		if len(names) == 0 {
+			if err == nil || errors.Is(err, io.EOF) {
+				break
+			}
+			return files, err
 		}
+		files = append(files, names...)
 		if err == nil {
 			continue
 		}
@@ -808,11 +812,15 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if len(names) > 0 {
-			for _, n := range names {
-				if err := os.RemoveAll(path.Join(directory, n)); err != nil {
-					return err
-				}
+		if len(names) == 0 {
+			if err == nil || errors.Is(err, io.EOF) {
+				break
+			}
+			return err
+		}
+		for _, n := range names {
+			if err := os.RemoveAll(path.Join(directory, n)); err != nil {
+				return err
 			}
 		}
 		if err == nil {
@@ -827,11 +835,11 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 }
 
 func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructured, error) {
-        u := &unstructured.Unstructured{}
-        if err := json.Unmarshal(jsonBytes, u); err != nil {
-                return nil, err
-        }
-        return u, nil
+	u := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, u); err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {

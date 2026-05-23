@@ -2,6 +2,8 @@ package syncutil
 
 import "sync"
 
+// ConcurrentErrorSlice stores non-nil errors in a thread-safe slice.
+// Append ignores nil errors so Last() can safely return nil only when the slice is empty.
 type ConcurrentErrorSlice struct {
 	s  []error
 	mu *sync.RWMutex
@@ -15,6 +17,9 @@ func NewConcurrentErrorSlice() ConcurrentErrorSlice {
 }
 
 func (c ConcurrentErrorSlice) Append(e error) ConcurrentErrorSlice {
+	if e == nil {
+		return c
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
