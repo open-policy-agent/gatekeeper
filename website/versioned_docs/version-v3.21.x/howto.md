@@ -5,7 +5,8 @@ title: How to use Gatekeeper
 
 Gatekeeper uses the [OPA Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/master/constraint) to describe and enforce policy. Look there for more detailed information on their semantics and advanced usage.
 
-This page covers validation policies. Validation uses `ConstraintTemplate` and `Constraint` resources to evaluate Kubernetes objects and can then deny, warn, dry-run, audit, or report violations.
+This page covers validation policies. Validation uses `ConstraintTemplate` and `Constraint` resources to evaluate Kubernetes objects.
+During admission, it can deny, warn, or dry-run requests; in audit mode, it evaluates resources and reports violations.
 
 To modify resources during admission instead, use [mutation policies](mutation.md).
 

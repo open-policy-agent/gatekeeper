@@ -7,7 +7,7 @@ title: Mutation
 
 The mutation feature allows Gatekeeper to modify Kubernetes resources at request time based on customizable mutation policies.
 
-Mutation policies are separate from validation constraints. They use mutation-specific CRDs instead of `ConstraintTemplate` and `Constraint` resources. If you need to reject, warn, dry-run, audit, or report non-compliant resources without changing them, use [validation constraints](howto.md) instead.
+Mutation policies are separate from validation constraints. They use mutation-specific CRDs instead of `ConstraintTemplate` and `Constraint` resources. If you need policy checks without mutating a resource (for admission-time deny/warn/dry-run or audit reporting), use [validation constraints](howto.md) instead.
 
 ## Mutation CRDs
 
