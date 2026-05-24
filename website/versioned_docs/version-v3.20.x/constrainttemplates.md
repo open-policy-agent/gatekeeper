@@ -9,7 +9,7 @@ They are part of Gatekeeper's validation policy model. Mutation policies use sep
 
 ConstraintTemplates are made of two main elements:
 
-1. Rego or CEL policy code in `spec.targets[]` (`rego` or `code[]` fields) that defines policy violation logic; see [field precedence](#field-precedence-in-constrainttemplate)
+1. Rego or CEL policy code in either `spec.targets[].rego` or `spec.targets[].code[]` that defines policy violation logic; see [field precedence](#field-precedence-in-constrainttemplate)
 2. The schema of the accompanying `Constraint` object, which represents an instantiation of a `ConstraintTemplate`
 
 
