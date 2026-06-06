@@ -12,16 +12,16 @@ var log = logf.Log.WithName("routing")
 
 const (
 	// API group for all PodStatus resources.
-	StatusGroup = "status.gatekeeper.sh"
+	statusGroup = "status.gatekeeper.sh"
 )
 
-// IsManagementResource returns true for resources that should be on the management cluster.
-func IsManagementResource(gvk schema.GroupVersionKind) bool {
-	return gvk.Group == StatusGroup
+// isManagementResource returns true for resources that should be on the management cluster.
+func isManagementResource(gvk schema.GroupVersionKind) bool {
+	return gvk.Group == statusGroup
 }
 
-// ResolveGVK infers the GVK from a runtime.Object.
-func ResolveGVK(scheme *runtime.Scheme, obj runtime.Object) (schema.GroupVersionKind, error) {
+// resolveGVK infers the GVK from a runtime.Object.
+func resolveGVK(scheme *runtime.Scheme, obj runtime.Object) (schema.GroupVersionKind, error) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	if !gvk.Empty() {
 		return gvk, nil

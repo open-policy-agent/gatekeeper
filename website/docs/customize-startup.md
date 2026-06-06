@@ -63,6 +63,8 @@ The `--mutation-annotations` flag adds the following two annotations to mutated 
 
 The `--enable-remote-cluster` flag enables Gatekeeper to run in a local (management) cluster while enforcing policies on a separate target cluster specified via `--kubeconfig`. This is designed for hosted control plane architectures where the target cluster's API server runs within the management cluster.
 
+> 📖 For a full end-to-end setup walkthrough, installing CRDs across both clusters, deploying Gatekeeper, wiring webhook certificates, and a smoke test see the [Remote Cluster Mode](remote-cluster.md) guide.
+
 ### When to Use
 
 Use remote cluster mode when:

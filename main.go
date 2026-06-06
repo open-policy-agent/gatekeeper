@@ -667,12 +667,13 @@ func newCacheFunc(scheme *runtime.Scheme, mgmtConfig *rest.Config) cache.NewCach
 		}
 
 		// management cluster cache
-		mgmtCache, err := cache.New(mgmtConfig, cache.Options{
-			Scheme: opts.Scheme,
-			DefaultNamespaces: map[string]cache.Config{
-				util.GetNamespace(): {},
-			},
-		})
+		mgmtOpts := opts
+		mgmtOpts.Mapper = nil
+		mgmtOpts.HTTPClient = nil
+		mgmtOpts.DefaultNamespaces = map[string]cache.Config{
+			util.GetNamespace(): {},
+		}
+		mgmtCache, err := cache.New(mgmtConfig, mgmtOpts)
 		if err != nil {
 			return nil, fmt.Errorf("creating management cache: %w", err)
 		}

@@ -15,9 +15,11 @@ import (
 )
 
 // fakeCache is a minimal cache.Cache that records which calls it received.
+// err is returned by Get and syncResult is returned by WaitForCacheSync.
 type fakeCache struct {
 	cache.Cache
-	name                     string
+	err                      error
+	syncResult               bool
 	getCalled                bool
 	listCalled               bool
 	getInformerCalled        bool
@@ -28,7 +30,7 @@ type fakeCache struct {
 
 func (f *fakeCache) Get(_ context.Context, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
 	f.getCalled = true
-	return nil
+	return f.err
 }
 
 func (f *fakeCache) List(_ context.Context, _ client.ObjectList, _ ...client.ListOption) error {
@@ -56,7 +58,7 @@ func (f *fakeCache) Start(_ context.Context) error {
 }
 
 func (f *fakeCache) WaitForCacheSync(_ context.Context) bool {
-	return true
+	return f.syncResult
 }
 
 func (f *fakeCache) IndexField(_ context.Context, _ client.Object, _ string, _ client.IndexerFunc) error {
@@ -72,8 +74,8 @@ func newScheme() *runtime.Scheme {
 }
 
 func TestRoutingCache_Get_TypedPodStatus(t *testing.T) {
-	target := &fakeCache{name: "target"}
-	mgmt := &fakeCache{name: "management"}
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
 	rc := NewRoutingCache(target, mgmt, newScheme())
 
 	obj := &statusv1beta1.ConstraintTemplatePodStatus{}
@@ -88,8 +90,8 @@ func TestRoutingCache_Get_TypedPodStatus(t *testing.T) {
 }
 
 func TestRoutingCache_Get_TypedConstraintPodStatus(t *testing.T) {
-	target := &fakeCache{name: "target"}
-	mgmt := &fakeCache{name: "management"}
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
 	rc := NewRoutingCache(target, mgmt, newScheme())
 
 	obj := &statusv1beta1.ConstraintPodStatus{}
@@ -104,8 +106,8 @@ func TestRoutingCache_Get_TypedConstraintPodStatus(t *testing.T) {
 }
 
 func TestRoutingCache_Get_ConnectionPodStatus(t *testing.T) {
-	target := &fakeCache{name: "target"}
-	mgmt := &fakeCache{name: "management"}
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
 	rc := NewRoutingCache(target, mgmt, newScheme())
 
 	obj := &statusv1alpha1.ConnectionPodStatus{}
@@ -114,11 +116,14 @@ func TestRoutingCache_Get_ConnectionPodStatus(t *testing.T) {
 	if !mgmt.getCalled {
 		t.Error("expected Get to route to management cache for ConnectionPodStatus")
 	}
+	if target.getCalled {
+		t.Error("expected Get NOT to route to target cache for ConnectionPodStatus")
+	}
 }
 
 func TestRoutingCache_Get_UnstructuredPodStatus(t *testing.T) {
-	target := &fakeCache{name: "target"}
-	mgmt := &fakeCache{name: "management"}
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
 	rc := NewRoutingCache(target, mgmt, newScheme())
 
 	obj := &unstructured.Unstructured{}
@@ -128,11 +133,14 @@ func TestRoutingCache_Get_UnstructuredPodStatus(t *testing.T) {
 	if !mgmt.getCalled {
 		t.Error("expected Get to route to management cache for unstructured PodStatus")
 	}
+	if target.getCalled {
+		t.Error("expected Get NOT to route to target cache for unstructured PodStatus")
+	}
 }
 
 func TestRoutingCache_Get_NonPodStatus(t *testing.T) {
-	target := &fakeCache{name: "target"}
-	mgmt := &fakeCache{name: "management"}
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
 	rc := NewRoutingCache(target, mgmt, newScheme())
 
 	obj := &unstructured.Unstructured{}
@@ -148,8 +156,8 @@ func TestRoutingCache_Get_NonPodStatus(t *testing.T) {
 }
 
 func TestRoutingCache_List_PodStatusList(t *testing.T) {
-	target := &fakeCache{name: "target"}
-	mgmt := &fakeCache{name: "management"}
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
 	rc := NewRoutingCache(target, mgmt, newScheme())
 
 	list := &statusv1beta1.ConstraintPodStatusList{}
@@ -165,7 +173,7 @@ func TestRoutingCache_List_PodStatusList(t *testing.T) {
 
 func TestRoutingCache_NonRemoteMode(t *testing.T) {
 	// Same pointer for both — simulates non-remote mode.
-	shared := &fakeCache{name: "shared"}
+	shared := &fakeCache{}
 	rc := NewRoutingCache(shared, shared, newScheme())
 
 	obj := &statusv1beta1.ConfigPodStatus{}
@@ -177,7 +185,7 @@ func TestRoutingCache_NonRemoteMode(t *testing.T) {
 }
 
 func TestRoutingCache_WaitForCacheSync_NonRemote(t *testing.T) {
-	shared := &fakeCache{name: "shared"}
+	shared := &fakeCache{syncResult: true}
 	rc := NewRoutingCache(shared, shared, newScheme())
 
 	if !rc.WaitForCacheSync(context.Background()) {
@@ -186,8 +194,8 @@ func TestRoutingCache_WaitForCacheSync_NonRemote(t *testing.T) {
 }
 
 func TestRoutingCache_FallbackOnUnresolvableGVK(t *testing.T) {
-	target := &fakeCache{name: "target"}
-	mgmt := &fakeCache{name: "management"}
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
 	// Use empty scheme where nothing can be resolved.
 	rc := NewRoutingCache(target, mgmt, runtime.NewScheme())
 
@@ -197,22 +205,15 @@ func TestRoutingCache_FallbackOnUnresolvableGVK(t *testing.T) {
 	if !target.getCalled {
 		t.Error("expected fallback to target cache when GVK cannot be resolved")
 	}
-}
-
-// errorCache is a cache.Cache that returns errors, used to verify routing.
-type errorCache struct {
-	cache.Cache
-	err error
-}
-
-func (e *errorCache) Get(_ context.Context, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
-	return e.err
+	if mgmt.getCalled {
+		t.Error("expected fallback NOT to route to management cache when GVK cannot be resolved")
+	}
 }
 
 func TestRoutingCache_PropagatesErrors(t *testing.T) {
 	expectedErr := errors.New("management cache error")
-	target := &fakeCache{name: "target"}
-	mgmt := &errorCache{err: expectedErr}
+	target := &fakeCache{}
+	mgmt := &fakeCache{err: expectedErr}
 	rc := NewRoutingCache(target, mgmt, newScheme())
 
 	obj := &statusv1beta1.MutatorPodStatus{}
@@ -221,11 +222,17 @@ func TestRoutingCache_PropagatesErrors(t *testing.T) {
 	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
+	if !mgmt.getCalled {
+		t.Error("expected Get to route to management cache for MutatorPodStatus")
+	}
+	if target.getCalled {
+		t.Error("expected Get NOT to route to target cache for MutatorPodStatus")
+	}
 }
 
 func TestRoutingCache_GetInformerForKind_PodStatus(t *testing.T) {
-	target := &fakeCache{name: "target"}
-	mgmt := &fakeCache{name: "management"}
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
 	rc := NewRoutingCache(target, mgmt, newScheme())
 
 	gvk := schema.GroupVersionKind{Group: "status.gatekeeper.sh", Version: "v1beta1", Kind: "ConfigPodStatus"}
@@ -236,5 +243,175 @@ func TestRoutingCache_GetInformerForKind_PodStatus(t *testing.T) {
 	}
 	if target.getInformerForKindCalled {
 		t.Error("expected GetInformerForKind NOT to route to target for status.gatekeeper.sh GVK")
+	}
+}
+
+func TestRoutingCache_GetInformer_PodStatus(t *testing.T) {
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
+	rc := NewRoutingCache(target, mgmt, newScheme())
+
+	obj := &statusv1beta1.ConstraintTemplatePodStatus{}
+	_, _ = rc.GetInformer(context.Background(), obj)
+
+	if !mgmt.getInformerCalled {
+		t.Error("expected GetInformer to route to management cache for ConstraintTemplatePodStatus")
+	}
+	if target.getInformerCalled {
+		t.Error("expected GetInformer NOT to route to target cache for ConstraintTemplatePodStatus")
+	}
+}
+
+func TestRoutingCache_GetInformer_NonPodStatus(t *testing.T) {
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
+	rc := NewRoutingCache(target, mgmt, newScheme())
+
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "templates.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintTemplate"})
+	_, _ = rc.GetInformer(context.Background(), obj)
+
+	if !target.getInformerCalled {
+		t.Error("expected GetInformer to route to target cache for ConstraintTemplate")
+	}
+	if mgmt.getInformerCalled {
+		t.Error("expected GetInformer NOT to route to management cache for ConstraintTemplate")
+	}
+}
+
+func TestRoutingCache_RemoveInformer_PodStatus(t *testing.T) {
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
+	rc := NewRoutingCache(target, mgmt, newScheme())
+
+	obj := &statusv1beta1.ConfigPodStatus{}
+	_ = rc.RemoveInformer(context.Background(), obj)
+
+	if !mgmt.removeInformerCalled {
+		t.Error("expected RemoveInformer to route to management cache for ConfigPodStatus")
+	}
+	if target.removeInformerCalled {
+		t.Error("expected RemoveInformer NOT to route to target cache for ConfigPodStatus")
+	}
+}
+
+func TestRoutingCache_RemoveInformer_NonPodStatus(t *testing.T) {
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
+	rc := NewRoutingCache(target, mgmt, newScheme())
+
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabels"})
+	_ = rc.RemoveInformer(context.Background(), obj)
+
+	if !target.removeInformerCalled {
+		t.Error("expected RemoveInformer to route to target cache for constraint")
+	}
+	if mgmt.removeInformerCalled {
+		t.Error("expected RemoveInformer NOT to route to management cache for constraint")
+	}
+}
+
+func TestRoutingCache_IndexField_PodStatus(t *testing.T) {
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
+	rc := NewRoutingCache(target, mgmt, newScheme())
+
+	obj := &statusv1beta1.MutatorPodStatus{}
+	_ = rc.IndexField(context.Background(), obj, "field", func(client.Object) []string { return nil })
+
+	if !mgmt.indexFieldCalled {
+		t.Error("expected IndexField to route to management cache for MutatorPodStatus")
+	}
+	if target.indexFieldCalled {
+		t.Error("expected IndexField NOT to route to target cache for MutatorPodStatus")
+	}
+}
+
+func TestRoutingCache_IndexField_NonPodStatus(t *testing.T) {
+	target := &fakeCache{}
+	mgmt := &fakeCache{}
+	rc := NewRoutingCache(target, mgmt, newScheme())
+
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "templates.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintTemplate"})
+	_ = rc.IndexField(context.Background(), obj, "field", func(client.Object) []string { return nil })
+
+	if !target.indexFieldCalled {
+		t.Error("expected IndexField to route to target cache for ConstraintTemplate")
+	}
+	if mgmt.indexFieldCalled {
+		t.Error("expected IndexField NOT to route to management cache for ConstraintTemplate")
+	}
+}
+
+func TestRoutingCache_WaitForCacheSync_Remote(t *testing.T) {
+	tests := []struct {
+		name       string
+		targetSync bool
+		mgmtSync   bool
+		want       bool
+	}{
+		{name: "both synced", targetSync: true, mgmtSync: true, want: true},
+		{name: "target not synced", targetSync: false, mgmtSync: true, want: false},
+		{name: "management not synced", targetSync: true, mgmtSync: false, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := &fakeCache{syncResult: tt.targetSync}
+			mgmt := &fakeCache{syncResult: tt.mgmtSync}
+			rc := NewRoutingCache(target, mgmt, newScheme())
+
+			if got := rc.WaitForCacheSync(context.Background()); got != tt.want {
+				t.Errorf("WaitForCacheSync() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// blockingCache blocks in Start() until context is canceled, or returns startErr immediately.
+type blockingCache struct {
+	cache.Cache
+	startErr error
+}
+
+func (b *blockingCache) Start(ctx context.Context) error {
+	if b.startErr != nil {
+		return b.startErr
+	}
+	<-ctx.Done()
+	return nil
+}
+
+func (b *blockingCache) WaitForCacheSync(_ context.Context) bool {
+	return true
+}
+
+func TestRoutingCache_Start_ManagementFailure(t *testing.T) {
+	mgmtErr := errors.New("connection refused")
+	target := &blockingCache{}
+	mgmt := &blockingCache{startErr: mgmtErr}
+	rc := NewRoutingCache(target, mgmt, newScheme())
+
+	err := rc.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected Start to return an error when management cache fails")
+	}
+	if !errors.Is(err, mgmtErr) {
+		t.Errorf("expected wrapped management error, got: %v", err)
+	}
+}
+
+func TestRoutingCache_Start_NormalShutdown(t *testing.T) {
+	target := &blockingCache{}
+	mgmt := &blockingCache{}
+	rc := NewRoutingCache(target, mgmt, newScheme())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := rc.Start(ctx)
+	if err != nil {
+		t.Errorf("expected nil error on normal shutdown, got: %v", err)
 	}
 }

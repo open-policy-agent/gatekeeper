@@ -107,7 +107,7 @@ func TestIsManagementResource(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := IsManagementResource(tt.gvk)
+			got := isManagementResource(tt.gvk)
 			if got != tt.want {
 				t.Errorf("IsManagementResource(%v) = %v, want %v", tt.gvk, got, tt.want)
 			}

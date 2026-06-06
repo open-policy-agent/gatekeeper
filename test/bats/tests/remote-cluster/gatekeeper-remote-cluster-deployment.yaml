@@ -1,0 +1,188 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gatekeeper-admin
+  namespace: gatekeeper-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gatekeeper-manager-role
+  namespace: gatekeeper-system
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get"]
+- apiGroups: ["status.gatekeeper.sh"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gatekeeper-manager-rolebinding
+  namespace: gatekeeper-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gatekeeper-manager-role
+subjects:
+- kind: ServiceAccount
+  name: gatekeeper-admin
+  namespace: gatekeeper-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
+  labels:
+    control-plane: controller-manager
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+    spec:
+      serviceAccountName: gatekeeper-admin
+      containers:
+      - name: manager
+        image: gatekeeper:remote-e2e
+        imagePullPolicy: IfNotPresent
+        args:
+        - --enable-remote-cluster
+        - --kubeconfig=/etc/kubeconfig/kubeconfig
+        - --disable-cert-rotation
+        - --port=8443
+        - --operation=webhook
+        - --operation=status
+        - --operation=mutation-webhook
+        - --operation=mutation-status
+        - --operation=generate
+        - --log-level=DEBUG
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - containerPort: 8443
+          protocol: TCP
+        volumeMounts:
+        - name: kubeconfig
+          mountPath: /etc/kubeconfig
+          readOnly: true
+        - name: cert
+          mountPath: /certs
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+          initialDelaySeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 15
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: nested-kubeconfig
+      - name: cert
+        secret:
+          secretName: gatekeeper-webhook-server-cert
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-webhook-service
+  namespace: gatekeeper-system
+spec:
+  type: NodePort
+  selector:
+    control-plane: controller-manager
+  ports:
+  - port: 443
+    targetPort: 8443
+    nodePort: 30443
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatekeeper-audit
+  namespace: gatekeeper-system
+  labels:
+    control-plane: audit-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: audit-controller
+  template:
+    metadata:
+      labels:
+        control-plane: audit-controller
+    spec:
+      serviceAccountName: gatekeeper-admin
+      containers:
+      - name: manager
+        image: gatekeeper:remote-e2e
+        imagePullPolicy: IfNotPresent
+        args:
+        - --enable-remote-cluster
+        - --kubeconfig=/etc/kubeconfig/kubeconfig
+        - --disable-cert-rotation
+        - --audit-interval=10
+        - --constraint-violations-limit=20
+        - --operation=audit
+        - --operation=status
+        - --operation=mutation-status
+        - --operation=generate
+        - --health-addr=:9090
+        - --log-level=DEBUG
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: kubeconfig
+          mountPath: /etc/kubeconfig
+          readOnly: true
+        - name: cert
+          mountPath: /certs
+          readOnly: true
+        - name: tmp-volume
+          mountPath: /tmp/audit
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+          initialDelaySeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 15
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: nested-kubeconfig
+      - name: cert
+        secret:
+          secretName: gatekeeper-webhook-server-cert
+      - name: tmp-volume
+        emptyDir: {}

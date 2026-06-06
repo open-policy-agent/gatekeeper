@@ -154,7 +154,7 @@ jobs:
           kind load docker-image ${{ env.GATEKEEPER_IMAGE }} --name ${{ env.MANAGEMENT_CLUSTER }}
           echo "Image loaded into management cluster"
 
-      - name: Deploy CRDs to management cluster (status CRDs)
+      - name: Deploy status CRDs to management cluster
         run: |
           for f in config/crd/bases/*podstatus*.yaml; do
             [[ "$(basename "$f")" == _* ]] && continue
@@ -162,17 +162,19 @@ jobs:
           done
           echo "Status CRDs deployed to management cluster"
 
-      - name: Deploy CRDs to nested cluster (policy CRDs)
+      - name: Deploy user facing CRDs to nested cluster
         run: |
           for f in config/crd/bases/*.yaml; do
             [[ "$(basename "$f")" == _* ]] && continue
             [[ "$(basename "$f")" == *podstatus* ]] && continue
             kubectl --context kind-${{ env.NESTED_CLUSTER }} apply -f "$f"
           done
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} apply \
+            -f charts/gatekeeper/crds/provider-customresourcedefinition.yaml
           kubectl --context kind-${{ env.NESTED_CLUSTER }} wait \
             --for=condition=established --timeout=60s \
             crd/constrainttemplates.templates.gatekeeper.sh
-          echo "Policy CRDs deployed to nested cluster"
+          echo "User facing CRDs deployed to nested cluster"
 
       - name: Create gatekeeper-system namespace in both clusters
         run: |
@@ -197,125 +199,8 @@ jobs:
 
       - name: Deploy Gatekeeper to management cluster
         run: |
-          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} apply -f - <<EOF
-          apiVersion: v1
-          kind: ServiceAccount
-          metadata:
-            name: gatekeeper-admin
-            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
-          ---
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: Role
-          metadata:
-            name: gatekeeper-manager-role
-            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
-          rules:
-          - apiGroups: [""]
-            resources: ["pods"]
-            verbs: ["get"]
-          - apiGroups: ["status.gatekeeper.sh"]
-            resources: ["*"]
-            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-          ---
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: RoleBinding
-          metadata:
-            name: gatekeeper-manager-rolebinding
-            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
-          roleRef:
-            apiGroup: rbac.authorization.k8s.io
-            kind: Role
-            name: gatekeeper-manager-role
-          subjects:
-          - kind: ServiceAccount
-            name: gatekeeper-admin
-            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
-          ---
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: gatekeeper-controller-manager
-            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
-            labels:
-              control-plane: controller-manager
-          spec:
-            replicas: 1
-            selector:
-              matchLabels:
-                control-plane: controller-manager
-            template:
-              metadata:
-                labels:
-                  control-plane: controller-manager
-              spec:
-                serviceAccountName: gatekeeper-admin
-                containers:
-                - name: manager
-                  image: ${{ env.GATEKEEPER_IMAGE }}
-                  imagePullPolicy: IfNotPresent
-                  args:
-                  - --enable-remote-cluster
-                  - --kubeconfig=/etc/kubeconfig/kubeconfig
-                  - --disable-cert-rotation
-                  - --port=8443
-                  - --enable-external-data=false
-                  - --operation=webhook
-                  - --operation=status
-                  - --operation=mutation-webhook
-                  - --operation=mutation-status
-                  - --operation=generate
-                  - --log-level=DEBUG
-                  env:
-                  - name: POD_NAME
-                    valueFrom:
-                      fieldRef:
-                        fieldPath: metadata.name
-                  - name: POD_NAMESPACE
-                    valueFrom:
-                      fieldRef:
-                        fieldPath: metadata.namespace
-                  ports:
-                  - containerPort: 8443
-                    protocol: TCP
-                  volumeMounts:
-                  - name: kubeconfig
-                    mountPath: /etc/kubeconfig
-                    readOnly: true
-                  - name: cert
-                    mountPath: /certs
-                    readOnly: true
-                  readinessProbe:
-                    httpGet:
-                      path: /readyz
-                      port: 9090
-                    initialDelaySeconds: 5
-                  livenessProbe:
-                    httpGet:
-                      path: /healthz
-                      port: 9090
-                    initialDelaySeconds: 15
-                volumes:
-                - name: kubeconfig
-                  secret:
-                    secretName: nested-kubeconfig
-                - name: cert
-                  secret:
-                    secretName: gatekeeper-webhook-server-cert
-          ---
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: gatekeeper-webhook-service
-            namespace: ${{ env.GATEKEEPER_NAMESPACE }}
-          spec:
-            type: NodePort
-            selector:
-              control-plane: controller-manager
-            ports:
-            - port: 443
-              targetPort: 8443
-              nodePort: 30443
-          EOF
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} apply \
+            -f test/bats/tests/remote-cluster/gatekeeper-remote-cluster-deployment.yaml
           
           echo "Gatekeeper deployment created"
 
@@ -358,6 +243,11 @@ jobs:
             wait --for=condition=Ready --timeout=120s pod -l control-plane=controller-manager
           
           echo "Gatekeeper pod is ready"
+
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} -n ${{ env.GATEKEEPER_NAMESPACE }} \
+            wait --for=condition=Ready --timeout=120s pod -l control-plane=audit-controller
+          
+          echo "Gatekeeper audit pod is ready"
 
       - name: Verify Gatekeeper pod is healthy (no crash loops)
         run: |
@@ -530,12 +420,12 @@ jobs:
             -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.metadata.uid}')
           
           echo "Initial UID: $UID1"
-          sleep 10
+          sleep 2
           
           UID2=$(kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get constrainttemplatepodstatuses/"$STATUS_NAME" \
             -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.metadata.uid}')
           
-          echo "UID after 10s: $UID2"
+          echo "UID after 2s: $UID2"
           
           if [[ "$UID1" == "$UID2" ]]; then
             echo "✓ Status resource is stable (same UID)"
@@ -550,6 +440,9 @@ jobs:
           kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} logs \
             -n ${{ env.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager \
             --tail=-1 > logs-controller.json || true
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} logs \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -l control-plane=audit-controller \
+            --tail=-1 > logs-audit.json || true
           kubectl --context kind-${{ env.NESTED_CLUSTER }} get constrainttemplates -o yaml > target-constrainttemplates.yaml || true
           kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get constrainttemplatepodstatuses \
             -n ${{ env.GATEKEEPER_NAMESPACE }} -o yaml > mgmt-ctpodstatuses.yaml || true
@@ -576,6 +469,12 @@ jobs:
           echo "=== Gatekeeper Logs ==="
           kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} logs \
             -n ${{ env.GATEKEEPER_NAMESPACE }} deployment/gatekeeper-controller-manager \
+            --tail=200 || true
+          
+          echo ""
+          echo "=== Gatekeeper Audit Logs ==="
+          kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} logs \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} deployment/gatekeeper-audit \
             --tail=200 || true
           
           echo ""
