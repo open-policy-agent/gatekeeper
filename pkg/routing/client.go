@@ -54,7 +54,7 @@ func (r *routingClient) clientFor(obj runtime.Object) client.Client {
 	return r.Client
 }
 
-// Reader method overrides
+// Reader method overrides.
 func (r *routingClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	return r.clientFor(obj).Get(ctx, key, obj, opts...)
 }
@@ -63,7 +63,7 @@ func (r *routingClient) List(ctx context.Context, list client.ObjectList, opts .
 	return r.clientFor(list).List(ctx, list, opts...)
 }
 
-// Writer method overrides
+// Writer method overrides.
 func (r *routingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	return r.clientFor(obj).Create(ctx, obj, opts...)
 }
