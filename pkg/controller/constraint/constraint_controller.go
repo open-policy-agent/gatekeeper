@@ -919,7 +919,7 @@ func updateEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodS
 	enforcementPointStatus := constraintstatusv1beta1.EnforcementPointStatus{EnforcementPoint: enforcementPoint, State: state, ObservedGeneration: observedGeneration, Message: message}
 	for i, ep := range status.Status.EnforcementPointsStatus {
 		if ep.EnforcementPoint == enforcementPoint {
-			if reflect.DeepEqual(ep, enforcementPointStatus) {
+			if ep == enforcementPointStatus {
 				return false
 			}
 			status.Status.EnforcementPointsStatus[i] = enforcementPointStatus
