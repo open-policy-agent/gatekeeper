@@ -833,8 +833,8 @@ func Test_StatusResource_Name(t *testing.T) {
 			})
 		}
 	}
-}	
-	
+}
+
 func Test_NonGkResource_Name(t *testing.T) {
 	h := &validationHandler{log: log}
 	fp := fakes.Pod(fakes.WithName(nameLargerThan63))
