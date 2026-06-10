@@ -40,6 +40,7 @@ NODE_VERSION ?= 24-bullseye-slim
 YQ_VERSION ?= 4.52.4
 
 HELM_ARGS ?=
+HELM_TIMEOUT ?= 5m
 HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
 	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
@@ -298,7 +299,7 @@ e2e-helm-deploy: e2e-helm-install $(LOCALBIN)
 ifeq ($(ENABLE_EXPORT),true)
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
-		--debug --wait \
+		--debug --wait --timeout ${HELM_TIMEOUT} \
 		$(HELM_EXPORT_ARGS) \
 		$(if $(filter disk,$(EXPORT_BACKEND)),$(HELM_DISK_EXPORT_ARGS)) \
 		$(if $(filter dapr,$(EXPORT_BACKEND)),$(HELM_DAPR_EXPORT_ARGS)) \
@@ -306,7 +307,7 @@ ifeq ($(ENABLE_EXPORT),true)
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
-		--debug --wait \
+		--debug --wait --timeout ${HELM_TIMEOUT} \
 		$(HELM_EXTRA_ARGS)
 endif
 
