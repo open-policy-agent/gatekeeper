@@ -27,17 +27,17 @@ SYNC_VAP_ENFORCEMENT_SCOPE ?= true
 
 VERSION := v3.23.0-beta.0
 
-KIND_VERSION ?= 0.30.0
+KIND_VERSION ?= 0.32.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.33.0
-KUSTOMIZE_VERSION ?= 5.6.0
+KUSTOMIZE_VERSION ?= 5.8.1
 BATS_VERSION ?= 1.13.0
-ORAS_VERSION ?= 1.3.1
+ORAS_VERSION ?= 1.3.2
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.17.4
 NODE_VERSION ?= 24-bullseye-slim
-YQ_VERSION ?= 4.52.4
+YQ_VERSION ?= 4.53.3
 
 HELM_ARGS ?=
 HELM_TIMEOUT ?= 5m
