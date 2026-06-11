@@ -9,6 +9,7 @@ import (
 )
 
 func TestAddManagedLabels(t *testing.T) {
+	t.Parallel()
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "templates.gatekeeper.sh/v1",
@@ -36,6 +37,7 @@ func TestAddManagedLabels(t *testing.T) {
 }
 
 func TestAddManagedLabels_WithoutBundle(t *testing.T) {
+	t.Parallel()
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "templates.gatekeeper.sh/v1",
@@ -55,6 +57,7 @@ func TestAddManagedLabels_WithoutBundle(t *testing.T) {
 }
 
 func TestAddManagedLabels_PreservesExistingLabels(t *testing.T) {
+	t.Parallel()
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "templates.gatekeeper.sh/v1",
@@ -76,6 +79,7 @@ func TestAddManagedLabels_PreservesExistingLabels(t *testing.T) {
 }
 
 func TestIsManagedByGator(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		labels      map[string]string
@@ -149,6 +153,7 @@ func TestIsManagedByGator(t *testing.T) {
 }
 
 func TestGetPolicyVersion(t *testing.T) {
+	t.Parallel()
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"metadata": map[string]interface{}{
@@ -176,6 +181,7 @@ func TestGetPolicyVersion(t *testing.T) {
 }
 
 func TestGetBundle(t *testing.T) {
+	t.Parallel()
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"metadata": map[string]interface{}{
