@@ -391,7 +391,7 @@ manifests: __controller-gen
 		output:crd:artifacts:config=config/crd/bases
 	@# Copy constraint template CRD from frameworks module
 	go mod download github.com/open-policy-agent/frameworks/constraint
-	cp $$(go list -m -f '{{.Dir}}' github.com/open-policy-agent/frameworks/constraint)/deploy/crds.yaml config/crd/bases/constrainttemplate-customresourcedefinition.yaml
+	cp $$(go list -mod=mod -m -f '{{.Dir}}' github.com/open-policy-agent/frameworks/constraint)/deploy/crds.yaml config/crd/bases/constrainttemplate-customresourcedefinition.yaml
 	./build/update-match-schema.sh
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
