@@ -175,7 +175,7 @@ func (f *HTTPFetcher) FetchContent(ctx context.Context, contentPath string) ([]b
 		cleanPath := filepath.Clean(fullPath)
 		cleanBase := filepath.Clean(catalogDir)
 		relPath, err := filepath.Rel(cleanBase, cleanPath)
-		if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || filepath.IsAbs(relPath) {
+		if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
 			return nil, fmt.Errorf("content path escapes catalog directory: %s", contentPath)
 		}
 

@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,11 +46,22 @@ func TestHTTPFetcher_FileBaseAtRoot(t *testing.T) {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "template.yaml")
 	require.NoError(t, os.WriteFile(testFile, []byte("test: content"), 0o600))
-	contentPath, err := filepath.Rel(string(filepath.Separator), testFile)
+
+	rootDir := string(filepath.Separator)
+	if volume := filepath.VolumeName(tempDir); volume != "" {
+		rootDir = volume + string(filepath.Separator)
+	}
+
+	contentPath, err := filepath.Rel(rootDir, testFile)
 	require.NoError(t, err)
 
+	catalogPath := filepath.ToSlash(filepath.Join(rootDir, "catalog.yaml"))
+	if filepath.VolumeName(rootDir) != "" {
+		catalogPath = "/" + catalogPath
+	}
+
 	fetcher := NewHTTPFetcher(DefaultTimeout)
-	fetcher.SetBaseURL("file:///catalog.yaml")
+	fetcher.SetBaseURL((&url.URL{Scheme: fileScheme, Path: catalogPath}).String())
 
 	content, err := fetcher.FetchContent(context.Background(), filepath.ToSlash(contentPath))
 	require.NoError(t, err)
