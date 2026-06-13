@@ -524,7 +524,9 @@ func TestShouldGenerateVAP(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			DefaultGenerateVAP = ptr.To[bool](test.vapDefault)
+			origDefault := GetDefaultGenerateVAP()
+			SetDefaultGenerateVAP(test.vapDefault)
+			t.Cleanup(func() { SetDefaultGenerateVAP(origDefault) })
 			generateVAP, err := ShouldGenerateVAP(test.template)
 			if generateVAP != test.expected {
 				t.Errorf("wanted assumeVAP to be %v; got %v", test.expected, generateVAP)
@@ -864,9 +866,9 @@ func TestManageVAPB_CleansUpStaleVAPB(t *testing.T) {
 	})
 
 	// Ensure DefaultGenerateVAPB is true (default).
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+	origDefault := GetDefaultGenerateVAPB()
+	SetDefaultGenerateVAPB(true)
+	t.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
 
 	// Constraint with scoped enforcement — only webhook + audit, no vap.k8s.io.
 	instance := &unstructured.Unstructured{
@@ -963,9 +965,9 @@ func TestManageVAPB_NoStaleVAPB_NoDelete(t *testing.T) {
 		transform.SetGroupVersion(nil)
 	})
 
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+	origDefault := GetDefaultGenerateVAPB()
+	SetDefaultGenerateVAPB(true)
+	t.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
 
 	instance := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1048,9 +1050,9 @@ func TestManageVAPB_SkipsDeleteIfNotOwner(t *testing.T) {
 		transform.SetGroupVersion(nil)
 	})
 
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+	origDefault := GetDefaultGenerateVAPB()
+	SetDefaultGenerateVAPB(true)
+	t.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
 
 	// This constraint does NOT use vap.k8s.io.
 	instance := &unstructured.Unstructured{
@@ -1207,9 +1209,9 @@ func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
 				transform.SetGroupVersion(nil)
 			})
 
-			origDefault := *DefaultGenerateVAPB
-			*DefaultGenerateVAPB = true
-			t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+			origDefault := GetDefaultGenerateVAPB()
+			SetDefaultGenerateVAPB(true)
+			t.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
 
 			epName := util.WebhookEnforcementPoint
 			if tt.useVAPEnforcement {
@@ -1323,9 +1325,9 @@ func TestManageVAPB_PreservesErrorMetricWhenGenerationFails(t *testing.T) {
 		transform.SetGroupVersion(nil)
 	})
 
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+	origDefault := GetDefaultGenerateVAPB()
+	SetDefaultGenerateVAPB(true)
+	t.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
 
 	instance := &unstructured.Unstructured{
 		Object: map[string]interface{}{
