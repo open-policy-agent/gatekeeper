@@ -603,7 +603,10 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 					}
 					if t.After(time.Now()) {
 						wait := time.Until(t)
-						updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, fmt.Sprintf("waiting for %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", wait), instance.GetGeneration())
+						changed := updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, fmt.Sprintf("waiting until %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", timestamp), instance.GetGeneration())
+						if !changed {
+							return wait, nil
+						}
 						return wait, r.writer.Update(ctx, status)
 					}
 				}
@@ -912,15 +915,19 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 	return obj, nil
 }
 
-func updateEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodStatus, enforcementPoint string, state string, message string, observedGeneration int64) {
+func updateEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodStatus, enforcementPoint string, state string, message string, observedGeneration int64) bool {
 	enforcementPointStatus := constraintstatusv1beta1.EnforcementPointStatus{EnforcementPoint: enforcementPoint, State: state, ObservedGeneration: observedGeneration, Message: message}
 	for i, ep := range status.Status.EnforcementPointsStatus {
 		if ep.EnforcementPoint == enforcementPoint {
+			if ep == enforcementPointStatus {
+				return false
+			}
 			status.Status.EnforcementPointsStatus[i] = enforcementPointStatus
-			return
+			return true
 		}
 	}
 	status.Status.EnforcementPointsStatus = append(status.Status.EnforcementPointsStatus, enforcementPointStatus)
+	return true
 }
 
 func cleanEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodStatus, enforcementPoint string) {

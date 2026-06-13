@@ -27,7 +27,7 @@ SYNC_VAP_ENFORCEMENT_SCOPE ?= true
 
 VERSION := v3.23.0-beta.0
 
-KIND_VERSION ?= 0.29.0
+KIND_VERSION ?= 0.30.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.33.0
@@ -40,6 +40,7 @@ NODE_VERSION ?= 24-bullseye-slim
 YQ_VERSION ?= 4.52.4
 
 HELM_ARGS ?=
+HELM_TIMEOUT ?= 5m
 HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
 	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
@@ -78,7 +79,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v2.4.0
+GOLANGCI_LINT_VERSION := v2.5.0
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -298,7 +299,7 @@ e2e-helm-deploy: e2e-helm-install $(LOCALBIN)
 ifeq ($(ENABLE_EXPORT),true)
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
-		--debug --wait \
+		--debug --wait --timeout ${HELM_TIMEOUT} \
 		$(HELM_EXPORT_ARGS) \
 		$(if $(filter disk,$(EXPORT_BACKEND)),$(HELM_DISK_EXPORT_ARGS)) \
 		$(if $(filter dapr,$(EXPORT_BACKEND)),$(HELM_DAPR_EXPORT_ARGS)) \
@@ -306,7 +307,7 @@ ifeq ($(ENABLE_EXPORT),true)
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
-		--debug --wait \
+		--debug --wait --timeout ${HELM_TIMEOUT} \
 		$(HELM_EXTRA_ARGS)
 endif
 
