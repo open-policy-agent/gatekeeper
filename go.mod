@@ -2,7 +2,7 @@ module github.com/open-policy-agent/gatekeeper/v3
 
 go 1.25.0
 
-toolchain go1.25.10
+toolchain go1.25.11
 
 require (
 	cloud.google.com/go/trace v1.10.11
