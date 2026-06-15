@@ -36,7 +36,3 @@ type GVKManifestList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []GVKManifest `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&GVKManifest{}, &GVKManifestList{})
-}

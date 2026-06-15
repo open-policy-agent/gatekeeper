@@ -78,10 +78,53 @@ const (
 var (
 	log                          = logf.Log.V(logging.DebugLevel).WithName("controller").WithValues(logging.Process, "constraint_controller")
 	discoveryErr                 *apiutil.ErrResourceDiscoveryFailed
+	defaultFlagsMux              sync.RWMutex
 	DefaultGenerateVAPB          = flag.Bool("default-create-vap-binding-for-constraints", true, "(beta) Create VAPBinding resource for constraint of the template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy Binding, true: create Validating Admission Policy Binding.")
 	DefaultGenerateVAP           = flag.Bool("default-create-vap-for-templates", true, "(beta) Create VAP resource for template containing VAP-style CEL source. Allowed values are false: do not create Validating Admission Policy unless generateVAP: true is set on constraint template explicitly, true: create Validating Admission Policy unless generateVAP: false is set on constraint template explicitly.")
 	DefaultWaitForVAPBGeneration = flag.Int("default-wait-for-vapb-generation", 30, "(beta) Wait time in seconds before generating a ValidatingAdmissionPolicyBinding after a constraint CRD is created.")
 )
+
+// GetDefaultGenerateVAPB returns the default VAPB generation setting.
+func GetDefaultGenerateVAPB() bool {
+	defaultFlagsMux.RLock()
+	defer defaultFlagsMux.RUnlock()
+	return *DefaultGenerateVAPB
+}
+
+// SetDefaultGenerateVAPB updates the default VAPB generation setting.
+func SetDefaultGenerateVAPB(value bool) {
+	defaultFlagsMux.Lock()
+	defer defaultFlagsMux.Unlock()
+	*DefaultGenerateVAPB = value
+}
+
+// GetDefaultGenerateVAP returns the default VAP generation setting.
+func GetDefaultGenerateVAP() bool {
+	defaultFlagsMux.RLock()
+	defer defaultFlagsMux.RUnlock()
+	return *DefaultGenerateVAP
+}
+
+// SetDefaultGenerateVAP updates the default VAP generation setting.
+func SetDefaultGenerateVAP(value bool) {
+	defaultFlagsMux.Lock()
+	defer defaultFlagsMux.Unlock()
+	*DefaultGenerateVAP = value
+}
+
+// GetDefaultWaitForVAPBGeneration returns the default VAPB generation wait time in seconds.
+func GetDefaultWaitForVAPBGeneration() int {
+	defaultFlagsMux.RLock()
+	defer defaultFlagsMux.RUnlock()
+	return *DefaultWaitForVAPBGeneration
+}
+
+// SetDefaultWaitForVAPBGeneration updates the default VAPB generation wait time in seconds.
+func SetDefaultWaitForVAPBGeneration(value int) {
+	defaultFlagsMux.Lock()
+	defer defaultFlagsMux.Unlock()
+	*DefaultWaitForVAPBGeneration = value
+}
 
 var (
 	ErrValidatingAdmissionPolicyAPIDisabled = errors.New("validatingAdmissionPolicy API is not enabled")
@@ -369,7 +412,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 		isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
 		if isAPIEnabled {
-			shouldGenerateVAPB, _, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
+			shouldGenerateVAPB, _, err := shouldGenerateVAPB(GetDefaultGenerateVAPB(), enforcementAction, instance)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -475,7 +518,7 @@ func ShouldGenerateVAP(ct *templates.ConstraintTemplate) (bool, error) {
 		return false, err
 	}
 	if source.GenerateVAP == nil {
-		return *DefaultGenerateVAP, nil
+		return GetDefaultGenerateVAP(), nil
 	}
 	return *source.GenerateVAP, nil
 }
@@ -549,7 +592,7 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		return noDelay, err
 	}
 
-	shouldGenerateVAPB, VAPEnforcementActions, err := shouldGenerateVAPB(*DefaultGenerateVAPB, enforcementAction, instance)
+	shouldGenerateVAPB, VAPEnforcementActions, err := shouldGenerateVAPB(GetDefaultGenerateVAPB(), enforcementAction, instance)
 	if err != nil {
 		log.Error(err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 		return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")

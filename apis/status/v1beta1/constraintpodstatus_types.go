@@ -82,10 +82,6 @@ type ConstraintPodStatusList struct {
 	Items           []ConstraintPodStatus `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&ConstraintPodStatus{}, &ConstraintPodStatusList{})
-}
-
 // NewConstraintStatusForPod returns a constraint status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the constraint status controller.

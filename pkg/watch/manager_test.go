@@ -42,6 +42,22 @@ type fakeCacheInformer struct {
 
 func (f *fakeCacheInformer) IsStopped() bool { return false }
 
+func (f *fakeCacheInformer) HasSyncedChecker() kcache.DoneChecker {
+	return &fakeDoneChecker{}
+}
+
+type fakeDoneChecker struct{}
+
+func (f *fakeDoneChecker) Name() string {
+	return "fakeDoneChecker"
+}
+
+func (f *fakeDoneChecker) Done() <-chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}
+
 func (f *fakeCacheInformer) AddEventHandler(h kcache.ResourceEventHandler) (kcache.ResourceEventHandlerRegistration, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
