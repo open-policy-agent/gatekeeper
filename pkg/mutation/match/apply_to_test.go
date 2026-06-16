@@ -320,7 +320,7 @@ func TestAppliesGVKAndOperation(t *testing.T) {
 			want:      true,
 		},
 		{
-			name: "empty operation string (audit/expansion context) matches",
+			name: "empty operation string with explicit CREATE rejects mutation",
 			applyTo: []MutationApplyTo{
 				{
 					ApplyTo:    ApplyTo{Groups: []string{""}, Kinds: []string{"Pod"}, Versions: []string{"v1"}},
@@ -329,7 +329,7 @@ func TestAppliesGVKAndOperation(t *testing.T) {
 			},
 			gvk:       podGVK,
 			operation: "",
-			want:      true,
+			want:      false,
 		},
 		{
 			name:      "no applyTo entries matches nothing",

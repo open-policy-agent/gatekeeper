@@ -7,20 +7,45 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	expansionunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion/fixtures"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/assign"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	admissionv1 "k8s.io/api/admission/v1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
+
+func loadAssignWithOperations(t *testing.T, raw string, operations ...admissionregistrationv1.OperationType) types.Mutator {
+	t.Helper()
+
+	u := fixtures.LoadFixture(raw, t)
+	a := &mutationsunversioned.Assign{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.UnstructuredContent(), a); err != nil {
+		t.Fatalf("error converting assign: %s", err)
+	}
+	for i := range a.Spec.ApplyTo {
+		a.Spec.ApplyTo[i].Operations = operations
+	}
+
+	mutator, err := assign.MutatorForAssign(a)
+	if err != nil {
+		t.Fatalf("error creating assign: %s", err)
+	}
+	return mutator
+}
 
 func TestExpand(t *testing.T) {
 	tests := []struct {
 		name      string
 		generator *unstructured.Unstructured
 		ns        *corev1.Namespace
+		operation admissionv1.Operation
 		templates []*expansionunversioned.ExpansionTemplate
 		mutators  []types.Mutator
 		want      []*Resultant
@@ -79,6 +104,35 @@ func TestExpand(t *testing.T) {
 			},
 			want: []*Resultant{
 				{Obj: fixtures.LoadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+			},
+		},
+		{
+			name:      "operation-scoped mutator deployment create expands pod and mutates",
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			operation: admissionv1.Create,
+			mutators: []types.Mutator{
+				loadAssignWithOperations(t, fixtures.AssignPullImage, admissionregistrationv1.Create),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			want: []*Resultant{
+				{Obj: fixtures.LoadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+			},
+		},
+		{
+			name:      "operation-scoped mutator without operation expands pod but does not mutate",
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssignWithOperations(t, fixtures.AssignPullImage, admissionregistrationv1.Create),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			want: []*Resultant{
+				{Obj: fixtures.LoadFixture(fixtures.PodNoMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
@@ -270,6 +324,7 @@ func TestExpand(t *testing.T) {
 				Namespace: tc.ns,
 				Username:  "unit-test",
 				Source:    types.SourceTypeGenerated,
+				Operation: tc.operation,
 			}
 			results, err := expSystem.Expand(base)
 			if tc.expectErr && err == nil {

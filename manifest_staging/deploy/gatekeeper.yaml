@@ -99,6 +99,9 @@ spec:
                       description: |-
                         Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
+                        NOTE: The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations.
+                        DELETE and CONNECT are accepted values but will not trigger mutations because the webhook
+                        does not handle these operation types. Support may be added in future releases.
                       items:
                         description: OperationType specifies an operation for a request.
                         enum:
@@ -468,6 +471,9 @@ spec:
                       description: |-
                         Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
+                        NOTE: The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations.
+                        DELETE and CONNECT are accepted values but will not trigger mutations because the webhook
+                        does not handle these operation types. Support may be added in future releases.
                       items:
                         description: OperationType specifies an operation for a request.
                         enum:
@@ -837,6 +843,9 @@ spec:
                       description: |-
                         Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
+                        NOTE: The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations.
+                        DELETE and CONNECT are accepted values but will not trigger mutations because the webhook
+                        does not handle these operation types. Support may be added in future releases.
                       items:
                         description: OperationType specifies an operation for a request.
                         enum:
@@ -1228,6 +1237,9 @@ spec:
                       description: |-
                         Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
+                        NOTE: The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations.
+                        DELETE and CONNECT are accepted values but will not trigger mutations because the webhook
+                        does not handle these operation types. Support may be added in future releases.
                       items:
                         description: OperationType specifies an operation for a request.
                         enum:
@@ -3878,6 +3890,9 @@ spec:
                       description: |-
                         Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
+                        NOTE: The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations.
+                        DELETE and CONNECT are accepted values but will not trigger mutations because the webhook
+                        does not handle these operation types. Support may be added in future releases.
                       items:
                         description: OperationType specifies an operation for a request.
                         enum:
@@ -4216,6 +4231,9 @@ spec:
                       description: |-
                         Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
+                        NOTE: The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations.
+                        DELETE and CONNECT are accepted values but will not trigger mutations because the webhook
+                        does not handle these operation types. Support may be added in future releases.
                       items:
                         description: OperationType specifies an operation for a request.
                         enum:
@@ -4554,6 +4572,9 @@ spec:
                       description: |-
                         Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
                         this mutation. If empty, all operations are allowed for backward compatibility.
+                        NOTE: The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations.
+                        DELETE and CONNECT are accepted values but will not trigger mutations because the webhook
+                        does not handle these operation types. Support may be added in future releases.
                       items:
                         description: OperationType specifies an operation for a request.
                         enum:

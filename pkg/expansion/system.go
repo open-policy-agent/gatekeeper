@@ -161,6 +161,7 @@ func (s *System) expandRecursive(base *mutationtypes.Mutable, resultants *[]*Res
 			Namespace: base.Namespace,
 			Username:  base.Username,
 			Source:    base.Source,
+			Operation: base.Operation,
 		}
 		if err := s.expandRecursive(mut, resultants, depth+1); err != nil {
 			return err
@@ -202,6 +203,7 @@ func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 			Namespace: base.Namespace,
 			Username:  base.Username,
 			Source:    mutationtypes.SourceTypeGenerated,
+			Operation: base.Operation,
 		}
 		_, err := s.mutationSystem.Mutate(context.Background(), mutable)
 		if err != nil {

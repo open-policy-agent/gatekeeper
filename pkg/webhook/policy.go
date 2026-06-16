@@ -617,6 +617,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 			Object:    obj,
 			Namespace: review.Namespace,
 			Username:  req.UserInfo.Username,
+			Operation: req.Operation,
 		}
 		resultants, err = h.expansionSystem.Expand(base)
 		if err != nil {

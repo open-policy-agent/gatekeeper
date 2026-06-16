@@ -90,14 +90,14 @@ applyTo:
 
 > **Note:** The Gatekeeper mutation webhook currently only processes `CREATE` and `UPDATE` operations. While `DELETE` and `CONNECT` are valid values for the `operations` field, they will not trigger mutations because the webhook does not handle these operation types. Support for `DELETE` and `CONNECT` may be added in future releases.
 
-**Backward Compatibility:** If the `operations` field is not specified or is empty, the mutation applies to all operations (CREATE, UPDATE, DELETE, and CONNECT). This means no operation filtering is applied, preserving the existing behavior for mutators that do not specify operations.
+**Backward Compatibility:** If the `operations` field is not specified or is empty, no operation filtering is applied, preserving the existing behavior for mutators that do not specify operations. In admission, this means the mutator can apply to the operations handled by the mutation webhook, which are currently `CREATE` and `UPDATE`.
 
 **Common Use Cases:**
 - `operations: ["CREATE"]` - Ideal for setting initial values that shouldn't change on updates (e.g., environment variables with immutable constraints)
 - `operations: ["UPDATE"]` - For mutations that should only apply when resources are modified
 - `operations: ["CREATE", "UPDATE"]` - Apply to both creation and updates (this is what the webhook currently supports)
 
-> **Important Consideration:** When using `operations: ["CREATE"]` only, the mutation will not apply to resources that already exist before the mutator is deployed. If those resources are later updated (e.g., for label changes or finalizer removal), the mutation will not be applied, and the previously mutated values remain unchanged. However, if the mutator is later deleted or modified, resources created under the old mutator may no longer match the new policy, which could cause issues if the field was set differently than what the user originally specified. Users should be aware that `operations: ["CREATE"]` effectively makes the mutated fields read-only for the mutation lifecycle.
+> **Important Consideration:** When using `operations: ["CREATE"]` only, the mutation will not apply to resources that already exist before the mutator is deployed. If those resources are later updated (e.g., for label changes or finalizer removal), the mutation will not be applied, and the previously mutated values remain unchanged. Explicitly operation-scoped mutators also do not apply in audit or expansion contexts where no admission operation is available. However, if the mutator is later deleted or modified, resources created under the old mutator may no longer match the new policy, which could cause issues if the field was set differently than what the user originally specified. Users should be aware that `operations: ["CREATE"]` effectively makes the mutated fields read-only for the mutation lifecycle.
 
 The `match` section is common to all mutators. It supports the following match criteria:
 - scope - the scope (Namespaced | Cluster) of the mutated resource
