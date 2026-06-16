@@ -17,8 +17,24 @@ func TestApplyTo_MatchesOperation(t *testing.T) {
 		want      bool
 	}{
 		{
-			name:      "empty operation string - allows mutation",
+			name:      "empty operation string with empty operations - allows mutation",
 			applyTo:   MutationApplyTo{},
+			operation: "",
+			want:      true,
+		},
+		{
+			name: "empty operation string with explicit CREATE - rejects mutation",
+			applyTo: MutationApplyTo{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+			},
+			operation: "",
+			want:      false,
+		},
+		{
+			name: "empty operation string with OperationAll - allows mutation",
+			applyTo: MutationApplyTo{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.OperationAll},
+			},
 			operation: "",
 			want:      true,
 		},
@@ -434,7 +450,7 @@ func TestValidateOperations(t *testing.T) {
 			errMsg:  "invalid operation \"create\"",
 		},
 		{
-			name:    "wildcard with CREATE is rejected",
+			name: "wildcard with CREATE is rejected",
 			applyTo: []MutationApplyTo{
 				{Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.OperationAll, admissionregistrationv1.Create}},
 			},
@@ -442,7 +458,7 @@ func TestValidateOperations(t *testing.T) {
 			errMsg:  "wildcard \"*\" in applyTo[0].operations must not be combined with other operations",
 		},
 		{
-			name:    "wildcard with multiple ops is rejected",
+			name: "wildcard with multiple ops is rejected",
 			applyTo: []MutationApplyTo{
 				{Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.OperationAll, admissionregistrationv1.Update}},
 			},

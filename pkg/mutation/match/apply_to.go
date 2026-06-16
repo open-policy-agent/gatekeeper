@@ -96,30 +96,33 @@ func (a *ApplyTo) Matches(gvk schema.GroupVersionKind) bool {
 // MatchesOperation returns true if the operation is contained in the MutationApplyTo's
 // operations list. If no operations are specified, all operations are allowed
 // for backward compatibility.
-// If operation is empty (e.g., in audit/expansion contexts), returns true
-// to maintain backward compatibility with non-admission flows.
+// If operation is empty (e.g., in audit/expansion contexts), only mutators
+// without operation filtering are allowed for backward compatibility.
 func (a *MutationApplyTo) MatchesOperation(operation admissionv1.Operation) bool {
-	// If operation is empty (audit, expansion, or gator contexts), allow the mutation
-	// These contexts don't have admission operations and should not be filtered
 	if operation == "" {
-		return true
+		return len(a.Operations) == 0 || slices.Contains(a.Operations, admissionregistrationv1.OperationAll)
 	}
 
-	// If no operations specified, allow all operations for backward compatibility.
-	// Note: this differs from groups/versions/kinds where empty means no match.
-	// Empty operations means "no operation filtering" to preserve existing behavior.
-	if len(a.Operations) == 0 {
-		return true
+	return slices.Contains(a.EffectiveOperations(), operation)
+}
+
+// EffectiveOperations returns the admission operations this MutationApplyTo applies to.
+// Empty operations and OperationAll both mean no operation filtering.
+func (a *MutationApplyTo) EffectiveOperations() []admissionv1.Operation {
+	if len(a.Operations) == 0 || slices.Contains(a.Operations, admissionregistrationv1.OperationAll) {
+		return []admissionv1.Operation{
+			admissionv1.Create,
+			admissionv1.Update,
+			admissionv1.Delete,
+			admissionv1.Connect,
+		}
 	}
 
-	if slices.Contains(a.Operations, admissionregistrationv1.OperationAll) {
-		return true
+	operations := make([]admissionv1.Operation, 0, len(a.Operations))
+	for _, operation := range a.Operations {
+		operations = append(operations, admissionv1.Operation(operation))
 	}
-
-	// Check if the operation is explicitly allowed by the user
-	// Convert admissionv1.Operation to admissionregistrationv1.OperationType for comparison
-	opType := admissionregistrationv1.OperationType(operation)
-	return slices.Contains(a.Operations, opType)
+	return operations
 }
 
 // validOperations defines the set of valid admission operations.

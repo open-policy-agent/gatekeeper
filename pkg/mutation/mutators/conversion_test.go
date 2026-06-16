@@ -8,11 +8,30 @@ import (
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
+	mutationschema "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
+	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+var schemaBindingOperations = []admissionv1.Operation{
+	admissionv1.Create,
+	admissionv1.Update,
+	admissionv1.Delete,
+	admissionv1.Connect,
+}
+
+func schemaBindingsForGVKs(gvks []schema.GroupVersionKind) []mutationschema.Binding {
+	bindings := make([]mutationschema.Binding, 0, len(gvks)*len(schemaBindingOperations))
+	for _, gvk := range gvks {
+		for _, operation := range schemaBindingOperations {
+			bindings = append(bindings, mutationschema.Binding{GVK: gvk, Operation: operation})
+		}
+	}
+	return bindings
+}
 
 func makeValue(v interface{}) mutationsunversioned.AssignField {
 	return mutationsunversioned.AssignField{Value: &types.Anything{Value: v}}
@@ -51,7 +70,7 @@ func TestAssignToMutator(t *testing.T) {
 	}
 
 	bindings := mutatorWithSchema.SchemaBindings()
-	expectedBindings := []schema.GroupVersionKind{
+	expectedGVKs := []schema.GroupVersionKind{
 		{Group: "group1", Version: "version1", Kind: "kind1"},
 		{Group: "group1", Version: "version1", Kind: "kind2"},
 		{Group: "group1", Version: "version1", Kind: "kind3"},
@@ -65,6 +84,7 @@ func TestAssignToMutator(t *testing.T) {
 		{Group: "group4", Version: "version1", Kind: "kind3"},
 		{Group: "group4", Version: "version1", Kind: "kind4"},
 	}
+	expectedBindings := schemaBindingsForGVKs(expectedGVKs)
 
 	if diff := cmp.Diff(expectedBindings, bindings); diff != "" {
 		t.Errorf("Bindings are not as expected: %s", diff)

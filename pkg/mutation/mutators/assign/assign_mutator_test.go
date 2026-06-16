@@ -17,6 +17,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/stretchr/testify/require"
 	admissionv1 "k8s.io/api/admission/v1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -739,6 +740,7 @@ func TestApplyTo(t *testing.T) {
 		group         string
 		version       string
 		kind          string
+		operation     admissionv1.Operation
 		matchExpected bool
 	}{
 		{
@@ -753,6 +755,7 @@ func TestApplyTo(t *testing.T) {
 			group:         "",
 			version:       "v1",
 			kind:          "Foo",
+			operation:     admissionv1.Create,
 			matchExpected: true,
 		},
 		{
@@ -767,6 +770,23 @@ func TestApplyTo(t *testing.T) {
 			group:         "",
 			version:       "v1",
 			kind:          "Bar",
+			operation:     admissionv1.Create,
+			matchExpected: false,
+		},
+		{
+			name: "explicit operation does not match operationless context",
+			applyTo: []match.MutationApplyTo{{
+				ApplyTo: match.ApplyTo{
+					Groups:   []string{""},
+					Kinds:    []string{"Foo"},
+					Versions: []string{"v1"},
+				},
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+			}},
+			group:         "",
+			version:       "v1",
+			kind:          "Foo",
+			operation:     "",
 			matchExpected: false,
 		},
 	}
@@ -782,7 +802,7 @@ func TestApplyTo(t *testing.T) {
 				Version: test.version,
 				Kind:    test.kind,
 			})
-			matches, err := mutator.Matches(&types.Mutable{Object: obj, Source: types.SourceTypeDefault, Operation: admissionv1.Create})
+			matches, err := mutator.Matches(&types.Mutable{Object: obj, Source: types.SourceTypeDefault, Operation: test.operation})
 			require.NoError(t, err)
 			if matches != test.matchExpected {
 				t.Errorf("Matches() = %t, expected %t", matches, test.matchExpected)
