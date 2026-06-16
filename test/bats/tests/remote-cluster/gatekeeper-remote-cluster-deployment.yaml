@@ -63,6 +63,8 @@ spec:
         - --operation=mutation-webhook
         - --operation=mutation-status
         - --operation=generate
+        - --default-create-vap-for-templates=true
+        - --default-create-vap-binding-for-constraints=true
         - --log-level=DEBUG
         env:
         - name: POD_NAME
@@ -147,6 +149,8 @@ spec:
         - --operation=status
         - --operation=mutation-status
         - --operation=generate
+        - --default-create-vap-for-templates=true
+        - --default-create-vap-binding-for-constraints=true
         - --health-addr=:9090
         - --log-level=DEBUG
         env:

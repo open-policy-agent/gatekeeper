@@ -26,6 +26,12 @@ type fakeClient struct {
 	patched      bool
 	deletedAllOf bool
 	applied      bool
+	// subresource call tracking
+	subGot     bool
+	subCreated bool
+	subUpdated bool
+	subPatched bool
+	subApplied bool
 }
 
 func (f *fakeClient) Get(_ context.Context, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
@@ -68,150 +74,190 @@ func (f *fakeClient) Apply(_ context.Context, _ runtime.ApplyConfiguration, _ ..
 	return nil
 }
 
+// SubResource returns a fake SubResourceClient that records calls back onto the
+// parent fakeClient, so tests can assert which underlying client a routed
+// subresource operation reached.
+func (f *fakeClient) SubResource(_ string) client.SubResourceClient {
+	return &fakeSubResourceClient{parent: f}
+}
+
+// fakeSubResourceClient records subresource calls onto its parent fakeClient. It
+// embeds the SubResourceClient interface (nil) so any method not overridden here
+// panics if called, surfacing accidental usage.
+type fakeSubResourceClient struct {
+	client.SubResourceClient
+	parent *fakeClient
+}
+
+func (f *fakeSubResourceClient) Get(_ context.Context, _, _ client.Object, _ ...client.SubResourceGetOption) error {
+	f.parent.subGot = true
+	return nil
+}
+
+func (f *fakeSubResourceClient) Create(_ context.Context, _, _ client.Object, _ ...client.SubResourceCreateOption) error {
+	f.parent.subCreated = true
+	return nil
+}
+
+func (f *fakeSubResourceClient) Update(_ context.Context, _ client.Object, _ ...client.SubResourceUpdateOption) error {
+	f.parent.subUpdated = true
+	return nil
+}
+
+func (f *fakeSubResourceClient) Patch(_ context.Context, _ client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) error {
+	f.parent.subPatched = true
+	return nil
+}
+
+func (f *fakeSubResourceClient) Apply(_ context.Context, _ runtime.ApplyConfiguration, _ ...client.SubResourceApplyOption) error {
+	f.parent.subApplied = true
+	return nil
+}
+
 func TestRoutingClient_Create_PodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.ConstraintTemplatePodStatus{}
 	_ = rc.Create(context.Background(), obj)
 
-	if !mgmt.created {
-		t.Error("expected Create to route to management for ConstraintTemplatePodStatus")
+	if !localCluster.created {
+		t.Error("expected Create to route to local cluster for ConstraintTemplatePodStatus")
 	}
-	if target.created {
-		t.Error("expected Create NOT to route to target for ConstraintTemplatePodStatus")
+	if remoteCluster.created {
+		t.Error("expected Create NOT to route to remote cluster for ConstraintTemplatePodStatus")
 	}
 }
 
 func TestRoutingClient_Update_PodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.ConfigPodStatus{}
 	_ = rc.Update(context.Background(), obj)
 
-	if !mgmt.updated {
-		t.Error("expected Update to route to management for ConfigPodStatus")
+	if !localCluster.updated {
+		t.Error("expected Update to route to local cluster for ConfigPodStatus")
 	}
-	if target.updated {
-		t.Error("expected Update NOT to route to target for ConfigPodStatus")
+	if remoteCluster.updated {
+		t.Error("expected Update NOT to route to remote cluster for ConfigPodStatus")
 	}
 }
 
 func TestRoutingClient_Delete_PodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.MutatorPodStatus{}
 	_ = rc.Delete(context.Background(), obj)
 
-	if !mgmt.deleted {
-		t.Error("expected Delete to route to management for MutatorPodStatus")
+	if !localCluster.deleted {
+		t.Error("expected Delete to route to local cluster for MutatorPodStatus")
 	}
-	if target.deleted {
-		t.Error("expected Delete NOT to route to target for MutatorPodStatus")
+	if remoteCluster.deleted {
+		t.Error("expected Delete NOT to route to remote cluster for MutatorPodStatus")
 	}
 }
 
 func TestRoutingClient_Patch_PodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.ProviderPodStatus{}
 	_ = rc.Patch(context.Background(), obj, client.MergeFrom(obj))
 
-	if !mgmt.patched {
-		t.Error("expected Patch to route to management for ProviderPodStatus")
+	if !localCluster.patched {
+		t.Error("expected Patch to route to local cluster for ProviderPodStatus")
 	}
-	if target.patched {
-		t.Error("expected Patch NOT to route to target for ProviderPodStatus")
+	if remoteCluster.patched {
+		t.Error("expected Patch NOT to route to remote cluster for ProviderPodStatus")
 	}
 }
 
 func TestRoutingClient_DeleteAllOf_PodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.ConstraintPodStatus{}
 	_ = rc.DeleteAllOf(context.Background(), obj)
 
-	if !mgmt.deletedAllOf {
-		t.Error("expected DeleteAllOf to route to management for ConstraintPodStatus")
+	if !localCluster.deletedAllOf {
+		t.Error("expected DeleteAllOf to route to local cluster for ConstraintPodStatus")
 	}
-	if target.deletedAllOf {
-		t.Error("expected DeleteAllOf NOT to route to target for ConstraintPodStatus")
+	if remoteCluster.deletedAllOf {
+		t.Error("expected DeleteAllOf NOT to route to remote cluster for ConstraintPodStatus")
 	}
 }
 
 func TestRoutingClient_DeleteAllOf_NonPodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabels"})
 	_ = rc.DeleteAllOf(context.Background(), obj)
 
-	if !target.deletedAllOf {
-		t.Error("expected DeleteAllOf to route to target for constraint")
+	if !remoteCluster.deletedAllOf {
+		t.Error("expected DeleteAllOf to route to remote cluster for constraint")
 	}
-	if mgmt.deletedAllOf {
-		t.Error("expected DeleteAllOf NOT to route to management for constraint")
+	if localCluster.deletedAllOf {
+		t.Error("expected DeleteAllOf NOT to route to local cluster for constraint")
 	}
 }
 
 func TestRoutingClient_Create_ConnectionPodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1alpha1.ConnectionPodStatus{}
 	_ = rc.Create(context.Background(), obj)
 
-	if !mgmt.created {
-		t.Error("expected Create to route to management for ConnectionPodStatus")
+	if !localCluster.created {
+		t.Error("expected Create to route to local cluster for ConnectionPodStatus")
 	}
-	if target.created {
-		t.Error("expected Create NOT to route to target for ConnectionPodStatus")
+	if remoteCluster.created {
+		t.Error("expected Create NOT to route to remote cluster for ConnectionPodStatus")
 	}
 }
 
 func TestRoutingClient_Create_NonPodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "templates.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintTemplate"})
 	_ = rc.Create(context.Background(), obj)
 
-	if !target.created {
-		t.Error("expected Create to route to target for ConstraintTemplate")
+	if !remoteCluster.created {
+		t.Error("expected Create to route to remote cluster for ConstraintTemplate")
 	}
-	if mgmt.created {
-		t.Error("expected Create NOT to route to management for ConstraintTemplate")
+	if localCluster.created {
+		t.Error("expected Create NOT to route to local cluster for ConstraintTemplate")
 	}
 }
 
 func TestRoutingClient_Update_NonPodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabels"})
 	_ = rc.Update(context.Background(), obj)
 
-	if !target.updated {
-		t.Error("expected Update to route to target for constraint")
+	if !remoteCluster.updated {
+		t.Error("expected Update to route to remote cluster for constraint")
 	}
-	if mgmt.updated {
-		t.Error("expected Update NOT to route to management for constraint")
+	if localCluster.updated {
+		t.Error("expected Update NOT to route to local cluster for constraint")
 	}
 }
 
@@ -240,10 +286,10 @@ func (e *errorClient) Create(_ context.Context, _ client.Object, _ ...client.Cre
 }
 
 func TestRoutingClient_PropagatesErrors(t *testing.T) {
-	expectedErr := errors.New("management write error")
-	target := &fakeClient{}
-	mgmt := &errorClient{err: expectedErr}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	expectedErr := errors.New("local cluster write error")
+	remoteCluster := &fakeClient{}
+	localCluster := &errorClient{err: expectedErr}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.ExpansionTemplatePodStatus{}
 	err := rc.Create(context.Background(), obj)
@@ -251,61 +297,134 @@ func TestRoutingClient_PropagatesErrors(t *testing.T) {
 	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
-	if !mgmt.created {
-		t.Error("expected Create to route to management for ExpansionTemplatePodStatus")
+	if !localCluster.created {
+		t.Error("expected Create to route to local cluster for ExpansionTemplatePodStatus")
 	}
-	if target.created {
-		t.Error("expected Create NOT to route to target for ExpansionTemplatePodStatus")
+	if remoteCluster.created {
+		t.Error("expected Create NOT to route to remote cluster for ExpansionTemplatePodStatus")
 	}
 }
 
-func TestRoutingClient_FallbackOnUnresolvableGVK(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, runtime.NewScheme())
+func TestRoutingClient_ErrorsOnUnresolvableGVK(t *testing.T) {
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, runtime.NewScheme())
 
 	obj := &unstructured.Unstructured{}
-	_ = rc.Create(context.Background(), obj)
+	err := rc.Create(context.Background(), obj)
 
-	if !target.created {
-		t.Error("expected fallback to target on unresolvable GVK")
+	if err == nil {
+		t.Error("expected an error when GVK cannot be resolved")
 	}
-	if mgmt.created {
-		t.Error("expected fallback NOT to route to management on unresolvable GVK")
+	if remoteCluster.created {
+		t.Error("expected NOT to route to remote cluster on unresolvable GVK")
+	}
+	if localCluster.created {
+		t.Error("expected NOT to route to local cluster on unresolvable GVK")
+	}
+}
+
+// SubResource / Status routing tests
+
+func TestRoutingClient_StatusUpdate_PodStatus(t *testing.T) {
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
+
+	obj := &statusv1beta1.ConfigPodStatus{}
+	_ = rc.Status().Update(context.Background(), obj)
+
+	if !localCluster.subUpdated {
+		t.Error("expected Status().Update() to route to local cluster for ConfigPodStatus")
+	}
+	if remoteCluster.subUpdated {
+		t.Error("expected Status().Update() NOT to route to remote cluster for ConfigPodStatus")
+	}
+}
+
+func TestRoutingClient_SubResourcePatch_PodStatus(t *testing.T) {
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
+
+	obj := &statusv1beta1.ConstraintPodStatus{}
+	_ = rc.SubResource("status").Patch(context.Background(), obj, client.Merge)
+
+	if !localCluster.subPatched {
+		t.Error("expected SubResource(\"status\").Patch() to route to local cluster for ConstraintPodStatus")
+	}
+	if remoteCluster.subPatched {
+		t.Error("expected SubResource(\"status\").Patch() NOT to route to remote cluster for ConstraintPodStatus")
+	}
+}
+
+func TestRoutingClient_StatusUpdate_Parent(t *testing.T) {
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
+
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabels"})
+	_ = rc.Status().Update(context.Background(), obj)
+
+	if !remoteCluster.subUpdated {
+		t.Error("expected Status().Update() to route to remote cluster for constraint")
+	}
+	if localCluster.subUpdated {
+		t.Error("expected Status().Update() NOT to route to local cluster for constraint")
+	}
+}
+
+func TestRoutingClient_StatusUpdate_ErrorsOnUnresolvableGVK(t *testing.T) {
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, runtime.NewScheme())
+
+	obj := &unstructured.Unstructured{}
+	err := rc.Status().Update(context.Background(), obj)
+
+	if err == nil {
+		t.Error("expected an error when GVK cannot be resolved")
+	}
+	if remoteCluster.subUpdated {
+		t.Error("expected NOT to route to remote cluster on unresolvable GVK")
+	}
+	if localCluster.subUpdated {
+		t.Error("expected NOT to route to local cluster on unresolvable GVK")
 	}
 }
 
 // Reader routing tests
 
 func TestRoutingClient_Get_PodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.ConstraintTemplatePodStatus{}
 	_ = rc.Get(context.Background(), client.ObjectKey{Name: "test", Namespace: "gatekeeper-system"}, obj)
 
-	if !mgmt.got {
-		t.Error("expected Get to route to management for ConstraintTemplatePodStatus")
+	if !localCluster.got {
+		t.Error("expected Get to route to local cluster for ConstraintTemplatePodStatus")
 	}
-	if target.got {
-		t.Error("expected Get NOT to route to target for ConstraintTemplatePodStatus")
+	if remoteCluster.got {
+		t.Error("expected Get NOT to route to remote cluster for ConstraintTemplatePodStatus")
 	}
 }
 
 func TestRoutingClient_List_PodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	list := &statusv1beta1.ConstraintPodStatusList{}
 	_ = rc.List(context.Background(), list)
 
-	if !mgmt.listed {
-		t.Error("expected List to route to management for ConstraintPodStatusList")
+	if !localCluster.listed {
+		t.Error("expected List to route to local cluster for ConstraintPodStatusList")
 	}
-	if target.listed {
-		t.Error("expected List NOT to route to target for ConstraintPodStatusList")
+	if remoteCluster.listed {
+		t.Error("expected List NOT to route to remote cluster for ConstraintPodStatusList")
 	}
 }
 
@@ -332,49 +451,49 @@ type typedApplyConfig struct{}
 func (t *typedApplyConfig) IsApplyConfiguration() {}
 
 func TestRoutingClient_Apply_PodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &fakeApplyConfig{gvk: schema.GroupVersionKind{Group: "status.gatekeeper.sh", Version: "v1beta1", Kind: "ConfigPodStatus"}}
 	_ = rc.Apply(context.Background(), obj)
 
-	if !mgmt.applied {
-		t.Error("expected Apply to route to management for status.gatekeeper.sh apply configuration")
+	if !localCluster.applied {
+		t.Error("expected Apply to route to local cluster for status.gatekeeper.sh apply configuration")
 	}
-	if target.applied {
-		t.Error("expected Apply NOT to route to target for status.gatekeeper.sh apply configuration")
+	if remoteCluster.applied {
+		t.Error("expected Apply NOT to route to remote cluster for status.gatekeeper.sh apply configuration")
 	}
 }
 
 func TestRoutingClient_Apply_NonPodStatus(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
 	obj := &fakeApplyConfig{gvk: schema.GroupVersionKind{Group: "templates.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintTemplate"}}
 	_ = rc.Apply(context.Background(), obj)
 
-	if !target.applied {
-		t.Error("expected Apply to route to target for non-status apply configuration")
+	if !remoteCluster.applied {
+		t.Error("expected Apply to route to remote cluster for non-status apply configuration")
 	}
-	if mgmt.applied {
-		t.Error("expected Apply NOT to route to management for non-status apply configuration")
+	if localCluster.applied {
+		t.Error("expected Apply NOT to route to local cluster for non-status apply configuration")
 	}
 }
 
-func TestRoutingClient_Apply_TypedFallsBackToTarget(t *testing.T) {
-	target := &fakeClient{}
-	mgmt := &fakeClient{}
-	rc := NewRoutingClient(target, mgmt, newScheme())
+func TestRoutingClient_Apply_TypedFallsBackToRemoteCluster(t *testing.T) {
+	remoteCluster := &fakeClient{}
+	localCluster := &fakeClient{}
+	rc := NewRoutingClient(remoteCluster, localCluster, newScheme())
 
-	// Typed apply configs do not expose a GVK, so routing falls back to target.
+	// Typed apply configs do not expose a GVK, so routing falls back to the remote cluster.
 	_ = rc.Apply(context.Background(), &typedApplyConfig{})
 
-	if !target.applied {
-		t.Error("expected Apply to fall back to target for typed apply configuration")
+	if !remoteCluster.applied {
+		t.Error("expected Apply to fall back to remote cluster for typed apply configuration")
 	}
-	if mgmt.applied {
-		t.Error("expected Apply NOT to route to management for typed apply configuration")
+	if localCluster.applied {
+		t.Error("expected Apply NOT to route to local cluster for typed apply configuration")
 	}
 }

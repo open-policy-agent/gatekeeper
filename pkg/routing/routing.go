@@ -15,8 +15,8 @@ const (
 	statusGroup = "status.gatekeeper.sh"
 )
 
-// isManagementResource returns true for resources that should be on the management cluster.
-func isManagementResource(gvk schema.GroupVersionKind) bool {
+// isLocalClusterResource returns true for resources that should be on the local cluster.
+func isLocalClusterResource(gvk schema.GroupVersionKind) bool {
 	return gvk.Group == statusGroup
 }
 

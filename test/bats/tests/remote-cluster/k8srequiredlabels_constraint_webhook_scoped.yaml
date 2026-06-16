@@ -1,0 +1,25 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-test-label
+  labels:
+    gatekeeper.sh/tests: "yes"
+spec:
+  # Scope enforcement to the webhook only.
+  enforcementAction: scoped
+  scopedEnforcementActions:
+    - action: deny
+      enforcementPoints:
+        - name: validation.gatekeeper.sh
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - default
+      - gatekeeper-system
+  parameters:
+    labels: ["test-label"]

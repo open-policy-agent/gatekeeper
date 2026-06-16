@@ -74,100 +74,100 @@ func newScheme() *runtime.Scheme {
 }
 
 func TestRoutingCache_Get_TypedPodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.ConstraintTemplatePodStatus{}
 	_ = rc.Get(context.Background(), client.ObjectKey{Name: "test", Namespace: "gatekeeper-system"}, obj)
 
-	if !mgmt.getCalled {
-		t.Error("expected Get to route to management cache for ConstraintTemplatePodStatus")
+	if !localCluster.getCalled {
+		t.Error("expected Get to route to local cluster cache for ConstraintTemplatePodStatus")
 	}
-	if target.getCalled {
-		t.Error("expected Get NOT to route to target cache for ConstraintTemplatePodStatus")
+	if remoteCluster.getCalled {
+		t.Error("expected Get NOT to route to remote cluster cache for ConstraintTemplatePodStatus")
 	}
 }
 
 func TestRoutingCache_Get_TypedConstraintPodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.ConstraintPodStatus{}
 	_ = rc.Get(context.Background(), client.ObjectKey{Name: "test", Namespace: "gatekeeper-system"}, obj)
 
-	if !mgmt.getCalled {
-		t.Error("expected Get to route to management cache for ConstraintPodStatus")
+	if !localCluster.getCalled {
+		t.Error("expected Get to route to local cluster cache for ConstraintPodStatus")
 	}
-	if target.getCalled {
-		t.Error("expected Get NOT to route to target cache for ConstraintPodStatus")
+	if remoteCluster.getCalled {
+		t.Error("expected Get NOT to route to remote cluster cache for ConstraintPodStatus")
 	}
 }
 
 func TestRoutingCache_Get_ConnectionPodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1alpha1.ConnectionPodStatus{}
 	_ = rc.Get(context.Background(), client.ObjectKey{Name: "test", Namespace: "gatekeeper-system"}, obj)
 
-	if !mgmt.getCalled {
-		t.Error("expected Get to route to management cache for ConnectionPodStatus")
+	if !localCluster.getCalled {
+		t.Error("expected Get to route to local cluster cache for ConnectionPodStatus")
 	}
-	if target.getCalled {
-		t.Error("expected Get NOT to route to target cache for ConnectionPodStatus")
+	if remoteCluster.getCalled {
+		t.Error("expected Get NOT to route to remote cluster cache for ConnectionPodStatus")
 	}
 }
 
 func TestRoutingCache_Get_UnstructuredPodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "status.gatekeeper.sh", Version: "v1beta1", Kind: "ConfigPodStatus"})
 	_ = rc.Get(context.Background(), client.ObjectKey{Name: "test", Namespace: "gatekeeper-system"}, obj)
 
-	if !mgmt.getCalled {
-		t.Error("expected Get to route to management cache for unstructured PodStatus")
+	if !localCluster.getCalled {
+		t.Error("expected Get to route to local cluster cache for unstructured PodStatus")
 	}
-	if target.getCalled {
-		t.Error("expected Get NOT to route to target cache for unstructured PodStatus")
+	if remoteCluster.getCalled {
+		t.Error("expected Get NOT to route to remote cluster cache for unstructured PodStatus")
 	}
 }
 
 func TestRoutingCache_Get_NonPodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "templates.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintTemplate"})
 	_ = rc.Get(context.Background(), client.ObjectKey{Name: "test"}, obj)
 
-	if !target.getCalled {
-		t.Error("expected Get to route to target cache for ConstraintTemplate")
+	if !remoteCluster.getCalled {
+		t.Error("expected Get to route to remote cluster cache for ConstraintTemplate")
 	}
-	if mgmt.getCalled {
-		t.Error("expected Get NOT to route to management cache for ConstraintTemplate")
+	if localCluster.getCalled {
+		t.Error("expected Get NOT to route to local cluster cache for ConstraintTemplate")
 	}
 }
 
 func TestRoutingCache_List_PodStatusList(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	list := &statusv1beta1.ConstraintPodStatusList{}
 	_ = rc.List(context.Background(), list)
 
-	if !mgmt.listCalled {
-		t.Error("expected List to route to management cache for ConstraintPodStatusList")
+	if !localCluster.listCalled {
+		t.Error("expected List to route to local cluster cache for ConstraintPodStatusList")
 	}
-	if target.listCalled {
-		t.Error("expected List NOT to route to target cache for ConstraintPodStatusList")
+	if remoteCluster.listCalled {
+		t.Error("expected List NOT to route to remote cluster cache for ConstraintPodStatusList")
 	}
 }
 
@@ -193,28 +193,31 @@ func TestRoutingCache_WaitForCacheSync_NonRemote(t *testing.T) {
 	}
 }
 
-func TestRoutingCache_FallbackOnUnresolvableGVK(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
+func TestRoutingCache_ErrorsOnUnresolvableGVK(t *testing.T) {
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
 	// Use empty scheme where nothing can be resolved.
-	rc := NewRoutingCache(target, mgmt, runtime.NewScheme())
+	rc := NewRoutingCache(remoteCluster, localCluster, runtime.NewScheme())
 
 	obj := &unstructured.Unstructured{}
-	_ = rc.Get(context.Background(), client.ObjectKey{Name: "test"}, obj)
+	err := rc.Get(context.Background(), client.ObjectKey{Name: "test"}, obj)
 
-	if !target.getCalled {
-		t.Error("expected fallback to target cache when GVK cannot be resolved")
+	if err == nil {
+		t.Error("expected an error when GVK cannot be resolved")
 	}
-	if mgmt.getCalled {
-		t.Error("expected fallback NOT to route to management cache when GVK cannot be resolved")
+	if remoteCluster.getCalled {
+		t.Error("expected NOT to route to remote cluster cache when GVK cannot be resolved")
+	}
+	if localCluster.getCalled {
+		t.Error("expected NOT to route to local cluster cache when GVK cannot be resolved")
 	}
 }
 
 func TestRoutingCache_PropagatesErrors(t *testing.T) {
-	expectedErr := errors.New("management cache error")
-	target := &fakeCache{}
-	mgmt := &fakeCache{err: expectedErr}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	expectedErr := errors.New("local cluster cache error")
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{err: expectedErr}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.MutatorPodStatus{}
 	err := rc.Get(context.Background(), client.ObjectKey{Name: "test", Namespace: "ns"}, obj)
@@ -222,145 +225,145 @@ func TestRoutingCache_PropagatesErrors(t *testing.T) {
 	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
-	if !mgmt.getCalled {
-		t.Error("expected Get to route to management cache for MutatorPodStatus")
+	if !localCluster.getCalled {
+		t.Error("expected Get to route to local cluster cache for MutatorPodStatus")
 	}
-	if target.getCalled {
-		t.Error("expected Get NOT to route to target cache for MutatorPodStatus")
+	if remoteCluster.getCalled {
+		t.Error("expected Get NOT to route to remote cluster cache for MutatorPodStatus")
 	}
 }
 
 func TestRoutingCache_GetInformerForKind_PodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	gvk := schema.GroupVersionKind{Group: "status.gatekeeper.sh", Version: "v1beta1", Kind: "ConfigPodStatus"}
 	_, _ = rc.GetInformerForKind(context.Background(), gvk)
 
-	if !mgmt.getInformerForKindCalled {
-		t.Error("expected GetInformerForKind to route to management for status.gatekeeper.sh GVK")
+	if !localCluster.getInformerForKindCalled {
+		t.Error("expected GetInformerForKind to route to local cluster for status.gatekeeper.sh GVK")
 	}
-	if target.getInformerForKindCalled {
-		t.Error("expected GetInformerForKind NOT to route to target for status.gatekeeper.sh GVK")
+	if remoteCluster.getInformerForKindCalled {
+		t.Error("expected GetInformerForKind NOT to route to remote cluster for status.gatekeeper.sh GVK")
 	}
 }
 
 func TestRoutingCache_GetInformer_PodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.ConstraintTemplatePodStatus{}
 	_, _ = rc.GetInformer(context.Background(), obj)
 
-	if !mgmt.getInformerCalled {
-		t.Error("expected GetInformer to route to management cache for ConstraintTemplatePodStatus")
+	if !localCluster.getInformerCalled {
+		t.Error("expected GetInformer to route to local cluster cache for ConstraintTemplatePodStatus")
 	}
-	if target.getInformerCalled {
-		t.Error("expected GetInformer NOT to route to target cache for ConstraintTemplatePodStatus")
+	if remoteCluster.getInformerCalled {
+		t.Error("expected GetInformer NOT to route to remote cluster cache for ConstraintTemplatePodStatus")
 	}
 }
 
 func TestRoutingCache_GetInformer_NonPodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "templates.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintTemplate"})
 	_, _ = rc.GetInformer(context.Background(), obj)
 
-	if !target.getInformerCalled {
-		t.Error("expected GetInformer to route to target cache for ConstraintTemplate")
+	if !remoteCluster.getInformerCalled {
+		t.Error("expected GetInformer to route to remote cluster cache for ConstraintTemplate")
 	}
-	if mgmt.getInformerCalled {
-		t.Error("expected GetInformer NOT to route to management cache for ConstraintTemplate")
+	if localCluster.getInformerCalled {
+		t.Error("expected GetInformer NOT to route to local cluster cache for ConstraintTemplate")
 	}
 }
 
 func TestRoutingCache_RemoveInformer_PodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.ConfigPodStatus{}
 	_ = rc.RemoveInformer(context.Background(), obj)
 
-	if !mgmt.removeInformerCalled {
-		t.Error("expected RemoveInformer to route to management cache for ConfigPodStatus")
+	if !localCluster.removeInformerCalled {
+		t.Error("expected RemoveInformer to route to local cluster cache for ConfigPodStatus")
 	}
-	if target.removeInformerCalled {
-		t.Error("expected RemoveInformer NOT to route to target cache for ConfigPodStatus")
+	if remoteCluster.removeInformerCalled {
+		t.Error("expected RemoveInformer NOT to route to remote cluster cache for ConfigPodStatus")
 	}
 }
 
 func TestRoutingCache_RemoveInformer_NonPodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabels"})
 	_ = rc.RemoveInformer(context.Background(), obj)
 
-	if !target.removeInformerCalled {
-		t.Error("expected RemoveInformer to route to target cache for constraint")
+	if !remoteCluster.removeInformerCalled {
+		t.Error("expected RemoveInformer to route to remote cluster cache for constraint")
 	}
-	if mgmt.removeInformerCalled {
-		t.Error("expected RemoveInformer NOT to route to management cache for constraint")
+	if localCluster.removeInformerCalled {
+		t.Error("expected RemoveInformer NOT to route to local cluster cache for constraint")
 	}
 }
 
 func TestRoutingCache_IndexField_PodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &statusv1beta1.MutatorPodStatus{}
 	_ = rc.IndexField(context.Background(), obj, "field", func(client.Object) []string { return nil })
 
-	if !mgmt.indexFieldCalled {
-		t.Error("expected IndexField to route to management cache for MutatorPodStatus")
+	if !localCluster.indexFieldCalled {
+		t.Error("expected IndexField to route to local cluster cache for MutatorPodStatus")
 	}
-	if target.indexFieldCalled {
-		t.Error("expected IndexField NOT to route to target cache for MutatorPodStatus")
+	if remoteCluster.indexFieldCalled {
+		t.Error("expected IndexField NOT to route to remote cluster cache for MutatorPodStatus")
 	}
 }
 
 func TestRoutingCache_IndexField_NonPodStatus(t *testing.T) {
-	target := &fakeCache{}
-	mgmt := &fakeCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &fakeCache{}
+	localCluster := &fakeCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "templates.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintTemplate"})
 	_ = rc.IndexField(context.Background(), obj, "field", func(client.Object) []string { return nil })
 
-	if !target.indexFieldCalled {
-		t.Error("expected IndexField to route to target cache for ConstraintTemplate")
+	if !remoteCluster.indexFieldCalled {
+		t.Error("expected IndexField to route to remote cluster cache for ConstraintTemplate")
 	}
-	if mgmt.indexFieldCalled {
-		t.Error("expected IndexField NOT to route to management cache for ConstraintTemplate")
+	if localCluster.indexFieldCalled {
+		t.Error("expected IndexField NOT to route to local cluster cache for ConstraintTemplate")
 	}
 }
 
 func TestRoutingCache_WaitForCacheSync_Remote(t *testing.T) {
 	tests := []struct {
 		name       string
-		targetSync bool
-		mgmtSync   bool
+		remoteSync bool
+		localSync  bool
 		want       bool
 	}{
-		{name: "both synced", targetSync: true, mgmtSync: true, want: true},
-		{name: "target not synced", targetSync: false, mgmtSync: true, want: false},
-		{name: "management not synced", targetSync: true, mgmtSync: false, want: false},
+		{name: "both synced", remoteSync: true, localSync: true, want: true},
+		{name: "remote cluster not synced", remoteSync: false, localSync: true, want: false},
+		{name: "local cluster not synced", remoteSync: true, localSync: false, want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			target := &fakeCache{syncResult: tt.targetSync}
-			mgmt := &fakeCache{syncResult: tt.mgmtSync}
-			rc := NewRoutingCache(target, mgmt, newScheme())
+			remoteCluster := &fakeCache{syncResult: tt.remoteSync}
+			localCluster := &fakeCache{syncResult: tt.localSync}
+			rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 			if got := rc.WaitForCacheSync(context.Background()); got != tt.want {
 				t.Errorf("WaitForCacheSync() = %v, want %v", got, tt.want)
@@ -387,25 +390,25 @@ func (b *blockingCache) WaitForCacheSync(_ context.Context) bool {
 	return true
 }
 
-func TestRoutingCache_Start_ManagementFailure(t *testing.T) {
-	mgmtErr := errors.New("connection refused")
-	target := &blockingCache{}
-	mgmt := &blockingCache{startErr: mgmtErr}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+func TestRoutingCache_Start_LocalClusterFailure(t *testing.T) {
+	localErr := errors.New("connection refused")
+	remoteCluster := &blockingCache{}
+	localCluster := &blockingCache{startErr: localErr}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	err := rc.Start(context.Background())
 	if err == nil {
-		t.Fatal("expected Start to return an error when management cache fails")
+		t.Fatal("expected Start to return an error when local cluster cache fails")
 	}
-	if !errors.Is(err, mgmtErr) {
-		t.Errorf("expected wrapped management error, got: %v", err)
+	if !errors.Is(err, localErr) {
+		t.Errorf("expected wrapped local cluster error, got: %v", err)
 	}
 }
 
 func TestRoutingCache_Start_NormalShutdown(t *testing.T) {
-	target := &blockingCache{}
-	mgmt := &blockingCache{}
-	rc := NewRoutingCache(target, mgmt, newScheme())
+	remoteCluster := &blockingCache{}
+	localCluster := &blockingCache{}
+	rc := NewRoutingCache(remoteCluster, localCluster, newScheme())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

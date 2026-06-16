@@ -46,7 +46,14 @@ kubectl --context <mgmt> apply \
   -f config/crd/bases/status.gatekeeper.sh_*.yaml
 
 # Policy / user-facing CRDs → target cluster
-kubectl --context <target> apply -f config/crd/bases/
+# (every CRD except the status.gatekeeper.sh *podstatus* CRDs, which belong
+#  on the management cluster only)
+for f in config/crd/bases/*.yaml; do
+  [[ "$(basename "$f")" == _* ]] && continue
+  [[ "$(basename "$f")" == *podstatus* ]] && continue
+  kubectl --context <target> apply -f "$f"
+done
+# The Provider CRD ships only with the Helm chart, not config/crd/bases.
 kubectl --context <target> apply \
   -f charts/gatekeeper/crds/provider-customresourcedefinition.yaml
 ```
@@ -188,12 +195,13 @@ kubectl --context <mgmt> get constrainttemplatepodstatuses,constraintpodstatuses
   -n gatekeeper-system
 ```
 
-Verify there are **no** PodStatus resources on the target cluster:
+Verify there are **no** PodStatus resources on the target cluster.
 
 ```bash
 kubectl --context <target> get constrainttemplatepodstatuses \
-  -n gatekeeper-system 2>/dev/null
-# (expected: no resources found)
+  -n gatekeeper-system
+# (expected: error — the server doesn't have a resource type
+#  "constrainttemplatepodstatuses", since PodStatus CRDs live on management only)
 ```
 
 Verify enforcement on the target cluster — a Namespace missing the required

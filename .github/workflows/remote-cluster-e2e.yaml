@@ -176,10 +176,10 @@ jobs:
             crd/constrainttemplates.templates.gatekeeper.sh
           echo "User facing CRDs deployed to nested cluster"
 
-      - name: Create gatekeeper-system namespace in both clusters
+      - name: Create gatekeeper-system namespace in management cluster
         run: |
+          # Only the management cluster needs gatekeeper-system
           kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} create namespace ${{ env.GATEKEEPER_NAMESPACE }}
-          kubectl --context kind-${{ env.NESTED_CLUSTER }} create namespace ${{ env.GATEKEEPER_NAMESPACE }}
 
       - name: Create secrets in management cluster
         run: |
@@ -383,14 +383,164 @@ jobs:
             exit 1
           fi
 
-      - name: Test webhook REJECTS non-compliant resource
+      - name: Verify ValidatingAdmissionPolicy generated on nested cluster
         run: |
-          # Try to create namespace without required label - should fail
-          if kubectl --context kind-${{ env.NESTED_CLUSTER }} create ns test-ns-reject 2>&1; then
-            echo "✗ Namespace was created but should have been rejected!"
+          # This asserts the CEL/VAP generation path works end-to-end across the cluster split.
+          VAP_NAME="gatekeeper-k8srequiredlabels"
+          VAPB_NAME="gatekeeper-k8srequiredlabels-require-test-label"
+
+          for i in {1..60}; do
+            if kubectl --context kind-${{ env.NESTED_CLUSTER }} get validatingadmissionpolicy "$VAP_NAME" &>/dev/null; then
+              echo "✓ ValidatingAdmissionPolicy '$VAP_NAME' generated on nested cluster"
+              break
+            fi
+            echo "Waiting for ValidatingAdmissionPolicy... ($i/60)"
+            sleep 2
+          done
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get validatingadmissionpolicy "$VAP_NAME" -o name || {
+            echo "✗ ValidatingAdmissionPolicy '$VAP_NAME' not found on nested cluster"
             exit 1
+          }
+
+          for i in {1..60}; do
+            if kubectl --context kind-${{ env.NESTED_CLUSTER }} get validatingadmissionpolicybinding "$VAPB_NAME" &>/dev/null; then
+              echo "✓ ValidatingAdmissionPolicyBinding '$VAPB_NAME' generated on nested cluster"
+              break
+            fi
+            echo "Waiting for ValidatingAdmissionPolicyBinding... ($i/60)"
+            sleep 2
+          done
+          BOUND_POLICY=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get validatingadmissionpolicybinding "$VAPB_NAME" \
+            -o jsonpath='{.spec.policyName}' 2>/dev/null || echo "")
+          if [[ "$BOUND_POLICY" == "$VAP_NAME" ]]; then
+            echo "✓ Binding references the generated policy ($BOUND_POLICY)"
           else
-            echo "✓ Webhook correctly rejected non-compliant namespace"
+            echo "✗ Binding policyName '$BOUND_POLICY' does not reference '$VAP_NAME'"
+            exit 1
+          fi
+
+          # Verify the generated VAP/VAPB did NOT leak onto the management cluster.
+          MGMT_VAP=$(kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get validatingadmissionpolicy "$VAP_NAME" --no-headers 2>/dev/null | wc -l || echo "0")
+          if [[ "$MGMT_VAP" -eq 0 ]]; then
+            echo "✓ No generated ValidatingAdmissionPolicy on management cluster"
+          else
+            echo "✗ Found generated ValidatingAdmissionPolicy on management cluster - should be on target only!"
+            exit 1
+          fi
+
+      - name: Verify external data Provider routing
+        run: |
+          CA_BUNDLE=$(base64 -w0 < /tmp/gk-certs/ca.crt)
+
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} apply -f - <<EOF
+          apiVersion: externaldata.gatekeeper.sh/v1beta1
+          kind: Provider
+          metadata:
+            name: dummy-provider
+          spec:
+            url: https://dummy-provider.gatekeeper-system:8090/validate
+            timeout: 10
+            caBundle: ${CA_BUNDLE}
+          EOF
+
+          # The Provider must be accepted on the nested cluster.
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} get provider dummy-provider -o name || {
+            echo "✗ Provider not found on nested cluster"
+            exit 1
+          }
+          echo "✓ Provider accepted on nested cluster"
+
+          # Wait for the ProviderPodStatus resources to appear on management
+          for i in {1..60}; do
+            ACTIVE=$(kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get providerpodstatuses \
+              -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[*].status.active}' 2>/dev/null || echo "")
+            TOTAL=$(kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get providerpodstatuses \
+              -n ${{ env.GATEKEEPER_NAMESPACE }} --no-headers 2>/dev/null | wc -l)
+            ACTIVE_COUNT=$(echo "$ACTIVE" | tr ' ' '\n' | grep -c true || true)
+            if [[ "$TOTAL" -gt 0 && "$ACTIVE_COUNT" -eq "$TOTAL" ]]; then
+              echo "✓ All $TOTAL ProviderPodStatus resources are Active on management cluster"
+              break
+            fi
+            echo "Waiting for Active ProviderPodStatus... ($i/60) total=$TOTAL active=$ACTIVE_COUNT"
+            sleep 2
+          done
+
+          TOTAL=$(kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get providerpodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} --no-headers 2>/dev/null | wc -l)
+          ACTIVE_COUNT=$(kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get providerpodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[*].status.active}' 2>/dev/null | tr ' ' '\n' | grep -c true || true)
+          if [[ "$TOTAL" -eq 0 || "$ACTIVE_COUNT" -ne "$TOTAL" ]]; then
+            echo "✗ Expected all ProviderPodStatus Active on management (total=$TOTAL active=$ACTIVE_COUNT)"
+            kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get providerpodstatuses \
+              -n ${{ env.GATEKEEPER_NAMESPACE }} -o yaml || true
+            exit 1
+          fi
+
+          # ProviderPodStatus must carry OwnerReferences (so GC works on pod restart).
+          REFS=$(kubectl --context kind-${{ env.MANAGEMENT_CLUSTER }} get providerpodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} -o jsonpath='{.items[0].metadata.ownerReferences}')
+          if [[ -n "$REFS" && "$REFS" != "null" ]]; then
+            echo "✓ ProviderPodStatus has OwnerReferences"
+          else
+            echo "✗ ProviderPodStatus missing OwnerReferences"
+            exit 1
+          fi
+
+          # The ProviderPodStatus must NOT exist on the nested cluster
+          NESTED_PPS=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get providerpodstatuses \
+            -n ${{ env.GATEKEEPER_NAMESPACE }} --no-headers 2>/dev/null | wc -l || echo "0")
+          if [[ "$NESTED_PPS" -eq 0 ]]; then
+            echo "✓ No ProviderPodStatus on nested cluster"
+          else
+            echo "✗ Found ProviderPodStatus on nested cluster - should be on management only!"
+            exit 1
+          fi
+
+      - name: Test VAP enforces
+        run: |
+          OUT=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} create ns test-ns-vap 2>&1) && {
+            echo "✗ Namespace was created but should have been rejected!"
+            kubectl --context kind-${{ env.NESTED_CLUSTER }} delete ns test-ns-vap 2>/dev/null || true
+            exit 1
+          }
+          echo "$OUT"
+          if echo "$OUT" | grep -q "ValidatingAdmissionPolicy"; then
+            echo "✓ VAP enforced (denial attributed to ValidatingAdmissionPolicy)"
+          else
+            echo "✗ Expected denial from ValidatingAdmissionPolicy, got: $OUT"
+            exit 1
+          fi
+
+      - name: Test webhook enforces in isolation
+        run: |
+          VAPB_NAME="gatekeeper-k8srequiredlabels-require-test-label"
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} apply \
+            -f test/bats/tests/remote-cluster/k8srequiredlabels_constraint_webhook_scoped.yaml
+
+          echo "Waiting for the generated VAPB to be removed..."
+          for i in {1..30}; do
+            if ! kubectl --context kind-${{ env.NESTED_CLUSTER }} get validatingadmissionpolicybinding "$VAPB_NAME" &>/dev/null; then
+              echo "✓ VAPB removed; VAP no longer enforces"
+              break
+            fi
+            sleep 2
+          done
+          if kubectl --context kind-${{ env.NESTED_CLUSTER }} get validatingadmissionpolicybinding "$VAPB_NAME" &>/dev/null; then
+            echo "✗ VAPB still present; cannot isolate the webhook"
+            exit 1
+          fi
+
+          OUT=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} create ns test-ns-webhook 2>&1) && {
+            echo "✗ Namespace was created but should have been rejected!"
+            kubectl --context kind-${{ env.NESTED_CLUSTER }} delete ns test-ns-webhook 2>/dev/null || true
+            exit 1
+          }
+          echo "$OUT"
+          if echo "$OUT" | grep -q 'admission webhook "validation.gatekeeper.sh"'; then
+            echo "✓ Webhook enforced cross-cluster (denial attributed to validation.gatekeeper.sh, VAP not in path)"
+          else
+            echo "✗ Expected denial from the admission webhook, got: $OUT"
+            exit 1
           fi
 
       - name: Test webhook ALLOWS compliant resource

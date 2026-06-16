@@ -249,13 +249,13 @@ func innerMain() int {
 			},
 		}
 	}
-	// create management cluster config once if remote cluster mode is enabled, shared by RoutingCache (reads) and RoutingClient (writes)
-	var mgmtConfig *rest.Config
+	// create local cluster config once if remote cluster mode is enabled, shared by RoutingCache (reads) and RoutingClient (writes)
+	var localClusterConfig *rest.Config
 	if controller.RemoteClusterEnabled() {
 		var err error
-		mgmtConfig, err = rest.InClusterConfig()
+		localClusterConfig, err = rest.InClusterConfig()
 		if err != nil {
-			setupLog.Error(err, "management cluster in-cluster config required for --enable-remote-cluster")
+			setupLog.Error(err, "local cluster in-cluster config required for --enable-remote-cluster")
 			return 1
 		}
 	}
@@ -269,8 +269,8 @@ func innerMain() int {
 		WebhookServer:          crWebhook.NewServer(serverOpts),
 		HealthProbeBindAddress: *healthAddr,
 		MapperProvider:         apiutil.NewDynamicRESTMapper,
-		NewCache:               newCacheFunc(scheme, mgmtConfig),
-		NewClient:              newClientFunc(scheme, mgmtConfig),
+		NewCache:               newCacheFunc(scheme, localClusterConfig),
+		NewClient:              newClientFunc(scheme, localClusterConfig),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -655,48 +655,56 @@ func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
 
 // returns a NewCacheFunc that wraps the default cache with a RoutingCache when remote cluster mode is enabled
 // In non-remote mode it returns nil, which tells the manager to use the default cache.
-func newCacheFunc(scheme *runtime.Scheme, mgmtConfig *rest.Config) cache.NewCacheFunc {
-	if mgmtConfig == nil {
+func newCacheFunc(scheme *runtime.Scheme, localClusterConfig *rest.Config) cache.NewCacheFunc {
+	if localClusterConfig == nil {
 		return nil
 	}
 	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
 		// standard behavior
-		targetCache, err := cache.New(config, opts)
+		remoteClusterCache, err := cache.New(config, opts)
 		if err != nil {
-			return nil, fmt.Errorf("creating target cache: %w", err)
+			return nil, fmt.Errorf("creating remote cluster cache: %w", err)
 		}
 
-		// management cluster cache
-		mgmtOpts := opts
-		mgmtOpts.Mapper = nil
-		mgmtOpts.HTTPClient = nil
-		mgmtOpts.DefaultNamespaces = map[string]cache.Config{
-			util.GetNamespace(): {},
+		// local cluster cache
+		localClusterOpts := cache.Options{
+			Scheme:                      opts.Scheme,
+			SyncPeriod:                  opts.SyncPeriod,
+			ReaderFailOnMissingInformer: opts.ReaderFailOnMissingInformer,
+			DefaultWatchErrorHandler:    opts.DefaultWatchErrorHandler,
+			DefaultNamespaces: map[string]cache.Config{
+				util.GetNamespace(): {},
+			},
 		}
-		mgmtCache, err := cache.New(mgmtConfig, mgmtOpts)
+		localClusterCache, err := cache.New(localClusterConfig, localClusterOpts)
 		if err != nil {
-			return nil, fmt.Errorf("creating management cache: %w", err)
+			return nil, fmt.Errorf("creating local cluster cache: %w", err)
 		}
-		return routing.NewRoutingCache(targetCache, mgmtCache, scheme), nil
+		return routing.NewRoutingCache(remoteClusterCache, localClusterCache, scheme), nil
 	}
 }
 
 // returns a NewClientFunc that wraps the default client with a RoutingClient when remote cluster mode is enabled
 // In non-remote mode it returns nil, which tells the manager to use the default client.
-func newClientFunc(scheme *runtime.Scheme, mgmtConfig *rest.Config) client.NewClientFunc {
-	if mgmtConfig == nil {
+func newClientFunc(scheme *runtime.Scheme, localClusterConfig *rest.Config) client.NewClientFunc {
+	if localClusterConfig == nil {
 		return nil
 	}
 	return func(config *rest.Config, opts client.Options) (client.Client, error) {
-		targetClient, err := client.New(config, opts)
+		remoteClusterClient, err := client.New(config, opts)
 		if err != nil {
-			return nil, fmt.Errorf("creating target client: %w", err)
+			return nil, fmt.Errorf("creating remote cluster client: %w", err)
 		}
 
-		mgmtClient, err := client.New(mgmtConfig, client.Options{Scheme: scheme})
+		// local cluster client
+		localClusterOpts := opts
+		localClusterOpts.Mapper = nil
+		localClusterOpts.HTTPClient = nil
+
+		localClusterClient, err := client.New(localClusterConfig, localClusterOpts)
 		if err != nil {
-			return nil, fmt.Errorf("creating management client: %w", err)
+			return nil, fmt.Errorf("creating local cluster client: %w", err)
 		}
-		return routing.NewRoutingClient(targetClient, mgmtClient, scheme), nil
+		return routing.NewRoutingClient(remoteClusterClient, localClusterClient, scheme), nil
 	}
 }

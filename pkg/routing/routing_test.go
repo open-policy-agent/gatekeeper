@@ -6,13 +6,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func TestIsManagementResource(t *testing.T) {
+func TestIsLocalClusterResource(t *testing.T) {
 	tests := []struct {
 		name string
 		gvk  schema.GroupVersionKind
 		want bool
 	}{
-		// PodStatus types — should route to management
+		// PodStatus types — should route to the local cluster
 		{
 			name: "ConstraintTemplatePodStatus",
 			gvk:  schema.GroupVersionKind{Group: "status.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintTemplatePodStatus"},
@@ -48,7 +48,7 @@ func TestIsManagementResource(t *testing.T) {
 			gvk:  schema.GroupVersionKind{Group: "status.gatekeeper.sh", Version: "v1alpha1", Kind: "ConnectionPodStatus"},
 			want: true,
 		},
-		// Policy/parent resources — should route to target
+		// Policy/parent resources — should route to the remote cluster
 		{
 			name: "ConstraintTemplate",
 			gvk:  schema.GroupVersionKind{Group: "templates.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintTemplate"},
@@ -107,9 +107,9 @@ func TestIsManagementResource(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isManagementResource(tt.gvk)
+			got := isLocalClusterResource(tt.gvk)
 			if got != tt.want {
-				t.Errorf("IsManagementResource(%v) = %v, want %v", tt.gvk, got, tt.want)
+				t.Errorf("isLocalClusterResource(%v) = %v, want %v", tt.gvk, got, tt.want)
 			}
 		})
 	}
