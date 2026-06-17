@@ -74,10 +74,6 @@ type MutatorPodStatusList struct {
 	Items           []MutatorPodStatus `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&MutatorPodStatus{}, &MutatorPodStatusList{})
-}
-
 // NewMutatorStatusForPod returns a mutator status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the mutator status controller.
@@ -98,11 +94,8 @@ func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtim
 		PodLabel:         pod.Name,
 	})
 
-	// Skip OwnerReference in remote cluster mode
-	if !util.ShouldSkipPodOwnerRef() {
-		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-			return nil, err
-		}
+	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+		return nil, err
 	}
 
 	return obj, nil

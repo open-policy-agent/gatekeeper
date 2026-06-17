@@ -125,6 +125,7 @@ func (d *Driver) AddTemplate(_ context.Context, ct *templates.ConstraintTemplate
 		filterCompiler.CompileCondition(nil, celVars, environment.StoredExpressions),
 		filterCompiler.CompileCondition(messageAccessors, celVars, environment.StoredExpressions),
 		failurePolicy,
+		nil,
 	)
 
 	d.mux.Lock()

@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"strings"
 	"sync"
@@ -335,9 +334,9 @@ func setupVersionPinnedReconcileTest(t *testing.T, groupVersion *schema.GroupVer
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	origWait := *constraint.DefaultWaitForVAPBGeneration
-	*constraint.DefaultWaitForVAPBGeneration = 2
-	t.Cleanup(func() { *constraint.DefaultWaitForVAPBGeneration = origWait })
+	origWait := constraint.GetDefaultWaitForVAPBGeneration()
+	constraint.SetDefaultWaitForVAPBGeneration(2)
+	t.Cleanup(func() { constraint.SetDefaultWaitForVAPBGeneration(origWait) })
 
 	return ctx, c
 }
@@ -445,9 +444,9 @@ func TestReconcile(t *testing.T) {
 	// Override the default VAPB generation wait time to speed up tests.
 	// The production default is 30s, but tests only need to verify the
 	// wait behavior works, not that it waits a specific duration.
-	origWait := *constraint.DefaultWaitForVAPBGeneration
-	*constraint.DefaultWaitForVAPBGeneration = 2
-	t.Cleanup(func() { *constraint.DefaultWaitForVAPBGeneration = origWait })
+	origWait := constraint.GetDefaultWaitForVAPBGeneration()
+	constraint.SetDefaultWaitForVAPBGeneration(2)
+	t.Cleanup(func() { constraint.SetDefaultWaitForVAPBGeneration(origWait) })
 
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
@@ -722,9 +721,10 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should not be created", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreated"
 		logger.Info("Running test: VapBinding should not be created")
-		require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-binding-for-constraints", "false"}))
+		origDefault := constraint.GetDefaultGenerateVAPB()
+		constraint.SetDefaultGenerateVAPB(false)
 		t.Cleanup(func() {
-			require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-binding-for-constraints", "true"}))
+			constraint.SetDefaultGenerateVAPB(origDefault)
 		})
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false), nil)
 		cstr := newDenyAllCstr(suffix)
@@ -820,9 +820,10 @@ func TestReconcile(t *testing.T) {
 	t.Run("Error should not be present on constraint when VAP generation if off and VAPB generation is on for templates without CEL", func(t *testing.T) {
 		suffix := "ErrorShouldNotBePresentOnConstraint"
 		logger.Info("Running test: Error should not be present on constraint when VAP generation is off and VAPB generation is on for templates wihout CEL")
-		require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-for-templates", "false"}))
+		origDefault := constraint.GetDefaultGenerateVAP()
+		constraint.SetDefaultGenerateVAP(false)
 		t.Cleanup(func() {
-			require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-for-templates", "true"}))
+			constraint.SetDefaultGenerateVAP(origDefault)
 		})
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstr(suffix)
@@ -846,7 +847,9 @@ func TestReconcile(t *testing.T) {
 	t.Run("  be created without generateVap intent in CT", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreatedWithoutGenerateVapIntent"
 		logger.Info("Running test: VapBinding should not be created without generateVap intent in CT")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		origDefault := constraint.GetDefaultGenerateVAPB()
+		constraint.SetDefaultGenerateVAPB(true)
+		t.Cleanup(func() { constraint.SetDefaultGenerateVAPB(origDefault) })
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))

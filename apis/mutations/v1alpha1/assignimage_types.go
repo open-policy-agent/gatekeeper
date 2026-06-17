@@ -91,7 +91,3 @@ type AssignImageList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AssignImage `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&AssignImage{}, &AssignImageList{})
-}
