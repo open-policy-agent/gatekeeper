@@ -103,11 +103,8 @@ func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstruc
 		ConstraintTemplateNameLabel: strings.ToLower(constraint.GetKind()),
 	})
 
-	// Skip OwnerReference in remote cluster mode
-	if !util.ShouldSkipPodOwnerRef() {
-		if err = controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-			return nil, err
-		}
+	if err = controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+		return nil, err
 	}
 
 	return obj, nil
