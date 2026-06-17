@@ -111,7 +111,3 @@ func NewProviderStatusForPod(pod *corev1.Pod, providerName string, scheme *runti
 func KeyForProvider(id string, providerName string) (string, error) {
 	return DashPacker(id, providerName)
 }
-
-func init() {
-	SchemeBuilder.Register(&ProviderPodStatus{}, &ProviderPodStatusList{})
-}

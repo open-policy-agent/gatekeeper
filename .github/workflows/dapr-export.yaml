@@ -13,57 +13,61 @@ permissions: read-all
 jobs:
   dapr_test:
     name: "Dapr export test"
-    runs-on: oracle-vm-8cpu-32gb-x86-64
-    timeout-minutes: 15
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
     strategy:
       matrix:
         DAPR_VERSION: ["1.12"]
     steps:
-    - name: Harden Runner
-      uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
-      with:
-        egress-policy: audit
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
 
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
-    - name: Bootstrap e2e
-      run: |
-        mkdir -p $GITHUB_WORKSPACE/bin
-        mkdir .tmp
-        echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-        make e2e-bootstrap
-        make e2e-helm-install
-        helm repo add dapr https://dapr.github.io/helm-charts/
-        helm repo add bitnami https://charts.bitnami.com/bitnami
-        helm repo update
-        helm upgrade --install dapr dapr/dapr --version=${{ matrix.DAPR_VERSION }} --namespace dapr-system --create-namespace --wait --debug
-        helm upgrade --install redis bitnami/redis --namespace default --wait --debug
-        make e2e-subscriber-build-load-image
-        make e2e-subscriber-deploy
+      - name: Bootstrap e2e
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          mkdir .tmp
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+          make e2e-bootstrap
+          make e2e-helm-install
+          helm repo add dapr https://dapr.github.io/helm-charts/
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          helm upgrade --install dapr dapr/dapr --version=${{ matrix.DAPR_VERSION }} --namespace dapr-system --create-namespace --wait --timeout 10m --debug
+          helm upgrade --install redis bitnami/redis --namespace default --wait --timeout 10m --debug
+          make e2e-subscriber-build-load-image
+          make e2e-subscriber-deploy
 
-    - name: Run e2e
-      run: |
-        make docker-buildx IMG=gatekeeper-e2e:latest
-        make e2e-build-load-externaldata-image
-        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest CI=true
-        kind load docker-image --name kind gatekeeper-e2e:latest gatekeeper-crds:latest
-        kubectl create ns gatekeeper-system
-        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG AUDIT_CHANNEL=audit-channel EXPORT_BACKEND=dapr
-        make e2e-publisher-deploy
-        make test-e2e ENABLE_EXPORT_TESTS=1 EXPORT_BACKEND=dapr
+      - name: Run e2e
+        run: |
+          make docker-buildx IMG=gatekeeper-e2e:latest
+          make e2e-build-load-externaldata-image
+          make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest CI=true
+          kind load docker-image --name kind gatekeeper-e2e:latest gatekeeper-crds:latest
+          kubectl create ns gatekeeper-system
+          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG AUDIT_CHANNEL=audit-channel EXPORT_BACKEND=dapr HELM_TIMEOUT=10m
+          make e2e-publisher-deploy
+          make test-e2e ENABLE_EXPORT_TESTS=1 EXPORT_BACKEND=dapr
 
-    - name: Save logs
-      if: ${{ always() }}
-      run: |
-        kubectl logs -n fake-subscriber -l app=sub --tail=-1 > logs-audit-subscribe.json
-        kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-export.json
+      - name: Save logs
+        if: ${{ always() }}
+        run: |
+          kubectl logs -n fake-subscriber -l app=sub --tail=-1 > logs-audit-subscribe.json || true
+          kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-export.json || true
+          kubectl get pods -A -o wide > k8s-pods.txt || true
+          kubectl get events -A --sort-by=.metadata.creationTimestamp > k8s-events.txt || true
+          kubectl describe pods -n dapr-system > k8s-dapr-system-pods.txt || true
+          kubectl describe pods -n gatekeeper-system > k8s-gatekeeper-system-pods.txt || true
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      if: ${{ always() }}
-      with:
-        name: export-logs
-        path: |
-          logs-*.json
-
+      - name: Upload artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: export-logs
+          path: |
+            logs-*.json
+            k8s-*.txt

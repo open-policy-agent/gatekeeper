@@ -50,10 +50,6 @@ type ConfigPodStatusList struct {
 	Items           []ConfigPodStatus `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&ConfigPodStatus{}, &ConfigPodStatusList{})
-}
-
 // NewConfigStatusForPod returns an config status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the config status controller.

@@ -64,10 +64,6 @@ type ConstraintTemplatePodStatusList struct {
 	Items           []ConstraintTemplatePodStatus `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&ConstraintTemplatePodStatus{}, &ConstraintTemplatePodStatusList{})
-}
-
 // NewConstraintTemplateStatusForPod returns a constraint template status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the constraint template status controller.
