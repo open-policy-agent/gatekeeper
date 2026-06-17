@@ -103,7 +103,11 @@ func (a *MutationApplyTo) MatchesOperation(operation admissionv1.Operation) bool
 		return len(a.Operations) == 0 || slices.Contains(a.Operations, admissionregistrationv1.OperationAll)
 	}
 
-	return slices.Contains(a.EffectiveOperations(), operation)
+	if len(a.Operations) == 0 || slices.Contains(a.Operations, admissionregistrationv1.OperationAll) {
+		return true
+	}
+
+	return slices.Contains(a.Operations, admissionregistrationv1.OperationType(operation))
 }
 
 // EffectiveOperations returns the admission operations this MutationApplyTo applies to.

@@ -417,6 +417,14 @@ func TestValidateOperations(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "duplicate operation is rejected",
+			applyTo: []MutationApplyTo{
+				{Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Create}},
+			},
+			wantErr: true,
+			errMsg:  "duplicate operation \"CREATE\" in applyTo[0].operations",
+		},
+		{
 			name: "invalid operation is rejected",
 			applyTo: []MutationApplyTo{
 				{Operations: []admissionregistrationv1.OperationType{"INVALID"}},
