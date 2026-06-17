@@ -110,7 +110,7 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION": `{{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}`,
 
-	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
+	`HELMSUBST_SECRET_ANNOTATIONS: ""`: `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG": `{{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}`,
 
@@ -159,7 +159,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_MUTATING_WEBHOOK_REINVOCATION_POLICY": `{{ .Values.mutatingWebhookReinvocationPolicy }}`,
 
-	"HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
+	`HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS: ""`: `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
     {{- /* 1. Get mandatory exemption from helper */ -}}
@@ -176,7 +176,7 @@ var replacements = map[string]string{
         {{- $list = append $value $.Release.Namespace | uniq -}}
       {{- end }}
       {{- range $list }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}`,
 
@@ -216,7 +216,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.validatingWebhookFailurePolicy }}`,
 
-	"HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
+	`HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS: ""`: `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_MATCHEXPRESSION_METADATANAME": `key: kubernetes.io/metadata.name
       operator: NotIn
@@ -238,7 +238,7 @@ var replacements = map[string]string{
         {{- $list = append $value $.Release.Namespace | uniq -}}
       {{- end }}
       {{- range $list }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}`,
 
@@ -390,4 +390,38 @@ var replacements = map[string]string{
         {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
         - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}`,
+
+	"- HELMSUBST_LOG_LEVEL_KEY": `{{ if hasKey .Values "logLevelKey" }}- --log-level-key={{ .Values.logLevelKey }}{{- end }}`,
+
+	"- HELMSUBST_LOG_LEVEL_ENCODER": `{{ if hasKey .Values "logLevelEncoder" }}- --log-level-encoder={{ .Values.logLevelEncoder }}{{- end }}`,
+
+	"- HELMSUBST_METRICS_ADDR": `{{ if hasKey .Values "metricsAddr" }}- --metrics-addr={{ .Values.metricsAddr }}{{- end }}`,
+
+	"- HELMSUBST_READINESS_RETRIES": `{{ if hasKey .Values "readinessRetries" }}- --readiness-retries={{ .Values.readinessRetries }}{{- end }}`,
+
+	"- HELMSUBST_ENABLE_PPROF": `{{ if hasKey .Values "enablePprof" }}- --enable-pprof={{ .Values.enablePprof }}{{- end }}`,
+
+	"- HELMSUBST_PPROF_PORT": `{{ if hasKey .Values "pprofPort" }}- --pprof-port={{ .Values.pprofPort }}{{- end }}`,
+
+	"- HELMSUBST_DISABLE_ENFORCEMENTACTION_VALIDATION": `{{ if hasKey .Values "disableEnforcementActionValidation" }}- --disable-enforcementaction-validation={{ .Values.disableEnforcementActionValidation }}{{- end }}`,
+
+	"- HELMSUBST_ENABLE_REFERENTIAL_RULES": `{{ if hasKey .Values "enableReferentialRules" }}- --enable-referential-rules={{ .Values.enableReferentialRules }}{{- end }}`,
+
+	"- HELMSUBST_CONTROLLER_MANAGER_HOST": `{{ if hasKey .Values.controllerManager "host" }}- --host={{ .Values.controllerManager.host }}{{- end }}`,
+
+	"- HELMSUBST_CONTROLLER_MANAGER_CERT_DIR": `{{ if hasKey .Values.controllerManager "certDir" }}- --cert-dir={{ .Values.controllerManager.certDir }}{{- end }}`,
+
+	"- HELMSUBST_CONTROLLER_MANAGER_CERT_SERVICE_NAME": `{{ if hasKey .Values.controllerManager "certServiceName" }}- --cert-service-name={{ .Values.controllerManager.certServiceName }}{{- end }}`,
+
+	"- HELMSUBST_CONTROLLER_MANAGER_CLIENT_CA_NAME": `{{ if hasKey .Values.controllerManager "clientCAName" }}- --client-ca-name={{ .Values.controllerManager.clientCAName }}{{- end }}`,
+
+	"- HELMSUBST_CONTROLLER_MANAGER_CLIENT_CN_NAME": `{{ if hasKey .Values.controllerManager "clientCNName" }}- --client-cn-name={{ .Values.controllerManager.clientCNName }}{{- end }}`,
+
+	"- HELMSUBST_AUDIT_API_CACHE_DIR": `{{ if hasKey .Values.audit "apiCacheDir" }}- --api-cache-dir={{ .Values.audit.apiCacheDir }}{{- end }}`,
+
+	"- HELMSUBST_SHUTDOWN_DELAY": `{{ if hasKey .Values "shutdownDelay" }}- --shutdown-delay={{ .Values.shutdownDelay }}{{- end }}`,
+
+	"- HELMSUBST_ENABLE_REMOTE_CLUSTER": `{{ if hasKey .Values "enableRemoteCluster" }}- --enable-remote-cluster={{ .Values.enableRemoteCluster }}{{- end }}`,
+
+	"- HELMSUBST_KUBECONFIG": `{{ if hasKey .Values "kubeconfig" }}- --kubeconfig={{ .Values.kubeconfig }}{{- end }}`,
 }

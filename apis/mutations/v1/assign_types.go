@@ -103,7 +103,3 @@ type AssignList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Assign `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&Assign{}, &AssignList{})
-}

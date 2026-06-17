@@ -678,6 +678,7 @@ func logAction(template namedObj, a action) {
 	logger.Info(
 		fmt.Sprintf("template was %s", string(a)),
 		logging.EventType, fmt.Sprintf("template_%s", string(a)),
+		logging.Semantic, true,
 		logging.TemplateName, template.GetName(),
 	)
 }
@@ -686,6 +687,7 @@ func logError(name string) {
 	logger.Info(
 		"unable to ingest template",
 		logging.EventType, "template_ingest_error",
+		logging.Semantic, true,
 		logging.TemplateName, name,
 	)
 }
@@ -1021,6 +1023,7 @@ func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnot
 		return noRequeue, nil
 	}
 	currentTime := time.Now()
+	waitDuration := time.Duration(constraint.GetDefaultWaitForVAPBGeneration()) * time.Second
 	if ct.Annotations != nil && ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] != "" {
 		until := ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation]
 		t, err := time.Parse(time.RFC3339, until)
@@ -1029,7 +1032,7 @@ func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnot
 		}
 		// if wait time is within the time window to generate vap binding, do not update the annotation
 		// otherwise update the annotation with the current time + wait time. This prevents clock skew from preventing generation on task reschedule.
-		if t.Before(currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second)) {
+		if t.Before(currentTime.Add(waitDuration)) {
 			if t.Before(currentTime) {
 				ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationUnblocked
 				return noRequeue, r.Update(ctx, ct)
@@ -1040,9 +1043,9 @@ func (r *ReconcileConstraintTemplate) updateTemplateWithBlockVAPBGenerationAnnot
 	if ct.Annotations == nil {
 		ct.Annotations = make(map[string]string)
 	}
-	ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second).Format(time.RFC3339)
+	ct.Annotations[constraint.BlockVAPBGenerationUntilAnnotation] = currentTime.Add(waitDuration).Format(time.RFC3339)
 	ct.Annotations[constraint.VAPBGenerationAnnotation] = constraint.VAPBGenerationBlocked
-	return time.Duration(*constraint.DefaultWaitForVAPBGeneration) * time.Second, r.Update(ctx, ct)
+	return waitDuration, r.Update(ctx, ct)
 }
 
 func ShouldGenerateVAPForVersionedCT(ct *v1beta1.ConstraintTemplate, scheme *runtime.Scheme) (bool, error) {

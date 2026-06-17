@@ -102,7 +102,3 @@ func NewConnectionStatusForPod(pod *corev1.Pod, connectionNamespace, connectionN
 func KeyForConnection(id string, connectionNamespace string, connectionName string) (string, error) {
 	return v1beta1.DashPacker(id, connectionNamespace, connectionName)
 }
-
-func init() {
-	SchemeBuilder.Register(&ConnectionPodStatus{}, &ConnectionPodStatusList{})
-}

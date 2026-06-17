@@ -305,13 +305,21 @@ func innerMain() int {
 		return 1
 	}
 
-	// only setup healthcheck when flag is set and available webhook count > 0
-	if len(webhooks) > 0 && *enableTLSHealthcheck {
-		tlsChecker := webhook.NewTLSChecker(*certDir, *port)
-		setupLog.Info("setting up TLS healthcheck probe")
-		if err := mgr.AddHealthzCheck("tls-check", tlsChecker); err != nil {
-			setupLog.Error(err, "unable to create tls health check")
+	if len(webhooks) > 0 {
+		tlsChecker := webhook.NewTLSChecker(*certDir, *host, *port)
+		setupLog.Info("setting up TLS readiness probe")
+		if err := mgr.AddReadyzCheck("tls-check", tlsChecker); err != nil {
+			setupLog.Error(err, "unable to create tls readiness check")
 			return 1
+		}
+
+		// only setup healthcheck when flag is set
+		if *enableTLSHealthcheck {
+			setupLog.Info("setting up TLS healthcheck probe")
+			if err := mgr.AddHealthzCheck("tls-check", tlsChecker); err != nil {
+				setupLog.Error(err, "unable to create tls health check")
+				return 1
+			}
 		}
 	}
 
@@ -428,42 +436,47 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 
 	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 
-	if *enableK8sCel {
-		k8sDriver, err := k8scel.New()
+	var client *constraintclient.Client
+
+	if operations.HasValidationOperations() {
+		if *enableK8sCel {
+			k8sDriver, err := k8scel.New()
+			if err != nil {
+				setupLog.Error(err, "unable to set up K8s native driver")
+				return err
+			}
+			cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
+		}
+
+		externs := rego.Externs()
+		if *enableReferential {
+			externs = rego.Externs("inventory")
+		}
+		args = append(args, externs)
+
+		driver, err := rego.New(args...)
 		if err != nil {
-			setupLog.Error(err, "unable to set up K8s native driver")
+			setupLog.Error(err, "unable to set up Driver")
 			return err
 		}
-		cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
-	}
+		cfArgs = append(cfArgs, constraintclient.Driver(driver))
 
-	externs := rego.Externs()
-	if *enableReferential {
-		externs = rego.Externs("inventory")
-	}
-	args = append(args, externs)
+		eps := []string{}
+		if operations.IsAssigned(operations.Audit) {
+			eps = append(eps, util.AuditEnforcementPoint)
+		}
+		if operations.IsAssigned(operations.Webhook) {
+			eps = append(eps, util.WebhookEnforcementPoint)
+		}
 
-	driver, err := rego.New(args...)
-	if err != nil {
-		setupLog.Error(err, "unable to set up Driver")
-		return err
-	}
-	cfArgs = append(cfArgs, constraintclient.Driver(driver))
+		cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
 
-	eps := []string{}
-	if operations.IsAssigned(operations.Audit) {
-		eps = append(eps, util.AuditEnforcementPoint)
-	}
-	if operations.IsAssigned(operations.Webhook) {
-		eps = append(eps, util.WebhookEnforcementPoint)
-	}
-
-	cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
-
-	client, err := constraintclient.NewClient(cfArgs...)
-	if err != nil {
-		setupLog.Error(err, "unable to set up OPA client")
-		return err
+		var clientErr error
+		client, clientErr = constraintclient.NewClient(cfArgs...)
+		if clientErr != nil {
+			setupLog.Error(clientErr, "unable to set up OPA client")
+			return clientErr
+		}
 	}
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
@@ -512,14 +525,20 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	}
 
 	syncMetricsCache := syncutil.NewMetricsCache()
-	cm, err := cachemanager.NewCacheManager(&cachemanager.Config{
-		CfClient:         client,
+
+	cmConfig := &cachemanager.Config{
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
 		Registrar:        reg,
 		Reader:           mgr.GetCache(),
-	})
+	}
+
+	if client != nil {
+		cmConfig.CfClient = client
+	}
+
+	cm, err := cachemanager.NewCacheManager(cmConfig)
 	if err != nil {
 		setupLog.Error(err, "unable to create cache manager")
 		return err

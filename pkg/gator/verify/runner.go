@@ -1,7 +1,6 @@
 package verify
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -280,9 +279,9 @@ func (r *Runner) addTemplate(suiteDir, templatePath string, client gator.Client)
 // RunCase executes a Case and returns the result of the run.
 func (r *Runner) runCase(ctx context.Context, newClient func(opts ...gator.Opt) (gator.Client, error), newExpander func() (*expand.Expander, error), suiteDir string, tc *Case) CaseResult {
 	start := time.Now()
-	var printBuf bytes.Buffer
+	printBuf := gator.NewPrintBuffer(gator.DefaultPrintBufferLimit)
 	trace, err := r.checkCase(ctx, func() (gator.Client, error) {
-		return newClient(gator.WithPrintHook(&printBuf))
+		return newClient(gator.WithPrintHook(printBuf))
 	}, newExpander, suiteDir, tc)
 
 	return CaseResult{
