@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
@@ -524,7 +525,9 @@ func TestShouldGenerateVAP(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			DefaultGenerateVAP = ptr.To[bool](test.vapDefault)
+			origDefault := GetDefaultGenerateVAP()
+			SetDefaultGenerateVAP(test.vapDefault)
+			t.Cleanup(func() { SetDefaultGenerateVAP(origDefault) })
 			generateVAP, err := ShouldGenerateVAP(test.template)
 			if generateVAP != test.expected {
 				t.Errorf("wanted assumeVAP to be %v; got %v", test.expected, generateVAP)
@@ -820,6 +823,15 @@ type trackingWriter struct {
 	fakeWriter
 	deletedObjects []client.Object
 	createdObjects []client.Object
+	updatedObjects []client.Object
+}
+
+func (t *trackingWriter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if err := t.fakeWriter.Update(ctx, obj, opts...); err != nil {
+		return err
+	}
+	t.updatedObjects = append(t.updatedObjects, obj)
+	return nil
 }
 
 func (t *trackingWriter) Delete(_ context.Context, obj client.Object, _ ...client.DeleteOption) error {
@@ -864,9 +876,9 @@ func TestManageVAPB_CleansUpStaleVAPB(t *testing.T) {
 	})
 
 	// Ensure DefaultGenerateVAPB is true (default).
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+	origDefault := GetDefaultGenerateVAPB()
+	SetDefaultGenerateVAPB(true)
+	t.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
 
 	// Constraint with scoped enforcement — only webhook + audit, no vap.k8s.io.
 	instance := &unstructured.Unstructured{
@@ -963,9 +975,9 @@ func TestManageVAPB_NoStaleVAPB_NoDelete(t *testing.T) {
 		transform.SetGroupVersion(nil)
 	})
 
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+	origDefault := GetDefaultGenerateVAPB()
+	SetDefaultGenerateVAPB(true)
+	t.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
 
 	instance := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1048,9 +1060,9 @@ func TestManageVAPB_SkipsDeleteIfNotOwner(t *testing.T) {
 		transform.SetGroupVersion(nil)
 	})
 
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+	origDefault := GetDefaultGenerateVAPB()
+	SetDefaultGenerateVAPB(true)
+	t.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
 
 	// This constraint does NOT use vap.k8s.io.
 	instance := &unstructured.Unstructured{
@@ -1207,9 +1219,9 @@ func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
 				transform.SetGroupVersion(nil)
 			})
 
-			origDefault := *DefaultGenerateVAPB
-			*DefaultGenerateVAPB = true
-			t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+			origDefault := GetDefaultGenerateVAPB()
+			SetDefaultGenerateVAPB(true)
+			t.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
 
 			epName := util.WebhookEnforcementPoint
 			if tt.useVAPEnforcement {
@@ -1314,6 +1326,114 @@ func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
 	}
 }
 
+func TestManageVAPB_WaitStatusIsIdempotent(t *testing.T) {
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	origGenerateVAP := *DefaultGenerateVAP
+	origGenerateVAPB := *DefaultGenerateVAPB
+	*DefaultGenerateVAP = true
+	*DefaultGenerateVAPB = true
+	t.Cleanup(func() {
+		*DefaultGenerateVAP = origGenerateVAP
+		*DefaultGenerateVAPB = origGenerateVAPB
+	})
+
+	scheme := runtime.NewScheme()
+	if err := templatesv1beta1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	unversionedCT := makeTemplateWithCELEngine(nil)
+	ct := &templatesv1beta1.ConstraintTemplate{}
+	if err := scheme.Convert(unversionedCT, ct, nil); err != nil {
+		t.Fatal(err)
+	}
+	unblockAt := time.Now().Add(30 * time.Second).Format(time.RFC3339)
+	ct.Annotations = map[string]string{
+		BlockVAPBGenerationUntilAnnotation: unblockAt,
+		VAPBGenerationAnnotation:           VAPBGenerationBlocked,
+	}
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"generation": int64(1),
+				"name":       "test-constraint",
+				"uid":        "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.VAPEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "testkind"}: ct,
+		},
+	}
+	writer := &trackingWriter{}
+	status := &constraintstatusv1beta1.ConstraintPodStatus{}
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   scheme,
+	}
+
+	requeueAfter, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+	if requeueAfter <= 0 {
+		t.Fatalf("expected positive requeue delay while VAPB generation is blocked, got %s", requeueAfter)
+	}
+	if len(writer.updatedObjects) != 1 {
+		t.Fatalf("expected first wait reconcile to update status once, got %d updates", len(writer.updatedObjects))
+	}
+	if len(status.Status.EnforcementPointsStatus) != 1 {
+		t.Fatalf("expected one enforcement point status, got %d", len(status.Status.EnforcementPointsStatus))
+	}
+	firstEPStatus := status.Status.EnforcementPointsStatus[0]
+	if firstEPStatus.State != WaitVAPBState {
+		t.Fatalf("expected EP state %q, got %q", WaitVAPBState, firstEPStatus.State)
+	}
+	if want := fmt.Sprintf("waiting until %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", unblockAt); firstEPStatus.Message != want {
+		t.Fatalf("expected stable wait message %q, got %q", want, firstEPStatus.Message)
+	}
+
+	beforeSecondReconcile := status.DeepCopy()
+	requeueAfter, err = r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("second manageVAPB returned unexpected error: %v", err)
+	}
+	if requeueAfter <= 0 {
+		t.Fatalf("expected positive requeue delay on second wait reconcile, got %s", requeueAfter)
+	}
+	if len(writer.updatedObjects) != 1 {
+		t.Fatalf("expected second wait reconcile to skip unchanged status update, got %d total updates", len(writer.updatedObjects))
+	}
+	if !reflect.DeepEqual(beforeSecondReconcile.Status, status.Status) {
+		t.Fatalf("expected second wait reconcile to leave status unchanged; diff: %s", spew.Sdump(status.Status))
+	}
+}
+
 func TestManageVAPB_PreservesErrorMetricWhenGenerationFails(t *testing.T) {
 	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
 	transform.SetVapAPIEnabled(ptr.To(true))
@@ -1323,9 +1443,9 @@ func TestManageVAPB_PreservesErrorMetricWhenGenerationFails(t *testing.T) {
 		transform.SetGroupVersion(nil)
 	})
 
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+	origDefault := GetDefaultGenerateVAPB()
+	SetDefaultGenerateVAPB(true)
+	t.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
 
 	instance := &unstructured.Unstructured{
 		Object: map[string]interface{}{
