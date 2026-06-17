@@ -214,6 +214,12 @@ func innerMain() int {
 		setupLog.Error(errors.New("--enable-mutation flag is deprecated"), "use of deprecated flag")
 	}
 
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "sync-vap-enforcement-scope" {
+			setupLog.Error(errors.New("--sync-vap-enforcement-scope flag is deprecated and will be removed in Gatekeeper v3.24"), "use of deprecated flag")
+		}
+	})
+
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent("gatekeeper")
 	setupLog.Info("setting up manager", "user agent", config.UserAgent)
