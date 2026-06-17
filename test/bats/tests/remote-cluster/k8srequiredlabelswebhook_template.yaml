@@ -1,14 +1,14 @@
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
-  name: k8srequiredlabels
+  name: k8srequiredlabelswebhook
   labels:
     gatekeeper.sh/tests: "yes"
 spec:
   crd:
     spec:
       names:
-        kind: K8sRequiredLabels
+        kind: K8sRequiredLabelsWebhook
       validation:
         openAPIV3Schema:
           type: object
@@ -20,7 +20,7 @@ spec:
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
-        package k8srequiredlabels
+        package k8srequiredlabelswebhook
 
         violation[{"msg": msg, "details": {"missing_labels": missing}}] {
           provided := {label | input.review.object.metadata.labels[label]}
@@ -29,14 +29,3 @@ spec:
           count(missing) > 0
           msg := sprintf("you must provide labels: %v", [missing])
         }
-      code:
-        - engine: K8sNativeValidation
-          source:
-            generateVAP: true
-            variables:
-              - name: requiredLabels
-                expression: "has(variables.params.labels) ? variables.params.labels : []"
-            validations:
-              - expression: "variables.requiredLabels.all(entry, has(object.metadata.labels) && entry in object.metadata.labels)"
-                messageExpression: "'you must provide labels: ' + variables.requiredLabels.join(', ')"
-

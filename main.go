@@ -58,6 +58,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness/pruner"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/routing"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/upgrade"
@@ -71,9 +72,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -251,6 +255,17 @@ func innerMain() int {
 			},
 		}
 	}
+	// create local cluster config once if remote cluster mode is enabled, shared by RoutingCache (reads) and RoutingClient (writes)
+	var localClusterConfig *rest.Config
+	if controller.RemoteClusterEnabled() {
+		var err error
+		localClusterConfig, err = rest.InClusterConfig()
+		if err != nil {
+			setupLog.Error(err, "local cluster in-cluster config required for --enable-remote-cluster")
+			return 1
+		}
+	}
+
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -260,6 +275,8 @@ func innerMain() int {
 		WebhookServer:          crWebhook.NewServer(serverOpts),
 		HealthProbeBindAddress: *healthAddr,
 		MapperProvider:         apiutil.NewDynamicRESTMapper,
+		NewCache:               newCacheFunc(scheme, localClusterConfig),
+		NewClient:              newClientFunc(scheme, localClusterConfig),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -640,4 +657,60 @@ func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
 	newlogger := zapr.NewLogger(zlog)
 	ctrl.SetLogger(newlogger)
 	klog.SetLogger(newlogger)
+}
+
+// returns a NewCacheFunc that wraps the default cache with a RoutingCache when remote cluster mode is enabled
+// In non-remote mode it returns nil, which tells the manager to use the default cache.
+func newCacheFunc(scheme *runtime.Scheme, localClusterConfig *rest.Config) cache.NewCacheFunc {
+	if localClusterConfig == nil {
+		return nil
+	}
+	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
+		// standard behavior
+		remoteClusterCache, err := cache.New(config, opts)
+		if err != nil {
+			return nil, fmt.Errorf("creating remote cluster cache: %w", err)
+		}
+
+		// local cluster cache
+		localClusterOpts := cache.Options{
+			Scheme:                      opts.Scheme,
+			SyncPeriod:                  opts.SyncPeriod,
+			ReaderFailOnMissingInformer: opts.ReaderFailOnMissingInformer,
+			DefaultWatchErrorHandler:    opts.DefaultWatchErrorHandler,
+			DefaultNamespaces: map[string]cache.Config{
+				util.GetNamespace(): {},
+			},
+		}
+		localClusterCache, err := cache.New(localClusterConfig, localClusterOpts)
+		if err != nil {
+			return nil, fmt.Errorf("creating local cluster cache: %w", err)
+		}
+		return routing.NewRoutingCache(remoteClusterCache, localClusterCache, scheme), nil
+	}
+}
+
+// returns a NewClientFunc that wraps the default client with a RoutingClient when remote cluster mode is enabled
+// In non-remote mode it returns nil, which tells the manager to use the default client.
+func newClientFunc(scheme *runtime.Scheme, localClusterConfig *rest.Config) client.NewClientFunc {
+	if localClusterConfig == nil {
+		return nil
+	}
+	return func(config *rest.Config, opts client.Options) (client.Client, error) {
+		remoteClusterClient, err := client.New(config, opts)
+		if err != nil {
+			return nil, fmt.Errorf("creating remote cluster client: %w", err)
+		}
+
+		// local cluster client
+		localClusterOpts := opts
+		localClusterOpts.Mapper = nil
+		localClusterOpts.HTTPClient = nil
+
+		localClusterClient, err := client.New(localClusterConfig, localClusterOpts)
+		if err != nil {
+			return nil, fmt.Errorf("creating local cluster client: %w", err)
+		}
+		return routing.NewRoutingClient(remoteClusterClient, localClusterClient, scheme), nil
+	}
 }
