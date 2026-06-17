@@ -496,56 +496,101 @@ jobs:
             exit 1
           fi
 
+      - name: Deploy webhook-only constraint to nested cluster
+        run: |
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} apply \
+            -f test/bats/tests/remote-cluster/k8srequiredlabelswebhook_template.yaml
+
+          for i in {1..60}; do
+            if kubectl --context kind-${{ env.NESTED_CLUSTER }} get crd k8srequiredlabelswebhook.constraints.gatekeeper.sh &>/dev/null; then
+              echo "✓ Webhook constraint CRD created"
+              break
+            fi
+            echo "Waiting for webhook constraint CRD... ($i/60)"
+            sleep 2
+          done
+
+          kubectl --context kind-${{ env.NESTED_CLUSTER }} apply \
+            -f test/bats/tests/remote-cluster/k8srequiredlabelswebhook_constraint.yaml
+
+          for i in {1..60}; do
+            ENFORCED=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} get k8srequiredlabelswebhook require-webhook-label \
+              -o jsonpath='{.status.byPod[0].enforced}' 2>/dev/null || echo "")
+            if [[ "$ENFORCED" == "true" ]]; then
+              echo "✓ Webhook-only constraint is enforced"
+              break
+            fi
+            echo "Waiting for webhook-only constraint to be enforced... ($i/60)"
+            sleep 2
+          done
+
       - name: Test VAP enforces
         run: |
-          OUT=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} create ns test-ns-vap 2>&1) && {
-            echo "✗ Namespace was created but should have been rejected!"
-            kubectl --context kind-${{ env.NESTED_CLUSTER }} delete ns test-ns-vap 2>/dev/null || true
-            exit 1
-          }
-          echo "$OUT"
-          if echo "$OUT" | grep -q "ValidatingAdmissionPolicy"; then
-            echo "✓ VAP enforced (denial attributed to ValidatingAdmissionPolicy)"
-          else
-            echo "✗ Expected denial from ValidatingAdmissionPolicy, got: $OUT"
+          cat > /tmp/ns-vap.yaml <<'EOF'
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: NAME_PLACEHOLDER
+            labels:
+              webhook-test: "yes"
+          EOF
+
+          SUCCESS=false
+          for i in {1..30}; do
+            OUT=$(sed "s/NAME_PLACEHOLDER/test-ns-vap-$i/" /tmp/ns-vap.yaml \
+              | kubectl --context kind-${{ env.NESTED_CLUSTER }} create -f - 2>&1) && {
+              echo "✗ Namespace was created but should have been rejected!"
+              kubectl --context kind-${{ env.NESTED_CLUSTER }} delete ns test-ns-vap-$i 2>/dev/null || true
+              exit 1
+            }
+            if echo "$OUT" | grep -q "ValidatingAdmissionPolicy"; then
+              echo "✓ VAP enforced (denial attributed to ValidatingAdmissionPolicy)"
+              SUCCESS=true
+              break
+            fi
+            echo "Waiting for VAP to become the enforcing point... ($i/30) got: $OUT"
+            sleep 2
+          done
+          if [[ "$SUCCESS" != "true" ]]; then
+            echo "✗ Expected denial from ValidatingAdmissionPolicy, last got: $OUT"
             exit 1
           fi
 
       - name: Test webhook enforces in isolation
         run: |
-          VAPB_NAME="gatekeeper-k8srequiredlabels-require-test-label"
-          kubectl --context kind-${{ env.NESTED_CLUSTER }} apply \
-            -f test/bats/tests/remote-cluster/k8srequiredlabels_constraint_webhook_scoped.yaml
+          cat > /tmp/ns-webhook.yaml <<'EOF'
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: NAME_PLACEHOLDER
+            labels:
+              test-label: "yes"
+          EOF
 
-          echo "Waiting for the generated VAPB to be removed..."
-          for i in {1..30}; do
-            if ! kubectl --context kind-${{ env.NESTED_CLUSTER }} get validatingadmissionpolicybinding "$VAPB_NAME" &>/dev/null; then
-              echo "✓ VAPB removed; VAP no longer enforces"
+          SUCCESS=false
+          for i in {1..15}; do
+            if OUT=$(sed "s/NAME_PLACEHOLDER/test-ns-webhook-$i/" /tmp/ns-webhook.yaml \
+              | kubectl --context kind-${{ env.NESTED_CLUSTER }} create -f - 2>&1); then
+              echo "Namespace admitted; webhook-only constraint not yet served on all replicas, retrying... ($i/15)"
+              kubectl --context kind-${{ env.NESTED_CLUSTER }} delete ns test-ns-webhook-$i 2>/dev/null || true
+              sleep 2
+              continue
+            fi
+            if echo "$OUT" | grep -q 'admission webhook "validation.gatekeeper.sh"'; then
+              echo "✓ Webhook enforced cross-cluster (denial attributed to validation.gatekeeper.sh, VAP not in path)"
+              SUCCESS=true
               break
             fi
+            echo "Waiting for the webhook-only constraint to be served... ($i/15) got: $OUT"
             sleep 2
           done
-          if kubectl --context kind-${{ env.NESTED_CLUSTER }} get validatingadmissionpolicybinding "$VAPB_NAME" &>/dev/null; then
-            echo "✗ VAPB still present; cannot isolate the webhook"
-            exit 1
-          fi
-
-          OUT=$(kubectl --context kind-${{ env.NESTED_CLUSTER }} create ns test-ns-webhook 2>&1) && {
-            echo "✗ Namespace was created but should have been rejected!"
-            kubectl --context kind-${{ env.NESTED_CLUSTER }} delete ns test-ns-webhook 2>/dev/null || true
-            exit 1
-          }
-          echo "$OUT"
-          if echo "$OUT" | grep -q 'admission webhook "validation.gatekeeper.sh"'; then
-            echo "✓ Webhook enforced cross-cluster (denial attributed to validation.gatekeeper.sh, VAP not in path)"
-          else
-            echo "✗ Expected denial from the admission webhook, got: $OUT"
+          if [[ "$SUCCESS" != "true" ]]; then
+            echo "✗ Expected denial from the admission webhook (namespace was admitted or denied by the wrong enforcement point)"
             exit 1
           fi
 
       - name: Test webhook ALLOWS compliant resource
         run: |
-          # Create namespace with required label - should succeed
           kubectl --context kind-${{ env.NESTED_CLUSTER }} apply -f - <<EOF
           apiVersion: v1
           kind: Namespace
@@ -553,9 +598,10 @@ jobs:
             name: test-ns-allow
             labels:
               test-label: "yes"
+              webhook-test: "yes"
           EOF
-          
-          echo "✓ Webhook correctly allowed compliant namespace"
+
+          echo "✓ Compliant namespace allowed"
 
       - name: Verify status resources are stable (no GC churn)
         run: |
