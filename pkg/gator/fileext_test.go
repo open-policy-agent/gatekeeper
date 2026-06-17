@@ -3,6 +3,7 @@ package gator
 import "testing"
 
 func TestIsYAMLExtension(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		ext      string
 		expected bool
@@ -24,6 +25,7 @@ func TestIsYAMLExtension(t *testing.T) {
 }
 
 func TestIsSupportedExtension(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		ext      string
 		expected bool

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
@@ -15,9 +16,11 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	expansionunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	expansionfixtures "github.com/open-policy-agent/gatekeeper/v3/pkg/expansion/fixtures"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -28,6 +31,7 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -200,6 +204,81 @@ func validRegoTemplateConstraint() *unstructured.Unstructured {
 	return u
 }
 
+func expectedOperationTemplate() *templates.ConstraintTemplate {
+	return &templates.ConstraintTemplate{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: templatesv1beta1.SchemeGroupVersion.String(),
+			Kind:       "ConstraintTemplate",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "k8sexpectedoperation",
+		},
+		Spec: templates.ConstraintTemplateSpec{
+			CRD: templates.CRD{
+				Spec: templates.CRDSpec{
+					Names: templates.Names{
+						Kind: "K8sExpectedOperation",
+					},
+					Validation: &templates.Validation{
+						OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
+							Type: "object",
+							Properties: map[string]apiextensions.JSONSchemaProps{
+								"operation": {
+									Type: "string",
+								},
+							},
+						},
+					},
+				},
+			},
+			Targets: []templates.Target{{
+				Target: target.Name,
+				Code: []templates.Code{{
+					Engine: "Rego",
+					Source: &templates.Anything{
+						Value: map[string]interface{}{"rego": `
+package expectedoperation
+
+violation[{"msg": msg}] {
+   input.review.operation == input.parameters.operation
+   msg := sprintf("expanded review preserved operation %v", [input.review.operation])
+}`},
+					},
+				}},
+			}},
+		},
+	}
+}
+
+func expectedOperationConstraint(operation admissionv1.Operation) *unstructured.Unstructured {
+	u := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"match": map[string]interface{}{
+					"kinds": []interface{}{
+						map[string]interface{}{
+							"apiGroups": []interface{}{""},
+							"kinds":     []interface{}{"Pod"},
+						},
+					},
+					"source": "Generated",
+				},
+				"parameters": map[string]interface{}{
+					"operation": string(operation),
+				},
+			},
+		},
+	}
+	u.SetGroupVersionKind(k8schema.GroupVersionKind{
+		Group:   constraints.Group,
+		Version: "v1beta1",
+		Kind:    "K8sExpectedOperation",
+	})
+	u.SetName("expected-operation-" + strings.ToLower(string(operation)))
+
+	return u
+}
+
 func makeOpaClient() (*constraintclient.Client, error) {
 	t := &target.K8sValidationTarget{}
 	driver, err := rego.New(rego.Tracing(false))
@@ -345,6 +424,85 @@ func TestReviewRequest(t *testing.T) {
 
 		maxThreads = 1
 		t.Run(tt.Name+withMaxThreads, testFn)
+	}
+}
+
+func TestReviewRequestExpandedResourcesPreserveOperation(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation admissionv1.Operation
+	}{
+		{
+			name:      "create",
+			operation: admissionv1.Create,
+		},
+		{
+			name:      "update",
+			operation: admissionv1.Update,
+		},
+		{
+			name:      "delete",
+			operation: admissionv1.Delete,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			opa, err := makeOpaClient()
+			require.NoError(t, err)
+
+			_, err = opa.AddTemplate(ctx, expectedOperationTemplate())
+			require.NoError(t, err)
+			_, err = opa.AddConstraint(ctx, expectedOperationConstraint(tt.operation))
+			require.NoError(t, err)
+
+			template := &expansionunversioned.ExpansionTemplate{}
+			err = yaml.Unmarshal([]byte(expansionfixtures.TempExpDeploymentExpandsPods), template)
+			require.NoError(t, err)
+			expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
+			require.NoError(t, expSystem.UpsertTemplate(template))
+
+			rawDeployment, err := yaml.YAMLToJSON([]byte(expansionfixtures.DeploymentNginx))
+			require.NoError(t, err)
+			req := &admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Kind: metav1.GroupVersionKind{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+					Name:      "nginx-deployment",
+					Namespace: "ns1",
+					Operation: tt.operation,
+					UserInfo: authenticationv1.UserInfo{
+						Username: "user@example.com",
+					},
+				},
+			}
+			if tt.operation == admissionv1.Delete {
+				req.OldObject = runtime.RawExtension{Raw: rawDeployment}
+			} else {
+				req.Object = runtime.RawExtension{Raw: rawDeployment}
+			}
+
+			handler := validationHandler{
+				opa:             opa,
+				expansionSystem: expSystem,
+				webhookHandler: webhookHandler{
+					injectedConfig: &v1alpha1.Config{},
+					client:         &nsGetter{},
+				},
+				log: log,
+			}
+
+			resp, err := handler.reviewRequest(ctx, req)
+			require.NoError(t, err)
+			require.NotEmpty(t, resp.Results())
+			for _, result := range resp.Results() {
+				require.Contains(t, result.Msg, string(tt.operation))
+			}
+		})
 	}
 }
 
@@ -833,8 +991,8 @@ func Test_StatusResource_Name(t *testing.T) {
 			})
 		}
 	}
-}	
-	
+}
+
 func Test_NonGkResource_Name(t *testing.T) {
 	h := &validationHandler{log: log}
 	fp := fakes.Pod(fakes.WithName(nameLargerThan63))
