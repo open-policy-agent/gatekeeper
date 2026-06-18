@@ -1,6 +1,7 @@
 package match
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,6 +40,14 @@ func TestApplyTo_MatchesOperation(t *testing.T) {
 			want:      true,
 		},
 		{
+			name: "empty operation string with all supported operations - allows mutation",
+			applyTo: MutationApplyTo{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
+			},
+			operation: "",
+			want:      true,
+		},
+		{
 			name:      "empty operations - allows CREATE (backward compatibility)",
 			applyTo:   MutationApplyTo{},
 			operation: admissionv1.Create,
@@ -51,10 +60,10 @@ func TestApplyTo_MatchesOperation(t *testing.T) {
 			want:      true,
 		},
 		{
-			name:      "empty operations - allows DELETE (backward compatibility)",
+			name:      "empty operations - rejects unsupported DELETE",
 			applyTo:   MutationApplyTo{},
 			operation: admissionv1.Delete,
-			want:      true,
+			want:      false,
 		},
 		{
 			name: "explicit CREATE only",
@@ -113,28 +122,28 @@ func TestApplyTo_MatchesOperation(t *testing.T) {
 			want:      false,
 		},
 		{
-			name: "DELETE operation allowed when explicitly specified",
+			name: "DELETE operation does not match until mutation webhook supports it",
 			applyTo: MutationApplyTo{
 				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Delete},
 			},
 			operation: admissionv1.Delete,
-			want:      true,
+			want:      false,
 		},
 		{
-			name: "multiple operations including DELETE",
+			name: "multiple operations including DELETE rejects DELETE until mutation webhook supports it",
 			applyTo: MutationApplyTo{
 				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update, admissionregistrationv1.Delete},
 			},
 			operation: admissionv1.Delete,
-			want:      true,
+			want:      false,
 		},
 		{
-			name: "CONNECT operation allowed when explicitly specified",
+			name: "CONNECT operation does not match until mutation webhook supports it",
 			applyTo: MutationApplyTo{
 				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Connect},
 			},
 			operation: admissionv1.Connect,
-			want:      true,
+			want:      false,
 		},
 		{
 			name: "CONNECT operation rejected when not specified",
@@ -161,20 +170,20 @@ func TestApplyTo_MatchesOperation(t *testing.T) {
 			want:      true,
 		},
 		{
-			name: "OperationAll (*) matches DELETE",
+			name: "OperationAll (*) rejects unsupported DELETE",
 			applyTo: MutationApplyTo{
 				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.OperationAll},
 			},
 			operation: admissionv1.Delete,
-			want:      true,
+			want:      false,
 		},
 		{
-			name: "OperationAll (*) matches CONNECT",
+			name: "OperationAll (*) rejects unsupported CONNECT",
 			applyTo: MutationApplyTo{
 				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.OperationAll},
 			},
 			operation: admissionv1.Connect,
-			want:      true,
+			want:      false,
 		},
 	}
 
@@ -183,6 +192,57 @@ func TestApplyTo_MatchesOperation(t *testing.T) {
 			got := tt.applyTo.MatchesOperation(tt.operation)
 			if got != tt.want {
 				t.Errorf("ApplyTo.MatchesOperation() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyTo_EffectiveOperations(t *testing.T) {
+	tests := []struct {
+		name    string
+		applyTo MutationApplyTo
+		want    []admissionv1.Operation
+	}{
+		{
+			name:    "empty operations only bind supported mutation operations",
+			applyTo: MutationApplyTo{},
+			want:    []admissionv1.Operation{admissionv1.Create, admissionv1.Update},
+		},
+		{
+			name: "OperationAll only binds supported mutation operations",
+			applyTo: MutationApplyTo{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.OperationAll},
+			},
+			want: []admissionv1.Operation{admissionv1.Create, admissionv1.Update},
+		},
+		{
+			name: "CREATE and UPDATE are preserved",
+			applyTo: MutationApplyTo{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
+			},
+			want: []admissionv1.Operation{admissionv1.Create, admissionv1.Update},
+		},
+		{
+			name: "DELETE and CONNECT do not create schema conflict bindings",
+			applyTo: MutationApplyTo{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Delete, admissionregistrationv1.Connect},
+			},
+			want: nil,
+		},
+		{
+			name: "unsupported operations are filtered from mixed operation lists",
+			applyTo: MutationApplyTo{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Delete, admissionregistrationv1.Connect},
+			},
+			want: []admissionv1.Operation{admissionv1.Create},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.applyTo.EffectiveOperations()
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("EffectiveOperations() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -330,6 +390,18 @@ func TestAppliesGVKAndOperation(t *testing.T) {
 			gvk:       podGVK,
 			operation: "",
 			want:      false,
+		},
+		{
+			name: "empty operation string with all supported operations matches mutation",
+			applyTo: []MutationApplyTo{
+				{
+					ApplyTo:    ApplyTo{Groups: []string{""}, Kinds: []string{"Pod"}, Versions: []string{"v1"}},
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
+				},
+			},
+			gvk:       podGVK,
+			operation: "",
+			want:      true,
 		},
 		{
 			name:      "no applyTo entries matches nothing",

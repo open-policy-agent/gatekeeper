@@ -19,8 +19,6 @@ import (
 var schemaBindingOperations = []admissionv1.Operation{
 	admissionv1.Create,
 	admissionv1.Update,
-	admissionv1.Delete,
-	admissionv1.Connect,
 }
 
 func schemaBindingsForGVKs(gvks []schema.GroupVersionKind) []mutationschema.Binding {

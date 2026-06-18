@@ -50,12 +50,17 @@ type ApplyTo struct {
 type MutationApplyTo struct {
 	ApplyTo `json:",inline"`
 	// Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
-	// this mutation. If empty, all operations are allowed for backward compatibility.
+	// this mutation. If empty, all operations supported by the mutation webhook are allowed for backward compatibility.
 	// NOTE: The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations.
 	// DELETE and CONNECT are accepted values but will not trigger mutations because the webhook
 	// does not handle these operation types. Support may be added in future releases.
 	// +kubebuilder:validation:items:Enum=CREATE;UPDATE;DELETE;CONNECT;*
 	Operations []admissionregistrationv1.OperationType `json:"operations,omitempty"`
+}
+
+var supportedMutationOperations = []admissionv1.Operation{
+	admissionv1.Create,
+	admissionv1.Update,
 }
 
 // Flatten returns the set of GroupVersionKinds this ApplyTo matches.
@@ -93,14 +98,22 @@ func (a *ApplyTo) Matches(gvk schema.GroupVersionKind) bool {
 	return true
 }
 
-// MatchesOperation returns true if the operation is contained in the MutationApplyTo's
-// operations list. If no operations are specified, all operations are allowed
-// for backward compatibility.
-// If operation is empty (e.g., in audit/expansion contexts), only mutators
-// without operation filtering are allowed for backward compatibility.
+// IsSupportedMutationOperation returns true if Gatekeeper currently executes mutation for the operation.
+func IsSupportedMutationOperation(operation admissionv1.Operation) bool {
+	return slices.Contains(supportedMutationOperations, operation)
+}
+
+// MatchesOperation returns true if the operation is supported by the mutation webhook and is contained in the
+// MutationApplyTo's operations list. If no operations are specified, all supported mutation operations are allowed for
+// backward compatibility. If operation is empty (e.g., in audit/expansion contexts), only mutators that apply to every
+// supported mutation operation are allowed.
 func (a *MutationApplyTo) MatchesOperation(operation admissionv1.Operation) bool {
 	if operation == "" {
-		return len(a.Operations) == 0 || slices.Contains(a.Operations, admissionregistrationv1.OperationAll)
+		return a.matchesAllSupportedMutationOperations()
+	}
+
+	if !IsSupportedMutationOperation(operation) {
+		return false
 	}
 
 	if len(a.Operations) == 0 || slices.Contains(a.Operations, admissionregistrationv1.OperationAll) {
@@ -110,21 +123,32 @@ func (a *MutationApplyTo) MatchesOperation(operation admissionv1.Operation) bool
 	return slices.Contains(a.Operations, admissionregistrationv1.OperationType(operation))
 }
 
-// EffectiveOperations returns the admission operations this MutationApplyTo applies to.
-// Empty operations and OperationAll both mean no operation filtering.
-func (a *MutationApplyTo) EffectiveOperations() []admissionv1.Operation {
+func (a *MutationApplyTo) matchesAllSupportedMutationOperations() bool {
 	if len(a.Operations) == 0 || slices.Contains(a.Operations, admissionregistrationv1.OperationAll) {
-		return []admissionv1.Operation{
-			admissionv1.Create,
-			admissionv1.Update,
-			admissionv1.Delete,
-			admissionv1.Connect,
-		}
+		return true
 	}
 
-	operations := make([]admissionv1.Operation, 0, len(a.Operations))
-	for _, operation := range a.Operations {
-		operations = append(operations, admissionv1.Operation(operation))
+	for _, operation := range supportedMutationOperations {
+		if !slices.Contains(a.Operations, admissionregistrationv1.OperationType(operation)) {
+			return false
+		}
+	}
+	return true
+}
+
+// EffectiveOperations returns the admission operations this MutationApplyTo applies to for schema conflict detection.
+// The mutation webhook currently only executes CREATE and UPDATE requests, so DELETE and CONNECT must not create
+// schema-conflict bindings that can disable mutators for operations that actually run.
+func (a *MutationApplyTo) EffectiveOperations() []admissionv1.Operation {
+	if len(a.Operations) == 0 || slices.Contains(a.Operations, admissionregistrationv1.OperationAll) {
+		return slices.Clone(supportedMutationOperations)
+	}
+
+	operations := make([]admissionv1.Operation, 0, len(supportedMutationOperations))
+	for _, operation := range supportedMutationOperations {
+		if slices.Contains(a.Operations, admissionregistrationv1.OperationType(operation)) {
+			operations = append(operations, operation)
+		}
 	}
 	return operations
 }

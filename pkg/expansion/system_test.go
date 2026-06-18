@@ -107,12 +107,26 @@ func TestExpand(t *testing.T) {
 			},
 		},
 		{
-			name:      "operation-scoped mutator deployment create expands pod and mutates",
+			name:      "operation-scoped mutator ignores generator operation during expansion",
 			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			operation: admissionv1.Create,
 			mutators: []types.Mutator{
 				loadAssignWithOperations(t, fixtures.AssignPullImage, admissionregistrationv1.Create),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			want: []*Resultant{
+				{Obj: fixtures.LoadFixture(fixtures.PodNoMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+			},
+		},
+		{
+			name:      "mutator scoped to all supported operations expands pod and mutates without operation context",
+			generator: fixtures.LoadFixture(fixtures.DeploymentNginx, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssignWithOperations(t, fixtures.AssignPullImage, admissionregistrationv1.Create, admissionregistrationv1.Update),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
 				fixtures.LoadTemplate(fixtures.TempExpDeploymentExpandsPods, t),

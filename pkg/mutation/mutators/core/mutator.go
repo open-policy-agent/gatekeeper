@@ -44,10 +44,11 @@ func NewValidatedBindings(name string, kind string, applies []match.MutationAppl
 		return nil, fmt.Errorf("invalid applyTo for %s mutator %s: %w", kind, name, err)
 	}
 
-	bindings := getSortedBindings(applies)
-	if len(bindings) == 0 {
+	if len(applies) == 0 {
 		return nil, fmt.Errorf("applyTo required for %s mutator %s", kind, name)
 	}
+
+	bindings := getSortedBindings(applies)
 
 	return bindings, nil
 }
