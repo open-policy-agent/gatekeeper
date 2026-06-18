@@ -456,18 +456,20 @@ func TestValidateOperations(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "DELETE operation is valid",
+			name: "DELETE operation is rejected until mutation webhook supports it",
 			applyTo: []MutationApplyTo{
 				{Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Delete}},
 			},
-			wantErr: false,
+			wantErr: true,
+			errMsg:  "invalid operation \"DELETE\" in applyTo[0].operations: must be one of CREATE, UPDATE, *",
 		},
 		{
-			name: "CONNECT operation is valid",
+			name: "CONNECT operation is rejected until mutation webhook supports it",
 			applyTo: []MutationApplyTo{
 				{Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Connect}},
 			},
-			wantErr: false,
+			wantErr: true,
+			errMsg:  "invalid operation \"CONNECT\" in applyTo[0].operations: must be one of CREATE, UPDATE, *",
 		},
 		{
 			name: "OperationAll (*) is valid",
@@ -477,13 +479,11 @@ func TestValidateOperations(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "all valid operations together",
+			name: "all accepted operations together",
 			applyTo: []MutationApplyTo{
 				{Operations: []admissionregistrationv1.OperationType{
 					admissionregistrationv1.Create,
 					admissionregistrationv1.Update,
-					admissionregistrationv1.Delete,
-					admissionregistrationv1.Connect,
 				}},
 			},
 			wantErr: false,

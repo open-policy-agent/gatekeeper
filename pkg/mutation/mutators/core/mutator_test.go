@@ -1,14 +1,15 @@
 package core
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 )
 
-func TestNewValidatedBindings_AllUnsupportedOperationsAllowedWithoutBindings(t *testing.T) {
-	bindings, err := NewValidatedBindings("delete-connect-only", "Assign", []match.MutationApplyTo{
+func TestNewValidatedBindings_UnsupportedOperationsRejected(t *testing.T) {
+	_, err := NewValidatedBindings("delete-connect-only", "Assign", []match.MutationApplyTo{
 		{
 			ApplyTo: match.ApplyTo{
 				Groups:   []string{""},
@@ -21,10 +22,10 @@ func TestNewValidatedBindings_AllUnsupportedOperationsAllowedWithoutBindings(t *
 			},
 		},
 	})
-	if err != nil {
-		t.Fatalf("NewValidatedBindings() error = %v, want <nil>", err)
+	if err == nil {
+		t.Fatalf("NewValidatedBindings() error = <nil>, want rejection of unsupported operations")
 	}
-	if len(bindings) != 0 {
-		t.Fatalf("NewValidatedBindings() returned %d bindings, want 0", len(bindings))
+	if !strings.Contains(err.Error(), "DELETE") || !strings.Contains(err.Error(), "CONNECT") {
+		t.Fatalf("NewValidatedBindings() error = %v, want it to name the rejected DELETE and CONNECT operations", err)
 	}
 }

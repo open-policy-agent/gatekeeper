@@ -49,15 +49,19 @@ type ApplyTo struct {
 // +kubebuilder:object:generate=true
 type MutationApplyTo struct {
 	ApplyTo `json:",inline"`
-	// Operations specifies which admission operations (CREATE, UPDATE, DELETE, CONNECT, *) should trigger
+	// Operations specifies which admission operations (CREATE, UPDATE, *) should trigger
 	// this mutation. If empty, all operations supported by the mutation webhook are allowed for backward compatibility.
-	// NOTE: The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations.
-	// DELETE and CONNECT are accepted values but will not trigger mutations because the webhook
-	// does not handle these operation types. Support may be added in future releases.
-	// +kubebuilder:validation:items:Enum=CREATE;UPDATE;DELETE;CONNECT;*
+	// The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations, so those are the only
+	// concrete values accepted. DELETE and CONNECT are rejected until the mutation webhook supports them.
+	// "*" means all operations the mutation webhook currently supports and will broaden automatically if support
+	// for additional operations is added in a future release.
+	// +kubebuilder:validation:items:Enum=CREATE;UPDATE;*
 	Operations []admissionregistrationv1.OperationType `json:"operations,omitempty"`
 }
 
+// supportedMutationOperations is the set of admission operations the mutation webhook currently executes.
+// Adding an entry here (and registering the webhook for it) will broaden the effective scope of omitted-operations
+// and "*" mutators on upgrade, so such a change must be deliberate and release-noted.
 var supportedMutationOperations = []admissionv1.Operation{
 	admissionv1.Create,
 	admissionv1.Update,
@@ -153,17 +157,18 @@ func (a *MutationApplyTo) EffectiveOperations() []admissionv1.Operation {
 	return operations
 }
 
-// validOperations defines the set of valid admission operations.
+// validOperations defines the set of operations accepted in a mutation applyTo. Only the operations the mutation
+// webhook currently executes (CREATE, UPDATE) plus the "*" wildcard are accepted. DELETE and CONNECT are intentionally
+// rejected until the mutation webhook supports them; accepting them now would permit valid-but-inert mutators and
+// commit the API to silently activating them on a future upgrade.
 var validOperations = sets.New[admissionregistrationv1.OperationType](
 	admissionregistrationv1.Create,
 	admissionregistrationv1.Update,
-	admissionregistrationv1.Delete,
-	admissionregistrationv1.Connect,
 	admissionregistrationv1.OperationAll,
 )
 
 // ValidateOperations validates that all operations in the MutationApplyTo
-// are valid Kubernetes admission operations (CREATE, UPDATE, DELETE, CONNECT, *).
+// are operations the mutation webhook accepts (CREATE, UPDATE, *).
 // It collates all errors and returns them together, following the Kubernetes
 // validation pattern.
 func ValidateOperations(applyTo []MutationApplyTo) error {
@@ -177,7 +182,7 @@ func ValidateOperations(applyTo []MutationApplyTo) error {
 			}
 			seen.Insert(op)
 			if !validOperations.Has(op) {
-				errs = append(errs, fmt.Sprintf("invalid operation %q in applyTo[%d].operations: must be one of CREATE, UPDATE, DELETE, CONNECT, *", op, i))
+				errs = append(errs, fmt.Sprintf("invalid operation %q in applyTo[%d].operations: must be one of CREATE, UPDATE, *", op, i))
 			}
 			if op == admissionregistrationv1.OperationAll {
 				hasWildcard = true
