@@ -206,10 +206,8 @@ preUninstall:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
-podAnnotations:
-  cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
-auditPodAnnotations:
-  cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+podAnnotations: {}
+auditPodAnnotations: {}
 podLabels: {}
 podCountLimit: "100"
 secretAnnotations: {}
