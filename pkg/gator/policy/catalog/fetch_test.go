@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,6 +40,32 @@ func TestHTTPFetcher_PathTraversalProtection(t *testing.T) {
 	_, err = fetcher.FetchContent(ctx, "subdir/../../etc/passwd")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "path traversal")
+}
+
+func TestHTTPFetcher_FileBaseAtRoot(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "template.yaml")
+	require.NoError(t, os.WriteFile(testFile, []byte("test: content"), 0o600))
+
+	rootDir := string(filepath.Separator)
+	if volume := filepath.VolumeName(tempDir); volume != "" {
+		rootDir = volume + string(filepath.Separator)
+	}
+
+	contentPath, err := filepath.Rel(rootDir, testFile)
+	require.NoError(t, err)
+
+	catalogPath := filepath.ToSlash(filepath.Join(rootDir, "catalog.yaml"))
+	if filepath.VolumeName(rootDir) != "" {
+		catalogPath = "/" + catalogPath
+	}
+
+	fetcher := NewHTTPFetcher(DefaultTimeout)
+	fetcher.SetBaseURL((&url.URL{Scheme: fileScheme, Path: catalogPath}).String())
+
+	content, err := fetcher.FetchContent(context.Background(), filepath.ToSlash(contentPath))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "test: content")
 }
 
 func TestHTTPFetcher_SetBaseURL(t *testing.T) {
