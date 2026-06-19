@@ -163,7 +163,7 @@ By default, audit will request each resource from the Kubernetes API during each
 
 ### Disabling Audit
 
-If you want to completely disable the audit process (for example, to reduce CPU or Memory usage), you must be careful not to break other singleton operations like CRD generation and status aggregation, which are also handled by the audit pod. 
+If you want to completely disable the audit process (for example, to reduce CPU or Memory usage), you must be careful not to break other singleton operations like CRD generation and status aggregation, which are also handled by the audit pod.
 
 Instead of completely removing the audit deployment (e.g., by setting `disableAudit: true` in Helm), you should disable just the audit operation:
 - In Helm, set `audit.disableAuditOperation: true`.
