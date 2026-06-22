@@ -33,7 +33,7 @@ type ModifySetSpec struct {
 	// ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
 	// This is necessary because every mutation implies part of an object schema and object
 	// schemas are associated with specific GVKs.
-	ApplyTo []match.ApplyTo `json:"applyTo,omitempty"`
+	ApplyTo []match.MutationApplyTo `json:"applyTo,omitempty"`
 
 	// Match allows the user to limit which resources get mutated.
 	// Individual match criteria are AND-ed together. An undefined
