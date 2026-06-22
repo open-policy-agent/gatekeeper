@@ -13,10 +13,10 @@ require (
 	github.com/golang/protobuf v1.5.4
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/onsi/gomega v1.41.0
-	github.com/open-policy-agent/cert-controller v0.15.1-0.20260223153912-82ce7d04c83b
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20260612214949-2526ccd5cc34
-	github.com/open-policy-agent/opa v1.17.0
+	github.com/onsi/gomega v1.42.0
+	github.com/open-policy-agent/cert-controller v0.16.1-0.20260608222807-1c492bc2d223
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20260616163050-e1eaa1bf6d62
+	github.com/open-policy-agent/opa v1.17.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2
@@ -74,7 +74,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
-	github.com/go-chi/chi/v5 v5.2.2 // indirect
+	github.com/go-chi/chi/v5 v5.2.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
