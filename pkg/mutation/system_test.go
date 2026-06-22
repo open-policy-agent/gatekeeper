@@ -12,6 +12,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 	mutationschema "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -117,8 +118,17 @@ func (m *fakeMutator) String() string {
 	return m.MID.String()
 }
 
-func (m *fakeMutator) SchemaBindings() []schema.GroupVersionKind {
-	return m.GVKs
+func (m *fakeMutator) SchemaBindings() []mutationschema.Binding {
+	bindings := make([]mutationschema.Binding, 0, len(m.GVKs)*4)
+	for _, gvk := range m.GVKs {
+		bindings = append(bindings,
+			mutationschema.Binding{GVK: gvk, Operation: admissionv1.Create},
+			mutationschema.Binding{GVK: gvk, Operation: admissionv1.Update},
+			mutationschema.Binding{GVK: gvk, Operation: admissionv1.Delete},
+			mutationschema.Binding{GVK: gvk, Operation: admissionv1.Connect},
+		)
+	}
+	return bindings
 }
 
 func TestMutation(t *testing.T) {
