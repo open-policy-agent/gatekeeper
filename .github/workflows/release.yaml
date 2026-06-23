@@ -15,12 +15,12 @@ permissions: read-all
 jobs:
   tagged-release:
     name: "Tagged Release"
-    runs-on: oracle-vm-8cpu-32gb-x86-64
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
       packages: write
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Cleanup disk
         run: |
