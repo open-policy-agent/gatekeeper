@@ -161,6 +161,14 @@ number of instances to run, please refer to [operations audit](operations.md#aud
 
 By default, audit will request each resource from the Kubernetes API during each audit cycle. To rely on the audit informer cache instead, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into the audit cache before they can be evaluated against the enforced policies. Refer to the [Replicating data](sync.md) section for more information.
 
+### Disabling Audit
+
+If you want to completely disable the audit process (for example, to reduce CPU or Memory usage), you must be careful not to break other singleton operations like CRD generation and status aggregation, which are also handled by the audit pod.
+
+Instead of completely removing the audit deployment (e.g., by setting `disableAudit: true` in Helm), you should disable just the audit operation:
+- In Helm, set `audit.disableAuditOperation: true`.
+- If not using Helm, remove the `--operation=audit` flag from the audit deployment manifest.
+
 ### Audit using kinds specified in the constraints only
 
 By default, Gatekeeper will audit all resources in the cluster. This operation can take some time depending on the number of resources.

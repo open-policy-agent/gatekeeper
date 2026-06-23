@@ -49,6 +49,7 @@ type FailedConnection struct {
 type Writer struct {
 	mu                           sync.Mutex
 	openConnections              map[string]Connection
+	connectionLocks              map[string]*sync.Mutex
 	closedConnections            map[string]FailedConnection
 	cleanupDone                  chan struct{}
 	cleanupOnce                  sync.Once
@@ -92,21 +93,59 @@ var Connections = &Writer{
 
 var log = logf.Log.WithName("disk-driver").WithValues(logging.Process, "export")
 
+func (r *Writer) connectionLockLocked(connectionName string) *sync.Mutex {
+	if r.connectionLocks == nil {
+		r.connectionLocks = make(map[string]*sync.Mutex)
+	}
+	if r.connectionLocks[connectionName] == nil {
+		r.connectionLocks[connectionName] = &sync.Mutex{}
+	}
+	return r.connectionLocks[connectionName]
+}
+
+func (r *Writer) getOrCreateConnectionLock(connectionName string) *sync.Mutex {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.connectionLockLocked(connectionName)
+}
+
+func (r *Writer) getExistingConnectionLock(connectionName string) (*sync.Mutex, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.openConnections[connectionName]; !exists {
+		return nil, false
+	}
+	return r.connectionLockLocked(connectionName), true
+}
+
+func (r *Writer) connectionLockIsCurrentLocked(connectionName string, lock *sync.Mutex) bool {
+	return r.connectionLocks != nil && r.connectionLocks[connectionName] == lock
+}
+
 func (r *Writer) CreateConnection(_ context.Context, connectionName string, config interface{}) error {
 	path, maxResults, ttl, err := unmarshalConfig(config)
 	if err != nil {
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	for {
+		connLock := r.getOrCreateConnectionLock(connectionName)
+		connLock.Lock()
 
-	r.openConnections[connectionName] = Connection{
-		Path:                path,
-		MaxAuditResults:     int(maxResults),
-		ClosedConnectionTTL: ttl,
+		r.mu.Lock()
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			r.openConnections[connectionName] = Connection{
+				Path:                path,
+				MaxAuditResults:     int(maxResults),
+				ClosedConnectionTTL: ttl,
+			}
+			r.mu.Unlock()
+			connLock.Unlock()
+			return nil
+		}
+		r.mu.Unlock()
+		connLock.Unlock()
 	}
-	return nil
 }
 
 func (r *Writer) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
@@ -115,45 +154,76 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
 	}
 
-	r.mu.Lock()
-	conn, exists := r.openConnections[connectionName]
-	if !exists {
-		r.mu.Unlock()
-		return fmt.Errorf("connection %s for disk driver not found", connectionName)
-	}
-
-	var needsCleanup bool
-	if conn.Path != path {
-		delete(r.openConnections, connectionName)
-		needsCleanup = true
-	}
-	r.mu.Unlock()
-
-	if needsCleanup {
-		if err := r.closeAndRemoveFilesWithRetry(conn); err != nil {
-			// Re-add connection on failure so it is not lost.
-			r.mu.Lock()
-			r.openConnections[connectionName] = conn
-			r.mu.Unlock()
-			return fmt.Errorf("error updating connection %s, %w", connectionName, err)
+	for {
+		connLock, exists := r.getExistingConnectionLock(connectionName)
+		if !exists {
+			return fmt.Errorf("connection %s for disk driver not found", connectionName)
 		}
-		conn.Path = path
-		conn.File = nil
+		connLock.Lock()
+
+		r.mu.Lock()
+		conn, exists := r.openConnections[connectionName]
+		if !exists {
+			r.mu.Unlock()
+			connLock.Unlock()
+			return fmt.Errorf("connection %s for disk driver not found", connectionName)
+		}
+		if !r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			r.mu.Unlock()
+			connLock.Unlock()
+			continue
+		}
+
+		var needsCleanup bool
+		if conn.Path != path {
+			delete(r.openConnections, connectionName)
+			needsCleanup = true
+		}
+		r.mu.Unlock()
+
+		if needsCleanup {
+			if err := r.closeAndRemoveFilesWithRetry(conn); err != nil {
+				// Re-add the old connection only if this update still owns the
+				// current lock and no newer connection was installed.
+				r.mu.Lock()
+				if _, exists := r.openConnections[connectionName]; !exists && r.connectionLockIsCurrentLocked(connectionName, connLock) {
+					r.openConnections[connectionName] = conn
+				}
+				r.mu.Unlock()
+				connLock.Unlock()
+				return fmt.Errorf("error updating connection %s, %w", connectionName, err)
+			}
+			conn.Path = path
+			conn.File = nil
+		}
+
+		conn.MaxAuditResults = int(maxResults)
+		conn.ClosedConnectionTTL = ttl
+
+		r.mu.Lock()
+		if !r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			r.mu.Unlock()
+			connLock.Unlock()
+			continue
+		}
+		r.openConnections[connectionName] = conn
+		r.mu.Unlock()
+		connLock.Unlock()
+		return nil
 	}
-
-	conn.MaxAuditResults = int(maxResults)
-	conn.ClosedConnectionTTL = ttl
-
-	r.mu.Lock()
-	r.openConnections[connectionName] = conn
-	r.mu.Unlock()
-	return nil
 }
 
 func (r *Writer) CloseConnection(connectionName string) error {
+	connLock, exists := r.getExistingConnectionLock(connectionName)
+	if !exists {
+		return fmt.Errorf("connection %s not found for disk driver", connectionName)
+	}
+	connLock.Lock()
+	defer connLock.Unlock()
+
 	r.mu.Lock()
 	conn, ok := r.openConnections[connectionName]
-	if !ok {
+	if !ok || !r.connectionLockIsCurrentLocked(connectionName, connLock) {
 		r.mu.Unlock()
 		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
@@ -164,6 +234,7 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	if err != nil {
 		now := time.Now()
 		r.mu.Lock()
+		// Store the failed connection with retry metadata with a unique key to avoid conflicts.
 		r.closedConnections[connectionName+now.String()] = FailedConnection{
 			Connection:  conn,
 			FailedAt:    now,
@@ -179,22 +250,36 @@ func (r *Writer) CloseConnection(connectionName string) error {
 		r.cleanupOnce.Do(func() {
 			go r.backgroundCleanup(done)
 		})
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			delete(r.connectionLocks, connectionName)
+		}
 		r.mu.Unlock()
+		return err
 	}
-	return err
+
+	r.mu.Lock()
+	if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+		delete(r.connectionLocks, connectionName)
+	}
+	r.mu.Unlock()
+	return nil
 }
 
-// Publish holds the global lock for its entire body because Connection values
-// share a *os.File pointer; releasing the lock mid-method would let concurrent
-// publishers race on the same file descriptor.
 func (r *Writer) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	conn, ok := r.openConnections[connectionName]
-	if !ok {
+	connLock, exists := r.getExistingConnectionLock(connectionName)
+	if !exists {
 		return fmt.Errorf("invalid connection: %s not found for disk driver", connectionName)
 	}
+	connLock.Lock()
+	defer connLock.Unlock()
+
+	r.mu.Lock()
+	conn, ok := r.openConnections[connectionName]
+	if !ok || !r.connectionLockIsCurrentLocked(connectionName, connLock) {
+		r.mu.Unlock()
+		return fmt.Errorf("invalid connection: %s not found for disk driver", connectionName)
+	}
+	r.mu.Unlock()
 
 	var violation util.ExportMsg
 	if violation, ok = data.(util.ExportMsg); !ok {
@@ -206,7 +291,6 @@ func (r *Writer) Publish(_ context.Context, connectionName string, data interfac
 		if err != nil {
 			return fmt.Errorf("error handling audit start: %w", err)
 		}
-		r.openConnections[connectionName] = conn
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -230,8 +314,13 @@ func (r *Writer) Publish(_ context.Context, connectionName string, data interfac
 		}
 		conn.File = nil
 		conn.currentAuditRun = ""
+	}
+
+	r.mu.Lock()
+	if r.connectionLockIsCurrentLocked(connectionName, connLock) {
 		r.openConnections[connectionName] = conn
 	}
+	r.mu.Unlock()
 	return nil
 }
 
@@ -387,6 +476,9 @@ func unmarshalConfig(config interface{}) (string, float64, time.Duration, error)
 	maxResults, maxResultsOk := cfg[maxAuditResults].(float64)
 	if !maxResultsOk {
 		return "", 0.0, 0, fmt.Errorf("missing or invalid 'maxAuditResults'")
+	}
+	if maxResults < 0 {
+		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be negative")
 	}
 	if maxResults > maxAllowedAuditRuns {
 		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)

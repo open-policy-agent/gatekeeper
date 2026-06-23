@@ -1,12 +1,54 @@
 package mutators
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 )
+
+func TestSharedCache_TallyStatusAcrossKinds(t *testing.T) {
+	cache := NewMutationCache()
+
+	for i := 0; i < 4; i++ {
+		cache.Upsert(types.ID{
+			Group: "mutations.gatekeeper.sh",
+			Kind:  "Assign",
+			Name:  fmt.Sprintf("assign-%d", i),
+		}, MutatorStatusActive, false)
+	}
+
+	for i := 0; i < 2; i++ {
+		cache.Upsert(types.ID{
+			Group: "mutations.gatekeeper.sh",
+			Kind:  "ModifySet",
+			Name:  fmt.Sprintf("modifyset-%d", i),
+		}, MutatorStatusActive, false)
+	}
+
+	cache.Upsert(types.ID{
+		Group: "mutations.gatekeeper.sh",
+		Kind:  "AssignMetadata",
+		Name:  "assignmeta-0",
+	}, MutatorStatusActive, false)
+
+	cache.Upsert(types.ID{
+		Group: "mutations.gatekeeper.sh",
+		Kind:  "AssignImage",
+		Name:  "assignimage-0",
+	}, MutatorStatusActive, false)
+
+	got := cache.TallyStatus()
+
+	if got[MutatorStatusActive] != 8 {
+		t.Errorf("shared Cache.TallyStatus()[active] = %d, want 8", got[MutatorStatusActive])
+	}
+	if got[MutatorStatusError] != 0 {
+		t.Errorf("shared Cache.TallyStatus()[error] = %d, want 0", got[MutatorStatusError])
+	}
+}
 
 func TestCache_TallyStatus(t *testing.T) {
 	type fields struct {

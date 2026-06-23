@@ -58,6 +58,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness/pruner"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/routing"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/upgrade"
@@ -71,9 +72,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -214,6 +218,12 @@ func innerMain() int {
 		setupLog.Error(errors.New("--enable-mutation flag is deprecated"), "use of deprecated flag")
 	}
 
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "sync-vap-enforcement-scope" {
+			setupLog.Error(errors.New("--sync-vap-enforcement-scope flag is deprecated and will be removed in Gatekeeper v3.24"), "use of deprecated flag")
+		}
+	})
+
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent("gatekeeper")
 	setupLog.Info("setting up manager", "user agent", config.UserAgent)
@@ -245,6 +255,17 @@ func innerMain() int {
 			},
 		}
 	}
+	// create local cluster config once if remote cluster mode is enabled, shared by RoutingCache (reads) and RoutingClient (writes)
+	var localClusterConfig *rest.Config
+	if controller.RemoteClusterEnabled() {
+		var err error
+		localClusterConfig, err = rest.InClusterConfig()
+		if err != nil {
+			setupLog.Error(err, "local cluster in-cluster config required for --enable-remote-cluster")
+			return 1
+		}
+	}
+
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -254,6 +275,8 @@ func innerMain() int {
 		WebhookServer:          crWebhook.NewServer(serverOpts),
 		HealthProbeBindAddress: *healthAddr,
 		MapperProvider:         apiutil.NewDynamicRESTMapper,
+		NewCache:               newCacheFunc(scheme, localClusterConfig),
+		NewClient:              newClientFunc(scheme, localClusterConfig),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -305,13 +328,21 @@ func innerMain() int {
 		return 1
 	}
 
-	// only setup healthcheck when flag is set and available webhook count > 0
-	if len(webhooks) > 0 && *enableTLSHealthcheck {
-		tlsChecker := webhook.NewTLSChecker(*certDir, *port)
-		setupLog.Info("setting up TLS healthcheck probe")
-		if err := mgr.AddHealthzCheck("tls-check", tlsChecker); err != nil {
-			setupLog.Error(err, "unable to create tls health check")
+	if len(webhooks) > 0 {
+		tlsChecker := webhook.NewTLSChecker(*certDir, *host, *port)
+		setupLog.Info("setting up TLS readiness probe")
+		if err := mgr.AddReadyzCheck("tls-check", tlsChecker); err != nil {
+			setupLog.Error(err, "unable to create tls readiness check")
 			return 1
+		}
+
+		// only setup healthcheck when flag is set
+		if *enableTLSHealthcheck {
+			setupLog.Info("setting up TLS healthcheck probe")
+			if err := mgr.AddHealthzCheck("tls-check", tlsChecker); err != nil {
+				setupLog.Error(err, "unable to create tls health check")
+				return 1
+			}
 		}
 	}
 
@@ -428,42 +459,47 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 
 	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 
-	if *enableK8sCel {
-		k8sDriver, err := k8scel.New()
+	var client *constraintclient.Client
+
+	if operations.HasValidationOperations() {
+		if *enableK8sCel {
+			k8sDriver, err := k8scel.New()
+			if err != nil {
+				setupLog.Error(err, "unable to set up K8s native driver")
+				return err
+			}
+			cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
+		}
+
+		externs := rego.Externs()
+		if *enableReferential {
+			externs = rego.Externs("inventory")
+		}
+		args = append(args, externs)
+
+		driver, err := rego.New(args...)
 		if err != nil {
-			setupLog.Error(err, "unable to set up K8s native driver")
+			setupLog.Error(err, "unable to set up Driver")
 			return err
 		}
-		cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
-	}
+		cfArgs = append(cfArgs, constraintclient.Driver(driver))
 
-	externs := rego.Externs()
-	if *enableReferential {
-		externs = rego.Externs("inventory")
-	}
-	args = append(args, externs)
+		eps := []string{}
+		if operations.IsAssigned(operations.Audit) {
+			eps = append(eps, util.AuditEnforcementPoint)
+		}
+		if operations.IsAssigned(operations.Webhook) {
+			eps = append(eps, util.WebhookEnforcementPoint)
+		}
 
-	driver, err := rego.New(args...)
-	if err != nil {
-		setupLog.Error(err, "unable to set up Driver")
-		return err
-	}
-	cfArgs = append(cfArgs, constraintclient.Driver(driver))
+		cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
 
-	eps := []string{}
-	if operations.IsAssigned(operations.Audit) {
-		eps = append(eps, util.AuditEnforcementPoint)
-	}
-	if operations.IsAssigned(operations.Webhook) {
-		eps = append(eps, util.WebhookEnforcementPoint)
-	}
-
-	cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
-
-	client, err := constraintclient.NewClient(cfArgs...)
-	if err != nil {
-		setupLog.Error(err, "unable to set up OPA client")
-		return err
+		var clientErr error
+		client, clientErr = constraintclient.NewClient(cfArgs...)
+		if clientErr != nil {
+			setupLog.Error(clientErr, "unable to set up OPA client")
+			return clientErr
+		}
 	}
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
@@ -512,14 +548,20 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	}
 
 	syncMetricsCache := syncutil.NewMetricsCache()
-	cm, err := cachemanager.NewCacheManager(&cachemanager.Config{
-		CfClient:         client,
+
+	cmConfig := &cachemanager.Config{
 		SyncMetricsCache: syncMetricsCache,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
 		Registrar:        reg,
 		Reader:           mgr.GetCache(),
-	})
+	}
+
+	if client != nil {
+		cmConfig.CfClient = client
+	}
+
+	cm, err := cachemanager.NewCacheManager(cmConfig)
 	if err != nil {
 		setupLog.Error(err, "unable to create cache manager")
 		return err
@@ -615,4 +657,60 @@ func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
 	newlogger := zapr.NewLogger(zlog)
 	ctrl.SetLogger(newlogger)
 	klog.SetLogger(newlogger)
+}
+
+// returns a NewCacheFunc that wraps the default cache with a RoutingCache when remote cluster mode is enabled
+// In non-remote mode it returns nil, which tells the manager to use the default cache.
+func newCacheFunc(scheme *runtime.Scheme, localClusterConfig *rest.Config) cache.NewCacheFunc {
+	if localClusterConfig == nil {
+		return nil
+	}
+	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
+		// standard behavior
+		remoteClusterCache, err := cache.New(config, opts)
+		if err != nil {
+			return nil, fmt.Errorf("creating remote cluster cache: %w", err)
+		}
+
+		// local cluster cache
+		localClusterOpts := cache.Options{
+			Scheme:                      opts.Scheme,
+			SyncPeriod:                  opts.SyncPeriod,
+			ReaderFailOnMissingInformer: opts.ReaderFailOnMissingInformer,
+			DefaultWatchErrorHandler:    opts.DefaultWatchErrorHandler,
+			DefaultNamespaces: map[string]cache.Config{
+				util.GetNamespace(): {},
+			},
+		}
+		localClusterCache, err := cache.New(localClusterConfig, localClusterOpts)
+		if err != nil {
+			return nil, fmt.Errorf("creating local cluster cache: %w", err)
+		}
+		return routing.NewRoutingCache(remoteClusterCache, localClusterCache, scheme), nil
+	}
+}
+
+// returns a NewClientFunc that wraps the default client with a RoutingClient when remote cluster mode is enabled
+// In non-remote mode it returns nil, which tells the manager to use the default client.
+func newClientFunc(scheme *runtime.Scheme, localClusterConfig *rest.Config) client.NewClientFunc {
+	if localClusterConfig == nil {
+		return nil
+	}
+	return func(config *rest.Config, opts client.Options) (client.Client, error) {
+		remoteClusterClient, err := client.New(config, opts)
+		if err != nil {
+			return nil, fmt.Errorf("creating remote cluster client: %w", err)
+		}
+
+		// local cluster client
+		localClusterOpts := opts
+		localClusterOpts.Mapper = nil
+		localClusterOpts.HTTPClient = nil
+
+		localClusterClient, err := client.New(localClusterConfig, localClusterOpts)
+		if err != nil {
+			return nil, fmt.Errorf("creating local cluster client: %w", err)
+		}
+		return routing.NewRoutingClient(remoteClusterClient, localClusterClient, scheme), nil
+	}
 }

@@ -88,11 +88,8 @@ func NewConnectionStatusForPod(pod *corev1.Pod, connectionNamespace, connectionN
 		v1beta1.PodLabel:            pod.Name,
 	})
 
-	// Skip OwnerReference in remote cluster mode
-	if !util.ShouldSkipPodOwnerRef() {
-		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-			return nil, err
-		}
+	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+		return nil, err
 	}
 
 	return obj, nil
@@ -101,8 +98,4 @@ func NewConnectionStatusForPod(pod *corev1.Pod, connectionNamespace, connectionN
 // KeyForConnection returns a unique status object name given the Pod ID and a connection object.
 func KeyForConnection(id string, connectionNamespace string, connectionName string) (string, error) {
 	return v1beta1.DashPacker(id, connectionNamespace, connectionName)
-}
-
-func init() {
-	SchemeBuilder.Register(&ConnectionPodStatus{}, &ConnectionPodStatusList{})
 }

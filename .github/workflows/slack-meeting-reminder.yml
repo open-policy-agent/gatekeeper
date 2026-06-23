@@ -2,9 +2,13 @@ name: Slack Meeting Reminder
 
 on:
   schedule:
-    # Run every Wednesday at 9 AM PST (5 PM UTC) - 1 hour before 10 AM meeting
+    # Run every Wednesday at 9 AM Pacific Time - 1 hour before 10 AM meeting.
+    # Both UTC hours are needed to account for daylight saving time.
+    - cron: "0 16 * * 3"
     - cron: "0 17 * * 3"
-    # Run every Wednesday at 1 PM PST (9 PM UTC) - 1 hour before 2 PM meeting
+    # Run every Wednesday at 1 PM Pacific Time - 1 hour before 2 PM meeting.
+    # Both UTC hours are needed to account for daylight saving time.
+    - cron: "0 20 * * 3"
     - cron: "0 21 * * 3"
 
 permissions: read-all
@@ -14,29 +18,55 @@ jobs:
     runs-on: oracle-vm-2cpu-8gb-x86-64
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
-      - name: Determine which time slot to use
+      - name: Determine whether to send reminder
         id: check-week
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
-          # Get the ISO week number
-          WEEK_NUM=$(date +%V)
-          # Check if it's an even or odd week
-          if [ $((WEEK_NUM % 2)) -eq 0 ]; then
-            # Even week: 1 PM PST (21:00 UTC)
-            EXPECTED_HOUR=21
-          else
-            # Odd week: 9 AM PST (17:00 UTC)
-            EXPECTED_HOUR=17
+          set -euo pipefail
+
+          read -r schedule_minute schedule_hour schedule_dom schedule_month schedule_day <<< "$SCHEDULE"
+
+          if [ "$schedule_minute" != "0" ] || [ "$schedule_dom" != "*" ] || [ "$schedule_month" != "*" ] || [ "$schedule_day" != "3" ]; then
+            echo "unexpected schedule: $SCHEDULE" >&2
+            exit 1
           fi
-          CURRENT_HOUR=$(date -u +%H)
-          echo "Expected hour: $EXPECTED_HOUR, Current hour: $CURRENT_HOUR"
-          if [ "$CURRENT_HOUR" -eq "$EXPECTED_HOUR" ]; then
-            echo "should_run=true" >> $GITHUB_OUTPUT
+
+          scheduled_date=$(date -u +%Y-%m-%d)
+          scheduled_time="${scheduled_date} ${schedule_hour}:00 UTC"
+          pacific_hour=$(TZ=America/Los_Angeles date -d "$scheduled_time" +%-H)
+          week_num=$(TZ=America/Los_Angeles date -d "$scheduled_time" +%V)
+          week_num=$((10#$week_num))
+
+          case "$pacific_hour" in
+            9)
+              scheduled_slot=odd
+              ;;
+            13)
+              scheduled_slot=even
+              ;;
+            *)
+              echo "Schedule $SCHEDULE maps to $pacific_hour:00 Pacific Time; skipping."
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          if [ $((week_num % 2)) -eq 0 ]; then
+            expected_slot=even
           else
-            echo "should_run=false" >> $GITHUB_OUTPUT
+            expected_slot=odd
+          fi
+
+          echo "ISO week: $week_num, schedule slot: $scheduled_slot, expected slot: $expected_slot"
+          if [ "$scheduled_slot" = "$expected_slot" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Send Slack notification

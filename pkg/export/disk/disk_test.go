@@ -76,6 +76,16 @@ func TestCreateConnection(t *testing.T) {
 			err:         fmt.Errorf("error creating connection conn4: maxAuditResults cannot be greater than the maximum allowed audit runs: 5"),
 			expectError: true,
 		},
+		{
+			name:           "Negative maxAuditResults",
+			connectionName: "conn5",
+			config: map[string]interface{}{
+				"path":            tmpPath,
+				"maxAuditResults": -1.0,
+			},
+			err:         fmt.Errorf("error creating connection conn5: maxAuditResults cannot be negative"),
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -214,6 +224,16 @@ func TestUpdateConnection(t *testing.T) {
 			},
 			expectError: true,
 			err:         fmt.Errorf("error updating connection conn1: maxAuditResults cannot be greater than the maximum allowed audit runs: 5"),
+		},
+		{
+			name:           "Negative maxAuditResults",
+			connectionName: "conn1",
+			config: map[string]interface{}{
+				"path":            t.TempDir(),
+				"maxAuditResults": -1.0,
+			},
+			expectError: true,
+			err:         fmt.Errorf("error updating connection conn1: maxAuditResults cannot be negative"),
 		},
 	}
 
@@ -2040,22 +2060,46 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 			creators   = 4
 			iterations = 20
 		)
+		var resultMu sync.Mutex
+		var unexpectedErrors []string
+		var publishSuccesses, createSuccesses, closeSuccesses int
+		recordResult := func(operation string, err error, allowedErrors ...string) {
+			resultMu.Lock()
+			defer resultMu.Unlock()
+			if err == nil {
+				switch operation {
+				case "Publish":
+					publishSuccesses++
+				case "CreateConnection":
+					createSuccesses++
+				case "CloseConnection":
+					closeSuccesses++
+				}
+				return
+			}
+			for _, allowed := range allowedErrors {
+				if strings.Contains(err.Error(), allowed) {
+					return
+				}
+			}
+			unexpectedErrors = append(unexpectedErrors, fmt.Sprintf("%s: %v", operation, err))
+		}
 
 		for i := 0; i < publishers; i++ {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
 				for j := 0; j < iterations; j++ {
-					_ = writer.Publish(ctx, connectionName, util.ExportMsg{
+					recordResult("Publish", writer.Publish(ctx, connectionName, util.ExportMsg{
 						Message: util.AuditStartedMsg,
 						ID:      fmt.Sprintf("audit-%d-%d", idx, j),
-					}, "audit")
-					_ = writer.Publish(ctx, connectionName, util.ExportMsg{
+					}, "audit"), "invalid connection")
+					recordResult("Publish", writer.Publish(ctx, connectionName, util.ExportMsg{
 						Message: "test-violation",
-					}, "audit")
-					_ = writer.Publish(ctx, connectionName, util.ExportMsg{
+					}, "audit"), "invalid connection", "failed to write violation: no file provided")
+					recordResult("Publish", writer.Publish(ctx, connectionName, util.ExportMsg{
 						Message: util.AuditCompletedMsg,
-					}, "audit")
+					}, "audit"), "invalid connection", "failed to write violation: no file provided", "error handling audit end")
 				}
 			}(i)
 		}
@@ -2066,10 +2110,10 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 				defer wg.Done()
 				updateCfg := map[string]interface{}{
 					"path":            tmpDir,
-					"maxAuditResults": 10.0,
+					"maxAuditResults": 5.0,
 				}
 				for j := 0; j < iterations; j++ {
-					_ = writer.UpdateConnection(ctx, connectionName, updateCfg)
+					recordResult("UpdateConnection", writer.UpdateConnection(ctx, connectionName, updateCfg), "not found")
 				}
 			}()
 		}
@@ -2079,7 +2123,7 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for j := 0; j < iterations; j++ {
-					_ = writer.CloseConnection(connectionName)
+					recordResult("CloseConnection", writer.CloseConnection(connectionName), "not found")
 				}
 			}()
 		}
@@ -2089,12 +2133,26 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for j := 0; j < iterations; j++ {
-					_ = writer.CreateConnection(ctx, connectionName, config)
+					recordResult("CreateConnection", writer.CreateConnection(ctx, connectionName, config))
 				}
 			}()
 		}
 
 		wg.Wait()
+		resultMu.Lock()
+		defer resultMu.Unlock()
+		if len(unexpectedErrors) > 0 {
+			t.Fatalf("unexpected concurrent operation errors: %v", unexpectedErrors)
+		}
+		if publishSuccesses == 0 {
+			t.Fatal("expected at least one successful Publish call")
+		}
+		if createSuccesses == 0 {
+			t.Fatal("expected at least one successful CreateConnection call")
+		}
+		if closeSuccesses == 0 {
+			t.Fatal("expected at least one successful CloseConnection call")
+		}
 
 		writer.mu.Lock()
 		connCount := len(writer.openConnections)

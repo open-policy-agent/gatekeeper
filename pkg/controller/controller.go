@@ -51,6 +51,11 @@ var (
 	remoteCluster   = flag.Bool("enable-remote-cluster", false, "(alpha) Enable remote cluster mode where Gatekeeper operates against a target cluster specified via --kubeconfig while running in the local cluster. Mutually exclusive with --debug-use-fake-pod.")
 )
 
+// RemoteClusterEnabled returns whether --enable-remote-cluster is set.
+func RemoteClusterEnabled() bool {
+	return remoteCluster != nil && *remoteCluster
+}
+
 type Injector interface {
 	InjectTracker(tracker *readiness.Tracker)
 
@@ -180,8 +185,6 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		if kubeconfigFlag == nil || kubeconfigFlag.Value.String() == "" {
 			return fmt.Errorf("--enable-remote-cluster requires --kubeconfig to be specified pointing to the target cluster")
 		}
-		// In remote cluster mode, the pod doesn't exist in the target cluster. Skip setting OwnerReferences.
-		util.SetSkipPodOwnerRef(true)
 	}
 
 	if deps.GetPod == nil {

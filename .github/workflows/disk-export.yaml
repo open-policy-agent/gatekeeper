@@ -15,47 +15,50 @@ permissions: read-all
 jobs:
   disk_test:
     name: "Disk export test"
-    runs-on: oracle-vm-8cpu-32gb-x86-64
-    timeout-minutes: 15
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
     steps:
-    - name: Harden Runner
-      uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
-      with:
-        egress-policy: audit
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
 
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-    - name: Bootstrap e2e
-      run: |
-        mkdir -p $GITHUB_WORKSPACE/bin
-        echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-        make e2e-bootstrap
+      - name: Bootstrap e2e
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+          make e2e-bootstrap
 
-    - name: Run e2e
-      run: |
-        make docker-buildx IMG=gatekeeper-e2e:latest
-        make e2e-build-load-externaldata-image
-        make e2e-reader-build-image
-        make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest CI=true
-        kind load docker-image --name kind gatekeeper-e2e:latest fake-reader:latest gatekeeper-crds:latest
-        kubectl create ns gatekeeper-system
+      - name: Run e2e
+        run: |
+          make docker-buildx IMG=gatekeeper-e2e:latest
+          make e2e-build-load-externaldata-image
+          make e2e-reader-build-image
+          make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest CI=true
+          kind load docker-image --name kind gatekeeper-e2e:latest fake-reader:latest gatekeeper-crds:latest
+          kubectl create ns gatekeeper-system
 
-        make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG EXPORT_BACKEND=disk FAKE_READER_IMAGE_PULL_POLICY=Never AUDIT_CONNECTION=audit-connection AUDIT_CHANNEL=audit-channel EXPORT_DISK_MOUNT=/tmp/violations EXPORT_DISK_PATH=/tmp/violations/topics MAX_AUDIT_RESULTS=3 FAKE_READER_IMAGE=fake-reader:latest
+          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG EXPORT_BACKEND=disk FAKE_READER_IMAGE_PULL_POLICY=Never AUDIT_CONNECTION=audit-connection AUDIT_CHANNEL=audit-channel EXPORT_DISK_MOUNT=/tmp/violations EXPORT_DISK_PATH=/tmp/violations/topics MAX_AUDIT_RESULTS=3 FAKE_READER_IMAGE=fake-reader:latest HELM_TIMEOUT=10m
 
-        make test-e2e ENABLE_EXPORT_TESTS=1 EXPORT_BACKEND=disk
+          make test-e2e ENABLE_EXPORT_TESTS=1 EXPORT_BACKEND=disk
 
-    - name: Save logs
-      if: ${{ always() }}
-      run: |
-        kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c manager --tail=-1 > logs-audit-manager.json
-        kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c reader --tail=-1 > logs-audit-export.json
+      - name: Save logs
+        if: ${{ always() }}
+        run: |
+          kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c manager --tail=-1 > logs-audit-manager.json || true
+          kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c reader --tail=-1 > logs-audit-export.json || true
+          kubectl get pods -A -o wide > k8s-pods.txt || true
+          kubectl get events -A --sort-by=.metadata.creationTimestamp > k8s-events.txt || true
+          kubectl describe pods -n gatekeeper-system > k8s-gatekeeper-system-pods.txt || true
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-      if: ${{ always() }}
-      with:
-        name: export-logs
-        path: |
-          logs-*.json
-
+      - name: Upload artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: export-logs
+          path: |
+            logs-*.json
+            k8s-*.txt

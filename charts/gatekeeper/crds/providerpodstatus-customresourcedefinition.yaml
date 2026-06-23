@@ -14,7 +14,6 @@ spec:
     listKind: ProviderPodStatusList
     plural: providerpodstatuses
     singular: providerpodstatus
-  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1beta1

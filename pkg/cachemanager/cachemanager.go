@@ -71,6 +71,18 @@ type CFDataClient interface {
 	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
 }
 
+// noopCFDataClient is a no-op implementation of CFDataClient used when no
+// real client is provided.
+type noopCFDataClient struct{}
+
+func (*noopCFDataClient) AddData(_ context.Context, _ interface{}) (*types.Responses, error) {
+	return &types.Responses{}, nil
+}
+
+func (*noopCFDataClient) RemoveData(_ context.Context, _ interface{}) (*types.Responses, error) {
+	return &types.Responses{}, nil
+}
+
 type registrarReplacer interface {
 	ReplaceWatch(ctx context.Context, gvks []schema.GroupVersionKind) error
 }
@@ -93,8 +105,13 @@ func NewCacheManager(config *Config) (*CacheManager, error) {
 		config.GVKAggregator = aggregator.NewGVKAggregator()
 	}
 
+	cfClient := config.CfClient
+	if cfClient == nil {
+		cfClient = &noopCFDataClient{}
+	}
+
 	cm := &CacheManager{
-		cfClient:                   config.CfClient,
+		cfClient:                   cfClient,
 		syncMetricsCache:           config.SyncMetricsCache,
 		tracker:                    config.Tracker,
 		processExcluder:            config.ProcessExcluder,
