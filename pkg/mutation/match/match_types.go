@@ -34,6 +34,10 @@ type Match struct {
 	// `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and
 	// `gatekeeper-system`.
 	ExcludedNamespaces []wildcard.Wildcard `json:"excludedNamespaces,omitempty"`
+	// Processes scopes excludedNamespaces to specific Gatekeeper processes.
+	// Accepts `audit`, `webhook`, `sync`, `mutation-webhook`, or `*`.
+	// When omitted or set to `*`, excludedNamespaces applies to all processes.
+	Processes []string `json:"processes,omitempty"`
 	// LabelSelector is the combination of two optional fields: `matchLabels`
 	// and `matchExpressions`.  These two fields provide different methods of
 	// selecting or excluding k8s objects based on the label keys and values
