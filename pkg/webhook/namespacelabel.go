@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -98,5 +99,7 @@ func GetAllExemptedNamespacesWithWildcard() []string {
 	for ns := range exemptNamespaceSuffix {
 		namespaces = append(namespaces, "*"+ns)
 	}
+	// Sort for deterministic ordering; map iteration order is not stable.
+	sort.Strings(namespaces)
 	return namespaces
 }
