@@ -199,31 +199,15 @@ func indentLines(content string, spaces int) string {
 	return strings.Join(lines, "\n")
 }
 
-type constraintTemplate struct {
-	APIVersion string `yaml:"apiVersion"`
-	Kind       string `yaml:"kind"`
-	Spec       struct {
-		Targets []target `yaml:"targets"`
-	} `yaml:"spec"`
-}
-
-type target struct {
-	Target string `yaml:"target"`
-	Code   []codeBlock `yaml:"code"`
-}
-
-type codeBlock struct {
-	Engine string `yaml:"engine"`
-	Source map[string]interface{} `yaml:"source"`
-}
-
 func injectSources(content string, regoPaths []string, celPath string) (string, error) {
-	var doc constraintTemplate
+	var doc map[string]interface{}
 	if err := yaml.Unmarshal([]byte(content), &doc); err != nil {
 		return "", fmt.Errorf("parsing template yaml: %w", err)
 	}
-	if doc.Kind != "ConstraintTemplate" {
-		return "", fmt.Errorf("expected ConstraintTemplate, got %q", doc.Kind)
+
+	kind, _ := doc["kind"].(string)
+	if kind != "ConstraintTemplate" {
+		return "", fmt.Errorf("expected ConstraintTemplate, got %q", kind)
 	}
 
 	regoBody, err := readCombinedSources(regoPaths)
@@ -240,31 +224,53 @@ func injectSources(content string, regoPaths []string, celPath string) (string, 
 		celBody = strings.TrimSuffix(string(celBytes), "\n")
 	}
 
+	spec, ok := doc["spec"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("template missing spec")
+	}
+	targets, ok := spec["targets"].([]interface{})
+	if !ok {
+		return "", fmt.Errorf("template missing spec.targets")
+	}
+
 	regoInjected := false
 	celInjected := false
-	for i := range doc.Spec.Targets {
-		for j := range doc.Spec.Targets[i].Code {
-			block := &doc.Spec.Targets[i].Code[j]
-			switch block.Engine {
+	for _, targetItem := range targets {
+		targetMap, ok := targetItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		codeBlocks, ok := targetMap["code"].([]interface{})
+		if !ok {
+			continue
+		}
+		for _, codeItem := range codeBlocks {
+			block, ok := codeItem.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			engine, _ := block["engine"].(string)
+			switch engine {
 			case "Rego":
 				if regoBody == "" {
 					continue
 				}
-				if block.Source == nil {
-					block.Source = map[string]interface{}{}
+				source, ok := block["source"].(map[string]interface{})
+				if !ok {
+					source = map[string]interface{}{}
+					block["source"] = source
 				}
-				block.Source["rego"] = regoBody
+				source["rego"] = regoBody
 				regoInjected = true
 			case "K8sNativeValidation":
 				if celBody == "" {
 					continue
 				}
-				if block.Source == nil {
-					block.Source = map[string]interface{}{}
-				}
-				if err := yaml.Unmarshal([]byte(celBody), &block.Source); err != nil {
+				var celSource map[string]interface{}
+				if err := yaml.Unmarshal([]byte(celBody), &celSource); err != nil {
 					return "", fmt.Errorf("parsing cel yaml: %w", err)
 				}
+				block["source"] = celSource
 				celInjected = true
 			}
 		}
@@ -280,7 +286,7 @@ func injectSources(content string, regoPaths []string, celPath string) (string, 
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
-	if err := encoder.Encode(&doc); err != nil {
+	if err := encoder.Encode(doc); err != nil {
 		return "", fmt.Errorf("marshaling compiled template: %w", err)
 	}
 	if err := encoder.Close(); err != nil {
@@ -310,14 +316,36 @@ func readCombinedSources(paths []string) (string, error) {
 }
 
 func validateConstraintTemplateYAML(content string) error {
-	var doc constraintTemplate
+	var doc map[string]interface{}
 	if err := yaml.Unmarshal([]byte(content), &doc); err != nil {
 		return fmt.Errorf("compiled output is not valid yaml: %w", err)
 	}
-	if doc.APIVersion == "" || doc.Kind != "ConstraintTemplate" {
+
+	apiVersion, _ := doc["apiVersion"].(string)
+	kind, _ := doc["kind"].(string)
+	if apiVersion == "" || kind != "ConstraintTemplate" {
 		return fmt.Errorf("compiled output is not a ConstraintTemplate manifest")
 	}
-	if len(doc.Spec.Targets) == 0 {
+
+	metadata, ok := doc["metadata"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("compiled ConstraintTemplate is missing metadata")
+	}
+	name, _ := metadata["name"].(string)
+	if name == "" {
+		return fmt.Errorf("compiled ConstraintTemplate is missing metadata.name")
+	}
+
+	spec, ok := doc["spec"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("compiled ConstraintTemplate is missing spec")
+	}
+	if _, ok := spec["crd"].(map[string]interface{}); !ok {
+		return fmt.Errorf("compiled ConstraintTemplate is missing spec.crd")
+	}
+
+	targets, ok := spec["targets"].([]interface{})
+	if !ok || len(targets) == 0 {
 		return fmt.Errorf("compiled ConstraintTemplate has no targets")
 	}
 	return nil

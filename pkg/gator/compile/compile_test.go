@@ -67,6 +67,12 @@ func TestCompileInjectRegoIntoScaffold(t *testing.T) {
 	if !strings.Contains(output, "package scaffoldpolicy") {
 		t.Fatalf("expected injected rego in output, got:\n%s", output)
 	}
+	if !strings.Contains(output, "name: scaffoldpolicy") {
+		t.Fatalf("expected metadata.name preserved in output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "kind: ScaffoldPolicy") {
+		t.Fatalf("expected spec.crd.spec.names.kind preserved in output, got:\n%s", output)
+	}
 }
 
 func TestCompileMissingTemplate(t *testing.T) {
