@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -25,6 +26,7 @@ type Matchable struct {
 	Object    client.Object
 	Namespace *corev1.Namespace
 	Source    types.SourceType
+	Process   process.Process
 }
 
 // Matches verifies if the given object belonging to the given namespace
@@ -140,11 +142,28 @@ func excludedNamespacesMatch(match *Match, target *Matchable) (bool, error) {
 
 	for _, n := range match.ExcludedNamespaces {
 		if n.Matches(namespace) {
-			return false, nil
+			if excludedNamespacesAppliesToProcess(match.Processes, target.Process) {
+				return false, nil
+			}
+			return true, nil
 		}
 	}
 
 	return true, nil
+}
+
+func excludedNamespacesAppliesToProcess(processes []string, current process.Process) bool {
+	if len(processes) == 0 {
+		return true
+	}
+
+	for _, p := range processes {
+		if p == string(process.Star) || process.Process(p) == current {
+			return true
+		}
+	}
+
+	return false
 }
 
 func namespacesMatch(match *Match, target *Matchable) (bool, error) {

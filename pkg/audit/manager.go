@@ -609,8 +609,9 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		}
 
 		au := &target.AugmentedUnstructured{
-			Object:    obj,
-			Namespace: ns,
+			Object:           obj,
+			Namespace:        ns,
+			EnforcementPoint: util.AuditEnforcementPoint,
 		}
 		opts := []reviews.ReviewOpt{
 			reviews.EnforcementPoint(util.AuditEnforcementPoint),
@@ -705,9 +706,10 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				ns = &nsRef
 			}
 			augmentedObj := target.AugmentedUnstructured{
-				Object:    *objFile,
-				Namespace: ns,
-				Source:    mutationtypes.SourceTypeOriginal,
+				Object:           *objFile,
+				Namespace:        ns,
+				Source:           mutationtypes.SourceTypeOriginal,
+				EnforcementPoint: util.AuditEnforcementPoint,
 			}
 
 			opts := []reviews.ReviewOpt{
@@ -737,9 +739,10 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			}
 			for _, resultant := range resultants {
 				au := target.AugmentedUnstructured{
-					Object:    *resultant.Obj,
-					Namespace: ns,
-					Source:    mutationtypes.SourceTypeGenerated,
+					Object:           *resultant.Obj,
+					Namespace:        ns,
+					Source:           mutationtypes.SourceTypeGenerated,
+					EnforcementPoint: util.AuditEnforcementPoint,
 				}
 				resultantOpts := []reviews.ReviewOpt{
 					reviews.EnforcementPoint(util.AuditEnforcementPoint),
