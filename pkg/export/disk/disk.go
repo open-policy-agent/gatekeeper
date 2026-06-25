@@ -50,11 +50,12 @@ type Writer struct {
 	mu                           sync.Mutex
 	openConnections              map[string]Connection
 	connectionLocks              map[string]*sync.Mutex
+	cleanupPaths                 map[string]struct{}
 	closedConnections            map[string]FailedConnection
 	cleanupDone                  chan struct{}
 	cleanupOnce                  sync.Once
 	cleanupStopped               bool
-	closeAndRemoveFilesWithRetry func(conn Connection) error
+	closeAndRemoveFilesWithRetry func(conn *Connection) error
 }
 
 const (
@@ -73,25 +74,66 @@ const (
 )
 
 var Connections = &Writer{
-	openConnections:   make(map[string]Connection),
-	closedConnections: make(map[string]FailedConnection),
-	cleanupDone:       make(chan struct{}),
-	closeAndRemoveFilesWithRetry: func(conn Connection) error {
-		return wait.ExponentialBackoff(retry.DefaultBackoff, func() (bool, error) {
-			if conn.File != nil {
-				if err := conn.unlockAndCloseFile(); err != nil {
-					return false, fmt.Errorf("error closing file: %w", err)
-				}
-			}
-			if err := os.RemoveAll(conn.Path); err != nil {
-				return false, fmt.Errorf("error deleting violations stored at old path: %w", err)
-			}
-			return true, nil
-		})
-	},
+	openConnections:              make(map[string]Connection),
+	closedConnections:            make(map[string]FailedConnection),
+	cleanupDone:                  make(chan struct{}),
+	closeAndRemoveFilesWithRetry: closeAndRemoveFilesWithRetry,
 }
 
 var log = logf.Log.WithName("disk-driver").WithValues(logging.Process, "export")
+
+func closeAndRemoveFilesWithRetry(conn *Connection) error {
+	return closeAndRemoveFilesWithBackoff(conn, retry.DefaultBackoff, os.RemoveAll)
+}
+
+func closeFileWithBackoff(conn *Connection, backoff wait.Backoff) error {
+	if conn.File == nil {
+		return nil
+	}
+	var lastErr error
+	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
+		if err := conn.unlockAndCloseFile(); err != nil {
+			lastErr = fmt.Errorf("error closing file: %w", err)
+			return false, nil
+		}
+		conn.File = nil
+		lastErr = nil
+		return true, nil
+	})
+	if err != nil {
+		if lastErr != nil {
+			return lastErr
+		}
+		return err
+	}
+	return nil
+}
+
+func closeAndRemoveFilesWithBackoff(conn *Connection, backoff wait.Backoff, removeAll func(string) error) error {
+	var lastErr error
+	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
+		if conn.File != nil {
+			if err := conn.unlockAndCloseFile(); err != nil {
+				lastErr = fmt.Errorf("error closing file: %w", err)
+				return false, nil
+			}
+			conn.File = nil
+		}
+		if err := removeAll(conn.Path); err != nil {
+			lastErr = fmt.Errorf("error deleting violations stored at old path: %w", err)
+			return false, nil
+		}
+		lastErr = nil
+		return true, nil
+	})
+	if err != nil {
+		if lastErr != nil {
+			return lastErr
+		}
+		return err
+	}
+	return nil
+}
 
 func (r *Writer) connectionLockLocked(connectionName string) *sync.Mutex {
 	if r.connectionLocks == nil {
@@ -103,23 +145,77 @@ func (r *Writer) connectionLockLocked(connectionName string) *sync.Mutex {
 	return r.connectionLocks[connectionName]
 }
 
-func (r *Writer) getOrCreateConnectionLock(connectionName string) *sync.Mutex {
+func (r *Writer) connectionLock(connectionName string, createIfMissing bool) (*sync.Mutex, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.connectionLockLocked(connectionName)
-}
-
-func (r *Writer) getExistingConnectionLock(connectionName string) (*sync.Mutex, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, exists := r.openConnections[connectionName]; !exists {
-		return nil, false
+	if !createIfMissing {
+		if _, exists := r.openConnections[connectionName]; !exists {
+			return nil, false
+		}
 	}
 	return r.connectionLockLocked(connectionName), true
 }
 
+// acquireCurrentConnectionLock returns the current per-connection lock held.
+// The caller must unlock the returned mutex.
+//
+// A connection lock can become stale if CloseConnection removes it after a
+// caller observes the lock but before the caller acquires it. Re-checking under
+// r.mu after acquiring the lock prevents callers from mutating connection state
+// while holding a lock that is no longer registered for connectionName.
+func (r *Writer) acquireCurrentConnectionLock(connectionName string, createIfMissing bool) (*sync.Mutex, bool) {
+	for {
+		connLock, exists := r.connectionLock(connectionName, createIfMissing)
+		if !exists {
+			return nil, false
+		}
+
+		connLock.Lock()
+
+		r.mu.Lock()
+		isCurrent := r.connectionLockIsCurrentLocked(connectionName, connLock)
+		r.mu.Unlock()
+		if isCurrent {
+			return connLock, true
+		}
+
+		connLock.Unlock()
+	}
+}
+
 func (r *Writer) connectionLockIsCurrentLocked(connectionName string, lock *sync.Mutex) bool {
 	return r.connectionLocks != nil && r.connectionLocks[connectionName] == lock
+}
+
+func (r *Writer) pathCleanupInProgressLocked(cleanupPath string) bool {
+	_, exists := r.cleanupPaths[cleanupPath]
+	return exists
+}
+
+func (r *Writer) pathInUseLocked(cleanupPath string) bool {
+	for _, conn := range r.openConnections {
+		if conn.Path == cleanupPath {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Writer) reserveCleanupPathLocked(cleanupPath string) bool {
+	if r.pathInUseLocked(cleanupPath) || r.pathCleanupInProgressLocked(cleanupPath) {
+		return false
+	}
+	if r.cleanupPaths == nil {
+		r.cleanupPaths = make(map[string]struct{})
+	}
+	r.cleanupPaths[cleanupPath] = struct{}{}
+	return true
+}
+
+func (r *Writer) releaseCleanupPath(cleanupPath string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.cleanupPaths, cleanupPath)
 }
 
 func (r *Writer) CreateConnection(_ context.Context, connectionName string, config interface{}) error {
@@ -128,24 +224,21 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
 	}
 
-	for {
-		connLock := r.getOrCreateConnectionLock(connectionName)
-		connLock.Lock()
+	connLock, _ := r.acquireCurrentConnectionLock(connectionName, true)
+	defer connLock.Unlock()
 
-		r.mu.Lock()
-		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
-			r.openConnections[connectionName] = Connection{
-				Path:                path,
-				MaxAuditResults:     int(maxResults),
-				ClosedConnectionTTL: ttl,
-			}
-			r.mu.Unlock()
-			connLock.Unlock()
-			return nil
-		}
+	r.mu.Lock()
+	if r.pathCleanupInProgressLocked(path) {
 		r.mu.Unlock()
-		connLock.Unlock()
+		return fmt.Errorf("error creating connection %s: path %s is being cleaned up", connectionName, path)
 	}
+	r.openConnections[connectionName] = Connection{
+		Path:                path,
+		MaxAuditResults:     int(maxResults),
+		ClosedConnectionTTL: ttl,
+	}
+	r.mu.Unlock()
+	return nil
 }
 
 func (r *Writer) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
@@ -154,71 +247,48 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
 	}
 
-	for {
-		connLock, exists := r.getExistingConnectionLock(connectionName)
-		if !exists {
-			return fmt.Errorf("connection %s for disk driver not found", connectionName)
-		}
-		connLock.Lock()
-
-		r.mu.Lock()
-		conn, exists := r.openConnections[connectionName]
-		if !exists {
-			r.mu.Unlock()
-			connLock.Unlock()
-			return fmt.Errorf("connection %s for disk driver not found", connectionName)
-		}
-		if !r.connectionLockIsCurrentLocked(connectionName, connLock) {
-			r.mu.Unlock()
-			connLock.Unlock()
-			continue
-		}
-
-		var needsCleanup bool
-		if conn.Path != path {
-			delete(r.openConnections, connectionName)
-			needsCleanup = true
-		}
-		r.mu.Unlock()
-
-		if needsCleanup {
-			if err := r.closeAndRemoveFilesWithRetry(conn); err != nil {
-				// Re-add the old connection only if this update still owns the
-				// current lock and no newer connection was installed.
-				r.mu.Lock()
-				if _, exists := r.openConnections[connectionName]; !exists && r.connectionLockIsCurrentLocked(connectionName, connLock) {
-					r.openConnections[connectionName] = conn
-				}
-				r.mu.Unlock()
-				connLock.Unlock()
-				return fmt.Errorf("error updating connection %s, %w", connectionName, err)
-			}
-			conn.Path = path
-			conn.File = nil
-		}
-
-		conn.MaxAuditResults = int(maxResults)
-		conn.ClosedConnectionTTL = ttl
-
-		r.mu.Lock()
-		if !r.connectionLockIsCurrentLocked(connectionName, connLock) {
-			r.mu.Unlock()
-			connLock.Unlock()
-			continue
-		}
-		r.openConnections[connectionName] = conn
-		r.mu.Unlock()
-		connLock.Unlock()
-		return nil
+	connLock, exists := r.acquireCurrentConnectionLock(connectionName, false)
+	if !exists {
+		return fmt.Errorf("connection %s for disk driver not found", connectionName)
 	}
+	defer connLock.Unlock()
+
+	r.mu.Lock()
+	conn, exists := r.openConnections[connectionName]
+	if !exists || !r.connectionLockIsCurrentLocked(connectionName, connLock) {
+		r.mu.Unlock()
+		return fmt.Errorf("connection %s for disk driver not found", connectionName)
+	}
+	if conn.Path != path && r.pathCleanupInProgressLocked(path) {
+		r.mu.Unlock()
+		return fmt.Errorf("error updating connection %s: path %s is being cleaned up", connectionName, path)
+	}
+	r.mu.Unlock()
+
+	if conn.Path != path {
+		// Keep the old connection visible while cleanup runs so concurrent callers
+		// can find the current lock and wait instead of observing a transient miss.
+		if err := r.closeAndRemoveFilesWithRetry(&conn); err != nil {
+			return fmt.Errorf("error updating connection %s, %w", connectionName, err)
+		}
+		conn.Path = path
+		conn.File = nil
+	}
+
+	conn.MaxAuditResults = int(maxResults)
+	conn.ClosedConnectionTTL = ttl
+
+	r.mu.Lock()
+	r.openConnections[connectionName] = conn
+	r.mu.Unlock()
+	return nil
 }
 
 func (r *Writer) CloseConnection(connectionName string) error {
-	connLock, exists := r.getExistingConnectionLock(connectionName)
+	connLock, exists := r.acquireCurrentConnectionLock(connectionName, false)
 	if !exists {
 		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
-	connLock.Lock()
 	defer connLock.Unlock()
 
 	r.mu.Lock()
@@ -230,7 +300,7 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	delete(r.openConnections, connectionName)
 	r.mu.Unlock()
 
-	err := r.closeAndRemoveFilesWithRetry(conn)
+	err := r.closeAndRemoveFilesWithRetry(&conn)
 	if err != nil {
 		now := time.Now()
 		r.mu.Lock()
@@ -266,11 +336,10 @@ func (r *Writer) CloseConnection(connectionName string) error {
 }
 
 func (r *Writer) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
-	connLock, exists := r.getExistingConnectionLock(connectionName)
+	connLock, exists := r.acquireCurrentConnectionLock(connectionName, false)
 	if !exists {
 		return fmt.Errorf("invalid connection: %s not found for disk driver", connectionName)
 	}
-	connLock.Lock()
 	defer connLock.Unlock()
 
 	r.mu.Lock()
@@ -553,12 +622,21 @@ func (r *Writer) retryFailedConnections() {
 
 	// Collect connections that need retry and release the lock before I/O.
 	type retryItem struct {
-		name string
-		conn FailedConnection
+		name      string
+		conn      FailedConnection
+		closeOnly bool
 	}
 	items := make([]retryItem, 0, len(toRetry))
 	for _, name := range toRetry {
-		items = append(items, retryItem{name: name, conn: r.closedConnections[name]})
+		failedConn := r.closedConnections[name]
+		if r.pathInUseLocked(failedConn.Path) {
+			items = append(items, retryItem{name: name, conn: failedConn, closeOnly: true})
+			continue
+		}
+		if !r.reserveCleanupPathLocked(failedConn.Path) {
+			continue
+		}
+		items = append(items, retryItem{name: name, conn: failedConn})
 	}
 	r.mu.Unlock()
 
@@ -570,7 +648,13 @@ func (r *Writer) retryFailedConnections() {
 	}
 	results := make([]retryResult, 0, len(items))
 	for i := range items {
-		err := r.closeAndRemoveFilesWithRetry(items[i].conn.Connection)
+		var err error
+		if items[i].closeOnly {
+			err = closeFileWithBackoff(&items[i].conn.Connection, retry.DefaultBackoff)
+		} else {
+			err = r.closeAndRemoveFilesWithRetry(&items[i].conn.Connection)
+			r.releaseCleanupPath(items[i].conn.Path)
+		}
 		if err == nil {
 			log.Info("Successfully closed previously failed connection", "connection", items[i].name)
 			results = append(results, retryResult{name: items[i].name, ok: true})

@@ -130,7 +130,7 @@ func TestUpdateConnection(t *testing.T) {
 		openConnections:   make(map[string]Connection),
 		closedConnections: make(map[string]FailedConnection),
 		cleanupDone:       make(chan struct{}),
-		closeAndRemoveFilesWithRetry: func(conn Connection) error {
+		closeAndRemoveFilesWithRetry: func(conn *Connection) error {
 			return wait.ExponentialBackoff(retry.DefaultBackoff, func() (bool, error) {
 				if conn.File != nil {
 					if err := conn.unlockAndCloseFile(); err != nil {
@@ -274,12 +274,92 @@ func TestUpdateConnection(t *testing.T) {
 	}
 }
 
+func TestUpdateConnectionKeepsConnectionVisibleDuringPathCleanup(t *testing.T) {
+	oldPath := t.TempDir()
+	newPath := t.TempDir()
+	cleanupStarted := make(chan struct{})
+	allowCleanup := make(chan struct{})
+	var cleanupStartedOnce sync.Once
+	var allowCleanupOnce sync.Once
+	releaseCleanup := func() {
+		allowCleanupOnce.Do(func() {
+			close(allowCleanup)
+		})
+	}
+	defer releaseCleanup()
+
+	writer := &Writer{
+		openConnections:   make(map[string]Connection),
+		closedConnections: make(map[string]FailedConnection),
+		cleanupDone:       make(chan struct{}),
+		closeAndRemoveFilesWithRetry: func(conn *Connection) error {
+			if conn.Path == oldPath {
+				cleanupStartedOnce.Do(func() {
+					close(cleanupStarted)
+				})
+				<-allowCleanup
+			}
+			return nil
+		},
+	}
+
+	const connectionName = "path-update-conn"
+	oldConfig := map[string]interface{}{
+		"path":            oldPath,
+		"maxAuditResults": 5.0,
+	}
+	newConfig := map[string]interface{}{
+		"path":            newPath,
+		"maxAuditResults": 4.0,
+	}
+
+	if err := writer.CreateConnection(context.Background(), connectionName, oldConfig); err != nil {
+		t.Fatalf("CreateConnection() error = %v", err)
+	}
+
+	updateErr := make(chan error, 1)
+	go func() {
+		updateErr <- writer.UpdateConnection(context.Background(), connectionName, newConfig)
+	}()
+
+	select {
+	case <-cleanupStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for path cleanup to start")
+	}
+
+	writer.mu.Lock()
+	_, exists := writer.openConnections[connectionName]
+	writer.mu.Unlock()
+	if !exists {
+		t.Fatalf("connection %s disappeared while path cleanup was in progress", connectionName)
+	}
+
+	releaseCleanup()
+
+	select {
+	case err := <-updateErr:
+		if err != nil {
+			t.Fatalf("UpdateConnection() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for UpdateConnection to finish")
+	}
+
+	writer.mu.Lock()
+	conn := writer.openConnections[connectionName]
+	writer.mu.Unlock()
+	if conn.Path != newPath {
+		t.Fatalf("expected path %s, got %s", newPath, conn.Path)
+	}
+}
+
 func TestCloseConnection(t *testing.T) {
 	writer := &Writer{
 		openConnections:   make(map[string]Connection),
 		closedConnections: make(map[string]FailedConnection),
 		cleanupDone:       make(chan struct{}),
-		closeAndRemoveFilesWithRetry: func(conn Connection) error {
+		closeAndRemoveFilesWithRetry: func(conn *Connection) error {
 			return wait.ExponentialBackoff(retry.DefaultBackoff, func() (bool, error) {
 				if conn.File != nil {
 					if err := conn.unlockAndCloseFile(); err != nil {
@@ -351,7 +431,7 @@ func TestCloseConnection(t *testing.T) {
 				writer.openConnections["failing-conn"] = Connection{
 					Path: tmpDir,
 				}
-				writer.closeAndRemoveFilesWithRetry = func(_ Connection) error {
+				writer.closeAndRemoveFilesWithRetry = func(_ *Connection) error {
 					return fmt.Errorf("forced failure")
 				}
 				return nil
@@ -1126,7 +1206,7 @@ func TestRetryFailedConnections(t *testing.T) {
 					RetryCount:  0,
 					NextRetryAt: time.Now().Add(-1 * time.Second),
 				}
-				writer.closeAndRemoveFilesWithRetry = func(_ Connection) error {
+				writer.closeAndRemoveFilesWithRetry = func(_ *Connection) error {
 					return nil
 				}
 			},
@@ -1146,7 +1226,7 @@ func TestRetryFailedConnections(t *testing.T) {
 					RetryCount:  1,
 					NextRetryAt: time.Now().Add(-1 * time.Second),
 				}
-				writer.closeAndRemoveFilesWithRetry = func(_ Connection) error {
+				writer.closeAndRemoveFilesWithRetry = func(_ *Connection) error {
 					return fmt.Errorf("forced failure")
 				}
 			},
@@ -1173,7 +1253,7 @@ func TestRetryFailedConnections(t *testing.T) {
 					RetryCount:  maxRetryAttempts,
 					NextRetryAt: time.Now().Add(-1 * time.Second),
 				}
-				writer.closeAndRemoveFilesWithRetry = func(_ Connection) error {
+				writer.closeAndRemoveFilesWithRetry = func(_ *Connection) error {
 					t.Error("closeAndRemoveFilesWithRetry should not be called for max retry connections")
 					return nil
 				}
@@ -1194,7 +1274,7 @@ func TestRetryFailedConnections(t *testing.T) {
 					RetryCount:  0,
 					NextRetryAt: time.Now().Add(-1 * time.Second),
 				}
-				writer.closeAndRemoveFilesWithRetry = func(_ Connection) error {
+				writer.closeAndRemoveFilesWithRetry = func(_ *Connection) error {
 					t.Error("closeAndRemoveFilesWithRetry should not be called for expired connections")
 					return nil
 				}
@@ -1215,7 +1295,7 @@ func TestRetryFailedConnections(t *testing.T) {
 					RetryCount:  0,
 					NextRetryAt: time.Now().Add(1 * time.Minute),
 				}
-				writer.closeAndRemoveFilesWithRetry = func(_ Connection) error {
+				writer.closeAndRemoveFilesWithRetry = func(_ *Connection) error {
 					t.Error("closeAndRemoveFilesWithRetry should not be called when NextRetryAt is in future")
 					return nil
 				}
@@ -1257,7 +1337,7 @@ func TestRetryFailedConnections(t *testing.T) {
 					NextRetryAt: now.Add(1 * time.Minute),
 				}
 
-				writer.closeAndRemoveFilesWithRetry = func(conn Connection) error {
+				writer.closeAndRemoveFilesWithRetry = func(conn *Connection) error {
 					if strings.Contains(conn.Path, "success") {
 						return nil
 					}
@@ -1291,7 +1371,7 @@ func TestRetryFailedConnections(t *testing.T) {
 				closedConnections: make(map[string]FailedConnection),
 				cleanupDone:       make(chan struct{}),
 				cleanupStopped:    false,
-				closeAndRemoveFilesWithRetry: func(_ Connection) error {
+				closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 					return nil
 				},
 			}
@@ -1346,7 +1426,7 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 			cleanupDone:       make(chan struct{}),
 			cleanupOnce:       sync.Once{},
 			cleanupStopped:    false,
-			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+			closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 				return nil
 			},
 		}
@@ -1394,7 +1474,7 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 			cleanupDone:       make(chan struct{}),
 			cleanupOnce:       sync.Once{},
 			cleanupStopped:    false,
-			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+			closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 				return nil
 			},
 		}
@@ -1441,7 +1521,7 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 			cleanupDone:       make(chan struct{}),
 			cleanupOnce:       sync.Once{},
 			cleanupStopped:    false,
-			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+			closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 				return nil
 			},
 		}
@@ -1473,7 +1553,7 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 			t.Error("Expected cleanup to be stopped after first phase")
 		}
 
-		writer.closeAndRemoveFilesWithRetry = func(_ Connection) error {
+		writer.closeAndRemoveFilesWithRetry = func(_ *Connection) error {
 			return fmt.Errorf("simulated failure")
 		}
 
@@ -1511,6 +1591,65 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 	})
 }
 
+func TestCloseAndRemoveFilesWithBackoffRetriesRemoveAfterClosingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	file, err := os.CreateTemp(tmpDir, "cleanup")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatalf("Flock() error = %v", err)
+	}
+
+	removeCalls := 0
+	conn := &Connection{Path: tmpDir, File: file}
+	err = closeAndRemoveFilesWithBackoff(conn, wait.Backoff{
+		Steps:    3,
+		Duration: time.Nanosecond,
+		Factor:   1,
+		Jitter:   0,
+	}, func(string) error {
+		removeCalls++
+		if removeCalls == 1 {
+			return fmt.Errorf("transient remove failure")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("closeAndRemoveFilesWithBackoff() error = %v", err)
+	}
+	if removeCalls != 2 {
+		t.Fatalf("expected 2 remove attempts, got %d", removeCalls)
+	}
+	if conn.File != nil {
+		t.Fatal("expected file to remain nil after cleanup succeeds")
+	}
+
+	file, err = os.CreateTemp(tmpDir, "cleanup")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatalf("Flock() error = %v", err)
+	}
+
+	conn = &Connection{Path: tmpDir, File: file}
+	err = closeAndRemoveFilesWithBackoff(conn, wait.Backoff{
+		Steps:    1,
+		Duration: time.Nanosecond,
+		Factor:   1,
+		Jitter:   0,
+	}, func(string) error {
+		return fmt.Errorf("persistent remove failure")
+	})
+	if err == nil {
+		t.Fatal("expected closeAndRemoveFilesWithBackoff() to fail")
+	}
+	if conn.File != nil {
+		t.Fatal("expected file to remain nil after close succeeds but remove fails")
+	}
+}
+
 func TestCloseConnectionWithFailedRetries(t *testing.T) {
 	t.Run("Failed close adds connection to closedConnections", func(t *testing.T) {
 		writer := &Writer{
@@ -1518,7 +1657,7 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
-			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+			closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 				return fmt.Errorf("simulated failure")
 			},
 		}
@@ -1563,6 +1702,65 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 		}
 	})
 
+	t.Run("Retry skips cleanup path reused by active connection", func(t *testing.T) {
+		cleanupErr := fmt.Errorf("simulated failure")
+		writer := &Writer{
+			mu:                sync.Mutex{},
+			openConnections:   make(map[string]Connection),
+			closedConnections: make(map[string]FailedConnection),
+			cleanupDone:       make(chan struct{}),
+			closeAndRemoveFilesWithRetry: func(conn *Connection) error {
+				if conn.Path == "" {
+					t.Fatal("cleanup called with empty path")
+				}
+				return cleanupErr
+			},
+		}
+
+		ctx := context.Background()
+		connectionName := "reused-path-conn"
+		config := map[string]interface{}{
+			"path":            t.TempDir(),
+			"maxAuditResults": 5.0,
+		}
+
+		if err := writer.CreateConnection(ctx, connectionName, config); err != nil {
+			t.Fatalf("CreateConnection() error = %v", err)
+		}
+		if err := writer.CloseConnection(connectionName); err == nil {
+			t.Fatal("expected CloseConnection() to fail")
+		}
+		if err := writer.CreateConnection(ctx, connectionName, config); err != nil {
+			t.Fatalf("CreateConnection() after failed close error = %v", err)
+		}
+
+		writer.closeAndRemoveFilesWithRetry = func(conn *Connection) error {
+			if conn.Path == config["path"] {
+				t.Fatalf("stale cleanup attempted active path %s", conn.Path)
+			}
+			return nil
+		}
+
+		writer.mu.Lock()
+		for name, failedConn := range writer.closedConnections {
+			failedConn.NextRetryAt = time.Now().Add(-time.Second)
+			writer.closedConnections[name] = failedConn
+		}
+		writer.mu.Unlock()
+
+		writer.retryFailedConnections()
+
+		writer.mu.Lock()
+		_, exists := writer.openConnections[connectionName]
+		writer.mu.Unlock()
+		if !exists {
+			t.Fatalf("active connection %s was removed", connectionName)
+		}
+		if closedConnectionExists(writer, connectionName) {
+			t.Fatalf("stale failed connection should be dropped while path is active")
+		}
+	})
+
 	t.Run("Background cleanup retries failed connections", func(t *testing.T) {
 		callCount := 0
 		writer := &Writer{
@@ -1570,7 +1768,7 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
-			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+			closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 				callCount++
 				if callCount <= 2 {
 					return fmt.Errorf("retry %d failed", callCount)
@@ -1656,7 +1854,7 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
-			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+			closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 				return fmt.Errorf("always fails")
 			},
 		}
@@ -1691,7 +1889,7 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
-			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+			closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 				return fmt.Errorf("not called")
 			},
 		}
@@ -1829,7 +2027,7 @@ func TestConnectionTTL(t *testing.T) {
 				openConnections:   make(map[string]Connection),
 				closedConnections: make(map[string]FailedConnection),
 				cleanupDone:       make(chan struct{}),
-				closeAndRemoveFilesWithRetry: func(_ Connection) error {
+				closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 					return nil
 				},
 			}
@@ -1867,7 +2065,7 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
-			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+			closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 				return fmt.Errorf("always fail")
 			},
 		}
@@ -1920,7 +2118,7 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
-			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+			closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 				return fmt.Errorf("always fail")
 			},
 		}
@@ -1961,7 +2159,7 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
-			closeAndRemoveFilesWithRetry: func(_ Connection) error {
+			closeAndRemoveFilesWithRetry: func(_ *Connection) error {
 				return fmt.Errorf("always fail")
 			},
 		}
@@ -2033,7 +2231,7 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 			openConnections:   make(map[string]Connection),
 			closedConnections: make(map[string]FailedConnection),
 			cleanupDone:       make(chan struct{}),
-			closeAndRemoveFilesWithRetry: func(conn Connection) error {
+			closeAndRemoveFilesWithRetry: func(conn *Connection) error {
 				// Simulate cleanup work; always succeed.
 				return nil
 			},
