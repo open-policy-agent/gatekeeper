@@ -288,34 +288,21 @@ func TestUpdateConnectionKeepsConnectionVisibleDuringPathCleanup(t *testing.T) {
 	}
 	defer releaseCleanup()
 
-	writer := &Writer{
-		openConnections:   make(map[string]Connection),
-		closedConnections: make(map[string]FailedConnection),
-		cleanupDone:       make(chan struct{}),
-		closeAndRemoveFilesWithRetry: func(conn *Connection) error {
-			if conn.Path == oldPath {
-				cleanupStartedOnce.Do(func() {
-					close(cleanupStarted)
-				})
-				<-allowCleanup
-			}
-			return nil
-		},
-	}
+	writer := newTestWriter(func(conn *Connection) error {
+		if conn.Path == oldPath {
+			cleanupStartedOnce.Do(func() {
+				close(cleanupStarted)
+			})
+			<-allowCleanup
+		}
+		return nil
+	})
 
 	const connectionName = "path-update-conn"
-	oldConfig := map[string]interface{}{
-		"path":            oldPath,
-		"maxAuditResults": 5.0,
-	}
-	newConfig := map[string]interface{}{
-		"path":            newPath,
-		"maxAuditResults": 4.0,
-	}
+	oldConfig := diskConfig(oldPath, 5.0)
+	newConfig := diskConfig(newPath, 4.0)
 
-	if err := writer.CreateConnection(context.Background(), connectionName, oldConfig); err != nil {
-		t.Fatalf("CreateConnection() error = %v", err)
-	}
+	requireCreateConnection(t, writer, connectionName, oldConfig)
 
 	updateErr := make(chan error, 1)
 	go func() {
@@ -328,10 +315,7 @@ func TestUpdateConnectionKeepsConnectionVisibleDuringPathCleanup(t *testing.T) {
 		t.Fatal("timed out waiting for path cleanup to start")
 	}
 
-	writer.mu.Lock()
-	_, exists := writer.openConnections[connectionName]
-	writer.mu.Unlock()
-	if !exists {
+	if !openConnectionExists(writer, connectionName) {
 		t.Fatalf("connection %s disappeared while path cleanup was in progress", connectionName)
 	}
 
@@ -1704,35 +1688,21 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 
 	t.Run("Retry skips cleanup path reused by active connection", func(t *testing.T) {
 		cleanupErr := fmt.Errorf("simulated failure")
-		writer := &Writer{
-			mu:                sync.Mutex{},
-			openConnections:   make(map[string]Connection),
-			closedConnections: make(map[string]FailedConnection),
-			cleanupDone:       make(chan struct{}),
-			closeAndRemoveFilesWithRetry: func(conn *Connection) error {
-				if conn.Path == "" {
-					t.Fatal("cleanup called with empty path")
-				}
-				return cleanupErr
-			},
-		}
+		writer := newTestWriter(func(conn *Connection) error {
+			if conn.Path == "" {
+				t.Fatal("cleanup called with empty path")
+			}
+			return cleanupErr
+		})
 
-		ctx := context.Background()
 		connectionName := "reused-path-conn"
-		config := map[string]interface{}{
-			"path":            t.TempDir(),
-			"maxAuditResults": 5.0,
-		}
+		config := diskConfig(t.TempDir(), 5.0)
 
-		if err := writer.CreateConnection(ctx, connectionName, config); err != nil {
-			t.Fatalf("CreateConnection() error = %v", err)
-		}
+		requireCreateConnection(t, writer, connectionName, config)
 		if err := writer.CloseConnection(connectionName); err == nil {
 			t.Fatal("expected CloseConnection() to fail")
 		}
-		if err := writer.CreateConnection(ctx, connectionName, config); err != nil {
-			t.Fatalf("CreateConnection() after failed close error = %v", err)
-		}
+		requireCreateConnection(t, writer, connectionName, config)
 
 		writer.closeAndRemoveFilesWithRetry = func(conn *Connection) error {
 			if conn.Path == config["path"] {
@@ -1741,19 +1711,11 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 			return nil
 		}
 
-		writer.mu.Lock()
-		for name, failedConn := range writer.closedConnections {
-			failedConn.NextRetryAt = time.Now().Add(-time.Second)
-			writer.closedConnections[name] = failedConn
-		}
-		writer.mu.Unlock()
+		markClosedConnectionsReady(writer)
 
 		writer.retryFailedConnections()
 
-		writer.mu.Lock()
-		_, exists := writer.openConnections[connectionName]
-		writer.mu.Unlock()
-		if !exists {
+		if !openConnectionExists(writer, connectionName) {
 			t.Fatalf("active connection %s was removed", connectionName)
 		}
 		if closedConnectionExists(writer, connectionName) {
@@ -2226,29 +2188,15 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 	t.Run("concurrent Publish, UpdateConnection, CloseConnection, and CreateConnection", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		writer := &Writer{
-			mu:                sync.Mutex{},
-			openConnections:   make(map[string]Connection),
-			closedConnections: make(map[string]FailedConnection),
-			cleanupDone:       make(chan struct{}),
-			closeAndRemoveFilesWithRetry: func(conn *Connection) error {
-				// Simulate cleanup work; always succeed.
-				return nil
-			},
-		}
+		writer := newTestWriter(nil)
 
 		ctx := context.Background()
-		config := map[string]interface{}{
-			"path":            tmpDir,
-			"maxAuditResults": 5.0,
-		}
+		config := diskConfig(tmpDir, 5.0)
 
 		const connectionName = "concurrent-test"
 
 		// Create the initial connection so Publish / Update have something to work with.
-		if err := writer.CreateConnection(ctx, connectionName, config); err != nil {
-			t.Fatalf("CreateConnection() error = %v", err)
-		}
+		requireCreateConnection(t, writer, connectionName, config)
 
 		var wg sync.WaitGroup
 		const (
