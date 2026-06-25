@@ -2,6 +2,8 @@ package disk
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -48,4 +50,20 @@ func openConnectionExists(writer *Writer, connectionName string) bool {
 	defer writer.mu.Unlock()
 	_, exists := writer.openConnections[connectionName]
 	return exists
+}
+
+func listFiles(dir string) ([]string, error) {
+	var files []string
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			files = append(files, path)
+		}
+		return nil
+	})
+
+	return files, err
 }
