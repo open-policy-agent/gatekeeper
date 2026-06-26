@@ -74,6 +74,10 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	defer connLock.Unlock()
 
 	r.mu.Lock()
+	if _, exists := r.openConnections[connectionName]; exists {
+		r.mu.Unlock()
+		return fmt.Errorf("connection %s already exists for disk driver", connectionName)
+	}
 	if r.pathCleanupInProgressLocked(path) {
 		r.mu.Unlock()
 		return fmt.Errorf("error creating connection %s: path %s is being cleaned up", connectionName, path)

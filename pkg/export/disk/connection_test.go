@@ -140,6 +140,49 @@ func TestCreateConnectionRejectsPathCleanupInProgress(t *testing.T) {
 	}
 }
 
+func TestCreateConnectionRejectsDuplicateConnection(t *testing.T) {
+	writer := newTestWriter(nil)
+	connectionName := "duplicate-conn"
+	path := t.TempDir()
+	file, err := os.CreateTemp(path, "audit")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatalf("Flock() error = %v", err)
+	}
+	writer.openConnections[connectionName] = Connection{
+		Path:            path,
+		MaxAuditResults: 3,
+		File:            file,
+		currentAuditRun: "audit1",
+	}
+
+	err = writer.CreateConnection(context.Background(), connectionName, diskConfig(t.TempDir(), 4.0))
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("expected duplicate connection error, got %v", err)
+	}
+
+	writer.mu.Lock()
+	conn := writer.openConnections[connectionName]
+	writer.mu.Unlock()
+	if conn.Path != path {
+		t.Fatalf("expected path %s, got %s", path, conn.Path)
+	}
+	if conn.MaxAuditResults != 3 {
+		t.Fatalf("expected maxAuditResults 3, got %d", conn.MaxAuditResults)
+	}
+	if conn.File != file {
+		t.Fatal("expected duplicate create to preserve existing file handle")
+	}
+	if _, err := conn.File.WriteString("still open\n"); err != nil {
+		t.Fatalf("expected existing file to remain writable: %v", err)
+	}
+	if err := writer.CloseConnection(connectionName); err != nil {
+		t.Fatalf("CloseConnection() error = %v", err)
+	}
+}
+
 func TestUpdateConnection(t *testing.T) {
 	writer := &Writer{
 		openConnections:   make(map[string]Connection),
@@ -984,7 +1027,7 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for j := 0; j < iterations; j++ {
-					recordResult("CreateConnection", writer.CreateConnection(ctx, connectionName, config))
+					recordResult("CreateConnection", writer.CreateConnection(ctx, connectionName, config), "already exists")
 				}
 			}()
 		}
