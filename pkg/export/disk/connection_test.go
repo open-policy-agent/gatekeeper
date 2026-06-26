@@ -124,6 +124,22 @@ func TestCreateConnection(t *testing.T) {
 	}
 }
 
+func TestCreateConnectionRejectsPathCleanupInProgress(t *testing.T) {
+	cleanupPath := t.TempDir()
+	writer := newTestWriter(nil)
+	writer.cleanupPaths = map[string]struct{}{
+		cleanupPath: {},
+	}
+
+	err := writer.CreateConnection(context.Background(), "conn-cleaning", diskConfig(cleanupPath, 3.0))
+	if err == nil || !strings.Contains(err.Error(), "is being cleaned up") {
+		t.Fatalf("expected cleanup in progress error, got %v", err)
+	}
+	if openConnectionExists(writer, "conn-cleaning") {
+		t.Fatal("connection should not be created while path cleanup is in progress")
+	}
+}
+
 func TestUpdateConnection(t *testing.T) {
 	writer := &Writer{
 		openConnections:   make(map[string]Connection),
@@ -270,6 +286,34 @@ func TestUpdateConnection(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestUpdateConnectionRejectsPathCleanupInProgress(t *testing.T) {
+	oldPath := t.TempDir()
+	cleanupPath := t.TempDir()
+	writer := newTestWriter(nil)
+	requireCreateConnection(t, writer, "conn-cleaning", diskConfig(oldPath, 3.0))
+	writer.mu.Lock()
+	originalConn := writer.openConnections["conn-cleaning"]
+	writer.cleanupPaths = map[string]struct{}{
+		cleanupPath: {},
+	}
+	writer.mu.Unlock()
+
+	err := writer.UpdateConnection(context.Background(), "conn-cleaning", diskConfig(cleanupPath, 4.0))
+	if err == nil || !strings.Contains(err.Error(), "is being cleaned up") {
+		t.Fatalf("expected cleanup in progress error, got %v", err)
+	}
+
+	writer.mu.Lock()
+	conn := writer.openConnections["conn-cleaning"]
+	writer.mu.Unlock()
+	if conn.Path != originalConn.Path {
+		t.Fatalf("expected path %s, got %s", originalConn.Path, conn.Path)
+	}
+	if conn.MaxAuditResults != originalConn.MaxAuditResults {
+		t.Fatalf("expected maxAuditResults %d, got %d", originalConn.MaxAuditResults, conn.MaxAuditResults)
 	}
 }
 
