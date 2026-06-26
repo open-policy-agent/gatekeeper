@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestHandleAuditStart(t *testing.T) {
@@ -52,6 +54,43 @@ func TestHandleAuditStart(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleAuditStartRejectsUnsafePathSegments(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		auditID string
+		topic   string
+	}{
+		{name: "invalid topic traversal", auditID: "audit1", topic: "../topic"},
+		{name: "invalid audit traversal", auditID: "../audit", topic: "topic1"},
+		{name: "invalid audit separator", auditID: "nested/audit", topic: "topic1"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			conn := Connection{Path: t.TempDir()}
+			err := conn.handleAuditStart(tt.auditID, tt.topic)
+			if err == nil || !strings.Contains(err.Error(), "single path segment") {
+				t.Fatalf("expected path segment error, got %v", err)
+			}
+			if conn.File != nil {
+				t.Fatal("expected no file to be opened")
+			}
+		})
+	}
+}
+
+func TestHandleAuditStartRejectsRepeatedStart(t *testing.T) {
+	conn := Connection{Path: t.TempDir()}
+	if err := conn.handleAuditStart("audit1", "topic1"); err != nil {
+		t.Fatalf("handleAuditStart() error = %v", err)
+	}
+	defer conn.unlockAndCloseFile()
+
+	err := conn.handleAuditStart("audit2", "topic1")
+	if err == nil || !strings.Contains(err.Error(), "audit file already open") {
+		t.Fatalf("expected repeated start error, got %v", err)
+	}
+}
+
 func TestHandleAuditEnd(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -95,7 +134,16 @@ func TestHandleAuditEnd(t *testing.T) {
 				if err := os.MkdirAll(dir, 0o755); err != nil {
 					return err
 				}
-				if _, err := os.Create(path.Join(dir, "extra_audit.log")); err != nil {
+				extraFilePath := path.Join(dir, "extra_audit.log")
+				extraFile, err := os.Create(extraFilePath)
+				if err != nil {
+					return err
+				}
+				if err := extraFile.Close(); err != nil {
+					return err
+				}
+				oldTime := time.Now().Add(-time.Hour)
+				if err := os.Chtimes(extraFilePath, oldTime, oldTime); err != nil {
 					return err
 				}
 				file, err := os.Create(path.Join(dir, conn.currentAuditRun+".txt"))
@@ -103,7 +151,7 @@ func TestHandleAuditEnd(t *testing.T) {
 					return err
 				}
 				conn.File = file
-				return nil
+				return os.Chtimes(file.Name(), time.Now(), time.Now())
 			},
 			expectError:  false,
 			expectedFile: "audit1.log",
@@ -127,13 +175,36 @@ func TestHandleAuditEnd(t *testing.T) {
 				if err != nil {
 					t.Errorf("Failed to list files: %v", err)
 				}
-				if slices.Contains(files, tt.expectedFile) {
+				if tt.expectedFile != "" && !slices.ContainsFunc(files, func(file string) bool {
+					return path.Base(file) == tt.expectedFile
+				}) {
 					t.Errorf("Expected file %s to exist, but it does not. Files: %v", tt.expectedFile, files)
 				}
 			}
 		})
 	}
 }
+
+func TestHandleAuditEndSetsSharedWriteMode(t *testing.T) {
+	conn := Connection{Path: t.TempDir(), MaxAuditResults: 1}
+	if err := conn.handleAuditStart("audit1", "topic1"); err != nil {
+		t.Fatalf("handleAuditStart() error = %v", err)
+	}
+	if _, err := conn.File.WriteString("test\n"); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+	if err := conn.handleAuditEnd("topic1"); err != nil {
+		t.Fatalf("handleAuditEnd() error = %v", err)
+	}
+	info, err := os.Stat(filepath.Join(conn.Path, "topic1", "audit1.log"))
+	if err != nil {
+		t.Fatalf("Stat() error = %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o666 {
+		t.Fatalf("expected mode 0666, got %o", got)
+	}
+}
+
 func TestUnlockAndCloseFile(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -234,7 +305,7 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 					return err
 				}
 				for i := 0; i < 3; i++ {
-					if _, err := os.Create(path.Join(dir, fmt.Sprintf("audit%d.txt", i))); err != nil {
+					if _, err := os.Create(path.Join(dir, fmt.Sprintf("audit%d.log", i))); err != nil {
 						return err
 					}
 				}
@@ -256,14 +327,23 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 					return err
 				}
 				for i := 0; i < 4; i++ {
-					if _, err := os.Create(path.Join(dir, fmt.Sprintf("audit%d.txt", i))); err != nil {
+					if _, err := os.Create(path.Join(dir, fmt.Sprintf("audit%d.log", i))); err != nil {
 						return err
 					}
+				}
+				if _, err := os.Create(path.Join(dir, "in-progress.txt")); err != nil {
+					return err
+				}
+				if err := os.Mkdir(path.Join(dir, "nested"), 0o755); err != nil {
+					return err
+				}
+				if _, err := os.Create(path.Join(dir, "nested", "nested.log")); err != nil {
+					return err
 				}
 				return nil
 			},
 			expectError:   false,
-			expectedFiles: 2,
+			expectedFiles: 4,
 		},
 		{
 			name: "Error getting earliest file",
@@ -302,7 +382,7 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 		})
 	}
 }
-func TestGetFilesSortedByModTimeAsc(t *testing.T) {
+func TestGetLogFilesSortedByModTimeAsc(t *testing.T) {
 	tests := []struct {
 		name          string
 		setup         func(dir string) error
@@ -322,10 +402,10 @@ func TestGetFilesSortedByModTimeAsc(t *testing.T) {
 		{
 			name: "Single file in directory",
 			setup: func(dir string) error {
-				_, err := os.Create(path.Join(dir, "file1.txt"))
+				_, err := os.Create(path.Join(dir, "file1.log"))
 				return err
 			},
-			expectedFile:  "file1.txt",
+			expectedFile:  "file1.log",
 			expectedFiles: 1,
 			expectError:   false,
 		},
@@ -333,30 +413,33 @@ func TestGetFilesSortedByModTimeAsc(t *testing.T) {
 			name: "Multiple files in directory",
 			setup: func(dir string) error {
 				for i := 1; i <= 3; i++ {
-					if _, err := os.Create(path.Join(dir, fmt.Sprintf("file%d.txt", i))); err != nil {
+					if _, err := os.Create(path.Join(dir, fmt.Sprintf("file%d.log", i))); err != nil {
 						return err
 					}
 				}
+				if _, err := os.Create(path.Join(dir, "ignored.txt")); err != nil {
+					return err
+				}
 				return nil
 			},
-			expectedFile:  "file1.txt",
+			expectedFile:  "file1.log",
 			expectedFiles: 3,
 			expectError:   false,
 		},
 		{
-			name: "Nested directories",
+			name: "Nested directories ignored",
 			setup: func(dir string) error {
 				subDir := path.Join(dir, "subdir")
 				if err := os.Mkdir(subDir, 0o755); err != nil {
 					return err
 				}
-				if _, err := os.Create(path.Join(subDir, "file1.txt")); err != nil {
+				if _, err := os.Create(path.Join(subDir, "file1.log")); err != nil {
 					return err
 				}
 				return nil
 			},
-			expectedFile:  "subdir/file1.txt",
-			expectedFiles: 1,
+			expectedFile:  "",
+			expectedFiles: 0,
 			expectError:   false,
 		},
 		{
@@ -378,9 +461,9 @@ func TestGetFilesSortedByModTimeAsc(t *testing.T) {
 					t.Errorf("Setup failed: %v", err)
 				}
 			}
-			files, err := getFilesSortedByModTimeAsc(dir)
+			files, err := getLogFilesSortedByModTimeAsc(dir)
 			if (err != nil) != tt.expectError {
-				t.Errorf("getEarliestFile() error = %v, expectError %v", err, tt.expectError)
+				t.Errorf("getLogFilesSortedByModTimeAsc() error = %v, expectError %v", err, tt.expectError)
 			}
 			if !tt.expectError {
 				if len(files) != tt.expectedFiles {

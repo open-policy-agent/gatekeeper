@@ -334,6 +334,85 @@ func TestUpdateConnectionKeepsConnectionVisibleDuringPathCleanup(t *testing.T) {
 		t.Fatalf("expected path %s, got %s", newPath, conn.Path)
 	}
 }
+
+func TestUpdateConnectionPersistsClosedFileOnCleanupError(t *testing.T) {
+	oldPath := t.TempDir()
+	newPath := t.TempDir()
+	file, err := os.CreateTemp(oldPath, "audit")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatalf("Flock() error = %v", err)
+	}
+
+	writer := newTestWriter(func(conn *Connection) error {
+		if conn.File != nil {
+			if err := conn.unlockAndCloseFile(); err != nil {
+				return err
+			}
+			conn.File = nil
+		}
+		return fmt.Errorf("forced remove failure")
+	})
+	writer.openConnections["conn1"] = Connection{
+		Path:            oldPath,
+		MaxAuditResults: 3,
+		File:            file,
+	}
+
+	err = writer.UpdateConnection(context.Background(), "conn1", diskConfig(newPath, 3.0))
+	if err == nil || !strings.Contains(err.Error(), "forced remove failure") {
+		t.Fatalf("expected cleanup failure, got %v", err)
+	}
+
+	writer.mu.Lock()
+	conn := writer.openConnections["conn1"]
+	writer.mu.Unlock()
+	if conn.File != nil {
+		t.Fatal("expected closed file state to be persisted")
+	}
+	if conn.Path != oldPath {
+		t.Fatalf("expected path to remain %s, got %s", oldPath, conn.Path)
+	}
+}
+
+func TestUpdateConnectionDoesNotRemoveSharedOldPath(t *testing.T) {
+	writer := &Writer{
+		openConnections:              make(map[string]Connection),
+		closedConnections:            make(map[string]FailedConnection),
+		cleanupDone:                  make(chan struct{}),
+		closeAndRemoveFilesWithRetry: closeAndRemoveFilesWithRetry,
+	}
+
+	sharedPath := t.TempDir()
+	newPath := t.TempDir()
+	remainingFile := path.Join(sharedPath, "audit", "remaining.log")
+	if err := os.MkdirAll(path.Dir(remainingFile), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(remainingFile, []byte("remaining"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	writer.openConnections["conn1"] = Connection{Path: sharedPath}
+	writer.openConnections["conn2"] = Connection{Path: sharedPath}
+
+	if err := writer.UpdateConnection(context.Background(), "conn1", diskConfig(newPath, 5.0)); err != nil {
+		t.Fatalf("UpdateConnection() error = %v", err)
+	}
+
+	if _, err := os.Stat(remainingFile); err != nil {
+		t.Fatalf("expected shared old-path file to remain for active connection: %v", err)
+	}
+	writer.mu.Lock()
+	conn := writer.openConnections["conn1"]
+	writer.mu.Unlock()
+	if conn.Path != newPath {
+		t.Fatalf("expected conn1 path %s, got %s", newPath, conn.Path)
+	}
+}
+
 func TestCloseConnection(t *testing.T) {
 	writer := &Writer{
 		openConnections:   make(map[string]Connection),
@@ -455,6 +534,39 @@ func TestCloseConnection(t *testing.T) {
 		})
 	}
 }
+
+func TestCloseConnectionDoesNotRemoveSharedPath(t *testing.T) {
+	writer := &Writer{
+		openConnections:              make(map[string]Connection),
+		closedConnections:            make(map[string]FailedConnection),
+		cleanupDone:                  make(chan struct{}),
+		closeAndRemoveFilesWithRetry: closeAndRemoveFilesWithRetry,
+	}
+
+	sharedPath := t.TempDir()
+	remainingFile := path.Join(sharedPath, "audit", "remaining.log")
+	if err := os.MkdirAll(path.Dir(remainingFile), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(remainingFile, []byte("remaining"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	writer.openConnections["conn1"] = Connection{Path: sharedPath}
+	writer.openConnections["conn2"] = Connection{Path: sharedPath}
+
+	if err := writer.CloseConnection("conn1"); err != nil {
+		t.Fatalf("CloseConnection() error = %v", err)
+	}
+
+	if _, err := os.Stat(remainingFile); err != nil {
+		t.Fatalf("expected shared-path file to remain for active connection: %v", err)
+	}
+	if !openConnectionExists(writer, "conn2") {
+		t.Fatal("expected conn2 to remain open")
+	}
+}
+
 func TestPublish(t *testing.T) {
 	writer := &Writer{
 		openConnections: make(map[string]Connection),
@@ -570,7 +682,10 @@ func TestPublish(t *testing.T) {
 					if len(files) > 2 {
 						t.Errorf("Expected <= 2 file, got %d, %v", len(files), files)
 					}
-					if slices.Contains(files, writer.openConnections[tt.connectionName].currentAuditRun+".txt") {
+					expectedFile := writer.openConnections[tt.connectionName].currentAuditRun + ".txt"
+					if !slices.ContainsFunc(files, func(file string) bool {
+						return path.Base(file) == expectedFile
+					}) {
 						t.Errorf("Expected file %s to exist, but it does not", writer.openConnections[tt.connectionName].currentAuditRun+".txt")
 					}
 				}
@@ -578,7 +693,9 @@ func TestPublish(t *testing.T) {
 					if len(files) != 1 {
 						t.Errorf("Expected 1 file, got %d, %v", len(files), files)
 					}
-					if slices.Contains(files, msg.ID+".log") {
+					if !slices.ContainsFunc(files, func(file string) bool {
+						return path.Base(file) == msg.ID+".log"
+					}) {
 						t.Errorf("Expected file %s to exist, but it does not, files: %v", msg.ID+".log", files)
 					}
 					content, err := os.ReadFile(files[0])
@@ -595,6 +712,134 @@ func TestPublish(t *testing.T) {
 		})
 	}
 }
+
+func TestPublishHonorsCanceledContext(t *testing.T) {
+	writer := &Writer{
+		openConnections: make(map[string]Connection),
+	}
+	tmpPath := t.TempDir()
+	writer.openConnections["conn1"] = Connection{
+		Path:            tmpPath,
+		MaxAuditResults: 1,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := writer.Publish(ctx, "conn1", util.ExportMsg{
+		ID:      "audit1",
+		Message: util.AuditStartedMsg,
+	}, "topic1")
+	if err == nil || !strings.Contains(err.Error(), context.Canceled.Error()) {
+		t.Fatalf("expected canceled context error, got %v", err)
+	}
+	if _, err := os.Stat(path.Join(tmpPath, "topic1")); !os.IsNotExist(err) {
+		t.Fatalf("expected no audit directory, got err %v", err)
+	}
+}
+
+func TestPublishPersistsFileAfterAuditStartMarshalError(t *testing.T) {
+	writer := &Writer{
+		openConnections: make(map[string]Connection),
+	}
+	writer.openConnections["conn1"] = Connection{
+		Path:            t.TempDir(),
+		MaxAuditResults: 1,
+	}
+
+	err := writer.Publish(context.Background(), "conn1", util.ExportMsg{
+		ID:      "audit1",
+		Message: util.AuditStartedMsg,
+		Details: make(chan struct{}),
+	}, "topic1")
+	if err == nil || !strings.Contains(err.Error(), "error marshaling data") {
+		t.Fatalf("expected marshaling error, got %v", err)
+	}
+
+	writer.mu.Lock()
+	conn := writer.openConnections["conn1"]
+	writer.mu.Unlock()
+	if conn.File == nil {
+		t.Fatal("expected opened file to remain tracked after marshal error")
+	}
+
+	if err := writer.CloseConnection("conn1"); err != nil {
+		t.Fatalf("CloseConnection() error = %v", err)
+	}
+}
+
+func TestPublishDoesNotTrackFileAfterAuditStartLockError(t *testing.T) {
+	originalLockFile := lockFile
+	lockFile = func(_ *os.File) error {
+		return fmt.Errorf("forced lock failure")
+	}
+	defer func() {
+		lockFile = originalLockFile
+	}()
+
+	writer := &Writer{
+		openConnections: make(map[string]Connection),
+	}
+	writer.openConnections["conn1"] = Connection{
+		Path:            t.TempDir(),
+		MaxAuditResults: 1,
+	}
+
+	err := writer.Publish(context.Background(), "conn1", util.ExportMsg{
+		ID:      "audit1",
+		Message: util.AuditStartedMsg,
+	}, "topic1")
+	if err == nil || !strings.Contains(err.Error(), "failed to acquire lock") {
+		t.Fatalf("expected lock error, got %v", err)
+	}
+
+	writer.mu.Lock()
+	conn := writer.openConnections["conn1"]
+	writer.mu.Unlock()
+	if conn.File != nil {
+		t.Fatal("expected failed audit start file to remain untracked")
+	}
+
+	if err := writer.CloseConnection("conn1"); err != nil {
+		t.Fatalf("CloseConnection() error = %v", err)
+	}
+}
+
+func TestPublishClearsFileAfterAuditEndRenameError(t *testing.T) {
+	writer := &Writer{
+		openConnections: make(map[string]Connection),
+	}
+	tmpPath := t.TempDir()
+	writer.openConnections["conn1"] = Connection{
+		Path:            tmpPath,
+		MaxAuditResults: 1,
+	}
+
+	if err := writer.Publish(context.Background(), "conn1", util.ExportMsg{
+		ID:      "audit1",
+		Message: util.AuditStartedMsg,
+	}, "topic1"); err != nil {
+		t.Fatalf("Publish(audit start) error = %v", err)
+	}
+	if err := os.Mkdir(path.Join(tmpPath, "topic1", "audit1.log"), 0o755); err != nil {
+		t.Fatalf("Mkdir() error = %v", err)
+	}
+
+	err := writer.Publish(context.Background(), "conn1", util.ExportMsg{
+		ID:      "audit1",
+		Message: util.AuditCompletedMsg,
+	}, "topic1")
+	if err == nil || !strings.Contains(err.Error(), "failed to rename file") {
+		t.Fatalf("expected rename error, got %v", err)
+	}
+
+	writer.mu.Lock()
+	conn := writer.openConnections["conn1"]
+	writer.mu.Unlock()
+	if conn.File != nil {
+		t.Fatal("expected closed file to be cleared after audit end rename error")
+	}
+}
+
 func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 	t.Run("concurrent Publish, UpdateConnection, CloseConnection, and CreateConnection", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -649,7 +894,7 @@ func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 					recordResult("Publish", writer.Publish(ctx, connectionName, util.ExportMsg{
 						Message: util.AuditStartedMsg,
 						ID:      fmt.Sprintf("audit-%d-%d", idx, j),
-					}, "audit"), "invalid connection")
+					}, "audit"), "invalid connection", "audit file already open")
 					recordResult("Publish", writer.Publish(ctx, connectionName, util.ExportMsg{
 						Message: "test-violation",
 					}, "audit"), "invalid connection", "failed to write violation: no file provided")

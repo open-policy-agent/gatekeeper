@@ -761,9 +761,9 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 
 		writer.mu.Lock()
 		conn := writer.openConnections["short-ttl-conn"]
-		writer.mu.Unlock()
-
 		conn.ClosedConnectionTTL = 100 * time.Millisecond
+		writer.openConnections["short-ttl-conn"] = conn
+		writer.mu.Unlock()
 
 		if conn.ClosedConnectionTTL != 100*time.Millisecond {
 			t.Errorf("Expected TTL 100ms, got %v", conn.ClosedConnectionTTL)
@@ -782,11 +782,7 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 
 		writer.retryFailedConnections()
 
-		writer.mu.Lock()
-		_, stillExists := writer.closedConnections["short-ttl-conn"]
-		writer.mu.Unlock()
-
-		if stillExists {
+		if closedConnectionExists(writer, "short-ttl-conn") {
 			t.Error("Connection should have been removed after TTL expiration")
 		}
 	})

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,11 +13,52 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
+var lockFile = func(file *os.File) error {
+	return syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+}
+
+func validatePathSegment(name string, value string) error {
+	if value == "" {
+		return fmt.Errorf("%s cannot be empty", name)
+	}
+	if value == "." || value == ".." || strings.ContainsAny(value, `/\`) || filepath.IsAbs(value) {
+		return fmt.Errorf("%s must be a single path segment", name)
+	}
+	return nil
+}
+
+func auditDirPath(basePath string, topic string) (string, error) {
+	if err := validatePathSegment("topic", topic); err != nil {
+		return "", err
+	}
+	return filepath.Join(basePath, topic), nil
+}
+
+func auditRunFilePath(basePath string, topic string, auditRun string, ext string) (string, error) {
+	if err := validatePathSegment("audit ID", auditRun); err != nil {
+		return "", err
+	}
+	dir, err := auditDirPath(basePath, topic)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, appendExtension(auditRun, ext)), nil
+}
+
 func (conn *Connection) handleAuditStart(auditID string, topic string) error {
 	// Replace ':' with '_' to avoid issues with file names in windows
-	conn.currentAuditRun = strings.ReplaceAll(auditID, ":", "_")
+	auditRun := strings.ReplaceAll(auditID, ":", "_")
+	if err := validatePathSegment("audit ID", auditRun); err != nil {
+		return err
+	}
+	if conn.File != nil {
+		return fmt.Errorf("audit file already open for audit run %s", conn.currentAuditRun)
+	}
 
-	dir := path.Join(conn.Path, topic)
+	dir, err := auditDirPath(conn.Path, topic)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o777); err != nil {
 		return fmt.Errorf("failed to create directories: %w", err)
 	}
@@ -28,24 +68,40 @@ func (conn *Connection) handleAuditStart(auditID string, topic string) error {
 		return fmt.Errorf("failed to set directory permissions: %w", err)
 	}
 
-	file, err := os.OpenFile(path.Join(dir, appendExtension(conn.currentAuditRun, "txt")), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+	filePath, err := auditRunFilePath(conn.Path, topic, auditRun, "txt")
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
-	conn.File = file
 	err = retry.OnError(retry.DefaultBackoff, func(_ error) bool {
 		return true
 	}, func() error {
-		return syscall.Flock(int(conn.File.Fd()), syscall.LOCK_EX)
+		return lockFile(file)
 	})
 	if err != nil {
+		if closeErr := file.Close(); closeErr != nil {
+			return fmt.Errorf("failed to acquire lock: %w", errors.Join(err, closeErr))
+		}
 		return fmt.Errorf("failed to acquire lock: %w", err)
 	}
+	conn.currentAuditRun = auditRun
+	conn.File = file
 	log.Info("Writing latest violations in", "filename", conn.File.Name())
 	return nil
 }
 
 func (conn *Connection) handleAuditEnd(topic string) error {
+	readyFilePath, err := auditRunFilePath(conn.Path, topic, conn.currentAuditRun, "log")
+	if err != nil {
+		return err
+	}
+	tmpFilePath, err := auditRunFilePath(conn.Path, topic, conn.currentAuditRun, "txt")
+	if err != nil {
+		return err
+	}
 	if err := retry.OnError(retry.DefaultBackoff, func(_ error) bool {
 		return true
 	}, conn.unlockAndCloseFile); err != nil {
@@ -53,12 +109,11 @@ func (conn *Connection) handleAuditEnd(topic string) error {
 	}
 	conn.File = nil
 
-	readyFilePath := path.Join(conn.Path, topic, appendExtension(conn.currentAuditRun, "log"))
-	if err := os.Rename(path.Join(conn.Path, topic, appendExtension(conn.currentAuditRun, "txt")), readyFilePath); err != nil {
+	if err := os.Rename(tmpFilePath, readyFilePath); err != nil {
 		return fmt.Errorf("failed to rename file: %w, %s", err, conn.currentAuditRun)
 	}
 	// Set the file permissions to make sure reader can modify files if need be after the lock is released.
-	if err := os.Chmod(readyFilePath, 0o777); err != nil {
+	if err := os.Chmod(readyFilePath, 0o666); err != nil {
 		return fmt.Errorf("failed to set file permissions: %w", err)
 	}
 	log.Info("File renamed", "filename", readyFilePath)
@@ -84,8 +139,11 @@ func (conn *Connection) unlockAndCloseFile() error {
 }
 
 func (conn *Connection) cleanupOldAuditFiles(topic string) error {
-	dirPath := path.Join(conn.Path, topic)
-	files, err := getFilesSortedByModTimeAsc(dirPath)
+	dirPath, err := auditDirPath(conn.Path, topic)
+	if err != nil {
+		return err
+	}
+	files, err := getLogFilesSortedByModTimeAsc(dirPath)
 	if err != nil {
 		return fmt.Errorf("failed removing older audit files, error getting files sorted by mod time: %w", err)
 	}
@@ -99,27 +157,32 @@ func (conn *Connection) cleanupOldAuditFiles(topic string) error {
 	return errors.Join(errs...)
 }
 
-func getFilesSortedByModTimeAsc(dirPath string) ([]string, error) {
+func getLogFilesSortedByModTimeAsc(dirPath string) ([]string, error) {
 	type fileInfo struct {
 		path    string
 		modTime time.Time
 	}
 	var filesInfo []fileInfo
 
-	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			filesInfo = append(filesInfo, fileInfo{path: path, modTime: info.ModTime()})
-		}
-		return nil
-	})
+	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return nil, err
 	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".log" {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil, err
+		}
+		filesInfo = append(filesInfo, fileInfo{path: filepath.Join(dirPath, entry.Name()), modTime: info.ModTime()})
+	}
 
 	sort.Slice(filesInfo, func(i, j int) bool {
+		if filesInfo[i].modTime.Equal(filesInfo[j].modTime) {
+			return filesInfo[i].path < filesInfo[j].path
+		}
 		return filesInfo[i].modTime.Before(filesInfo[j].modTime)
 	})
 

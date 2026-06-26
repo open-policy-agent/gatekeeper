@@ -85,6 +85,35 @@ func (r *Writer) pathInUseLocked(cleanupPath string) bool {
 	return false
 }
 
+func (r *Writer) pathInUseByOtherConnectionLocked(connectionName string, cleanupPath string) bool {
+	for name, conn := range r.openConnections {
+		if name != connectionName && conn.Path == cleanupPath {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Writer) closeAndCleanupConnection(connectionName string, conn *Connection) error {
+	r.mu.Lock()
+	if r.pathInUseByOtherConnectionLocked(connectionName, conn.Path) || r.pathCleanupInProgressLocked(conn.Path) {
+		r.mu.Unlock()
+		return closeFileWithBackoff(conn, retry.DefaultBackoff)
+	}
+	if r.cleanupPaths == nil {
+		r.cleanupPaths = make(map[string]struct{})
+	}
+	r.cleanupPaths[conn.Path] = struct{}{}
+	r.mu.Unlock()
+	defer r.releaseCleanupPath(conn.Path)
+
+	cleanup := r.closeAndRemoveFilesWithRetry
+	if cleanup == nil {
+		cleanup = closeAndRemoveFilesWithRetry
+	}
+	return cleanup(conn)
+}
+
 func (r *Writer) reserveCleanupPathLocked(cleanupPath string) bool {
 	if r.pathInUseLocked(cleanupPath) || r.pathCleanupInProgressLocked(cleanupPath) {
 		return false

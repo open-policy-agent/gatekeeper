@@ -38,6 +38,20 @@ func TestValidatePath(t *testing.T) {
 			expectedErr: "path must not contain '..', dir traversal is not allowed",
 		},
 		{
+			name:        "Relative path",
+			path:        "relative/path",
+			setup:       nil,
+			expectError: true,
+			expectedErr: "path must be absolute",
+		},
+		{
+			name:        "Root path",
+			path:        string(os.PathSeparator),
+			setup:       nil,
+			expectError: true,
+			expectedErr: "path must not be filesystem root",
+		},
+		{
 			name: "Path is a file",
 			path: func() string {
 				file, err := os.CreateTemp("", "testfile")
@@ -59,7 +73,7 @@ func TestValidatePath(t *testing.T) {
 					t.Fatalf("Setup failed: %v", err)
 				}
 			}
-			err := validatePath(tt.path)
+			_, err := validatePath(tt.path)
 			if (err != nil) != tt.expectError {
 				t.Errorf("validatePath() error = %v, expectError %v", err, tt.expectError)
 			}
@@ -136,6 +150,16 @@ func TestUnmarshalConfig(t *testing.T) {
 			},
 			expectError: true,
 			expectedErr: "maxAuditResults cannot be greater than the maximum allowed audit runs",
+			expectedTTL: 0,
+		},
+		{
+			name: "Fractional maxAuditResults",
+			config: map[string]interface{}{
+				"path":            tmpPath,
+				"maxAuditResults": 0.9,
+			},
+			expectError: true,
+			expectedErr: "maxAuditResults must be an integer",
 			expectedTTL: 0,
 		},
 		{

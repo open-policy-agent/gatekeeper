@@ -114,7 +114,12 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	if conn.Path != path {
 		// Keep the old connection visible while cleanup runs so concurrent callers
 		// can find the current lock and wait instead of observing a transient miss.
-		if err := r.closeAndRemoveFilesWithRetry(&conn); err != nil {
+		if err := r.closeAndCleanupConnection(connectionName, &conn); err != nil {
+			r.mu.Lock()
+			if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+				r.openConnections[connectionName] = conn
+			}
+			r.mu.Unlock()
 			return fmt.Errorf("error updating connection %s, %w", connectionName, err)
 		}
 		conn.Path = path
@@ -146,7 +151,7 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	delete(r.openConnections, connectionName)
 	r.mu.Unlock()
 
-	err := r.closeAndRemoveFilesWithRetry(&conn)
+	err := r.closeAndCleanupConnection(connectionName, &conn)
 	if err != nil {
 		now := time.Now()
 		r.mu.Lock()
@@ -181,12 +186,19 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	return nil
 }
 
-func (r *Writer) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
+func (r *Writer) Publish(ctx context.Context, connectionName string, data interface{}, topic string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("publish canceled: %w", err)
+	}
+
 	connLock, exists := r.acquireCurrentConnectionLock(connectionName, false)
 	if !exists {
 		return fmt.Errorf("invalid connection: %s not found for disk driver", connectionName)
 	}
 	defer connLock.Unlock()
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("publish canceled: %w", err)
+	}
 
 	r.mu.Lock()
 	conn, ok := r.openConnections[connectionName]
@@ -200,12 +212,24 @@ func (r *Writer) Publish(_ context.Context, connectionName string, data interfac
 	if violation, ok = data.(util.ExportMsg); !ok {
 		return fmt.Errorf("invalid data type: cannot convert data to exportMsg")
 	}
+	connChanged := false
+	defer func() {
+		if !connChanged {
+			return
+		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			r.openConnections[connectionName] = conn
+		}
+	}()
 
 	if violation.Message == util.AuditStartedMsg {
 		err := conn.handleAuditStart(violation.ID, topic)
 		if err != nil {
 			return fmt.Errorf("error handling audit start: %w", err)
 		}
+		connChanged = true
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -216,6 +240,9 @@ func (r *Writer) Publish(_ context.Context, connectionName string, data interfac
 	if conn.File == nil {
 		return fmt.Errorf("failed to write violation: no file provided")
 	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("publish canceled: %w", err)
+	}
 
 	_, err = conn.File.WriteString(string(jsonData) + "\n")
 	if err != nil {
@@ -223,6 +250,7 @@ func (r *Writer) Publish(_ context.Context, connectionName string, data interfac
 	}
 
 	if violation.Message == util.AuditCompletedMsg {
+		connChanged = true
 		err := conn.handleAuditEnd(topic)
 		if err != nil {
 			return fmt.Errorf("error handling audit end: %w", err)
@@ -230,11 +258,5 @@ func (r *Writer) Publish(_ context.Context, connectionName string, data interfac
 		conn.File = nil
 		conn.currentAuditRun = ""
 	}
-
-	r.mu.Lock()
-	if r.connectionLockIsCurrentLocked(connectionName, connLock) {
-		r.openConnections[connectionName] = conn
-	}
-	r.mu.Unlock()
 	return nil
 }

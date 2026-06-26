@@ -2,24 +2,37 @@ package disk
 
 import (
 	"fmt"
+	"math"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 // validatePath checks if the provided path is valid and writable.
-func validatePath(path string) error {
+func validatePath(path string) (string, error) {
 	if path == "" {
-		return fmt.Errorf("path cannot be empty")
+		return "", fmt.Errorf("path cannot be empty")
 	}
-	if strings.Contains(path, "..") {
-		return fmt.Errorf("path must not contain '..', dir traversal is not allowed")
+	for _, elem := range strings.FieldsFunc(path, func(r rune) bool {
+		return r == '/' || r == '\\'
+	}) {
+		if elem == ".." {
+			return "", fmt.Errorf("path must not contain '..', dir traversal is not allowed")
+		}
+	}
+	cleanPath := filepath.Clean(path)
+	if !filepath.IsAbs(cleanPath) {
+		return "", fmt.Errorf("path must be absolute")
+	}
+	if cleanPath == string(os.PathSeparator) {
+		return "", fmt.Errorf("path must not be filesystem root")
 	}
 	// validate if the path is writable
-	if err := os.MkdirAll(path, 0o777); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+	if err := os.MkdirAll(cleanPath, 0o777); err != nil {
+		return "", fmt.Errorf("failed to create directory: %w", err)
 	}
-	return nil
+	return cleanPath, nil
 }
 
 func unmarshalConfig(config interface{}) (string, float64, time.Duration, error) {
@@ -32,15 +45,20 @@ func unmarshalConfig(config interface{}) (string, float64, time.Duration, error)
 	if !pathOk {
 		return "", 0.0, 0, fmt.Errorf("missing or invalid 'path'")
 	}
-	if err := validatePath(path); err != nil {
+	cleanPath, err := validatePath(path)
+	if err != nil {
 		return "", 0.0, 0, fmt.Errorf("invalid path: %w", err)
 	}
+	path = cleanPath
 	maxResults, maxResultsOk := cfg[maxAuditResults].(float64)
 	if !maxResultsOk {
 		return "", 0.0, 0, fmt.Errorf("missing or invalid 'maxAuditResults'")
 	}
 	if maxResults < 0 {
 		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be negative")
+	}
+	if maxResults != math.Trunc(maxResults) {
+		return "", 0.0, 0, fmt.Errorf("maxAuditResults must be an integer")
 	}
 	if maxResults > maxAllowedAuditRuns {
 		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
