@@ -38,13 +38,6 @@ func TestValidatePath(t *testing.T) {
 			expectedErr: "path must not contain '..', dir traversal is not allowed",
 		},
 		{
-			name:        "Relative path",
-			path:        "relative/path",
-			setup:       nil,
-			expectError: true,
-			expectedErr: "path must be absolute",
-		},
-		{
 			name:        "Root path",
 			path:        string(os.PathSeparator),
 			setup:       nil,
@@ -81,6 +74,29 @@ func TestValidatePath(t *testing.T) {
 				t.Errorf("Expected error to contain %q, got %q", tt.expectedErr, err.Error())
 			}
 		})
+	}
+}
+
+func TestValidatePathAllowsRelativePath(t *testing.T) {
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(oldWD); err != nil {
+			t.Errorf("Chdir() error = %v", err)
+		}
+	})
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	path, err := validatePath("tmp/violations/topics")
+	if err != nil {
+		t.Fatalf("validatePath() error = %v", err)
+	}
+	if path != "tmp/violations/topics" {
+		t.Fatalf("expected cleaned relative path, got %q", path)
 	}
 }
 

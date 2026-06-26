@@ -22,9 +22,6 @@ func validatePath(path string) (string, error) {
 		}
 	}
 	cleanPath := filepath.Clean(path)
-	if !filepath.IsAbs(cleanPath) {
-		return "", fmt.Errorf("path must be absolute")
-	}
 	if cleanPath == string(os.PathSeparator) {
 		return "", fmt.Errorf("path must not be filesystem root")
 	}
