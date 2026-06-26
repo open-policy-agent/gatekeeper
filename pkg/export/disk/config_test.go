@@ -245,8 +245,8 @@ func TestConnectionTTL(t *testing.T) {
 				"maxAuditResults":     5.0,
 				"closedConnectionTTL": 123,
 			},
-			expectedTTL: maxConnectionAge,
-			expectError: false,
+			expectedTTL: 0,
+			expectError: true,
 		},
 		{
 			name: "Complex TTL format",

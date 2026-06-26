@@ -45,6 +45,13 @@ func TestHandleAuditStart(t *testing.T) {
 				if tt.connection.File == nil {
 					t.Errorf("Expected file to be opened, but it is nil")
 				} else {
+					info, err := os.Stat(path.Dir(tt.connection.File.Name()))
+					if err != nil {
+						t.Fatalf("failed to stat audit dir: %v", err)
+					}
+					if got := info.Mode().Perm(); got != 0o770 {
+						t.Fatalf("expected audit dir mode 0770, got %o", got)
+					}
 					if tt.connection.File.Name() != expectedFileName {
 						t.Errorf("Expected file name %s, got %s", expectedFileName, tt.connection.File.Name())
 					}

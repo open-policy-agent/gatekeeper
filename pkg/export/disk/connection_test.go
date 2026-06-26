@@ -842,6 +842,10 @@ func TestPublishClearsFileAfterAuditEndRenameError(t *testing.T) {
 	}
 }
 
+// TestConcurrentPublishUpdateCloseConnection exercises concurrent Publish,
+// UpdateConnection, CloseConnection, and CreateConnection calls on the disk
+// driver to validate the mutex-based synchronization and prevent data-race
+// regressions. This test is meant to be run with -race to catch races.
 func TestConcurrentPublishUpdateCloseConnection(t *testing.T) {
 	t.Run("concurrent Publish, UpdateConnection, CloseConnection, and CreateConnection", func(t *testing.T) {
 		tmpDir := t.TempDir()

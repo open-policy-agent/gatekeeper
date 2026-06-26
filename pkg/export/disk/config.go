@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// validatePath checks if the provided path is valid and writable.
+// validatePath checks if the provided path is valid and ensures the directory exists.
 func validatePath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path cannot be empty")
@@ -28,8 +28,8 @@ func validatePath(path string) (string, error) {
 	if cleanPath == string(os.PathSeparator) {
 		return "", fmt.Errorf("path must not be filesystem root")
 	}
-	// validate if the path is writable
-	if err := os.MkdirAll(cleanPath, 0o777); err != nil {
+	// ensure the directory exists
+	if err := os.MkdirAll(cleanPath, 0o770); err != nil {
 		return "", fmt.Errorf("failed to create directory: %w", err)
 	}
 	return cleanPath, nil
@@ -64,7 +64,11 @@ func unmarshalConfig(config interface{}) (string, float64, time.Duration, error)
 		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
 	}
 	ttl := maxConnectionAge
-	if ttlStr, ok := cfg["closedConnectionTTL"].(string); ok {
+	if ttlValue, ok := cfg["closedConnectionTTL"]; ok {
+		ttlStr, ok := ttlValue.(string)
+		if !ok {
+			return "", 0.0, 0, fmt.Errorf("invalid ttl format: expected string")
+		}
 		duration, err := time.ParseDuration(ttlStr)
 		if err != nil {
 			return "", 0.0, 0, fmt.Errorf("invalid ttl format: %w", err)

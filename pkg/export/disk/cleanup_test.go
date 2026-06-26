@@ -94,7 +94,7 @@ func TestRetryFailedConnections(t *testing.T) {
 				writer.closedConnections["conn4"] = FailedConnection{
 					Connection:  Connection{Path: t.TempDir(), ClosedConnectionTTL: maxConnectionAge},
 					FailedAt:    time.Now().Add(-maxConnectionAge - time.Minute),
-					RetryCount:  0,
+					RetryCount:  1,
 					NextRetryAt: time.Now().Add(-1 * time.Second),
 				}
 				writer.closeAndRemoveFilesWithRetry = func(_ *Connection) error {
@@ -106,6 +106,26 @@ func TestRetryFailedConnections(t *testing.T) {
 			validateResult: func(t *testing.T, writer *Writer) {
 				if !writer.cleanupStopped {
 					t.Error("Expected cleanup to be stopped when no connections remain")
+				}
+			},
+		},
+		{
+			name: "Expired connection gets first due background retry",
+			setup: func(writer *Writer) {
+				writer.closedConnections["conn-expired-first-retry"] = FailedConnection{
+					Connection:  Connection{Path: t.TempDir(), ClosedConnectionTTL: minConnectionAge},
+					FailedAt:    time.Now().Add(-minConnectionAge - time.Second),
+					RetryCount:  0,
+					NextRetryAt: time.Now().Add(-1 * time.Second),
+				}
+				writer.closeAndRemoveFilesWithRetry = func(_ *Connection) error {
+					return nil
+				}
+			},
+			expectedClosedConnsLen: 0,
+			validateResult: func(t *testing.T, writer *Writer) {
+				if !writer.cleanupStopped {
+					t.Error("Expected cleanup to be stopped when expired first retry succeeds")
 				}
 			},
 		},
@@ -899,8 +919,3 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 		}
 	})
 }
-
-// TestConcurrentPublishUpdateCloseConnection exercises concurrent Publish,
-// UpdateConnection, CloseConnection, and CreateConnection calls on the disk
-// driver to validate the mutex-based synchronization and prevent data-race
-// regressions. This test is meant to be run with -race to catch races.

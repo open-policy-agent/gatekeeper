@@ -159,7 +159,8 @@ func (r *Writer) retryFailedConnections() {
 	var toRetry []string
 
 	for name, failedConn := range r.closedConnections {
-		if now.Sub(failedConn.FailedAt) > failedConn.ClosedConnectionTTL {
+		expired := now.Sub(failedConn.FailedAt) > failedConn.ClosedConnectionTTL
+		if expired && (failedConn.RetryCount > 0 || now.Before(failedConn.NextRetryAt)) {
 			log.Info("Removing expired failed connection", "connection", name, "age", now.Sub(failedConn.FailedAt))
 			toRemove = append(toRemove, name)
 			continue

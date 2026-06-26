@@ -14,7 +14,7 @@ import (
 )
 
 var lockFile = func(file *os.File) error {
-	return syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+	return syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 }
 
 func validatePathSegment(name string, value string) error {
@@ -59,12 +59,12 @@ func (conn *Connection) handleAuditStart(auditID string, topic string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o777); err != nil {
+	if err := os.MkdirAll(dir, 0o770); err != nil {
 		return fmt.Errorf("failed to create directories: %w", err)
 	}
 
 	// Set the dir permissions to make sure reader can modify files if need be after the lock is released.
-	if err := os.Chmod(dir, 0o777); err != nil {
+	if err := os.Chmod(dir, 0o770); err != nil {
 		return fmt.Errorf("failed to set directory permissions: %w", err)
 	}
 

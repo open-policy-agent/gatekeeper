@@ -155,7 +155,7 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	if err != nil {
 		now := time.Now()
 		r.mu.Lock()
-		// Store the failed connection with retry metadata with a unique key to avoid conflicts.
+		// Store the failed connection with retry metadata under a timestamped key to avoid replacing prior failures.
 		r.closedConnections[connectionName+now.String()] = FailedConnection{
 			Connection:  conn,
 			FailedAt:    now,
@@ -244,7 +244,7 @@ func (r *Writer) Publish(ctx context.Context, connectionName string, data interf
 		return fmt.Errorf("publish canceled: %w", err)
 	}
 
-	_, err = conn.File.WriteString(string(jsonData) + "\n")
+	_, err = conn.File.Write(append(jsonData, '\n'))
 	if err != nil {
 		return fmt.Errorf("error writing message to disk: %w", err)
 	}
