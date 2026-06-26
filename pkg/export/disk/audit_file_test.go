@@ -83,7 +83,11 @@ func TestHandleAuditStartRejectsRepeatedStart(t *testing.T) {
 	if err := conn.handleAuditStart("audit1", "topic1"); err != nil {
 		t.Fatalf("handleAuditStart() error = %v", err)
 	}
-	defer conn.unlockAndCloseFile()
+	defer func() {
+		if err := conn.unlockAndCloseFile(); err != nil {
+			t.Errorf("unlockAndCloseFile() error = %v", err)
+		}
+	}()
 
 	err := conn.handleAuditStart("audit2", "topic1")
 	if err == nil || !strings.Contains(err.Error(), "audit file already open") {
@@ -270,6 +274,7 @@ func TestUnlockAndCloseFile(t *testing.T) {
 		})
 	}
 }
+
 func TestCleanupOldAuditFiles(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -382,6 +387,7 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 		})
 	}
 }
+
 func TestGetLogFilesSortedByModTimeAsc(t *testing.T) {
 	tests := []struct {
 		name          string

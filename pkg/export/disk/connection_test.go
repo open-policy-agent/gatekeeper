@@ -123,6 +123,7 @@ func TestCreateConnection(t *testing.T) {
 		})
 	}
 }
+
 func TestUpdateConnection(t *testing.T) {
 	writer := &Writer{
 		openConnections:   make(map[string]Connection),
@@ -271,6 +272,7 @@ func TestUpdateConnection(t *testing.T) {
 		})
 	}
 }
+
 func TestUpdateConnectionKeepsConnectionVisibleDuringPathCleanup(t *testing.T) {
 	oldPath := t.TempDir()
 	newPath := t.TempDir()
@@ -391,7 +393,7 @@ func TestUpdateConnectionDoesNotRemoveSharedOldPath(t *testing.T) {
 	if err := os.MkdirAll(path.Dir(remainingFile), 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	if err := os.WriteFile(remainingFile, []byte("remaining"), 0o644); err != nil {
+	if err := os.WriteFile(remainingFile, []byte("remaining"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -548,7 +550,7 @@ func TestCloseConnectionDoesNotRemoveSharedPath(t *testing.T) {
 	if err := os.MkdirAll(path.Dir(remainingFile), 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	if err := os.WriteFile(remainingFile, []byte("remaining"), 0o644); err != nil {
+	if err := os.WriteFile(remainingFile, []byte("remaining"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 

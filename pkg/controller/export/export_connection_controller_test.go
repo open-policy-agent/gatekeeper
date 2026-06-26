@@ -33,6 +33,13 @@ import (
 
 const timeout = time.Second * 20
 
+func diskConnectionConfig(path string) map[string]interface{} {
+	return map[string]interface{}{
+		"path":            path,
+		"maxAuditResults": float64(3),
+	}
+}
+
 // Note: For this test we check the ConnectionPodStatus resource that is created
 // by the controller, and not the Connection status itself, to isolate test boundaries
 // since updating the Connection status is handled by a separate controller.
@@ -59,7 +66,7 @@ func TestReconcile_E2E(t *testing.T) {
 	// Start the manager and let it run in the background
 	testutils.StartManager(ctx, t, mgr)
 
-	t.Run("Reconcile called for new Connection create, then update, and finally delete, all with expected operations and ConnectionPodStatus updates", func(_ *testing.T) {
+	t.Run("Reconcile called for new Connection create, then update, and finally delete, all with expected operations and ConnectionPodStatus updates", func(t *testing.T) {
 		connObj := connectionv1alpha1.Connection{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      auditConnectionName,
@@ -67,10 +74,7 @@ func TestReconcile_E2E(t *testing.T) {
 			},
 			Spec: connectionv1alpha1.ConnectionSpec{
 				Driver: disk.Name,
-				Config: &anythingtypes.Anything{Value: map[string]interface{}{
-					"path":            "value",
-					"maxAuditResults": float64(3),
-				}},
+				Config: &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())},
 			},
 		}
 		typeConnectionNamespacedName := types.NamespacedName{
@@ -113,10 +117,8 @@ func TestReconcile_E2E(t *testing.T) {
 		}).WithTimeout(timeout).Should(gomega.Succeed())
 
 		// Test Update of the connection object
-		connObj.Spec.Config.Value = map[string]interface{}{
-			"path":            "new-value",
-			"maxAuditResults": float64(3),
-		}
+		updatedConfig := diskConnectionConfig(t.TempDir())
+		connObj.Spec.Config.Value = updatedConfig
 		// Set the status to active to simulate an update to the Connection when a Publish operation was already performed marking active true
 		connPodStatusObj.Status.Active = true
 		g.Expect(k8sClient.Update(ctx, &connObj)).Should(gomega.Succeed(), "Updating the connection object should succeed")
@@ -133,7 +135,7 @@ func TestReconcile_E2E(t *testing.T) {
 			// Get the latest connection object
 			err := k8sClient.Get(ctx, typeConnectionNamespacedName, &connObj)
 			g.Expect(err).Should(gomega.Succeed(), "Connection object should exist after update")
-			g.Expect(connObj.Spec.Config.Value).Should(gomega.Equal(map[string]interface{}{"path": "new-value", "maxAuditResults": float64(3)}), "Connection object should have the updated config value after update")
+			g.Expect(connObj.Spec.Config.Value).Should(gomega.Equal(updatedConfig), "Connection object should have the updated config value after update")
 			g.Expect(connObj.GetGeneration()).Should(gomega.Not(gomega.Equal(generationOnCreate)), "Connection object generation should have changed after update")
 			g.Expect(connObj.Status.ByPod).Should(gomega.BeNil(), "Connection object status should be nil after update, as the controller does not set it")
 		}).WithTimeout(timeout).Should(gomega.Succeed())
@@ -203,10 +205,7 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 			},
 			Spec: connectionv1alpha1.ConnectionSpec{
 				Driver: disk.Name,
-				Config: &anythingtypes.Anything{Value: map[string]interface{}{
-					"path":            "value",
-					"maxAuditResults": float64(3),
-				}},
+				Config: &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())},
 			},
 		}
 		typeConnectionNamespacedName := types.NamespacedName{
@@ -330,10 +329,7 @@ func TestReconcile_Client_Failures(t *testing.T) {
 			},
 			Spec: connectionv1alpha1.ConnectionSpec{
 				Driver: disk.Name,
-				Config: &anythingtypes.Anything{Value: map[string]interface{}{
-					"path":            "value",
-					"maxAuditResults": float64(3),
-				}},
+				Config: &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())},
 			},
 		}
 		typeConnectionNamespacedName := types.NamespacedName{
@@ -404,7 +400,7 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 	// Start the manager and let it run in the background
 	testutils.StartManager(ctx, t, mgr)
 
-	t.Run("Reconcile called when ConnectionPodStatus updated on the side and reconciled back to expected state", func(_ *testing.T) {
+	t.Run("Reconcile called when ConnectionPodStatus updated on the side and reconciled back to expected state", func(t *testing.T) {
 		connObj := connectionv1alpha1.Connection{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      auditConnectionName,
@@ -412,10 +408,7 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 			},
 			Spec: connectionv1alpha1.ConnectionSpec{
 				Driver: disk.Name,
-				Config: &anythingtypes.Anything{Value: map[string]interface{}{
-					"path":            "value",
-					"maxAuditResults": float64(3),
-				}},
+				Config: &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())},
 			},
 		}
 		typeConnectionNamespacedName := types.NamespacedName{
@@ -513,7 +506,7 @@ func TestReconcile_UnsupportedConnectionName(t *testing.T) {
 	// Start the manager and let it run in the background
 	testutils.StartManager(ctx, t, mgr)
 
-	t.Run("Reconcile called for new Connection create for an unsupported connection name and the ConnectionPodStatus has an UpsertError and doesn't impact Create for a valid Connection object", func(_ *testing.T) {
+	t.Run("Reconcile called for new Connection create for an unsupported connection name and the ConnectionPodStatus has an UpsertError and doesn't impact Create for a valid Connection object", func(t *testing.T) {
 		auditConnectionNameBad := "audit-connection-bad"
 
 		connObjBad := connectionv1alpha1.Connection{
@@ -523,10 +516,7 @@ func TestReconcile_UnsupportedConnectionName(t *testing.T) {
 			},
 			Spec: connectionv1alpha1.ConnectionSpec{
 				Driver: disk.Name,
-				Config: &anythingtypes.Anything{Value: map[string]interface{}{
-					"path":            "value",
-					"maxAuditResults": float64(3),
-				}},
+				Config: &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())},
 			},
 		}
 		typeConnectionNamespacedName := types.NamespacedName{
@@ -596,10 +586,7 @@ func TestReconcile_UnsupportedConnectionName(t *testing.T) {
 			},
 			Spec: connectionv1alpha1.ConnectionSpec{
 				Driver: disk.Name,
-				Config: &anythingtypes.Anything{Value: map[string]interface{}{
-					"path":            "value",
-					"maxAuditResults": float64(3),
-				}},
+				Config: &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())},
 			},
 		}
 

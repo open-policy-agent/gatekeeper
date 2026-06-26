@@ -83,6 +83,7 @@ func TestValidatePath(t *testing.T) {
 		})
 	}
 }
+
 func TestUnmarshalConfig(t *testing.T) {
 	tmpPath := t.TempDir()
 
@@ -200,6 +201,7 @@ func TestUnmarshalConfig(t *testing.T) {
 		})
 	}
 }
+
 func TestConnectionTTL(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -239,6 +239,7 @@ func TestRetryFailedConnections(t *testing.T) {
 		})
 	}
 }
+
 func TestBackgroundCleanupLifecycle(t *testing.T) {
 	t.Run("Background cleanup starts on first CreateConnection", func(t *testing.T) {
 		writer := &Writer{
@@ -412,6 +413,7 @@ func TestBackgroundCleanupLifecycle(t *testing.T) {
 		writer.mu.Unlock()
 	})
 }
+
 func TestCloseAndRemoveFilesWithBackoffRetriesRemoveAfterClosingFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	file, err := os.CreateTemp(tmpDir, "cleanup")
@@ -470,6 +472,7 @@ func TestCloseAndRemoveFilesWithBackoffRetriesRemoveAfterClosingFile(t *testing.
 		t.Fatal("expected file to remain nil after close succeeds but remove fails")
 	}
 }
+
 func TestCloseConnectionWithFailedRetries(t *testing.T) {
 	t.Run("Failed close adds connection to closedConnections", func(t *testing.T) {
 		writer := &Writer{
@@ -716,6 +719,7 @@ func TestCloseConnectionWithFailedRetries(t *testing.T) {
 		}
 	})
 }
+
 func closedConnectionExists(writer *Writer, connName string) bool {
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
@@ -726,6 +730,7 @@ func closedConnectionExists(writer *Writer, connName string) bool {
 	}
 	return false
 }
+
 func getClosedConnections(writer *Writer, connName string) []FailedConnection {
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
@@ -737,6 +742,7 @@ func getClosedConnections(writer *Writer, connName string) []FailedConnection {
 	}
 	return conns
 }
+
 func TestTTLBasedConnectionRemoval(t *testing.T) {
 	t.Run("Connection removed after custom TTL expires", func(t *testing.T) {
 		writer := &Writer{
