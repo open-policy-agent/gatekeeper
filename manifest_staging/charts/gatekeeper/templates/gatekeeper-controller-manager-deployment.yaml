@@ -99,6 +99,10 @@ spec:
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL
           }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+        
+        {{- if hasKey .Values "defaultK8sNativeValidationFailurePolicy"}}
+        - --default-k8s-native-validation-failure-policy={{ .Values.defaultK8sNativeValidationFailurePolicy }}
+        {{- end }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}

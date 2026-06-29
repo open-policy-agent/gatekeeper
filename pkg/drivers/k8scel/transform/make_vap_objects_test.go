@@ -243,6 +243,57 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 	}
 }
 
+func TestTemplateToPolicyDefinitionUsesDefaultFailurePolicyForK8sNativeValidation(t *testing.T) {
+	original := *schema.DefaultFailurePolicyForK8sNativeValidation
+	t.Cleanup(func() { *schema.DefaultFailurePolicyForK8sNativeValidation = original })
+	*schema.DefaultFailurePolicyForK8sNativeValidation = string(admissionregistrationv1.Ignore)
+
+	source := &schema.Source{
+		Validations: []schema.Validation{
+			{
+				Expression: "true",
+				Message:    "always passes",
+			},
+		},
+	}
+	rawSrc, err := runtime.DefaultUnstructuredConverter.ToUnstructured(source)
+	if err != nil {
+		t.Fatalf("unexpected error converting source to unstructured: %v", err)
+	}
+	template := &templates.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "somepolicy"},
+		Spec: templates.ConstraintTemplateSpec{
+			CRD: templates.CRD{
+				Spec: templates.CRDSpec{
+					Names: templates.Names{
+						Kind: "SomePolicy",
+					},
+				},
+			},
+			Targets: []templates.Target{
+				{
+					Code: []templates.Code{
+						{
+							Engine: schema.Name,
+							Source: &templates.Anything{
+								Value: rawSrc,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	policy, err := TemplateToPolicyDefinition(template)
+	if err != nil {
+		t.Fatalf("TemplateToPolicyDefinition() returned an unexpected error: %v", err)
+	}
+	if policy.Spec.FailurePolicy == nil || *policy.Spec.FailurePolicy != admissionregistrationv1beta1.Ignore {
+		t.Fatalf("FailurePolicy = %v, want %s", policy.Spec.FailurePolicy, admissionregistrationv1beta1.Ignore)
+	}
+}
+
 func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 	baseSource := &schema.Source{
 		FailurePolicy: ptr.To[string]("Fail"),
