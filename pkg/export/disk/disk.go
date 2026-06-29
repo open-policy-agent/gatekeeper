@@ -82,12 +82,24 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 		r.mu.Unlock()
 		return fmt.Errorf("error creating connection %s: path %s is being cleaned up", connectionName, path)
 	}
+	// Register the connection before creating its directory: once it is in
+	// openConnections, pathInUseLocked(path) holds, so a concurrent cleanup will
+	// not remove this path while ensureDirectory runs below.
 	r.openConnections[connectionName] = Connection{
 		Path:                path,
 		MaxAuditResults:     int(maxResults),
 		ClosedConnectionTTL: ttl,
 	}
 	r.mu.Unlock()
+
+	if err := ensureDirectory(path); err != nil {
+		r.mu.Lock()
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			delete(r.openConnections, connectionName)
+		}
+		r.mu.Unlock()
+		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
+	}
 	return nil
 }
 
@@ -109,11 +121,28 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 		r.mu.Unlock()
 		return fmt.Errorf("connection %s for disk driver not found", connectionName)
 	}
-	if conn.Path != path && r.pathCleanupInProgressLocked(path) {
-		r.mu.Unlock()
-		return fmt.Errorf("error updating connection %s: path %s is being cleaned up", connectionName, path)
+	if conn.Path != path {
+		if r.pathCleanupInProgressLocked(path) {
+			r.mu.Unlock()
+			return fmt.Errorf("error updating connection %s: path %s is being cleaned up", connectionName, path)
+		}
+		// Reserve the target path before releasing r.mu so a concurrent cleanup
+		// cannot remove it during the unlocked window below while ensureDirectory
+		// creates it and the connection migrates onto it. The connection still
+		// points at its old path, so pathInUseLocked does not yet protect the
+		// target; the reservation is released once the migration commits and
+		// pathInUseLocked takes over.
+		r.markCleanupPathLocked(path)
+		defer r.releaseCleanupPath(path)
 	}
 	r.mu.Unlock()
+
+	// Create the target directory only after confirming it is not mid-cleanup and
+	// reserving it, so a rejected update never recreates a directory cleanup is
+	// removing and an accepted update is not raced by a concurrent removal.
+	if err := ensureDirectory(path); err != nil {
+		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
+	}
 
 	if conn.Path != path {
 		// Keep the old connection visible while cleanup runs so concurrent callers

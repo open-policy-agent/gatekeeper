@@ -9,7 +9,9 @@ import (
 	"time"
 )
 
-// validatePath checks if the provided path is valid and ensures the directory exists.
+// validatePath validates the provided path and returns its cleaned form. It
+// performs no filesystem mutations so it is safe to call while parsing config;
+// directory creation is handled separately by ensureDirectory.
 func validatePath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path cannot be empty")
@@ -25,11 +27,19 @@ func validatePath(path string) (string, error) {
 	if cleanPath == string(os.PathSeparator) {
 		return "", fmt.Errorf("path must not be filesystem root")
 	}
-	// ensure the directory exists
-	if err := os.MkdirAll(cleanPath, 0o770); err != nil {
-		return "", fmt.Errorf("failed to create directory: %w", err)
+	if cleanPath == "." {
+		return "", fmt.Errorf("path must not resolve to the current working directory")
 	}
 	return cleanPath, nil
+}
+
+// ensureDirectory creates the directory tree for the given path. It is kept
+// separate from validatePath so configuration parsing stays free of side effects.
+func ensureDirectory(path string) error {
+	if err := os.MkdirAll(path, 0o770); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+	return nil
 }
 
 func unmarshalConfig(config interface{}) (string, float64, time.Duration, error) {

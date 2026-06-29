@@ -3,6 +3,7 @@ package disk
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -45,17 +46,18 @@ func TestValidatePath(t *testing.T) {
 			expectedErr: "path must not be filesystem root",
 		},
 		{
-			name: "Path is a file",
-			path: func() string {
-				file, err := os.CreateTemp("", "testfile")
-				if err != nil {
-					t.Fatalf("Failed to create temp file: %v", err)
-				}
-				return file.Name()
-			}(),
+			name:        "Current directory",
+			path:        ".",
 			setup:       nil,
 			expectError: true,
-			expectedErr: "failed to create directory",
+			expectedErr: "path must not resolve to the current working directory",
+		},
+		{
+			name:        "Current directory with trailing slash",
+			path:        "./",
+			setup:       nil,
+			expectError: true,
+			expectedErr: "path must not resolve to the current working directory",
 		},
 	}
 
@@ -98,6 +100,32 @@ func TestValidatePathAllowsRelativePath(t *testing.T) {
 	if path != "tmp/violations/topics" {
 		t.Fatalf("expected cleaned relative path, got %q", path)
 	}
+}
+
+func TestEnsureDirectory(t *testing.T) {
+	t.Run("creates directory", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "violations")
+		if err := ensureDirectory(dir); err != nil {
+			t.Fatalf("ensureDirectory() error = %v", err)
+		}
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatalf("stat() error = %v", err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("expected %s to be a directory", dir)
+		}
+	})
+
+	t.Run("path is a file", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "testfile")
+		if err != nil {
+			t.Fatalf("CreateTemp() error = %v", err)
+		}
+		if err := ensureDirectory(file.Name()); err == nil || !strings.Contains(err.Error(), "failed to create directory") {
+			t.Fatalf("expected 'failed to create directory' error, got %v", err)
+		}
+	})
 }
 
 func TestUnmarshalConfig(t *testing.T) {
@@ -144,6 +172,16 @@ func TestUnmarshalConfig(t *testing.T) {
 			name: "Invalid path",
 			config: map[string]interface{}{
 				"path":            "../invalid/path",
+				"maxAuditResults": 3.0,
+			},
+			expectError: true,
+			expectedErr: "invalid path",
+			expectedTTL: 0,
+		},
+		{
+			name: "Current directory path",
+			config: map[string]interface{}{
+				"path":            ".",
 				"maxAuditResults": 3.0,
 			},
 			expectError: true,

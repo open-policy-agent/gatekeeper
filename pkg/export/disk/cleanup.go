@@ -108,24 +108,28 @@ func (r *Writer) closeAndCleanupConnection(connectionName string, conn *Connecti
 		r.mu.Unlock()
 		return closeFileWithBackoff(conn, retry.DefaultBackoff)
 	}
-	if r.cleanupPaths == nil {
-		r.cleanupPaths = make(map[string]struct{})
-	}
-	r.cleanupPaths[conn.Path] = struct{}{}
+	r.markCleanupPathLocked(conn.Path)
 	r.mu.Unlock()
 	defer r.releaseCleanupPath(conn.Path)
 
 	return r.closeAndRemoveFiles(conn)
 }
 
-func (r *Writer) reserveCleanupPathLocked(cleanupPath string) bool {
-	if r.pathInUseLocked(cleanupPath) || r.pathCleanupInProgressLocked(cleanupPath) {
-		return false
-	}
+// markCleanupPathLocked records that a filesystem mutation is in progress for
+// cleanupPath — either a cleanup removing it or a connection migrating onto it —
+// so other goroutines leave it untouched. Callers must hold r.mu.
+func (r *Writer) markCleanupPathLocked(cleanupPath string) {
 	if r.cleanupPaths == nil {
 		r.cleanupPaths = make(map[string]struct{})
 	}
 	r.cleanupPaths[cleanupPath] = struct{}{}
+}
+
+func (r *Writer) reserveCleanupPathLocked(cleanupPath string) bool {
+	if r.pathInUseLocked(cleanupPath) || r.pathCleanupInProgressLocked(cleanupPath) {
+		return false
+	}
+	r.markCleanupPathLocked(cleanupPath)
 	return true
 }
 
@@ -163,6 +167,10 @@ func (r *Writer) retryFailedConnections() {
 	var toRetry []string
 
 	for name, failedConn := range r.closedConnections {
+		// A failed connection past its TTL is dropped, with one exception: if it
+		// has never been retried (RetryCount == 0) and its first retry is now due,
+		// allow that single attempt before giving up. Connections that have already
+		// been retried, or whose first retry is not yet due, are removed once expired.
 		expired := now.Sub(failedConn.FailedAt) > failedConn.ClosedConnectionTTL
 		if expired && (failedConn.RetryCount > 0 || now.Before(failedConn.NextRetryAt)) {
 			log.Info("Removing expired failed connection", "connection", name, "age", now.Sub(failedConn.FailedAt))
@@ -200,6 +208,10 @@ func (r *Writer) retryFailedConnections() {
 			continue
 		}
 		if !r.reserveCleanupPathLocked(failedConn.Path) {
+			// Another cleanup already owns this path (an earlier item in this batch
+			// sharing the path, or a concurrent connection close). Leave the entry
+			// queued; its NextRetryAt is already in the past, so the next tick
+			// reconsiders it once the path is free.
 			continue
 		}
 		items = append(items, retryItem{name: name, conn: failedConn})
@@ -231,7 +243,9 @@ func (r *Writer) retryFailedConnections() {
 				delay = maxRetryDelay
 			}
 			delay = wait.Jitter(delay, Jitter)
-			items[i].conn.NextRetryAt = now.Add(delay)
+			// Schedule from the current time rather than the snapshot taken at the
+			// top of the function, since the close attempts above can take a while.
+			items[i].conn.NextRetryAt = time.Now().Add(delay)
 			results = append(results, retryResult{name: items[i].name, conn: items[i].conn})
 		}
 	}

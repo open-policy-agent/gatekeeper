@@ -126,6 +126,11 @@ func TestCreateConnection(t *testing.T) {
 
 func TestCreateConnectionRejectsPathCleanupInProgress(t *testing.T) {
 	cleanupPath := t.TempDir()
+	// Simulate cleanup having already removed the directory; a rejected create
+	// must not recreate it while cleanup is in progress.
+	if err := os.RemoveAll(cleanupPath); err != nil {
+		t.Fatalf("RemoveAll() error = %v", err)
+	}
 	writer := newTestWriter(nil)
 	writer.cleanupPaths = map[string]struct{}{
 		cleanupPath: {},
@@ -137,6 +142,9 @@ func TestCreateConnectionRejectsPathCleanupInProgress(t *testing.T) {
 	}
 	if openConnectionExists(writer, "conn-cleaning") {
 		t.Fatal("connection should not be created while path cleanup is in progress")
+	}
+	if _, statErr := os.Stat(cleanupPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected path to remain absent during cleanup, got stat err = %v", statErr)
 	}
 }
 
@@ -337,6 +345,11 @@ func TestUpdateConnectionRejectsPathCleanupInProgress(t *testing.T) {
 	cleanupPath := t.TempDir()
 	writer := newTestWriter(nil)
 	requireCreateConnection(t, writer, "conn-cleaning", diskConfig(oldPath, 3.0))
+	// Simulate cleanup having already removed the target directory; a rejected
+	// update must not recreate it while cleanup is in progress.
+	if err := os.RemoveAll(cleanupPath); err != nil {
+		t.Fatalf("RemoveAll() error = %v", err)
+	}
 	writer.mu.Lock()
 	originalConn := writer.openConnections["conn-cleaning"]
 	writer.cleanupPaths = map[string]struct{}{
@@ -357,6 +370,9 @@ func TestUpdateConnectionRejectsPathCleanupInProgress(t *testing.T) {
 	}
 	if conn.MaxAuditResults != originalConn.MaxAuditResults {
 		t.Fatalf("expected maxAuditResults %d, got %d", originalConn.MaxAuditResults, conn.MaxAuditResults)
+	}
+	if _, statErr := os.Stat(cleanupPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected path to remain absent during cleanup, got stat err = %v", statErr)
 	}
 }
 
@@ -421,6 +437,93 @@ func TestUpdateConnectionKeepsConnectionVisibleDuringPathCleanup(t *testing.T) {
 	writer.mu.Unlock()
 	if conn.Path != newPath {
 		t.Fatalf("expected path %s, got %s", newPath, conn.Path)
+	}
+}
+
+func TestUpdateConnectionProtectsTargetPathFromConcurrentCleanup(t *testing.T) {
+	oldPath := t.TempDir()
+	newPath := t.TempDir()
+
+	// Marker file in the target path; a cleanup that races the update must not
+	// remove it while the update holds the reservation.
+	marker := path.Join(newPath, "marker")
+	if err := os.WriteFile(marker, []byte("x"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cleanupStarted := make(chan struct{})
+	allowCleanup := make(chan struct{})
+	var cleanupStartedOnce sync.Once
+	var allowCleanupOnce sync.Once
+	releaseCleanup := func() {
+		allowCleanupOnce.Do(func() {
+			close(allowCleanup)
+		})
+	}
+	defer releaseCleanup()
+
+	writer := newTestWriter(func(conn *Connection) error {
+		// Pause while the update removes the old path so the test can race a
+		// cleanup of the reserved target path.
+		if conn.Path == oldPath {
+			cleanupStartedOnce.Do(func() {
+				close(cleanupStarted)
+			})
+			<-allowCleanup
+		}
+		return os.RemoveAll(conn.Path)
+	})
+
+	const updatedConn = "updated-conn"
+	const sharingConn = "sharing-conn"
+	requireCreateConnection(t, writer, updatedConn, diskConfig(oldPath, 3.0))
+	// A second connection currently owns the target path. Closing it while the
+	// update is in progress triggers a real cleanup attempt on the target path.
+	requireCreateConnection(t, writer, sharingConn, diskConfig(newPath, 3.0))
+
+	updateErr := make(chan error, 1)
+	go func() {
+		updateErr <- writer.UpdateConnection(context.Background(), updatedConn, diskConfig(newPath, 3.0))
+	}()
+
+	select {
+	case <-cleanupStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the update to start removing the old path")
+	}
+
+	// The update now holds the reservation on the target path. Closing the
+	// sharing connection must not remove the target path while it is reserved.
+	if err := writer.CloseConnection(sharingConn); err != nil {
+		t.Fatalf("CloseConnection() error = %v", err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("target path was not protected during update, marker stat err = %v", err)
+	}
+
+	releaseCleanup()
+
+	select {
+	case err := <-updateErr:
+		if err != nil {
+			t.Fatalf("UpdateConnection() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for UpdateConnection to finish")
+	}
+
+	writer.mu.Lock()
+	updated := writer.openConnections[updatedConn]
+	reservedAfter := writer.pathCleanupInProgressLocked(newPath)
+	writer.mu.Unlock()
+	if updated.Path != newPath {
+		t.Fatalf("expected path %s, got %s", newPath, updated.Path)
+	}
+	if reservedAfter {
+		t.Fatal("expected target path reservation to be released after the update")
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("expected marker to survive the update, stat err = %v", err)
 	}
 }
 
