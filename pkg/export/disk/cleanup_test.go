@@ -260,6 +260,34 @@ func TestRetryFailedConnections(t *testing.T) {
 	}
 }
 
+func TestRetryFailedConnectionsUsesDefaultCleanupWhenUnset(t *testing.T) {
+	tmpDir := t.TempDir()
+	staleFile := tmpDir + string(os.PathSeparator) + "stale.log"
+	if err := os.WriteFile(staleFile, []byte("stale"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	writer := &Writer{
+		openConnections:   make(map[string]Connection),
+		closedConnections: make(map[string]FailedConnection),
+		cleanupDone:       make(chan struct{}),
+	}
+	writer.closedConnections["conn"] = FailedConnection{
+		Connection:  Connection{Path: tmpDir, ClosedConnectionTTL: maxConnectionAge},
+		FailedAt:    time.Now().Add(-time.Minute),
+		RetryCount:  0,
+		NextRetryAt: time.Now().Add(-time.Second),
+	}
+
+	writer.retryFailedConnections()
+
+	if _, err := os.Stat(staleFile); !os.IsNotExist(err) {
+		t.Fatalf("expected default cleanup to remove stale file, got %v", err)
+	}
+	if closedConnectionExists(writer, "conn") {
+		t.Fatal("expected failed connection to be removed after default cleanup succeeds")
+	}
+}
+
 func TestBackgroundCleanupLifecycle(t *testing.T) {
 	t.Run("Background cleanup starts on first CreateConnection", func(t *testing.T) {
 		writer := &Writer{

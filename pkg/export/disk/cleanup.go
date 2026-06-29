@@ -22,6 +22,14 @@ func closeAndRemoveFilesWithRetry(conn *Connection) error {
 	return closeAndRemoveFilesWithBackoff(conn, retry.DefaultBackoff, os.RemoveAll)
 }
 
+func (r *Writer) closeAndRemoveFiles(conn *Connection) error {
+	cleanup := r.closeAndRemoveFilesWithRetry
+	if cleanup == nil {
+		cleanup = closeAndRemoveFilesWithRetry
+	}
+	return cleanup(conn)
+}
+
 func closeFileWithBackoff(conn *Connection, backoff wait.Backoff) error {
 	if conn.File == nil {
 		return nil
@@ -107,11 +115,7 @@ func (r *Writer) closeAndCleanupConnection(connectionName string, conn *Connecti
 	r.mu.Unlock()
 	defer r.releaseCleanupPath(conn.Path)
 
-	cleanup := r.closeAndRemoveFilesWithRetry
-	if cleanup == nil {
-		cleanup = closeAndRemoveFilesWithRetry
-	}
-	return cleanup(conn)
+	return r.closeAndRemoveFiles(conn)
 }
 
 func (r *Writer) reserveCleanupPathLocked(cleanupPath string) bool {
@@ -213,7 +217,7 @@ func (r *Writer) retryFailedConnections() {
 		if items[i].closeOnly {
 			err = closeFileWithBackoff(&items[i].conn.Connection, retry.DefaultBackoff)
 		} else {
-			err = r.closeAndRemoveFilesWithRetry(&items[i].conn.Connection)
+			err = r.closeAndRemoveFiles(&items[i].conn.Connection)
 			r.releaseCleanupPath(items[i].conn.Path)
 		}
 		if err == nil {
