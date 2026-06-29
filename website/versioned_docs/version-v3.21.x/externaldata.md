@@ -176,6 +176,44 @@ Response example: [[`"my-key"`, `"my-value"`, `""`], [`"another-key"`, `42`, `""
 Example template:
 https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/policy/template.yaml
 
+### Testing policies that use `external_data`
+
+The `external_data` built-in is registered by Gatekeeper, so the standard `opa test` command does not know about it by default. For unit tests, define a test-only `external_data` function in a `*_test.rego` file in the same package as the policy under test. OPA compiles the policy and test files together, so the test-only function is used while tests run and is not included in the ConstraintTemplate you deploy to Gatekeeper.
+
+For example, keep the policy's call to `external_data` in the ConstraintTemplate, and add the mock responses in the test file:
+
+```rego
+package k8sexternaldata
+
+test_input_not_allow {
+  review := {"review": {"object": {"spec": {"template": {"spec": {"containers": [{"image": "error_image"}]}}}}}}
+  results := violation with input as review
+  count(results) == 1
+}
+
+external_data(request) = response {
+  request.provider == "dummy-provider"
+  request.keys == ["system_error_image"]
+  response := {
+    "status_code": 504,
+    "system_error": "provider not responding",
+  }
+}
+
+external_data(request) = response {
+  request.provider == "dummy-provider"
+  request.keys != ["system_error_image"]
+  response := {
+    "errors": [[key, "not allowed"] | key := request.keys[_]; key == "error_image"],
+    "responses": [[key, "allowed"] | key := request.keys[_]; key != "error_image"],
+    "status_code": 200,
+    "system_error": "",
+  }
+}
+```
+
+Add more `external_data` rules to return different responses for different key sets, including provider errors or system errors. If you prefer to mock `external_data` with the [`with` keyword](https://www.openpolicyagent.org/docs/latest/policy-testing/#data-and-function-mocking), add the `external_data` built-in signature to an OPA capabilities file and run tests with `opa test --capabilities capabilities.json .`.
+
 ## External data for Gatekeeper mutating webhook
 
 External data can be used in conjunction with [Gatekeeper mutating webhook](mutation.md).
