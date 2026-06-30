@@ -193,6 +193,7 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 	r := newStatsReporter()
 	reconciler := &ReconcileConstraintTemplate{
 		Client:          mgr.GetClient(),
+		apiReader:       mgr.GetAPIReader(),
 		scheme:          mgr.GetScheme(),
 		cfClient:        cfClient,
 		watcher:         w,
@@ -284,6 +285,10 @@ var _ reconcile.Reconciler = &ReconcileConstraintTemplate{}
 // ReconcileConstraintTemplate reconciles a ConstraintTemplate object.
 type ReconcileConstraintTemplate struct {
 	client.Client
+	// apiReader is an uncached reader used to refetch the latest version of a ConstraintTemplatePodStatus when an
+	// optimistic-concurrency conflict is hit on update. The default reconciler client reads through the informer cache,
+	// which can briefly return a stale resourceVersion right after a successful write and cause spurious 409 conflicts.
+	apiReader       client.Reader
 	scheme          *runtime.Scheme
 	watcher         *watch.Registrar
 	statusWatcher   *watch.Registrar
@@ -394,7 +399,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
 		status.Status.Errors = append(status.Status.Errors, createErr)
 
-		if updateErr := r.Update(ctx, status); updateErr != nil {
+		if updateErr := r.updatePodStatusWithRetry(ctx, status); updateErr != nil {
 			logger.Error(updateErr, "update status error")
 			return reconcile.Result{Requeue: true}, nil
 		}
@@ -454,7 +459,7 @@ func (r *ReconcileConstraintTemplate) reportErrorOnCTStatus(ctx context.Context,
 		Message: fmt.Sprintf("%s: %s", message, err),
 	}
 	status.Status.Errors = append(status.Status.Errors, createErr)
-	if err2 := r.Update(ctx, status); err2 != nil {
+	if err2 := r.updatePodStatusWithRetry(ctx, status); err2 != nil {
 		return errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
 	}
 	return err
@@ -522,7 +527,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if err := r.Update(ctx, status); err != nil {
+	if err := r.updatePodStatusWithRetry(ctx, status); err != nil {
 		logger.Error(err, "update ct pod status error")
 		return reconcile.Result{Requeue: true}, nil
 	}
@@ -585,6 +590,38 @@ func (r *ReconcileConstraintTemplate) deleteAllStatus(ctx context.Context, ctNam
 	}
 
 	return nil
+}
+
+// updatePodStatusWithRetry updates a ConstraintTemplatePodStatus and transparently recovers from optimistic-concurrency
+// conflicts caused by a stale informer cache. The reconciler's default client reads through the cache, so when the same
+// ConstraintTemplate is reconciled twice in rapid succession (for example: CT update followed by the owned-CRD update
+// event re-enqueuing the CT) the second reconcile can observe a PodStatus with an older resourceVersion than the one
+// already on the API server, and the subsequent Update fails with a 409 Conflict.
+//
+// On Conflict we refetch the PodStatus via the uncached APIReader, re-apply our desired Status, and attempt the Update
+// once more inline before yielding to RetryOnConflict's backoff. This collapses the common case (stale cache, no other
+// writer racing us) into a single fast retry. If that inline attempt still conflicts, the error is returned to
+// RetryOnConflict which will back off and try again. Non-conflict errors are returned as-is. The supplied status
+// pointer is updated in place with the latest object so callers can continue to mutate it after a successful return.
+func (r *ReconcileConstraintTemplate) updatePodStatusWithRetry(ctx context.Context, status *statusv1beta1.ConstraintTemplatePodStatus) error {
+	desiredStatus := status.Status
+	key := client.ObjectKeyFromObject(status)
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		err := r.Update(ctx, status)
+		if err == nil {
+			return nil
+		}
+		if !apierrors.IsConflict(err) {
+			return err
+		}
+		latest := &statusv1beta1.ConstraintTemplatePodStatus{}
+		if getErr := r.apiReader.Get(ctx, key, latest); getErr != nil {
+			return getErr
+		}
+		latest.Status = desiredStatus
+		*status = *latest
+		return r.Update(ctx, status)
+	})
 }
 
 func (r *ReconcileConstraintTemplate) getOrCreatePodStatus(ctx context.Context, ctName string) (*statusv1beta1.ConstraintTemplatePodStatus, error) {
