@@ -97,15 +97,15 @@ spec:
       - name: crds-upgrade
         {{- if .Values.preInstall.crdRepository.image.repository }}
           {{- if not .Values.preInstall.crdRepository.image.tag }}
-        image: '{{ .Values.preInstall.crdRepository.image.repository }}'
+        image: {{ printf "%s/%s" .Values.preInstall.crdRepository.image.registry .Values.preInstall.crdRepository.image.repository }}
           {{- else }}
-        image: '{{ .Values.preInstall.crdRepository.image.repository }}:{{ .Values.preInstall.crdRepository.image.tag }}'
+        image: {{ printf "%s/%s:%s" .Values.preInstall.crdRepository.image.registry .Values.preInstall.crdRepository.image.repository .Values.preInstall.crdRepository.image.tag }}
           {{- end }}
         {{- else }}
           {{- if not .Values.image.release }}
-        image: '{{ .Values.image.crdRepository }}'
+        image: {{ printf "%s/%s" .Values.image.crdRegistry .Values.image.crdRepository }}
           {{- else }}
-        image: '{{ .Values.image.crdRepository }}:{{ .Values.image.release }}'
+        image: {{ printf "%s/%s:%s" .Values.image.crdRegistry .Values.image.crdRepository .Values.image.release }}
           {{- end }}
         {{- end }}
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
