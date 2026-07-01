@@ -31,6 +31,39 @@ Install with Homebrew:
 brew install gator
 ```
 
+## The `gator compile` subcommand
+
+`gator compile` renders `ConstraintTemplate` manifests from separate policy source
+files. It supports the [gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library)
+layout where Rego and CEL live in `src.rego` / `src.cel` and are embedded into
+`constraint.tmpl` via gomplate-style `file.Read` snippets.
+
+### Compile a policy source directory
+
+```shell
+# From a gatekeeper-library checkout
+gator compile --source-dir=src/general/requiredlabels \
+  --output=library/general/requiredlabels/template.yaml
+```
+
+`--source-dir` expects a `constraint.tmpl` file in the directory. When
+`--working-dir` is omitted, `gator compile` infers the repository root by walking
+up to the parent of a `src/` directory.
+
+### Compile a template file directly
+
+```shell
+gator compile --filename=src/general/requiredlabels/constraint.tmpl --working-dir=.
+```
+
+### Inject Rego into a template scaffold
+
+When a template does not use gomplate snippets, pass explicit source files:
+
+```shell
+gator compile --filename=template.yaml --rego=src.rego
+```
+
 ## The `gator test` subcommand
 
 `gator test` allows users to test a set of Kubernetes objects against a set of

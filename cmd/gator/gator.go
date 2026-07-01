@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/bench"
+	compilecmd "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/compile"
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/policy"
 	"github.com/open-policy-agent/gatekeeper/v3/cmd/gator/sync"
@@ -20,6 +21,7 @@ var commands = []*cobra.Command{
 	verify.Cmd,
 	test.Cmd,
 	expand.Cmd,
+	compilecmd.Cmd,
 	sync.Cmd,
 	policy.Cmd,
 	bench.Cmd,
