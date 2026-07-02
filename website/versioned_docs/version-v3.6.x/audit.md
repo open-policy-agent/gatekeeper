@@ -111,9 +111,9 @@ All of these events (including `violation_audited`) are marked with the same `au
 
 ### Why Audit Runs as a Singleton
 
-By default, audit runs as its own deployment. Gatekeeper audit component is designed to run as a singleton because it writes to Constraint CRs, and having multiple instances could lead to conflicting writes. To limit traffic to the API server and to avoid contention writing audit results to constraints, audit should run as a singleton pod.
+By default, audit runs as its own deployment. Gatekeeper audit is designed to run as a singleton because it writes audit results to Constraint status. Multiple audit instances can contend on the same Constraint status fields. To limit traffic to the API server and avoid contention writing audit results to constraints, audit should run as a singleton pod.
 
-If your setup only consumes audit results from logs (and does not rely on Constraint status updates), you can safely run multiple replicas. However, we generally don't recommend this unless you set `--constraint-violations-limit=0`.
+If your setup only consumes audit results from logs, setting `--constraint-violations-limit=0` avoids storing individual violations in Constraint `.status.violations`. This does not disable all Constraint status writes: audit still updates fields such as `.status.auditTimestamp` and `.status.totalViolations`, so running multiple audit replicas can still cause status update contention.
 
 ## Configuring Audit
 
