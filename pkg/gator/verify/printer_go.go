@@ -127,6 +127,20 @@ func (p PrinterGo) PrintCase(w StringWriter, r *CaseResult, verbose bool) error 
 		if err != nil {
 			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
+
+		if len(r.Print) > 0 {
+			_, err = w.WriteString("        === PRINT ===\n")
+			if err != nil {
+				return fmt.Errorf("%w: %w", ErrWritingString, err)
+			}
+
+			for _, line := range strings.Split(strings.TrimSuffix(r.Print, "\n"), "\n") {
+				_, err = w.WriteString(fmt.Sprintf("        %s\n", line))
+				if err != nil {
+					return fmt.Errorf("%w: %w", ErrWritingString, err)
+				}
+			}
+		}
 	}
 
 	if r.Error != nil {

@@ -16,9 +16,9 @@ limitations under the License.
 package constrainttemplate
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"strings"
 	"sync"
@@ -49,7 +49,6 @@ import (
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -232,6 +231,116 @@ func getMatchEntryConfig() []configv1alpha1.MatchEntry {
 	}
 }
 
+func cloneGroupVersionPtr(value *schema.GroupVersion) *schema.GroupVersion {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func setVAPTestGlobals(t *testing.T, groupVersion *schema.GroupVersion) {
+	t.Helper()
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	transform.SetVapAPIEnabled(ptr.To[bool](true))
+	transform.SetGroupVersion(cloneGroupVersionPtr(groupVersion))
+}
+
+func setupVersionPinnedReconcileTest(t *testing.T, groupVersion *schema.GroupVersion) (context.Context, client.Client) {
+	t.Helper()
+
+	setVAPTestGlobals(t, groupVersion)
+
+	mgr, wm := testutils.SetupManager(t, cfg)
+	c := testclient.NewRetryClient(mgr.GetClient())
+
+	err := testutils.CreateGatekeeperNamespace(mgr.GetConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	driver, err := rego.New(rego.Tracing(true))
+	if err != nil {
+		t.Fatalf("unable to set up Driver: %v", err)
+	}
+	k8sDriver, err := k8scel.New()
+	if err != nil {
+		t.Fatalf("unable to set up K8s native driver: %v", err)
+	}
+
+	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.Driver(k8sDriver), constraintclient.EnforcementPoints(util.AuditEnforcementPoint))
+	if err != nil {
+		t.Fatalf("unable to set up constraint framework client: %s", err)
+	}
+
+	testutils.Setenv(t, "POD_NAME", "no-pod")
+
+	tracker, err := readiness.SetupTracker(mgr, false, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
+
+	constraintEvents := make(chan event.GenericEvent, 1024)
+	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
+	processExcluder := process.New()
+	processExcluder.Add(getMatchEntryConfig())
+
+	webhookCache := webhookconfigcache.NewWebhookConfigCache()
+	const testWebhookName = "gatekeeper-validating-webhook-configuration"
+	webhookName := testWebhookName
+	originalVwhName := webhook.VwhName
+	t.Cleanup(func() { webhook.VwhName = originalVwhName })
+	webhook.VwhName = &webhookName
+
+	exactMatch := admissionregistrationv1.Exact
+	webhookCache.UpsertConfig(testWebhookName, webhookconfigcache.WebhookMatchingConfig{
+		Rules: []admissionregistrationv1.RuleWithOperations{
+			{
+				Operations: []admissionregistrationv1.OperationType{
+					admissionregistrationv1.Create,
+					admissionregistrationv1.Update,
+					admissionregistrationv1.Delete,
+					admissionregistrationv1.Connect,
+				},
+				Rule: admissionregistrationv1.Rule{
+					APIGroups:   []string{""},
+					APIVersions: []string{"v1"},
+					Resources:   []string{"*"},
+				},
+			},
+		},
+		MatchPolicy: &exactMatch,
+	})
+
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, constraintEvents, func(context.Context) (*corev1.Pod, error) { return pod, nil }, webhookCache, processExcluder)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = add(mgr, rec, constraintTemplateEvents)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
+
+	origWait := constraint.GetDefaultWaitForVAPBGeneration()
+	constraint.SetDefaultWaitForVAPBGeneration(2)
+	t.Cleanup(func() { constraint.SetDefaultWaitForVAPBGeneration(origWait) })
+
+	return ctx, c
+}
+
 func TestReconcile(t *testing.T) {
 	// Uncommenting the below enables logging of K8s internals like watch.
 	// fs := flag.NewFlagSet("", flag.PanicOnError)
@@ -317,6 +426,7 @@ func TestReconcile(t *testing.T) {
 
 	// Make webhook cache available to tests for configuration
 	sharedWebhookCache := webhookCache
+	setVAPTestGlobals(t, &admissionregistrationv1beta1.SchemeGroupVersion)
 
 	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, constraintEvents, func(context.Context) (*corev1.Pod, error) { return pod, nil }, webhookCache, processExcluder)
 	if err != nil {
@@ -331,8 +441,12 @@ func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	transform.VapAPIEnabled = ptr.To[bool](true)
-	transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+	// Override the default VAPB generation wait time to speed up tests.
+	// The production default is 30s, but tests only need to verify the
+	// wait behavior works, not that it waits a specific duration.
+	origWait := constraint.GetDefaultWaitForVAPBGeneration()
+	constraint.SetDefaultWaitForVAPBGeneration(2)
+	t.Cleanup(func() { constraint.SetDefaultWaitForVAPBGeneration(origWait) })
 
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
@@ -389,7 +503,7 @@ func TestReconcile(t *testing.T) {
 		logger.Info("Running test: Vap should be created with v1beta1")
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
@@ -607,9 +721,10 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should not be created", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreated"
 		logger.Info("Running test: VapBinding should not be created")
-		require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-binding-for-constraints", "false"}))
+		origDefault := constraint.GetDefaultGenerateVAPB()
+		constraint.SetDefaultGenerateVAPB(false)
 		t.Cleanup(func() {
-			require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-binding-for-constraints", "true"}))
+			constraint.SetDefaultGenerateVAPB(origDefault)
 		})
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false), nil)
 		cstr := newDenyAllCstr(suffix)
@@ -630,7 +745,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -665,7 +780,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -705,9 +820,10 @@ func TestReconcile(t *testing.T) {
 	t.Run("Error should not be present on constraint when VAP generation if off and VAPB generation is on for templates without CEL", func(t *testing.T) {
 		suffix := "ErrorShouldNotBePresentOnConstraint"
 		logger.Info("Running test: Error should not be present on constraint when VAP generation is off and VAPB generation is on for templates wihout CEL")
-		require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-for-templates", "false"}))
+		origDefault := constraint.GetDefaultGenerateVAP()
+		constraint.SetDefaultGenerateVAP(false)
 		t.Cleanup(func() {
-			require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-for-templates", "true"}))
+			constraint.SetDefaultGenerateVAP(origDefault)
 		})
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstr(suffix)
@@ -731,7 +847,9 @@ func TestReconcile(t *testing.T) {
 	t.Run("  be created without generateVap intent in CT", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreatedWithoutGenerateVapIntent"
 		logger.Info("Running test: VapBinding should not be created without generateVap intent in CT")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		origDefault := constraint.GetDefaultGenerateVAPB()
+		constraint.SetDefaultGenerateVAPB(true)
+		t.Cleanup(func() { constraint.SetDefaultGenerateVAPB(origDefault) })
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -750,7 +868,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -796,7 +914,7 @@ func TestReconcile(t *testing.T) {
 			}
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				// Since tests retries 3000 times at 100 retries per second, adding sleep makes sure that this test gets covarage time > 30s to cover the default wait.
 				time.Sleep(10 * time.Millisecond)
 				return err
@@ -841,7 +959,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -858,7 +976,7 @@ func TestReconcile(t *testing.T) {
 		suffix := "VapShouldBeCreatedV1"
 
 		logger.Info("Running test: Vap should be created with v1")
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -936,7 +1054,7 @@ func TestReconcile(t *testing.T) {
 		}
 		cache.UpsertConfig(webhookName, webhookConfig)
 
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		ro := []admissionregistrationv1.OperationType{
 			admissionregistrationv1.Create,
 			admissionregistrationv1.Update,
@@ -1003,7 +1121,7 @@ func TestReconcile(t *testing.T) {
 		}
 		cache.UpsertConfig(webhookName, webhookConfig)
 
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		ro := []admissionregistrationv1.OperationType{
 			admissionregistrationv1.OperationAll,
 		}
@@ -1072,7 +1190,7 @@ func TestReconcile(t *testing.T) {
 		}
 		cache.UpsertConfig(webhookName, webhookConfig)
 
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		ro := []admissionregistrationv1.OperationType{
 			admissionregistrationv1.Create,
 			admissionregistrationv1.Update,
@@ -1137,7 +1255,7 @@ func TestReconcile(t *testing.T) {
 		}
 		cache.UpsertConfig(webhookName, webhookConfig)
 
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		ro := []admissionregistrationv1.OperationType{
 			admissionregistrationv1.Delete,
 		}
@@ -1204,7 +1322,7 @@ func TestReconcile(t *testing.T) {
 			admissionregistrationv1.Update,
 		}
 
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
 		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
@@ -1233,7 +1351,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should be created with v1 with some delay after constraint CRD is available", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedV1"
 		logger.Info("Running test: VapBinding should be created with v1 with some delay after constraint CRD is available")
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -1265,7 +1383,7 @@ func TestReconcile(t *testing.T) {
 			}
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				// Since tests retries 3000 times at 100 retries per second, adding sleep makes sure that this test gets covarage time > 30s to cover the default wait.
 				time.Sleep(10 * time.Millisecond)
 				return err
@@ -1291,7 +1409,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should be created with v1 without warnings in enforcementPointsStatus", func(t *testing.T) {
 		suffix := "VapBindingShouldBeCreatedV1EnforcementPointsStatus"
 		logger.Info("Running test: VapBinding should be created with v1 without warnings in enforcementPointsStatus")
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
+		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -1346,264 +1464,6 @@ func TestReconcile(t *testing.T) {
 			}
 			return c.Delete(ctx, cstr)
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("VAP v1beta1 should be recreated when deleted", func(t *testing.T) {
-		suffix := "VapV1Beta1ShouldBeRecreated"
-
-		logger.Info("Running test: VAP v1beta1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-
-		vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-
-		// First, wait for VAP to be created
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Delete the VAP resource directly to simulate external deletion
-		vapToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
-		err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = c.Delete(ctx, vapToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Verify the VAP is recreated by the watch
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
-				return err
-			}
-			// Check that this is a new VAP instance (different UID)
-			if vap.UID == vapToDelete.UID {
-				return fmt.Errorf("VAP was not recreated, same UID found")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("VAP v1 should be recreated when deleted", func(t *testing.T) {
-		suffix := "VapV1ShouldBeRecreated"
-
-		logger.Info("Running test: VAP v1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-
-		vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-
-		// First, wait for VAP to be created
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Delete the VAP resource directly to simulate external deletion
-		vapToDelete := &admissionregistrationv1.ValidatingAdmissionPolicy{}
-		err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = c.Delete(ctx, vapToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Verify the VAP is recreated by the watch
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
-				return err
-			}
-			// Check that this is a new VAP instance (different UID)
-			if vap.UID == vapToDelete.UID {
-				return fmt.Errorf("VAP was not recreated, same UID found")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("VAPB v1beta1 should be recreated when deleted", func(t *testing.T) {
-		suffix := "VapbV1Beta1ShouldBeRecreated"
-
-		logger.Info("Running test: VAPB v1beta1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
-		cstr := newDenyAllCstr(suffix)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.GroupVersion = &admissionregistrationv1beta1.SchemeGroupVersion
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-
-		// Create the constraint first
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			return c.Create(ctx, cstr)
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		vapbName := fmt.Sprintf("gatekeeper-%s", cstr.GetName())
-
-		// First, wait for VAPB to be created
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Delete the VAPB resource directly to simulate external deletion
-		vapbToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-		err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = c.Delete(ctx, vapbToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Verify the VAPB is recreated by the watch
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
-				return err
-			}
-			// Check that this is a new VAPB instance (different UID)
-			if vapb.UID == vapbToDelete.UID {
-				return fmt.Errorf("VAPB was not recreated, same UID found")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Clean up the constraint
-		err = c.Delete(ctx, cstr)
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("VAPB v1 should be recreated when deleted", func(t *testing.T) {
-		suffix := "VapbV1ShouldBeRecreated"
-
-		logger.Info("Running test: VAPB v1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
-		cstr := newDenyAllCstr(suffix)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.GroupVersion = &admissionregistrationv1.SchemeGroupVersion
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-
-		// Create the constraint first
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			return c.Create(ctx, cstr)
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		vapbName := fmt.Sprintf("gatekeeper-%s", cstr.GetName())
-
-		// First, wait for VAPB to be created
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Delete the VAPB resource directly to simulate external deletion
-		vapbToDelete := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-		err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = c.Delete(ctx, vapbToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Verify the VAPB is recreated by the watch
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
-				return err
-			}
-			// Check that this is a new VAPB instance (different UID)
-			if vapb.UID == vapbToDelete.UID {
-				return fmt.Errorf("VAPB was not recreated, same UID found")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Clean up the constraint
-		err = c.Delete(ctx, cstr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2064,6 +1924,224 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+func TestReconcile_VAPV1Beta1RecreatedWhenDeleted(t *testing.T) {
+	ctx, c := setupVersionPinnedReconcileTest(t, &admissionregistrationv1beta1.SchemeGroupVersion)
+	suffix := "VapV1Beta1ShouldBeRecreated"
+
+	logger.Info("Running test: VAP v1beta1 should be recreated when deleted")
+	constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+	testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+	vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+
+	err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+		return c.Get(ctx, types.NamespacedName{Name: vapName}, vap)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vapToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+	err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.Delete(ctx, vapToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+		if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+			return err
+		}
+		if vap.UID == vapToDelete.UID {
+			return fmt.Errorf("VAP was not recreated, same UID found")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReconcile_VAPV1RecreatedWhenDeleted(t *testing.T) {
+	ctx, c := setupVersionPinnedReconcileTest(t, &admissionregistrationv1.SchemeGroupVersion)
+	suffix := "VapV1ShouldBeRecreated"
+
+	logger.Info("Running test: VAP v1 should be recreated when deleted")
+	constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+	testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+	vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+
+	err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+		return c.Get(ctx, types.NamespacedName{Name: vapName}, vap)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vapToDelete := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+	err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.Delete(ctx, vapToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+		if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+			return err
+		}
+		if vap.UID == vapToDelete.UID {
+			return fmt.Errorf("VAP was not recreated, same UID found")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReconcile_VAPBV1Beta1RecreatedWhenDeleted(t *testing.T) {
+	ctx, c := setupVersionPinnedReconcileTest(t, &admissionregistrationv1beta1.SchemeGroupVersion)
+	suffix := "VapbV1Beta1ShouldBeRecreated"
+
+	logger.Info("Running test: VAPB v1beta1 should be recreated when deleted")
+	constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
+	cstr := newDenyAllCstr(suffix)
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+	testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+	err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		return c.Create(ctx, cstr)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+
+	vapbName := transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+		return c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vapbToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+	err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.Delete(ctx, vapbToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+		if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
+			return err
+		}
+		if vapb.UID == vapbToDelete.UID {
+			return fmt.Errorf("VAPB was not recreated, same UID found")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReconcile_VAPBV1RecreatedWhenDeleted(t *testing.T) {
+	ctx, c := setupVersionPinnedReconcileTest(t, &admissionregistrationv1.SchemeGroupVersion)
+	suffix := "VapbV1ShouldBeRecreated"
+
+	logger.Info("Running test: VAPB v1 should be recreated when deleted")
+	constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
+	cstr := newDenyAllCstr(suffix)
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+	testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+	err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		return c.Create(ctx, cstr)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+
+	vapbName := transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+		return c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vapbToDelete := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+	err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.Delete(ctx, vapbToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+		if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
+			return err
+		}
+		if vapb.UID == vapbToDelete.UID {
+			return fmt.Errorf("VAPB was not recreated, same UID found")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Tests that expectations for constraints are canceled if the corresponding constraint is deleted.

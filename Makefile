@@ -6,6 +6,8 @@ GATOR_REPOSITORY ?= openpolicyagent/gator
 GHCR_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper
 GHCR_CRD_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper-crds
 GHCR_GATOR_REPOSITORY ?= ghcr.io/open-policy-agent/gator
+GHCR_FAKE_READER_REPOSITORY ?= ghcr.io/open-policy-agent/fake-reader
+GHCR_FAKE_SUBSCRIBER_REPOSITORY ?= ghcr.io/open-policy-agent/fake-subscriber
 
 IMG := $(REPOSITORY):latest
 CRD_IMG := $(CRD_REPOSITORY):latest
@@ -21,23 +23,24 @@ AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
 GENERATE_VAP ?= true
 GENERATE_VAPBINDING ?= true
-SYNC_VAP_ENFORCEMENT_SCOPE ?= false
+SYNC_VAP_ENFORCEMENT_SCOPE ?= true
 
-VERSION := v3.22.0-beta.0
+VERSION := v3.23.0-beta.0
 
-KIND_VERSION ?= 0.29.0
+KIND_VERSION ?= 0.32.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.33.0
-KUSTOMIZE_VERSION ?= 3.8.9
-BATS_VERSION ?= 1.12.0
-ORAS_VERSION ?= 1.2.3
+KUSTOMIZE_VERSION ?= 5.8.1
+BATS_VERSION ?= 1.13.0
+ORAS_VERSION ?= 1.3.2
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.17.4
 NODE_VERSION ?= 24-bullseye-slim
-YQ_VERSION ?= 4.35.2
+YQ_VERSION ?= 4.53.3
 
 HELM_ARGS ?=
+HELM_TIMEOUT ?= 5m
 HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
 	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
@@ -76,7 +79,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v2.4.0
+GOLANGCI_LINT_VERSION := v2.9.0
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -180,11 +183,26 @@ endif
 
 all: lint test manager
 
-# Run tests
+# Run tests with coverage
+.PHONY: native-test
 native-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
+	go test ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
+
+# Run tests with race detector
+.PHONY: native-race-test
+native-race-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	GO111MODULE=on \
+	go test ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
+
+# Run benchmarks only (no unit tests)
+.PHONY: native-bench-test
+native-bench-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	GO111MODULE=on \
+	go test ./pkg/... ./apis/... ./cmd/gator/... -bench . -run "^$$"
 
 .PHONY: benchmark-test
 benchmark-test:
@@ -204,7 +222,7 @@ test-e2e-owner-ref:
 	@bash test/with-admission-plugin/test-e2e-owner-ref.sh
 
 .PHONY: test-gator
-test-gator: gator test-gator-verify test-gator-test test-gator-expand
+test-gator: gator test-gator-verify test-gator-test test-gator-expand test-gator-policy
 
 .PHONY: test-gator-containerized
 test-gator-containerized: __test-image
@@ -222,6 +240,14 @@ test-gator-test: gator
 .PHONY: test-gator-expand
 test-gator-expand: gator
 	bats test/gator/expand
+
+.PHONY: test-gator-policy
+test-gator-policy: gator
+	go test -cover -race ./pkg/gator/policy/...
+
+.PHONY: test-gator-policy-e2e
+test-gator-policy-e2e: gator
+	bats test/gator/policy/policy.bats
 
 e2e-dependencies:
 	# Download and install kind
@@ -273,7 +299,7 @@ e2e-helm-deploy: e2e-helm-install $(LOCALBIN)
 ifeq ($(ENABLE_EXPORT),true)
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
-		--debug --wait \
+		--debug --wait --timeout ${HELM_TIMEOUT} \
 		$(HELM_EXPORT_ARGS) \
 		$(if $(filter disk,$(EXPORT_BACKEND)),$(HELM_DISK_EXPORT_ARGS)) \
 		$(if $(filter dapr,$(EXPORT_BACKEND)),$(HELM_DAPR_EXPORT_ARGS)) \
@@ -281,7 +307,7 @@ ifeq ($(ENABLE_EXPORT),true)
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
-		--debug --wait \
+		--debug --wait --timeout ${HELM_TIMEOUT} \
 		$(HELM_EXTRA_ARGS)
 endif
 
@@ -365,7 +391,7 @@ manifests: __controller-gen
 		output:crd:artifacts:config=config/crd/bases
 	@# Copy constraint template CRD from frameworks module
 	go mod download github.com/open-policy-agent/frameworks/constraint
-	cp $$(go list -m -f '{{.Dir}}' github.com/open-policy-agent/frameworks/constraint)/deploy/crds.yaml config/crd/bases/constrainttemplate-customresourcedefinition.yaml
+	cp $$(go list -mod=mod -m -f '{{.Dir}}' github.com/open-policy-agent/frameworks/constraint)/deploy/crds.yaml config/crd/bases/constrainttemplate-customresourcedefinition.yaml
 	./build/update-match-schema.sh
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
@@ -375,7 +401,7 @@ manifests: __controller-gen
 		/gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
 	docker run --rm -v $(shell pwd):/gatekeeper \
 		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-		--load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
+		--load-restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.
@@ -502,6 +528,24 @@ docker-buildx-gator-release: docker-buildx-builder
 		-t ${GATOR_REPOSITORY}:${VERSION} \
 		$(if $(filter true,$(PUSH_TO_GHCR)),-t ${GHCR_GATOR_REPOSITORY}:${VERSION}) \
 		-f gator.Dockerfile .
+
+# Build fake-reader image
+docker-buildx-fake-reader: docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t ${GHCR_FAKE_READER_REPOSITORY}:latest \
+		-f test/export/fake-reader/Dockerfile test/export/fake-reader
+
+# Build fake-subscriber image
+docker-buildx-fake-subscriber: docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t ${GHCR_FAKE_SUBSCRIBER_REPOSITORY}:latest \
+		-f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
 
 # Update manager_image_patch.yaml with image tag
 patch-image:

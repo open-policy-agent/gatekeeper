@@ -14,13 +14,13 @@ spec:
     listKind: ExpansionTemplatePodStatusList
     plural: expansiontemplatepodstatuses
     singular: expansiontemplatepodstatus
-  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ExpansionTemplatePodStatus is the Schema for the expansiontemplatepodstatuses API.
+        description: ExpansionTemplatePodStatus is the Schema for the expansiontemplatepodstatuses
+          API.
         properties:
           apiVersion:
             description: |-
@@ -40,7 +40,8 @@ spec:
           metadata:
             type: object
           status:
-            description: ExpansionTemplatePodStatusStatus defines the observed state of ExpansionTemplatePodStatus.
+            description: ExpansionTemplatePodStatusStatus defines the observed state
+              of ExpansionTemplatePodStatus.
             properties:
               errors:
                 items:
@@ -54,7 +55,8 @@ spec:
                   type: object
                 type: array
               id:
-                description: 'Important: Run "make" to regenerate code after modifying this file'
+                description: 'Important: Run "make" to regenerate code after modifying
+                  this file'
                 type: string
               observedGeneration:
                 format: int64

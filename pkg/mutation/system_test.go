@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 	mutationschema "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -116,8 +118,17 @@ func (m *fakeMutator) String() string {
 	return m.MID.String()
 }
 
-func (m *fakeMutator) SchemaBindings() []schema.GroupVersionKind {
-	return m.GVKs
+func (m *fakeMutator) SchemaBindings() []mutationschema.Binding {
+	bindings := make([]mutationschema.Binding, 0, len(m.GVKs)*4)
+	for _, gvk := range m.GVKs {
+		bindings = append(bindings,
+			mutationschema.Binding{GVK: gvk, Operation: admissionv1.Create},
+			mutationschema.Binding{GVK: gvk, Operation: admissionv1.Update},
+			mutationschema.Binding{GVK: gvk, Operation: admissionv1.Delete},
+			mutationschema.Binding{GVK: gvk, Operation: admissionv1.Connect},
+		)
+	}
+	return bindings
 }
 
 func TestMutation(t *testing.T) {
@@ -211,7 +222,7 @@ func TestMutation(t *testing.T) {
 				}
 			}
 
-			mutated, err := c.Mutate(&types.Mutable{Object: toMutate})
+			mutated, err := c.Mutate(context.Background(), &types.Mutable{Object: toMutate})
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("got Mutate() error = %v, want %v", err, tc.wantErr)
 			}
@@ -282,7 +293,7 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 	// We can mutate objects before System is put in an inconsistent state.
 	t.Run("mutate works on consistent state", func(t *testing.T) {
 		u := &unstructured.Unstructured{}
-		gotMutated, gotErr := s.Mutate(&types.Mutable{
+		gotMutated, gotErr := s.Mutate(context.Background(), &types.Mutable{
 			Object:    u,
 			Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
 		})
@@ -303,7 +314,7 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 	// Since foo and foo-conflict define conflicting schemas, neither is executed.
 	t.Run("no mutation on inconsistent state", func(t *testing.T) {
 		u2 := &unstructured.Unstructured{}
-		gotMutated, gotErr := s.Mutate(&types.Mutable{
+		gotMutated, gotErr := s.Mutate(context.Background(), &types.Mutable{
 			Object:    u2,
 			Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
 		})
@@ -325,7 +336,7 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 	// Mutations are performed again.
 	t.Run("mutations performed after conflict removed", func(t *testing.T) {
 		u3 := &unstructured.Unstructured{}
-		gotMutated, gotErr := s.Mutate(&types.Mutable{
+		gotMutated, gotErr := s.Mutate(context.Background(), &types.Mutable{
 			Object:    u3,
 			Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
 		})
@@ -370,7 +381,7 @@ func TestSystem_DontApplyConflictingMutationsRemoveOriginal(t *testing.T) {
 	}
 
 	u := &unstructured.Unstructured{}
-	gotMutated, gotErr := s.Mutate(&types.Mutable{
+	gotMutated, gotErr := s.Mutate(context.Background(), &types.Mutable{
 		Object:    u,
 		Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
 	})
@@ -424,7 +435,7 @@ func TestSystem_EarliestConflictingMutatorWins(t *testing.T) {
 	}
 
 	u := &unstructured.Unstructured{}
-	gotMutated, gotErr := s.Mutate(&types.Mutable{
+	gotMutated, gotErr := s.Mutate(context.Background(), &types.Mutable{
 		Object:    u,
 		Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
 	})
@@ -513,7 +524,7 @@ func TestSystem_ReportingInjection(t *testing.T) {
 	}
 
 	toMutate := &unstructured.Unstructured{Object: converted}
-	_, err = s.Mutate(&types.Mutable{Object: toMutate})
+	_, err = s.Mutate(context.Background(), &types.Mutable{Object: toMutate})
 	if err != nil {
 		t.Fatal("Mutate failed unexpectedly", err)
 	}
@@ -557,7 +568,7 @@ func TestSystem_Mutate_InverseMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mutated, err := s.Mutate(&types.Mutable{Object: obj})
+	mutated, err := s.Mutate(context.Background(), &types.Mutable{Object: obj})
 	if mutated {
 		t.Errorf("got Mutate() = %t, want %t", mutated, false)
 	}

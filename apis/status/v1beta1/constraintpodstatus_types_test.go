@@ -15,11 +15,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+const (
+	podName  = "some-gk-pod"
+	podNS    = "a-gk-namespace"
+	cstrName = "a-constraint"
+	cstrKind = "AConstraintKind"
+)
+
 func TestNewConstraintStatusForPod(t *testing.T) {
-	podName := "some-gk-pod"
-	podNS := "a-gk-namespace"
-	cstrName := "a-constraint"
-	cstrKind := "AConstraintKind"
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
 	scheme := runtime.NewScheme()

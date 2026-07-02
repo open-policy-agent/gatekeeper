@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
@@ -17,7 +18,7 @@ import (
 )
 
 // resolvePlaceholders resolves all external data placeholders in the given object.
-func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
+func (s *System) resolvePlaceholders(ctx context.Context, obj *unstructured.Unstructured) error {
 	providerKeys := make(map[string]sets.Set[string])
 
 	// recurse object to find all existing external data placeholders
@@ -53,12 +54,14 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 		return fmt.Errorf("failed to get client TLS certificate: %w", err)
 	}
 
-	externalData, errors := s.sendRequests(providerKeys, clientCert)
+	externalData, errors := s.sendRequests(ctx, providerKeys, clientCert)
 	return s.mutateWithExternalData(obj, externalData, errors)
 }
 
+const defaultExternalDataRequestTimeout = 5 * time.Second
+
 // sendRequests sends requests to all providers in parallel.
-func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]error) {
+func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.Set[string], clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]error) {
 	var (
 		wg    sync.WaitGroup
 		mutex sync.RWMutex
@@ -81,11 +84,21 @@ func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCe
 			continue
 		}
 
+		providerCopy := provider
+		keysList := keys.UnsortedList()
+
 		wg.Add(1)
-		go func(provider *externaldataUnversioned.Provider, keys []string) {
+		go func(provider externaldataUnversioned.Provider, keys []string) {
 			defer wg.Done()
 
-			resp, _, err := fn(context.Background(), provider, keys, clientCert)
+			timeout := time.Duration(provider.Spec.Timeout) * time.Second
+			if timeout <= 0 {
+				timeout = defaultExternalDataRequestTimeout
+			}
+			reqCtx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
+
+			resp, _, err := fn(reqCtx, &provider, keys, clientCert)
 
 			mutex.Lock()
 			defer mutex.Unlock()
@@ -103,9 +116,9 @@ func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCe
 			for _, item := range resp.Response.Items {
 				responses[provider.Name][item.Key] = &item
 			}
-		}(&provider, keys.UnsortedList())
-		wg.Wait()
+		}(providerCopy, keysList)
 	}
+	wg.Wait()
 
 	return responses, errors
 }

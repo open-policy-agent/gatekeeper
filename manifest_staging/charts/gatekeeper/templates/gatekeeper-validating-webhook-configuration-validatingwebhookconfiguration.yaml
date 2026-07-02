@@ -3,7 +3,8 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  annotations: {{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}
   labels:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
@@ -36,17 +37,22 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
-    - key: kubernetes.io/metadata.name
-      operator: NotIn
-      values:
-      - {{ .Release.Namespace }}
     
-    {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
+    {{- /* 1. Get mandatory exemption from helper */ -}}
+    {{- $defaults := include "gatekeeper.mandatoryNamespaceExemption" . | fromYaml -}}
+    {{- /* 2. Merge user values with mandatory exemption. */ -}}
+    {{- $merged := merge (deepCopy .Values.validatingWebhookExemptNamespacesLabels) $defaults -}}
+    {{- range $key, $value := $merged }}
     - key: {{ $key }}
       operator: NotIn
       values:
-      {{- range $value }}
-      - {{ . }}
+      {{- /* Ensure current namespace is in the list for the metadata key */ -}}
+      {{- $list := $value -}}
+      {{- if eq $key "kubernetes.io/metadata.name" }}
+        {{- $list = append $value $.Release.Namespace | uniq -}}
+      {{- end }}
+      {{- range $list }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}
   objectSelector: {{ toYaml .Values.validatingWebhookObjectSelector | nindent 4 }}

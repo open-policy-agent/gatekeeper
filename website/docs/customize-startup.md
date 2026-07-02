@@ -59,6 +59,77 @@ The `--mutation-annotations` flag adds the following two annotations to mutated 
 
 > ❗ Note that this will break the idempotence requirement that Kubernetes sets for mutation webhooks. See the [Kubernetes docs here](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#idempotence) for more details
 
+## [Alpha] Remote Cluster Mode for Gatekeeper
+
+The `--enable-remote-cluster` flag enables Gatekeeper to run in a local (management) cluster while enforcing policies on a separate target cluster specified via `--kubeconfig`. This is designed for hosted control plane architectures where the target cluster's API server runs within the management cluster.
+
+> 📖 For a full end-to-end setup walkthrough, installing CRDs across both clusters, deploying Gatekeeper, wiring webhook certificates, and a smoke test see the [Remote Cluster Mode](remote-cluster.md) guide.
+
+### When to Use
+
+Use remote cluster mode when:
+- Gatekeeper runs in a local (management) cluster
+- You want to enforce policies on a remote target cluster
+
+### Configuration
+
+```bash
+--enable-remote-cluster            # Enable remote cluster mode
+--kubeconfig=/path/to/target.yaml  # Kubeconfig for target cluster
+```
+
+### How It Works
+
+Status resources live on the management cluster alongside the Gatekeeper pod, with OwnerReferences pointing to the pod. This enables automatic garbage collection — when a pod restarts, Kubernetes cleans up its old status resources automatically.
+
+### RBAC Requirements
+
+Gatekeeper needs permissions on the **management/local cluster** to resolve its pod identity and manage status resources:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gatekeeper-manager-role
+  namespace: gatekeeper-system
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get"]
+- apiGroups: ["status.gatekeeper.sh"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+```
+
+### Migration from Previous Versions
+
+If upgrading from a version where `--enable-remote-cluster` stored status resources on the target cluster, you may have orphaned status resources on the target cluster. Run the following to clean them up:
+
+```bash
+kubectl delete constrainttemplatepodstatuses,constraintpodstatuses,mutatorpodstatuses,expansiontemplatepodstatuses,configpodstatuses,providerpodstatuses,connectionpodstatuses \
+  -n gatekeeper-system --all --context <target-cluster-context>
+```
+
+This is a one-time cleanup. After upgrading, status resources are automatically managed on the management cluster.
+
+```bash
+# List all pod names referenced in status resources (repeat for each status type)
+kubectl get constrainttemplatepodstatuses -n gatekeeper-system \
+  -o jsonpath="{.items[*].metadata.labels['gatekeeper\.sh/pod']}" | tr ' ' '\n' | sort -u
+
+# Compare with running Gatekeeper pods in local cluster
+kubectl get pods -n gatekeeper-system -l control-plane=controller-manager -o name
+```
+
+To clean up orphaned resources after identifying old pod names:
+
+```bash
+# Delete status resources for a specific old pod
+OLD_POD="gatekeeper-controller-manager-old-xyz"
+kubectl delete constrainttemplatepodstatuses,constraintpodstatuses,mutatorpodstatuses,expansiontemplatepodstatuses,configpodstatuses,providerpodstatuses,connectionpodstatuses \
+  -n gatekeeper-system -l gatekeeper.sh/pod=$OLD_POD
+```
+
 ## Other Configuration Options
 
 For the complete list of configuration flags for your specific version of Gatekeeper, run the Gatekeeper binary with the `--help` flag. For example:

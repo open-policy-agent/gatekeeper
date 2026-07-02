@@ -188,6 +188,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		logging.LogStatsEntries(
 			h.opa,
 			h.log.WithValues(
+				logging.Semantic, true,
 				logging.Process, "admission",
 				logging.EventType, "review_response_stats",
 				logging.ResourceGroup, req.Kind.Group,
@@ -274,6 +275,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 		}
 		if *logDenies {
 			h.log.WithValues(
+				logging.Semantic, true,
 				logging.Process, "admission",
 				logging.Details, r.Metadata["details"],
 				logging.EventType, "violation",
@@ -364,7 +366,10 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return true, nil
 	}
 
-	if len(req.Name) > 63 {
+	// Status resource names are generated from the controller pod name plus the
+	// backing object identity (for example, template or constraint name), so
+	// valid status object names can exceed 63 characters.
+	if req.Kind.Group != "status.gatekeeper.sh" && len(req.Name) > 63 {
 		return false, fmt.Errorf("resource cannot have metadata.name larger than 63 char; length: %d", len(req.Name))
 	}
 
@@ -625,13 +630,13 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	}
 
 	trace, dump := h.tracingLevel(ctx, req)
-	resp, err := h.review(ctx, review, trace, dump)
+	resp, err := h.review(ctx, review, review.Namespace, trace, dump)
 	if err != nil {
 		return nil, fmt.Errorf("error reviewing resource %s: %w", req.Name, err)
 	}
 
 	for _, res := range resultants {
-		resultantResp, err := h.review(ctx, createReviewForResultant(res.Obj, review.Namespace), trace, dump)
+		resultantResp, err := h.review(ctx, createReviewForResultant(res.Obj, review.Namespace, req.Operation), review.Namespace, trace, dump)
 		if err != nil {
 			return nil, fmt.Errorf("error reviewing resultant resource: %w", err)
 		}
@@ -643,8 +648,20 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	return resp, nil
 }
 
-func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {
-	resp, err := h.opa.Review(ctx, review, reviews.EnforcementPoint(util.WebhookEnforcementPoint), reviews.Tracing(trace), reviews.Stats(*logStatsAdmission))
+func (h *validationHandler) review(ctx context.Context, review interface{}, namespace *corev1.Namespace, trace bool, dump bool) (*rtypes.Responses, error) {
+	// Build review options
+	opts := []reviews.ReviewOpt{
+		reviews.EnforcementPoint(util.WebhookEnforcementPoint),
+		reviews.Tracing(trace),
+		reviews.Stats(*logStatsAdmission),
+	}
+
+	// Add namespace option if available for CEL namespaceObject and Rego input.review.namespaceObject support
+	if opt := util.NamespaceReviewOpt(namespace, h.log); opt != nil {
+		opts = append(opts, opt)
+	}
+
+	resp, err := h.opa.Review(ctx, review, opts...)
 	if resp != nil && trace {
 		h.log.Info(resp.TraceDump())
 	}
@@ -690,10 +707,11 @@ func (h *validationHandler) createReviewForRequest(ctx context.Context, req *adm
 	return review, nil
 }
 
-func createReviewForResultant(obj *unstructured.Unstructured, ns *corev1.Namespace) *target.AugmentedUnstructured {
+func createReviewForResultant(obj *unstructured.Unstructured, ns *corev1.Namespace, operation admissionv1.Operation) *target.AugmentedUnstructured {
 	return &target.AugmentedUnstructured{
 		Object:    *obj,
 		Namespace: ns,
+		Operation: operation,
 		Source:    mutationtypes.SourceTypeGenerated,
 	}
 }

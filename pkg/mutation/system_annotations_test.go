@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -32,7 +33,7 @@ func TestSystem_Mutate_Annotations(t *testing.T) {
 
 	obj := &unstructured.Unstructured{}
 
-	mutated, err := s.Mutate(&types.Mutable{Object: obj})
+	mutated, err := s.Mutate(context.Background(), &types.Mutable{Object: obj})
 	if err != nil {
 		t.Fatalf("got Mutate() error = %v, want %v", err, nil)
 	}

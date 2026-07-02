@@ -329,17 +329,17 @@ func (am *Manager) audit(ctx context.Context) error {
 
 	if *auditFromCache {
 		var res []Result
-		am.log.Info("Auditing from cache")
+		am.log.WithValues(logging.Semantic, true).Info("Auditing from cache")
 		res, errs := am.auditFromCache(ctx)
-		am.log.Info("Audit from cache results", "violations", len(res))
+		am.log.WithValues(logging.Semantic, true).Info("Audit from cache results", "violations", len(res))
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
 		}
 
-		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, &auditExportPublishingState)
 	} else {
-		am.log.Info("Auditing via discovery client")
-		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+		am.log.WithValues(logging.Semantic, true).Info("Auditing via discovery client")
+		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, &auditExportPublishingState)
 		if err != nil {
 			return err
 		}
@@ -373,7 +373,7 @@ func (am *Manager) auditResources(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	auditExportPublishingState auditExportPublishingState,
+	auditExportPublishingState *auditExportPublishingState,
 ) error {
 	// delete all from cache dir before starting audit
 	err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
@@ -612,7 +612,14 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			Object:    obj,
 			Namespace: ns,
 		}
-		resp, err := am.opa.Review(ctx, au, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
+		opts := []reviews.ReviewOpt{
+			reviews.EnforcementPoint(util.AuditEnforcementPoint),
+			reviews.Stats(*logStatsAudit),
+		}
+		if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
+			opts = append(opts, opt)
+		}
+		resp, err := am.opa.Review(ctx, au, opts...)
 		if err != nil {
 			am.log.Error(err, fmt.Sprintf("Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
 			continue
@@ -621,7 +628,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		if *logStatsAudit {
 			logging.LogStatsEntries(
 				am.opa,
-				am.log.WithValues(logging.EventType, "audit_cache_stats"),
+				am.log.WithValues(logging.EventType, "audit_cache_stats", logging.Semantic, true),
 				resp.StatsEntries,
 				"audit from cache review request stats",
 			)
@@ -663,7 +670,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	auditExportPublishingState auditExportPublishingState,
+	auditExportPublishingState *auditExportPublishingState,
 ) error {
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
@@ -703,7 +710,14 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				Source:    mutationtypes.SourceTypeOriginal,
 			}
 
-			resp, err := am.opa.Review(ctx, augmentedObj, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
+			opts := []reviews.ReviewOpt{
+				reviews.EnforcementPoint(util.AuditEnforcementPoint),
+				reviews.Stats(*logStatsAudit),
+			}
+			if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
+				opts = append(opts, opt)
+			}
+			resp, err := am.opa.Review(ctx, augmentedObj, opts...)
 			if err != nil {
 				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
 				continue
@@ -727,7 +741,14 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					Namespace: ns,
 					Source:    mutationtypes.SourceTypeGenerated,
 				}
-				resultantResp, err := am.opa.Review(ctx, au, reviews.EnforcementPoint(util.AuditEnforcementPoint), reviews.Stats(*logStatsAudit))
+				resultantOpts := []reviews.ReviewOpt{
+					reviews.EnforcementPoint(util.AuditEnforcementPoint),
+					reviews.Stats(*logStatsAudit),
+				}
+				if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
+					resultantOpts = append(resultantOpts, opt)
+				}
+				resultantResp, err := am.opa.Review(ctx, au, resultantOpts...)
 				if err != nil {
 					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
 					continue
@@ -740,7 +761,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			if *logStatsAudit {
 				logging.LogStatsEntries(
 					am.opa,
-					am.log.WithValues(logging.EventType, "audit_stats"),
+					am.log.WithValues(logging.EventType, "audit_stats", logging.Semantic, true),
 					resp.StatsEntries,
 					"audit review request stats",
 				)
@@ -868,7 +889,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	auditExportPublishingState auditExportPublishingState,
+	auditExportPublishingState *auditExportPublishingState,
 ) {
 	for _, r := range res {
 		constraint := r.Constraint
@@ -1139,6 +1160,7 @@ func logStart(l logr.Logger) {
 	l.Info(
 		"auditing constraints and violations",
 		logging.EventType, "audit_started",
+		logging.Semantic, true,
 	)
 }
 
@@ -1146,6 +1168,7 @@ func logFinish(l logr.Logger, t time.Duration) {
 	l.Info(
 		"auditing is complete",
 		logging.EventType, "audit_finished",
+		logging.Semantic, true,
 		"duration", t.String(),
 	)
 }
@@ -1154,6 +1177,7 @@ func logConstraint(l logr.Logger, gvknn *util.KindVersionName, enforcementAction
 	l.Info(
 		"audit results for constraint",
 		logging.EventType, "constraint_audited",
+		logging.Semantic, true,
 		logging.ConstraintGroup, gvknn.Group,
 		logging.ConstraintAPIVersion, gvknn.Version,
 		logging.ConstraintKind, gvknn.Kind,
@@ -1202,6 +1226,7 @@ func logViolation(l logr.Logger,
 		message,
 		logging.Details, details,
 		logging.EventType, "violation_audited",
+		logging.Semantic, true,
 		logging.ConstraintGroup, constraint.GroupVersionKind().Group,
 		logging.ConstraintAPIVersion, constraint.GroupVersionKind().Version,
 		logging.ConstraintKind, constraint.GetKind(),

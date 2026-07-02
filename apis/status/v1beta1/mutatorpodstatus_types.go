@@ -74,10 +74,6 @@ type MutatorPodStatusList struct {
 	Items           []MutatorPodStatus `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&MutatorPodStatus{}, &MutatorPodStatusList{})
-}
-
 // NewMutatorStatusForPod returns a mutator status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the mutator status controller.

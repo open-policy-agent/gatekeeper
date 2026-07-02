@@ -1,0 +1,43 @@
+# Test ConstraintTemplate: Required Labels
+#
+# This is a simplified template for testing purposes.
+# Based on: https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/general/requiredlabels
+
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: test-required-labels
+  annotations:
+    description: "Requires resources to contain specified labels."
+spec:
+  crd:
+    spec:
+      names:
+        kind: TestRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            message:
+              type: string
+            labels:
+              type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  allowedRegex:
+                    type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package testrequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_].key}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("Resource missing required labels: %v", [missing])
+        }

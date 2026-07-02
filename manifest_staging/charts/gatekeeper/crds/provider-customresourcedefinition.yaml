@@ -14,11 +14,11 @@ spec:
     listKind: ProviderList
     plural: providers
     singular: provider
-  preserveUnknownFields: false
   scope: Cluster
   versions:
   - deprecated: true
-    deprecationWarning: externaldata.gatekeeper.sh/v1alpha1 is deprecated. Use externaldata.gatekeeper.sh/v1beta1 instead.
+    deprecationWarning: externaldata.gatekeeper.sh/v1alpha1 is deprecated. Use externaldata.gatekeeper.sh/v1beta1
+      instead.
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -53,7 +53,8 @@ spec:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the url for the provider. URL is prefixed with https://.
+                description: URL is the url for the provider. URL is prefixed with
+                  https://.
                 type: string
             type: object
           status:
@@ -62,13 +63,15 @@ spec:
               byPod:
                 description: ByPod is the status of the provider by pod
                 items:
-                  description: ProviderPodStatusStatus defines the observed state of ProviderPodStatus.
+                  description: ProviderPodStatusStatus defines the observed state
+                    of ProviderPodStatus.
                   properties:
                     active:
                       type: boolean
                     errors:
                       items:
-                        description: ProviderError represents a single error caught while managing providers.
+                        description: ProviderError represents a single error caught
+                          while managing providers.
                         properties:
                           errorTimestamp:
                             format: date-time
@@ -118,7 +121,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: Provider is the Schema for the providers API
+        description: Provider is the Schema for the providers API.
         properties:
           apiVersion:
             description: |-
@@ -149,7 +152,8 @@ spec:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the url for the provider. URL is prefixed with https://.
+                description: URL is the url for the provider. URL is prefixed with
+                  https://.
                 type: string
             type: object
           status:
@@ -158,13 +162,15 @@ spec:
               byPod:
                 description: ByPod is the status of the provider by pod
                 items:
-                  description: ProviderPodStatusStatus defines the observed state of ProviderPodStatus.
+                  description: ProviderPodStatusStatus defines the observed state
+                    of ProviderPodStatus.
                   properties:
                     active:
                       type: boolean
                     errors:
                       items:
-                        description: ProviderError represents a single error caught while managing providers.
+                        description: ProviderError represents a single error caught
+                          while managing providers.
                         properties:
                           errorTimestamp:
                             format: date-time

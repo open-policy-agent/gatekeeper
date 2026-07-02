@@ -1,0 +1,40 @@
+# Test ConstraintTemplate: Container Limits
+#
+# This is a simplified template for testing purposes.
+# Based on: https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/general/containerlimits
+
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: test-container-limits
+  annotations:
+    description: "Requires containers to have memory and CPU limits set."
+spec:
+  crd:
+    spec:
+      names:
+        kind: TestContainerLimits
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            cpu:
+              type: string
+            memory:
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package testcontainerlimits
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.resources.limits.cpu
+          msg := sprintf("Container '%v' has no CPU limit", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.resources.limits.memory
+          msg := sprintf("Container '%v' has no memory limit", [container.name])
+        }

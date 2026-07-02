@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"context"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
@@ -17,10 +18,12 @@ func makeValue(v interface{}) unversioned.AssignField {
 func assign(value interface{}, location string) *unversioned.Assign {
 	result := &unversioned.Assign{
 		Spec: unversioned.AssignSpec{
-			ApplyTo: []match.ApplyTo{{
-				Groups:   []string{"*"},
-				Versions: []string{"*"},
-				Kinds:    []string{"*"},
+			ApplyTo: []match.MutationApplyTo{{
+				ApplyTo: match.ApplyTo{
+					Groups:   []string{"*"},
+					Versions: []string{"*"},
+					Kinds:    []string{"*"},
+				},
 			}},
 			Location: location,
 			Parameters: unversioned.Parameters{
@@ -49,6 +52,6 @@ func BenchmarkSystem_Mutate(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		u := &unstructured.Unstructured{}
 
-		_, _ = s.Mutate(&types.Mutable{Object: u})
+		_, _ = s.Mutate(context.Background(), &types.Mutable{Object: u})
 	}
 }

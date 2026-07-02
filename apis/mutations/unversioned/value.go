@@ -31,7 +31,7 @@ var validFields = map[Field]bool{
 type AssignField struct {
 	// Value is a constant value that will be assigned to `location`
 	// +kubebuilder:validation:Schemaless
-	// +kubebuilder:validation:XPreserveUnknownFields
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Value *types.Anything `json:"value,omitempty"`
 
 	// FromMetadata assigns a value from the specified metadata field.

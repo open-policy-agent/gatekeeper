@@ -60,16 +60,19 @@ spec:
         {{- end }}
         args:
         - --audit-interval={{ .Values.auditInterval }}
-        - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
+        - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel
+          .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName
+          }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         {{ if hasKey .Values "auditChunkSize" }}- --audit-chunk-size={{ .Values.auditChunkSize }}{{- end }}
         - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
         {{ if hasKey .Values "emitAuditEvents" }}- --emit-audit-events={{ .Values.emitAuditEvents }}{{- end }}
         {{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}
-        - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
+        - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace
+          }}
         
         {{- if not .Values.audit.disableGenerateOperation }}
         - --operation=generate
@@ -95,17 +98,33 @@ spec:
         - --health-addr=:{{ .Values.audit.healthPort }}
         - --prometheus-port={{ .Values.audit.metricsPort }}
         - --enable-external-data={{ .Values.enableExternalData }}
-        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
+        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion
+          }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
+        {{- if and (has "opentelemetry" .Values.metricsBackends) (hasKey .Values "otlpEndpoint") }}
+        - --otlp-endpoint={{ .Values.otlpEndpoint }}
+        {{- end }}
+        {{- if and (has "opentelemetry" .Values.metricsBackends) (hasKey .Values "otlpMetricInterval") }}
+        - --otlp-metric-interval={{ .Values.otlpMetricInterval }}
+        {{- end }}
+        {{- if and (has "stackdriver" .Values.metricsBackends) (hasKey .Values "stackdriverOnlyWhenAvailable") }}
+        - --stackdriver-only-when-available={{ .Values.stackdriverOnlyWhenAvailable }}
+        {{- end }}
+        {{- if and (has "stackdriver" .Values.metricsBackends) (hasKey .Values "stackdriverMetricInterval") }}
+        - --stackdriver-metric-interval={{ .Values.stackdriverMetricInterval }}
+        {{- end }}
+        {{ if hasKey .Values "metricsAddr" }}- --metrics-addr={{ .Values.metricsAddr }}{{- end }}
         
         {{- if .Values.audit.logFile}}
         - --log-file={{ .Values.audit.logFile }}
         {{- end }}
-        - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
-        - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
+        - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled
+          }}
+        - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL
+          }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
         
         {{- if hasKey .Values "defaultCreateVAPForTemplates"}}
@@ -131,6 +150,16 @@ spec:
         {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
         - --default-wait-for-vapb-generation={{ .Values.defaultWaitForVAPBGeneration }}
         {{- end }}
+        {{ if hasKey .Values "logLevelKey" }}- --log-level-key={{ .Values.logLevelKey }}{{- end }}
+        {{ if hasKey .Values "logLevelEncoder" }}- --log-level-encoder={{ .Values.logLevelEncoder }}{{- end }}
+        {{ if hasKey .Values "readinessRetries" }}- --readiness-retries={{ .Values.readinessRetries }}{{- end }}
+        {{ if hasKey .Values "enablePprof" }}- --enable-pprof={{ .Values.enablePprof }}{{- end }}
+        {{ if hasKey .Values "pprofPort" }}- --pprof-port={{ .Values.pprofPort }}{{- end }}
+        {{ if hasKey .Values.audit "apiCacheDir" }}- --api-cache-dir={{ .Values.audit.apiCacheDir }}{{- end }}
+        {{ if hasKey .Values "enableReferentialRules" }}- --enable-referential-rules={{ .Values.enableReferentialRules }}{{- end }}
+        {{ if hasKey .Values "shutdownDelay" }}- --shutdown-delay={{ .Values.shutdownDelay }}{{- end }}
+        {{ if hasKey .Values "enableRemoteCluster" }}- --enable-remote-cluster={{ .Values.enableRemoteCluster }}{{- end }}
+        {{ if hasKey .Values "kubeconfig" }}- --kubeconfig={{ .Values.kubeconfig }}{{- end }}
         command:
         - /manager
         env:
@@ -192,7 +221,7 @@ spec:
         - mountPath: {{ .Values.audit.exportVolumeMount.path }}
           name: {{ .Values.audit.exportVolume.name }}
         {{- end }}
-      {{ if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") }}
+      {{ if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") (not .Values.audit.disableAuditSidecar) }}
       - {{ toYaml .Values.audit.exportSidecar | nindent 8 }}
       {{- end }}
       dnsPolicy: {{ .Values.audit.dnsPolicy }}

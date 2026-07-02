@@ -46,8 +46,9 @@ spec:
                   schemas are associated with specific GVKs.
                 items:
                   description: |-
-                    ApplyTo determines what GVKs items the mutation should apply to.
-                    Globs are not allowed.
+                    MutationApplyTo extends ApplyTo with operation filtering for mutations.
+                    This type is used by mutation resources (Assign, AssignImage, ModifySet)
+                    to specify which GVKs and admission operations trigger the mutation.
                   properties:
                     groups:
                       items:
@@ -55,6 +56,22 @@ spec:
                       type: array
                     kinds:
                       items:
+                        type: string
+                      type: array
+                    operations:
+                      description: |-
+                        Operations specifies which admission operations (CREATE, UPDATE, *) should trigger
+                        this mutation. If empty, all operations supported by the mutation webhook are allowed for backward compatibility.
+                        The Gatekeeper mutation webhook currently only processes CREATE and UPDATE operations, so those are the only
+                        concrete values accepted. DELETE and CONNECT are rejected until the mutation webhook supports them.
+                        "*" means all operations the mutation webhook currently supports and will broaden automatically if support
+                        for additional operations is added in a future release.
+                      items:
+                        description: OperationType specifies an operation for a request.
+                        enum:
+                        - CREATE
+                        - UPDATE
+                        - '*'
                         type: string
                       type: array
                     versions:

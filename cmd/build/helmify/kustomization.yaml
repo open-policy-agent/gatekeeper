@@ -4,7 +4,7 @@ commonLabels:
   chart: '{{ template "gatekeeper.name" . }}'
   release: "{{ .Release.Name }}"
   heritage: "{{ .Release.Service }}"
-bases:
+resources:
   - "../../../config/default"
 patchesStrategicMerge:
   - kustomize-for-helm.yaml

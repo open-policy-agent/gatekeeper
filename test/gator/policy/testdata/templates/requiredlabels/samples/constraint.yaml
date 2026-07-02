@@ -1,0 +1,18 @@
+# Sample Constraint: Require Owner Label
+#
+# This constraint requires all namespaces to have an "owner" label.
+
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: TestRequiredLabels
+metadata:
+  name: all-must-have-owner
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    message: "All namespaces must have an 'owner' label"
+    labels:
+      - key: owner

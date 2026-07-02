@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -135,7 +135,7 @@ type fileList []string
 func (l *fileList) addFile(target string) error {
 	// target is a file.
 	ext := path.Ext(target)
-	if ext != ".yaml" && ext != ".yml" {
+	if !gator.IsYAMLExtension(ext) {
 		return fmt.Errorf("%w: %q", ErrUnsupportedExtension, ext)
 	}
 	*l = append(*l, target)
@@ -172,7 +172,7 @@ func isYAMLFile(d fs.DirEntry) bool {
 		return false
 	}
 	ext := path.Ext(d.Name())
-	return ext == ".yaml" || ext == ".yml"
+	return gator.IsYAMLExtension(ext)
 }
 
 func readSuite(f fs.FS, path string) (*Suite, error) {

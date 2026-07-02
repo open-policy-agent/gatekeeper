@@ -2,41 +2,93 @@ name: Slack Meeting Reminder
 
 on:
   schedule:
-    # Run every Wednesday at 9 AM PST (5 PM UTC) - 1 hour before 10 AM meeting
-    - cron: "0 17 * * 3"
-    # Run every Wednesday at 1 PM PST (9 PM UTC) - 1 hour before 2 PM meeting
-    - cron: "0 21 * * 3"
+    # Run every Wednesday at 8:30 AM Pacific Time - 1.5 hours before 10 AM meeting.
+    # Both UTC hours are needed to account for daylight saving time.
+    - cron: "30 15 * * 3"
+    - cron: "30 16 * * 3"
+    # Run every Wednesday at 12:30 PM Pacific Time - 1.5 hours before 2 PM meeting.
+    # Both UTC hours are needed to account for daylight saving time.
+    - cron: "30 19 * * 3"
+    - cron: "30 20 * * 3"
 
 permissions: read-all
 
 jobs:
   send-reminder:
-    runs-on: ubuntu-latest
+    runs-on: oracle-vm-2cpu-8gb-x86-64
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
-      - name: Determine which time slot to use
+      - name: Determine whether to send reminder
         id: check-week
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
-          # Get the ISO week number
-          WEEK_NUM=$(date +%V)
-          # Check if it's an even or odd week
-          if [ $((WEEK_NUM % 2)) -eq 0 ]; then
-            # Even week: 1 PM PST (21:00 UTC)
-            EXPECTED_HOUR=21
-          else
-            # Odd week: 9 AM PST (17:00 UTC)
-            EXPECTED_HOUR=17
+          set -euo pipefail
+
+          read -r schedule_minute schedule_hour schedule_dom schedule_month schedule_day <<< "$SCHEDULE"
+
+          if [ "$schedule_minute" != "30" ] || [ "$schedule_dom" != "*" ] || [ "$schedule_month" != "*" ] || [ "$schedule_day" != "3" ]; then
+            echo "unexpected schedule: $SCHEDULE" >&2
+            exit 1
           fi
-          CURRENT_HOUR=$(date -u +%H)
-          echo "Expected hour: $EXPECTED_HOUR, Current hour: $CURRENT_HOUR"
-          if [ "$CURRENT_HOUR" -eq "$EXPECTED_HOUR" ]; then
-            echo "should_run=true" >> $GITHUB_OUTPUT
+
+          scheduled_date=$(date -u +%Y-%m-%d)
+          scheduled_time="${scheduled_date} ${schedule_hour}:00 UTC"
+          pacific_hour=$(TZ=America/Los_Angeles date -d "$scheduled_time" +%-H)
+
+          # Determine the alternating slot by counting whole weeks from a fixed anchor
+          anchor_epoch=$(date -u -d "2026-06-17" +%s)
+          today_epoch=$(date -u -d "$scheduled_date" +%s)
+          week_index=$(( (today_epoch - anchor_epoch) / 604800 ))
+
+          case "$pacific_hour" in
+            8)
+              scheduled_slot=odd
+              ;;
+            12)
+              scheduled_slot=even
+              ;;
+            *)
+              echo "Schedule $SCHEDULE maps to $pacific_hour:30 Pacific Time; skipping."
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          if [ $(( week_index % 2 )) -eq 0 ]; then
+            expected_slot=odd
           else
-            echo "should_run=false" >> $GITHUB_OUTPUT
+            expected_slot=even
+          fi
+
+          echo "week index from anchor: $week_index, schedule slot: $scheduled_slot, expected slot: $expected_slot"
+          if [ "$scheduled_slot" = "$expected_slot" ]; then
+            # Resolve both meeting start times in Central European Time for the current date.
+            # Computing them from the same instant keeps them DST-correct.
+            morning_epoch=$(TZ=America/Los_Angeles date -d "$scheduled_date 10:00" +%s)
+            afternoon_epoch=$(TZ=America/Los_Angeles date -d "$scheduled_date 14:00" +%s)
+            cet_morning=$(TZ=Europe/Berlin date -d "@$morning_epoch" +%H:%M)
+            cet_afternoon=$(TZ=Europe/Berlin date -d "@$afternoon_epoch" +%H:%M)
+            if [ "$scheduled_slot" = "odd" ]; then
+              meeting_pt="10:00"
+              meeting_cet="$cet_morning"
+            else
+              meeting_pt="14:00"
+              meeting_cet="$cet_afternoon"
+            fi
+            {
+              echo "meeting_pt=$meeting_pt"
+              echo "meeting_cet=$meeting_cet"
+              echo "cet_morning=$cet_morning"
+              echo "cet_afternoon=$cet_afternoon"
+              echo "should_run=true"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Send Slack notification
@@ -50,7 +102,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "The OPA Gatekeeper weekly is starting in 1 hour!  :clock1:\n\nAdd your agenda items to the meeting notes to get your questions answered by one of the Gatekeeper maintainers.\n\n<https://docs.google.com/document/d/1A1-Q-1OMw3QODs1wT6eqfLTagcGmgzAJAjJihiO3T48/edit|Meeting Notes>"
+                    "text": "The OPA Gatekeeper weekly is today at ${{ steps.check-week.outputs.meeting_pt }} Pacific Time · ${{ steps.check-week.outputs.meeting_cet }} Central European Time!  :clock1:\n\nAdd your agenda items to the meeting notes to get your questions answered by one of the Gatekeeper maintainers.\n\n<https://docs.google.com/document/d/1A1-Q-1OMw3QODs1wT6eqfLTagcGmgzAJAjJihiO3T48/edit|Meeting Notes>"
                   }
                 },
                 {
@@ -71,7 +123,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "• 21:00 and 05:00 Central European Time"
+                    "text": "• ${{ steps.check-week.outputs.cet_morning }} and ${{ steps.check-week.outputs.cet_afternoon }} Central European Time"
                   }
                 },
                 {

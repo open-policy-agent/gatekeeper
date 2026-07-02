@@ -181,3 +181,101 @@ func TestValidationErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestHasCELEngine(t *testing.T) {
+	tests := []struct {
+		name     string
+		template *templates.ConstraintTemplate
+		expected bool
+	}{
+		{
+			name: "Has CEL engine",
+			template: &templates.ConstraintTemplate{
+				Spec: templates.ConstraintTemplateSpec{
+					Targets: []templates.Target{
+						{
+							Code: []templates.Code{
+								{Engine: Name},
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "No CEL engine - different engine",
+			template: &templates.ConstraintTemplate{
+				Spec: templates.ConstraintTemplateSpec{
+					Targets: []templates.Target{
+						{
+							Code: []templates.Code{
+								{Engine: "Rego"},
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "No CEL engine - empty code",
+			template: &templates.ConstraintTemplate{
+				Spec: templates.ConstraintTemplateSpec{
+					Targets: []templates.Target{
+						{
+							Code: []templates.Code{},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "No targets",
+			template: &templates.ConstraintTemplate{
+				Spec: templates.ConstraintTemplateSpec{
+					Targets: []templates.Target{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "Multiple targets - invalid",
+			template: &templates.ConstraintTemplate{
+				Spec: templates.ConstraintTemplateSpec{
+					Targets: []templates.Target{
+						{Code: []templates.Code{{Engine: Name}}},
+						{Code: []templates.Code{{Engine: Name}}},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "CEL engine with other engines",
+			template: &templates.ConstraintTemplate{
+				Spec: templates.ConstraintTemplateSpec{
+					Targets: []templates.Target{
+						{
+							Code: []templates.Code{
+								{Engine: "Rego"},
+								{Engine: Name},
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HasCELEngine(tt.template)
+			if got != tt.expected {
+				t.Errorf("HasCELEngine() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}

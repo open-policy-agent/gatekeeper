@@ -31,7 +31,7 @@ type ConnectionSpec struct {
 	Driver string `json:"driver"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Schemaless
-	// +kubebuilder:validation:XPreserveUnknownFields
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Config *types.Anything `json:"config"`
 }
 
@@ -60,8 +60,4 @@ type ConnectionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Connection `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Connection{}, &ConnectionList{})
 }

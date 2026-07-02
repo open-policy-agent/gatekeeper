@@ -5,7 +5,9 @@ title: Mutation
 
 `Feature State`: Gatekeeper version v3.10+ (stable)
 
-The mutation feature allows Gatekeeper modify Kubernetes resources at request time based on customizable mutation policies.
+The mutation feature allows Gatekeeper to modify Kubernetes resources at request time based on customizable mutation policies.
+
+Mutation policies are separate from validation constraints. They use mutation-specific CRDs instead of `ConstraintTemplate` and `Constraint` resources. If you need policy checks without mutating a resource (for admission-time deny/warn/dry-run or audit reporting), use [validation constraints](howto.md) instead.
 
 ## Mutation CRDs
 
@@ -53,6 +55,7 @@ applyTo:
 - groups: [""]
   kinds: ["Pod"]
   versions: ["v1"]
+  operations: ["CREATE"]  # Optional: specify which operations to mutate
 match:
   scope: Namespaced | Cluster
   kinds:
@@ -67,6 +70,38 @@ match:
 Note that the `applyTo` field is required for all mutators except `AssignMetadata`, which does not have the `applyTo` field. 
 `applyTo` allows Gatekeeper to understand the schema of the objects being modified, so that it can detect when two mutators disagree as
 to a kind's schema, which can cause non-convergent mutations. Also, the `applyTo` section does not accept globs.
+
+##### Operations Field
+
+The `operations` field in `applyTo` allows you to specify which Kubernetes admission operations should trigger the mutation. 
+This provides granular control over when mutations are applied, helping to avoid issues with immutable fields during resource updates.
+
+```yaml
+applyTo:
+- groups: [""]
+  kinds: ["Pod"]
+  versions: ["v1"]
+  operations: ["CREATE"]  # Only mutate on resource creation
+```
+
+**Accepted operations:**
+- `CREATE` - Apply mutation when resources are created
+- `UPDATE` - Apply mutation when resources are updated
+- `*` - Apply mutation to every operation the mutation webhook currently supports (today, `CREATE` and `UPDATE`)
+
+> **Note:** The Gatekeeper mutation webhook only processes `CREATE` and `UPDATE` operations, so those are the only concrete values accepted. `DELETE` and `CONNECT` are **rejected** by validation until the mutation webhook supports them. This avoids creating mutators that are valid but can never run, and prevents stored mutators from silently activating on a future upgrade. Support for additional operations would be introduced as a deliberate, release-noted change.
+
+**Backward Compatibility:** If the `operations` field is not specified or is empty, the mutator applies to all operations currently handled by the mutation webhook, which are `CREATE` and `UPDATE`. `operations: ["*"]` and `operations: ["CREATE", "UPDATE"]` are equivalent to omitting the field while those are the only operations the mutation webhook handles.
+
+> **Forward Compatibility of `*` / omitted:** `operations: ["*"]` and omitting the field both mean "all operations the mutation webhook currently supports." If a future release adds support for additional mutation operations, mutators using `*` (or no `operations` field) will broaden to include them automatically, consistent with the meaning of `*` in Kubernetes admission webhooks. If you want a mutator to stay scoped to specific operations across upgrades, list them explicitly (e.g. `operations: ["CREATE", "UPDATE"]`).
+
+**Common Use Cases:**
+- `operations: ["CREATE"]` - Ideal for setting initial values that shouldn't change on updates (e.g., environment variables with immutable constraints)
+- `operations: ["UPDATE"]` - For mutations that should only apply when resources are modified
+- `operations: ["CREATE", "UPDATE"]` - Apply to both creation and updates, pinned to those operations even if more are supported later
+- `operations: ["*"]` - Apply to all currently-supported operations, broadening automatically if support for more is added
+
+> **Important Consideration:** When using `operations: ["CREATE"]` only, the mutation will not apply to resources that already exist before the mutator is deployed. If those resources are later updated (e.g., for label changes or finalizer removal), the mutation will not be applied, and the previously mutated values remain unchanged. Mutators scoped to only some supported operations also do not apply in audit, expansion, or other contexts where no admission operation is available; mutators that apply to every supported operation do apply in those contexts. However, if the mutator is later deleted or modified, resources created under the old mutator may no longer match the new policy, which could cause issues if the field was set differently than what the user originally specified. Users should be aware that `operations: ["CREATE"]` effectively makes the mutated fields read-only for the mutation lifecycle.
 
 The `match` section is common to all mutators. It supports the following match criteria:
 - scope - the scope (Namespaced | Cluster) of the mutated resource
@@ -326,6 +361,32 @@ spec:
   parameters:
     assign:
       value: Always
+```
+
+### Using the operations field to control mutation timing
+
+Setting environment variables only on Pod creation to avoid issues with immutable fields:
+
+```yaml
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: demo-env-create-only
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+    operations: ["CREATE"]  # Only apply on resource creation
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "spec.containers[name:*].env[name:DEPLOYMENT_TIMESTAMP].value"
+  parameters:
+    assign:
+      value: "2024-01-01T00:00:00Z"
 ```
 
 ### Adding a `network` sidecar to a Pod
