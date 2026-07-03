@@ -27,6 +27,7 @@ var ErrNotRemoved = errors.New("failed to find mutator on sorted list")
 type System struct {
 	schemaDB                          schema.DB
 	orderedMutators                   orderedIDs
+	candidateMutators                 candidateIndex
 	mutatorsMap                       map[types.ID]types.Mutator
 	mux                               sync.RWMutex
 	reporter                          StatsReporter
@@ -54,6 +55,7 @@ func NewSystem(options SystemOpts) *System {
 	return &System{
 		schemaDB:                          *schema.New(),
 		orderedMutators:                   orderedIDs{},
+		candidateMutators:                 newCandidateIndex(),
 		mutatorsMap:                       make(map[types.ID]types.Mutator),
 		reporter:                          options.Reporter,
 		newUUID:                           options.NewUUID,
@@ -111,7 +113,11 @@ func (s *System) Upsert(m types.Mutator) error {
 		}
 	}
 
+	if current, ok := s.mutatorsMap[id]; ok {
+		s.candidateMutators.remove(current)
+	}
 	s.mutatorsMap[id] = toAdd
+	s.candidateMutators.add(toAdd)
 
 	s.orderedMutators.insert(id)
 	return err
@@ -126,7 +132,9 @@ func (s *System) Remove(id types.ID) error {
 		return nil
 	}
 
+	mutator := s.mutatorsMap[id]
 	s.schemaDB.Remove(id)
+	s.candidateMutators.remove(mutator)
 
 	delete(s.mutatorsMap, id)
 
@@ -195,10 +203,11 @@ func (s *System) mutate(ctx context.Context, mutable *types.Mutable) (int, error
 	var allAppliedMutations [][]types.Mutator
 
 	for iteration := 1; iteration <= maxIterations; iteration++ {
+		candidateIDs := s.mutationCandidateIDs(mutable)
 		var appliedMutations []types.Mutator
 		var old *unstructured.Unstructured
 
-		for _, id := range s.orderedMutators.ids {
+		for _, id := range candidateIDs {
 			if s.schemaDB.HasConflicts(id) {
 				// Don't try to apply Mutators which have conflicts.
 				continue
@@ -263,6 +272,35 @@ func (s *System) mutate(ctx context.Context, mutable *types.Mutable) (int, error
 		mutable.Object.GroupVersionKind().Kind,
 		mutable.Object.GetNamespace(),
 		getNameOrGenerateName(mutable.Object))
+}
+
+func (s *System) mutationCandidateIDs(mutable *types.Mutable) []types.ID {
+	if mutable == nil || mutable.Object == nil {
+		return s.orderedMutators.ids
+	}
+
+	if s.candidateMutators.hasGVKChangingMutators() {
+		return s.orderedMutators.ids
+	}
+
+	gvk := mutable.Object.GroupVersionKind()
+	if gvk.Empty() {
+		// Without a request GVK, schema bindings cannot safely prove a mutator
+		// is inapplicable. Preserve legacy behavior by checking every mutator.
+		return s.orderedMutators.ids
+	}
+
+	if mutable.Operation == "" {
+		// Empty operation is used by non-admission mutation callers. The exact
+		// empty-operation semantics live in each mutator's Matches method, so the
+		// index only filters by GVK here.
+		return s.candidateMutators.candidatesForGVK(gvk)
+	}
+
+	return s.candidateMutators.candidates(schema.Binding{
+		GVK:       gvk,
+		Operation: mutable.Operation,
+	})
 }
 
 func mutateErr(err error, uid uuid.UUID, mID types.ID, obj *unstructured.Unstructured) error {
