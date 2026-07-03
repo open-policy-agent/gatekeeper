@@ -87,14 +87,13 @@ You can alter the variables in `charts/gatekeeper/values.yaml` to customize your
 
 ### Configuring Pod Annotations for Cluster Autoscaler
 
-If you are using the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler), you may want to allow downscaling of nodes running Gatekeeper pods. Since Gatekeeper uses `emptyDir` volumes for `/tmp`, the Cluster Autoscaler will block node downscaling by default.
+If you are using the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler), you may want to allow downscaling of nodes running Gatekeeper pods. Since the Gatekeeper audit pod uses an `emptyDir` volume for `/tmp/audit`, the Cluster Autoscaler will block node downscaling by default.
 
-To enable safe eviction for the manager and audit pods, you can pass the `safe-to-evict` pod annotations via Helm:
+To enable safe eviction for the audit pod, you can pass the `safe-to-evict` pod annotation via Helm:
 
 ```sh
-helm install gatekeeper/gatekeeper --name-template=gatekeeper --namespace gatekeeper-system --create-namespace \
-    --set podAnnotations."cluster-autoscaler\.kubernetes\.io/safe-to-evict"="true" \
-    --set auditPodAnnotations."cluster-autoscaler\.kubernetes\.io/safe-to-evict"="true"
+helm install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system --create-namespace \
+    --set-string auditPodAnnotations."cluster-autoscaler\.kubernetes\.io/safe-to-evict"="true"
 ```
 
 ## Uninstallation
