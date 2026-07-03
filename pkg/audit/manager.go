@@ -329,6 +329,20 @@ func (am *Manager) audit(ctx context.Context) error {
 		totalViolationsPerEnforcementAction[action] = 0
 	}
 
+	hasConstraints, err := am.hasConstraintInstances(ctx, constraintsGVKs)
+	if err != nil {
+		am.log.Error(err, "unable to determine whether constraints exist; continuing audit")
+	} else if !hasConstraints {
+		am.log.Info("Audit exits, no constraint instances found")
+		am.stopAuditResultsUpdateLoop()
+		for k, v := range totalViolationsPerEnforcementAction {
+			if err := am.reporter.reportTotalViolations(k, v); err != nil {
+				am.log.Error(err, "failed to report total violations")
+			}
+		}
+		return nil
+	}
+
 	if *auditFromCache {
 		var res []Result
 		am.log.WithValues(logging.Semantic, true).Info("Auditing from cache")
@@ -1002,6 +1016,20 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 	return ret, nil
 }
 
+func (am *Manager) hasConstraintInstances(ctx context.Context, constraintsGVKs []schema.GroupVersionKind) (bool, error) {
+	for _, constraintGVK := range constraintsGVKs {
+		constraintList := &unstructured.UnstructuredList{}
+		constraintList.SetGroupVersionKind(constraintGVK)
+		if err := am.client.List(ctx, constraintList, client.Limit(1)); err != nil {
+			return true, err
+		}
+		if len(constraintList.Items) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (am *Manager) addAuditResponsesToUpdateLists(
 	updateLists map[util.KindVersionName]*LimitQueue,
 	res []Result,
@@ -1063,20 +1091,26 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	}
 }
 
-func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]*LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) {
+func (am *Manager) stopAuditResultsUpdateLoop() {
 	// if there is a previous reporting thread, close it before starting a new one
-	if am.ucloop != nil {
-		// this is closing the previous audit reporting thread
-		am.log.Info("closing the previous audit reporting thread")
-		close(am.ucloop.stop)
-		select {
-		case <-am.ucloop.stopped:
-		case <-time.After(time.Duration(*auditInterval) * time.Second):
-			// avoid deadlocking in cases where ucloop never stops
-			// this creates potential leak of threads but avoids potential of deadlocking
-			am.log.Info("timeout waiting for previous audit reporting thread to finish")
-		}
+	if am.ucloop == nil {
+		return
 	}
+	// this is closing the previous audit reporting thread
+	am.log.Info("closing the previous audit reporting thread")
+	close(am.ucloop.stop)
+	select {
+	case <-am.ucloop.stopped:
+	case <-time.After(time.Duration(*auditInterval) * time.Second):
+		// avoid deadlocking in cases where ucloop never stops
+		// this creates potential leak of threads but avoids potential of deadlocking
+		am.log.Info("timeout waiting for previous audit reporting thread to finish")
+	}
+	am.ucloop = nil
+}
+
+func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]*LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) {
+	am.stopAuditResultsUpdateLoop()
 
 	am.ucloop = &updateConstraintLoop{
 		client:  am.client,

@@ -893,3 +893,69 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 		})
 	}
 }
+
+func Test_hasConstraintInstances(t *testing.T) {
+	constraintGVK := schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabels"}
+
+	t.Run("no constraints", func(t *testing.T) {
+		am := &Manager{client: fake.NewClientBuilder().Build()}
+		hasConstraints, err := am.hasConstraintInstances(context.Background(), []schema.GroupVersionKind{constraintGVK})
+		require.NoError(t, err)
+		require.False(t, hasConstraints)
+	})
+
+	t.Run("has constraint", func(t *testing.T) {
+		constraint := &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "K8sRequiredLabels",
+			"metadata": map[string]interface{}{
+				"name": "required-labels",
+			},
+		}}
+		constraint.SetGroupVersionKind(constraintGVK)
+		am := &Manager{client: fake.NewClientBuilder().WithObjects(constraint).Build()}
+		hasConstraints, err := am.hasConstraintInstances(context.Background(), []schema.GroupVersionKind{constraintGVK})
+		require.NoError(t, err)
+		require.True(t, hasConstraints)
+	})
+}
+
+func BenchmarkHasConstraintInstancesNoConstraints(b *testing.B) {
+	const constraintKinds = 100
+	constraintGVKs := make([]schema.GroupVersionKind, constraintKinds)
+	for i := range constraintGVKs {
+		constraintGVKs[i] = schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintKind" + strconv.Itoa(i)}
+	}
+	am := &Manager{client: fake.NewClientBuilder().Build()}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		hasConstraints, err := am.hasConstraintInstances(context.Background(), constraintGVKs)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if hasConstraints {
+			b.Fatal("hasConstraintInstances() = true, want false")
+		}
+	}
+}
+
+func Test_stopAuditResultsUpdateLoop(t *testing.T) {
+	stop := make(chan struct{})
+	stopped := make(chan struct{})
+	am := &Manager{
+		log: logr.Discard(),
+		ucloop: &updateConstraintLoop{
+			stop:    stop,
+			stopped: stopped,
+		},
+	}
+	go func() {
+		<-stop
+		close(stopped)
+	}()
+
+	am.stopAuditResultsUpdateLoop()
+	require.Nil(t, am.ucloop)
+}
