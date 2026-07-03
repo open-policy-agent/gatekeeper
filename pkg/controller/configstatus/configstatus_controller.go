@@ -103,6 +103,9 @@ func PodStatusToConfigMapper(selfOnly bool) handler.TypedMapFunc[*v1beta1.Config
 // Add creates a new config status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
+	if err := indexStatusLabel(context.Background(), mgr, &v1beta1.ConfigPodStatus{}, v1beta1.ConfigNameLabel); err != nil {
+		return err
+	}
 	c, err := controller.New("config-status-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
@@ -119,6 +122,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 	return nil
+}
+
+func indexStatusLabel(ctx context.Context, mgr manager.Manager, obj client.Object, field string) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, obj, field, func(obj client.Object) []string {
+		value := obj.GetLabels()[field]
+		if value == "" {
+			return nil
+		}
+		return []string{value}
+	})
 }
 
 var _ reconcile.Reconciler = &ReconcileConfigStatus{}
@@ -154,7 +167,7 @@ func (r *ReconcileConfigStatus) Reconcile(ctx context.Context, request reconcile
 	if err := r.reader.List(
 		ctx,
 		sObjs,
-		client.MatchingLabels{v1beta1.ConfigNameLabel: request.Name},
+		client.MatchingFields{v1beta1.ConfigNameLabel: request.Name},
 		client.InNamespace(util.GetNamespace()),
 	); err != nil {
 		return reconcile.Result{}, err
