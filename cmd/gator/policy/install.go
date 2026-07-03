@@ -21,6 +21,7 @@ var (
 	installBundles           []string
 	installEnforcementAction string
 	installDryRun            bool
+	installForce             bool
 	installOutput            string
 )
 
@@ -50,6 +51,9 @@ gator policy install --bundle pod-security-baseline --enforcement-action=warn
 # Preview changes without applying
 gator policy install --bundle pod-security-baseline --dry-run
 
+# Install even if the cluster Kubernetes version is outside a policy's supported range
+gator policy install k8srequiredlabels --force
+
 # Output as JSON for scripting
 gator policy install --bundle pod-security-baseline --dry-run -o json`,
 		RunE: runInstall,
@@ -57,7 +61,8 @@ gator policy install --bundle pod-security-baseline --dry-run -o json`,
 
 	cmd.Flags().StringSliceVar(&installBundles, "bundle", nil, "Install a policy bundle (may be specified multiple times)")
 	cmd.Flags().StringVar(&installEnforcementAction, "enforcement-action", "", "Override enforcement action (deny, warn, dryrun). Note: 'scoped' is not supported in this release.")
-	cmd.Flags().BoolVar(&installDryRun, "dry-run", false, "Preview changes without applying (does not require cluster access)")
+	cmd.Flags().BoolVar(&installDryRun, "dry-run", false, "Preview changes without applying (requires cluster access to check Kubernetes version compatibility)")
+	cmd.Flags().BoolVar(&installForce, "force", false, "Install even if the cluster Kubernetes version is outside a policy's supported range")
 	cmd.Flags().StringVarP(&installOutput, "output", "o", "table", "Output format: table, json")
 
 	return cmd
@@ -113,15 +118,21 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	// Create fetcher for templates/constraints with the cached catalog source URL as base
 	fetcher := catalog.NewHTTPFetcherWithBaseURL(catalog.DefaultTimeout, catalogSourceURL)
 
-	// Create Kubernetes client (unless dry-run)
+	// Create Kubernetes client. Like upgrade, install --dry-run contacts the
+	// cluster when it can so the preview applies the same Kubernetes-version
+	// compatibility gate a real install would.
 	var k8sClient client.Client
-	if !installDryRun {
-		k8sClient, err = client.NewK8sClient()
-		if err != nil {
+	k8sClient, err = client.NewK8sClient()
+	if err != nil {
+		if !installDryRun {
 			return fmt.Errorf("creating Kubernetes client: %w", err)
 		}
-	} else {
-		k8sClient = &dryRunClient{}
+		// A dry-run only needs the cluster to gate policies that declare a Kubernetes version range. Fall back to a stub so previewing policies
+		// without version bounds (or with --force) still works offline; if the gate is actually active, the stub surfaces this connection error
+		// instead of silently skipping the check.
+		k8sClient = &dryRunFallbackClient{
+			err: fmt.Errorf("creating Kubernetes client for the version-compatibility check (use --force to skip it): %w", err),
+		}
 	}
 
 	// Build install options
@@ -130,6 +141,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		Bundles:           installBundles,
 		EnforcementAction: installEnforcementAction,
 		DryRun:            installDryRun,
+		Force:             installForce,
 	}
 
 	// Perform installation
@@ -163,6 +175,8 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 	outResult.Skipped = result.Skipped
 
+	outResult.Incompatible = result.Incompatible
+
 	for _, name := range result.Failed {
 		outResult.Failed = append(outResult.Failed, output.FailedEntry{
 			Name:  name,
@@ -183,52 +197,80 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 		msg := fmt.Sprintf("installation incomplete: %d of %d policies installed",
 			len(result.Installed), result.TotalRequested)
+		// When incompatible policies are also present, the Incompatible branch
+		// below is unreachable, so fold its guidance into this message rather than
+		// dropping the "--force" hint.
+		if len(result.Incompatible) > 0 {
+			msg += fmt.Sprintf(" (%d skipped: %s)", len(result.Incompatible), incompatibleGuidance)
+		}
 		fmt.Fprintln(os.Stderr, "\nRe-run command to continue (already installed will be skipped).")
+		return gatorpolicy.NewPartialSuccessError(msg)
+	}
+
+	// Policies skipped as incompatible with the cluster's Kubernetes version were
+	// explicitly requested but not installed, so signal partial success rather
+	// than exiting 0 as if everything succeeded.
+	if len(result.Incompatible) > 0 {
+		msg := fmt.Sprintf("installation incomplete: %d of %d policies installed (%d skipped: %s)",
+			len(result.Installed), result.TotalRequested, len(result.Incompatible), incompatibleGuidance)
 		return gatorpolicy.NewPartialSuccessError(msg)
 	}
 
 	return nil
 }
 
-// dryRunClient is a no-op client for dry-run mode.
-type dryRunClient struct{}
-
-func (c *dryRunClient) GatekeeperInstalled(_ context.Context) (bool, error) {
-	return true, nil
+// dryRunFallbackClient stands in for a real client when one cannot be built for
+// a dry-run (e.g. no reachable cluster or kubeconfig). A dry-run only ever calls
+// ServerVersion, and only when the compatibility gate is active (a bounded
+// policy without --force). Every method reports the client-creation failure so
+// that any call fails loudly with a clear error instead of panicking or
+// silently succeeding.
+type dryRunFallbackClient struct {
+	err error
 }
 
-func (c *dryRunClient) ListManagedTemplates(_ context.Context) ([]client.InstalledPolicy, error) {
-	return nil, nil
+func (c *dryRunFallbackClient) GatekeeperInstalled(context.Context) (bool, error) {
+	return false, c.err
 }
 
-func (c *dryRunClient) GetTemplate(_ context.Context, _ string) (*unstructured.Unstructured, error) {
-	return nil, nil
+// ServerVersion reports the client-creation failure so the gate fails loudly for
+// bounded policies rather than silently skipping the check.
+func (c *dryRunFallbackClient) ServerVersion(context.Context) (string, error) {
+	return "", c.err
 }
 
-func (c *dryRunClient) InstallTemplate(_ context.Context, _ *unstructured.Unstructured) error {
-	return nil
+func (c *dryRunFallbackClient) ListManagedTemplates(context.Context) ([]client.InstalledPolicy, error) {
+	return nil, c.err
 }
 
-func (c *dryRunClient) InstallConstraint(_ context.Context, _ *unstructured.Unstructured) error {
-	return nil
+func (c *dryRunFallbackClient) GetTemplate(context.Context, string) (*unstructured.Unstructured, error) {
+	return nil, c.err
 }
 
-func (c *dryRunClient) GetConstraint(_ context.Context, _ schema.GroupVersionResource, _ string) (*unstructured.Unstructured, error) {
-	return nil, nil
+func (c *dryRunFallbackClient) InstallTemplate(context.Context, *unstructured.Unstructured) error {
+	return c.err
 }
 
-func (c *dryRunClient) DeleteTemplate(_ context.Context, _ string) error {
-	return nil
+func (c *dryRunFallbackClient) InstallConstraint(context.Context, *unstructured.Unstructured) error {
+	return c.err
 }
 
-func (c *dryRunClient) DeleteConstraint(_ context.Context, _ schema.GroupVersionResource, _ string) error {
-	return nil
+func (c *dryRunFallbackClient) GetConstraint(context.Context, schema.GroupVersionResource, string) (*unstructured.Unstructured, error) {
+	return nil, c.err
 }
 
-func (c *dryRunClient) WaitForTemplateReady(_ context.Context, _ string, _ time.Duration) error {
-	return nil
+func (c *dryRunFallbackClient) DeleteTemplate(context.Context, string) error {
+	return c.err
 }
 
-func (c *dryRunClient) WaitForConstraintCRD(_ context.Context, _ string, _ time.Duration) error {
-	return nil
+func (c *dryRunFallbackClient) DeleteConstraint(context.Context, schema.GroupVersionResource, string) error {
+	return c.err
+}
+
+func (c *dryRunFallbackClient) WaitForTemplateReady(context.Context, string, time.Duration) error {
+	return c.err
+}
+
+func (c *dryRunFallbackClient) WaitForConstraintCRD(context.Context, string, time.Duration) error {
+	return c.err
 }

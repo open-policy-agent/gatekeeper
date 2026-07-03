@@ -18,6 +18,7 @@ var (
 	upgradeBundles           []string
 	upgradeEnforcementAction string
 	upgradeDryRun            bool
+	upgradeForce             bool
 	upgradeOutput            string
 )
 
@@ -49,6 +50,7 @@ gator policy upgrade --all -o json`,
 	cmd.Flags().StringSliceVar(&upgradeBundles, "bundle", nil, "Upgrade all policies in a bundle (may be specified multiple times)")
 	cmd.Flags().StringVar(&upgradeEnforcementAction, "enforcement-action", "", "Override enforcement action (deny, warn, dryrun)")
 	cmd.Flags().BoolVar(&upgradeDryRun, "dry-run", false, "Preview changes without applying (requires cluster access to check current state)")
+	cmd.Flags().BoolVar(&upgradeForce, "force", false, "Upgrade even if the cluster Kubernetes version is outside a policy's supported range")
 	cmd.Flags().StringVarP(&upgradeOutput, "output", "o", "table", "Output format: table, json")
 
 	return cmd
@@ -89,9 +91,14 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading catalog: %w", err)
 	}
 
-	// Create Kubernetes client
+	// Create Kubernetes client. Note: unlike install, upgrade --dry-run still
+	// requires cluster access because it must read the currently-installed
+	// versions to compute the upgrade preview.
 	k8sClient, err := client.NewK8sClient()
 	if err != nil {
+		if upgradeDryRun {
+			return fmt.Errorf("creating Kubernetes client: %w (upgrade --dry-run still requires cluster access to read installed policy versions)", err)
+		}
 		return fmt.Errorf("creating Kubernetes client: %w", err)
 	}
 
@@ -125,6 +132,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		All:               upgradeAll,
 		EnforcementAction: upgradeEnforcementAction,
 		DryRun:            upgradeDryRun,
+		Force:             upgradeForce,
 	}
 
 	// Perform upgrade
@@ -155,6 +163,8 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		})
 	}
 
+	outResult.Incompatible = result.Incompatible
+
 	for _, name := range result.Failed {
 		outResult.Failed = append(outResult.Failed, output.FailedEntry{
 			Name:  name,
@@ -170,6 +180,13 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// Return appropriate error for non-success cases
 	if len(result.Failed) > 0 {
 		return gatorpolicy.NewPartialSuccessError("upgrade incomplete: some policies failed to upgrade")
+	}
+
+	// Policies skipped as incompatible were requested but not upgraded, so signal
+	// partial success rather than exiting 0 as if everything succeeded.
+	if len(result.Incompatible) > 0 {
+		return gatorpolicy.NewPartialSuccessError(fmt.Sprintf("upgrade incomplete: %d policies skipped (%s)",
+			len(result.Incompatible), incompatibleGuidance))
 	}
 
 	return nil

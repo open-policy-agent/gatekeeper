@@ -61,7 +61,7 @@ gator policy
     --library-path <path>       # Path to library repository (default: ".")
     --output, -o <file>         # Output file path (default: "catalog.yaml")
     --name <name>               # Catalog name (default: "gatekeeper-library")
-    --version <ver>             # Catalog version (default: "v1.0.0")
+    --version <ver>             # Catalog version (default: "v1.1.0")
   --base-url <url>            # Convert local template/constraint paths to URLs
     --bundles <file>            # Bundles definition file (optional)
     --validate                  # Validate generated catalog (default: true)
@@ -119,7 +119,7 @@ apiVersion: gator.gatekeeper.sh/v1alpha1
 kind: PolicyCatalog
 metadata:
   name: gatekeeper-library
-  version: v1.0.0
+  version: v1.1.0
   updatedAt: "2026-01-08T00:00:00Z"
   repository: https://github.com/open-policy-agent/gatekeeper-library
 
@@ -152,6 +152,8 @@ policies:
     description: "Blocks privileged containers"
     category: pod-security
     templatePath: library/pod-security-policy/privileged-containers/template.yaml
+    minKubernetesVersion: v1.21.0
+    maxKubernetesVersion: v1.30.0
     bundleConstraints:
       pod-security-baseline: library/pod-security-policy/privileged-containers/samples/psp-privileged-container/constraint.yaml
       pod-security-restricted: library/pod-security-policy/privileged-containers/samples/psp-privileged-container/constraint.yaml
@@ -193,6 +195,8 @@ policies:
 | `sampleConstraintPath` | string | No | Relative path to sample Constraint |
 | `documentationUrl` | string | No | Link to documentation |
 | `bundles` | []string | No | Bundle(s) this policy belongs to |
+| `minKubernetesVersion` | string | No | Minimum Kubernetes version the policy supports (e.g. `v1.21.0`). Sourced from the `metadata.gatekeeper.sh/minKubernetesVersion` annotation, or derived from the API lifecycle of the resources the policy targets. Accepts the tolerant Kubernetes version format (not strict SemVer). |
+| `maxKubernetesVersion` | string | No | Maximum Kubernetes version the policy has been tested against (e.g. `v1.30.0`). Sourced from the `metadata.gatekeeper.sh/maxKubernetesVersion` annotation, or derived from the API lifecycle of the resources the policy targets. Accepts the tolerant Kubernetes version format (not strict SemVer). |
 
 #### Path Resolution Rules
 
@@ -211,9 +215,14 @@ The `templatePath`, `bundleConstraints`, and `sampleConstraintPath` fields are *
 
 | Term | Field | Description | Format |
 |------|-------|-------------|--------|
-| **Catalog Schema Version** | `metadata.version` | Format/contract version of the catalog structure itself. Increment when adding/removing fields. | semver (e.g., `v1.0.0`) |
+| **Catalog Schema Version** | `metadata.version` | Format/contract version of the catalog structure itself. Increment when adding/removing fields. | semver (e.g., `v1.1.0`) |
 | **Catalog Content Version** | `metadata.updatedAt` | Timestamp indicating when this catalog snapshot was generated from the library. | ISO 8601 timestamp |
 | **Policy Version** | `policies[].version` | Version of the individual ConstraintTemplate/Constraint. Tracks policy logic changes. | semver (e.g., `v1.2.0`) |
+
+Schema version history:
+
+- `v1.0.0` — initial catalog schema.
+- `v1.1.0` — added the optional `minKubernetesVersion` / `maxKubernetesVersion` policy fields.
 
 #### Version Behavior
 

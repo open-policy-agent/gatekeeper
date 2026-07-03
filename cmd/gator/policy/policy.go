@@ -28,6 +28,12 @@ gator policy uninstall k8srequiredlabels
 
 # Generate a catalog from gatekeeper-library
 gator policy generate-catalog --library-path=/path/to/gatekeeper-library`
+
+	// incompatibleGuidance is the shared hint appended to install/upgrade
+	// result messages when policies were skipped for being incompatible with
+	// the cluster's Kubernetes version, so install and upgrade can't drift
+	// apart in wording.
+	incompatibleGuidance = "incompatible Kubernetes version, use --force to override"
 )
 
 // Cmd is the gator policy subcommand.
