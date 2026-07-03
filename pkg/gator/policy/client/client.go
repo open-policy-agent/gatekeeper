@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -36,6 +37,9 @@ type InstalledPolicy struct {
 type Client interface {
 	// GatekeeperInstalled checks if Gatekeeper CRDs are installed.
 	GatekeeperInstalled(ctx context.Context) (bool, error)
+
+	// ServerVersion returns the cluster's Kubernetes version (e.g. "v1.30.2").
+	ServerVersion(ctx context.Context) (string, error)
 
 	// ListManagedTemplates lists all ConstraintTemplates managed by gator.
 	ListManagedTemplates(ctx context.Context) ([]InstalledPolicy, error)
@@ -67,7 +71,8 @@ type Client interface {
 
 // K8sClient implements Client using the Kubernetes API.
 type K8sClient struct {
-	dynamicClient dynamic.Interface
+	dynamicClient   dynamic.Interface
+	discoveryClient discovery.DiscoveryInterface
 }
 
 // NewK8sClient creates a new K8sClient using the default kubeconfig.
@@ -77,12 +82,7 @@ func NewK8sClient() (*K8sClient, error) {
 		return nil, fmt.Errorf("getting kubeconfig: %w", err)
 	}
 
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("creating dynamic client: %w", err)
-	}
-
-	return &K8sClient{dynamicClient: dynamicClient}, nil
+	return NewK8sClientWithConfig(config)
 }
 
 // NewK8sClientWithConfig creates a new K8sClient with the given config.
@@ -92,7 +92,12 @@ func NewK8sClientWithConfig(config *rest.Config) (*K8sClient, error) {
 		return nil, fmt.Errorf("creating dynamic client: %w", err)
 	}
 
-	return &K8sClient{dynamicClient: dynamicClient}, nil
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("creating discovery client: %w", err)
+	}
+
+	return &K8sClient{dynamicClient: dynamicClient, discoveryClient: discoveryClient}, nil
 }
 
 func getKubeConfig() (*rest.Config, error) {
@@ -120,6 +125,18 @@ func (c *K8sClient) GatekeeperInstalled(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("checking Gatekeeper installation: %w", err)
 	}
 	return true, nil
+}
+
+// ServerVersion returns the cluster's Kubernetes version (e.g. "v1.30.2").
+func (c *K8sClient) ServerVersion(_ context.Context) (string, error) {
+	if c.discoveryClient == nil {
+		return "", fmt.Errorf("discovery client not configured")
+	}
+	info, err := c.discoveryClient.ServerVersion()
+	if err != nil {
+		return "", fmt.Errorf("getting server version: %w", err)
+	}
+	return info.GitVersion, nil
 }
 
 // ListManagedTemplates lists all ConstraintTemplates managed by gator.

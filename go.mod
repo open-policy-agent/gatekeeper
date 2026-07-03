@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	cloud.google.com/go/trace v1.10.11
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.44.0
+	github.com/blang/semver/v4 v4.0.0
 	github.com/dapr/go-sdk v1.8.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/dominikbraun/graph v0.16.2
@@ -63,7 +64,6 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/aws/aws-sdk-go v1.47.9 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect

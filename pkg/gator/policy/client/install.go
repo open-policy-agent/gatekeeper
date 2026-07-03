@@ -30,6 +30,22 @@ type InstallOptions struct {
 	EnforcementAction string
 	// DryRun if true, only prints what would be done.
 	DryRun bool
+	// Force if true, bypasses the cluster Kubernetes version compatibility check.
+	Force bool
+	// serverVersion, when non-empty, is the pre-resolved cluster Kubernetes
+	// version used for the compatibility gate. It lets a batch caller (e.g.
+	// Upgrade) resolve the version once instead of once per policy. When empty,
+	// Install resolves it itself.
+	serverVersion string
+}
+
+// IncompatibleEntry describes a policy skipped because the cluster's Kubernetes
+// version falls outside the policy's supported range.
+type IncompatibleEntry struct {
+	// Name is the policy name.
+	Name string
+	// Reason is a human-readable explanation of the incompatibility.
+	Reason string
 }
 
 // InstallResult contains the result of an install operation.
@@ -38,6 +54,8 @@ type InstallResult struct {
 	Installed []string
 	// Skipped is the list of skipped policies (already at same version).
 	Skipped []string
+	// Incompatible is the list of policies skipped due to Kubernetes version incompatibility.
+	Incompatible []IncompatibleEntry
 	// Failed is the list of policies that failed to install.
 	Failed []string
 	// Errors contains error messages for failed policies.
@@ -95,7 +113,12 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 	// Track total policies requested
 	result.TotalRequested = len(policyNames)
 
-	// Validate Gatekeeper is installed (skip if dry-run)
+	// Validate Gatekeeper is installed and determine the cluster version
+	// (both require cluster access, so skip when dry-run).
+	// serverVersion is empty when the compatibility gate is not applied
+	// (dry-run, --force, or no requested policy declares a version bound),
+	// which disables the per-policy version check below.
+	var serverVersion string
 	if !opts.DryRun {
 		installed, err := k8sClient.GatekeeperInstalled(ctx)
 		if err != nil {
@@ -103,6 +126,19 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		}
 		if !installed {
 			return nil, &GatekeeperNotInstalledError{}
+		}
+
+		// Only contact the cluster for its version when at least one requested
+		// policy declares a bound; otherwise the gate can never fire and the
+		// discovery call would be a needless dependency and failure mode.
+		if !opts.Force && anyPolicyHasVersionBounds(cat, policyNames) {
+			serverVersion = opts.serverVersion
+			if serverVersion == "" {
+				serverVersion, err = k8sClient.ServerVersion(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("determining cluster Kubernetes version (use --force to skip the compatibility check): %w", err)
+				}
+			}
 		}
 	}
 
@@ -114,6 +150,28 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 			result.Errors[policyName] = fmt.Sprintf("policy not found: %s", policyName)
 			// Fail fast per MVP design
 			return result, nil
+		}
+
+		// Skip policies incompatible with the cluster's Kubernetes version.
+		// serverVersion is empty when the gate is disabled (dry-run or --force).
+		if serverVersion != "" {
+			compatible, err := catalog.K8sVersionInRange(serverVersion, policy.MinKubernetesVersion, policy.MaxKubernetesVersion)
+			if err != nil {
+				// A version string that fails to parse is a per-policy data
+				// problem; record it and move on so the remaining policies still
+				// get a chance to install, matching the incompatible-skip below.
+				result.Failed = append(result.Failed, policyName)
+				result.Errors[policyName] = err.Error()
+				continue
+			}
+			if !compatible {
+				result.Incompatible = append(result.Incompatible, IncompatibleEntry{
+					Name: policyName,
+					Reason: fmt.Sprintf("cluster Kubernetes version %s is outside the supported range %s",
+						serverVersion, catalog.FormatK8sVersionRange(policy.MinKubernetesVersion, policy.MaxKubernetesVersion)),
+				})
+				continue
+			}
 		}
 
 		// Determine if this policy should install constraints.
@@ -141,6 +199,18 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 	}
 
 	return result, nil
+}
+
+// anyPolicyHasVersionBounds reports whether any of the named policies declares a
+// minimum or maximum Kubernetes version, i.e. whether the compatibility gate can
+// fire at all for this install.
+func anyPolicyHasVersionBounds(cat *catalog.PolicyCatalog, names []string) bool {
+	for _, name := range names {
+		if p := cat.GetPolicy(name); p != nil && (p.MinKubernetesVersion != "" || p.MaxKubernetesVersion != "") {
+			return true
+		}
+	}
+	return false
 }
 
 func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts *InstallOptions, result *InstallResult) (skipped bool, err error) {

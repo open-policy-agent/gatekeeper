@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"text/tabwriter"
+
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
 )
 
 // TablePrinter outputs results in human-readable table format.
@@ -49,7 +51,7 @@ func (p *TablePrinter) PrintSearchResults(w io.Writer, results []SearchResult) e
 	defer tw.Flush()
 
 	// Header
-	fmt.Fprintln(tw, "NAME\tVERSION\tCATEGORY\tDESCRIPTION")
+	fmt.Fprintln(tw, "NAME\tVERSION\tCATEGORY\tK8S VERSION\tDESCRIPTION")
 
 	// Rows
 	for _, r := range results {
@@ -57,7 +59,7 @@ func (p *TablePrinter) PrintSearchResults(w io.Writer, results []SearchResult) e
 		if len(desc) > 50 {
 			desc = desc[:47] + "..."
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.Name, r.Version, r.Category, desc)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.Name, r.Version, r.Category, catalog.FormatK8sVersionRange(r.MinKubernetesVersion, r.MaxKubernetesVersion), desc)
 	}
 
 	return nil
@@ -102,6 +104,10 @@ func (p *TablePrinter) PrintInstallResult(w io.Writer, result *InstallResult) er
 
 	for _, name := range result.Skipped {
 		fmt.Fprintf(w, "- %s (already installed at same version)\n", name)
+	}
+
+	for _, entry := range result.Incompatible {
+		fmt.Fprintf(w, "- %s (skipped: %s)\n", entry.Name, entry.Reason)
 	}
 
 	for _, f := range result.Failed {
@@ -167,11 +173,15 @@ func (p *TablePrinter) PrintUpgradeResult(w io.Writer, result *UpgradeResult) er
 		fmt.Fprintf(w, "- %s (not found in catalog)\n", name)
 	}
 
+	for _, entry := range result.Incompatible {
+		fmt.Fprintf(w, "- %s (skipped: %s)\n", entry.Name, entry.Reason)
+	}
+
 	for _, f := range result.Failed {
 		fmt.Fprintf(w, "✗ %s - failed: %s\n", f.Name, f.Error)
 	}
 
-	if len(result.Upgraded) == 0 && len(result.Failed) == 0 {
+	if len(result.Upgraded) == 0 && len(result.Failed) == 0 && len(result.Incompatible) == 0 {
 		if len(result.NotFound) > 0 {
 			fmt.Fprintf(w, "\nNo upgrades available. %d policies not found in catalog.\n", len(result.NotFound))
 		} else {

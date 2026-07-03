@@ -452,6 +452,132 @@ spec:
 	}
 }
 
+func TestParsePolicyFromTemplate_K8sVersionAnnotations(t *testing.T) {
+	tempDir := t.TempDir()
+
+	libraryDir := filepath.Join(tempDir, "library")
+	generalDir := filepath.Join(libraryDir, "general")
+	policyDir := filepath.Join(generalDir, "versionedpolicy")
+	if err := os.MkdirAll(policyDir, 0o755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		annotations string
+		wantMin     string
+		wantMax     string
+	}{
+		{
+			name: "both min and max set",
+			annotations: `    metadata.gatekeeper.sh/minKubernetesVersion: "v1.21.0"
+    metadata.gatekeeper.sh/maxKubernetesVersion: "v1.30.0"`,
+			wantMin: "v1.21.0",
+			wantMax: "v1.30.0",
+		},
+		{
+			name:        "only min set",
+			annotations: `    metadata.gatekeeper.sh/minKubernetesVersion: "v1.25.0"`,
+			wantMin:     "v1.25.0",
+			wantMax:     "",
+		},
+		{
+			name:        "no k8s version annotations",
+			annotations: "",
+			wantMin:     "",
+			wantMax:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			templateContent := `apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sversionedpolicy
+  annotations:
+    description: "A versioned test policy"
+    metadata.gatekeeper.sh/version: "1.0.0"
+` + tt.annotations + `
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sVersionedPolicy
+`
+			templatePath := filepath.Join(policyDir, "template.yaml")
+			if err := os.WriteFile(templatePath, []byte(templateContent), 0o600); err != nil {
+				t.Fatalf("Failed to write template: %v", err)
+			}
+
+			policy, err := parsePolicyFromTemplate(templatePath, tempDir)
+			if err != nil {
+				t.Fatalf("parsePolicyFromTemplate failed: %v", err)
+			}
+
+			if policy.MinKubernetesVersion != tt.wantMin {
+				t.Errorf("MinKubernetesVersion: got %q, want %q", policy.MinKubernetesVersion, tt.wantMin)
+			}
+			if policy.MaxKubernetesVersion != tt.wantMax {
+				t.Errorf("MaxKubernetesVersion: got %q, want %q", policy.MaxKubernetesVersion, tt.wantMax)
+			}
+		})
+	}
+}
+
+func TestValidateCatalogSchema_K8sVersions(t *testing.T) {
+	baseCatalog := func(minVer, maxVer string) *PolicyCatalog {
+		return &PolicyCatalog{
+			APIVersion: "gator.gatekeeper.sh/v1alpha1",
+			Kind:       "PolicyCatalog",
+			Metadata: CatalogMetadata{
+				Name:    "test",
+				Version: "v1.0.0",
+			},
+			Policies: []Policy{
+				{
+					Name:                 "test-policy",
+					Version:              "v1.0.0",
+					TemplatePath:         "library/general/test/template.yaml",
+					MinKubernetesVersion: minVer,
+					MaxKubernetesVersion: maxVer,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name        string
+		minVer      string
+		maxVer      string
+		expectError bool
+	}{
+		{"both valid", "v1.21.0", "v1.30.0", false},
+		{"only min valid", "v1.21.0", "", false},
+		{"only max valid", "", "v1.30.0", false},
+		{"neither set", "", "", false},
+		{"two-component min accepted", "1.21", "", false},
+		{"invalid min", "notaversion", "", true},
+		{"invalid max", "", "latest", true},
+		{"inverted range min greater than max", "v1.30.0", "v1.21.0", true},
+		{"equal min and max", "v1.21.0", "v1.21.0", false},
+		{"min release max pre-release same patch (inverted per semver)", "v1.21.0", "v1.21.0-alpha", true},
+		{"min pre-release max release same patch (valid per semver)", "v1.21.0-alpha", "v1.21.0", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateCatalogSchema(baseCatalog(tt.minVer, tt.maxVer))
+			if tt.expectError && err == nil {
+				t.Error("Expected error, got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestConvertPathsToURLs(t *testing.T) {
 	catalog := &PolicyCatalog{
 		Policies: []Policy{
@@ -722,10 +848,13 @@ func TestIsValidVersion(t *testing.T) {
 		{"v1.2.3-alpha", true},
 		{"v1.2.3+build", true},
 		{"v1.2.3-alpha+build", true},
+		// Two-component "major.minor" is the conventional Kubernetes version
+		// form and is accepted (patch defaults to 0).
+		{"v1", true},
+		{"v1.0", true},
+		{"1.30", true},
 		{"", false},
 		{"latest", false},
-		{"v1", false},
-		{"v1.0", false},
 	}
 
 	for _, tt := range tests {
@@ -735,6 +864,75 @@ func TestIsValidVersion(t *testing.T) {
 				t.Errorf("isValidVersion(%q) = %v, want %v", tt.version, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestK8sVersionInRange(t *testing.T) {
+	tests := []struct {
+		name          string
+		serverVersion string
+		minVer        string
+		maxVer        string
+		want          bool
+		wantErr       bool
+	}{
+		{"no bounds always compatible", "v1.10.0", "", "", true, false},
+		{"within range", "v1.25.0", "v1.21.0", "v1.30.0", true, false},
+		{"equal to min", "v1.21.0", "v1.21.0", "v1.30.0", true, false},
+		{"equal to max", "v1.30.0", "v1.21.0", "v1.30.0", true, false},
+		{"below min", "v1.20.9", "v1.21.0", "v1.30.0", false, false},
+		{"above max", "v1.31.0", "v1.21.0", "v1.30.0", false, false},
+		{"min only, above", "v1.25.0", "v1.21.0", "", true, false},
+		{"min only, below", "v1.20.0", "v1.21.0", "", false, false},
+		{"max only, below", "v1.25.0", "", "v1.30.0", true, false},
+		{"max only, above", "v1.31.0", "", "v1.30.0", false, false},
+		{"two-component bounds", "v1.25.0", "1.21", "1.30", true, false},
+		// Distro suffixes must not affect the comparison: 1.30.2-gke.x should be
+		// treated as 1.30.2, which is above max 1.30.0.
+		{"distro suffix above max", "v1.30.2-gke.1234", "v1.21.0", "v1.30.0", false, false},
+		{"distro suffix within range", "v1.28.3-eks.5", "v1.21.0", "v1.30.0", true, false},
+		// A patch-level distro build of exactly the min must still count as >= min
+		// despite semver ranking pre-release below release.
+		{"distro suffix equal to min", "v1.21.0-gke.100", "v1.21.0", "", true, false},
+		{"invalid server version", "notaversion", "v1.21.0", "", false, true},
+		{"invalid min", "v1.25.0", "bogus", "", false, true},
+		{"invalid max", "v1.25.0", "", "bogus", false, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := K8sVersionInRange(tt.serverVersion, tt.minVer, tt.maxVer)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("K8sVersionInRange(%q, %q, %q) = %v, want %v", tt.serverVersion, tt.minVer, tt.maxVer, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatK8sVersionRange(t *testing.T) {
+	tests := []struct {
+		minVer string
+		maxVer string
+		want   string
+	}{
+		{"v1.21.0", "v1.30.0", "v1.21.0 - v1.30.0"},
+		{"v1.21.0", "", ">=v1.21.0"},
+		{"", "v1.30.0", "<=v1.30.0"},
+		{"", "", "-"},
+	}
+	for _, tt := range tests {
+		if got := FormatK8sVersionRange(tt.minVer, tt.maxVer); got != tt.want {
+			t.Errorf("FormatK8sVersionRange(%q, %q) = %q, want %q", tt.minVer, tt.maxVer, got, tt.want)
+		}
 	}
 }
 

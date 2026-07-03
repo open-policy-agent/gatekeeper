@@ -21,6 +21,7 @@ var (
 	installBundles           []string
 	installEnforcementAction string
 	installDryRun            bool
+	installForce             bool
 	installOutput            string
 )
 
@@ -50,6 +51,9 @@ gator policy install --bundle pod-security-baseline --enforcement-action=warn
 # Preview changes without applying
 gator policy install --bundle pod-security-baseline --dry-run
 
+# Install even if the cluster Kubernetes version is outside a policy's supported range
+gator policy install k8srequiredlabels --force
+
 # Output as JSON for scripting
 gator policy install --bundle pod-security-baseline --dry-run -o json`,
 		RunE: runInstall,
@@ -58,6 +62,7 @@ gator policy install --bundle pod-security-baseline --dry-run -o json`,
 	cmd.Flags().StringSliceVar(&installBundles, "bundle", nil, "Install a policy bundle (may be specified multiple times)")
 	cmd.Flags().StringVar(&installEnforcementAction, "enforcement-action", "", "Override enforcement action (deny, warn, dryrun). Note: 'scoped' is not supported in this release.")
 	cmd.Flags().BoolVar(&installDryRun, "dry-run", false, "Preview changes without applying (does not require cluster access)")
+	cmd.Flags().BoolVar(&installForce, "force", false, "Install even if the cluster Kubernetes version is outside a policy's supported range")
 	cmd.Flags().StringVarP(&installOutput, "output", "o", "table", "Output format: table, json")
 
 	return cmd
@@ -130,6 +135,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		Bundles:           installBundles,
 		EnforcementAction: installEnforcementAction,
 		DryRun:            installDryRun,
+		Force:             installForce,
 	}
 
 	// Perform installation
@@ -163,6 +169,13 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 	outResult.Skipped = result.Skipped
 
+	for _, entry := range result.Incompatible {
+		outResult.Incompatible = append(outResult.Incompatible, output.SkippedEntry{
+			Name:   entry.Name,
+			Reason: entry.Reason,
+		})
+	}
+
 	for _, name := range result.Failed {
 		outResult.Failed = append(outResult.Failed, output.FailedEntry{
 			Name:  name,
@@ -187,6 +200,15 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		return gatorpolicy.NewPartialSuccessError(msg)
 	}
 
+	// Policies skipped as incompatible with the cluster's Kubernetes version were
+	// explicitly requested but not installed, so signal partial success rather
+	// than exiting 0 as if everything succeeded.
+	if len(result.Incompatible) > 0 {
+		msg := fmt.Sprintf("installation incomplete: %d of %d policies installed (%d skipped: incompatible Kubernetes version, use --force to override)",
+			len(result.Installed), result.TotalRequested, len(result.Incompatible))
+		return gatorpolicy.NewPartialSuccessError(msg)
+	}
+
 	return nil
 }
 
@@ -195,6 +217,10 @@ type dryRunClient struct{}
 
 func (c *dryRunClient) GatekeeperInstalled(_ context.Context) (bool, error) {
 	return true, nil
+}
+
+func (c *dryRunClient) ServerVersion(_ context.Context) (string, error) {
+	return "", nil
 }
 
 func (c *dryRunClient) ListManagedTemplates(_ context.Context) ([]client.InstalledPolicy, error) {
