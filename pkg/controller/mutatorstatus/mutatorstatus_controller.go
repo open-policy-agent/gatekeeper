@@ -16,6 +16,7 @@ limitations under the License.
 package mutatorstatus
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -283,6 +284,10 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 		s = append(s, o)
 	}
 
+	if byPodStatusMatches(instance.Object, s) {
+		return reconcile.Result{}, nil
+	}
+
 	if err := unstructured.SetNestedSlice(instance.Object, s, "status", "byPod"); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -292,6 +297,24 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func byPodStatusMatches(obj map[string]interface{}, desired []interface{}) bool {
+	current, found, err := unstructured.NestedFieldNoCopy(obj, "status", "byPod")
+	if !found || err != nil {
+		return false
+	}
+
+	currentJSON, err := json.Marshal(current)
+	if err != nil {
+		return false
+	}
+	desiredJSON, err := json.Marshal(desired)
+	if err != nil {
+		return false
+	}
+
+	return bytes.Equal(currentJSON, desiredJSON)
 }
 
 type sortableStatuses []v1beta1.MutatorPodStatus

@@ -30,6 +30,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -178,6 +179,10 @@ func (r *ReconcileExpansionStatus) Reconcile(ctx context.Context, request reconc
 			continue
 		}
 		s = append(s, statusObjs[i].Status)
+	}
+
+	if apiequality.Semantic.DeepEqual(et.Status.ByPod, s) {
+		return reconcile.Result{}, nil
 	}
 
 	et.Status.ByPod = s
