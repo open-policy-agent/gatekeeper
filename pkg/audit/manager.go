@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"bufio"
 	"container/heap"
 	"context"
 	"encoding/json"
@@ -56,6 +57,7 @@ const (
 	defaultConstraintViolationsLimit = 20
 	defaultListLimit                 = 500
 	defaultAPICacheDir               = "/tmp/audit"
+	auditObjectsFile                 = "objects.json"
 )
 
 var (
@@ -527,6 +529,7 @@ func (am *Manager) auditResources(
 					continue kindsLoop
 				}
 				folderCount++
+				itemsToReview := objList.Items[:0]
 				for index := range objList.Items {
 					isExcludedNamespace, err := am.skipExcludedNamespace(&objList.Items[index])
 					if err != nil {
@@ -536,23 +539,23 @@ func (am *Manager) auditResources(
 					if isExcludedNamespace {
 						continue
 					}
-
-					fileName := fmt.Sprintf("%d", index)
-					destFile := path.Join(*apiCacheDir, subPath, fileName)
-					item := objList.Items[index]
-					jsonBytes, err := item.MarshalJSON()
-					if err != nil {
-						log.Error(err, "error while marshaling unstructured object to JSON")
-						continue
-					}
-					if err := os.WriteFile(destFile, jsonBytes, 0o600); err != nil {
-						log.Error(err, "error writing data to file")
-						continue
-					}
+					itemsToReview = append(itemsToReview, objList.Items[index])
 				}
 
-				resourceVersion = objList.GetResourceVersion()
-				opts.Continue = objList.GetContinue()
+				nextResourceVersion := objList.GetResourceVersion()
+				nextContinue := objList.GetContinue()
+				writeErr := am.writeUnstructuredListBestEffort(parentDir, itemsToReview)
+				resourceVersion = nextResourceVersion
+				opts.Continue = nextContinue
+				if writeErr != nil {
+					log.Error(writeErr, "error writing data to file")
+					if opts.Continue == "" {
+						break
+					}
+					am.log.V(logging.DebugLevel).Info("Requesting next chunk of objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
+					continue
+				}
+
 				if opts.Continue == "" {
 					am.log.V(logging.DebugLevel).Info("Finished listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 					break
@@ -684,92 +687,89 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			continue
 		}
 		for _, fileName := range files {
-			contents, err := os.ReadFile(path.Join(pDir, fileName)) // #nosec G304
-			if err != nil {
-				am.log.Error(err, "Unable to get content from file", "fileName", fileName)
-				continue
-			}
-			objFile, err := am.readUnstructured(contents)
-			if err != nil {
-				am.log.Error(err, "Unable to get unstructured data from content in file", "fileName", fileName)
-				continue
-			}
-			objNs := objFile.GetNamespace()
-			var ns *corev1.Namespace
-			if objNs != "" {
-				nsRef, err := nsCache.Get(ctx, am.client, objNs)
-				if err != nil {
-					am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
-					continue
+			filePath := path.Join(pDir, fileName)
+			err := am.forEachUnstructuredInFile(filePath, func(objFile *unstructured.Unstructured) {
+				objNs := objFile.GetNamespace()
+				var ns *corev1.Namespace
+				if objNs != "" {
+					nsRef, err := nsCache.Get(ctx, am.client, objNs)
+					if err != nil {
+						am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
+						return
+					}
+					ns = &nsRef
 				}
-				ns = &nsRef
-			}
-			augmentedObj := target.AugmentedUnstructured{
-				Object:    *objFile,
-				Namespace: ns,
-				Source:    mutationtypes.SourceTypeOriginal,
-			}
-
-			opts := []reviews.ReviewOpt{
-				reviews.EnforcementPoint(util.AuditEnforcementPoint),
-				reviews.Stats(*logStatsAudit),
-			}
-			if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
-				opts = append(opts, opt)
-			}
-			resp, err := am.opa.Review(ctx, augmentedObj, opts...)
-			if err != nil {
-				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
-				continue
-			}
-
-			// Expand object and review any resultant resources
-			base := &mutationtypes.Mutable{
-				Object:    objFile,
-				Namespace: ns,
-				Username:  "",
-				Source:    mutationtypes.SourceTypeOriginal,
-			}
-			resultants, err := am.expansionSystem.Expand(base)
-			if err != nil {
-				am.log.Error(err, "unable to expand object", "objName", objFile.GetName())
-				continue
-			}
-			for _, resultant := range resultants {
-				au := target.AugmentedUnstructured{
-					Object:    *resultant.Obj,
+				augmentedObj := target.AugmentedUnstructured{
+					Object:    *objFile,
 					Namespace: ns,
-					Source:    mutationtypes.SourceTypeGenerated,
+					Source:    mutationtypes.SourceTypeOriginal,
 				}
-				resultantOpts := []reviews.ReviewOpt{
+
+				opts := []reviews.ReviewOpt{
 					reviews.EnforcementPoint(util.AuditEnforcementPoint),
 					reviews.Stats(*logStatsAudit),
 				}
 				if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
-					resultantOpts = append(resultantOpts, opt)
+					opts = append(opts, opt)
 				}
-				resultantResp, err := am.opa.Review(ctx, au, resultantOpts...)
+				resp, err := am.opa.Review(ctx, augmentedObj, opts...)
 				if err != nil {
-					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
-					continue
+					am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
+					return
 				}
-				expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
-				expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
-				expansion.AggregateStats(resultant.TemplateName, resp, resultantResp)
-			}
 
-			if *logStatsAudit {
-				logging.LogStatsEntries(
-					am.opa,
-					am.log.WithValues(logging.EventType, "audit_stats", logging.Semantic, true),
-					resp.StatsEntries,
-					"audit review request stats",
-				)
-			}
+				// Expand object and review any resultant resources
+				base := &mutationtypes.Mutable{
+					Object:    objFile,
+					Namespace: ns,
+					Username:  "",
+					Source:    mutationtypes.SourceTypeOriginal,
+				}
+				resultants, err := am.expansionSystem.Expand(base)
+				if err != nil {
+					am.log.Error(err, "unable to expand object", "objName", objFile.GetName())
+					return
+				}
+				for _, resultant := range resultants {
+					au := target.AugmentedUnstructured{
+						Object:    *resultant.Obj,
+						Namespace: ns,
+						Source:    mutationtypes.SourceTypeGenerated,
+					}
+					resultantOpts := []reviews.ReviewOpt{
+						reviews.EnforcementPoint(util.AuditEnforcementPoint),
+						reviews.Stats(*logStatsAudit),
+					}
+					if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
+						resultantOpts = append(resultantOpts, opt)
+					}
+					resultantResp, err := am.opa.Review(ctx, au, resultantOpts...)
+					if err != nil {
+						am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
+						continue
+					}
+					expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
+					expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
+					expansion.AggregateStats(resultant.TemplateName, resp, resultantResp)
+				}
 
-			if len(resp.Results()) > 0 {
-				results := ToResults(&augmentedObj.Object, resp)
-				am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+				if *logStatsAudit {
+					logging.LogStatsEntries(
+						am.opa,
+						am.log.WithValues(logging.EventType, "audit_stats", logging.Semantic, true),
+						resp.StatsEntries,
+						"audit review request stats",
+					)
+				}
+
+				if len(resp.Results()) > 0 {
+					results := ToResults(&augmentedObj.Object, resp)
+					am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+				}
+			})
+			if err != nil {
+				am.log.Error(err, "Unable to get unstructured data from content in file", "fileName", fileName)
+				continue
 			}
 		}
 	}
@@ -817,6 +817,112 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 	return nil
 }
 
+func (am *Manager) writeUnstructuredList(directory string, objects []unstructured.Unstructured) error {
+	return am.writeUnstructuredListFunc(directory, objects, nil)
+}
+
+func (am *Manager) writeUnstructuredListBestEffort(directory string, objects []unstructured.Unstructured) error {
+	return am.writeUnstructuredListFunc(directory, objects, func(err error) {
+		log.Error(err, "error while marshaling unstructured object to JSON")
+	})
+}
+
+func (am *Manager) writeUnstructuredListFunc(directory string, objects []unstructured.Unstructured, handleMarshalError func(error)) error {
+	if len(objects) == 0 {
+		return nil
+	}
+
+	file, err := os.OpenFile(path.Join(directory, auditObjectsFile), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	if _, err := writer.WriteString("["); err != nil {
+		return err
+	}
+	wroteObject := false
+	for index := range objects {
+		jsonBytes, err := objects[index].MarshalJSON()
+		if err != nil {
+			if handleMarshalError == nil {
+				return err
+			}
+			handleMarshalError(err)
+			continue
+		}
+		if wroteObject {
+			if _, err := writer.WriteString(","); err != nil {
+				return err
+			}
+		}
+		if _, err := writer.Write(jsonBytes); err != nil {
+			return err
+		}
+		wroteObject = true
+	}
+	if _, err := writer.WriteString("]"); err != nil {
+		return err
+	}
+	return writer.Flush()
+}
+
+func (am *Manager) forEachUnstructuredInFile(filePath string, handleObject func(*unstructured.Unstructured)) error {
+	file, err := os.Open(filePath) // #nosec G304
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	reader := bufio.NewReader(file)
+	firstByte, err := firstNonSpaceByte(reader)
+	if err != nil {
+		return err
+	}
+	if err := reader.UnreadByte(); err != nil {
+		return err
+	}
+
+	decoder := json.NewDecoder(reader)
+	if firstByte != '[' {
+		obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
+		if err := decoder.Decode(obj); err != nil {
+			return err
+		}
+		handleObject(obj)
+		return nil
+	}
+
+	if _, err := decoder.Token(); err != nil {
+		return err
+	}
+	for decoder.More() {
+		obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
+		if err := decoder.Decode(obj); err != nil {
+			return err
+		}
+		handleObject(obj)
+	}
+	_, err = decoder.Token()
+	return err
+}
+
+func firstNonSpaceByte(reader *bufio.Reader) (byte, error) {
+	for {
+		b, err := reader.ReadByte()
+		if err != nil {
+			return 0, err
+		}
+		switch b {
+		case ' ', '\n', '\r', '\t':
+			continue
+		default:
+			return b, nil
+		}
+	}
+}
+
 func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructured, error) {
 	u := &unstructured.Unstructured{
 		Object: make(map[string]interface{}),
@@ -826,6 +932,19 @@ func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructure
 		return nil, err
 	}
 	return u, nil
+}
+
+func (am *Manager) readUnstructuredList(jsonBytes []byte) ([]unstructured.Unstructured, error) {
+	var objects []unstructured.Unstructured
+	if err := json.Unmarshal(jsonBytes, &objects); err == nil {
+		return objects, nil
+	}
+
+	object, err := am.readUnstructured(jsonBytes)
+	if err != nil {
+		return nil, err
+	}
+	return []unstructured.Unstructured{*object}, nil
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
