@@ -163,6 +163,12 @@ func eventPackerMapFuncHardcodeGVKForModifySet(gvk schema.GroupVersionKind) hand
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
+	if err := indexStatusLabel(context.Background(), mgr, &v1beta1.MutatorPodStatus{}, v1beta1.MutatorNameLabel); err != nil {
+		return err
+	}
+	if err := indexStatusLabel(context.Background(), mgr, &v1beta1.MutatorPodStatus{}, v1beta1.MutatorKindLabel); err != nil {
+		return err
+	}
 	// Create a new controller
 	c, err := controller.New("mutator-status-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -203,6 +209,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		source.Kind(mgr.GetCache(), &mutationsv1.ModifySet{},
 			handler.TypedEnqueueRequestsFromMapFunc(eventPackerMapFuncHardcodeGVKForModifySet(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "ModifySet"})),
 		))
+}
+
+func indexStatusLabel(ctx context.Context, mgr manager.Manager, obj client.Object, field string) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, obj, field, func(obj client.Object) []string {
+		value := obj.GetLabels()[field]
+		if value == "" {
+			return nil
+		}
+		return []string{value}
+	})
 }
 
 var _ reconcile.Reconciler = &ReconcileMutatorStatus{}
@@ -252,7 +268,7 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	if err := r.reader.List(
 		ctx,
 		sObjs,
-		client.MatchingLabels{
+		client.MatchingFields{
 			v1beta1.MutatorNameLabel: instance.GetName(),
 			v1beta1.MutatorKindLabel: instance.GetKind(),
 		},

@@ -66,7 +66,7 @@ func TestReconcileSkipsSecondIdenticalStatusUpdate(t *testing.T) {
 		},
 	}
 
-	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(conn, podStatus).Build()
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&statusv1alpha1.ConnectionPodStatus{}, statusv1beta1.ConnectionNameLabel, indexObjectByLabel(statusv1beta1.ConnectionNameLabel)).WithObjects(conn, podStatus).Build()
 	statusClient := &recordingStatusClient{client: k8sClient}
 	reconciler := &ReconcileConnectionStatus{
 		reader:       k8sClient,
@@ -92,6 +92,16 @@ func newTestScheme(t *testing.T) *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	require.NoError(t, apis.AddToScheme(scheme))
 	return scheme
+}
+
+func indexObjectByLabel(label string) client.IndexerFunc {
+	return func(obj client.Object) []string {
+		value := obj.GetLabels()[label]
+		if value == "" {
+			return nil
+		}
+		return []string{value}
+	}
 }
 
 type recordingStatusClient struct {

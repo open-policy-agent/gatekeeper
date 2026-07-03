@@ -135,12 +135,38 @@ func (r *mutatorStatusReader) Get(_ context.Context, key client.ObjectKey, obj c
 	return nil
 }
 
-func (r *mutatorStatusReader) List(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+func (r *mutatorStatusReader) List(_ context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	statusList, ok := list.(*v1beta1.MutatorPodStatusList)
 	if !ok {
 		return fmt.Errorf("unexpected List object type %T", list)
 	}
+	if err := requireIndexedStatusListOptions(opts, map[string]string{
+		v1beta1.MutatorNameLabel: r.instance.GetName(),
+		v1beta1.MutatorKindLabel: r.instance.GetKind(),
+	}); err != nil {
+		return err
+	}
 	statusList.Items = append([]v1beta1.MutatorPodStatus(nil), r.statuses...)
+	return nil
+}
+
+func requireIndexedStatusListOptions(opts []client.ListOption, fields map[string]string) error {
+	listOpts := &client.ListOptions{}
+	for _, opt := range opts {
+		opt.ApplyToList(listOpts)
+	}
+	if listOpts.Namespace != util.GetNamespace() {
+		return fmt.Errorf("list namespace = %q, want %q", listOpts.Namespace, util.GetNamespace())
+	}
+	if listOpts.FieldSelector == nil {
+		return fmt.Errorf("missing field selector")
+	}
+	for field, want := range fields {
+		got, found := listOpts.FieldSelector.RequiresExactMatch(field)
+		if !found || got != want {
+			return fmt.Errorf("field selector %q = %q, found %t; want %q", field, got, found, want)
+		}
+	}
 	return nil
 }
 

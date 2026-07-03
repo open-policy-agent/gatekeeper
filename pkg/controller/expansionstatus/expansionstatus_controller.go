@@ -104,6 +104,9 @@ func PodStatusToExpansionTemplateMapper(selfOnly bool) handler.TypedMapFunc[*v1b
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
+	if err := indexStatusLabel(context.Background(), mgr, &v1beta1.ExpansionTemplatePodStatus{}, v1beta1.ExpansionTemplateNameLabel); err != nil {
+		return err
+	}
 	// Create a new controller
 	c, err := controller.New("expansion-template-status-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -125,6 +128,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 	return nil
+}
+
+func indexStatusLabel(ctx context.Context, mgr manager.Manager, obj client.Object, field string) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, obj, field, func(obj client.Object) []string {
+		value := obj.GetLabels()[field]
+		if value == "" {
+			return nil
+		}
+		return []string{value}
+	})
 }
 
 var _ reconcile.Reconciler = &ReconcileExpansionStatus{}
@@ -159,7 +172,7 @@ func (r *ReconcileExpansionStatus) Reconcile(ctx context.Context, request reconc
 	if err := r.reader.List(
 		ctx,
 		sObjs,
-		client.MatchingLabels{v1beta1.ExpansionTemplateNameLabel: request.Name},
+		client.MatchingFields{v1beta1.ExpansionTemplateNameLabel: request.Name},
 		client.InNamespace(util.GetNamespace()),
 	); err != nil {
 		return reconcile.Result{}, err
