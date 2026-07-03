@@ -24,7 +24,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	k8sscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -32,6 +34,77 @@ import (
 // between tests sharing the same testenv etcd objects that with the same audit connection name would otherwise cause conflicts
 
 const timeout = time.Second * 20
+
+type countingClient struct {
+	client.Client
+	creates int
+	updates int
+}
+
+func (c *countingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	c.creates++
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+func (c *countingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	c.updates++
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+func TestUpdateOrCreateConnectionPodStatusSkipsStableSecondUpdate(t *testing.T) {
+	ctx := context.Background()
+	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("status-pod"), fakes.WithUID("status-pod-uid"))
+	connObj := &connectionv1alpha1.Connection{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "audit-connection-skip-stable",
+			Namespace:  util.GetNamespace(),
+			UID:        "connection-uid",
+			Generation: 1,
+		},
+	}
+	k8sClient := &countingClient{Client: crfake.NewClientBuilder().WithScheme(k8sscheme.Scheme).Build()}
+	getPod := func(context.Context) (*corev1.Pod, error) { return pod, nil }
+
+	require.NoError(t, updateOrCreateConnectionPodStatus(ctx, k8sClient, k8sClient, k8sscheme.Scheme, connObj, nil, nil, getPod))
+	require.Equal(t, 1, k8sClient.creates)
+	require.Equal(t, 0, k8sClient.updates)
+
+	require.NoError(t, updateOrCreateConnectionPodStatus(ctx, k8sClient, k8sClient, k8sscheme.Scheme, connObj, nil, nil, getPod))
+	require.Equal(t, 1, k8sClient.creates)
+	require.Equal(t, 0, k8sClient.updates)
+}
+
+func TestUpdateOrCreateConnectionPodStatusRepairsMetadata(t *testing.T) {
+	ctx := context.Background()
+	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("status-pod"), fakes.WithUID("status-pod-uid"))
+	connObj := &connectionv1alpha1.Connection{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "audit-connection-repair-metadata",
+			Namespace:  util.GetNamespace(),
+			UID:        "connection-uid",
+			Generation: 1,
+		},
+	}
+	status, err := statusv1alpha1.NewConnectionStatusForPod(pod, connObj.GetNamespace(), connObj.GetName(), k8sscheme.Scheme)
+	require.NoError(t, err)
+	status.SetLabels(nil)
+	status.SetOwnerReferences(nil)
+	status.Status.ConnectionUID = connObj.GetUID()
+	status.Status.ObservedGeneration = connObj.GetGeneration()
+
+	k8sClient := &countingClient{Client: crfake.NewClientBuilder().WithScheme(k8sscheme.Scheme).WithObjects(status).Build()}
+	getPod := func(context.Context) (*corev1.Pod, error) { return pod, nil }
+
+	require.NoError(t, updateOrCreateConnectionPodStatus(ctx, k8sClient, k8sClient, k8sscheme.Scheme, connObj, nil, nil, getPod))
+	require.Equal(t, 0, k8sClient.creates)
+	require.Equal(t, 1, k8sClient.updates)
+
+	got := &statusv1alpha1.ConnectionPodStatus{}
+	require.NoError(t, k8sClient.Get(ctx, client.ObjectKeyFromObject(status), got))
+	require.Equal(t, connObj.GetName(), got.Labels[statusv1beta1.ConnectionNameLabel])
+	require.Equal(t, pod.GetName(), got.Labels[statusv1beta1.PodLabel])
+	require.Len(t, got.OwnerReferences, 1)
+}
 
 // Note: For this test we check the ConnectionPodStatus resource that is created
 // by the controller, and not the Connection status itself, to isolate test boundaries

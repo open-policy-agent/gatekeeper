@@ -16,6 +16,7 @@ limitations under the License.
 package constrainttemplatestatus
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -188,6 +189,20 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 		}
 		s = append(s, o)
 	}
+	currentByPod, _, byPodErr := unstructured.NestedSlice(template.Object, "status", "byPod")
+	byPodEqual := false
+	if byPodErr == nil {
+		var err error
+		byPodEqual, err = equalUnstructuredStatus(currentByPod, s)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+	currentCreated, _, createdErr := unstructured.NestedBool(template.Object, "status", "created")
+	if byPodEqual && createdErr == nil && currentCreated == created {
+		return reconcile.Result{}, nil
+	}
+
 	if err := unstructured.SetNestedSlice(template.Object, s, "status", "byPod"); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -200,6 +215,18 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{}, nil
+}
+
+func equalUnstructuredStatus(a, b interface{}) (bool, error) {
+	aJSON, err := json.Marshal(a)
+	if err != nil {
+		return false, err
+	}
+	bJSON, err := json.Marshal(b)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(aJSON, bJSON), nil
 }
 
 type sortableStatuses []v1beta1.ConstraintTemplatePodStatus
