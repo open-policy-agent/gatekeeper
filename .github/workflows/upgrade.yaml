@@ -23,7 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        HELM_VERSION: ["4.2.1"]
+        # Keeping Helm 3 here because the 3.9.2 base release requires Kubernetes 1.24 (for PodSecurityPolicy),
+        # which is long past EOL and falls outside Helm 4's supported version skew.
+        HELM_VERSION: ["3.14.1"]
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
