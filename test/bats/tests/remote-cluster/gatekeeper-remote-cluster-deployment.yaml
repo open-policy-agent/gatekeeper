@@ -16,6 +16,9 @@ rules:
 - apiGroups: ["status.gatekeeper.sh"]
   resources: ["*"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["status.gatekeeper.sh"]
+  resources: ["constrainttemplatepodstatuses/status"]
+  verbs: ["get", "patch", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

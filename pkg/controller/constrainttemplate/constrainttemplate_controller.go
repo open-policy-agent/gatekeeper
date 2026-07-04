@@ -394,7 +394,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
 		status.Status.Errors = append(status.Status.Errors, createErr)
 
-		if updateErr := r.Update(ctx, status); updateErr != nil {
+		if updateErr := r.Status().Update(ctx, status); updateErr != nil {
 			logger.Error(updateErr, "update status error")
 			return reconcile.Result{Requeue: true}, nil
 		}
@@ -454,7 +454,7 @@ func (r *ReconcileConstraintTemplate) reportErrorOnCTStatus(ctx context.Context,
 		Message: fmt.Sprintf("%s: %s", message, err),
 	}
 	status.Status.Errors = append(status.Status.Errors, createErr)
-	if err2 := r.Update(ctx, status); err2 != nil {
+	if err2 := r.Status().Update(ctx, status); err2 != nil {
 		return errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
 	}
 	return err
@@ -522,7 +522,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if err := r.Update(ctx, status); err != nil {
+	if err := r.Status().Update(ctx, status); err != nil {
 		logger.Error(err, "update ct pod status error")
 		return reconcile.Result{Requeue: true}, nil
 	}
@@ -610,6 +610,10 @@ func (r *ReconcileConstraintTemplate) getOrCreatePodStatus(ctx context.Context, 
 		return nil, err
 	}
 	if err := r.Create(ctx, statusObj); err != nil {
+		return nil, err
+	}
+	// With a status subresource, Create does not persist .status; write it explicitly.
+	if err := r.Status().Update(ctx, statusObj); err != nil {
 		return nil, err
 	}
 	return statusObj, nil

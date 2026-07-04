@@ -46,6 +46,7 @@ type VAPGenerationStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:subresource:status
 
 // ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses API.
 type ConstraintTemplatePodStatus struct {
