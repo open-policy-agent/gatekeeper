@@ -204,6 +204,20 @@ spec:
                       pattern: ^\*?[-:a-z0-9]*\*?$
                       type: string
                     type: array
+                  processes:
+                    description: |-
+                      Processes scopes excludedNamespaces to specific Gatekeeper processes.
+                      Accepts `audit`, `webhook`, `sync`, `mutation-webhook`, or `*`.
+                      When omitted or set to `*`, excludedNamespaces applies to all processes.
+                    enum:
+                    - audit
+                    - webhook
+                    - sync
+                    - mutation-webhook
+                    - '*'
+                    items:
+                      type: string
+                    type: array
                   scope:
                     description: |-
                       Scope determines if cluster-scoped and/or namespaced-scoped resources
@@ -520,6 +534,20 @@ spec:
                       pattern: ^\*?[-:a-z0-9]*\*?$
                       type: string
                     type: array
+                  processes:
+                    description: |-
+                      Processes scopes excludedNamespaces to specific Gatekeeper processes.
+                      Accepts `audit`, `webhook`, `sync`, `mutation-webhook`, or `*`.
+                      When omitted or set to `*`, excludedNamespaces applies to all processes.
+                    enum:
+                    - audit
+                    - webhook
+                    - sync
+                    - mutation-webhook
+                    - '*'
+                    items:
+                      type: string
+                    type: array
                   scope:
                     description: |-
                       Scope determines if cluster-scoped and/or namespaced-scoped resources
@@ -834,6 +862,20 @@ spec:
                         "kube-public", "*-system" will match "kube-system" or "gatekeeper-system", "*system*" will
                         match "system-kube" or "kube-system".  The asterisk is required for wildcard matching.
                       pattern: ^\*?[-:a-z0-9]*\*?$
+                      type: string
+                    type: array
+                  processes:
+                    description: |-
+                      Processes scopes excludedNamespaces to specific Gatekeeper processes.
+                      Accepts `audit`, `webhook`, `sync`, `mutation-webhook`, or `*`.
+                      When omitted or set to `*`, excludedNamespaces applies to all processes.
+                    enum:
+                    - audit
+                    - webhook
+                    - sync
+                    - mutation-webhook
+                    - '*'
+                    items:
                       type: string
                     type: array
                   scope:
