@@ -36,6 +36,11 @@ const (
 	Mutator                      = "mutator"
 	DebugLevel                   = 1 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
 	ExecutionStats               = "execution_stats"
+
+	// Semantic marks a log line as machine-readable and subject to
+	// backward-compatibility requirements. Consumers can filter on
+	// this field to find stable, parseable log entries.
+	Semantic = "semantic"
 )
 
 func LogStatsEntries(client *constraintclient.Client, logger logr.Logger, entries []*instrumentation.StatsEntry, msg string) {

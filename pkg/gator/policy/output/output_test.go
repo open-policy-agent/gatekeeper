@@ -11,6 +11,7 @@ import (
 )
 
 func TestTablePrinter_PrintPolicies(t *testing.T) {
+	t.Parallel()
 	printer := &TablePrinter{}
 	var buf bytes.Buffer
 
@@ -35,6 +36,7 @@ func TestTablePrinter_PrintPolicies(t *testing.T) {
 }
 
 func TestTablePrinter_PrintPolicies_Empty(t *testing.T) {
+	t.Parallel()
 	printer := &TablePrinter{}
 	var buf bytes.Buffer
 
@@ -46,6 +48,7 @@ func TestTablePrinter_PrintPolicies_Empty(t *testing.T) {
 }
 
 func TestTablePrinter_PrintSearchResults(t *testing.T) {
+	t.Parallel()
 	printer := &TablePrinter{}
 	var buf bytes.Buffer
 
@@ -67,6 +70,7 @@ func TestTablePrinter_PrintSearchResults(t *testing.T) {
 }
 
 func TestTablePrinter_PrintSearchResults_TruncatesLongDescription(t *testing.T) {
+	t.Parallel()
 	printer := &TablePrinter{}
 	var buf bytes.Buffer
 
@@ -84,6 +88,7 @@ func TestTablePrinter_PrintSearchResults_TruncatesLongDescription(t *testing.T) 
 }
 
 func TestJSONPrinter_PrintPolicies(t *testing.T) {
+	t.Parallel()
 	printer := &JSONPrinter{}
 	var buf bytes.Buffer
 
@@ -107,6 +112,7 @@ func TestJSONPrinter_PrintPolicies(t *testing.T) {
 }
 
 func TestJSONPrinter_PrintSearchResults(t *testing.T) {
+	t.Parallel()
 	printer := &JSONPrinter{}
 	var buf bytes.Buffer
 
@@ -130,6 +136,7 @@ func TestJSONPrinter_PrintSearchResults(t *testing.T) {
 }
 
 func TestNewPrinter(t *testing.T) {
+	t.Parallel()
 	tablePrinter, err := NewPrinter(FormatTable)
 	require.NoError(t, err)
 	assert.IsType(t, &TablePrinter{}, tablePrinter)
@@ -150,6 +157,7 @@ func TestNewPrinter(t *testing.T) {
 }
 
 func TestTablePrinter_PrintInstallResult(t *testing.T) {
+	t.Parallel()
 	printer := &TablePrinter{}
 	var buf bytes.Buffer
 
@@ -176,6 +184,7 @@ func TestTablePrinter_PrintInstallResult(t *testing.T) {
 }
 
 func TestTablePrinter_PrintInstallResult_DryRun(t *testing.T) {
+	t.Parallel()
 	printer := &TablePrinter{}
 	var buf bytes.Buffer
 
@@ -196,6 +205,7 @@ func TestTablePrinter_PrintInstallResult_DryRun(t *testing.T) {
 }
 
 func TestTablePrinter_PrintUninstallResult(t *testing.T) {
+	t.Parallel()
 	printer := &TablePrinter{}
 	var buf bytes.Buffer
 
@@ -218,6 +228,7 @@ func TestTablePrinter_PrintUninstallResult(t *testing.T) {
 }
 
 func TestTablePrinter_PrintUpgradeResult(t *testing.T) {
+	t.Parallel()
 	printer := &TablePrinter{}
 	var buf bytes.Buffer
 
@@ -240,6 +251,7 @@ func TestTablePrinter_PrintUpgradeResult(t *testing.T) {
 }
 
 func TestJSONPrinter_PrintInstallResult(t *testing.T) {
+	t.Parallel()
 	printer := &JSONPrinter{}
 	var buf bytes.Buffer
 
@@ -268,6 +280,7 @@ func TestJSONPrinter_PrintInstallResult(t *testing.T) {
 }
 
 func TestJSONPrinter_PrintUninstallResult(t *testing.T) {
+	t.Parallel()
 	printer := &JSONPrinter{}
 	var buf bytes.Buffer
 
@@ -293,6 +306,7 @@ func TestJSONPrinter_PrintUninstallResult(t *testing.T) {
 }
 
 func TestJSONPrinter_PrintUpgradeResult(t *testing.T) {
+	t.Parallel()
 	printer := &JSONPrinter{}
 	var buf bytes.Buffer
 
