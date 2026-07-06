@@ -37,7 +37,7 @@ type Match struct {
 	// Processes scopes excludedNamespaces to specific Gatekeeper processes.
 	// Accepts `audit`, `webhook`, `sync`, `mutation-webhook`, or `*`.
 	// When omitted or set to `*`, excludedNamespaces applies to all processes.
-	// +kubebuilder:validation:Enum=audit;webhook;sync;mutation-webhook;*
+	// +kubebuilder:validation:items:Enum=audit;webhook;sync;mutation-webhook;*
 	Processes []string `json:"processes,omitempty"`
 	// LabelSelector is the combination of two optional fields: `matchLabels`
 	// and `matchExpressions`.  These two fields provide different methods of
