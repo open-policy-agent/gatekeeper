@@ -197,13 +197,13 @@ spec:
                   Processes scopes excludedNamespaces to specific Gatekeeper processes.
                   Accepts `audit`, `webhook`, `sync`, `mutation-webhook`, or `*`.
                   When omitted or set to `*`, excludedNamespaces applies to all processes.
-                enum:
-                - audit
-                - webhook
-                - sync
-                - mutation-webhook
-                - '*'
                 items:
+                  enum:
+                  - audit
+                  - webhook
+                  - sync
+                  - mutation-webhook
+                  - '*'
                   type: string
                 type: array
               scope:
