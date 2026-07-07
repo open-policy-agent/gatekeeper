@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -460,6 +461,57 @@ func BenchmarkUpdatePodStatusIfChangedNoop(b *testing.B) {
 	}
 	b.StopTimer()
 	b.ReportMetric(float64(k8sClient.updates)/float64(b.N), "updates/op")
+}
+
+type constraintListClient struct {
+	client.Client
+	items []unstructured.Unstructured
+}
+
+func (c *constraintListClient) List(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+	unstructuredList, ok := list.(*unstructured.UnstructuredList)
+	if !ok {
+		return fmt.Errorf("expected *unstructured.UnstructuredList, got %T", list)
+	}
+	unstructuredList.Items = c.items
+	return nil
+}
+
+func BenchmarkTriggerConstraintEvents(b *testing.B) {
+	for _, itemCount := range []int{100, 1000, 10000} {
+		items := make([]unstructured.Unstructured, itemCount)
+		for i := 0; i < itemCount; i++ {
+			items[i] = unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+				"kind":       "TestKind",
+				"metadata": map[string]interface{}{
+					"name": "constraint-" + strconv.Itoa(i),
+				},
+			}}
+		}
+
+		b.Run("constraints-"+strconv.Itoa(itemCount), func(b *testing.B) {
+			events := make(chan event.GenericEvent, itemCount)
+			r := &ReconcileConstraintTemplate{
+				Client:     &constraintListClient{Client: crfake.NewClientBuilder().Build(), items: items},
+				cstrEvents: events,
+			}
+			ct := &v1beta1.ConstraintTemplate{}
+			ct.Spec.CRD.Spec.Names.Kind = "TestKind"
+			status := &statusv1beta1.ConstraintTemplatePodStatus{}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if err := r.triggerConstraintEvents(context.Background(), ct, status); err != nil {
+					b.Fatal(err)
+				}
+				for j := 0; j < itemCount; j++ {
+					<-events
+				}
+			}
+		})
+	}
 }
 
 func TestReconcile(t *testing.T) {

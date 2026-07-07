@@ -662,11 +662,9 @@ func (r *ReconcileConstraintTemplate) triggerConstraintEvents(ctx context.Contex
 		err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not list all constraint objects", status, err)
 		return err
 	}
-	logger.Info("list gvk objects", "cstrObjs", cstrObjs)
-	for _, cstr := range cstrObjs {
-		c := cstr
-		logger.Info("triggering cstrEvent")
-		r.cstrEvents <- event.GenericEvent{Object: &c}
+	logger.Info("triggering constraint events", "gvk", gvk, "count", len(cstrObjs))
+	for i := range cstrObjs {
+		r.cstrEvents <- event.GenericEvent{Object: &cstrObjs[i]}
 	}
 
 	return nil
