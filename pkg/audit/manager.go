@@ -501,6 +501,9 @@ func (am *Manager) auditResources(
 	for gv, gvKinds := range clusterAPIResources {
 	kindsLoop:
 		for kind := range gvKinds {
+			if !shouldAuditKind(matchedKinds, kind) {
+				continue
+			}
 			am.log.V(logging.DebugLevel).Info("Listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 			// delete all existing folders from cache dir before starting next kind
 			err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
@@ -510,10 +513,6 @@ func (am *Manager) auditResources(
 			}
 			// tracking number of folders created for this kind
 			folderCount := 0
-			_, matchAll := matchedKinds["*"]
-			if _, found := matchedKinds[kind]; !found && !matchAll {
-				continue
-			}
 
 			objList := &unstructured.UnstructuredList{}
 			opts := &client.ListOptions{
@@ -591,6 +590,13 @@ func (am *Manager) auditResources(
 		return mergeErrors(errs)
 	}
 	return nil
+}
+
+func shouldAuditKind(matchedKinds map[string]bool, kind string) bool {
+	if matchedKinds["*"] {
+		return true
+	}
+	return matchedKinds[kind]
 }
 
 func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
