@@ -613,34 +613,9 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		return nil, fmt.Errorf("failed to create augmentedReview: %w", err)
 	}
 
-	resultants := []*expansion.Resultant{}
-	// Skip the expansion if admissionRequest.Obj is nil.
-	rawObj := getReqObject(req)
-	if rawObj != nil {
-		// Convert the request's generator resource to unstructured for expansion
-		obj := &unstructured.Unstructured{}
-		if _, _, err := deserializer.Decode(rawObj, nil, obj); err != nil {
-			return nil, fmt.Errorf("error decoding generator resource %s: %w", req.Name, err)
-		}
-		obj.SetNamespace(req.Namespace)
-		obj.SetGroupVersionKind(
-			schema.GroupVersionKind{
-				Group:   req.Kind.Group,
-				Version: req.Kind.Version,
-				Kind:    req.Kind.Kind,
-			})
-
-		// Expand the generator and apply mutators to the resultant resources
-		// The base object is not mutated, so we do not need to specify its source
-		base := &mutationtypes.Mutable{
-			Object:    obj,
-			Namespace: review.Namespace,
-			Username:  req.UserInfo.Username,
-		}
-		resultants, err = h.expansionSystem.Expand(base)
-		if err != nil {
-			return nil, fmt.Errorf("unable to expand object: %w", err)
-		}
+	resultants, err := h.expandRequest(req, review)
+	if err != nil {
+		return nil, err
 	}
 
 	trace, dump := h.tracingLevel(ctx, req)
@@ -660,6 +635,46 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	}
 
 	return resp, nil
+}
+
+func (h *validationHandler) expandRequest(req *admission.Request, review *target.AugmentedReview) ([]*expansion.Resultant, error) {
+	resultants := []*expansion.Resultant{}
+	// Skip the expansion if admissionRequest.Obj is nil.
+	rawObj := getReqObject(req)
+	if rawObj == nil {
+		return resultants, nil
+	}
+
+	gvk := schema.GroupVersionKind{
+		Group:   req.Kind.Group,
+		Version: req.Kind.Version,
+		Kind:    req.Kind.Kind,
+	}
+	if !h.expansionSystem.HasTemplatesForGVK(gvk) {
+		return resultants, nil
+	}
+
+	// Convert the request's generator resource to unstructured for expansion.
+	obj := &unstructured.Unstructured{}
+	if _, _, err := deserializer.Decode(rawObj, nil, obj); err != nil {
+		return nil, fmt.Errorf("error decoding generator resource %s: %w", req.Name, err)
+	}
+	obj.SetNamespace(req.Namespace)
+	obj.SetGroupVersionKind(gvk)
+
+	// Expand the generator and apply mutators to the resultant resources.
+	// The base object is not mutated, so we do not need to specify its source.
+	base := &mutationtypes.Mutable{
+		Object:    obj,
+		Namespace: review.Namespace,
+		Username:  req.UserInfo.Username,
+	}
+	resultants, err := h.expansionSystem.Expand(base)
+	if err != nil {
+		return nil, fmt.Errorf("unable to expand object: %w", err)
+	}
+
+	return resultants, nil
 }
 
 func (h *validationHandler) review(ctx context.Context, review interface{}, namespace *corev1.Namespace, trace bool, dump bool) (*rtypes.Responses, error) {

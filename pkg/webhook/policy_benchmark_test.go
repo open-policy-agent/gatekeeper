@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	templv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -33,6 +34,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -247,6 +249,60 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 			Options:   runtime.RawExtension{},
 		},
 	}
+}
+
+func BenchmarkValidationExpansionNoTemplates(b *testing.B) {
+	for _, payloadSize := range []int{10 << 10, 100 << 10, 1024 << 10} {
+		req := largeConfigMapAdmissionRequest(payloadSize)
+		h := validationHandler{
+			expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+		}
+		review := &target.AugmentedReview{
+			AdmissionRequest: &req.AdmissionRequest,
+			IsAdmission:      true,
+		}
+
+		b.Run(strconv.Itoa(payloadSize), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				resultants, err := h.expandRequest(&req, review)
+				if err != nil {
+					b.Fatalf("expandRequest() error = %v", err)
+				}
+				if len(resultants) != 0 {
+					b.Fatalf("resultants = %d, want 0", len(resultants))
+				}
+			}
+		})
+	}
+}
+
+func largeConfigMapAdmissionRequest(payloadSize int) atypes.Request {
+	data := map[string]interface{}{
+		"payload": strings.Repeat("x", payloadSize),
+	}
+	obj := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"metadata": map[string]interface{}{
+			"name":      "benchmark-configmap",
+			"namespace": "benchmark-ns",
+		},
+		"data": data,
+	}}
+	rawObj, _ := json.Marshal(obj.Object)
+	return atypes.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+		Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
+		Resource:  metav1.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
+		Name:      "benchmark-configmap",
+		Namespace: "benchmark-ns",
+		Operation: admissionv1.Create,
+		UserInfo:  authenticationv1.UserInfo{Username: "benchmark-user"},
+		Object: runtime.RawExtension{
+			Object: obj,
+			Raw:    rawObj,
+		},
+	}}
 }
 
 func BenchmarkValidationMessagesDenyScale(b *testing.B) {

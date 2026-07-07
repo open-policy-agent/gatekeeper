@@ -506,6 +506,76 @@ func TestReviewRequestExpandedResourcesPreserveOperation(t *testing.T) {
 	}
 }
 
+func TestExpandRequestSkipsDecodeWhenNoTemplateCanMatch(t *testing.T) {
+	deploymentTemplate := &expansionunversioned.ExpansionTemplate{}
+	require.NoError(t, yaml.Unmarshal([]byte(expansionfixtures.TempExpDeploymentExpandsPods), deploymentTemplate))
+
+	tests := []struct {
+		name        string
+		templates   []*expansionunversioned.ExpansionTemplate
+		requestKind metav1.GroupVersionKind
+		operation   admissionv1.Operation
+		wantErr     bool
+	}{
+		{
+			name:        "no templates skips malformed object",
+			requestKind: metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
+			operation:   admissionv1.Create,
+		},
+		{
+			name:        "nonmatching template skips malformed object",
+			templates:   []*expansionunversioned.ExpansionTemplate{deploymentTemplate},
+			requestKind: metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
+			operation:   admissionv1.Create,
+		},
+		{
+			name:        "matching create template decodes malformed object",
+			templates:   []*expansionunversioned.ExpansionTemplate{deploymentTemplate},
+			requestKind: metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+			operation:   admissionv1.Create,
+			wantErr:     true,
+		},
+		{
+			name:        "matching delete template decodes malformed old object",
+			templates:   []*expansionunversioned.ExpansionTemplate{deploymentTemplate},
+			requestKind: metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+			operation:   admissionv1.Delete,
+			wantErr:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
+			for _, template := range tt.templates {
+				require.NoError(t, expSystem.UpsertTemplate(template))
+			}
+
+			handler := validationHandler{expansionSystem: expSystem}
+			req := &admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+				Kind:      tt.requestKind,
+				Name:      "malformed",
+				Namespace: "ns1",
+				Operation: tt.operation,
+				UserInfo:  authenticationv1.UserInfo{Username: "user@example.com"},
+			}}
+			if tt.operation == admissionv1.Delete {
+				req.OldObject = runtime.RawExtension{Raw: []byte("{")}
+			} else {
+				req.Object = runtime.RawExtension{Raw: []byte("{")}
+			}
+
+			resultants, err := handler.expandRequest(req, &target.AugmentedReview{})
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Empty(t, resultants)
+		})
+	}
+}
+
 func TestReviewDefaultNS(t *testing.T) {
 	cfg := &v1alpha1.Config{
 		Spec: v1alpha1.ConfigSpec{
