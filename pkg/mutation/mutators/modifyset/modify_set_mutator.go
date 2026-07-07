@@ -2,6 +2,7 @@ package modifyset
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/google/go-cmp/cmp"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
@@ -197,6 +198,10 @@ func (s setter) SetValue(obj map[string]interface{}, key string) error {
 	}
 }
 
+func equalSetValue(a, b interface{}) bool {
+	return reflect.DeepEqual(a, b)
+}
+
 func (s setter) setValueMerge(obj map[string]interface{}, key string) error {
 	val, ok := obj[key]
 	// missing list => add all values as a new list.
@@ -212,7 +217,7 @@ func (s setter) setValueMerge(obj map[string]interface{}, key string) error {
 outer:
 	for _, v := range s.values {
 		for _, existing := range vals {
-			if cmp.Equal(v, existing) {
+			if equalSetValue(v, existing) {
 				continue outer
 			}
 		}
@@ -241,7 +246,7 @@ func (s setter) setValuePrune(obj map[string]interface{}, key string) error {
 	for _, existing := range vals {
 		matched := false
 		for _, v := range s.values {
-			if cmp.Equal(v, existing) {
+			if equalSetValue(v, existing) {
 				matched = true
 			}
 		}
