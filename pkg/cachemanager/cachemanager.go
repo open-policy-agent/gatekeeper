@@ -383,18 +383,21 @@ func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind)
 		Kind:    gvk.Kind + "List",
 	})
 
-	var err error
-	func() {
-		c.mu.RLock()
-		defer c.mu.RUnlock()
+	c.mu.RLock()
+	watching := c.watchedSet.Contains(gvk)
+	c.mu.RUnlock()
 
-		// only call List if we are still watching the gvk.
-		if c.watchedSet.Contains(gvk) {
-			err = c.reader.List(ctx, u)
-		}
-	}()
+	// Only call List if we are still watching the GVK, but do not hold the
+	// cache-manager lock while listing. Full-GVK LISTs can be slow on large
+	// clusters; holding the lock here blocks source updates/removals and delays
+	// cancellation of stale relists. AddObject re-checks the watched set before
+	// adding each listed object, so a GVK removed while the List is in flight will
+	// not be re-added to the constraint framework cache.
+	if !watching {
+		return nil
+	}
 
-	if err != nil {
+	if err := c.reader.List(ctx, u); err != nil {
 		return fmt.Errorf("listing data for %+v: %w", gvk, err)
 	}
 
@@ -480,6 +483,16 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 }
 
 func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.GroupVersionKind, stopCh <-chan struct{}) {
+	relistCtx, cancelRelist := context.WithCancel(ctx)
+	defer cancelRelist()
+	go func() {
+		select {
+		case <-stopCh:
+			cancelRelist()
+		case <-relistCtx.Done():
+		}
+	}()
+
 	gvksSet := watch.NewSet()
 	gvksSet.Add(gvksToRelist...)
 
@@ -488,28 +501,20 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 
 		for _, gvk := range gvkItems {
 			select {
-			case <-ctx.Done():
-				return
-			case <-stopCh:
+			case <-relistCtx.Done():
 				return
 			default:
 				operation := func(ctx context.Context) (bool, error) {
-					select {
-					// make sure that the stop channel hasn't closed yet in order to stop
-					// the operation in the backoff retry-er earlier so we don't sync GVKs
-					// that we may not want to sync anymore. This also ensures that we exit
-					// the func as soon as possible.
-					case <-stopCh:
-						return true, nil
-					default:
-						if err := c.syncGVK(ctx, gvk); err != nil {
-							return false, err
-						}
-						return true, nil
+					if err := c.syncGVK(ctx, gvk); err != nil {
+						return false, err
 					}
+					return true, nil
 				}
 
-				if err := wait.ExponentialBackoffWithContext(ctx, backoff, operation); err != nil {
+				if err := wait.ExponentialBackoffWithContext(relistCtx, backoff, operation); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return
+					}
 					log.Error(err, "internal: error listings gvk cache data", "gvk", gvk)
 				} else {
 					gvksSet.Remove(gvk)

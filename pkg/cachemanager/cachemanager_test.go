@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager/aggregator"
@@ -22,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
@@ -656,6 +658,177 @@ func TestCacheManager_RemoveSource(t *testing.T) {
 			require.ElementsMatch(t, cm.gvksToSync.GVKs(), tc.expectedGVKs)
 		})
 	}
+}
+
+type blockingReader struct {
+	started chan struct{}
+	release chan struct{}
+	items   []unstructured.Unstructured
+}
+
+func newBlockingReader() *blockingReader {
+	return &blockingReader{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (r *blockingReader) Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
+	return nil
+}
+
+func (r *blockingReader) List(ctx context.Context, list client.ObjectList, _ ...client.ListOption) error {
+	close(r.started)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-r.release:
+	}
+
+	if len(r.items) == 0 {
+		return nil
+	}
+
+	unstructuredList, ok := list.(*unstructured.UnstructuredList)
+	if !ok {
+		return fmt.Errorf("expected *unstructured.UnstructuredList, got %T", list)
+	}
+	unstructuredList.Items = append(unstructuredList.Items, r.items...)
+	return nil
+}
+
+func newSyncGVKContentionCacheManager(gvk schema.GroupVersionKind, reader client.Reader) *CacheManager {
+	gvksToSync := aggregator.NewGVKAggregator()
+	gvksToSync.Upsert(configKey, []schema.GroupVersionKind{gvk})
+	watchedSet := watch.NewSet()
+	watchedSet.Add(gvk)
+
+	return &CacheManager{
+		cfClient:              &noopCFDataClient{},
+		reader:                reader,
+		registrar:             &fakeRegistrar{},
+		gvksToSync:            gvksToSync,
+		watchedSet:            watchedSet,
+		gvksToDeleteFromCache: watch.NewSet(),
+		danglingWatches:       watch.NewSet(),
+		syncMetricsCache:      syncutil.NewMetricsCache(),
+		tracker:               readiness.NewTracker(reader, false, false, false),
+		processExcluder:       process.New(),
+	}
+}
+
+func TestCacheManagerSyncGVKDoesNotBlockSourceUpdatesDuringList(t *testing.T) {
+	reader := newBlockingReader()
+	cm := newSyncGVKContentionCacheManager(configMapGVK, reader)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	syncDone := make(chan error, 1)
+	go func() {
+		syncDone <- cm.syncGVK(ctx, configMapGVK)
+	}()
+	<-reader.started
+
+	removeDone := make(chan error, 1)
+	go func() {
+		removeDone <- cm.RemoveSource(ctx, configKey)
+	}()
+
+	select {
+	case err := <-removeDone:
+		require.NoError(t, err)
+	case <-time.After(100 * time.Millisecond):
+		close(reader.release)
+		require.NoError(t, <-syncDone)
+		t.Fatal("RemoveSource blocked behind an in-flight List")
+	}
+
+	close(reader.release)
+	require.NoError(t, <-syncDone)
+}
+
+func TestCacheManagerSyncGVKDoesNotAddObjectsAfterSourceRemovedDuringList(t *testing.T) {
+	reader := newBlockingReader()
+	reader.items = []unstructured.Unstructured{*fakes.UnstructuredFor(configMapGVK, "default", "cm")}
+	cm := newSyncGVKContentionCacheManager(configMapGVK, reader)
+	cfClient := &fakes.FakeCfClient{}
+	cm.cfClient = cfClient
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	syncDone := make(chan error, 1)
+	go func() {
+		syncDone <- cm.syncGVK(ctx, configMapGVK)
+	}()
+	<-reader.started
+
+	require.NoError(t, cm.RemoveSource(ctx, configKey))
+	close(reader.release)
+	require.NoError(t, <-syncDone)
+	require.False(t, cfClient.HasGVK(configMapGVK), "removed GVK should not be added from an in-flight List")
+}
+
+func TestCacheManagerReplayGVKsCancelsInFlightListOnStop(t *testing.T) {
+	reader := newBlockingReader()
+	cm := newSyncGVKContentionCacheManager(configMapGVK, reader)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stopCh := make(chan struct{})
+
+	replayDone := make(chan struct{})
+	go func() {
+		cm.replayGVKs(ctx, []schema.GroupVersionKind{configMapGVK}, stopCh)
+		close(replayDone)
+	}()
+	<-reader.started
+
+	close(stopCh)
+	select {
+	case <-replayDone:
+	case <-time.After(100 * time.Millisecond):
+		close(reader.release)
+		<-replayDone
+		t.Fatal("replayGVKs did not cancel an in-flight List after stopCh closed")
+	}
+}
+
+func BenchmarkCacheManagerSyncGVKSourceUpdateContention(b *testing.B) {
+	ctx := context.Background()
+	var blocked int
+
+	for i := 0; i < b.N; i++ {
+		reader := newBlockingReader()
+		cm := newSyncGVKContentionCacheManager(configMapGVK, reader)
+
+		syncDone := make(chan error, 1)
+		go func() {
+			syncDone <- cm.syncGVK(ctx, configMapGVK)
+		}()
+		<-reader.started
+
+		removeDone := make(chan error, 1)
+		go func() {
+			removeDone <- cm.RemoveSource(ctx, configKey)
+		}()
+
+		select {
+		case err := <-removeDone:
+			require.NoError(b, err)
+		case <-time.After(100 * time.Microsecond):
+			blocked++
+			close(reader.release)
+			require.NoError(b, <-removeDone)
+		}
+
+		select {
+		case <-reader.release:
+		default:
+			close(reader.release)
+		}
+		require.NoError(b, <-syncDone)
+	}
+
+	b.ReportMetric(float64(blocked)/float64(b.N), "blocked/op")
 }
 
 func Test_interpretErr(t *testing.T) {
