@@ -254,7 +254,11 @@ func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constrain
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrCreatingMatcher, err)
 		}
-		return &Matcher{match: m, cache: &h.cache}, nil
+		compiledMatch, err := match.Compile(m)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrCreatingMatcher, err)
+		}
+		return &Matcher{match: m, compiledMatch: compiledMatch, cache: &h.cache}, nil
 	}
 
 	return &Matcher{}, nil
