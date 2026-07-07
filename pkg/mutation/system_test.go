@@ -2,6 +2,7 @@ package mutation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -775,6 +776,88 @@ func TestSystem_ReportingInjection(t *testing.T) {
 	wantIterations := 4
 	if fr.iterations != wantIterations {
 		t.Errorf("want system to report %v iterations but found %v", wantIterations, fr.iterations)
+	}
+}
+
+func TestMutationObjectEqualMatchesPreviousConvergenceSemantics(t *testing.T) {
+	placeholder := &unversioned.ExternalDataPlaceholder{
+		Ref:             &unversioned.ExternalData{Provider: "provider", FailurePolicy: types.FailurePolicyFail},
+		ValueAtLocation: "old-value",
+	}
+
+	cases := []struct {
+		name    string
+		old     *unstructured.Unstructured
+		current *unstructured.Unstructured
+	}{
+		{
+			name:    "both nil",
+			old:     nil,
+			current: nil,
+		},
+		{
+			name:    "one nil",
+			old:     nil,
+			current: &unstructured.Unstructured{Object: map[string]interface{}{}},
+		},
+		{
+			name: "equal json values and placeholder",
+			old: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"spec": map[string]interface{}{
+					"string":      "value",
+					"int":         int64(1),
+					"float":       float64(1.5),
+					"bool":        true,
+					"number":      json.Number("2"),
+					"placeholder": placeholder,
+				},
+			}},
+			current: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"spec": map[string]interface{}{
+					"string":      "value",
+					"int":         int64(1),
+					"float":       float64(1.5),
+					"bool":        true,
+					"number":      json.Number("2"),
+					"placeholder": placeholder.DeepCopy(),
+				},
+			}},
+		},
+		{
+			name: "different placeholder value",
+			old: &unstructured.Unstructured{Object: map[string]interface{}{
+				"spec": map[string]interface{}{"placeholder": placeholder},
+			}},
+			current: &unstructured.Unstructured{Object: map[string]interface{}{
+				"spec": map[string]interface{}{"placeholder": &unversioned.ExternalDataPlaceholder{
+					Ref:             placeholder.Ref.DeepCopy(),
+					ValueAtLocation: "new-value",
+				}},
+			}},
+		},
+		{
+			name: "nil and empty maps remain different",
+			old: &unstructured.Unstructured{Object: map[string]interface{}{
+				"spec": map[string]interface{}(nil),
+			}},
+			current: &unstructured.Unstructured{Object: map[string]interface{}{
+				"spec": map[string]interface{}{},
+			}},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mutationObjectEqual(tc.old, tc.current)
+			want := cmp.Equal(tc.old, tc.current)
+			if got != want {
+				t.Fatalf("mutationObjectEqual() = %t, want previous cmp.Equal semantics %t", got, want)
+			}
+		})
 	}
 }
 

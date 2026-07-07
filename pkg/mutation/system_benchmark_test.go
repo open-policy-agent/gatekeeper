@@ -138,6 +138,85 @@ func BenchmarkSystem_MutateNonMatchingMutatorScale(b *testing.B) {
 	}
 }
 
+func BenchmarkSystem_MutateMatchingMutatorsLargeObject(b *testing.B) {
+	for _, tc := range []struct {
+		name         string
+		mutatorCount int
+		dataEntries  int
+		preMutated   bool
+	}{
+		{name: "matching-1/data-500/fresh", mutatorCount: 1, dataEntries: 500},
+		{name: "matching-10/data-500/fresh", mutatorCount: 10, dataEntries: 500},
+		{name: "matching-100/data-500/fresh", mutatorCount: 100, dataEntries: 500},
+		{name: "matching-1000/data-500/fresh", mutatorCount: 1000, dataEntries: 500},
+		{name: "matching-1/data-500/already-mutated", mutatorCount: 1, dataEntries: 500, preMutated: true},
+		{name: "matching-10/data-500/already-mutated", mutatorCount: 10, dataEntries: 500, preMutated: true},
+		{name: "matching-100/data-500/already-mutated", mutatorCount: 100, dataEntries: 500, preMutated: true},
+		{name: "matching-1000/data-500/already-mutated", mutatorCount: 1000, dataEntries: 500, preMutated: true},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			s := NewSystem(SystemOpts{})
+			for i := 0; i < tc.mutatorCount; i++ {
+				a := assign("matched"+strconv.Itoa(i), "spec.field"+strconv.Itoa(i))
+				a.Name = "assign-matching-" + strconv.Itoa(i)
+				a.Spec.ApplyTo = []match.MutationApplyTo{{
+					ApplyTo: match.ApplyTo{
+						Groups:   []string{""},
+						Versions: []string{"v1"},
+						Kinds:    []string{"ConfigMap"},
+					},
+				}}
+				mutator, err := mutators.MutatorForAssign(a)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if err := s.Upsert(mutator); err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			base := benchmarkMutationObject(tc.dataEntries, tc.preMutated, tc.mutatorCount)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				u := base
+				if !tc.preMutated {
+					b.StopTimer()
+					u = base.DeepCopy()
+					b.StartTimer()
+				}
+				if _, err := s.Mutate(context.Background(), &types.Mutable{Object: u, Operation: admissionv1.Create}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func benchmarkMutationObject(dataEntries int, preMutated bool, mutatorCount int) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"metadata": map[string]interface{}{
+			"name":      "cm",
+			"namespace": "default",
+		},
+		"data": benchmarkLargeObjectData(dataEntries),
+	}}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+
+	if preMutated {
+		spec := make(map[string]interface{}, mutatorCount)
+		for i := 0; i < mutatorCount; i++ {
+			spec["field"+strconv.Itoa(i)] = "matched" + strconv.Itoa(i)
+		}
+		obj.Object["spec"] = spec
+	}
+
+	return obj
+}
+
 func benchmarkLargeObjectData(entries int) map[string]interface{} {
 	data := make(map[string]interface{}, entries)
 	for i := 0; i < entries; i++ {

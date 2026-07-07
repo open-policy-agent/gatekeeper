@@ -3,9 +3,9 @@ package mutation
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
@@ -233,7 +233,7 @@ func (s *System) mutate(ctx context.Context, mutable *types.Mutable) (int, error
 			}
 		}
 
-		if len(appliedMutations) == 0 || cmp.Equal(old, mutable.Object) {
+		if len(appliedMutations) == 0 || mutationObjectEqual(old, mutable.Object) {
 			// If no mutations were applied, we can safely assume the object is
 			// identical to before.
 			if iteration == 1 {
@@ -272,6 +272,19 @@ func (s *System) mutate(ctx context.Context, mutable *types.Mutable) (int, error
 		mutable.Object.GroupVersionKind().Kind,
 		mutable.Object.GetNamespace(),
 		getNameOrGenerateName(mutable.Object))
+}
+
+func mutationObjectEqual(old, current *unstructured.Unstructured) bool {
+	if old == nil || current == nil {
+		return old == current
+	}
+
+	// Mutators operate on the unstructured Object map. Avoid go-cmp here: this
+	// convergence check is on the admission hot path and can run once per
+	// matching-mutator iteration over large objects. reflect.DeepEqual preserves
+	// the relevant JSON/placeholder equality semantics without go-cmp's option and
+	// reporter machinery.
+	return reflect.DeepEqual(old.Object, current.Object)
 }
 
 func (s *System) mutationCandidateIDs(mutable *types.Mutable) []types.ID {
