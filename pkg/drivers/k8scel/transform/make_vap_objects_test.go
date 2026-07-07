@@ -885,6 +885,59 @@ func TestConvertWebhookRulesToResourceRules(t *testing.T) {
 	}
 }
 
+// TestConvertWebhookRulesToResourceRulesOperationOrder asserts operations are
+// emitted in canonical order (CREATE, UPDATE, DELETE, CONNECT).
+func TestConvertWebhookRulesToResourceRulesOperationOrder(t *testing.T) {
+	tests := []struct {
+		name     string
+		ruleOps  []admissionregistrationv1beta1.OperationType
+		ctOps    []admissionregistrationv1beta1.OperationType
+		expected []admissionregistrationv1beta1.OperationType
+	}{
+		{
+			name:     "intersection preserves canonical order",
+			ruleOps:  []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Delete, admissionregistrationv1beta1.Update, admissionregistrationv1beta1.Create},
+			ctOps:    []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Update, admissionregistrationv1beta1.Create},
+			expected: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+		},
+		{
+			name:     "wildcard rule intersected with all ops is canonical",
+			ruleOps:  []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+			ctOps:    []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+			expected: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update, admissionregistrationv1beta1.Delete, admissionregistrationv1beta1.Connect},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			rules := []admissionregistrationv1beta1.RuleWithOperations{
+				{
+					Operations: test.ruleOps,
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			}
+
+			// Repeat: set iteration order varies between calls.
+			for i := 0; i < 20; i++ {
+				result, err := convertWebhookRulesToResourceRules(rules, test.ctOps)
+				if err != nil && !errors.Is(err, ErrOperationMismatch) {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if len(result) != 1 {
+					t.Fatalf("expected 1 resource rule, got %d", len(result))
+				}
+				if !reflect.DeepEqual(result[0].Operations, test.expected) {
+					t.Fatalf("operations = %v, want %v", result[0].Operations, test.expected)
+				}
+			}
+		})
+	}
+}
+
 func TestExpandWildcardOperations(t *testing.T) {
 	allOps := []admissionregistrationv1beta1.OperationType{
 		admissionregistrationv1beta1.Create,

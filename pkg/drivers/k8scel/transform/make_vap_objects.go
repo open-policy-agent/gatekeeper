@@ -109,7 +109,12 @@ func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.Rul
 			if !intersection.Equal(ctOpsSet) {
 				errs = append(errs, ErrOperationMismatch)
 			}
-			operations = intersection.UnsortedList()
+			// Emit in canonical allOps order for deterministic output.
+			for _, op := range allOps {
+				if intersection.Has(op) {
+					operations = append(operations, op)
+				}
+			}
 		}
 
 		resourceRules = append(resourceRules, admissionregistrationv1beta1.NamedRuleWithOperations{
