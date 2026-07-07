@@ -506,6 +506,30 @@ func TestReviewRequestExpandedResourcesPreserveOperation(t *testing.T) {
 	}
 }
 
+func TestSkipExcludedNamespaceSkipsDecodeWhenNoExclusions(t *testing.T) {
+	req := &admissionv1.AdmissionRequest{
+		Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
+		Name:      "malformed",
+		Namespace: "ns1",
+		Operation: admissionv1.Create,
+		Object:    runtime.RawExtension{Raw: []byte("{")},
+	}
+
+	handler := webhookHandler{processExcluder: process.New()}
+	excluded, err := handler.skipExcludedNamespace(req, process.Webhook)
+	require.NoError(t, err)
+	require.False(t, excluded)
+
+	excluder := process.New()
+	excluder.Add([]v1alpha1.MatchEntry{{
+		ExcludedNamespaces: []wildcard.Wildcard{"ns1"},
+		Processes:          []string{string(process.Webhook)},
+	}})
+	handler.processExcluder = excluder
+	_, err = handler.skipExcludedNamespace(req, process.Webhook)
+	require.Error(t, err)
+}
+
 func TestExpandRequestSkipsDecodeWhenNoTemplateCanMatch(t *testing.T) {
 	deploymentTemplate := &expansionunversioned.ExpansionTemplate{}
 	require.NoError(t, yaml.Unmarshal([]byte(expansionfixtures.TempExpDeploymentExpandsPods), deploymentTemplate))

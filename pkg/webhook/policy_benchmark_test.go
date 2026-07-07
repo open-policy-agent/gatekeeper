@@ -251,6 +251,26 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 	}
 }
 
+func BenchmarkSkipExcludedNamespaceNoExclusions(b *testing.B) {
+	for _, payloadSize := range []int{10 << 10, 100 << 10, 1024 << 10} {
+		req := largeConfigMapAdmissionRequest(payloadSize)
+		h := webhookHandler{processExcluder: process.New()}
+
+		b.Run(strconv.Itoa(payloadSize), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				excluded, err := h.skipExcludedNamespace(&req.AdmissionRequest, process.Webhook)
+				if err != nil {
+					b.Fatalf("skipExcludedNamespace() error = %v", err)
+				}
+				if excluded {
+					b.Fatal("skipExcludedNamespace() = true, want false")
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkValidationExpansionNoTemplates(b *testing.B) {
 	for _, payloadSize := range []int{10 << 10, 100 << 10, 1024 << 10} {
 		req := largeConfigMapAdmissionRequest(payloadSize)
