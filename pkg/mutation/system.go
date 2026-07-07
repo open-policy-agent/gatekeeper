@@ -34,6 +34,7 @@ type System struct {
 	reporter                          StatsReporter
 	newUUID                           func() uuid.UUID
 	providerCache                     *externaldata.ProviderCache
+	providerResponseCache             *externaldata.ProviderResponseCache
 	sendRequestToExternalDataProvider externaldata.SendRequestToProvider
 	clientCertWatcher                 *certwatcher.CertWatcher
 }
@@ -43,6 +44,7 @@ type SystemOpts struct {
 	Reporter                          StatsReporter
 	NewUUID                           func() uuid.UUID
 	ProviderCache                     *externaldata.ProviderCache
+	ProviderResponseCache             *externaldata.ProviderResponseCache
 	SendRequestToExternalDataProvider externaldata.SendRequestToProvider
 	ClientCertWatcher                 *certwatcher.CertWatcher
 }
@@ -61,6 +63,7 @@ func NewSystem(options SystemOpts) *System {
 		reporter:                          options.Reporter,
 		newUUID:                           options.NewUUID,
 		providerCache:                     options.ProviderCache,
+		providerResponseCache:             options.ProviderResponseCache,
 		sendRequestToExternalDataProvider: options.SendRequestToExternalDataProvider,
 		clientCertWatcher:                 options.ClientCertWatcher,
 	}
