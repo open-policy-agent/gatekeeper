@@ -273,6 +273,16 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				continue
 			}
 		}
+		if len(actions) == 0 && !*logDenies && !*emitAdmissionEvents {
+			switch r.EnforcementAction {
+			case string(util.Deny):
+				denyMsgs = append(denyMsgs, validationMessage(r.Constraint.GetName(), r.Msg))
+			case string(util.Warn):
+				warnMsgs = append(warnMsgs, validationMessage(r.Constraint.GetName(), r.Msg))
+			}
+			continue
+		}
+
 		if *logDenies {
 			h.log.WithValues(
 				logging.Semantic, true,
@@ -343,15 +353,19 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 		}
 		for _, action := range actions {
 			if action == string(util.Deny) {
-				denyMsgs = append(denyMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
+				denyMsgs = append(denyMsgs, validationMessage(r.Constraint.GetName(), r.Msg))
 			}
 
 			if action == string(util.Warn) {
-				warnMsgs = append(warnMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
+				warnMsgs = append(warnMsgs, validationMessage(r.Constraint.GetName(), r.Msg))
 			}
 		}
 	}
 	return denyMsgs, warnMsgs
+}
+
+func validationMessage(constraintName, msg string) string {
+	return "[" + constraintName + "] " + msg
 }
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors

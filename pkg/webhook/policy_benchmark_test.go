@@ -28,6 +28,7 @@ import (
 	templv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
@@ -245,6 +246,44 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 			DryRun:    &dryRun,
 			Options:   runtime.RawExtension{},
 		},
+	}
+}
+
+func BenchmarkValidationMessagesDenyScale(b *testing.B) {
+	for _, resultCount := range []int{100, 1000, 10000} {
+		results := make([]*rtypes.Result, resultCount)
+		for i := 0; i < resultCount; i++ {
+			constraint := &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+				"kind":       "K8sBenchmark",
+				"metadata": map[string]interface{}{
+					"name": "constraint-" + strconv.Itoa(i),
+				},
+			}}
+			results[i] = &rtypes.Result{
+				Msg:               "benchmark violation",
+				Constraint:        constraint,
+				EnforcementAction: "deny",
+			}
+		}
+		req := atypes.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+			Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
+			Resource:  metav1.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
+			Name:      "benchmark-configmap",
+			Operation: admissionv1.Create,
+			UserInfo:  authenticationv1.UserInfo{Username: "benchmark-user"},
+		}}
+		h := validationHandler{log: log}
+
+		b.Run("results-"+strconv.Itoa(resultCount), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				denyMsgs, warnMsgs := h.getValidationMessages(results, &req)
+				if len(denyMsgs) != resultCount || len(warnMsgs) != 0 {
+					b.Fatalf("deny,warn counts = %d,%d; want %d,0", len(denyMsgs), len(warnMsgs), resultCount)
+				}
+			}
+		})
 	}
 }
 
