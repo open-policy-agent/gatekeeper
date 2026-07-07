@@ -341,6 +341,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			log.Info("could not get/create pod status object", "error", err)
 			return reconcile.Result{}, err
 		}
+		oldStatus := status.Status.DeepCopy()
 		status.Status.ConstraintUID = instance.GetUID()
 		status.Status.ObservedGeneration = instance.GetGeneration()
 		status.Status.Errors = nil
@@ -363,7 +364,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		status.Status.Enforced = true
-		if err = r.writer.Update(ctx, status); err != nil {
+		if err = r.updatePodStatusIfChanged(ctx, status, oldStatus); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 

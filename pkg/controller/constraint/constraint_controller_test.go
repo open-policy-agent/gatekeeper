@@ -862,6 +862,59 @@ func (f *fakeReporter) DeleteVAPBStatus(name types.NamespacedName) {
 	delete(f.vapbStatuses, name)
 }
 
+func TestUpdateConstraintPodStatusIfChangedSkipsNoopAndWritesChanges(t *testing.T) {
+	ctx := context.Background()
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
+			ConstraintUID:      "constraint-uid",
+			ObservedGeneration: 1,
+			Enforced:           true,
+		},
+	}
+	writer := &trackingWriter{}
+	reconciler := &ReconcileConstraint{writer: writer}
+
+	oldStatus := status.Status.DeepCopy()
+	if err := reconciler.updatePodStatusIfChanged(ctx, status, oldStatus); err != nil {
+		t.Fatalf("updatePodStatusIfChanged() error = %v, want nil", err)
+	}
+	if len(writer.updatedObjects) != 0 {
+		t.Fatalf("updates = %d, want 0 for unchanged status", len(writer.updatedObjects))
+	}
+
+	status.Status.ObservedGeneration++
+	if err := reconciler.updatePodStatusIfChanged(ctx, status, oldStatus); err != nil {
+		t.Fatalf("updatePodStatusIfChanged() after status change error = %v, want nil", err)
+	}
+	if len(writer.updatedObjects) != 1 {
+		t.Fatalf("updates = %d, want 1 for changed status", len(writer.updatedObjects))
+	}
+}
+
+func BenchmarkUpdateConstraintPodStatusIfChangedNoop(b *testing.B) {
+	ctx := context.Background()
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
+			ConstraintUID:      "constraint-uid",
+			ObservedGeneration: 1,
+			Enforced:           true,
+		},
+	}
+	writer := &trackingWriter{}
+	reconciler := &ReconcileConstraint{writer: writer}
+	oldStatus := status.Status.DeepCopy()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := reconciler.updatePodStatusIfChanged(ctx, status, oldStatus); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	b.ReportMetric(float64(len(writer.updatedObjects))/float64(b.N), "updates/op")
+}
+
 func TestManageVAPB_CleansUpStaleVAPB(t *testing.T) {
 	// Regression test for https://github.com/open-policy-agent/gatekeeper/issues/4441
 	// When vap.k8s.io is removed from scopedEnforcementActions, the stale VAPB must be deleted.
