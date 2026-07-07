@@ -29,6 +29,7 @@ type System struct {
 	orderedMutators                   orderedIDs
 	candidateMutators                 candidateIndex
 	mutatorsMap                       map[types.ID]types.Mutator
+	mustTerminateMutators             int
 	mux                               sync.RWMutex
 	reporter                          StatsReporter
 	newUUID                           func() uuid.UUID
@@ -115,9 +116,15 @@ func (s *System) Upsert(m types.Mutator) error {
 
 	if current, ok := s.mutatorsMap[id]; ok {
 		s.candidateMutators.remove(current)
+		if current.MustTerminate() {
+			s.mustTerminateMutators--
+		}
 	}
 	s.mutatorsMap[id] = toAdd
 	s.candidateMutators.add(toAdd)
+	if toAdd.MustTerminate() {
+		s.mustTerminateMutators++
+	}
 
 	s.orderedMutators.insert(id)
 	return err
@@ -135,6 +142,9 @@ func (s *System) Remove(id types.ID) error {
 	mutator := s.mutatorsMap[id]
 	s.schemaDB.Remove(id)
 	s.candidateMutators.remove(mutator)
+	if mutator.MustTerminate() {
+		s.mustTerminateMutators--
+	}
 
 	delete(s.mutatorsMap, id)
 
@@ -240,9 +250,11 @@ func (s *System) mutate(ctx context.Context, mutable *types.Mutable) (int, error
 				return 0, nil
 			}
 
-			err := s.resolvePlaceholders(ctx, mutable.Object)
-			if err != nil {
-				return iteration, fmt.Errorf("failed to resolve external data placeholders: %w", err)
+			if s.mustTerminateMutators > 0 {
+				err := s.resolvePlaceholders(ctx, mutable.Object)
+				if err != nil {
+					return iteration, fmt.Errorf("failed to resolve external data placeholders: %w", err)
+				}
 			}
 
 			if *MutationLoggingEnabled {

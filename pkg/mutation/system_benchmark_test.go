@@ -194,6 +194,43 @@ func BenchmarkSystem_MutateMatchingMutatorsLargeObject(b *testing.B) {
 	}
 }
 
+func BenchmarkSystem_MutateSkipsPlaceholderScanWithoutTerminatingMutators(b *testing.B) {
+	for _, dataEntries := range []int{500, 5000} {
+		b.Run("data-"+strconv.Itoa(dataEntries), func(b *testing.B) {
+			s := NewSystem(SystemOpts{})
+			a := assign("matched", "spec.matched")
+			a.Name = "assign-matching"
+			a.Spec.ApplyTo = []match.MutationApplyTo{{
+				ApplyTo: match.ApplyTo{
+					Groups:   []string{""},
+					Versions: []string{"v1"},
+					Kinds:    []string{"ConfigMap"},
+				},
+			}}
+			mutator, err := mutators.MutatorForAssign(a)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if err := s.Upsert(mutator); err != nil {
+				b.Fatal(err)
+			}
+
+			base := benchmarkMutationObject(dataEntries, false, 1)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				u := base.DeepCopy()
+				b.StartTimer()
+				if _, err := s.Mutate(context.Background(), &types.Mutable{Object: u, Operation: admissionv1.Create}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func benchmarkMutationObject(dataEntries int, preMutated bool, mutatorCount int) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{
 		"apiVersion": "v1",

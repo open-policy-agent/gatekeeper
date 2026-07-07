@@ -62,8 +62,9 @@ type fakeMutator struct {
 	NewGVK *schema.GroupVersionKind
 
 	// External data fields
-	FailurePolicy types.ExternalDataFailurePolicy
-	Default       *types.Anything
+	FailurePolicy       types.ExternalDataFailurePolicy
+	Default             *types.Anything
+	RequiresTermination bool
 }
 
 func (m *fakeMutator) Matches(*types.Mutable) (bool, error) {
@@ -105,7 +106,7 @@ func (m *fakeMutator) Mutate(mutable *types.Mutable) (bool, error) {
 }
 
 func (m *fakeMutator) MustTerminate() bool {
-	return false
+	return m.RequiresTermination
 }
 
 func (m *fakeMutator) TerminalType() parser.NodeType {
@@ -130,13 +131,14 @@ func (m *fakeMutator) HasDiff(mutator types.Mutator) bool {
 
 func (m *fakeMutator) DeepCopy() types.Mutator {
 	res := &fakeMutator{
-		MID:           m.MID,
-		MPath:         m.MPath.DeepCopy(),
-		GVKs:          make([]schema.GroupVersionKind, len(m.GVKs)),
-		Bindings:      make([]mutationschema.Binding, len(m.Bindings)),
-		MatchCount:    m.MatchCount,
-		MutationCount: m.MutationCount,
-		UnstableFor:   m.UnstableFor,
+		MID:                 m.MID,
+		MPath:               m.MPath.DeepCopy(),
+		GVKs:                make([]schema.GroupVersionKind, len(m.GVKs)),
+		Bindings:            make([]mutationschema.Binding, len(m.Bindings)),
+		MatchCount:          m.MatchCount,
+		MutationCount:       m.MutationCount,
+		UnstableFor:         m.UnstableFor,
+		RequiresTermination: m.RequiresTermination,
 	}
 	copy(res.GVKs, m.GVKs)
 	copy(res.Bindings, m.Bindings)
@@ -307,6 +309,45 @@ func TestMutation(t *testing.T) {
 				t.Errorf("got %d  mutation iterations, want %d", tc.mutations[0].MutationCount, tc.wantIterations)
 			}
 		})
+	}
+}
+
+func TestSystemTracksMutatorsThatMayNeedPlaceholderResolution(t *testing.T) {
+	s := NewSystem(SystemOpts{})
+	terminating := &fakeMutator{MID: id("terminating"), RequiresTermination: true}
+	nonTerminating := &fakeMutator{MID: id("non-terminating")}
+
+	if err := s.Upsert(terminating); err != nil {
+		t.Fatalf("Upsert(terminating) error = %v", err)
+	}
+	if got, want := s.mustTerminateMutators, 1; got != want {
+		t.Fatalf("mustTerminateMutators = %d, want %d", got, want)
+	}
+
+	if err := s.Upsert(nonTerminating); err != nil {
+		t.Fatalf("Upsert(nonTerminating) error = %v", err)
+	}
+	if got, want := s.mustTerminateMutators, 1; got != want {
+		t.Fatalf("mustTerminateMutators after non-terminating upsert = %d, want %d", got, want)
+	}
+
+	replacement := &fakeMutator{MID: id("terminating")}
+	if err := s.Upsert(replacement); err != nil {
+		t.Fatalf("Upsert(replacement) error = %v", err)
+	}
+	if got, want := s.mustTerminateMutators, 0; got != want {
+		t.Fatalf("mustTerminateMutators after replacement = %d, want %d", got, want)
+	}
+
+	replacement.RequiresTermination = true
+	if err := s.Upsert(replacement); err != nil {
+		t.Fatalf("Upsert(terminating replacement) error = %v", err)
+	}
+	if err := s.Remove(replacement.ID()); err != nil {
+		t.Fatalf("Remove(replacement) error = %v", err)
+	}
+	if got, want := s.mustTerminateMutators, 0; got != want {
+		t.Fatalf("mustTerminateMutators after remove = %d, want %d", got, want)
 	}
 }
 
