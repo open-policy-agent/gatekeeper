@@ -143,8 +143,34 @@ func TestCreateConnectionRejectsPathCleanupInProgress(t *testing.T) {
 	if openConnectionExists(writer, "conn-cleaning") {
 		t.Fatal("connection should not be created while path cleanup is in progress")
 	}
+	if connectionLockExists(writer, "conn-cleaning") {
+		t.Fatal("connection lock should not be retained after rejected create")
+	}
 	if _, statErr := os.Stat(cleanupPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected path to remain absent during cleanup, got stat err = %v", statErr)
+	}
+}
+
+func TestCreateConnectionCleansUpLockWhenEnsureDirectoryFails(t *testing.T) {
+	writer := newTestWriter(nil)
+	file, err := os.CreateTemp(t.TempDir(), "not-a-directory")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	connectionName := "conn-directory-error"
+	err = writer.CreateConnection(context.Background(), connectionName, diskConfig(file.Name(), 3.0))
+	if err == nil || !strings.Contains(err.Error(), "failed to create directory") {
+		t.Fatalf("expected directory creation error, got %v", err)
+	}
+	if openConnectionExists(writer, connectionName) {
+		t.Fatal("connection should not be retained after directory creation failure")
+	}
+	if connectionLockExists(writer, connectionName) {
+		t.Fatal("connection lock should not be retained after directory creation failure")
 	}
 }
 

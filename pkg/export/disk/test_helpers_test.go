@@ -52,6 +52,13 @@ func openConnectionExists(writer *Writer, connectionName string) bool {
 	return exists
 }
 
+func connectionLockExists(writer *Writer, connectionName string) bool {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	_, exists := writer.connectionLocks[connectionName]
+	return exists
+}
+
 func listFiles(dir string) ([]string, error) {
 	var files []string
 
