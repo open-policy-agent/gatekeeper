@@ -17,7 +17,6 @@ package mutatorstatus
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -114,7 +113,7 @@ func mutatorStatusFixture(t *testing.T) (*unstructured.Unstructured, v1beta1.Mut
 		},
 	}
 
-	return mutator, podStatus, []interface{}{mustStatusMap(t, podStatus.Status)}
+	return mutator, podStatus, []interface{}{mustStatusMap(t, &podStatus.Status)}
 }
 
 type mutatorStatusReader struct {
@@ -218,13 +217,9 @@ func setByPod(t *testing.T, obj *unstructured.Unstructured, byPod []interface{})
 
 func mustStatusMap(t *testing.T, status interface{}) map[string]interface{} {
 	t.Helper()
-	j, err := json.Marshal(status)
+	out, err := apimachineryruntime.DefaultUnstructuredConverter.ToUnstructured(status)
 	if err != nil {
-		t.Fatalf("json.Marshal() returned error: %v", err)
-	}
-	var out map[string]interface{}
-	if err := json.Unmarshal(j, &out); err != nil {
-		t.Fatalf("json.Unmarshal() returned error: %v", err)
+		t.Fatalf("ToUnstructured() returned error: %v", err)
 	}
 	return out
 }
