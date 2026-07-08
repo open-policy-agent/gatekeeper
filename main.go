@@ -426,7 +426,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		case *externaldataProviderResponseCacheTTL > 0:
 			providerResponseCache := frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
 			args = append(args, rego.AddExternalDataProviderResponseCache(providerResponseCache))
-			mutationOpts.ProviderResponseCache = frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
+			mutationOpts.ProviderResponseCache = providerResponseCache
 		case *externaldataProviderResponseCacheTTL == 0:
 			setupLog.Info("external data provider response cache is disabled")
 		default:

@@ -28,6 +28,7 @@ type Matchable struct {
 }
 
 // CompiledMatch holds immutable match criteria with parsed selectors for repeated matching.
+// +kubebuilder:object:generate=false
 type CompiledMatch struct {
 	match                *Match
 	labelSelector        labels.Selector
@@ -125,10 +126,10 @@ func (m *CompiledMatch) Matches(target *Matchable) (bool, error) {
 	return true, nil
 }
 
-// matchFunc defines the matching logic of a Top Level Matcher.  A TLM receives the match criteria,
-// an object, and the namespace of the object and decides if there is a reason why the object does
-// not match.  If the TLM associated with the matching function is not defined by the user, the
-// matchFunc should return true.
+// compiledMatchFunc defines the matching logic of a Top Level Matcher. A TLM receives
+// compiled match criteria, an object, and the namespace of the object and decides if
+// there is a reason why the object does not match. If the TLM associated with the
+// matching function is not defined by the user, the compiledMatchFunc should return true.
 type (
 	compiledMatchFunc func(match *CompiledMatch, target *Matchable) (bool, error)
 )
