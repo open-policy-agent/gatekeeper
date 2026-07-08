@@ -624,6 +624,7 @@ func TestToMatcher(t *testing.T) {
 				// about caching functionality, we do not compare the cache
 				cmpopts.IgnoreTypes(sync.RWMutex{}, nsCache{}),
 				cmp.AllowUnexported(Matcher{}),
+				cmpopts.IgnoreFields(Matcher{}, "compiledMatch"),
 			}
 			if diff := cmp.Diff(tt.want, got, opts...); diff != "" {
 				t.Errorf("ToMatcher() got = %v, want %v", got, tt.want)

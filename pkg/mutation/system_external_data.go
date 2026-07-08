@@ -49,13 +49,84 @@ func (s *System) resolvePlaceholders(ctx context.Context, obj *unstructured.Unst
 		return nil
 	}
 
+	cachedExternalData, providerKeys := s.cachedProviderResponses(providerKeys)
+	if len(providerKeys) == 0 {
+		return s.mutateWithExternalData(obj, cachedExternalData, nil)
+	}
+
 	clientCert, err := s.getTLSCertificate()
 	if err != nil {
 		return fmt.Errorf("failed to get client TLS certificate: %w", err)
 	}
 
 	externalData, errors := s.sendRequests(ctx, providerKeys, clientCert)
+	externalData = mergeExternalData(cachedExternalData, externalData)
 	return s.mutateWithExternalData(obj, externalData, errors)
+}
+
+func (s *System) cachedProviderResponses(providerKeys map[string]sets.Set[string]) (map[string]map[string]*externaldata.Item, map[string]sets.Set[string]) {
+	if s.providerCache == nil || s.providerResponseCache == nil || s.providerResponseCache.TTL <= 0 {
+		return nil, providerKeys
+	}
+
+	cached := make(map[string]map[string]*externaldata.Item)
+	misses := make(map[string]sets.Set[string])
+	for providerName, keys := range providerKeys {
+		provider, err := s.providerCache.Get(providerName)
+		if err != nil {
+			misses[providerName] = keys
+			continue
+		}
+		for key := range keys {
+			cacheValue, err := s.providerResponseCache.Get(mutationProviderResponseCacheKey(&provider, key))
+			if err != nil || cacheValue == nil || !cacheValue.Idempotent || time.Since(time.Unix(cacheValue.Received, 0)) > s.providerResponseCache.TTL {
+				if _, ok := misses[providerName]; !ok {
+					misses[providerName] = sets.New[string]()
+				}
+				misses[providerName].Insert(key)
+				continue
+			}
+
+			if _, ok := cached[providerName]; !ok {
+				cached[providerName] = make(map[string]*externaldata.Item)
+			}
+			item := externaldata.Item{
+				Key:   key,
+				Value: cacheValue.Value,
+				Error: cacheValue.Error,
+			}
+			cached[providerName][key] = &item
+		}
+	}
+
+	return cached, misses
+}
+
+func mutationProviderResponseCacheKey(provider *externaldataUnversioned.Provider, key string) externaldata.CacheKey {
+	return externaldata.CacheKey{
+		ProviderName: fmt.Sprintf("%s/%s/%d", provider.GetName(), provider.GetUID(), provider.GetGeneration()),
+		Key:          key,
+	}
+}
+
+func mergeExternalData(cached, fresh map[string]map[string]*externaldata.Item) map[string]map[string]*externaldata.Item {
+	if len(cached) == 0 {
+		return fresh
+	}
+	if len(fresh) == 0 {
+		return cached
+	}
+
+	for providerName, items := range fresh {
+		if _, ok := cached[providerName]; !ok {
+			cached[providerName] = items
+			continue
+		}
+		for key, item := range items {
+			cached[providerName][key] = item
+		}
+	}
+	return cached
 }
 
 const defaultExternalDataRequestTimeout = 5 * time.Second
@@ -81,6 +152,7 @@ func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.
 		provider, err := s.providerCache.Get(name)
 		if err != nil {
 			log.Error(err, "failed to get external data provider", "provider", name)
+			errors[name] = fmt.Errorf("failed to get external data provider %s: %w", name, err)
 			continue
 		}
 
@@ -104,23 +176,49 @@ func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.
 			defer mutex.Unlock()
 
 			if err != nil {
-				errors[provider.Name] = fmt.Errorf("failed to send external data request to provider %s: %w", provider.Name, err)
+				setProviderKeyErrors(responses, provider.Name, keys, fmt.Errorf("failed to send external data request to provider %s: %w", provider.Name, err))
 				return
 			}
 			if err := validateExternalDataResponse(resp); err != nil {
-				errors[provider.Name] = fmt.Errorf("failed to validate external data response from provider %s: %w", provider.Name, err)
+				setProviderKeyErrors(responses, provider.Name, keys, fmt.Errorf("failed to validate external data response from provider %s: %w", provider.Name, err))
 				return
 			}
 
 			responses[provider.Name] = make(map[string]*externaldata.Item)
+			requestedKeys := sets.New(keys...)
+			received := time.Now().Unix()
 			for _, item := range resp.Response.Items {
-				responses[provider.Name][item.Key] = &item
+				if !requestedKeys.Has(item.Key) {
+					continue
+				}
+				itemCopy := item
+				responses[provider.Name][item.Key] = &itemCopy
+				if s.providerResponseCache != nil && s.providerResponseCache.TTL > 0 {
+					s.providerResponseCache.Upsert(
+						mutationProviderResponseCacheKey(&provider, item.Key),
+						externaldata.CacheValue{
+							Received:   received,
+							Value:      item.Value,
+							Error:      item.Error,
+							Idempotent: resp.Response.Idempotent,
+						},
+					)
+				}
 			}
 		}(providerCopy, keysList)
 	}
 	wg.Wait()
 
 	return responses, errors
+}
+
+func setProviderKeyErrors(responses map[string]map[string]*externaldata.Item, providerName string, keys []string, err error) {
+	if _, ok := responses[providerName]; !ok {
+		responses[providerName] = make(map[string]*externaldata.Item, len(keys))
+	}
+	for _, key := range keys {
+		responses[providerName][key] = &externaldata.Item{Key: key, Error: err.Error()}
+	}
 }
 
 // mutateWithExternalData recursively traverses the given object and replaces

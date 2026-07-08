@@ -10,6 +10,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	admissionv1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -138,12 +140,169 @@ func BenchmarkSystem_MutateNonMatchingMutatorScale(b *testing.B) {
 	}
 }
 
+func BenchmarkSystem_MutateMatchingMutatorsLargeObject(b *testing.B) {
+	for _, tc := range []struct {
+		name         string
+		mutatorCount int
+		dataEntries  int
+		preMutated   bool
+	}{
+		{name: "matching-1/data-500/fresh", mutatorCount: 1, dataEntries: 500},
+		{name: "matching-10/data-500/fresh", mutatorCount: 10, dataEntries: 500},
+		{name: "matching-100/data-500/fresh", mutatorCount: 100, dataEntries: 500},
+		{name: "matching-1000/data-500/fresh", mutatorCount: 1000, dataEntries: 500},
+		{name: "matching-1/data-500/already-mutated", mutatorCount: 1, dataEntries: 500, preMutated: true},
+		{name: "matching-10/data-500/already-mutated", mutatorCount: 10, dataEntries: 500, preMutated: true},
+		{name: "matching-100/data-500/already-mutated", mutatorCount: 100, dataEntries: 500, preMutated: true},
+		{name: "matching-1000/data-500/already-mutated", mutatorCount: 1000, dataEntries: 500, preMutated: true},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			s := NewSystem(SystemOpts{})
+			for i := 0; i < tc.mutatorCount; i++ {
+				a := assign("matched"+strconv.Itoa(i), "spec.field"+strconv.Itoa(i))
+				a.Name = "assign-matching-" + strconv.Itoa(i)
+				a.Spec.ApplyTo = []match.MutationApplyTo{{
+					ApplyTo: match.ApplyTo{
+						Groups:   []string{""},
+						Versions: []string{"v1"},
+						Kinds:    []string{"ConfigMap"},
+					},
+				}}
+				mutator, err := mutators.MutatorForAssign(a)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if err := s.Upsert(mutator); err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			base := benchmarkMutationObject(tc.dataEntries, tc.preMutated, tc.mutatorCount)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				u := base
+				if !tc.preMutated {
+					b.StopTimer()
+					u = base.DeepCopy()
+					b.StartTimer()
+				}
+				if _, err := s.Mutate(context.Background(), &types.Mutable{Object: u, Operation: admissionv1.Create}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkSystem_MutateSkipsPlaceholderScanWithoutTerminatingMutators(b *testing.B) {
+	for _, dataEntries := range []int{500, 5000} {
+		b.Run("data-"+strconv.Itoa(dataEntries), func(b *testing.B) {
+			s := NewSystem(SystemOpts{})
+			a := assign("matched", "spec.matched")
+			a.Name = "assign-matching"
+			a.Spec.ApplyTo = []match.MutationApplyTo{{
+				ApplyTo: match.ApplyTo{
+					Groups:   []string{""},
+					Versions: []string{"v1"},
+					Kinds:    []string{"ConfigMap"},
+				},
+			}}
+			mutator, err := mutators.MutatorForAssign(a)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if err := s.Upsert(mutator); err != nil {
+				b.Fatal(err)
+			}
+
+			base := benchmarkMutationObject(dataEntries, false, 1)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				u := base.DeepCopy()
+				b.StartTimer()
+				if _, err := s.Mutate(context.Background(), &types.Mutable{Object: u, Operation: admissionv1.Create}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func benchmarkMutationObject(dataEntries int, preMutated bool, mutatorCount int) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"metadata": map[string]interface{}{
+			"name":      "cm",
+			"namespace": "default",
+		},
+		"data": benchmarkLargeObjectData(dataEntries),
+	}}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+
+	if preMutated {
+		spec := make(map[string]interface{}, mutatorCount)
+		for i := 0; i < mutatorCount; i++ {
+			spec["field"+strconv.Itoa(i)] = "matched" + strconv.Itoa(i)
+		}
+		obj.Object["spec"] = spec
+	}
+
+	return obj
+}
+
 func benchmarkLargeObjectData(entries int) map[string]interface{} {
 	data := make(map[string]interface{}, entries)
 	for i := 0; i < entries; i++ {
 		data["key"+strconv.Itoa(i)] = "value" + strconv.Itoa(i)
 	}
 	return data
+}
+
+func BenchmarkSystem_MutateSelectorMatchingScale(b *testing.B) {
+	for _, mutatorCount := range []int{1, 100, 1000} {
+		b.Run("matching-"+strconv.Itoa(mutatorCount), func(b *testing.B) {
+			s := NewSystem(SystemOpts{})
+			for i := 0; i < mutatorCount; i++ {
+				a := assign("matched"+strconv.Itoa(i), "spec.field"+strconv.Itoa(i))
+				a.Name = "assign-selector-" + strconv.Itoa(i)
+				a.Spec.ApplyTo = []match.MutationApplyTo{{
+					ApplyTo: match.ApplyTo{
+						Groups:   []string{""},
+						Versions: []string{"v1"},
+						Kinds:    []string{"ConfigMap"},
+					},
+				}}
+				a.Spec.Match.LabelSelector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": "gatekeeper"}}
+				a.Spec.Match.NamespaceSelector = &metav1.LabelSelector{MatchLabels: map[string]string{"env": "prod"}}
+				mutator, err := mutators.MutatorForAssign(a)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if err := s.Upsert(mutator); err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			base := benchmarkMutationObject(10, true, mutatorCount)
+			base.SetLabels(map[string]string{"app": "gatekeeper"})
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default", Labels: map[string]string{"env": "prod"}}}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				u := base.DeepCopy()
+				if _, err := s.Mutate(context.Background(), &types.Mutable{Object: u, Namespace: ns, Operation: admissionv1.Create}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }
 
 func BenchmarkSystem_MutateCandidateIndexScale(b *testing.B) {

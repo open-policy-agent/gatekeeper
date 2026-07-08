@@ -44,6 +44,7 @@ import (
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -340,6 +341,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			log.Info("could not get/create pod status object", "error", err)
 			return reconcile.Result{}, err
 		}
+		oldStatus := status.Status.DeepCopy()
 		status.Status.ConstraintUID = instance.GetUID()
 		status.Status.ObservedGeneration = instance.GetGeneration()
 		status.Status.Errors = nil
@@ -362,7 +364,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		status.Status.Enforced = true
-		if err = r.writer.Update(ctx, status); err != nil {
+		if err = r.updatePodStatusIfChanged(ctx, status, oldStatus); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 
@@ -580,6 +582,7 @@ func (r *ReconcileConstraint) reportErrorOnConstraintStatus(ctx context.Context,
 
 func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction util.EnforcementAction, instance *unstructured.Unstructured, status *constraintstatusv1beta1.ConstraintPodStatus) (time.Duration, error) {
 	noDelay := time.Duration(0)
+	oldStatus := status.Status.DeepCopy()
 	vapBindingKey := types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}
 	if !operations.IsAssigned(operations.Generate) {
 		log.Info("generate operation is not assigned, ValidatingAdmissionPolicyBinding resource will not be generated", "constraintName", instance.GetName(), "constraintKind", instance.GetKind())
@@ -749,7 +752,14 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			r.reporter.DeleteVAPBStatus(vapBindingKey)
 		}
 	}
-	return noDelay, r.writer.Update(ctx, status)
+	return noDelay, r.updatePodStatusIfChanged(ctx, status, oldStatus)
+}
+
+func (r *ReconcileConstraint) updatePodStatusIfChanged(ctx context.Context, status *constraintstatusv1beta1.ConstraintPodStatus, oldStatus *constraintstatusv1beta1.ConstraintPodStatusStatus) error {
+	if apiequality.Semantic.DeepEqual(status.Status, *oldStatus) {
+		return nil
+	}
+	return r.writer.Update(ctx, status)
 }
 
 func (r *ReconcileConstraint) deleteVAPBIfOwned(ctx context.Context, vapBinding client.Object, instance *unstructured.Unstructured, vapBindingName string) error {

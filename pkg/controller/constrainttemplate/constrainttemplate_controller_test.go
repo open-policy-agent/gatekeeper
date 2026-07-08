@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -32,6 +33,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
@@ -66,6 +68,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
@@ -339,6 +342,176 @@ func setupVersionPinnedReconcileTest(t *testing.T, groupVersion *schema.GroupVer
 	t.Cleanup(func() { constraint.SetDefaultWaitForVAPBGeneration(origWait) })
 
 	return ctx, c
+}
+
+type ctCountingClient struct {
+	client.Client
+	updates int
+}
+
+func (c *ctCountingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if err := c.Client.Update(ctx, obj, opts...); err != nil {
+		return err
+	}
+	c.updates++
+	return nil
+}
+
+func TestUpdatePodStatusIfChangedSkipsNoopAndWritesChanges(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	require.NoError(t, apis.AddToScheme(scheme))
+
+	baseStatus := statusv1beta1.ConstraintTemplatePodStatusStatus{
+		TemplateUID:        "template-uid",
+		ObservedGeneration: 1,
+		VAPGenerationStatus: &statusv1beta1.VAPGenerationStatus{
+			State:              GeneratedVAPState,
+			ObservedGeneration: 1,
+		},
+	}
+
+	tests := []struct {
+		name       string
+		oldStatus  statusv1beta1.ConstraintTemplatePodStatusStatus
+		newStatus  statusv1beta1.ConstraintTemplatePodStatusStatus
+		wantWrites int
+	}{
+		{
+			name:      "unchanged generated VAP status skips write even with distinct pointer",
+			oldStatus: *baseStatus.DeepCopy(),
+			newStatus: *baseStatus.DeepCopy(),
+		},
+		{
+			name:      "observed generation change writes",
+			oldStatus: *baseStatus.DeepCopy(),
+			newStatus: func() statusv1beta1.ConstraintTemplatePodStatusStatus {
+				status := *baseStatus.DeepCopy()
+				status.ObservedGeneration++
+				return status
+			}(),
+			wantWrites: 1,
+		},
+		{
+			name:      "VAP warning change writes",
+			oldStatus: *baseStatus.DeepCopy(),
+			newStatus: func() statusv1beta1.ConstraintTemplatePodStatusStatus {
+				status := *baseStatus.DeepCopy()
+				status.VAPGenerationStatus.Warning = "changed"
+				return status
+			}(),
+			wantWrites: 1,
+		},
+		{
+			name: "stale errors cleared writes",
+			oldStatus: statusv1beta1.ConstraintTemplatePodStatusStatus{
+				TemplateUID:        "template-uid",
+				ObservedGeneration: 1,
+				Errors:             []*v1beta1.CreateCRDError{{Code: ErrCreateCode, Message: "stale"}},
+			},
+			newStatus:  statusv1beta1.ConstraintTemplatePodStatusStatus{TemplateUID: "template-uid", ObservedGeneration: 1},
+			wantWrites: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status := &statusv1beta1.ConstraintTemplatePodStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "status", Namespace: util.GetNamespace()},
+				Status:     tt.oldStatus,
+			}
+			k8sClient := &ctCountingClient{Client: crfake.NewClientBuilder().WithScheme(scheme).WithObjects(status.DeepCopy()).Build()}
+			reconciler := &ReconcileConstraintTemplate{Client: k8sClient}
+
+			toUpdate := &statusv1beta1.ConstraintTemplatePodStatus{}
+			require.NoError(t, k8sClient.Get(ctx, client.ObjectKeyFromObject(status), toUpdate))
+			toUpdate.Status = tt.newStatus
+			require.NoError(t, reconciler.updatePodStatusIfChanged(ctx, toUpdate, status.Status.DeepCopy()))
+			require.Equal(t, tt.wantWrites, k8sClient.updates)
+		})
+	}
+}
+
+func BenchmarkUpdatePodStatusIfChangedNoop(b *testing.B) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	require.NoError(b, apis.AddToScheme(scheme))
+
+	status := &statusv1beta1.ConstraintTemplatePodStatus{
+		ObjectMeta: metav1.ObjectMeta{Name: "status", Namespace: util.GetNamespace()},
+		Status: statusv1beta1.ConstraintTemplatePodStatusStatus{
+			TemplateUID:        "template-uid",
+			ObservedGeneration: 1,
+			VAPGenerationStatus: &statusv1beta1.VAPGenerationStatus{
+				State:              GeneratedVAPState,
+				ObservedGeneration: 1,
+			},
+		},
+	}
+	k8sClient := &ctCountingClient{Client: crfake.NewClientBuilder().WithScheme(scheme).WithObjects(status.DeepCopy()).Build()}
+	reconciler := &ReconcileConstraintTemplate{Client: k8sClient}
+	oldStatus := status.Status.DeepCopy()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := reconciler.updatePodStatusIfChanged(ctx, status, oldStatus); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	b.ReportMetric(float64(k8sClient.updates)/float64(b.N), "updates/op")
+}
+
+type constraintListClient struct {
+	client.Client
+	items []unstructured.Unstructured
+}
+
+func (c *constraintListClient) List(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+	unstructuredList, ok := list.(*unstructured.UnstructuredList)
+	if !ok {
+		return fmt.Errorf("expected *unstructured.UnstructuredList, got %T", list)
+	}
+	unstructuredList.Items = c.items
+	return nil
+}
+
+func BenchmarkTriggerConstraintEvents(b *testing.B) {
+	for _, itemCount := range []int{100, 1000, 10000} {
+		items := make([]unstructured.Unstructured, itemCount)
+		for i := 0; i < itemCount; i++ {
+			items[i] = unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+				"kind":       "TestKind",
+				"metadata": map[string]interface{}{
+					"name": "constraint-" + strconv.Itoa(i),
+				},
+			}}
+		}
+
+		b.Run("constraints-"+strconv.Itoa(itemCount), func(b *testing.B) {
+			events := make(chan event.GenericEvent, itemCount)
+			r := &ReconcileConstraintTemplate{
+				Client:     &constraintListClient{Client: crfake.NewClientBuilder().Build(), items: items},
+				cstrEvents: events,
+			}
+			ct := &v1beta1.ConstraintTemplate{}
+			ct.Spec.CRD.Spec.Names.Kind = "TestKind"
+			status := &statusv1beta1.ConstraintTemplatePodStatus{}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if err := r.triggerConstraintEvents(context.Background(), ct, status); err != nil {
+					b.Fatal(err)
+				}
+				for j := 0; j < itemCount; j++ {
+					<-events
+				}
+			}
+		})
+	}
 }
 
 func TestReconcile(t *testing.T) {

@@ -240,6 +240,37 @@ func BenchmarkManagerOnUpdate(b *testing.B) {
 	})
 }
 
+func BenchmarkManagerReplayEvents(b *testing.B) {
+	gvk := schema.GroupVersionKind{Version: watchTestVersionV1, Kind: watchTestKindPod}
+
+	for _, itemCount := range []int{100, 1000, 10000} {
+		items := make([]unstructured.Unstructured, itemCount)
+		for i := 0; i < itemCount; i++ {
+			items[i] = *newWatchTestObject(gvk, watchTestDefaultNS, fmt.Sprintf("pod-%d", i), fmt.Sprintf("uid-%d", i))
+		}
+
+		b.Run(fmt.Sprintf("items-%d", itemCount), func(b *testing.B) {
+			wm := &Manager{
+				cache:   &fakeRemovableCache{items: items},
+				stopped: make(chan struct{}),
+			}
+			events := make(chan event.GenericEvent, itemCount)
+			r := &Registrar{events: events}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if err := wm.replayEvents(context.Background(), r, gvk); err != nil {
+					b.Fatal(err)
+				}
+				for j := 0; j < itemCount; j++ {
+					<-events
+				}
+			}
+		})
+	}
+}
+
 func newEventOnlyManager(buffer int) *Manager {
 	return &Manager{
 		events:  make(chan interface{}, buffer),

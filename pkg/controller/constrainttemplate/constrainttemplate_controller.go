@@ -47,6 +47,7 @@ import (
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -381,6 +382,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		logger.Info("could not get/create pod status object", "error", err)
 		return reconcile.Result{}, err
 	}
+	oldStatus := status.Status.DeepCopy()
 	status.Status.TemplateUID = ct.GetUID()
 	status.Status.ObservedGeneration = ct.GetGeneration()
 	status.Status.Errors = nil
@@ -433,7 +435,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status)
+	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status, oldStatus)
 	if err != nil {
 		logger.Error(err, "handle update error")
 		logError(request.Name)
@@ -466,6 +468,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	unversionedCT *templates.ConstraintTemplate,
 	proposedCRD, currentCRD *apiextensionsv1.CustomResourceDefinition,
 	status *statusv1beta1.ConstraintTemplatePodStatus,
+	oldStatus *statusv1beta1.ConstraintTemplatePodStatusStatus,
 ) (reconcile.Result, error) {
 	name := proposedCRD.GetName()
 	logger := logger.WithValues("name", ct.GetName(), "crdName", name)
@@ -522,11 +525,18 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if err := r.Update(ctx, status); err != nil {
+	if err := r.updatePodStatusIfChanged(ctx, status, oldStatus); err != nil {
 		logger.Error(err, "update ct pod status error")
 		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{RequeueAfter: requeueAfter}, nil
+}
+
+func (r *ReconcileConstraintTemplate) updatePodStatusIfChanged(ctx context.Context, status *statusv1beta1.ConstraintTemplatePodStatus, oldStatus *statusv1beta1.ConstraintTemplatePodStatusStatus) error {
+	if apiequality.Semantic.DeepEqual(status.Status, *oldStatus) {
+		return nil
+	}
+	return r.Update(ctx, status)
 }
 
 func (r *ReconcileConstraintTemplate) handleDelete(
@@ -652,11 +662,9 @@ func (r *ReconcileConstraintTemplate) triggerConstraintEvents(ctx context.Contex
 		err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not list all constraint objects", status, err)
 		return err
 	}
-	logger.Info("list gvk objects", "cstrObjs", cstrObjs)
-	for _, cstr := range cstrObjs {
-		c := cstr
-		logger.Info("triggering cstrEvent")
-		r.cstrEvents <- event.GenericEvent{Object: &c}
+	logger.Info("triggering constraint events", "gvk", gvk, "count", len(cstrObjs))
+	for i := range cstrObjs {
+		r.cstrEvents <- event.GenericEvent{Object: &cstrObjs[i]}
 	}
 
 	return nil

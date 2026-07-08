@@ -91,6 +91,51 @@ func benchmarkNoModifySetMutator(b *testing.B, n int) {
 	}
 }
 
+func BenchmarkModifySetSetterSetValueScale(b *testing.B) {
+	for _, listSize := range []int{100, 1000, 10000} {
+		b.Run(fmt.Sprintf("merge-existing/list-%d", listSize), func(b *testing.B) {
+			obj := map[string]interface{}{"field": benchmarkModifySetList(listSize)}
+			s := setter{values: []interface{}{"value-0"}, op: unversioned.MergeOp}
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if err := s.SetValue(obj, "field"); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+
+		b.Run(fmt.Sprintf("merge-missing/list-%d", listSize), func(b *testing.B) {
+			obj := map[string]interface{}{"field": benchmarkModifySetList(listSize)}
+			s := setter{values: []interface{}{"missing-value"}, op: unversioned.MergeOp}
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if err := s.SetValue(obj, "field"); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+
+		b.Run(fmt.Sprintf("prune-missing/list-%d", listSize), func(b *testing.B) {
+			obj := map[string]interface{}{"field": benchmarkModifySetList(listSize)}
+			s := setter{values: []interface{}{"missing-value"}, op: unversioned.PruneOp}
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if err := s.SetValue(obj, "field"); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func benchmarkModifySetList(size int) []interface{} {
+	values := make([]interface{}, size)
+	for i := 0; i < size; i++ {
+		values[i] = "value-" + fmt.Sprint(i)
+	}
+	return values
+}
+
 func BenchmarkModifySetMutator_Mutate(b *testing.B) {
 	ns := []int{1, 2, 5, 10, 20}
 
