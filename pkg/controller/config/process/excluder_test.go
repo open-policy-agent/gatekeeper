@@ -1,6 +1,7 @@
 package process
 
 import (
+	"slices"
 	"sort"
 	"testing"
 
@@ -217,5 +218,30 @@ func TestGetExcludedNamespaces(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestGetExcludedNamespacesSorted ensures the returned slice is deterministically sorted.
+func TestGetExcludedNamespacesSorted(t *testing.T) {
+	excluder := New()
+	excluder.Add([]configv1alpha1.MatchEntry{
+		{
+			ExcludedNamespaces: []wildcard.Wildcard{"zeta", "alpha", "monitoring", "kube-system", "app-*"},
+			Processes:          []string{"webhook"},
+		},
+	})
+
+	want := []string{"alpha", "app-*", "kube-system", "monitoring", "zeta"}
+
+	// Call repeatedly: map iteration order varies between calls, so a single
+	// pass could pass by luck even without the sort.
+	for i := 0; i < 20; i++ {
+		got := excluder.GetExcludedNamespaces(Webhook)
+		if !sort.StringsAreSorted(got) {
+			t.Fatalf("GetExcludedNamespaces returned unsorted slice: %v", got)
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("GetExcludedNamespaces = %v, want %v", got, want)
+		}
 	}
 }

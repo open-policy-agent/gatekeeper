@@ -16,9 +16,7 @@ limitations under the License.
 package constraintstatus
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -29,6 +27,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -231,12 +230,8 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 		if statusObjs[i].Status.ConstraintUID != instance.GetUID() {
 			continue
 		}
-		j, err := json.Marshal(statusObjs[i].Status)
+		o, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&statusObjs[i].Status)
 		if err != nil {
-			return reconcile.Result{}, err
-		}
-		var o map[string]interface{}
-		if err := json.Unmarshal(j, &o); err != nil {
 			return reconcile.Result{}, err
 		}
 		s = append(s, o)
@@ -263,16 +258,7 @@ func byPodStatusMatches(obj map[string]interface{}, desired []interface{}) bool 
 		return false
 	}
 
-	currentJSON, err := json.Marshal(current)
-	if err != nil {
-		return false
-	}
-	desiredJSON, err := json.Marshal(desired)
-	if err != nil {
-		return false
-	}
-
-	return bytes.Equal(currentJSON, desiredJSON)
+	return apiequality.Semantic.DeepEqual(current, desired)
 }
 
 type sortableStatuses []v1beta1.ConstraintPodStatus
