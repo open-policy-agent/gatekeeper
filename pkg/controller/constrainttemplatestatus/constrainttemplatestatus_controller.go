@@ -16,6 +16,7 @@ limitations under the License.
 package constrainttemplatestatus
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -99,6 +100,9 @@ func PodStatusToConstraintTemplateMapper(selfOnly bool) handler.TypedMapFunc[*v1
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
+	if err := indexStatusLabel(context.Background(), mgr, &v1beta1.ConstraintTemplatePodStatus{}, v1beta1.ConstraintTemplateNameLabel); err != nil {
+		return err
+	}
 	// Create a new controller
 	c, err := controller.New("constraint-template-status-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -119,6 +123,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 	return nil
+}
+
+func indexStatusLabel(ctx context.Context, mgr manager.Manager, obj client.Object, field string) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, obj, field, func(obj client.Object) []string {
+		value := obj.GetLabels()[field]
+		if value == "" {
+			return nil
+		}
+		return []string{value}
+	})
 }
 
 var _ reconcile.Reconciler = &ReconcileConstraintStatus{}
@@ -155,7 +169,7 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 	if err := r.reader.List(
 		ctx,
 		sObjs,
-		client.MatchingLabels{v1beta1.ConstraintTemplateNameLabel: request.Name},
+		client.MatchingFields{v1beta1.ConstraintTemplateNameLabel: request.Name},
 		client.InNamespace(util.GetNamespace()),
 	); err != nil {
 		return reconcile.Result{}, err
@@ -188,6 +202,20 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 		}
 		s = append(s, o)
 	}
+	currentByPod, _, byPodErr := unstructured.NestedSlice(template.Object, "status", "byPod")
+	byPodEqual := false
+	if byPodErr == nil {
+		var err error
+		byPodEqual, err = equalUnstructuredStatus(currentByPod, s)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+	currentCreated, _, createdErr := unstructured.NestedBool(template.Object, "status", "created")
+	if byPodEqual && createdErr == nil && currentCreated == created {
+		return reconcile.Result{}, nil
+	}
+
 	if err := unstructured.SetNestedSlice(template.Object, s, "status", "byPod"); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -200,6 +228,18 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{}, nil
+}
+
+func equalUnstructuredStatus(a, b interface{}) (bool, error) {
+	aJSON, err := json.Marshal(a)
+	if err != nil {
+		return false, err
+	}
+	bJSON, err := json.Marshal(b)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(aJSON, bJSON), nil
 }
 
 type sortableStatuses []v1beta1.ConstraintTemplatePodStatus

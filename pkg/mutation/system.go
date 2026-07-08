@@ -27,6 +27,7 @@ var ErrNotRemoved = errors.New("failed to find mutator on sorted list")
 type System struct {
 	schemaDB                          schema.DB
 	orderedMutators                   orderedIDs
+	candidateMutators                 candidateIndex
 	mutatorsMap                       map[types.ID]types.Mutator
 	mux                               sync.RWMutex
 	reporter                          StatsReporter
@@ -54,6 +55,7 @@ func NewSystem(options SystemOpts) *System {
 	return &System{
 		schemaDB:                          *schema.New(),
 		orderedMutators:                   orderedIDs{},
+		candidateMutators:                 newCandidateIndex(),
 		mutatorsMap:                       make(map[types.ID]types.Mutator),
 		reporter:                          options.Reporter,
 		newUUID:                           options.NewUUID,
@@ -111,7 +113,11 @@ func (s *System) Upsert(m types.Mutator) error {
 		}
 	}
 
+	if current, ok := s.mutatorsMap[id]; ok {
+		s.candidateMutators.remove(current)
+	}
 	s.mutatorsMap[id] = toAdd
+	s.candidateMutators.add(toAdd)
 
 	s.orderedMutators.insert(id)
 	return err
@@ -126,7 +132,9 @@ func (s *System) Remove(id types.ID) error {
 		return nil
 	}
 
+	mutator := s.mutatorsMap[id]
 	s.schemaDB.Remove(id)
+	s.candidateMutators.remove(mutator)
 
 	delete(s.mutatorsMap, id)
 
@@ -172,16 +180,34 @@ func (s *System) Mutate(ctx context.Context, mutable *types.Mutable) (bool, erro
 // mutate runs all Mutators on obj. Returns the number of iterations required
 // to converge, and any error encountered attempting to run Mutators.
 func (s *System) mutate(ctx context.Context, mutable *types.Mutable) (int, error) {
-	mutationUUID := s.newUUID()
-	original := unversioned.DeepCopyWithPlaceholders(mutable.Object)
-	var allAppliedMutations [][]types.Mutator
 	maxIterations := len(s.orderedMutators.ids) + 1
+	if maxIterations == 1 {
+		return 0, nil
+	}
+
+	var mutationUUID uuid.UUID
+	var mutationUUIDSet bool
+	getMutationUUID := func() uuid.UUID {
+		if !mutationUUIDSet {
+			mutationUUID = s.newUUID()
+			mutationUUIDSet = true
+		}
+		return mutationUUID
+	}
+
+	trackAppliedMutations := *MutationLoggingEnabled || *MutationAnnotationsEnabled
+	var original *unstructured.Unstructured
+	if *MutationLoggingEnabled {
+		original = unversioned.DeepCopyWithPlaceholders(mutable.Object)
+	}
+	var allAppliedMutations [][]types.Mutator
 
 	for iteration := 1; iteration <= maxIterations; iteration++ {
+		candidateIDs := s.mutationCandidateIDs(mutable)
 		var appliedMutations []types.Mutator
-		old := unversioned.DeepCopyWithPlaceholders(mutable.Object)
+		var old *unstructured.Unstructured
 
-		for _, id := range s.orderedMutators.ids {
+		for _, id := range candidateIDs {
 			if s.schemaDB.HasConflicts(id) {
 				// Don't try to apply Mutators which have conflicts.
 				continue
@@ -194,12 +220,15 @@ func (s *System) mutate(ctx context.Context, mutable *types.Mutable) (int, error
 			}
 
 			if matches {
+				if old == nil {
+					old = unversioned.DeepCopyWithPlaceholders(mutable.Object)
+				}
 				mutated, err := mutator.Mutate(mutable)
 				if mutated {
 					appliedMutations = append(appliedMutations, mutator)
 				}
 				if err != nil {
-					return iteration, mutateErr(err, mutationUUID, mutator.ID(), mutable.Object)
+					return iteration, mutateErr(err, getMutationUUID(), mutator.ID(), mutable.Object)
 				}
 			}
 		}
@@ -217,32 +246,61 @@ func (s *System) mutate(ctx context.Context, mutable *types.Mutable) (int, error
 			}
 
 			if *MutationLoggingEnabled {
-				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations, mutable.Source)
+				logAppliedMutations("Mutation applied", getMutationUUID(), original, allAppliedMutations, mutable.Source)
 			}
 
 			if *MutationAnnotationsEnabled {
-				mutationAnnotations(mutable.Object, allAppliedMutations, mutationUUID)
+				mutationAnnotations(mutable.Object, allAppliedMutations, getMutationUUID())
 			}
 
 			return iteration, nil
 		}
 
-		if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
+		if trackAppliedMutations {
 			allAppliedMutations = append(allAppliedMutations, appliedMutations)
 		}
 	}
 
 	if *MutationLoggingEnabled {
-		logAppliedMutations("Mutation not converging", mutationUUID, original, allAppliedMutations, mutable.Source)
+		logAppliedMutations("Mutation not converging", getMutationUUID(), original, allAppliedMutations, mutable.Source)
 	}
 
 	return maxIterations, fmt.Errorf("%w: mutation %s not converging for %s %s %s %s",
 		ErrNotConverging,
-		mutationUUID,
+		getMutationUUID(),
 		mutable.Object.GroupVersionKind().Group,
 		mutable.Object.GroupVersionKind().Kind,
 		mutable.Object.GetNamespace(),
 		getNameOrGenerateName(mutable.Object))
+}
+
+func (s *System) mutationCandidateIDs(mutable *types.Mutable) []types.ID {
+	if mutable == nil || mutable.Object == nil {
+		return s.orderedMutators.ids
+	}
+
+	if s.candidateMutators.hasGVKChangingMutators() {
+		return s.orderedMutators.ids
+	}
+
+	gvk := mutable.Object.GroupVersionKind()
+	if gvk.Empty() {
+		// Without a request GVK, schema bindings cannot safely prove a mutator
+		// is inapplicable. Preserve legacy behavior by checking every mutator.
+		return s.orderedMutators.ids
+	}
+
+	if mutable.Operation == "" {
+		// Empty operation is used by non-admission mutation callers. The exact
+		// empty-operation semantics live in each mutator's Matches method, so the
+		// index only filters by GVK here.
+		return s.candidateMutators.candidatesForGVK(gvk)
+	}
+
+	return s.candidateMutators.candidates(schema.Binding{
+		GVK:       gvk,
+		Operation: mutable.Operation,
+	})
 }
 
 func mutateErr(err error, uid uuid.UUID, mID types.ID, obj *unstructured.Unstructured) error {

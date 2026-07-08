@@ -5,7 +5,9 @@ import (
 	"context"
 	"flag"
 	"os"
+	"path"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -17,6 +19,7 @@ import (
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
 	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -626,6 +629,162 @@ func Test_readUnstructured(t *testing.T) {
 	})
 }
 
+func Test_readUnstructuredList(t *testing.T) {
+	am := Manager{}
+
+	t.Run("batched objects", func(t *testing.T) {
+		jsonBytes := []byte(`[
+			{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"namespace-a"}},
+			{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"namespace-b"}}
+		]`)
+
+		items, err := am.readUnstructuredList(jsonBytes)
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+		require.Equal(t, "namespace-a", items[0].GetName())
+		require.Equal(t, "namespace-b", items[1].GetName())
+	})
+
+	t.Run("single object fallback", func(t *testing.T) {
+		jsonBytes := []byte(`{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"my-namespace"}}`)
+
+		items, err := am.readUnstructuredList(jsonBytes)
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		require.Equal(t, "my-namespace", items[0].GetName())
+	})
+}
+
+func Test_reviewObjectsBatchedSpoolMatchesPerObjectSpool(t *testing.T) {
+	objects := []unstructured.Unstructured{
+		auditTestPod("pod-a", "test-namespace"),
+		auditTestPod("pod-b", "test-namespace"),
+	}
+
+	perObject := runReviewObjectsSpool(t, objects, false)
+	batched := runReviewObjectsSpool(t, objects, true)
+
+	require.Equal(t, perObject, batched)
+}
+
+type reviewObjectsSummary struct {
+	Violations                          map[util.KindVersionName][]StatusViolation
+	TotalViolationsPerConstraint        map[util.KindVersionName]int64
+	TotalViolationsPerEnforcementAction map[util.EnforcementAction]int64
+}
+
+func runReviewObjectsSpool(t *testing.T, objects []unstructured.Unstructured, batched bool) reviewObjectsSummary {
+	t.Helper()
+
+	restoreAuditGlobals := setAuditGlobalsForReviewTest(t)
+	defer restoreAuditGlobals()
+
+	rootDir := t.TempDir()
+	*apiCacheDir = rootDir
+
+	const kind = "Pod"
+	spoolDir := path.Join(rootDir, kind+"_0")
+	require.NoError(t, os.Mkdir(spoolDir, 0o750))
+
+	am := newReviewObjectsTestManager(t, "test-namespace")
+	if batched {
+		require.NoError(t, am.writeUnstructuredList(spoolDir, objects))
+	} else {
+		for i := range objects {
+			jsonBytes, err := objects[i].MarshalJSON()
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(path.Join(spoolDir, strconv.Itoa(i)), jsonBytes, 0o600))
+		}
+	}
+
+	updateLists := map[util.KindVersionName]*LimitQueue{}
+	totalViolationsPerConstraint := map[util.KindVersionName]int64{}
+	totalViolationsPerEnforcementAction := map[util.EnforcementAction]int64{}
+	auditExportPublishingState := &auditExportPublishingState{Errors: map[string]error{}}
+
+	require.NoError(t, am.reviewObjects(context.Background(), kind, 1, newNSCache(), updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, "test-timestamp", auditExportPublishingState))
+
+	return summarizeReviewObjects(updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
+}
+
+func setAuditGlobalsForReviewTest(t *testing.T) func() {
+	t.Helper()
+
+	oldAPICacheDir := *apiCacheDir
+	oldExportEnabled := *exportutil.ExportEnabled
+	oldEmitAuditEvents := *emitAuditEvents
+	oldLogStatsAudit := *logStatsAudit
+
+	*exportutil.ExportEnabled = false
+	*emitAuditEvents = false
+	*logStatsAudit = false
+
+	return func() {
+		*apiCacheDir = oldAPICacheDir
+		*exportutil.ExportEnabled = oldExportEnabled
+		*emitAuditEvents = oldEmitAuditEvents
+		*logStatsAudit = oldLogStatsAudit
+	}
+}
+
+func newReviewObjectsTestManager(t *testing.T, namespace string) *Manager {
+	t.Helper()
+
+	driver, err := rego.New()
+	require.NoError(t, err)
+	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.EnforcementPoints([]string{util.AuditEnforcementPoint}...))
+	require.NoError(t, err)
+	_, err = opaClient.AddTemplate(context.Background(), fakes.DenyAllRegoTemplate())
+	require.NoError(t, err)
+	_, err = opaClient.AddConstraint(context.Background(), fakes.DenyAllConstraint())
+	require.NoError(t, err)
+
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(ns).Build()
+
+	return &Manager{
+		client:          k8sClient,
+		opa:             opaClient,
+		expansionSystem: expansion.NewSystem(nil),
+		log:             logr.Discard(),
+	}
+}
+
+func auditTestPod(name, namespace string) unstructured.Unstructured {
+	return unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "Pod",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": namespace,
+		},
+		"spec": map[string]interface{}{
+			"containers": []interface{}{
+				map[string]interface{}{
+					"name":  "container",
+					"image": "image",
+				},
+			},
+		},
+	}}
+}
+
+func summarizeReviewObjects(updateLists map[util.KindVersionName]*LimitQueue, totalViolationsPerConstraint map[util.KindVersionName]int64, totalViolationsPerEnforcementAction map[util.EnforcementAction]int64) reviewObjectsSummary {
+	violations := make(map[util.KindVersionName][]StatusViolation, len(updateLists))
+	for key, queue := range updateLists {
+		for queue.Len() > 0 {
+			violation := queue.Pop()
+			violations[key] = append(violations[key], *violation)
+		}
+	}
+
+	return reviewObjectsSummary{
+		Violations:                          violations,
+		TotalViolationsPerConstraint:        totalViolationsPerConstraint,
+		TotalViolationsPerEnforcementAction: totalViolationsPerEnforcementAction,
+	}
+}
+
 func Test_reportExportConnectionErrors(t *testing.T) {
 	// Setup
 	require.NoError(t, flag.CommandLine.Parse([]string{"--enable-violation-export", "true"}))
@@ -733,4 +892,70 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_hasConstraintInstances(t *testing.T) {
+	constraintGVK := schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabels"}
+
+	t.Run("no constraints", func(t *testing.T) {
+		am := &Manager{client: fake.NewClientBuilder().Build()}
+		hasConstraints, err := am.hasConstraintInstances(context.Background(), []schema.GroupVersionKind{constraintGVK})
+		require.NoError(t, err)
+		require.False(t, hasConstraints)
+	})
+
+	t.Run("has constraint", func(t *testing.T) {
+		constraint := &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "K8sRequiredLabels",
+			"metadata": map[string]interface{}{
+				"name": "required-labels",
+			},
+		}}
+		constraint.SetGroupVersionKind(constraintGVK)
+		am := &Manager{client: fake.NewClientBuilder().WithObjects(constraint).Build()}
+		hasConstraints, err := am.hasConstraintInstances(context.Background(), []schema.GroupVersionKind{constraintGVK})
+		require.NoError(t, err)
+		require.True(t, hasConstraints)
+	})
+}
+
+func BenchmarkHasConstraintInstancesNoConstraints(b *testing.B) {
+	const constraintKinds = 100
+	constraintGVKs := make([]schema.GroupVersionKind, constraintKinds)
+	for i := range constraintGVKs {
+		constraintGVKs[i] = schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintKind" + strconv.Itoa(i)}
+	}
+	am := &Manager{client: fake.NewClientBuilder().Build()}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		hasConstraints, err := am.hasConstraintInstances(context.Background(), constraintGVKs)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if hasConstraints {
+			b.Fatal("hasConstraintInstances() = true, want false")
+		}
+	}
+}
+
+func Test_stopAuditResultsUpdateLoop(t *testing.T) {
+	stop := make(chan struct{})
+	stopped := make(chan struct{})
+	am := &Manager{
+		log: logr.Discard(),
+		ucloop: &updateConstraintLoop{
+			stop:    stop,
+			stopped: stopped,
+		},
+	}
+	go func() {
+		<-stop
+		close(stopped)
+	}()
+
+	am.stopAuditResultsUpdateLoop()
+	require.Nil(t, am.ucloop)
 }
