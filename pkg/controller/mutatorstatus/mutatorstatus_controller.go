@@ -17,7 +17,6 @@ package mutatorstatus
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -289,12 +288,8 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 		if statusObjs[i].Status.MutatorUID != instance.GetUID() {
 			continue
 		}
-		j, err := json.Marshal(statusObjs[i].Status)
+		o, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&statusObjs[i].Status)
 		if err != nil {
-			return reconcile.Result{}, err
-		}
-		var o map[string]interface{}
-		if err := json.Unmarshal(j, &o); err != nil {
 			return reconcile.Result{}, err
 		}
 		s = append(s, o)

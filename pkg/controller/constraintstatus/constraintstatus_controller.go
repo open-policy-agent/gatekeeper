@@ -17,7 +17,6 @@ package constraintstatus
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -231,12 +230,8 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 		if statusObjs[i].Status.ConstraintUID != instance.GetUID() {
 			continue
 		}
-		j, err := json.Marshal(statusObjs[i].Status)
+		o, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&statusObjs[i].Status)
 		if err != nil {
-			return reconcile.Result{}, err
-		}
-		var o map[string]interface{}
-		if err := json.Unmarshal(j, &o); err != nil {
 			return reconcile.Result{}, err
 		}
 		s = append(s, o)
