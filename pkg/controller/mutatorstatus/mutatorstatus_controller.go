@@ -16,7 +16,6 @@ limitations under the License.
 package mutatorstatus
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -31,6 +30,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -321,16 +321,7 @@ func byPodStatusMatches(obj map[string]interface{}, desired []interface{}) bool 
 		return false
 	}
 
-	currentJSON, err := json.Marshal(current)
-	if err != nil {
-		return false
-	}
-	desiredJSON, err := json.Marshal(desired)
-	if err != nil {
-		return false
-	}
-
-	return bytes.Equal(currentJSON, desiredJSON)
+	return apiequality.Semantic.DeepEqual(current, desired)
 }
 
 type sortableStatuses []v1beta1.MutatorPodStatus
