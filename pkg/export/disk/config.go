@@ -112,30 +112,53 @@ func defaultRetryConfig() retryConfig {
 }
 
 // parseRetryConfig extracts optional retry tuning from a connection config.
-// Any field that is absent or invalid falls back to its package default,
-// so partial configuration is safe.
-func parseRetryConfig(config interface{}) retryConfig {
+// Absent fields fall back to their package default so partial configuration is
+// safe. A field that is *present but invalid* (e.g. a negative maxRetryAttempts,
+// a duration without a unit, or a numeric value where a string is expected)
+// returns an error instead of being silently ignored, consistent with how
+// unmarshalConfig validates closedConnectionTTL.
+func parseRetryConfig(config interface{}) (retryConfig, error) {
 	cfg, ok := config.(map[string]interface{})
 	rc := defaultRetryConfig()
 	if !ok {
-		return rc
+		return rc, nil
 	}
 
-	if v, ok := cfg["maxRetryAttempts"].(float64); ok && v > 0 && v == math.Trunc(v) {
-		rc.maxRetryAttempts = int(v)
-	}
-	if v, ok := cfg["baseRetryDelay"].(string); ok {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			rc.baseRetryDelay = d
+	if v, ok := cfg["maxRetryAttempts"]; ok {
+		f, ok := v.(float64)
+		if !ok || f != math.Trunc(f) || f <= 0 {
+			return rc, fmt.Errorf("invalid 'maxRetryAttempts': must be a positive integer")
 		}
+		rc.maxRetryAttempts = int(f)
 	}
-	if v, ok := cfg["retryBackoffFactor"].(float64); ok && v > 0 {
-		rc.retryBackoffFactor = v
-	}
-	if v, ok := cfg["maxRetryDelay"].(string); ok {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			rc.maxRetryDelay = d
+	if v, ok := cfg["baseRetryDelay"]; ok {
+		s, ok := v.(string)
+		if !ok {
+			return rc, fmt.Errorf("invalid 'baseRetryDelay': must be a duration string (e.g. \"30s\")")
 		}
+		d, err := time.ParseDuration(s)
+		if err != nil || d <= 0 {
+			return rc, fmt.Errorf("invalid 'baseRetryDelay': %v", s)
+		}
+		rc.baseRetryDelay = d
 	}
-	return rc
+	if v, ok := cfg["retryBackoffFactor"]; ok {
+		f, ok := v.(float64)
+		if !ok || f <= 0 {
+			return rc, fmt.Errorf("invalid 'retryBackoffFactor': must be a positive number")
+		}
+		rc.retryBackoffFactor = f
+	}
+	if v, ok := cfg["maxRetryDelay"]; ok {
+		s, ok := v.(string)
+		if !ok {
+			return rc, fmt.Errorf("invalid 'maxRetryDelay': must be a duration string (e.g. \"2m\")")
+		}
+		d, err := time.ParseDuration(s)
+		if err != nil || d <= 0 {
+			return rc, fmt.Errorf("invalid 'maxRetryDelay': %v", s)
+		}
+		rc.maxRetryDelay = d
+	}
+	return rc, nil
 }

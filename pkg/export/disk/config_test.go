@@ -380,14 +380,15 @@ func TestParseRetryConfig(t *testing.T) {
 		expectedBaseDelay time.Duration
 		expectedFactor    float64
 		expectedMaxDelay  time.Duration
+		expectErr         bool
 	}{
 		{
-			name:             "defaults when no retry fields set",
-			config:           map[string]interface{}{},
-			expectedAttempts: maxRetryAttempts,
+			name:              "defaults when no retry fields set",
+			config:            map[string]interface{}{},
+			expectedAttempts:  maxRetryAttempts,
 			expectedBaseDelay: baseRetryDelay,
-			expectedFactor:   retryBackoffFactor,
-			expectedMaxDelay: maxRetryDelay,
+			expectedFactor:    retryBackoffFactor,
+			expectedMaxDelay:  maxRetryDelay,
 		},
 		{
 			name: "all retry fields set",
@@ -413,23 +414,29 @@ func TestParseRetryConfig(t *testing.T) {
 			expectedMaxDelay:  maxRetryDelay,
 		},
 		{
-			name: "invalid values fall back to defaults",
+			name: "present but invalid values return an error",
 			config: map[string]interface{}{
 				"maxRetryAttempts":   -1.0,
 				"baseRetryDelay":     "not-a-duration",
 				"retryBackoffFactor": 0.0,
 				"maxRetryDelay":      "bogus",
 			},
-			expectedAttempts:  maxRetryAttempts,
-			expectedBaseDelay: baseRetryDelay,
-			expectedFactor:    retryBackoffFactor,
-			expectedMaxDelay:  maxRetryDelay,
+			expectErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rc := parseRetryConfig(tt.config)
+			rc, err := parseRetryConfig(tt.config)
+			if tt.expectErr {
+				if err == nil {
+					t.Fatalf("expected an error for invalid config, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if rc.maxRetryAttempts != tt.expectedAttempts {
 				t.Errorf("expected maxRetryAttempts %d, got %d", tt.expectedAttempts, rc.maxRetryAttempts)
 			}

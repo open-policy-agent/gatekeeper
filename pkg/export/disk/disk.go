@@ -81,7 +81,10 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	connLock, _ := r.acquireCurrentConnectionLock(connectionName, true)
 	defer connLock.Unlock()
 
-	rc := parseRetryConfig(config)
+	rc, err := parseRetryConfig(config)
+	if err != nil {
+		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
+	}
 	r.mu.Lock()
 	if _, exists := r.openConnections[connectionName]; exists {
 		r.mu.Unlock()
@@ -179,7 +182,10 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	conn.MaxAuditResults = int(maxResults)
 	conn.ClosedConnectionTTL = ttl
 
-	rc := parseRetryConfig(config)
+	rc, err := parseRetryConfig(config)
+	if err != nil {
+		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
+	}
 	conn.MaxRetryAttempts = rc.maxRetryAttempts
 	conn.BaseRetryDelay = rc.baseRetryDelay
 	conn.RetryBackoffFactor = rc.retryBackoffFactor
