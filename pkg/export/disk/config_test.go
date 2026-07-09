@@ -371,3 +371,77 @@ func TestConnectionTTL(t *testing.T) {
 		})
 	}
 }
+
+func TestParseRetryConfig(t *testing.T) {
+	tests := []struct {
+		name              string
+		config            map[string]interface{}
+		expectedAttempts  int
+		expectedBaseDelay time.Duration
+		expectedFactor    float64
+		expectedMaxDelay  time.Duration
+	}{
+		{
+			name:             "defaults when no retry fields set",
+			config:           map[string]interface{}{},
+			expectedAttempts: maxRetryAttempts,
+			expectedBaseDelay: baseRetryDelay,
+			expectedFactor:   retryBackoffFactor,
+			expectedMaxDelay: maxRetryDelay,
+		},
+		{
+			name: "all retry fields set",
+			config: map[string]interface{}{
+				"maxRetryAttempts":   3.0,
+				"baseRetryDelay":     "30s",
+				"retryBackoffFactor": 1.5,
+				"maxRetryDelay":      "2m",
+			},
+			expectedAttempts:  3,
+			expectedBaseDelay: 30 * time.Second,
+			expectedFactor:    1.5,
+			expectedMaxDelay:  2 * time.Minute,
+		},
+		{
+			name: "partial config falls back to defaults",
+			config: map[string]interface{}{
+				"maxRetryAttempts": 2.0,
+			},
+			expectedAttempts:  2,
+			expectedBaseDelay: baseRetryDelay,
+			expectedFactor:    retryBackoffFactor,
+			expectedMaxDelay:  maxRetryDelay,
+		},
+		{
+			name: "invalid values fall back to defaults",
+			config: map[string]interface{}{
+				"maxRetryAttempts":   -1.0,
+				"baseRetryDelay":     "not-a-duration",
+				"retryBackoffFactor": 0.0,
+				"maxRetryDelay":      "bogus",
+			},
+			expectedAttempts:  maxRetryAttempts,
+			expectedBaseDelay: baseRetryDelay,
+			expectedFactor:    retryBackoffFactor,
+			expectedMaxDelay:  maxRetryDelay,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rc := parseRetryConfig(tt.config)
+			if rc.maxRetryAttempts != tt.expectedAttempts {
+				t.Errorf("expected maxRetryAttempts %d, got %d", tt.expectedAttempts, rc.maxRetryAttempts)
+			}
+			if rc.baseRetryDelay != tt.expectedBaseDelay {
+				t.Errorf("expected baseRetryDelay %v, got %v", tt.expectedBaseDelay, rc.baseRetryDelay)
+			}
+			if rc.retryBackoffFactor != tt.expectedFactor {
+				t.Errorf("expected retryBackoffFactor %v, got %v", tt.expectedFactor, rc.retryBackoffFactor)
+			}
+			if rc.maxRetryDelay != tt.expectedMaxDelay {
+				t.Errorf("expected maxRetryDelay %v, got %v", tt.expectedMaxDelay, rc.maxRetryDelay)
+			}
+		})
+	}
+}

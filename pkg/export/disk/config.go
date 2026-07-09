@@ -90,3 +90,52 @@ func unmarshalConfig(config interface{}) (string, float64, time.Duration, error)
 	}
 	return path, maxResults, ttl, nil
 }
+
+// retryConfig holds the tunable retry parameters for failed-connection
+// cleanup. A nil/empty config yields the package defaults so existing
+// behavior is preserved.
+type retryConfig struct {
+	maxRetryAttempts   int
+	baseRetryDelay     time.Duration
+	retryBackoffFactor float64
+	maxRetryDelay      time.Duration
+}
+
+// defaultRetryConfig returns the package-level defaults.
+func defaultRetryConfig() retryConfig {
+	return retryConfig{
+		maxRetryAttempts:   maxRetryAttempts,
+		baseRetryDelay:     baseRetryDelay,
+		retryBackoffFactor: retryBackoffFactor,
+		maxRetryDelay:      maxRetryDelay,
+	}
+}
+
+// parseRetryConfig extracts optional retry tuning from a connection config.
+// Any field that is absent or invalid falls back to its package default,
+// so partial configuration is safe.
+func parseRetryConfig(config interface{}) retryConfig {
+	cfg, ok := config.(map[string]interface{})
+	rc := defaultRetryConfig()
+	if !ok {
+		return rc
+	}
+
+	if v, ok := cfg["maxRetryAttempts"].(float64); ok && v > 0 && v == math.Trunc(v) {
+		rc.maxRetryAttempts = int(v)
+	}
+	if v, ok := cfg["baseRetryDelay"].(string); ok {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			rc.baseRetryDelay = d
+		}
+	}
+	if v, ok := cfg["retryBackoffFactor"].(float64); ok && v > 0 {
+		rc.retryBackoffFactor = v
+	}
+	if v, ok := cfg["maxRetryDelay"].(string); ok {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			rc.maxRetryDelay = d
+		}
+	}
+	return rc
+}
