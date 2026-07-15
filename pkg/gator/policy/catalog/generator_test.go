@@ -556,108 +556,6 @@ func TestVersionRangeContradicts(t *testing.T) {
 	}
 }
 
-// TestParsePolicyFromTemplate_MixedExplicitDerivedVersion covers the case where
-// one bound is set explicitly and the other would be derived from the API
-// lifecycle of a targeted resource.
-func TestParsePolicyFromTemplate_MixedExplicitDerivedVersion(t *testing.T) {
-	tests := []struct {
-		name string
-		// annotations placed on the template.
-		annotations string
-		// matchGroup/matchKind is the built-in resource the sample constraint
-		// targets, feeding the derived bound.
-		matchGroup string
-		matchKind  string
-		wantMin    string
-		wantMax    string
-	}{
-		{
-			// extensions/Ingress derives max v1.21 (whole-minor), but the explicit
-			// min is newer, so the derived max would invert the range and is dropped.
-			name:        "explicit min newer than derived max drops derived max",
-			annotations: `    metadata.gatekeeper.sh/minKubernetesVersion: "v1.25.0"`,
-			matchGroup:  "extensions",
-			matchKind:   "Ingress",
-			wantMin:     "v1.25.0",
-			wantMax:     "",
-		},
-		{
-			// networking.k8s.io/Ingress derives min v1.14.0, but the explicit
-			// max is older, so the derived min is dropped.
-			name:        "explicit max older than derived min drops derived min",
-			annotations: `    metadata.gatekeeper.sh/maxKubernetesVersion: "v1.10.0"`,
-			matchGroup:  "networking.k8s.io",
-			matchKind:   "Ingress",
-			wantMin:     "",
-			wantMax:     "v1.10.0",
-		},
-		{
-			// Control: a compatible explicit min still allows the derived max.
-			name:        "explicit min compatible with derived max keeps both",
-			annotations: `    metadata.gatekeeper.sh/minKubernetesVersion: "v1.5.0"`,
-			matchGroup:  "extensions",
-			matchKind:   "Ingress",
-			wantMin:     "v1.5.0",
-			wantMax:     "v1.21",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-			policyDir := filepath.Join(tempDir, "library", "general", "mixedpolicy")
-			sampleDir := filepath.Join(policyDir, "samples", "example")
-			if err := os.MkdirAll(sampleDir, 0o755); err != nil {
-				t.Fatalf("Failed to create sample directory: %v", err)
-			}
-
-			templateContent := `apiVersion: templates.gatekeeper.sh/v1
-kind: ConstraintTemplate
-metadata:
-  name: k8smixedpolicy
-  annotations:
-    description: "A mixed version test policy"
-    metadata.gatekeeper.sh/version: "1.0.0"
-` + tt.annotations + `
-spec:
-  crd:
-    spec:
-      names:
-        kind: K8sMixedPolicy
-`
-			templatePath := filepath.Join(policyDir, "template.yaml")
-			if err := os.WriteFile(templatePath, []byte(templateContent), 0o600); err != nil {
-				t.Fatalf("Failed to write template: %v", err)
-			}
-
-			constraintContent := `apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sMixedPolicy
-spec:
-  match:
-    kinds:
-      - apiGroups: ["` + tt.matchGroup + `"]
-        kinds: ["` + tt.matchKind + `"]
-`
-			constraintPath := filepath.Join(sampleDir, "constraint.yaml")
-			if err := os.WriteFile(constraintPath, []byte(constraintContent), 0o600); err != nil {
-				t.Fatalf("Failed to write constraint: %v", err)
-			}
-
-			policy, err := parsePolicyFromTemplate(templatePath, tempDir)
-			if err != nil {
-				t.Fatalf("parsePolicyFromTemplate failed: %v", err)
-			}
-
-			if policy.MinKubernetesVersion != tt.wantMin {
-				t.Errorf("MinKubernetesVersion: got %q, want %q", policy.MinKubernetesVersion, tt.wantMin)
-			}
-			if policy.MaxKubernetesVersion != tt.wantMax {
-				t.Errorf("MaxKubernetesVersion: got %q, want %q", policy.MaxKubernetesVersion, tt.wantMax)
-			}
-		})
-	}
-}
-
 func TestValidateCatalogSchema_K8sVersions(t *testing.T) {
 	baseCatalog := func(minVer, maxVer string) *PolicyCatalog {
 		return &PolicyCatalog{
@@ -1075,7 +973,6 @@ func TestK8sVersionInRange(t *testing.T) {
 		})
 	}
 }
-
 
 func TestFormatK8sVersionRange(t *testing.T) {
 	tests := []struct {

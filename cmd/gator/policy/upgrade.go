@@ -179,14 +179,20 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 	// Return appropriate error for non-success cases
 	if len(result.Failed) > 0 {
-		return gatorpolicy.NewPartialSuccessError("upgrade incomplete: some policies failed to upgrade")
+		msg := "upgrade incomplete: some policies failed to upgrade"
+		// When incompatible policies are also present, the Incompatible branch
+		// below is unreachable, so fold its guidance into this message rather than
+		// dropping the "--force" hint (mirrors install).
+		if len(result.Incompatible) > 0 {
+			msg += incompatibleSkipSuffix(len(result.Incompatible))
+		}
+		return gatorpolicy.NewPartialSuccessError(msg)
 	}
 
 	// Policies skipped as incompatible were requested but not upgraded, so signal
 	// partial success rather than exiting 0 as if everything succeeded.
 	if len(result.Incompatible) > 0 {
-		return gatorpolicy.NewPartialSuccessError(fmt.Sprintf("upgrade incomplete: %d policies skipped (%s)",
-			len(result.Incompatible), incompatibleGuidance))
+		return gatorpolicy.NewPartialSuccessError("upgrade incomplete:" + incompatibleSkipSuffix(len(result.Incompatible)))
 	}
 
 	return nil

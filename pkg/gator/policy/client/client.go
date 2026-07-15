@@ -94,12 +94,17 @@ func NewK8sClientWithConfig(config *rest.Config) (*K8sClient, error) {
 		return nil, fmt.Errorf("creating dynamic client: %w", err)
 	}
 
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("creating discovery client: %w", err)
+	c := &K8sClient{dynamicClient: dynamicClient}
+
+	// The discovery client powers only the Kubernetes-version compatibility gate
+	// (ServerVersion). If it can't be built, leave it nil rather than failing
+	// construction: operations that do not require compatibility information must
+	// keep working, and informational callers such as list/update tolerate failure.
+	if discoveryClient, derr := discovery.NewDiscoveryClientForConfig(config); derr == nil {
+		c.discoveryClient = discoveryClient
 	}
 
-	return &K8sClient{dynamicClient: dynamicClient, discoveryClient: discoveryClient}, nil
+	return c, nil
 }
 
 func getKubeConfig() (*rest.Config, error) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
@@ -128,15 +129,38 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		}
 	}
 
-	// Resolve the cluster version for the Kubernetes-version compatibility gate.
-	// This runs for dry-run too so the preview reflects the same gate a real
-	// install applies. serverVersion stays empty when the gate is off (--force or
-	// no bounded policy), disabling the per-policy version check below. A caller
-	// (e.g. Upgrade) may pass a pre-resolved version to avoid re-querying.
-	serverVersion, err := resolveGateServerVersion(ctx, k8sClient, opts.Force, anyPolicyHasVersionBounds(cat, policyNames), preResolvedServerVersion)
-	if err != nil {
-		return nil, err
-	}
+	// Lazily resolve the cluster version for the Kubernetes-version compatibility
+	// gate. Resolution is deferred to the first policy that would actually write
+	// and declares a version bound, then cached (value and error) for the rest of
+	// the batch. Deferring it keeps an idempotent no-op reinstall — a template-only
+	// policy already at the target version — from being aborted by an unreachable
+	// or unparseable cluster version, since such a policy never reaches the gate.
+	//
+	// A dry-run is an offline preview: it never issues its own cluster query
+	// (allowQuery is !opts.DryRun). It still applies the gate when a caller injects
+	// a pre-resolved version (e.g. Upgrade, which already has cluster access);
+	// otherwise the gate is left disabled and the policy is previewed as installable.
+	//
+	// sync.OnceValues memoizes the (version, error) result so the cluster is
+	// queried at most once per batch, no matter how many bounded policies call it.
+	resolveVersion := sync.OnceValues(func() (string, error) {
+		v, err := resolveGateServerVersion(ctx, k8sClient, opts.Force, true, !opts.DryRun, preResolvedServerVersion)
+		if err != nil {
+			// Tag the error so the install loop can tell "the cluster version
+			// could not be resolved" apart from a genuine per-policy failure.
+			// The loop records each affected bounded policy as failed and keeps
+			// going; unbounded and no-op policies still install.
+			return "", &versionResolutionError{err: err}
+		}
+		return v, nil
+	})
+
+	// versionErr records a failure to resolve the cluster version for the
+	// compatibility gate. It is not fatal to the whole batch: bounded policies
+	// that cannot be gated are recorded as per-policy failures while unbounded
+	// and no-op policies still install. It is returned alongside the (partial)
+	// result once the batch completes.
+	var versionErr error
 
 	// Install each policy
 	for _, policyName := range policyNames {
@@ -155,10 +179,25 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		// The Kubernetes-version compatibility gate is applied inside installPolicy,
 		// after it determines whether a write would actually occur: an idempotent
 		// reinstall of a policy already at the target version is a no-op and must
-		// not be reported as incompatible on an out-of-range cluster. serverVersion
-		// is empty when the gate is disabled (--force or no bounded policy).
-		skipped, incompatible, err := installPolicy(ctx, k8sClient, fetcher, policy, installBundle, opts, result, serverVersion)
+		// not be reported as incompatible on an out-of-range cluster. It resolves
+		// the cluster version lazily (via resolveVersion) only when a would-write,
+		// bounded policy needs it.
+		skipped, incompatible, err := installPolicy(ctx, k8sClient, fetcher, policy, installBundle, opts, result, resolveVersion)
 		if err != nil {
+			// A failure to resolve the cluster version only prevents gating this
+			// bounded policy; it must not abort the whole batch. Record it as a
+			// per-policy failure (the error carries the --force hint) and keep
+			// going so unbounded and no-op policies still install. The resolution
+			// error is remembered and returned alongside the partial result once
+			// the batch completes. No-op policies never reach this, because the
+			// gate only resolves the version when a policy would actually write.
+			var vErr *versionResolutionError
+			if errors.As(err, &vErr) {
+				result.Failed = append(result.Failed, policyName)
+				result.Errors[policyName] = vErr.err.Error()
+				versionErr = vErr.err
+				continue
+			}
 			result.Failed = append(result.Failed, policyName)
 			result.Errors[policyName] = err.Error()
 			// Preserve typed error for conflict detection
@@ -181,7 +220,10 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		}
 	}
 
-	return result, nil
+	// versionErr is nil on the happy path. When the cluster version could not be
+	// resolved, the affected bounded policies are already in result.Failed;
+	// return the partial result alongside the error rather than discarding it.
+	return result, versionErr
 }
 
 // policyHasVersionBounds reports whether a policy declares a minimum or maximum
@@ -190,23 +232,17 @@ func policyHasVersionBounds(p *catalog.Policy) bool {
 	return p != nil && (p.MinKubernetesVersion != "" || p.MaxKubernetesVersion != "")
 }
 
-// anyPolicyHasVersionBounds reports whether any of the named policies declares a
-// minimum or maximum Kubernetes version, i.e. whether the compatibility gate can
-// fire at all for this install.
-func anyPolicyHasVersionBounds(cat *catalog.PolicyCatalog, names []string) bool {
-	for _, name := range names {
-		if policyHasVersionBounds(cat.GetPolicy(name)) {
-			return true
-		}
-	}
-	return false
-}
-
 // resolveGateServerVersion resolves the cluster Kubernetes version used by the
 // compatibility gate, shared by Install and Upgrade. It returns "" (gate
 // disabled) when force is set or hasBounds is false. A non-empty preResolved
 // version is used as-is instead of querying the cluster, letting a caller (e.g.
 // Upgrade) resolve the version once for a whole batch.
+//
+// allowQuery gates whether a fresh cluster query may be issued when no
+// preResolved version is supplied. Install's own dry-run passes false: a dry-run
+// is an offline preview that never contacts the cluster, so without a
+// caller-provided version the gate is simply left disabled (returns "", nil).
+// Real installs and Upgrade (which always has cluster access) pass true.
 //
 // --force is the single, explicit fail-open path: it disables the gate up front.
 // Otherwise, when compatibility genuinely cannot be established the caller is
@@ -214,12 +250,17 @@ func anyPolicyHasVersionBounds(cat *catalog.PolicyCatalog, names []string) bool 
 // that does not parse is such a case (bounded policies must not install as
 // "compatible" against a version the gate cannot reason about), as is a
 // cluster-connectivity failure while discovering the version.
-func resolveGateServerVersion(ctx context.Context, k8sClient Client, force, hasBounds bool, preResolved string) (string, error) {
+func resolveGateServerVersion(ctx context.Context, k8sClient Client, force, hasBounds, allowQuery bool, preResolved string) (string, error) {
 	if force || !hasBounds {
 		return "", nil
 	}
 	serverVersion := preResolved
 	if serverVersion == "" {
+		if !allowQuery {
+			// Offline preview (dry-run) with no caller-provided version: do not
+			// contact the cluster. Leave the gate disabled rather than failing.
+			return "", nil
+		}
 		v, err := k8sClient.ServerVersion(ctx)
 		if err != nil {
 			return "", fmt.Errorf("determining cluster Kubernetes version: the cluster must be reachable to check policy compatibility (use --force to skip the compatibility check): %w", err)
@@ -232,7 +273,7 @@ func resolveGateServerVersion(ctx context.Context, k8sClient Client, force, hasB
 	return serverVersion, nil
 }
 
-func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts *InstallOptions, result *InstallResult, serverVersion string) (skipped bool, incompatible *IncompatibleEntry, err error) {
+func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts *InstallOptions, result *InstallResult, resolveVersion func() (string, error)) (skipped bool, incompatible *IncompatibleEntry, err error) {
 	// Fetch template YAML
 	templateData, err := fetcher.FetchContent(ctx, policy.TemplatePath)
 	if err != nil {
@@ -273,34 +314,52 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 
 	// A template-only policy already managed at the target version is a pure
 	// no-op: nothing would be written to the cluster.
+	//
+	// A bundle policy is deliberately NOT treated as a no-op even when its
+	// template is already current: installConstraint always upserts the
+	// constraint (see above), which is a real write. So a bundle reinstall on an
+	// out-of-range cluster is correctly gated (and can be blocked by an
+	// unreachable/unparseable cluster version), unlike a template-only reinstall
+	// which is exempt because it writes nothing. The asymmetry is intentional:
+	// the exemption tracks "would this write?", not "is this a reinstall?".
 	isNoOp := templateAlreadyInstalled && !hasConstraint
 
 	// Determine whether applying this policy would write anything to the cluster.
-	// Dry-run does not read existing state, so it always evaluates the gate so the
-	// preview matches a real install.
+	// Dry-run does not read existing state, so it is always treated as a would-write.
 	wouldWrite := opts.DryRun || !isNoOp
 
 	// Kubernetes-version compatibility gate. It is applied only to policies that
-	// would actually write, mirroring Upgrade (which classifies already-current
-	// policies before gating): an idempotent reinstall must not be reported as
-	// incompatible on an out-of-range cluster when no write would occur.
-	// serverVersion is non-empty only when the gate is enabled, and it was
-	// validated in resolveGateServerVersion, so a parse error here can only come
-	// from a malformed minKubernetesVersion / maxKubernetesVersion on the policy
-	// itself. Fail such a policy rather than fail open, since ParseCatalog does not
-	// run schema validation and cached/custom catalogs can carry bad bounds.
-	// --force disables the gate by leaving serverVersion empty.
-	if serverVersion != "" && wouldWrite {
-		inRange, verr := catalog.K8sVersionInRange(serverVersion, policy.MinKubernetesVersion, policy.MaxKubernetesVersion)
+	// would actually write and declare a version bound, mirroring Upgrade (which
+	// classifies already-current policies before gating): an idempotent reinstall
+	// must not be reported as incompatible — or blocked by an unreachable cluster —
+	// when no write would occur. Only here is the cluster version resolved (lazily,
+	// via resolveVersion), so a pure no-op never queries it. --force skips the gate.
+	//
+	// resolveVersion returns "" when the gate is disabled — for a dry-run that has
+	// no pre-resolved cluster version (an offline preview never queries the cluster
+	// itself), the check is skipped and the policy is previewed as installable.
+	if !opts.Force && wouldWrite && policyHasVersionBounds(policy) {
+		serverVersion, verr := resolveVersion()
 		if verr != nil {
-			return false, nil, fmt.Errorf("evaluating Kubernetes version compatibility: %w", verr)
+			return false, nil, verr
 		}
-		if !inRange {
-			return false, &IncompatibleEntry{
-				Name: policy.Name,
-				Reason: fmt.Sprintf("cluster Kubernetes version %s is outside the supported range %s",
-					serverVersion, catalog.FormatK8sVersionRange(policy.MinKubernetesVersion, policy.MaxKubernetesVersion)),
-			}, nil
+		if serverVersion != "" {
+			// serverVersion was validated in resolveGateServerVersion, so a parse
+			// error here can only come from a malformed minKubernetesVersion /
+			// maxKubernetesVersion on the policy itself. Fail such a policy rather
+			// than fail open, since ParseCatalog does not run schema validation and
+			// cached/custom catalogs can carry bad bounds.
+			inRange, verr := catalog.K8sVersionInRange(serverVersion, policy.MinKubernetesVersion, policy.MaxKubernetesVersion)
+			if verr != nil {
+				return false, nil, fmt.Errorf("evaluating Kubernetes version compatibility: %w", verr)
+			}
+			if !inRange {
+				return false, &IncompatibleEntry{
+					Name: policy.Name,
+					Reason: fmt.Sprintf("cluster Kubernetes version %s is outside the supported range %s",
+						serverVersion, catalog.FormatK8sVersionRange(policy.MinKubernetesVersion, policy.MaxKubernetesVersion)),
+				}, nil
+			}
 		}
 	}
 
@@ -412,6 +471,19 @@ func constraintGVR(kind string) schema.GroupVersionResource {
 		Resource: strings.ToLower(kind),
 	}
 }
+
+// versionResolutionError wraps a failure to resolve the cluster Kubernetes
+// version for the compatibility gate. install records each bounded policy it
+// affects as a per-policy failure (the wrapped error carries the --force hint)
+// and keeps going, so unbounded and no-op policies still install; the wrapped
+// error is also returned alongside the partial result.
+type versionResolutionError struct {
+	err error
+}
+
+func (e *versionResolutionError) Error() string { return e.err.Error() }
+
+func (e *versionResolutionError) Unwrap() error { return e.err }
 
 // GatekeeperNotInstalledError is returned when Gatekeeper CRDs are not found.
 type GatekeeperNotInstalledError struct{}

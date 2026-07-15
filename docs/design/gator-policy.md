@@ -195,8 +195,9 @@ policies:
 | `sampleConstraintPath` | string | No | Relative path to sample Constraint |
 | `documentationUrl` | string | No | Link to documentation |
 | `bundles` | []string | No | Bundle(s) this policy belongs to |
-| `minKubernetesVersion` | string | No | Minimum Kubernetes version the policy supports (e.g. `v1.21.0`). Sourced from the `metadata.gatekeeper.sh/minKubernetesVersion` annotation, or derived from the API lifecycle of the resources the policy targets. Accepts the tolerant Kubernetes version format (not strict SemVer). |
-| `maxKubernetesVersion` | string | No | Maximum Kubernetes version the policy has been tested against (e.g. `v1.30.0`). Sourced from the `metadata.gatekeeper.sh/maxKubernetesVersion` annotation, or derived from the API lifecycle of the resources the policy targets. Accepts the tolerant Kubernetes version format (not strict SemVer). |
+| `minKubernetesVersion` | string | No | Minimum Kubernetes version the policy supports (e.g. `v1.21.0`). Sourced from the `metadata.gatekeeper.sh/minKubernetesVersion` annotation. Accepts the tolerant Kubernetes version format (not strict SemVer). |
+| `maxKubernetesVersion` | string | No | Maximum Kubernetes version the policy supports (e.g. `v1.30.0`). Sourced from the `metadata.gatekeeper.sh/maxKubernetesVersion` annotation. Accepts the tolerant Kubernetes version format (not strict SemVer). |
+`gator policy install` and `gator policy upgrade` skip policies outside this range; pass `--force` to bypass the compatibility check.
 
 #### Path Resolution Rules
 

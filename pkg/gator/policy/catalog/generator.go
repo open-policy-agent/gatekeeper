@@ -184,26 +184,11 @@ func parsePolicyFromTemplate(templatePath, libraryRoot string) (*Policy, error) 
 		}
 	}
 
-	// Get Kubernetes version compatibility from annotations
+	// Get Kubernetes version compatibility from annotations. A policy is bounded
+	// only when it carries an explicit metadata.gatekeeper.sh/{min,max}KubernetesVersion
+	// annotation; absent annotations leave the bound empty (unbounded on that side).
 	minK8sVersion := normalizeVersion(template.Metadata.Annotations["metadata.gatekeeper.sh/minKubernetesVersion"])
 	maxK8sVersion := normalizeVersion(template.Metadata.Annotations["metadata.gatekeeper.sh/maxKubernetesVersion"])
-
-	// When an explicit annotation is absent, fall back to deriving the bound
-	// from the API lifecycle of the built-in resources the policy targets.
-	// A derived bound is only applied when it does not invert the range against
-	// an explicit bound on the other side otherwise it is dropped.
-	if minK8sVersion == "" || maxK8sVersion == "" {
-		derivedMin, derivedMax, derr := deriveK8sVersionRange(targetGroupKinds(templateDir))
-		if derr != nil {
-			return nil, fmt.Errorf("deriving Kubernetes version range for policy %s: %w", template.Metadata.Name, derr)
-		}
-		if minK8sVersion == "" && !versionRangeContradicts(derivedMin, maxK8sVersion) {
-			minK8sVersion = derivedMin
-		}
-		if maxK8sVersion == "" && !versionRangeContradicts(minK8sVersion, derivedMax) {
-			maxK8sVersion = derivedMax
-		}
-	}
 
 	// Build BundleConstraints by discovering per-bundle constraint files.
 	// The library convention is that sample directories with names containing

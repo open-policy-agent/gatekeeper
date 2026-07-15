@@ -138,7 +138,10 @@ func Upgrade(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 	// policies that declare a version bound. Those are recorded as failed in the
 	// loop below while unbounded policies still upgrade, matching the per-policy
 	// continue-on-error behavior.
-	serverVersion, gateErr := resolveGateServerVersion(ctx, k8sClient, opts.Force, anyBounded, "")
+	// allowQuery is true: upgrade always has cluster access (it must read the
+	// installed versions), so it resolves the version even during dry-run and
+	// passes it into install as a pre-resolved value, keeping the preview accurate.
+	serverVersion, gateErr := resolveGateServerVersion(ctx, k8sClient, opts.Force, anyBounded, true, "")
 
 	// Upgrade each candidate policy
 	for _, c := range candidates {
@@ -256,30 +259,42 @@ func upgradePolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	return nil, len(installResult.Installed) > 0, nil
 }
 
-// GetUpgradableCount returns the count of policies that have updates available.
-func GetUpgradableCount(installed []InstalledPolicy, cat *catalog.PolicyCatalog) int {
-	count := 0
-	for _, p := range installed {
-		policy := cat.GetPolicy(p.Name)
-		if policy != nil && policy.Version != p.Version {
-			count++
-		}
-	}
-	return count
+// GetUpgradableCount returns the count of policies that have updates available
+// and are compatible with the given cluster Kubernetes version. See
+// GetUpgradablePolicies for how serverVersion is applied.
+func GetUpgradableCount(installed []InstalledPolicy, cat *catalog.PolicyCatalog, serverVersion string) int {
+	return len(GetUpgradablePolicies(installed, cat, serverVersion))
 }
 
 // GetUpgradablePolicies returns a list of policies that have updates available.
-func GetUpgradablePolicies(installed []InstalledPolicy, cat *catalog.PolicyCatalog) []VersionChange {
+//
+// A newer catalog version alone is not enough: `gator policy upgrade` skips a
+// policy whose supported Kubernetes range excludes the cluster, so counting it
+// here would overstate the upgrades that can actually be applied. serverVersion
+// is the cluster's Kubernetes version used to filter out such policies. When it
+// is empty (cluster version unknown) or a policy's bound is unparseable, the
+// gate is skipped for that policy and the upgrade is still reported, so an
+// undeterminable version never hides an available upgrade.
+func GetUpgradablePolicies(installed []InstalledPolicy, cat *catalog.PolicyCatalog, serverVersion string) []VersionChange {
 	var changes []VersionChange
 	for _, p := range installed {
 		policy := cat.GetPolicy(p.Name)
-		if policy != nil && policy.Version != p.Version {
-			changes = append(changes, VersionChange{
-				Name:        p.Name,
-				FromVersion: p.Version,
-				ToVersion:   policy.Version,
-			})
+		if policy == nil || policy.Version == p.Version {
+			continue
 		}
+		// Skip policies the cluster's Kubernetes version can't run: upgrade would
+		// classify them as incompatible and skip them without --force.
+		if serverVersion != "" && policyHasVersionBounds(policy) {
+			inRange, err := catalog.K8sVersionInRange(serverVersion, policy.MinKubernetesVersion, policy.MaxKubernetesVersion)
+			if err == nil && !inRange {
+				continue
+			}
+		}
+		changes = append(changes, VersionChange{
+			Name:        p.Name,
+			FromVersion: p.Version,
+			ToVersion:   policy.Version,
+		})
 	}
 	return changes
 }
