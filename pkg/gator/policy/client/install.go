@@ -274,28 +274,21 @@ func resolveGateServerVersion(ctx context.Context, k8sClient Client, force, hasB
 }
 
 func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts *InstallOptions, result *InstallResult, resolveVersion func() (string, error)) (skipped bool, incompatible *IncompatibleEntry, err error) {
-	// Fetch template YAML
-	templateData, err := fetcher.FetchContent(ctx, policy.TemplatePath)
-	if err != nil {
-		return false, nil, fmt.Errorf("fetching template: %w", err)
-	}
-
-	// Parse template
-	template := &unstructured.Unstructured{}
-	if err := yaml.Unmarshal(templateData, &template.Object); err != nil {
-		return false, nil, fmt.Errorf("parsing template YAML: %w", err)
-	}
-
-	// Check for existing template
+	// Check for an existing template using only the catalog policy's name and
+	// version - before ever fetching the remote artifact. This lets the no-op
+	// check and the compatibility gate run first, so an out-of-range policy
+	// with a missing or malformed artifact is recorded as Incompatible and
+	// skipped rather than surfacing a hard fetch/parse failure that can
+	// fail-fast the whole batch.
 	templateAlreadyInstalled := false
 	if !opts.DryRun {
-		existing, err := k8sClient.GetTemplate(ctx, template.GetName())
+		existing, err := k8sClient.GetTemplate(ctx, policy.Name)
 		if err == nil {
 			// Template exists - check if managed by gator
 			if !labels.IsManagedByGator(existing) {
 				return false, nil, &ConflictError{
 					ResourceKind: "ConstraintTemplate",
-					ResourceName: template.GetName(),
+					ResourceName: policy.Name,
 				}
 			}
 			// Check if same version
@@ -363,6 +356,23 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 		}
 	}
 
+	// A pure no-op writes nothing, so the remote artifact is never needed.
+	if isNoOp {
+		return true, nil, nil
+	}
+
+	// The policy is compatible (or forced, or unbounded) and would actually
+	// write something: only now fetch and parse the template artifact.
+	templateData, err := fetcher.FetchContent(ctx, policy.TemplatePath)
+	if err != nil {
+		return false, nil, fmt.Errorf("fetching template: %w", err)
+	}
+
+	template := &unstructured.Unstructured{}
+	if err := yaml.Unmarshal(templateData, &template.Object); err != nil {
+		return false, nil, fmt.Errorf("parsing template YAML: %w", err)
+	}
+
 	// Add labels and annotations
 	labels.AddManagedLabels(template, policy.Version, bundleName, catalog.DefaultRepository)
 
@@ -378,11 +388,6 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 		if err := installConstraint(ctx, k8sClient, fetcher, policy, constraintPath, bundleName, opts, result, template); err != nil {
 			return false, nil, err
 		}
-	}
-
-	// Return whether this policy was skipped (already at same version)
-	if isNoOp {
-		return true, nil, nil
 	}
 
 	return false, nil, nil

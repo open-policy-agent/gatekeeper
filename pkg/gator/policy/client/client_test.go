@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -16,7 +18,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/rest"
 )
 
 const (
@@ -97,6 +101,95 @@ func TestK8sClient_GetTemplate(t *testing.T) {
 	// Get non-existent template
 	_, err = client.GetTemplate(context.Background(), "nonexistent")
 	assert.Error(t, err)
+}
+
+// TestK8sClient_ServerVersion_Discovery exercises the real discovery-client
+// request path (K8sClient.ServerVersion), which the FakeClient-based
+// compatibility-gate tests never touch. It covers a successful /version
+// response, request/decoding errors, and context cancellation of the
+// explicit Do(ctx) call that ServerVersion relies on instead of the
+// discovery client's own context-less ServerVersion().
+func TestK8sClient_ServerVersion_Discovery(t *testing.T) {
+	newDiscoveryK8sClient := func(t *testing.T, server *httptest.Server) *K8sClient {
+		t.Helper()
+		discoveryClient, err := discovery.NewDiscoveryClientForConfig(&rest.Config{Host: server.URL})
+		require.NoError(t, err)
+		return &K8sClient{discoveryClient: discoveryClient}
+	}
+
+	t.Run("successful gitVersion response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/version", r.URL.Path)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"gitVersion":"v1.30.2"}`))
+		}))
+		defer server.Close()
+
+		client := newDiscoveryK8sClient(t, server)
+		version, err := client.ServerVersion(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, "v1.30.2", version)
+	})
+
+	t.Run("server error response is a genuine error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		client := newDiscoveryK8sClient(t, server)
+		_, err := client.ServerVersion(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "getting server version")
+	})
+
+	t.Run("malformed response body is a genuine error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("not json"))
+		}))
+		defer server.Close()
+
+		client := newDiscoveryK8sClient(t, server)
+		_, err := client.ServerVersion(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "parsing server version")
+	})
+
+	t.Run("request error (connection refused) is a genuine error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		addr := server.URL
+		server.Close() // nothing is listening at addr anymore
+
+		discoveryClient, err := discovery.NewDiscoveryClientForConfig(&rest.Config{Host: addr})
+		require.NoError(t, err)
+		client := &K8sClient{discoveryClient: discoveryClient}
+
+		_, err = client.ServerVersion(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "getting server version")
+	})
+
+	t.Run("context cancellation aborts a slow request instead of blocking forever", func(t *testing.T) {
+		release := make(chan struct{})
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			<-release
+		}))
+		defer server.Close()
+		defer close(release)
+
+		client := newDiscoveryK8sClient(t, server)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		_, err := client.ServerVersion(ctx)
+		elapsed := time.Since(start)
+
+		require.Error(t, err)
+		assert.Less(t, elapsed, 5*time.Second, "ServerVersion must honor context cancellation via Do(ctx) instead of blocking on the handler")
+	})
 }
 
 func TestK8sClient_InstallTemplate(t *testing.T) {

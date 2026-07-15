@@ -196,7 +196,7 @@ policies:
 | `documentationUrl` | string | No | Link to documentation |
 | `bundles` | []string | No | Bundle(s) this policy belongs to |
 | `minKubernetesVersion` | string | No | Minimum Kubernetes version the policy supports (e.g. `v1.21.0`). Sourced from the `metadata.gatekeeper.sh/minKubernetesVersion` annotation. Accepts the tolerant Kubernetes version format (not strict SemVer). |
-| `maxKubernetesVersion` | string | No | Maximum Kubernetes version the policy supports (e.g. `v1.30.0`). Sourced from the `metadata.gatekeeper.sh/maxKubernetesVersion` annotation. Accepts the tolerant Kubernetes version format (not strict SemVer). |
+| `maxKubernetesVersion` | string | No | Maximum Kubernetes version the policy supports (e.g. `v1.30.0`). Sourced from the `metadata.gatekeeper.sh/maxKubernetesVersion` annotation. Accepts the tolerant Kubernetes version format (not strict SemVer). A two-component maximum such as `v1.30` includes every patch release in that minor; a three-component maximum such as `v1.30.0` is an exact patch ceiling. |
 `gator policy install` and `gator policy upgrade` skip policies outside this range; pass `--force` to bypass the compatibility check.
 
 #### Path Resolution Rules
