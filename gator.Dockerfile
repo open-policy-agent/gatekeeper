@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.26-trixie@sha256:68b7145ec43d1820b9a56704554b53d1520aa2a15cb5233e374188a31b2a1bce AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-trixie@sha256:116489021a0d8ca3facf79f84ee69052cff88733547150a644d45c5eaa91dc43 AS builder
 
 ARG TARGETPLATFORM
 ARG TARGETOS
@@ -20,7 +20,7 @@ RUN \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -a -ldflags "${LDFLAGS}" -o /gator
 
-FROM --platform=$BUILDPLATFORM gcr.io/distroless/static-debian12@sha256:9c346e4be81b5ca7ff31a0d89eaeade58b0f95cfd3baed1f36083ddb47ca3160 AS build
+FROM --platform=$BUILDPLATFORM gcr.io/distroless/static-debian12@sha256:22fd79fd75eab2372585b44517f8a094349938919dc613aafc37e4bdc9967c82 AS build
 USER 65532:65532
 COPY --from=builder --chown=65532:65532 /gator /gator
 ENTRYPOINT ["/gator"]
