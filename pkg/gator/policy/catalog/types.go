@@ -43,7 +43,13 @@ type Bundle struct {
 
 // Policy represents a single policy available in the catalog.
 type Policy struct {
-	// Name is the unique identifier for this policy, typically matching the ConstraintTemplate name.
+	// Name is the unique identifier for this policy. It must match the
+	// metadata.name of the ConstraintTemplate at TemplatePath: the catalog keys
+	// its conflict, no-op, and compatibility checks off this name before the
+	// template artifact is fetched, and install rejects a template whose
+	// metadata.name differs. The generator sets this from the template's
+	// metadata.name, so generated catalogs always satisfy the contract; a
+	// hand-edited catalog must preserve it.
 	Name string `json:"name" yaml:"name"`
 	// Version is the semantic version of this policy (e.g., "v1.2.3").
 	Version string `json:"version" yaml:"version"`

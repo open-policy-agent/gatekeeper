@@ -542,15 +542,15 @@ func TestVersionRangeContradicts(t *testing.T) {
 		{name: "unparseable max is ignored", minVersion: "v1.25.0", maxVersion: "garbage", want: false},
 		// A patch-level min within a whole-minor ceiling is a valid range, not a
 		// contradiction: K8sVersionInRange admits every patch of "v1.21", so
-		// versionRangeContradicts (built on it) must agree.
+		// VersionRangeContradicts (built on it) must agree.
 		{name: "patch min within whole-minor ceiling", minVersion: "v1.21.3", maxVersion: "v1.21", want: false},
 		{name: "min in minor above whole-minor ceiling", minVersion: "v1.22.0", maxVersion: "v1.21", want: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := versionRangeContradicts(tt.minVersion, tt.maxVersion); got != tt.want {
-				t.Errorf("versionRangeContradicts(%q, %q) = %v, want %v", tt.minVersion, tt.maxVersion, got, tt.want)
+			if got := VersionRangeContradicts(tt.minVersion, tt.maxVersion); got != tt.want {
+				t.Errorf("VersionRangeContradicts(%q, %q) = %v, want %v", tt.minVersion, tt.maxVersion, got, tt.want)
 			}
 		})
 	}

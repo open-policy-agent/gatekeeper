@@ -337,6 +337,17 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 			return false, nil, verr
 		}
 		if serverVersion != "" {
+			// A contradictory range (minKubernetesVersion > maxKubernetesVersion)
+			// is satisfiable by no cluster, so K8sVersionInRange would report every
+			// cluster as out of range and the policy would be misreported as a
+			// normal cluster incompatibility. It is instead invalid policy metadata:
+			// ParseCatalog does not run schema validation, so a cached/custom catalog
+			// can carry such a range. Detect it with the same comparison
+			// ValidateCatalogSchema uses and fail the affected policy up front.
+			if catalog.VersionRangeContradicts(policy.MinKubernetesVersion, policy.MaxKubernetesVersion) {
+				return false, nil, fmt.Errorf("policy %s has minKubernetesVersion (%s) greater than maxKubernetesVersion (%s)",
+					policy.Name, policy.MinKubernetesVersion, policy.MaxKubernetesVersion)
+			}
 			// serverVersion was validated in resolveGateServerVersion, so a parse
 			// error here can only come from a malformed minKubernetesVersion /
 			// maxKubernetesVersion on the policy itself. Fail such a policy rather
@@ -371,6 +382,20 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	template := &unstructured.Unstructured{}
 	if err := yaml.Unmarshal(templateData, &template.Object); err != nil {
 		return false, nil, fmt.Errorf("parsing template YAML: %w", err)
+	}
+
+	// The preflight conflict check, the templateAlreadyInstalled determination,
+	// and the no-op/compatibility gate above all keyed off policy.Name. The
+	// catalog contract requires policy.Name to equal the ConstraintTemplate's
+	// metadata.name (see catalog.Policy.Name), and the generator guarantees it,
+	// but ParseCatalog does not run schema validation - so a hand-edited catalog
+	// could still point to a template whose metadata.name differs. If it does,
+	// InstallTemplate would target a different object than the one checked for a
+	// conflict - silently overwriting a possibly user-owned, unmanaged
+	// ConstraintTemplate. Enforce the documented contract here rather than bypass
+	// that protection.
+	if actualName := template.GetName(); actualName != policy.Name {
+		return false, nil, fmt.Errorf("template artifact for policy %q declares metadata.name %q; catalog policy name and ConstraintTemplate name must match", policy.Name, actualName)
 	}
 
 	// Add labels and annotations

@@ -186,7 +186,7 @@ policies:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | Yes | Policy identifier |
+| `name` | string | Yes | Policy identifier. Must match the `metadata.name` of the ConstraintTemplate at `templatePath`; `install` rejects a template whose name differs. |
 | `version` | string | Yes | Policy version (semver) |
 | `description` | string | Yes | Human-readable description |
 | `category` | string | Yes | Category: `general`, `pod-security`, etc. |

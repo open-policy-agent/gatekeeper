@@ -631,6 +631,41 @@ metadata:
 		assert.Contains(t, result.Errors["versioned-policy"], "maxKubernetesVersion")
 	})
 
+	t.Run("a contradictory version range fails the policy as invalid metadata, not a cluster incompatibility", func(t *testing.T) {
+		fakeClient := NewFakeClient()
+		fakeClient.serverVersion = v1_25_0 // within neither bound; would look "out of range"
+
+		// min (v1.30.0) > max (v1.21.0) is satisfiable by no cluster: both bounds
+		// parse, so K8sVersionInRange alone would report the cluster as out of range
+		// and mislabel this as a normal incompatibility. ParseCatalog does not run
+		// schema validation, so such an inverted range can reach the gate via a
+		// cached/custom catalog and must fail the policy as invalid metadata.
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog(v1_30_0, "v1.21.0"), &InstallOptions{
+			Policies: []string{"versioned-policy"},
+		})
+		require.NoError(t, err)
+		assert.Empty(t, result.Installed, "a policy with a contradictory range must not install")
+		assert.Empty(t, result.Incompatible, "a contradictory range is invalid metadata, not a cluster incompatibility")
+		require.Len(t, result.Failed, 1)
+		assert.Equal(t, "versioned-policy", result.Failed[0])
+		assert.Contains(t, result.Errors["versioned-policy"], "greater than maxKubernetesVersion")
+	})
+
+	t.Run("force bypasses the gate even for a contradictory version range", func(t *testing.T) {
+		fakeClient := NewFakeClient()
+		fakeClient.serverVersion = v1_25_0
+
+		// --force disables the gate entirely (serverVersion is left empty), so the
+		// contradictory range is never evaluated and the policy installs.
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog(v1_30_0, "v1.21.0"), &InstallOptions{
+			Policies: []string{"versioned-policy"},
+			Force:    true,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, result.Failed)
+		assert.Len(t, result.Installed, 1)
+	})
+
 	t.Run("force bypasses the gate even for a malformed policy bound", func(t *testing.T) {
 		fakeClient := NewFakeClient()
 		fakeClient.serverVersion = v1_25_0
@@ -804,12 +839,30 @@ metadata:
 
 		cat := &catalog.PolicyCatalog{
 			Policies: []catalog.Policy{
-				{Name: "bounded", Version: "v1.0.0", TemplatePath: "templates/test.yaml", MinKubernetesVersion: "v1.21.0"},
-				{Name: "unbounded", Version: "v1.0.0", TemplatePath: "templates/test.yaml"},
+				{Name: "bounded", Version: "v1.0.0", TemplatePath: "templates/bounded.yaml", MinKubernetesVersion: "v1.21.0"},
+				{Name: "unbounded", Version: "v1.0.0", TemplatePath: "templates/unbounded.yaml"},
+			},
+		}
+		// Each template artifact's metadata.name must match its catalog policy
+		// name (installPolicy rejects a mismatch to preserve conflict protection).
+		fetcher := &FakeFetcher{
+			content: map[string][]byte{
+				"templates/bounded.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: bounded
+`),
+				"templates/unbounded.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: unbounded
+`),
 			},
 		}
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), cat, &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, fetcher, cat, &InstallOptions{
 			Policies: []string{"bounded", "unbounded"},
 		})
 		// The partial result is returned alongside the resolution error (with the
@@ -1056,8 +1109,8 @@ metadata:
 		// "incompatible" needs v1.31; "compatible" is unbounded and has an update.
 		mixedCat := &catalog.PolicyCatalog{
 			Policies: []catalog.Policy{
-				{Name: "incompatible", Version: "v2.0.0", TemplatePath: "templates/t.yaml", MinKubernetesVersion: "v1.31.0"},
-				{Name: "compatible", Version: "v2.0.0", TemplatePath: "templates/t.yaml"},
+				{Name: "incompatible", Version: "v2.0.0", TemplatePath: "templates/incompatible.yaml", MinKubernetesVersion: "v1.31.0"},
+				{Name: "compatible", Version: "v2.0.0", TemplatePath: "templates/compatible.yaml"},
 			},
 		}
 
@@ -1069,13 +1122,20 @@ metadata:
 		fakeClient.templates["incompatible"] = managedTemplateAt("incompatible", "v1.0.0")
 		fakeClient.templates["compatible"] = managedTemplateAt("compatible", "v1.0.0")
 
+		// Each template artifact's metadata.name must match its catalog policy name.
 		fetcher := &FakeFetcher{
 			content: map[string][]byte{
-				"templates/t.yaml": []byte(`
+				"templates/incompatible.yaml": []byte(`
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
-  name: t
+  name: incompatible
+`),
+				"templates/compatible.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: compatible
 `),
 			},
 		}
@@ -1492,6 +1552,54 @@ metadata:
 	require.NoError(t, err) // Install returns result with failure, not error
 	assert.NotNil(t, result.ConflictErr)
 	assert.Len(t, result.Failed, 1)
+}
+
+// TestInstallTemplateNameMismatchDoesNotOverwrite guards the conflict-protection
+// bypass: the preflight conflict check keys off policy.Name, but InstallTemplate
+// writes to the artifact's metadata.name. If a catalog entry ("alias") points to
+// a template whose metadata.name ("real") is a pre-existing, unmanaged
+// ConstraintTemplate, install must reject the mismatch rather than silently
+// overwrite the user-owned template.
+func TestInstallTemplateNameMismatchDoesNotOverwrite(t *testing.T) {
+	cat := &catalog.PolicyCatalog{
+		Policies: []catalog.Policy{
+			{Name: "alias", Version: "v1.0.0", TemplatePath: "templates/alias.yaml"},
+		},
+	}
+
+	fakeClient := NewFakeClient()
+	// A user-owned (unmanaged) ConstraintTemplate named "real".
+	userTemplate := &unstructured.Unstructured{}
+	userTemplate.SetName("real")
+	userTemplate.SetAnnotations(map[string]string{"owner": "user"})
+	fakeClient.templates["real"] = userTemplate
+
+	// The catalog entry is named "alias" but its artifact declares metadata.name
+	// "real" — pointing at the user-owned template.
+	fetcher := &FakeFetcher{
+		content: map[string][]byte{
+			"templates/alias.yaml": []byte(`apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: real
+`),
+		},
+	}
+
+	result, err := Install(context.Background(), fakeClient, fetcher, cat, &InstallOptions{
+		Policies: []string{"alias"},
+	})
+	require.NoError(t, err) // per-policy failures are captured in the result
+	assert.Empty(t, result.Installed)
+	require.Len(t, result.Failed, 1)
+	assert.Equal(t, "alias", result.Failed[0])
+	assert.Contains(t, result.Errors["alias"], "metadata.name")
+
+	// The user-owned template must be untouched: same object, no gator labels.
+	got := fakeClient.templates["real"]
+	require.NotNil(t, got)
+	assert.False(t, labels.IsManagedByGator(got), "user-owned template must not be relabeled")
+	assert.Equal(t, "user", got.GetAnnotations()["owner"], "user-owned template must not be overwritten")
 }
 
 func TestInstallPreservesExistingEnforcementAction(t *testing.T) {

@@ -455,7 +455,7 @@ func ValidateCatalogSchema(catalog *PolicyCatalog) error {
 		// Reuse the enforcement-gate comparison so schema validation and
 		// enforcement (K8sVersionInRange) agree, including how distro
 		// pre-release/build suffixes are handled.
-		if versionRangeContradicts(policy.MinKubernetesVersion, policy.MaxKubernetesVersion) {
+		if VersionRangeContradicts(policy.MinKubernetesVersion, policy.MaxKubernetesVersion) {
 			return fmt.Errorf("policy %s has minKubernetesVersion (%s) greater than maxKubernetesVersion (%s)",
 				policy.Name, policy.MinKubernetesVersion, policy.MaxKubernetesVersion)
 		}
@@ -508,7 +508,7 @@ func ValidateK8sVersion(v string) error {
 	return nil
 }
 
-// versionRangeContradicts reports whether a [minVersion, maxVersion] pair is
+// VersionRangeContradicts reports whether a [minVersion, maxVersion] pair is
 // inverted, i.e. no cluster version could satisfy both bounds. An empty bound or
 // an unparseable value is treated as non-contradictory.
 //
@@ -518,7 +518,12 @@ func ValidateK8sVersion(v string) error {
 // maxVersion. This keeps the two in lock-step on whole-minor ceilings, where a
 // patch-less "v1.21" admits every patch of that minor (so min "v1.21.3" with max
 // "v1.21" is a valid range, not a contradiction).
-func versionRangeContradicts(minVersion, maxVersion string) bool {
+//
+// The install/upgrade compatibility gate uses it to distinguish invalid policy
+// metadata (a contradictory range that no cluster can satisfy) from a genuine
+// cluster incompatibility, since ParseCatalog does not run schema validation and
+// a cached/custom catalog can carry an inverted range.
+func VersionRangeContradicts(minVersion, maxVersion string) bool {
 	if minVersion == "" || maxVersion == "" {
 		return false
 	}
