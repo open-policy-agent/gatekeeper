@@ -268,7 +268,7 @@ func resolveGateServerVersion(ctx context.Context, k8sClient Client, force, hasB
 		serverVersion = v
 	}
 	if err := catalog.ValidateK8sVersion(serverVersion); err != nil {
-		return "", fmt.Errorf("cluster Kubernetes version %q could not be parsed, so policy compatibility cannot be verified; use --force to install without the compatibility check: %w", serverVersion, err)
+		return "", fmt.Errorf("cluster Kubernetes version %q could not be parsed, so policy compatibility cannot be verified; use --force to proceed without the compatibility check: %w", serverVersion, err)
 	}
 	return serverVersion, nil
 }
