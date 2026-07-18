@@ -77,14 +77,16 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	if err != nil {
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
 	}
-
-	connLock, _ := r.acquireCurrentConnectionLock(connectionName, true)
-	defer connLock.Unlock()
-
+	// Validate the retry config before registering any lock so an invalid
+	// value does not leave a leaked connectionLocks entry behind.
 	rc, err := parseRetryConfig(config)
 	if err != nil {
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
 	}
+
+	connLock, _ := r.acquireCurrentConnectionLock(connectionName, true)
+	defer connLock.Unlock()
+
 	r.mu.Lock()
 	if _, exists := r.openConnections[connectionName]; exists {
 		r.mu.Unlock()
@@ -125,6 +127,15 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 
 func (r *Writer) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
 	path, maxResults, ttl, err := unmarshalConfig(config)
+	if err != nil {
+		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
+	}
+	// Validate the retry config up front, before any destructive migration
+	// (closeAndCleanupConnection / ensureDirectory) runs. parseRetryConfig
+	// checks retry keys that unmarshalConfig does not, so a present-but-invalid
+	// value must be rejected here rather than after the old connection has been
+	// closed and its directory removed, which would leave broken in-memory state.
+	rc, err := parseRetryConfig(config)
 	if err != nil {
 		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
 	}
@@ -182,10 +193,6 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	conn.MaxAuditResults = int(maxResults)
 	conn.ClosedConnectionTTL = ttl
 
-	rc, err := parseRetryConfig(config)
-	if err != nil {
-		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
-	}
 	conn.MaxRetryAttempts = rc.maxRetryAttempts
 	conn.BaseRetryDelay = rc.baseRetryDelay
 	conn.RetryBackoffFactor = rc.retryBackoffFactor

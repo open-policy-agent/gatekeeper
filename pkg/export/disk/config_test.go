@@ -414,12 +414,30 @@ func TestParseRetryConfig(t *testing.T) {
 			expectedMaxDelay:  maxRetryDelay,
 		},
 		{
-			name: "present but invalid values return an error",
+			name: "invalid maxRetryAttempts returns an error",
 			config: map[string]interface{}{
-				"maxRetryAttempts":   -1.0,
-				"baseRetryDelay":     "not-a-duration",
+				"maxRetryAttempts": -1.0,
+			},
+			expectErr: true,
+		},
+		{
+			name: "invalid baseRetryDelay returns an error",
+			config: map[string]interface{}{
+				"baseRetryDelay": "not-a-duration",
+			},
+			expectErr: true,
+		},
+		{
+			name: "invalid retryBackoffFactor returns an error",
+			config: map[string]interface{}{
 				"retryBackoffFactor": 0.0,
-				"maxRetryDelay":      "bogus",
+			},
+			expectErr: true,
+		},
+		{
+			name: "invalid maxRetryDelay returns an error",
+			config: map[string]interface{}{
+				"maxRetryDelay": "bogus",
 			},
 			expectErr: true,
 		},
