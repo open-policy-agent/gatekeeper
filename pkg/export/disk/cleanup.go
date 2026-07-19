@@ -18,6 +18,24 @@ type FailedConnection struct {
 	NextRetryAt time.Time
 }
 
+// scheduleRetryDelay computes the backoff delay for retry attempt number
+// retryCount (0-based) using an exponential factor, then caps it at maxDelay
+// (when positive) and applies jitter. Jitter is applied before the final cap
+// so the scheduled delay never exceeds maxDelay even though wait.Jitter can
+// increase the value by up to Jitter (10%). When baseDelay or factor are zero
+// the caller is expected to have substituted package defaults beforehand.
+func scheduleRetryDelay(baseDelay time.Duration, factor float64, maxDelay time.Duration, retryCount int) time.Duration {
+	delay := time.Duration(float64(baseDelay) * math.Pow(factor, float64(retryCount)))
+	if maxDelay > 0 && delay > maxDelay {
+		delay = maxDelay
+	}
+	delay = wait.Jitter(delay, Jitter)
+	if maxDelay > 0 && delay > maxDelay {
+		delay = maxDelay
+	}
+	return delay
+}
+
 func closeAndRemoveFilesWithRetry(conn *Connection) error {
 	return closeAndRemoveFilesWithBackoff(conn, retry.DefaultBackoff, os.RemoveAll)
 }
@@ -260,11 +278,7 @@ func (r *Writer) retryFailedConnections() {
 			if maxDelay <= 0 {
 				maxDelay = maxRetryDelay
 			}
-			delay := time.Duration(float64(baseDelay) * math.Pow(factor, float64(items[i].conn.RetryCount)))
-			if maxDelay > 0 && delay > maxDelay {
-				delay = maxDelay
-			}
-			delay = wait.Jitter(delay, Jitter)
+			delay := scheduleRetryDelay(baseDelay, factor, maxDelay, items[i].conn.RetryCount)
 			// Schedule from the current time rather than the snapshot taken at the
 			// top of the function, since the close attempts above can take a while.
 			items[i].conn.NextRetryAt = time.Now().Add(delay)
