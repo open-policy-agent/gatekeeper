@@ -1,4 +1,4 @@
-FROM golang:1.26-trixie@sha256:a085df697019cb63b40a70f6a92b948f7dc9df96dfcb2c20ba6eed25ce28f5b3 AS builder
+FROM golang:1.26-trixie@sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7 AS builder
 
 ARG BATS_VERSION
 ARG ORAS_VERSION

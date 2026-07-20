@@ -28,8 +28,8 @@ type Mutator struct {
 
 	path parser.Path
 
-	// bindings are the set of GVKs this Mutator applies to.
-	bindings []runtimeschema.GroupVersionKind
+	// bindings are the set of GVK and operation scopes this Mutator applies to.
+	bindings []schema.Binding
 	tester   *patht.Tester
 }
 
@@ -71,7 +71,7 @@ func (m *Mutator) ID() types.ID {
 	return m.id
 }
 
-func (m *Mutator) SchemaBindings() []runtimeschema.GroupVersionKind {
+func (m *Mutator) SchemaBindings() []schema.Binding {
 	return m.bindings
 }
 
@@ -110,7 +110,7 @@ func (m *Mutator) DeepCopy() types.Mutator {
 		path: parser.Path{
 			Nodes: make([]parser.Node, len(m.path.Nodes)),
 		},
-		bindings: make([]runtimeschema.GroupVersionKind, len(m.bindings)),
+		bindings: make([]schema.Binding, len(m.bindings)),
 	}
 
 	copy(res.path.Nodes, m.path.Nodes)

@@ -29,3 +29,14 @@ spec:
           count(missing) > 0
           msg := sprintf("you must provide labels: %v", [missing])
         }
+      code:
+        - engine: K8sNativeValidation
+          source:
+            generateVAP: true
+            variables:
+              - name: requiredLabels
+                expression: "has(variables.params.labels) ? variables.params.labels : []"
+            validations:
+              - expression: "variables.requiredLabels.all(entry, has(object.metadata.labels) && entry in object.metadata.labels)"
+                messageExpression: "'you must provide labels: ' + variables.requiredLabels.join(', ')"
+
