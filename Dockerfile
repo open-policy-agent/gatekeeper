@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.26-trixie@sha256:116489021a0d8ca3facf79f84ee69052cff88733547150a644d45c5eaa91dc43 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-trixie@sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7 AS builder
 
 ARG TARGETPLATFORM
 ARG TARGETOS
@@ -21,7 +21,7 @@ RUN \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -a -ldflags "${LDFLAGS}" -o manager
 
-FROM gcr.io/distroless/static-debian12@sha256:22fd79fd75eab2372585b44517f8a094349938919dc613aafc37e4bdc9967c82
+FROM gcr.io/distroless/static-debian12@sha256:a9fcaedd4c9b59e12dd65d954f0b5044f19b0647a8a3712e77205df9e7b102cd
 
 WORKDIR /
 COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/manager .
