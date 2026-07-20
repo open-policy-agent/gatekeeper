@@ -76,15 +76,18 @@ jobs:
             if [ "$scheduled_slot" = "odd" ]; then
               meeting_pt="10:00"
               meeting_cet="$cet_morning"
+              meeting_link="https://zoom-lfx.platform.linuxfoundation.org/meeting/94144933087?password=888a184d-5510-44ef-8134-5b9cd80a0376"
             else
               meeting_pt="14:00"
               meeting_cet="$cet_afternoon"
+              meeting_link="https://zoom-lfx.platform.linuxfoundation.org/meeting/98932778409?password=3314408c-ca2c-414a-bea6-40e1658d9692"
             fi
             {
               echo "meeting_pt=$meeting_pt"
               echo "meeting_cet=$meeting_cet"
               echo "cet_morning=$cet_morning"
               echo "cet_afternoon=$cet_afternoon"
+              echo "meeting_link=$meeting_link"
               echo "should_run=true"
             } >> "$GITHUB_OUTPUT"
           else
@@ -130,7 +133,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "<https://zoom.us/j/332405601|Join Meeting> :point_left:"
+                    "text": "<${{ steps.check-week.outputs.meeting_link }}|Join Meeting> :point_left:"
                   }
                 },
                 {
