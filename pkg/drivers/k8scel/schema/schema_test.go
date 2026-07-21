@@ -184,27 +184,62 @@ func TestValidationErrors(t *testing.T) {
 	}
 }
 
-func TestDefaultFailurePolicyForK8sNativeValidation(t *testing.T) {
+func TestFailurePolicyForK8sNativeValidation(t *testing.T) {
 	original := *DefaultFailurePolicyForK8sNativeValidation
 	t.Cleanup(func() { *DefaultFailurePolicyForK8sNativeValidation = original })
 
-	source := &Source{}
-	*DefaultFailurePolicyForK8sNativeValidation = string(admissionv1.Ignore)
+	tests := []struct {
+		name                 string
+		defaultFailurePolicy string
+		sourceFailurePolicy  *string
+		want                 admissionv1.FailurePolicyType
+	}{
+		{
+			name:                 "omitted policy uses Fail default",
+			defaultFailurePolicy: string(admissionv1.Fail),
+			want:                 admissionv1.Fail,
+		},
+		{
+			name:                 "omitted policy uses Ignore default",
+			defaultFailurePolicy: string(admissionv1.Ignore),
+			want:                 admissionv1.Ignore,
+		},
+		{
+			name:                 "explicit Fail overrides Ignore default",
+			defaultFailurePolicy: string(admissionv1.Ignore),
+			sourceFailurePolicy:  ptr.To(string(admissionv1.Fail)),
+			want:                 admissionv1.Fail,
+		},
+		{
+			name:                 "explicit Ignore overrides Fail default",
+			defaultFailurePolicy: string(admissionv1.Fail),
+			sourceFailurePolicy:  ptr.To(string(admissionv1.Ignore)),
+			want:                 admissionv1.Ignore,
+		},
+	}
 
-	failurePolicy, err := source.GetFailurePolicy()
-	if err != nil {
-		t.Fatalf("GetFailurePolicy() returned an unexpected error: %v", err)
-	}
-	if failurePolicy == nil || *failurePolicy != admissionv1.Ignore {
-		t.Fatalf("GetFailurePolicy() = %v, want %s", failurePolicy, admissionv1.Ignore)
-	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			*DefaultFailurePolicyForK8sNativeValidation = test.defaultFailurePolicy
+			source := &Source{FailurePolicy: test.sourceFailurePolicy}
 
-	v1beta1FailurePolicy, err := source.GetV1Beta1FailurePolicy()
-	if err != nil {
-		t.Fatalf("GetV1Beta1FailurePolicy() returned an unexpected error: %v", err)
-	}
-	if v1beta1FailurePolicy == nil || *v1beta1FailurePolicy != admissionv1beta1.Ignore {
-		t.Fatalf("GetV1Beta1FailurePolicy() = %v, want %s", v1beta1FailurePolicy, admissionv1beta1.Ignore)
+			failurePolicy, err := source.GetFailurePolicy()
+			if err != nil {
+				t.Fatalf("GetFailurePolicy() returned an unexpected error: %v", err)
+			}
+			if failurePolicy == nil || *failurePolicy != test.want {
+				t.Fatalf("GetFailurePolicy() = %v, want %s", failurePolicy, test.want)
+			}
+
+			v1beta1FailurePolicy, err := source.GetV1Beta1FailurePolicy()
+			if err != nil {
+				t.Fatalf("GetV1Beta1FailurePolicy() returned an unexpected error: %v", err)
+			}
+			wantV1Beta1 := admissionv1beta1.FailurePolicyType(test.want)
+			if v1beta1FailurePolicy == nil || *v1beta1FailurePolicy != wantV1Beta1 {
+				t.Fatalf("GetV1Beta1FailurePolicy() = %v, want %s", v1beta1FailurePolicy, wantV1Beta1)
+			}
+		})
 	}
 }
 
