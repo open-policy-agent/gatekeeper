@@ -77,7 +77,7 @@ const (
 	denyall = "denyall"
 )
 
-// globalTestMu serializes access to all global variables (webhook.VwhName, transform.SyncVAPScope)
+// globalTestMu serializes access to all global variables (e.g. webhook.VwhName)
 // across all constraint template tests to prevent race conditions.
 var globalTestMu sync.Mutex
 
@@ -1129,10 +1129,6 @@ func TestReconcile(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
 
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
-
 		cache := webhookconfigcache.NewWebhookConfigCache()
 		const testWebhookName = "gatekeeper-validating-webhook-configuration"
 		webhookName := testWebhookName
@@ -1193,10 +1189,6 @@ func TestReconcile(t *testing.T) {
 		logger.Info("Running test: VAP should be created with wildcard operations")
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		cache := webhookconfigcache.NewWebhookConfigCache()
 		const testWebhookName = "gatekeeper-validating-webhook-configuration"
@@ -1263,10 +1255,6 @@ func TestReconcile(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
 
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
-
 		cache := webhookconfigcache.NewWebhookConfigCache()
 		const testWebhookName = "gatekeeper-validating-webhook-configuration"
 		webhookName := testWebhookName
@@ -1331,10 +1319,6 @@ func TestReconcile(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
 
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
-
 		cache := webhookconfigcache.NewWebhookConfigCache()
 		const testWebhookName = "gatekeeper-validating-webhook-configuration"
 		webhookName := testWebhookName
@@ -1393,9 +1377,6 @@ func TestReconcile(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
 
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 		// Use the shared webhook cache instead of creating a new one
 		cache := sharedWebhookCache
 		const testWebhookName = "gatekeeper-validating-webhook-configuration"
@@ -2985,48 +2966,26 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	err := scheme.Convert(ct, unversionedCT, nil)
 	require.NoError(t, err)
 
-	// Save and restore transform.SyncVAPScope
-	oldSyncVAPScope := *transform.SyncVAPScope
-	defer func() { *transform.SyncVAPScope = oldSyncVAPScope }()
-
-	t.Run("SyncVAPScope disabled uses default config", func(t *testing.T) {
-		*transform.SyncVAPScope = false
-		r := &ReconcileConstraintTemplate{}
-
-		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap", logger)
-		require.NoError(t, err)
-		require.NotNil(t, vap)
-		// The VAP name is derived from the template name, not the vapName parameter
-		require.Equal(t, "gatekeeper-test-template", vap.Name)
-	})
-
-	t.Run("SyncVAPScope enabled with nil caches", func(t *testing.T) {
+	t.Run("nil caches uses default config", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
 
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 		r := &ReconcileConstraintTemplate{
 			processExcluder: nil,
 			webhookCache:    nil,
 		}
 
-		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-synced", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCT, logger)
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 		// The VAP name is derived from the template name
 		require.Equal(t, "gatekeeper-test-template", vap.Name)
 	})
 
-	t.Run("SyncVAPScope enabled with webhook config - adds match constraints and conditions", func(t *testing.T) {
+	t.Run("webhook config - adds match constraints and conditions", func(t *testing.T) {
 		// Serialize access to webhook.VwhName global variable
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		cache := webhookconfigcache.NewWebhookConfigCache()
 		webhookName := testWebhookName
@@ -3087,7 +3046,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 			webhookCache:    cache,
 		}
 
-		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-with-webhook-config", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCT, logger)
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
@@ -3128,13 +3087,9 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		require.Equal(t, 2, webhookConditionsFound)
 	})
 
-	t.Run("SyncVAPScope enabled with excluded namespaces - adds to match conditions", func(t *testing.T) {
+	t.Run("excluded namespaces - adds to match conditions", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		processExcluder := process.Get()
 		processExcluder.Add([]configv1alpha1.MatchEntry{
@@ -3151,7 +3106,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 			webhookCache:    cache,
 		}
 
-		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-with-excluded-ns", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCT, logger)
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
@@ -3168,13 +3123,9 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		require.True(t, hasExcludedNsCondition)
 	})
 
-	t.Run("SyncVAPScope enabled with webhook config and excluded namespaces - combines both", func(t *testing.T) {
+	t.Run("webhook config and excluded namespaces - combines both", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		processExcluder := process.Get()
 		processExcluder.Add([]configv1alpha1.MatchEntry{
@@ -3210,7 +3161,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 			webhookCache:    cache,
 		}
 
-		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-combined", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCT, logger)
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
@@ -3238,10 +3189,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	t.Run("ConstraintTemplate with operations - intersection with webhook operations", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		ctWithOps := &v1beta1.ConstraintTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-template-with-ops"},
@@ -3300,7 +3247,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		cache.UpsertConfig(webhookName, webhookConfig)
 
 		r := &ReconcileConstraintTemplate{webhookCache: cache}
-		vap, err := r.transformTemplateToVAP(unversionedCTWithOps, "test-vap-ops-intersection", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCTWithOps, logger)
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
@@ -3314,10 +3261,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	t.Run("ConstraintTemplate operations mismatch - logs warning but continues", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		ctWithMismatchOps := &v1beta1.ConstraintTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-template-mismatch-ops"},
@@ -3375,7 +3318,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		cache.UpsertConfig(webhookName, webhookConfig)
 
 		r := &ReconcileConstraintTemplate{webhookCache: cache}
-		vap, err := r.transformTemplateToVAP(unversionedCTMismatch, "test-vap-ops-mismatch", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCTMismatch, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "operations mismatch")
 		require.NotNil(t, vap)
@@ -3389,10 +3332,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	t.Run("ConstraintTemplate no matching operations - returns error", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		ctNoMatch := &v1beta1.ConstraintTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-template-no-match"},
@@ -3449,7 +3388,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		cache.UpsertConfig(webhookName, webhookConfig)
 
 		r := &ReconcileConstraintTemplate{webhookCache: cache}
-		_, err = r.transformTemplateToVAP(unversionedCTNoMatch, "test-vap-no-match", logger)
+		_, err = r.transformTemplateToVAP(unversionedCTNoMatch, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no matching operations")
 	})
@@ -3457,10 +3396,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	t.Run("ConstraintTemplate with nil operations - uses all webhook operations", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		ctNilOps := &v1beta1.ConstraintTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-template-nil-ops"},
@@ -3515,7 +3450,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		cache.UpsertConfig(webhookName, webhookConfig)
 
 		r := &ReconcileConstraintTemplate{webhookCache: cache}
-		vap, err := r.transformTemplateToVAP(unversionedCTNilOps, "test-vap-nil-ops", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCTNilOps, logger)
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
@@ -3529,10 +3464,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	t.Run("ConstraintTemplate with wildcard operations - matches all webhook operations", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		ctWildcard := &v1beta1.ConstraintTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-template-wildcard"},
@@ -3589,7 +3520,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		cache.UpsertConfig(webhookName, webhookConfig)
 
 		r := &ReconcileConstraintTemplate{webhookCache: cache}
-		vap, err := r.transformTemplateToVAP(unversionedCTWildcard, "test-vap-wildcard", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCTWildcard, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "operations mismatch")
 		require.NotNil(t, vap)
@@ -3603,10 +3534,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	t.Run("Webhook with wildcard operations - intersects with specific CT operations", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		ctSpecific := &v1beta1.ConstraintTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-template-specific"},
@@ -3663,7 +3590,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		cache.UpsertConfig(webhookName, webhookConfig)
 
 		r := &ReconcileConstraintTemplate{webhookCache: cache}
-		vap, err := r.transformTemplateToVAP(unversionedCTSpecific, "test-vap-webhook-wildcard", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCTSpecific, logger)
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
@@ -3676,10 +3603,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	t.Run("Both webhook and CT with wildcard operations", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		ctWildcard := &v1beta1.ConstraintTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-template-both-wildcard"},
@@ -3735,7 +3658,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		cache.UpsertConfig(webhookName, webhookConfig)
 
 		r := &ReconcileConstraintTemplate{webhookCache: cache}
-		vap, err := r.transformTemplateToVAP(unversionedCTBothWildcard, "test-vap-both-wildcard", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCTBothWildcard, logger)
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
@@ -3750,10 +3673,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	t.Run("Webhook supports all operations and CT supports CREATE", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		ctCreate := &v1beta1.ConstraintTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-template-create-only"},
@@ -3809,7 +3728,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		cache.UpsertConfig(webhookName, webhookConfig)
 
 		r := &ReconcileConstraintTemplate{webhookCache: cache}
-		vap, err := r.transformTemplateToVAP(unversionedCTCreate, "test-vap-webhook-all-ct-create", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCTCreate, logger)
 		require.NoError(t, err)
 		require.NotNil(t, vap)
 
@@ -3821,10 +3740,6 @@ func Test_transformTemplateToVAP(t *testing.T) {
 	t.Run("CT supports all operations and webhook supports CREATE", func(t *testing.T) {
 		globalTestMu.Lock()
 		defer globalTestMu.Unlock()
-
-		originalSyncVAPScope := *transform.SyncVAPScope
-		defer func() { *transform.SyncVAPScope = originalSyncVAPScope }()
-		*transform.SyncVAPScope = true
 
 		ctAll := &v1beta1.ConstraintTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-template-all-ops"},
@@ -3880,7 +3795,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		cache.UpsertConfig(webhookName, webhookConfig)
 
 		r := &ReconcileConstraintTemplate{webhookCache: cache}
-		vap, err := r.transformTemplateToVAP(unversionedCTAll, "test-vap-ct-all-webhook-create", logger)
+		vap, err := r.transformTemplateToVAP(unversionedCTAll, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "operations mismatch")
 		require.NotNil(t, vap)
