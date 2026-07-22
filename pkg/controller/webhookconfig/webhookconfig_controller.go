@@ -8,7 +8,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
@@ -170,7 +169,7 @@ func (a *Adder) InjectConstraintTemplateEvent(ctEvents chan event.GenericEvent) 
 
 // Add creates a new webhook config controller and adds it to the Manager.
 func (a *Adder) Add(mgr manager.Manager) error {
-	if !operations.IsAssigned(operations.Generate) || !*transform.SyncVAPScope {
+	if !operations.IsAssigned(operations.Generate) {
 		return nil
 	}
 	r := &ReconcileWebhookConfig{

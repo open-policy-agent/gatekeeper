@@ -207,7 +207,6 @@ spec:
             - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - HELMSUBST_AUDIT_OPERATIONS
             - HELMSUBST_DEPLOYMENT_AUDIT_VIOLATION_EXPORT_ARGS
-            - HELMSUBST_DEPLOYMENT_SYNC_VAP_ENFORCEMENT_SCOPE
             - HELMSUBST_MUTATION_STATUS_ENABLED_ARG
             - --logtostderr
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT

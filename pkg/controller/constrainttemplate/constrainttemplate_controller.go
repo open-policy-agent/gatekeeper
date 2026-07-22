@@ -226,7 +226,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	}
 
 	// Watch for webhook configuration change events (only if Generate operation is enabled)
-	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && events != nil {
+	if operations.IsAssigned(operations.Generate) && events != nil {
 		err = c.Watch(source.Channel(events, &handler.EnqueueRequestForObject{}))
 		if err != nil {
 			return err
@@ -927,7 +927,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		}
 		logger.Info("get VAP", "vapName", vapName, "currentVap", currentVap)
 
-		transformedVap, transformErr := r.transformTemplateToVAP(unversionedCT, vapName, logger)
+		transformedVap, transformErr := r.transformTemplateToVAP(unversionedCT, logger)
 		if transformErr != nil {
 			logger.Error(transformErr, "transform to VAP error", "vapName", vapName)
 			if transformedVap != nil && errors.Is(transformErr, transform.ErrOperationMismatch) {
@@ -1057,18 +1057,12 @@ func ShouldGenerateVAPForVersionedCT(ct *v1beta1.ConstraintTemplate, scheme *run
 	return constraint.ShouldGenerateVAP(unversionedCT)
 }
 
-// transformTemplateToVAP transforms a ConstraintTemplate to a ValidatingAdmissionPolicy
-// It handles both synced webhook scope and default configurations.
+// transformTemplateToVAP transforms a ConstraintTemplate to a ValidatingAdmissionPolicy,
+// synchronizing the VAP enforcement scope with Gatekeeper's admission validation scope.
 func (r *ReconcileConstraintTemplate) transformTemplateToVAP(
 	unversionedCT *templates.ConstraintTemplate,
-	vapName string,
 	logger logr.Logger,
 ) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
-	if !*transform.SyncVAPScope {
-		logger.Info("using default configuration for VAP matching", "vapName", vapName)
-		return transform.TemplateToPolicyDefinition(unversionedCT)
-	}
-
 	var excludedNamespaces []string
 	if r.processExcluder != nil {
 		excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)

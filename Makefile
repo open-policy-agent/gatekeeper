@@ -23,7 +23,6 @@ AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
 GENERATE_VAP ?= true
 GENERATE_VAPBINDING ?= true
-SYNC_VAP_ENFORCEMENT_SCOPE ?= true
 
 VERSION := v3.24.0-beta.0
 
@@ -72,7 +71,6 @@ HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
 	--set logLevel=${LOG_LEVEL} \
 	--set defaultCreateVAPForTemplates=${GENERATE_VAP} \
 	--set defaultCreateVAPBindingForConstraints=${GENERATE_VAPBINDING} \
-	--set syncVAPEnforcementScope=${SYNC_VAP_ENFORCEMENT_SCOPE} \
 	--set mutationAnnotations=true;\
 
 GATEKEEPER_NAMESPACE ?= gatekeeper-system
@@ -143,7 +141,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --logtostderr\
 \n        - --default-create-vap-for-templates=${GENERATE_VAP}\
 \n        - --default-create-vap-binding-for-constraints=${GENERATE_VAPBINDING}\
-\n        - --sync-vap-enforcement-scope=${SYNC_VAP_ENFORCEMENT_SCOPE}\
 \n        - --log-level=${LOG_LEVEL}\
 \n"
 
