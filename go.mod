@@ -22,7 +22,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/contrib/detectors/aws/ec2 v1.21.1
-	go.opentelemetry.io/contrib/detectors/gcp v1.42.0
+	go.opentelemetry.io/contrib/detectors/gcp v1.43.0
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.44.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.63.0
@@ -35,7 +35,7 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/time v0.15.0
-	google.golang.org/grpc v1.81.1
+	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.2
@@ -57,7 +57,7 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.3 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/monitoring v1.20.1 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.31.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.32.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.44.0 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
@@ -138,7 +138,7 @@ require (
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/api v0.189.0 // indirect
 	google.golang.org/genproto v0.0.0-20240722135656-d784300faade // indirect
