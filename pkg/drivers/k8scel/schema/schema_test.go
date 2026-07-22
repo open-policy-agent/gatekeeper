@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	admissionv1 "k8s.io/api/admissionregistration/v1"
+	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/utils/ptr"
 )
 
@@ -179,6 +181,106 @@ func TestValidationErrors(t *testing.T) {
 				t.Errorf("got %v; wanted %v", err, test.expectedErr)
 			}
 		})
+	}
+}
+
+func TestFailurePolicyForK8sNativeValidation(t *testing.T) {
+	original := *DefaultFailurePolicyForK8sNativeValidation
+	t.Cleanup(func() { *DefaultFailurePolicyForK8sNativeValidation = original })
+
+	tests := []struct {
+		name                 string
+		defaultFailurePolicy string
+		sourceFailurePolicy  *string
+		want                 admissionv1.FailurePolicyType
+	}{
+		{
+			name:                 "omitted policy uses Fail default",
+			defaultFailurePolicy: string(admissionv1.Fail),
+			want:                 admissionv1.Fail,
+		},
+		{
+			name:                 "omitted policy uses Ignore default",
+			defaultFailurePolicy: string(admissionv1.Ignore),
+			want:                 admissionv1.Ignore,
+		},
+		{
+			name:                 "explicit Fail overrides Ignore default",
+			defaultFailurePolicy: string(admissionv1.Ignore),
+			sourceFailurePolicy:  ptr.To(string(admissionv1.Fail)),
+			want:                 admissionv1.Fail,
+		},
+		{
+			name:                 "explicit Ignore overrides Fail default",
+			defaultFailurePolicy: string(admissionv1.Fail),
+			sourceFailurePolicy:  ptr.To(string(admissionv1.Ignore)),
+			want:                 admissionv1.Ignore,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			*DefaultFailurePolicyForK8sNativeValidation = test.defaultFailurePolicy
+			source := &Source{FailurePolicy: test.sourceFailurePolicy}
+
+			failurePolicy, err := source.GetFailurePolicy()
+			if err != nil {
+				t.Fatalf("GetFailurePolicy() returned an unexpected error: %v", err)
+			}
+			if failurePolicy == nil || *failurePolicy != test.want {
+				t.Fatalf("GetFailurePolicy() = %v, want %s", failurePolicy, test.want)
+			}
+
+			v1beta1FailurePolicy, err := source.GetV1Beta1FailurePolicy()
+			if err != nil {
+				t.Fatalf("GetV1Beta1FailurePolicy() returned an unexpected error: %v", err)
+			}
+			wantV1Beta1 := admissionv1beta1.FailurePolicyType(test.want)
+			if v1beta1FailurePolicy == nil || *v1beta1FailurePolicy != wantV1Beta1 {
+				t.Fatalf("GetV1Beta1FailurePolicy() = %v, want %s", v1beta1FailurePolicy, wantV1Beta1)
+			}
+		})
+	}
+}
+
+func TestDefaultFailurePolicyForK8sNativeValidationIsValidatedAtStartup(t *testing.T) {
+	original := *DefaultFailurePolicyForK8sNativeValidation
+	t.Cleanup(func() { *DefaultFailurePolicyForK8sNativeValidation = original })
+
+	*DefaultFailurePolicyForK8sNativeValidation = "Unsupported"
+
+	if err := ValidateDefaultFailurePolicyForK8sNativeValidation(); !errors.Is(err, ErrBadFailurePolicy) {
+		t.Fatalf("ValidateDefaultFailurePolicyForK8sNativeValidation() error = %v, want %v", err, ErrBadFailurePolicy)
+	}
+}
+
+func TestSetDefaultFailurePolicyForK8sNativeValidation(t *testing.T) {
+	original := *DefaultFailurePolicyForK8sNativeValidation
+	t.Cleanup(func() { *DefaultFailurePolicyForK8sNativeValidation = original })
+
+	if err := SetDefaultFailurePolicyForK8sNativeValidation(string(admissionv1.Ignore)); err != nil {
+		t.Fatalf("SetDefaultFailurePolicyForK8sNativeValidation() returned an unexpected error: %v", err)
+	}
+	if *DefaultFailurePolicyForK8sNativeValidation != string(admissionv1.Ignore) {
+		t.Fatalf("DefaultFailurePolicyForK8sNativeValidation = %s, want %s", *DefaultFailurePolicyForK8sNativeValidation, admissionv1.Ignore)
+	}
+
+	if err := SetDefaultFailurePolicyForK8sNativeValidation("Unsupported"); !errors.Is(err, ErrBadFailurePolicy) {
+		t.Fatalf("SetDefaultFailurePolicyForK8sNativeValidation() error = %v, want %v", err, ErrBadFailurePolicy)
+	}
+	if *DefaultFailurePolicyForK8sNativeValidation != string(admissionv1.Ignore) {
+		t.Fatalf("DefaultFailurePolicyForK8sNativeValidation changed after invalid input: got %s, want %s", *DefaultFailurePolicyForK8sNativeValidation, admissionv1.Ignore)
+	}
+}
+
+func TestSourceValidateDoesNotValidateDefaultFailurePolicyForK8sNativeValidation(t *testing.T) {
+	original := *DefaultFailurePolicyForK8sNativeValidation
+	t.Cleanup(func() { *DefaultFailurePolicyForK8sNativeValidation = original })
+
+	*DefaultFailurePolicyForK8sNativeValidation = "Unsupported"
+
+	if err := (&Source{}).Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
 	}
 }
 

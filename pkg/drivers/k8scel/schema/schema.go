@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"flag"
 	"fmt"
 	"strings"
 
@@ -12,6 +13,17 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/policy/validating"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
 )
+
+const (
+	// DefaultFailurePolicyForK8sNativeValidationFlag is the CLI flag name for the K8sNativeValidation failure policy default.
+	DefaultFailurePolicyForK8sNativeValidationFlag = "default-k8s-native-validation-failure-policy"
+	// DefaultFailurePolicyForK8sNativeValidationDefault is the default failure policy for K8sNativeValidation sources that omit failurePolicy.
+	DefaultFailurePolicyForK8sNativeValidationDefault = string(admissionv1.Fail)
+	// DefaultFailurePolicyForK8sNativeValidationUsage describes the K8sNativeValidation failure policy default flag.
+	DefaultFailurePolicyForK8sNativeValidationUsage = "(beta) Failure policy to use when a K8sNativeValidation source omits failurePolicy. Allowed values are Fail or Ignore."
+)
+
+var DefaultFailurePolicyForK8sNativeValidation = flag.String(DefaultFailurePolicyForK8sNativeValidationFlag, DefaultFailurePolicyForK8sNativeValidationDefault, DefaultFailurePolicyForK8sNativeValidationUsage)
 
 const (
 	// Name is the name of the driver.
@@ -67,7 +79,7 @@ func (in *Source) Validate() error {
 	if err := in.validateVariables(); err != nil {
 		return err
 	}
-	if _, err := in.GetFailurePolicy(); err != nil {
+	if err := validateFailurePolicy(in.FailurePolicy); err != nil {
 		return err
 	}
 
@@ -197,41 +209,68 @@ func (in *Source) GetMessageExpressions() ([]cel.ExpressionAccessor, error) {
 }
 
 func (in *Source) GetFailurePolicy() (*admissionv1.FailurePolicyType, error) {
-	if in.FailurePolicy == nil {
-		return nil, nil
+	failurePolicy := in.FailurePolicy
+	if failurePolicy == nil {
+		failurePolicy = DefaultFailurePolicyForK8sNativeValidation
 	}
 
 	var out admissionv1.FailurePolicyType
 
-	switch *in.FailurePolicy {
+	switch *failurePolicy {
 	case string(admissionv1.Fail):
 		out = admissionv1.Fail
 	case string(admissionv1.Ignore):
 		out = admissionv1.Ignore
 	default:
-		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *in.FailurePolicy)
+		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *failurePolicy)
 	}
 
 	return &out, nil
 }
 
 func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType, error) {
-	var out admissionv1beta1.FailurePolicyType
-	if in.FailurePolicy == nil {
-		out = admissionv1beta1.Fail
-		return &out, nil
+	failurePolicy := in.FailurePolicy
+	if failurePolicy == nil {
+		failurePolicy = DefaultFailurePolicyForK8sNativeValidation
 	}
 
-	switch *in.FailurePolicy {
+	var out admissionv1beta1.FailurePolicyType
+
+	switch *failurePolicy {
 	case string(admissionv1.Fail):
 		out = admissionv1beta1.Fail
 	case string(admissionv1.Ignore):
 		out = admissionv1beta1.Ignore
 	default:
-		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *in.FailurePolicy)
+		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *failurePolicy)
 	}
 
 	return &out, nil
+}
+
+func ValidateDefaultFailurePolicyForK8sNativeValidation() error {
+	return validateFailurePolicy(DefaultFailurePolicyForK8sNativeValidation)
+}
+
+func SetDefaultFailurePolicyForK8sNativeValidation(failurePolicy string) error {
+	if err := validateFailurePolicy(&failurePolicy); err != nil {
+		return err
+	}
+	*DefaultFailurePolicyForK8sNativeValidation = failurePolicy
+	return nil
+}
+
+func validateFailurePolicy(failurePolicy *string) error {
+	if failurePolicy == nil {
+		return nil
+	}
+
+	switch *failurePolicy {
+	case string(admissionv1.Fail), string(admissionv1.Ignore):
+		return nil
+	default:
+		return fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *failurePolicy)
+	}
 }
 
 // MustToUnstructured() is a convenience method for converting to unstructured.
