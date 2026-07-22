@@ -132,12 +132,9 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, catalogURL string) ([]byte, err
 
 // FetchContent retrieves content from a URL, resolving relative paths against the catalog URL.
 func (f *HTTPFetcher) FetchContent(ctx context.Context, contentPath string) ([]byte, error) {
-	// Security: Validate the content path doesn't contain path traversal attempts.
-	// Check both the raw path and a URL-decoded/cleaned version to prevent
-	// bypasses via percent-encoding (e.g., %2e%2e).
-	decodedPath, _ := url.PathUnescape(contentPath)
-	cleanedPath := path.Clean(decodedPath)
-	if strings.Contains(contentPath, "..") || strings.Contains(decodedPath, "..") || strings.Contains(cleanedPath, "..") {
+	// Security: reject traversal path segments, including percent-encoded ones,
+	// without blocking filenames that legitimately contain "..".
+	if containsPathTraversal(contentPath) {
 		return nil, fmt.Errorf("content path contains path traversal: %s", contentPath)
 	}
 
@@ -189,6 +186,24 @@ func (f *HTTPFetcher) FetchContent(ctx context.Context, contentPath string) ([]b
 	}
 
 	return f.fetchHTTP(ctx, contentURL)
+}
+
+func containsPathTraversal(contentPath string) bool {
+	decodedPath, err := url.PathUnescape(contentPath)
+	if err != nil {
+		decodedPath = contentPath
+	}
+
+	cleanedPath := path.Clean(decodedPath)
+	for _, candidate := range []string{decodedPath, cleanedPath} {
+		for _, segment := range strings.Split(candidate, "/") {
+			if segment == ".." {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (f *HTTPFetcher) fetchHTTP(ctx context.Context, targetURL string) ([]byte, error) {
