@@ -3,11 +3,8 @@ package oci
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
-	"net/netip"
 	"os"
-	"strings"
 
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content/file"
@@ -24,7 +21,7 @@ const tempFilePrefix = "gator-bundle-"
 // default path from os.TempDir() is used. This func returns the directory path
 // that the image was pulled to, a handler function to clean up the directory
 // after it has been read, and an error (if any).
-func PullImage(imgURL string, tempDir string) (string, func(), error) {
+func PullImage(imgURL string, tempDir string, allowPlainHTTP bool) (string, func(), error) {
 	ctx := context.Background()
 	path, err := os.MkdirTemp(tempDir, tempFilePrefix)
 	if err != nil {
@@ -60,8 +57,11 @@ func PullImage(imgURL string, tempDir string) (string, func(), error) {
 	if err != nil {
 		return "", closeFn, fmt.Errorf("creating remote repository for %q: %w", imgURL, err)
 	}
-	// Preserve the oras v1 behavior for local test registries on loopback hosts.
-	repo.PlainHTTP = shouldUsePlainHTTP(ref.Registry)
+
+	repo.PlainHTTP = allowPlainHTTP
+	if allowPlainHTTP {
+		fmt.Fprintf(os.Stderr, "WARNING: pulling %q over plain HTTP\n", imgURL)
+	}
 	repo.Client = &auth.Client{
 		Client:     http.DefaultClient,
 		Cache:      auth.NewCache(),
@@ -74,22 +74,4 @@ func PullImage(imgURL string, tempDir string) (string, func(), error) {
 	}
 
 	return path, closeFn, nil
-}
-
-// shouldUsePlainHTTP returns true when the registry host is a loopback
-// address (localhost, 127.x.x.x, ::1), which typically serves plain HTTP.
-func shouldUsePlainHTTP(registryHost string) bool {
-	host, _, err := net.SplitHostPort(registryHost)
-	if err != nil {
-		host = registryHost
-	}
-	// Strip IPv6 brackets that remain when no port is present (e.g. "[::1]").
-	host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
-	if host == "localhost" {
-		return true
-	}
-	if addr, err := netip.ParseAddr(host); err == nil {
-		return addr.IsLoopback()
-	}
-	return false
 }
