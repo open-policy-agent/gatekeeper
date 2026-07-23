@@ -35,7 +35,7 @@ KUSTOMIZE_VERSION ?= 5.8.1
 BATS_VERSION ?= 1.13.0
 ORAS_VERSION ?= 1.3.2
 BATS_TESTS_FILE ?= test/bats/test.bats
-HELM_VERSION ?= 3.17.4
+HELM_VERSION ?= 4.2.1
 NODE_VERSION ?= 24-bullseye-slim
 YQ_VERSION ?= 4.53.3
 
@@ -293,7 +293,7 @@ e2e-helm-install:
 	mkdir -p .staging/helm
 	curl https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz > .staging/helm/helmbin.tar.gz
 	cd .staging/helm && tar -xvf helmbin.tar.gz
-	./.staging/helm/linux-amd64/helm version --client
+	./.staging/helm/linux-amd64/helm version
 
 e2e-helm-deploy: e2e-helm-install $(LOCALBIN)
 ifeq ($(ENABLE_EXPORT),true)
