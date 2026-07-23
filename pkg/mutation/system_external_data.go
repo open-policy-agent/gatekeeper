@@ -11,6 +11,7 @@ import (
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
+	gexternaldata "github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	errorsutil "k8s.io/apimachinery/pkg/util/errors"
@@ -81,6 +82,7 @@ func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.
 		provider, err := s.providerCache.Get(name)
 		if err != nil {
 			log.Error(err, "failed to get external data provider", "provider", name)
+			gexternaldata.ReportProviderError()
 			continue
 		}
 
@@ -104,10 +106,12 @@ func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.
 			defer mutex.Unlock()
 
 			if err != nil {
+				gexternaldata.ReportProviderError()
 				errors[provider.Name] = fmt.Errorf("failed to send external data request to provider %s: %w", provider.Name, err)
 				return
 			}
 			if err := validateExternalDataResponse(resp); err != nil {
+				gexternaldata.ReportProviderError()
 				errors[provider.Name] = fmt.Errorf("failed to validate external data response from provider %s: %w", provider.Name, err)
 				return
 			}
