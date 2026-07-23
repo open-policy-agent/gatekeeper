@@ -312,6 +312,10 @@ The following table describes each property in the `status.byPod` section:
     | path            | (alpha) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "/tmp/violations/topics" |
     | maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
     | closedConnectionTTL | (alpha) TTL in seconds for connection to be in the retry queue after it is closed/deleted in case of failure.                                                   | 600                 |
+    | maxRetryAttempts | (alpha) Maximum number of times the disk driver retries closing a connection that previously failed. A present but invalid value (e.g. a negative number) is rejected. | 10                 |
+    | baseRetryDelay | (alpha) Initial backoff before the first retry of a failed connection close, as a Go duration string (e.g. "30s"). A present but invalid value is rejected.        | 15s                |
+    | retryBackoffFactor | (alpha) Multiplier applied to the retry delay after each failed attempt. A present but invalid value (e.g. zero or negative) is rejected.                          | 2.0                |
+    | maxRetryDelay | (alpha) Upper bound on the retry backoff, as a Go duration string (e.g. "2m"). A present but invalid value is rejected.                                          | 10m                |
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
 

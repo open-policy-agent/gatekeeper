@@ -18,6 +18,24 @@ type FailedConnection struct {
 	NextRetryAt time.Time
 }
 
+// scheduleRetryDelay computes the backoff delay for retry attempt number
+// retryCount (0-based) using an exponential factor, then caps it at maxDelay
+// (when positive) and applies jitter. Jitter is applied before the final cap
+// so the scheduled delay never exceeds maxDelay even though wait.Jitter can
+// increase the value by up to Jitter (10%). When baseDelay or factor are zero
+// the caller is expected to have substituted package defaults beforehand.
+func scheduleRetryDelay(baseDelay time.Duration, factor float64, maxDelay time.Duration, retryCount int) time.Duration {
+	delay := time.Duration(float64(baseDelay) * math.Pow(factor, float64(retryCount)))
+	if maxDelay > 0 && delay > maxDelay {
+		delay = maxDelay
+	}
+	delay = wait.Jitter(delay, Jitter)
+	if maxDelay > 0 && delay > maxDelay {
+		delay = maxDelay
+	}
+	return delay
+}
+
 func closeAndRemoveFilesWithRetry(conn *Connection) error {
 	return closeAndRemoveFilesWithBackoff(conn, retry.DefaultBackoff, os.RemoveAll)
 }
@@ -158,6 +176,16 @@ func (r *Writer) backgroundCleanup(done <-chan struct{}) {
 	}
 }
 
+// maxRetryAttemptsFor returns the configured max retry attempts for a failed
+// connection, falling back to the package default when the value is unset so
+// existing behavior is preserved for connections created without retry tuning.
+func maxRetryAttemptsFor(fc FailedConnection) int {
+	if fc.MaxRetryAttempts > 0 {
+		return fc.MaxRetryAttempts
+	}
+	return maxRetryAttempts
+}
+
 // retryFailedConnections attempts to close connections that previously failed to close.
 func (r *Writer) retryFailedConnections() {
 	r.mu.Lock()
@@ -182,7 +210,7 @@ func (r *Writer) retryFailedConnections() {
 			continue
 		}
 
-		if failedConn.RetryCount >= maxRetryAttempts {
+		if failedConn.RetryCount >= maxRetryAttemptsFor(failedConn) {
 			log.Info("Max retry attempts exceeded for failed connection", "connection", name, "attempts", failedConn.RetryCount)
 			toRemove = append(toRemove, name)
 			continue
@@ -238,11 +266,19 @@ func (r *Writer) retryFailedConnections() {
 		} else {
 			log.Info("Failed to close connection on retry", "connection", items[i].name, "error", err, "attempt", items[i].conn.RetryCount+1)
 			items[i].conn.RetryCount++
-			delay := time.Duration(float64(baseRetryDelay) * math.Pow(retryBackoffFactor, float64(items[i].conn.RetryCount)))
-			if maxRetryDelay > 0 && delay > maxRetryDelay {
-				delay = maxRetryDelay
+			baseDelay := items[i].conn.BaseRetryDelay
+			if baseDelay <= 0 {
+				baseDelay = baseRetryDelay
 			}
-			delay = wait.Jitter(delay, Jitter)
+			factor := items[i].conn.RetryBackoffFactor
+			if factor <= 0 {
+				factor = retryBackoffFactor
+			}
+			maxDelay := items[i].conn.MaxRetryDelay
+			if maxDelay <= 0 {
+				maxDelay = maxRetryDelay
+			}
+			delay := scheduleRetryDelay(baseDelay, factor, maxDelay, items[i].conn.RetryCount)
 			// Schedule from the current time rather than the snapshot taken at the
 			// top of the function, since the close attempts above can take a while.
 			items[i].conn.NextRetryAt = time.Now().Add(delay)
