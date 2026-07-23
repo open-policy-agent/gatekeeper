@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	apiversion "k8s.io/apimachinery/pkg/version"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -36,6 +39,9 @@ type InstalledPolicy struct {
 type Client interface {
 	// GatekeeperInstalled checks if Gatekeeper CRDs are installed.
 	GatekeeperInstalled(ctx context.Context) (bool, error)
+
+	// ServerVersion returns the cluster's Kubernetes version (e.g. "v1.30.2").
+	ServerVersion(ctx context.Context) (string, error)
 
 	// ListManagedTemplates lists all ConstraintTemplates managed by gator.
 	ListManagedTemplates(ctx context.Context) ([]InstalledPolicy, error)
@@ -67,7 +73,8 @@ type Client interface {
 
 // K8sClient implements Client using the Kubernetes API.
 type K8sClient struct {
-	dynamicClient dynamic.Interface
+	dynamicClient   dynamic.Interface
+	discoveryClient discovery.DiscoveryInterface
 }
 
 // NewK8sClient creates a new K8sClient using the default kubeconfig.
@@ -77,12 +84,7 @@ func NewK8sClient() (*K8sClient, error) {
 		return nil, fmt.Errorf("getting kubeconfig: %w", err)
 	}
 
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("creating dynamic client: %w", err)
-	}
-
-	return &K8sClient{dynamicClient: dynamicClient}, nil
+	return NewK8sClientWithConfig(config)
 }
 
 // NewK8sClientWithConfig creates a new K8sClient with the given config.
@@ -92,7 +94,17 @@ func NewK8sClientWithConfig(config *rest.Config) (*K8sClient, error) {
 		return nil, fmt.Errorf("creating dynamic client: %w", err)
 	}
 
-	return &K8sClient{dynamicClient: dynamicClient}, nil
+	c := &K8sClient{dynamicClient: dynamicClient}
+
+	// The discovery client powers only the Kubernetes-version compatibility gate
+	// (ServerVersion). If it can't be built, leave it nil rather than failing
+	// construction: operations that do not require compatibility information must
+	// keep working, and informational callers such as list/update tolerate failure.
+	if discoveryClient, derr := discovery.NewDiscoveryClientForConfig(config); derr == nil {
+		c.discoveryClient = discoveryClient
+	}
+
+	return c, nil
 }
 
 func getKubeConfig() (*rest.Config, error) {
@@ -120,6 +132,27 @@ func (c *K8sClient) GatekeeperInstalled(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("checking Gatekeeper installation: %w", err)
 	}
 	return true, nil
+}
+
+// ServerVersion returns the cluster's Kubernetes version (e.g. "v1.30.2").
+func (c *K8sClient) ServerVersion(ctx context.Context) (string, error) {
+	if c.discoveryClient == nil {
+		return "", fmt.Errorf("discovery client not configured")
+	}
+	// The discovery client's own ServerVersion() ignores context (it issues the
+	// request with context.TODO()), so a stalled /version call would outlive
+	// command cancellation and block every bounded install/upgrade. Issue the
+	// /version request directly through the REST client with Do(ctx) so the
+	// caller's context governs cancellation and timeout.
+	body, err := c.discoveryClient.RESTClient().Get().AbsPath("/version").Do(ctx).Raw()
+	if err != nil {
+		return "", fmt.Errorf("getting server version: %w", err)
+	}
+	var info apiversion.Info
+	if err := json.Unmarshal(body, &info); err != nil {
+		return "", fmt.Errorf("parsing server version: %w", err)
+	}
+	return info.GitVersion, nil
 }
 
 // ListManagedTemplates lists all ConstraintTemplates managed by gator.

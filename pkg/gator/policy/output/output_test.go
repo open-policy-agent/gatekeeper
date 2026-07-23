@@ -64,9 +64,53 @@ func TestTablePrinter_PrintSearchResults(t *testing.T) {
 	assert.Contains(t, output, "NAME")
 	assert.Contains(t, output, "VERSION")
 	assert.Contains(t, output, "CATEGORY")
+	assert.Contains(t, output, "K8S VERSION")
 	assert.Contains(t, output, "DESCRIPTION")
 	assert.Contains(t, output, "k8srequiredlabels")
 	assert.Contains(t, output, "general")
+	// Policies with no k8s version constraints display the placeholder.
+	assert.Contains(t, output, "-")
+}
+
+func TestTablePrinter_PrintSearchResults_K8sVersionRange(t *testing.T) {
+	t.Parallel()
+	printer := &TablePrinter{}
+
+	tests := []struct {
+		name    string
+		result  SearchResult
+		wantCol string
+	}{
+		{
+			name:    "both min and max",
+			result:  SearchResult{Name: "p", Version: "v1.0.0", Category: "general", MinKubernetesVersion: "v1.21.0", MaxKubernetesVersion: "v1.30.0"},
+			wantCol: "v1.21.0 - v1.30.0",
+		},
+		{
+			name:    "min only",
+			result:  SearchResult{Name: "p", Version: "v1.0.0", Category: "general", MinKubernetesVersion: "v1.21.0"},
+			wantCol: ">=v1.21.0",
+		},
+		{
+			name:    "max only",
+			result:  SearchResult{Name: "p", Version: "v1.0.0", Category: "general", MaxKubernetesVersion: "v1.30.0"},
+			wantCol: "<=v1.30.0",
+		},
+		{
+			name:    "neither",
+			result:  SearchResult{Name: "p", Version: "v1.0.0", Category: "general"},
+			wantCol: "-",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := printer.PrintSearchResults(&buf, []SearchResult{tt.result})
+			require.NoError(t, err)
+			assert.Contains(t, buf.String(), tt.wantCol)
+		})
+	}
 }
 
 func TestTablePrinter_PrintSearchResults_TruncatesLongDescription(t *testing.T) {
@@ -117,13 +161,19 @@ func TestJSONPrinter_PrintSearchResults(t *testing.T) {
 	var buf bytes.Buffer
 
 	results := []SearchResult{
-		{Name: "k8srequiredlabels", Version: "v1.2.0", Category: "general", Description: "Requires labels"},
+		{
+			Name:                 "k8srequiredlabels",
+			Version:              "v1.2.0",
+			Category:             "general",
+			Description:          "Requires labels",
+			MinKubernetesVersion: "v1.21.0",
+			MaxKubernetesVersion: "v1.30.0",
+		},
 	}
 
 	err := printer.PrintSearchResults(&buf, results)
 	require.NoError(t, err)
 
-	// Verify JSON is valid and contains apiVersion
 	var output struct {
 		APIVersion string         `json:"apiVersion"`
 		Results    []SearchResult `json:"results"`
@@ -133,6 +183,8 @@ func TestJSONPrinter_PrintSearchResults(t *testing.T) {
 	assert.Equal(t, JSONOutputVersion, output.APIVersion)
 	assert.Len(t, output.Results, 1)
 	assert.Equal(t, "k8srequiredlabels", output.Results[0].Name)
+	assert.Equal(t, "v1.21.0", output.Results[0].MinKubernetesVersion)
+	assert.Equal(t, "v1.30.0", output.Results[0].MaxKubernetesVersion)
 }
 
 func TestNewPrinter(t *testing.T) {
@@ -167,6 +219,7 @@ func TestTablePrinter_PrintInstallResult(t *testing.T) {
 			{Name: "policy2", Version: "v2.0.0"},
 		},
 		Skipped:              []string{"policy3"},
+		Incompatible:         []SkippedEntry{{Name: "policy4", Reason: "cluster Kubernetes version v1.20.0 is outside the supported range >=v1.21.0"}},
 		TemplatesInstalled:   2,
 		ConstraintsInstalled: 1,
 	}
@@ -181,6 +234,10 @@ func TestTablePrinter_PrintInstallResult(t *testing.T) {
 	assert.Contains(t, output, "policy3")
 	assert.Contains(t, output, "already installed")
 	assert.Contains(t, output, "2 templates")
+	// Incompatible policies are rendered with their skip reason.
+	assert.Contains(t, output, "policy4")
+	assert.Contains(t, output, "skipped")
+	assert.Contains(t, output, "v1.20.0")
 }
 
 func TestTablePrinter_PrintInstallResult_DryRun(t *testing.T) {
@@ -237,6 +294,7 @@ func TestTablePrinter_PrintUpgradeResult(t *testing.T) {
 			{Name: "policy1", FromVersion: "v1.0.0", ToVersion: "v2.0.0"},
 		},
 		AlreadyCurrent: []string{"policy2"},
+		Incompatible:   []SkippedEntry{{Name: "policy3", Reason: "cluster Kubernetes version v1.20.0 is outside the supported range >=v1.31.0"}},
 	}
 
 	err := printer.PrintUpgradeResult(&buf, result)
@@ -248,6 +306,10 @@ func TestTablePrinter_PrintUpgradeResult(t *testing.T) {
 	assert.Contains(t, output, "v2.0.0")
 	assert.Contains(t, output, "policy2")
 	assert.Contains(t, output, "already at latest")
+	// Incompatible upgrades are rendered with their skip reason.
+	assert.Contains(t, output, "policy3")
+	assert.Contains(t, output, "skipped")
+	assert.Contains(t, output, "v1.31.0")
 }
 
 func TestJSONPrinter_PrintInstallResult(t *testing.T) {

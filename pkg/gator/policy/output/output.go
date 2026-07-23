@@ -3,6 +3,8 @@ package output
 import (
 	"fmt"
 	"io"
+
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/client"
 )
 
 // Format represents the output format type.
@@ -25,21 +27,29 @@ type PolicyInfo struct {
 
 // SearchResult represents a policy search result for output.
 type SearchResult struct {
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Category    string `json:"category"`
-	Description string `json:"description"`
+	Name                 string `json:"name"`
+	Version              string `json:"version"`
+	Category             string `json:"category"`
+	Description          string `json:"description"`
+	MinKubernetesVersion string `json:"minKubernetesVersion,omitempty"`
+	MaxKubernetesVersion string `json:"maxKubernetesVersion,omitempty"`
 }
 
 // InstallResult represents the result of an install operation for output.
 type InstallResult struct {
 	Installed            []InstallEntry `json:"installed,omitempty"`
 	Skipped              []string       `json:"skipped,omitempty"`
+	Incompatible         []SkippedEntry `json:"incompatible,omitempty"`
 	Failed               []FailedEntry  `json:"failed,omitempty"`
 	TemplatesInstalled   int            `json:"templatesInstalled"`
 	ConstraintsInstalled int            `json:"constraintsInstalled"`
 	DryRun               bool           `json:"dryRun"`
 }
+
+// SkippedEntry represents a policy that was skipped along with the reason. It
+// aliases client.IncompatibleEntry so the client result maps straight onto the
+// output result without a field-by-field copy.
+type SkippedEntry = client.IncompatibleEntry
 
 // InstallEntry represents a single installed policy.
 type InstallEntry struct {
@@ -68,6 +78,7 @@ type UpgradeResult struct {
 	AlreadyCurrent []string       `json:"alreadyCurrent,omitempty"`
 	NotInstalled   []string       `json:"notInstalled,omitempty"`
 	NotFound       []string       `json:"notFound,omitempty"`
+	Incompatible   []SkippedEntry `json:"incompatible,omitempty"`
 	Failed         []FailedEntry  `json:"failed,omitempty"`
 	DryRun         bool           `json:"dryRun"`
 }
