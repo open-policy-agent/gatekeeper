@@ -1,0 +1,15 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: scaffoldpolicy
+spec:
+  crd:
+    spec:
+      names:
+        kind: ScaffoldPolicy
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: ""
