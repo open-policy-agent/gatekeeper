@@ -677,6 +677,8 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
 			status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("cannot generate ValidatingAdmissionPolicyBinding: %s", ErrVAPConditionsNotSatisfied)})
 			shouldGenerateVAPB = false
+		default:
+			cleanEnforcementPointStatusWithState(status, util.VAPEnforcementPoint, ErrGenerateVAPBState)
 		}
 	}
 
@@ -1030,6 +1032,15 @@ func updateEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodS
 func cleanEnforcementPointStatus(status *constraintstatusv1beta1.ConstraintPodStatus, enforcementPoint string) {
 	for i, ep := range status.Status.EnforcementPointsStatus {
 		if ep.EnforcementPoint == enforcementPoint {
+			status.Status.EnforcementPointsStatus = append(status.Status.EnforcementPointsStatus[:i], status.Status.EnforcementPointsStatus[i+1:]...)
+			return
+		}
+	}
+}
+
+func cleanEnforcementPointStatusWithState(status *constraintstatusv1beta1.ConstraintPodStatus, enforcementPoint, state string) {
+	for i, ep := range status.Status.EnforcementPointsStatus {
+		if ep.EnforcementPoint == enforcementPoint && ep.State == state {
 			status.Status.EnforcementPointsStatus = append(status.Status.EnforcementPointsStatus[:i], status.Status.EnforcementPointsStatus[i+1:]...)
 			return
 		}

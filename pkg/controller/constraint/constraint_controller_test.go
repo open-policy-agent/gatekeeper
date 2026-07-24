@@ -1324,6 +1324,49 @@ func TestManageVAPB_RegoOnlyTemplateSkipsVAPAPIDisabledError(t *testing.T) {
 	if len(writer.updatedObjects) != 1 {
 		t.Fatalf("expected stable status to skip a second update, got %d updates", len(writer.updatedObjects))
 	}
+
+	celCT := &templatesv1beta1.ConstraintTemplate{}
+	if err := scheme.Convert(makeTemplateWithCELEngine(nil), celCT, nil); err != nil {
+		t.Fatal(err)
+	}
+	reader, ok := r.reader.(*fakeReader)
+	if !ok {
+		t.Fatalf("expected fake reader, got %T", r.reader)
+	}
+	reader.objects[types.NamespacedName{Name: "testkind"}] = celCT
+
+	oldStatus = status.Status.DeepCopy()
+	status.Status.Errors = nil
+	if _, err := r.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil {
+		t.Fatalf("CEL-eligible manageVAPB returned unexpected error: %v", err)
+	}
+	apiError := fmt.Sprintf("cannot generate ValidatingAdmissionPolicyBinding: %s", ErrValidatingAdmissionPolicyAPIDisabled)
+	if len(status.Status.Errors) != 1 || status.Status.Errors[0].Message != apiError {
+		t.Fatalf("expected VAP API error %q, got %v", apiError, status.Status.Errors)
+	}
+	for _, ep := range status.Status.EnforcementPointsStatus {
+		if ep.EnforcementPoint == util.VAPEnforcementPoint {
+			t.Fatalf("expected stale missing-CEL enforcement point status to be removed, got %#v", ep)
+		}
+	}
+	if err := r.persistPodStatus(context.Background(), status, oldStatus); err != nil {
+		t.Fatalf("persisting CEL-eligible status returned unexpected error: %v", err)
+	}
+	if len(writer.updatedObjects) != 2 {
+		t.Fatalf("expected one update for the Rego-to-CEL transition, got %d total updates", len(writer.updatedObjects))
+	}
+
+	oldStatus = status.Status.DeepCopy()
+	status.Status.Errors = nil
+	if _, err := r.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil {
+		t.Fatalf("stable CEL-eligible manageVAPB returned unexpected error: %v", err)
+	}
+	if err := r.persistPodStatus(context.Background(), status, oldStatus); err != nil {
+		t.Fatalf("persisting stable CEL-eligible status returned unexpected error: %v", err)
+	}
+	if len(writer.updatedObjects) != 2 {
+		t.Fatalf("expected stable CEL-eligible status to skip another update, got %d total updates", len(writer.updatedObjects))
+	}
 }
 
 func TestManageVAPB_VAPAPIDisabledStatusIsIdempotent(t *testing.T) {

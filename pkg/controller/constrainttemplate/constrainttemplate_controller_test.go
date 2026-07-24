@@ -161,10 +161,8 @@ func newUnitReconciler(t *testing.T, objects ...client.Object) (*ReconcileConstr
 	)
 	tracker := readiness.NewTracker(trackingClient, false, false, false)
 	trackerCtx, cancelTracker := context.WithCancel(context.Background())
-	t.Cleanup(cancelTracker)
-	go func() {
-		_ = tracker.Run(trackerCtx)
-	}()
+	cancelTracker()
+	require.NoError(t, tracker.Run(trackerCtx))
 	return &ReconcileConstraintTemplate{
 		Client:   trackingClient,
 		scheme:   scheme,
