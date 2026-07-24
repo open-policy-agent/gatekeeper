@@ -89,14 +89,40 @@ You can alter the variables in `charts/gatekeeper/values.yaml` to customize your
 
 ### Configuring Pod Annotations for Cluster Autoscaler
 
-If you are using the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler), you may want to allow downscaling of nodes running Gatekeeper pods. Since the Gatekeeper audit pod uses an `emptyDir` volume for `/tmp/audit`, the Cluster Autoscaler will block node downscaling by default.
+If you are using the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler), you may want to allow downscaling of nodes running Gatekeeper pods. Since the Gatekeeper audit pod uses an `emptyDir` volume named `tmp-volume` for `/tmp/audit`, the Cluster Autoscaler will block node downscaling by default.
 
 To enable safe eviction for the audit pod, you can pass the `safe-to-evict` pod annotation via Helm:
 
 ```sh
-helm install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system --create-namespace \
-    --set-string auditPodAnnotations."cluster-autoscaler\.kubernetes\.io/safe-to-evict"="true"
+helm upgrade --install gatekeeper gatekeeper/gatekeeper \
+    --namespace gatekeeper-system \
+    --create-namespace \
+    --set-string \
+    'auditPodAnnotations.cluster-autoscaler\.kubernetes\.io/safe-to-evict-local-volumes=tmp-volume'
 ```
+
+:::warning
+When violation export is enabled with exportBackend=disk, the audit pod has
+another local volume, named `tmp-violations` by default. It contains audit
+results being handed from Gatekeeper to the export sidecar. Do not include
+this volume in safe-to-evict-local-volumes unless losing incomplete or
+unconsumed export files during pod eviction is acceptable.
+
+To explicitly allow eviction despite both local volumes:
+
+```sh
+helm upgrade --install gatekeeper gatekeeper/gatekeeper \
+    --namespace gatekeeper-system \
+    --create-namespace \
+    --set enableViolationExport=true \
+    --set exportBackend=disk \
+    --set-string \
+    'auditPodAnnotations.cluster-autoscaler\.kubernetes\.io/safe-to-evict-local-volumes=tmp-volume\,tmp-violations'
+```
+
+If `audit.exportVolume.name` is customized, use that volume name instead of
+`tmp-violations`.
+:::
 
 ## Uninstallation
 
