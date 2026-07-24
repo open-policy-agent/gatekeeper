@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	admissionv1 "k8s.io/api/admissionregistration/v1"
@@ -23,7 +24,39 @@ const (
 	DefaultFailurePolicyForK8sNativeValidationUsage = "(beta) Failure policy to use when a K8sNativeValidation source omits failurePolicy. Allowed values are Fail or Ignore."
 )
 
-var DefaultFailurePolicyForK8sNativeValidation = flag.String(DefaultFailurePolicyForK8sNativeValidationFlag, DefaultFailurePolicyForK8sNativeValidationDefault, DefaultFailurePolicyForK8sNativeValidationUsage)
+type synchronizedStringFlag struct {
+	mu    sync.RWMutex
+	value string
+}
+
+func registerSynchronizedStringFlag(name, value, usage string) *synchronizedStringFlag {
+	flagValue := &synchronizedStringFlag{value: value}
+	flag.Var(flagValue, name, usage)
+	return flagValue
+}
+
+func (f *synchronizedStringFlag) String() string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.value
+}
+
+func (f *synchronizedStringFlag) Set(value string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.value = value
+	return nil
+}
+
+func (f *synchronizedStringFlag) Get() any {
+	return f.String()
+}
+
+var defaultFailurePolicyForK8sNativeValidation = registerSynchronizedStringFlag(
+	DefaultFailurePolicyForK8sNativeValidationFlag,
+	DefaultFailurePolicyForK8sNativeValidationDefault,
+	DefaultFailurePolicyForK8sNativeValidationUsage,
+)
 
 const (
 	// Name is the name of the driver.
@@ -209,55 +242,64 @@ func (in *Source) GetMessageExpressions() ([]cel.ExpressionAccessor, error) {
 }
 
 func (in *Source) GetFailurePolicy() (*admissionv1.FailurePolicyType, error) {
-	failurePolicy := in.FailurePolicy
-	if failurePolicy == nil {
-		failurePolicy = DefaultFailurePolicyForK8sNativeValidation
+	var failurePolicy string
+	if in.FailurePolicy == nil {
+		failurePolicy = GetDefaultFailurePolicyForK8sNativeValidation()
+	} else {
+		failurePolicy = *in.FailurePolicy
 	}
 
 	var out admissionv1.FailurePolicyType
 
-	switch *failurePolicy {
+	switch failurePolicy {
 	case string(admissionv1.Fail):
 		out = admissionv1.Fail
 	case string(admissionv1.Ignore):
 		out = admissionv1.Ignore
 	default:
-		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *failurePolicy)
+		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, failurePolicy)
 	}
 
 	return &out, nil
 }
 
 func (in *Source) GetV1Beta1FailurePolicy() (*admissionv1beta1.FailurePolicyType, error) {
-	failurePolicy := in.FailurePolicy
-	if failurePolicy == nil {
-		failurePolicy = DefaultFailurePolicyForK8sNativeValidation
+	var failurePolicy string
+	if in.FailurePolicy == nil {
+		failurePolicy = GetDefaultFailurePolicyForK8sNativeValidation()
+	} else {
+		failurePolicy = *in.FailurePolicy
 	}
 
 	var out admissionv1beta1.FailurePolicyType
 
-	switch *failurePolicy {
+	switch failurePolicy {
 	case string(admissionv1.Fail):
 		out = admissionv1beta1.Fail
 	case string(admissionv1.Ignore):
 		out = admissionv1beta1.Ignore
 	default:
-		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, *failurePolicy)
+		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", ErrBadFailurePolicy, failurePolicy)
 	}
 
 	return &out, nil
 }
 
+// GetDefaultFailurePolicyForK8sNativeValidation returns the default failure policy for K8sNativeValidation sources.
+func GetDefaultFailurePolicyForK8sNativeValidation() string {
+	return defaultFailurePolicyForK8sNativeValidation.String()
+}
+
 func ValidateDefaultFailurePolicyForK8sNativeValidation() error {
-	return validateFailurePolicy(DefaultFailurePolicyForK8sNativeValidation)
+	failurePolicy := GetDefaultFailurePolicyForK8sNativeValidation()
+	return validateFailurePolicy(&failurePolicy)
 }
 
 func SetDefaultFailurePolicyForK8sNativeValidation(failurePolicy string) error {
 	if err := validateFailurePolicy(&failurePolicy); err != nil {
 		return err
 	}
-	*DefaultFailurePolicyForK8sNativeValidation = failurePolicy
-	return nil
+	return defaultFailurePolicyForK8sNativeValidation.Set(failurePolicy)
 }
 
 func validateFailurePolicy(failurePolicy *string) error {

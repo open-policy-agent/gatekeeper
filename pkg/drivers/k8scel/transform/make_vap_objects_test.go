@@ -244,8 +244,12 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 }
 
 func TestTemplateToPolicyDefinitionFailurePolicy(t *testing.T) {
-	original := *schema.DefaultFailurePolicyForK8sNativeValidation
-	t.Cleanup(func() { *schema.DefaultFailurePolicyForK8sNativeValidation = original })
+	original := schema.GetDefaultFailurePolicyForK8sNativeValidation()
+	t.Cleanup(func() {
+		if err := schema.SetDefaultFailurePolicyForK8sNativeValidation(original); err != nil {
+			t.Errorf("restoring default K8sNativeValidation failure policy: %v", err)
+		}
+	})
 
 	tests := []struct {
 		name                 string
@@ -292,7 +296,9 @@ func TestTemplateToPolicyDefinitionFailurePolicy(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			*schema.DefaultFailurePolicyForK8sNativeValidation = test.defaultFailurePolicy
+			if err := schema.SetDefaultFailurePolicyForK8sNativeValidation(test.defaultFailurePolicy); err != nil {
+				t.Fatalf("setting default K8sNativeValidation failure policy: %v", err)
+			}
 
 			source := &schema.Source{
 				FailurePolicy: test.sourceFailurePolicy,
