@@ -1,7 +1,7 @@
 # Image URL to use all building/pushing image targets
-REPOSITORY ?= openpolicyagent/gatekeeper
-CRD_REPOSITORY ?= openpolicyagent/gatekeeper-crds
-GATOR_REPOSITORY ?= openpolicyagent/gator
+REPOSITORY ?= docker.io/openpolicyagent/gatekeeper
+CRD_REPOSITORY ?= docker.io/openpolicyagent/gatekeeper-crds
+GATOR_REPOSITORY ?= docker.io/openpolicyagent/gator
 
 GHCR_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper
 GHCR_CRD_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper-crds
@@ -56,9 +56,12 @@ HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
 	--set audit.channel=${AUDIT_CHANNEL} \
 	--set exportBackend=${EXPORT_BACKEND} \
 
-HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
+HELM_EXTRA_ARGS := --set image.registry=null \
+	--set image.repository=${HELM_REPO} \
+	--set image.crdRegistry=null \
 	--set image.crdRepository=${HELM_CRD_REPO} \
 	--set image.release=${HELM_RELEASE} \
+	--set postInstall.labelNamespace.image.registry=null \
 	--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
 	--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 	--set postInstall.labelNamespace.enabled=true \
