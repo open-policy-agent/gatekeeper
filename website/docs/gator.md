@@ -228,6 +228,8 @@ metadata:
 
 :::note
 Flag `enable-k8s-native-validation` enables ConstraintTemplate containing "validating admission policy styled CEL". By default, this flag is enabled and set to `true`.
+
+Flag `default-k8s-native-validation-failure-policy` sets the default failure policy for K8sNativeValidation sources that omit `failurePolicy`. It defaults to `Fail` and accepts `Fail` or `Ignore`; set it to match Gatekeeper's runtime default when testing policies shift-left.
 :::
 
 #### Specifying inputs
@@ -318,6 +320,8 @@ gator test --filename=manifests-and-policies/ --output=json
 
 :::note
 Flag `enable-k8s-native-validation` enables ConstraintTemplate containing "validating admission policy styled CEL". By default, this flag is enabled and set to `true`.
+
+Flag `default-k8s-native-validation-failure-policy` sets the default failure policy for K8sNativeValidation sources that omit `failurePolicy`. It defaults to `Fail` and accepts `Fail` or `Ignore`; set it to match Gatekeeper's runtime default when verifying policies shift-left.
 :::
 
 ### Writing Test Suites

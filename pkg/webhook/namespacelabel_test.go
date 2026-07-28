@@ -3,6 +3,8 @@ package webhook
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"sort"
 	"testing"
 
 	admissionv1 "k8s.io/api/admission/v1"
@@ -493,5 +495,35 @@ func TestGetAllExemptedNamespacesWithWildcard(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestGetAllExemptedNamespacesWithWildcardSorted ensures the returned slice is deterministically sorted.
+func TestGetAllExemptedNamespacesWithWildcardSorted(t *testing.T) {
+	origExemptNamespace := exemptNamespace
+	origExemptNamespacePrefix := exemptNamespacePrefix
+	origExemptNamespaceSuffix := exemptNamespaceSuffix
+	defer func() {
+		exemptNamespace = origExemptNamespace
+		exemptNamespacePrefix = origExemptNamespacePrefix
+		exemptNamespaceSuffix = origExemptNamespaceSuffix
+	}()
+
+	exemptNamespace = map[string]bool{"zeta": true, "alpha": true, "kube-system": true}
+	exemptNamespacePrefix = map[string]bool{"openshift-": true, "dev-": true}
+	exemptNamespaceSuffix = map[string]bool{"-system": true, "-prod": true}
+
+	want := []string{"*-prod", "*-system", "alpha", "dev-*", "kube-system", "openshift-*", "zeta"}
+
+	// Call repeatedly: map iteration order varies between calls, so a single
+	// pass could pass by luck even without the sort.
+	for i := 0; i < 20; i++ {
+		got := GetAllExemptedNamespacesWithWildcard()
+		if !sort.StringsAreSorted(got) {
+			t.Fatalf("GetAllExemptedNamespacesWithWildcard returned unsorted slice: %v", got)
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("GetAllExemptedNamespacesWithWildcard = %v, want %v", got, want)
+		}
 	}
 }

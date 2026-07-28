@@ -243,6 +243,131 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 	}
 }
 
+func TestTemplateToPolicyDefinitionFailurePolicy(t *testing.T) {
+	original := schema.GetDefaultFailurePolicyForK8sNativeValidation()
+	t.Cleanup(func() {
+		if err := schema.SetDefaultFailurePolicyForK8sNativeValidation(original); err != nil {
+			t.Errorf("restoring default K8sNativeValidation failure policy: %v", err)
+		}
+	})
+
+	tests := []struct {
+		name                 string
+		defaultFailurePolicy string
+		sourceFailurePolicy  *string
+		want                 admissionregistrationv1beta1.FailurePolicyType
+	}{
+		{
+			name:                 "omitted policy uses Fail default",
+			defaultFailurePolicy: string(admissionregistrationv1.Fail),
+			want:                 admissionregistrationv1beta1.Fail,
+		},
+		{
+			name:                 "omitted policy uses Ignore default",
+			defaultFailurePolicy: string(admissionregistrationv1.Ignore),
+			want:                 admissionregistrationv1beta1.Ignore,
+		},
+		{
+			name:                 "explicit Fail overrides Ignore default",
+			defaultFailurePolicy: string(admissionregistrationv1.Ignore),
+			sourceFailurePolicy:  ptr.To(string(admissionregistrationv1.Fail)),
+			want:                 admissionregistrationv1beta1.Fail,
+		},
+		{
+			name:                 "explicit Ignore overrides Fail default",
+			defaultFailurePolicy: string(admissionregistrationv1.Fail),
+			sourceFailurePolicy:  ptr.To(string(admissionregistrationv1.Ignore)),
+			want:                 admissionregistrationv1beta1.Ignore,
+		},
+	}
+
+	webhookConfig := &webhookconfigcache.WebhookMatchingConfig{
+		Rules: []admissionregistrationv1.RuleWithOperations{
+			{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+				Rule: admissionregistrationv1.Rule{
+					APIGroups:   []string{"*"},
+					APIVersions: []string{"*"},
+					Resources:   []string{"*"},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := schema.SetDefaultFailurePolicyForK8sNativeValidation(test.defaultFailurePolicy); err != nil {
+				t.Fatalf("setting default K8sNativeValidation failure policy: %v", err)
+			}
+
+			source := &schema.Source{
+				FailurePolicy: test.sourceFailurePolicy,
+				Validations: []schema.Validation{
+					{
+						Expression: "true",
+						Message:    "always passes",
+					},
+				},
+			}
+			rawSrc := source.MustToUnstructured()
+			template := &templates.ConstraintTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "somepolicy"},
+				Spec: templates.ConstraintTemplateSpec{
+					CRD: templates.CRD{
+						Spec: templates.CRDSpec{
+							Names: templates.Names{
+								Kind: "SomePolicy",
+							},
+						},
+					},
+					Targets: []templates.Target{
+						{
+							Code: []templates.Code{
+								{
+									Engine: schema.Name,
+									Source: &templates.Anything{
+										Value: rawSrc,
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			constructors := []struct {
+				name string
+				call func() (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error)
+			}{
+				{
+					name: "default match configuration",
+					call: func() (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+						return TemplateToPolicyDefinition(template)
+					},
+				},
+				{
+					name: "synced webhook configuration",
+					call: func() (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+						return TemplateToPolicyDefinitionWithWebhookConfig(template, webhookConfig, nil, nil)
+					},
+				},
+			}
+
+			for _, constructor := range constructors {
+				t.Run(constructor.name, func(t *testing.T) {
+					policy, err := constructor.call()
+					if err != nil {
+						t.Fatalf("constructing policy returned an unexpected error: %v", err)
+					}
+					if policy.Spec.FailurePolicy == nil || *policy.Spec.FailurePolicy != test.want {
+						t.Fatalf("FailurePolicy = %v, want %s", policy.Spec.FailurePolicy, test.want)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 	baseSource := &schema.Source{
 		FailurePolicy: ptr.To[string]("Fail"),
@@ -879,6 +1004,59 @@ func TestConvertWebhookRulesToResourceRules(t *testing.T) {
 				}
 				if !reflect.DeepEqual(result[0].Resources, test.rules[0].Resources) {
 					t.Errorf("Resources mismatch: got %v, want %v", result[0].Resources, test.rules[0].Resources)
+				}
+			}
+		})
+	}
+}
+
+// TestConvertWebhookRulesToResourceRulesOperationOrder asserts operations are
+// emitted in canonical order (CREATE, UPDATE, DELETE, CONNECT).
+func TestConvertWebhookRulesToResourceRulesOperationOrder(t *testing.T) {
+	tests := []struct {
+		name     string
+		ruleOps  []admissionregistrationv1beta1.OperationType
+		ctOps    []admissionregistrationv1beta1.OperationType
+		expected []admissionregistrationv1beta1.OperationType
+	}{
+		{
+			name:     "intersection preserves canonical order",
+			ruleOps:  []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Delete, admissionregistrationv1beta1.Update, admissionregistrationv1beta1.Create},
+			ctOps:    []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Update, admissionregistrationv1beta1.Create},
+			expected: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+		},
+		{
+			name:     "wildcard rule intersected with all ops is canonical",
+			ruleOps:  []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+			ctOps:    []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+			expected: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update, admissionregistrationv1beta1.Delete, admissionregistrationv1beta1.Connect},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			rules := []admissionregistrationv1beta1.RuleWithOperations{
+				{
+					Operations: test.ruleOps,
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			}
+
+			// Repeat: set iteration order varies between calls.
+			for i := 0; i < 20; i++ {
+				result, err := convertWebhookRulesToResourceRules(rules, test.ctOps)
+				if err != nil && !errors.Is(err, ErrOperationMismatch) {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if len(result) != 1 {
+					t.Fatalf("expected 1 resource rule, got %d", len(result))
+				}
+				if !reflect.DeepEqual(result[0].Operations, test.expected) {
+					t.Fatalf("operations = %v, want %v", result[0].Operations, test.expected)
 				}
 			}
 		})
