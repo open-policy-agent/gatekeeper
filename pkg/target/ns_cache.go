@@ -34,7 +34,7 @@ func (c *nsCache) Add(key []string, object interface{}) error {
 
 	ns, err := toNamespace(u)
 	if err != nil {
-		return fmt.Errorf("%w: cannot cache Namespace: %v", ErrCachingType, err)
+		return fmt.Errorf("%w: cannot cache Namespace: %w", ErrCachingType, err)
 	}
 
 	c.AddNamespace(toKey(key), ns)
