@@ -124,6 +124,10 @@ For some policies, you may want admission requests to be handled by the K8s Vali
 The K8s Validating Admission Controller requires both the Validating Admission Policy (VAP) and Validating Admission Policy Binding (VAPB) resources to exist to enforce a policy. Gatekeeper can be configured to generate both of these resources. To generate VAP Bindings for all Constraints, ensure the Gatekeeper 
 `--default-create-vap-binding-for-constraints` flag is set to `true`. To generate VAP as part of all Constraint Templates with the VAP CEL engine `K8sNativeValidation`, ensure the Gatekeeper `--default-create-vap-for-templates=true` flag is set to `true`. By default both flags are set to `true` now that the feature is in beta.
 
+If a K8sNativeValidation source omits `failurePolicy`, Gatekeeper uses `--default-k8s-native-validation-failure-policy`, which defaults to `Fail`, for both Gatekeeper's CEL evaluation and generated VAP resources. An explicit `source.failurePolicy` takes precedence over this default. This is separate from `validatingWebhookFailurePolicy`, which controls how Kubernetes handles failures when calling Gatekeeper's validating webhook and does not set CEL or generated VAP failure policy defaults.
+
+When the Kubernetes API server cannot resolve the Constraint resource referenced by a generated VAP's `paramKind`, `failurePolicy: Fail` rejects matching requests. Clusters that need admission to remain available during transient bootstrap or resource-discovery failures can set `--default-k8s-native-validation-failure-policy=Ignore`, or set the Helm value `defaultK8sNativeValidationFailurePolicy: Ignore`. `Ignore` allows requests affected by policy configuration or evaluation errors; validations that evaluate to `false` continue to use the VAP binding's configured validation actions.
+
 To override the `--default-create-vap-for-templates` flag's behavior for a constraint template, set `generateVAP` to `true` explicitly under the K8sNativeValidation engine's `source` in the constraint template. 
 
 ```yaml
