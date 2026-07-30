@@ -18,6 +18,7 @@ DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
 ENABLE_EXPORT ?= false
+ENABLE_ADMISSION_EXPORT ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
@@ -45,15 +46,20 @@ HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true
 	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
 
-HELM_DISK_EXPORT_ARGS := --set audit.exportVolumeMount.path=${EXPORT_DISK_MOUNT} \
+HELM_DISK_EXPORT_ARGS = --set audit.exportVolumeMount.path=${EXPORT_DISK_MOUNT} \
 	--set audit.exportConnection.path=${EXPORT_DISK_PATH} \
 	--set audit.exportConnection.maxAuditResults=${MAX_AUDIT_RESULTS} \
 	--set audit.exportSidecar.image=${FAKE_READER_IMAGE} \
 	--set audit.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
 
+HELM_DISK_ADMISSION_EXPORT_ARGS = --set admission.disableExportSidecar=false \
+	--set admission.exportSidecar.image=${FAKE_READER_IMAGE} \
+	--set admission.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
+
 HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
 	--set audit.connection=${AUDIT_CONNECTION} \
 	--set audit.channel=${AUDIT_CHANNEL} \
+	--set enableAdmissionViolationExport=${ENABLE_ADMISSION_EXPORT} \
 	--set exportBackend=${EXPORT_BACKEND} \
 
 HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
@@ -296,13 +302,14 @@ e2e-helm-install:
 	./.staging/helm/linux-amd64/helm version --client
 
 e2e-helm-deploy: e2e-helm-install $(LOCALBIN)
-ifeq ($(ENABLE_EXPORT),true)
+ifneq ($(filter true,$(ENABLE_EXPORT) $(ENABLE_ADMISSION_EXPORT)),)
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait --timeout ${HELM_TIMEOUT} \
 		$(HELM_EXPORT_ARGS) \
-		$(if $(filter disk,$(EXPORT_BACKEND)),$(HELM_DISK_EXPORT_ARGS)) \
-		$(if $(filter dapr,$(EXPORT_BACKEND)),$(HELM_DAPR_EXPORT_ARGS)) \
+		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_EXPORT_ARGS)) \
+		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter dapr,$(EXPORT_BACKEND))),$(HELM_DAPR_EXPORT_ARGS)) \
+		$(if $(and $(filter true,$(ENABLE_ADMISSION_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_ADMISSION_EXPORT_ARGS)) \
 		$(HELM_EXTRA_ARGS)
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \

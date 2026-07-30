@@ -136,9 +136,10 @@ func (ks *kindSet) Write() error {
 				obj = strings.Replace(obj, "      labels:", "      labels:\n        {{- include \"gatekeeper.podLabels\" . | nindent 8 }}\n        {{- include \"controllerManager.podLabels\" . | nindent 8 }}\n        {{- include \"gatekeeper.commonLabels\" . | nindent 8 }}", 1)
 				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.controllerManager.priorityClassName }}\n      priorityClassName:  {{ .Values.controllerManager.priorityClassName }}\n      {{- end }}", 1)
 				// Inject extra volume mounts at the start of the volumeMounts section for stability
-				obj = strings.Replace(obj, "        volumeMounts:", "        volumeMounts:\n        {{- include \"gatekeeper.extraVolumeMounts\" . | nindent 8 }}", 1)
+				obj = strings.Replace(obj, "        volumeMounts:", "        volumeMounts:\n        {{- include \"gatekeeper.extraVolumeMounts\" . | nindent 8 }}\n        {{- if and .Values.enableAdmissionViolationExport (eq (.Values.exportBackend | default \"\" | lower) \"disk\") }}\n        - mountPath: {{ .Values.audit.exportVolumeMount.path }}\n          name: {{ .Values.audit.exportVolume.name }}\n        {{- end }}", 1)
+				obj = strings.Replace(obj, "      dnsPolicy:", "      {{- if and .Values.enableAdmissionViolationExport (eq (.Values.exportBackend | default \"\" | lower) \"disk\") (not .Values.admission.disableExportSidecar) }}\n      {{- $admissionSidecar := deepCopy .Values.admission.exportSidecar }}\n      {{- $_ := set $admissionSidecar \"volumeMounts\" (list (dict \"mountPath\" .Values.audit.exportVolumeMount.path \"name\" .Values.audit.exportVolume.name)) }}\n      - {{ toYaml $admissionSidecar | nindent 8 }}\n      {{- end }}\n      dnsPolicy:", 1)
 				// Inject extra volumes at the start of the volumes section for stability
-				obj = strings.Replace(obj, "      volumes:", "      volumes:\n      {{- include \"gatekeeper.extraVolumes\" . | nindent 6 }}", 1)
+				obj = strings.Replace(obj, "      volumes:", "      volumes:\n      {{- include \"gatekeeper.extraVolumes\" . | nindent 6 }}\n      {{- if and .Values.enableAdmissionViolationExport (eq (.Values.exportBackend | default \"\" | lower) \"disk\") }}\n      - {{- toYaml .Values.audit.exportVolume | nindent 8 }}\n      {{- end }}", 1)
 				obj = strings.Replace(obj, "        env:", "        env:\n        {{- include \"gatekeeper.extraEnvs\" . | nindent 8 }}\n        {{- include \"controllerManager.extraEnvs\" . | nindent 8 }}", 1)
 			}
 

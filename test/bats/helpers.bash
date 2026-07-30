@@ -154,3 +154,29 @@ total_violations() {
   fi
   [[ "${ct_total_violations}" -eq "${violations}" ]]
 }
+
+admission_violation_count() {
+  kubectl logs -n ${GATEKEEPER_NAMESPACE} -l control-plane=controller-manager -c admission-reader --tail=-1 | awk '/violation_admission/ && /denied-export-pod/ {count++} END {print count+0}'
+}
+
+admission_violation_count_greater_than() {
+  local previous_count="$1"
+  local current_count
+  current_count="$(admission_violation_count)"
+  [[ "${current_count}" -gt "${previous_count}" ]]
+}
+
+admission_export_connection_active() {
+  local connection="${AUDIT_CONNECTION:-audit}"
+  local ready_pods
+  ready_pods="$(kubectl get pods -n "${GATEKEEPER_NAMESPACE}" -l control-plane=controller-manager -ojson | jq '[.items[] | select(.status.phase == "Running") | select(any(.status.containerStatuses[]?; .name == "manager" and .ready == true)) | .metadata.name]')"
+  kubectl get connection "${connection}" -n "${GATEKEEPER_NAMESPACE}" -ojson | jq -e --argjson ready "${ready_pods}" '.metadata.generation as $generation | [.status.byPod[]? | select(.observedGeneration == $generation) | select((.operations // []) | index("webhook")) | select(((.connectionErrors // []) | length) == 0) | select(any(.publishStatuses[]?; .source == "webhook" and .active == true)) | .id] as $active | any($ready[]; . as $pod | $active | index($pod))'
+}
+
+admission_export_connection_ready() {
+  local connection="${AUDIT_CONNECTION:-audit}"
+  local ready_pods
+  ready_pods="$(kubectl get pods -n "${GATEKEEPER_NAMESPACE}" -l control-plane=controller-manager -ojson | jq '[.items[] | select(.status.phase == "Running") | select(any(.status.containerStatuses[]?; .name == "manager" and .ready == true)) | .metadata.name]')"
+  [[ "$(jq 'length' <<<"${ready_pods}")" -gt 0 ]] || return 1
+  kubectl get connection "${connection}" -n "${GATEKEEPER_NAMESPACE}" -ojson | jq -e --argjson ready "${ready_pods}" '.metadata.generation as $generation | [.status.byPod[]? | select(.observedGeneration == $generation) | select((.operations // []) | index("webhook")) | select(((.connectionErrors // []) | length) == 0) | .id] as $reconciled | ($ready - $reconciled | length) == 0'
+}
