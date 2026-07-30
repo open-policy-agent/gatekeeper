@@ -40,17 +40,9 @@ spec:
           status:
             description: No spec field is defined here, as this is a status-only resource.
             properties:
-              active:
-                description: Indicator for alive connection with at least one successful
-                  publish
-                type: boolean
-              connectionUID:
-                description: |-
-                  UID is a type that holds unique ID values, including UUIDs.  Because we
-                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                  intent and helps make sure that UIDs and names do not get conflated.
-                type: string
-              errors:
+              connectionErrors:
+                description: ConnectionErrors contains errors from creating or updating
+                  the Connection.
                 items:
                   properties:
                     message:
@@ -61,7 +53,14 @@ spec:
                   - message
                   - type
                   type: object
+                maxItems: 500
                 type: array
+              connectionUID:
+                description: |-
+                  UID is a type that holds unique ID values, including UUIDs.  Because we
+                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                  intent and helps make sure that UIDs and names do not get conflated.
+                type: string
               id:
                 description: ID is the unique identifier for the pod that wrote the
                   status
@@ -73,6 +72,57 @@ spec:
                 items:
                   type: string
                 type: array
+              publishStatuses:
+                description: PublishStatuses reports publishing health independently
+                  for each source.
+                items:
+                  description: ConnectionPublishStatus reports publishing health for
+                    one producer.
+                  properties:
+                    active:
+                      description: |-
+                        Active indicates that the source completed at least one publish in its
+                        latest reporting window.
+                      type: boolean
+                    errors:
+                      description: Errors contains publish failures reported by this
+                        source.
+                      items:
+                        properties:
+                          message:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                        - message
+                        - type
+                        type: object
+                      maxItems: 500
+                      type: array
+                    lastAttemptTime:
+                      description: LastAttemptTime is the most recent publish attempt
+                        represented by this status.
+                      format: date-time
+                      type: string
+                    lastSuccessTime:
+                      description: LastSuccessTime is the most recent successful publish
+                        by this source.
+                      format: date-time
+                      type: string
+                    source:
+                      description: Source identifies the producer that owns this status.
+                      enum:
+                      - audit
+                      - webhook
+                      type: string
+                  required:
+                  - source
+                  type: object
+                maxItems: 2
+                type: array
+                x-kubernetes-list-map-keys:
+                - source
+                x-kubernetes-list-type: map
             type: object
         type: object
     served: true
