@@ -1,6 +1,7 @@
 package disk
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -30,14 +31,18 @@ func (r *Writer) closeAndRemoveFiles(conn *Connection) error {
 	return cleanup(conn)
 }
 
+// closeFileWithBackoff closes Connection-owned files without deleting the path.
+// Admission records are finalized because another Connection or cleanup may own
+// the shared path after this call returns.
 func closeFileWithBackoff(conn *Connection, backoff wait.Backoff) error {
-	if conn.File == nil {
+	conn.stopAdmissionCleanup()
+	if !conn.hasOpenFiles() {
 		return nil
 	}
 	var lastErr error
 	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
-		if err := conn.unlockAndCloseFile(); err != nil {
-			lastErr = fmt.Errorf("error closing file: %w", err)
+		if err := closeConnectionFiles(conn, true); err != nil {
+			lastErr = fmt.Errorf("error closing files: %w", err)
 			return false, nil
 		}
 		conn.File = nil
@@ -53,12 +58,15 @@ func closeFileWithBackoff(conn *Connection, backoff wait.Backoff) error {
 	return nil
 }
 
+// closeAndRemoveFilesWithBackoff closes resources without finalizing the
+// admission stream because the entire Connection path is removed immediately.
 func closeAndRemoveFilesWithBackoff(conn *Connection, backoff wait.Backoff, removeAll func(string) error) error {
+	conn.stopAdmissionCleanup()
 	var lastErr error
 	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
-		if conn.File != nil {
-			if err := conn.unlockAndCloseFile(); err != nil {
-				lastErr = fmt.Errorf("error closing file: %w", err)
+		if conn.hasOpenFiles() {
+			if err := closeConnectionFiles(conn, false); err != nil {
+				lastErr = fmt.Errorf("error closing files: %w", err)
 				return false, nil
 			}
 			conn.File = nil
@@ -79,13 +87,24 @@ func closeAndRemoveFilesWithBackoff(conn *Connection, backoff wait.Backoff, remo
 	return nil
 }
 
+// closeConnectionFiles attempts both audit and admission cleanup so failure in
+// one file type does not prevent releasing the other.
+func closeConnectionFiles(conn *Connection, finalizeAdmission bool) error {
+	var auditErr error
+	if conn.File != nil {
+		auditErr = conn.unlockAndCloseFile()
+	}
+	return errors.Join(auditErr, conn.closeAdmissionStream(finalizeAdmission))
+}
+
 func (r *Writer) pathCleanupInProgressLocked(cleanupPath string) bool {
 	_, exists := r.cleanupPaths[cleanupPath]
 	return exists
 }
 
 func (r *Writer) pathInUseLocked(cleanupPath string) bool {
-	for _, conn := range r.openConnections {
+	for name := range r.openConnections {
+		conn := r.openConnections[name]
 		if conn.Path == cleanupPath {
 			return true
 		}
@@ -93,8 +112,23 @@ func (r *Writer) pathInUseLocked(cleanupPath string) bool {
 	return false
 }
 
+// pathOwnedByFailedConnectionLocked prevents reuse while failed cleanup still
+// owns an open descriptor on the path. Callers must hold r.mu.
+func (r *Writer) pathOwnedByFailedConnectionLocked(path string) bool {
+	for name := range r.closedConnections {
+		failedConn := r.closedConnections[name]
+		if failedConn.Path == path && failedConn.hasOpenFiles() {
+			return true
+		}
+	}
+	return false
+}
+
+// pathInUseByOtherConnectionLocked reports whether deleting cleanupPath would
+// affect another active Connection. Callers must hold r.mu.
 func (r *Writer) pathInUseByOtherConnectionLocked(connectionName string, cleanupPath string) bool {
-	for name, conn := range r.openConnections {
+	for name := range r.openConnections {
+		conn := r.openConnections[name]
 		if name != connectionName && conn.Path == cleanupPath {
 			return true
 		}
@@ -125,6 +159,8 @@ func (r *Writer) markCleanupPathLocked(cleanupPath string) {
 	r.cleanupPaths[cleanupPath] = struct{}{}
 }
 
+// reserveCleanupPathLocked gives one cleanup or migration exclusive permission
+// to mutate cleanupPath. Callers must hold r.mu.
 func (r *Writer) reserveCleanupPathLocked(cleanupPath string) bool {
 	if r.pathInUseLocked(cleanupPath) || r.pathCleanupInProgressLocked(cleanupPath) {
 		return false
@@ -166,13 +202,16 @@ func (r *Writer) retryFailedConnections() {
 	var toRemove []string
 	var toRetry []string
 
-	for name, failedConn := range r.closedConnections {
+	for name := range r.closedConnections {
+		failedConn := r.closedConnections[name]
+		// Entries that still own file descriptors are retained regardless of TTL
+		// or retry count; dropping them would lose the only cleanup owner.
 		// A failed connection past its TTL is dropped, with one exception: if it
 		// has never been retried (RetryCount == 0) and its first retry is now due,
 		// allow that single attempt before giving up. Connections that have already
 		// been retried, or whose first retry is not yet due, are removed once expired.
 		expired := now.Sub(failedConn.FailedAt) > failedConn.ClosedConnectionTTL
-		if expired && (failedConn.RetryCount > 0 || now.Before(failedConn.NextRetryAt)) {
+		if expired && !failedConn.hasOpenFiles() && (failedConn.RetryCount > 0 || now.Before(failedConn.NextRetryAt)) {
 			log.Info("Removing expired failed connection", "connection", name, "age", now.Sub(failedConn.FailedAt))
 			toRemove = append(toRemove, name)
 			continue
@@ -182,7 +221,7 @@ func (r *Writer) retryFailedConnections() {
 			continue
 		}
 
-		if failedConn.RetryCount >= maxRetryAttempts {
+		if failedConn.RetryCount >= maxRetryAttempts && !failedConn.hasOpenFiles() {
 			log.Info("Max retry attempts exceeded for failed connection", "connection", name, "attempts", failedConn.RetryCount)
 			toRemove = append(toRemove, name)
 			continue
@@ -204,6 +243,8 @@ func (r *Writer) retryFailedConnections() {
 	for _, name := range toRetry {
 		failedConn := r.closedConnections[name]
 		if r.pathInUseLocked(failedConn.Path) {
+			// The active Connection owns the directory, so retry only descriptor
+			// cleanup and never remove the shared path.
 			items = append(items, retryItem{name: name, conn: failedConn, closeOnly: true})
 			continue
 		}
@@ -216,6 +257,8 @@ func (r *Writer) retryFailedConnections() {
 		}
 		items = append(items, retryItem{name: name, conn: failedConn})
 	}
+	// Path reservations remain recorded while slow filesystem retries execute
+	// outside the global mutex.
 	r.mu.Unlock()
 
 	type retryResult struct {

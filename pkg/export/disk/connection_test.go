@@ -469,9 +469,6 @@ func TestUpdateConnectionKeepsConnectionVisibleDuringPathCleanup(t *testing.T) {
 func TestUpdateConnectionProtectsTargetPathFromConcurrentCleanup(t *testing.T) {
 	oldPath := t.TempDir()
 	newPath := t.TempDir()
-
-	// Marker file in the target path; a cleanup that races the update must not
-	// remove it while the update holds the reservation.
 	marker := path.Join(newPath, "marker")
 	if err := os.WriteFile(marker, []byte("x"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -482,19 +479,13 @@ func TestUpdateConnectionProtectsTargetPathFromConcurrentCleanup(t *testing.T) {
 	var cleanupStartedOnce sync.Once
 	var allowCleanupOnce sync.Once
 	releaseCleanup := func() {
-		allowCleanupOnce.Do(func() {
-			close(allowCleanup)
-		})
+		allowCleanupOnce.Do(func() { close(allowCleanup) })
 	}
 	defer releaseCleanup()
 
 	writer := newTestWriter(func(conn *Connection) error {
-		// Pause while the update removes the old path so the test can race a
-		// cleanup of the reserved target path.
 		if conn.Path == oldPath {
-			cleanupStartedOnce.Do(func() {
-				close(cleanupStarted)
-			})
+			cleanupStartedOnce.Do(func() { close(cleanupStarted) })
 			<-allowCleanup
 		}
 		return os.RemoveAll(conn.Path)
@@ -503,8 +494,6 @@ func TestUpdateConnectionProtectsTargetPathFromConcurrentCleanup(t *testing.T) {
 	const updatedConn = "updated-conn"
 	const sharingConn = "sharing-conn"
 	requireCreateConnection(t, writer, updatedConn, diskConfig(oldPath, 3.0))
-	// A second connection currently owns the target path. Closing it while the
-	// update is in progress triggers a real cleanup attempt on the target path.
 	requireCreateConnection(t, writer, sharingConn, diskConfig(newPath, 3.0))
 
 	updateErr := make(chan error, 1)
@@ -518,8 +507,6 @@ func TestUpdateConnectionProtectsTargetPathFromConcurrentCleanup(t *testing.T) {
 		t.Fatal("timed out waiting for the update to start removing the old path")
 	}
 
-	// The update now holds the reservation on the target path. Closing the
-	// sharing connection must not remove the target path while it is reserved.
 	if err := writer.CloseConnection(sharingConn); err != nil {
 		t.Fatalf("CloseConnection() error = %v", err)
 	}
@@ -528,7 +515,6 @@ func TestUpdateConnectionProtectsTargetPathFromConcurrentCleanup(t *testing.T) {
 	}
 
 	releaseCleanup()
-
 	select {
 	case err := <-updateErr:
 		if err != nil {
