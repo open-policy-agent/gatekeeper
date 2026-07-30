@@ -3,13 +3,13 @@ id: export
 title: Exporting violations
 ---
 
-`Feature State`: Gatekeeper version v3.13+ (alpha)
+`Feature State`: Audit export in Gatekeeper version v3.13+; admission export in v3.24+ (alpha)
 
 > ❗ This feature is alpha, subject to change (feedback is welcome!). This feature was previously known as "Consuming violations using Pubsub".
 
 ## Description
 
-This feature exports audit violations to a backend from where users can consume violations.
+This feature exports audit violations, and optionally admission violations, to a backend from where users can consume violations.
 
 > To gain insights into different methods of obtaining audit violations and the respective trade-offs for each approach, please refer to [Reading Audit Results](audit.md#reading-audit-results).
 
@@ -30,9 +30,10 @@ metadata:
   name: audit-connection
   namespace: gatekeeper-system
 spec:
-  driver: "dapr"
+  driver: "disk"
   config:
-    component: "pubsub"
+    path: "/tmp/violations/topics"
+    maxAuditResults: 3
 ```
 - `driver` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`, `disk`
 - `config` field is an object that configures how the connection is made. E.g. which queue messages should be sent to.
@@ -57,28 +58,122 @@ spec:
     component: "pubsub"
 status:
   byPod:
-    ID: "pod-id"
-    ConnectionUID: "connection-id"
-    Active: {true | false}
-    Errors:
-      - Type: UpsertConnection
-        Message: "Error message"
-      - Type: Publish
-        Message: "Error message"
+  - id: "pod-id"
+    connectionUID: "connection-id"
+    connectionErrors:
+    - type: UpsertConnection
+      message: "Error message"
+    publishStatuses:
+    - source: audit
+      active: true
+      lastAttemptTime: "2026-07-28T12:00:00Z"
+      lastSuccessTime: "2026-07-28T12:00:00Z"
+      errors: []
+    - source: webhook
+      active: false
+      lastAttemptTime: "2026-07-28T12:00:05Z"
+      errors:
+      - type: Publish
+        message: "Error message"
 ```
 
 The following table describes each property in the `status.byPod` section:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `ID` | string | Unique identifier for the pod handling the connection |
-| `ConnectionUID` | string | Unique identifier for the specific connection instance |
-| `Active` | boolean | Indicates whether the connection had at least one successful publishing and is currently active and operational (`true`) or inactive (`false`) |
-| `Errors` | array | List of error objects containing information about any issues with the connection |
-| `Errors[].Type` | string | Type of error encountered (e.g., `UpsertConnection`, `PublishingError`) |
-| `Errors[].Message` | string | Human-readable description of the error |
+| `id` | string | Unique identifier for the pod handling the connection |
+| `connectionUID` | string | Unique identifier for the specific connection instance |
+| `connectionErrors` | array | Errors from creating or updating the Connection, limited to 500 entries |
+| `connectionErrors[].type` | string | Type of Connection error encountered, such as `UpsertConnection` |
+| `connectionErrors[].message` | string | Human-readable description of the Connection error |
+| `publishStatuses` | array | Publishing health grouped by source so one producer cannot clear another producer's state |
+| `publishStatuses[].source` | string | Publisher that owns the entry: `audit` or `webhook` |
+| `publishStatuses[].active` | boolean | Whether the source completed at least one publish in its latest reporting window |
+| `publishStatuses[].lastAttemptTime` | timestamp | Most recent publish attempt represented by this entry |
+| `publishStatuses[].lastSuccessTime` | timestamp | Most recent successful publish by this source |
+| `publishStatuses[].errors` | array | Publish error classes reported by this source, limited to 500 entries |
 
-### Quick start with exporting violations using Dapr and Redis
+Each publisher replaces only the entry it owns. Audit updates `source: audit`, while admission violation export from the validation webhook updates `source: webhook`; either update preserves the other entry. If a source observes more than 500 distinct error classes before a successful status update, the final entry reports that additional classes were omitted. Each stored error message is the coalesced class text before the first colon and is not otherwise length-truncated.
+
+## Enabling Gatekeeper to export admission violations
+
+Admission violation export is independent from audit export and is disabled by default. Set `--enable-admission-violation-export=true` on the controller-manager deployment to enable it. Enabling `--enable-violation-export` on the audit deployment does not enable admission export.
+
+Admission export uses these routing flags:
+
+- `--audit-connection`: Connection resource name shared by audit and admission export. Defaults to `audit-connection`.
+- `--audit-channel`: Channel shared by audit and admission export. Defaults to `audit-channel`.
+
+The equivalent Helm configuration is:
+
+```yaml
+enableAdmissionViolationExport: true
+exportBackend: disk
+```
+
+Admission violation export currently supports only the disk driver. The Helm chart rejects `enableAdmissionViolationExport: true` unless `exportBackend: disk`; the Dapr driver is not supported for admission export. The supported configuration routes audit and admission export through the same `Connection`, channel, path, and volume. Admission segment retention and other spool limits are fixed internal defaults while the feature is alpha; `maxAuditResults` continues to apply only to audit results. Additional admission-specific configuration can be added later if operational feedback requires it.
+
+The chart mounts `audit.exportVolume` at `audit.exportVolumeMount.path` in every controller-manager pod when admission export is enabled. The reader sidecar is disabled by default; configure a production reader or explicitly enable the demonstration reader with `admission.disableExportSidecar: false`. Each pod writes its own spool, so multiple webhook replicas and separate audit/webhook deployments do not contend for one file.
+
+```yaml
+enableAdmissionViolationExport: true
+exportBackend: disk
+audit:
+  connection: audit-connection
+  channel: audit-channel
+  exportConnection:
+    path: /tmp/violations/topics
+    maxAuditResults: 3
+admission:
+  disableExportSidecar: true
+```
+
+Admission disk files use newline-delimited JSON. Audit and admission files can share the same channel directory because their names are distinct: audit uses `<audit-run-id>.log`, while admission uses `admission-<timestamp>-<random>.log`. A writer creates a uniquely named, locked admission `.open` segment. Reaching the fixed byte, record, or age limit flushes and closes the segment, then atomically renames it to `.log`. The demonstration reader selects only the `admission-` prefix in admission mode, so it cannot delete audit run files.
+
+Cleanup removes only completed, unlocked `admission-` segments and enforces fixed file count, total bytes, and TTL limits. Audit cleanup explicitly ignores that prefix. A periodic janitor applies TTL while traffic is idle. Startup recovery ignores files locked by another live writer, truncates an abandoned `.open` file to its final complete JSONL record, and publishes it as a recovered `.log`. The driver also reserves filesystem headroom and rejects new records before exhausting the filesystem.
+
+Each retention-cleanup invocation removes at most 256 ready segments. Recovery may also remove abandoned empty `.open` files and `.deleting` remnants before retention runs. New disk Connections are rejected while 32 failed cleanup states are retained. Failures from Connections that were already open can temporarily take the retry map above that threshold because descriptor-owning state cannot be safely discarded.
+
+The default chart uses per-pod `emptyDir` volumes. Unconsumed files are lost when that pod is deleted. For durable custom storage, use a separate directory or volume per pod; do not point multiple pods at the same shared directory because Connection removal owns and cleans its configured path.
+
+Admission export messages use `eventType: violation_admission`. They include the evaluation timestamp, admission `operation` (`CREATE`, `UPDATE`, `DELETE`, or `CONNECT`), API resource and subresource, dry-run state, and requesting user's name, UID, and groups. They can describe denied requests that were never persisted in Kubernetes and include policy-provided details, resource labels, and constraint annotations. Treat the destination as security-sensitive; identity fields and policy or resource data may contain user-controlled or sensitive data.
+
+### Default queue and disk limits
+
+Admission export limits are fixed while the feature is alpha and apply independently to each controller-manager pod:
+
+| Layer | Limit | Default |
+|---|---|---:|
+| In-memory queue | Messages waiting to publish | 1,024 |
+| In-memory queue | Total encoded bytes waiting to publish | 16 MiB |
+| Record | Complete encoded JSON record | 64 KiB |
+| Disk segment | Maximum bytes | 1 MiB |
+| Disk segment | Maximum records | 1,000 |
+| Disk segment | Maximum age before rotation | 1 minute |
+| Disk spool | Completed segments | 20 |
+| Disk spool | Total bytes, including the open segment and pending record | 20 MiB |
+| Disk spool | Maximum completed-segment age | 24 hours |
+| Filesystem | Free-space reserve | 16 MiB |
+
+The 64 KiB record limit applies to the entire JSON object after encoding, not only to the violation message. JSON field names and escaping, policy-provided details, constraint annotations, resource labels, and request identity all count toward the limit. KiB measures bytes, so the number of characters that fit varies with UTF-8 and JSON escaping. The limit leaves room for normal policy and request metadata while preventing one user-influenced result from consuming a disproportionate share of the queue and disk spool. The `kubectl.kubernetes.io/last-applied-configuration` constraint annotation is omitted, but other annotations still count. An oversized record is dropped before enqueue and reported with drop reason `message_too_large`.
+
+Segment rotation occurs when any byte, record-count, or age limit is reached. The spool limits bound unconsumed backlog; they do not guarantee that records remain available for 24 hours. Cleanup removes the oldest completed segments until the count, byte, and age limits all hold, so count or byte pressure can remove a segment long before its maximum age. When one-minute age rotation is the limiting factor, 20 completed segments provide roughly 20 minutes of backlog; higher volume can rotate segments sooner. A reader must therefore drain segments fast enough for the workload.
+
+The demonstration admission reader logs each record and deletes its completed segment after a successful read. It demonstrates consumption and is not a retention archive. Retain exported records in the downstream system when longer history is required.
+
+### Delivery behavior
+
+Admission export is best-effort. Backend publishing does not delay or change the admission response:
+
+- Each controller-manager pod has an asynchronous queue limited to 1,024 messages and 16 MiB of encoded data.
+- A complete encoded JSON record is limited to 64 KiB.
+- Messages are dropped when encoding fails or an enqueue limit is reached. A failed publish is not retried.
+- Queued messages are drained for up to five seconds during shutdown. Messages still queued after that deadline are dropped and reported with the `shutdown` reason.
+- Repeated drop and publish-error logs are limited to one per minute for each class; use the admission export metrics to detect sustained loss.
+- Webhook publish success and errors are written to the `webhook` entry in `ConnectionPodStatus.status.publishStatuses` every 10 seconds instead of once per message. Audit updates only the `audit` entry at the end of each run.
+- A source with no new publish attempts leaves its previous entry unchanged. A later successful reporting window clears only that source's errors; use `lastAttemptTime` and `lastSuccessTime` to evaluate freshness.
+
+### Quick start with exporting audit violations using Dapr and Redis
 
 #### Prerequisites for Dapr
 
