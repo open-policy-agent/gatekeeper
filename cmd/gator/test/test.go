@@ -49,6 +49,7 @@ var (
 	flagIncludeTrace bool
 	flagGatherStats  bool
 	flagImages       []string
+	flagPlainHTTP    bool
 	flagTempDir      string
 	flagEnableK8sCel bool
 	flagDenyOnly     bool
@@ -58,11 +59,12 @@ var (
 var flagDefaultFailurePolicyForK8sNativeValidation string
 
 const (
-	flagNameFilename = "filename"
-	flagNameOutput   = "output"
-	flagNameImage    = "image"
-	flagNameTempDir  = "tempdir"
-	flagNameVerbose  = "verbose"
+	flagNameFilename  = "filename"
+	flagNameOutput    = "output"
+	flagNameImage     = "image"
+	flagNamePlainHTTP = "plain-http"
+	flagNameTempDir   = "tempdir"
+	flagNameVerbose   = "verbose"
 
 	stringJSON          = "json"
 	stringYAML          = "yaml"
@@ -79,6 +81,7 @@ func init() {
 	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "enable-k8s-native-validation", "", true, "enable the validating admission policy driver")
 	Cmd.Flags().StringVar(&flagDefaultFailurePolicyForK8sNativeValidation, celSchema.DefaultFailurePolicyForK8sNativeValidationFlag, celSchema.DefaultFailurePolicyForK8sNativeValidationDefault, celSchema.DefaultFailurePolicyForK8sNativeValidationUsage)
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
+	Cmd.Flags().BoolVar(&flagPlainHTTP, flagNamePlainHTTP, false, "use plain HTTP for OCI image pulls (not recommended)")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 	Cmd.Flags().BoolVarP(&flagDenyOnly, "deny-only", "", false, "output only denied constraints")
 	Cmd.Flags().BoolVarP(&flagVerbose, flagNameVerbose, "v", false, "print extended test output")
@@ -89,7 +92,7 @@ func run(_ *cobra.Command, _ []string) {
 		cmdutils.ErrFatalf("invalid default K8sNativeValidation failure policy: %v", err)
 	}
 
-	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
+	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, flagPlainHTTP)
 	if err != nil {
 		cmdutils.ErrFatalf("reading: %v", err)
 	}
