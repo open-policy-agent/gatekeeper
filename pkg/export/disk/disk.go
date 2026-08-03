@@ -48,10 +48,14 @@ type admissionLimits struct {
 // admissionState groups resources whose lifecycle is owned by the Connection.
 // Pointer fields remain shared when a Connection value is copied out of a map.
 type admissionState struct {
-	limits       admissionLimits
-	stream       *admissionStream
-	cleanupTimer *time.Timer
-	cleanupID    uint64
+	limits           admissionLimits
+	stream           *admissionStream
+	cleanupTimer     *time.Timer
+	cleanupID        uint64
+	usageInitialized bool
+	readyCount       int
+	readyBytes       int64
+	oldestReadyTime  time.Time
 }
 
 type Writer struct {
@@ -68,6 +72,7 @@ type Writer struct {
 	// without racing background timers through shared package state.
 	renameAdmissionFile            func(oldPath, newPath string) error
 	admissionRotationRetryInterval time.Duration
+	syncAdmissionFile              func(*os.File) error
 }
 
 const (
@@ -161,7 +166,8 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	}
 	// Recovery is prefix-filtered and therefore safe for audit-only Connections.
 	// Running it at creation repairs crash remnants before new admission traffic.
-	if err := conn.recoverAdmissionFiles(); err != nil {
+	hasAdmissionArtifacts, err := conn.recoverAdmissionFiles()
+	if err != nil {
 		r.mu.Lock()
 		delete(r.openConnections, connectionName)
 		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
@@ -170,7 +176,9 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 		r.mu.Unlock()
 		return fmt.Errorf("recovering admission files for connection %s: %w", connectionName, err)
 	}
-	r.scheduleAdmissionCleanup(connectionName, &conn)
+	if hasAdmissionArtifacts {
+		r.scheduleAdmissionCleanup(connectionName, &conn)
+	}
 	r.mu.Lock()
 	if r.connectionLockIsCurrentLocked(connectionName, connLock) {
 		r.openConnections[connectionName] = conn
@@ -226,11 +234,13 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 	}
 
 	var candidate Connection
+	var hasAdmissionArtifacts bool
 	if pathChanged {
 		// Recover a fresh candidate before destroying the old path. A failed target
 		// recovery must leave the currently usable connection untouched.
 		candidate = connectionFromConfig(&parsed)
-		if err := candidate.recoverAdmissionFiles(); err != nil {
+		hasAdmissionArtifacts, err = candidate.recoverAdmissionFiles()
+		if err != nil {
 			return fmt.Errorf("recovering admission files for connection %s: %w", connectionName, err)
 		}
 	}
@@ -246,16 +256,12 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 			r.mu.Unlock()
 			return fmt.Errorf("error updating connection %s, %w", connectionName, err)
 		}
-		r.scheduleAdmissionCleanup(connectionName, &candidate)
+		if hasAdmissionArtifacts {
+			r.scheduleAdmissionCleanup(connectionName, &candidate)
+		}
 		conn = candidate
 	} else {
 		applyConnectionConfig(&conn, &parsed)
-		if conn.admission.cleanupTimer == nil {
-			if err := conn.recoverAdmissionFiles(); err != nil {
-				return fmt.Errorf("recovering admission files for connection %s: %w", connectionName, err)
-			}
-			r.scheduleAdmissionCleanup(connectionName, &conn)
-		}
 	}
 
 	r.mu.Lock()
@@ -402,6 +408,68 @@ func (r *Writer) Publish(ctx context.Context, connectionName string, data interf
 	return nil
 }
 
+// PublishBatch writes admission records under one Connection lock. Validation
+// failures remain per-message; a shared storage failure applies to every valid
+// record in the batch because their durability cannot be distinguished safely.
+func (r *Writer) PublishBatch(ctx context.Context, connectionName string, messages []any, topic string) []error {
+	errorsByMessage := make([]error, len(messages))
+	validMessages := make([][]byte, 0, len(messages))
+	validIndexes := make([]int, 0, len(messages))
+	for i := range messages {
+		message, jsonData, err := decodeExportMessage(messages[i])
+		if err != nil {
+			errorsByMessage[i] = err
+			continue
+		}
+		if message.EventType != util.AdmissionViolationEventType {
+			errorsByMessage[i] = fmt.Errorf("batch publishing only supports admission violations")
+			continue
+		}
+		validMessages = append(validMessages, jsonData)
+		validIndexes = append(validIndexes, i)
+	}
+	if len(validMessages) == 0 {
+		return errorsByMessage
+	}
+	if err := ctx.Err(); err != nil {
+		setBatchErrors(errorsByMessage, validIndexes, fmt.Errorf("publish canceled: %w", err))
+		return errorsByMessage
+	}
+
+	connLock, exists := r.acquireCurrentConnectionLock(connectionName, false)
+	if !exists {
+		setBatchErrors(errorsByMessage, validIndexes, fmt.Errorf("invalid connection: %s not found for disk driver", connectionName))
+		return errorsByMessage
+	}
+	defer connLock.Unlock()
+
+	r.mu.Lock()
+	conn, exists := r.openConnections[connectionName]
+	if !exists || !r.connectionLockIsCurrentLocked(connectionName, connLock) {
+		r.mu.Unlock()
+		setBatchErrors(errorsByMessage, validIndexes, fmt.Errorf("invalid connection: %s not found for disk driver", connectionName))
+		return errorsByMessage
+	}
+	r.mu.Unlock()
+
+	err := r.writeAdmissionRecords(ctx, connectionName, &conn, topic, validMessages)
+	r.mu.Lock()
+	if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+		r.openConnections[connectionName] = conn
+	}
+	r.mu.Unlock()
+	if err != nil {
+		setBatchErrors(errorsByMessage, validIndexes, fmt.Errorf("writing admission violations: %w", err))
+	}
+	return errorsByMessage
+}
+
+func setBatchErrors(errorsByMessage []error, indexes []int, err error) {
+	for _, index := range indexes {
+		errorsByMessage[index] = err
+	}
+}
+
 // decodeExportMessage accepts the value forms used by audit and the queued
 // admission exporter. Raw messages are validated but returned byte-for-byte so
 // the disk driver does not alter the encoded admission payload.
@@ -424,10 +492,20 @@ func decodeExportMessage(data interface{}) (util.ExportMsg, []byte, error) {
 		}
 		return *value, encoded, nil
 	case json.RawMessage:
+		var header struct {
+			EventType string `json:"eventType,omitempty"`
+		}
+		if err := json.Unmarshal(value, &header); err != nil {
+			return violation, nil, fmt.Errorf("invalid export message: %w", err)
+		}
+		if header.EventType == util.AdmissionViolationEventType {
+			violation.EventType = header.EventType
+			return violation, value, nil
+		}
 		if err := json.Unmarshal(value, &violation); err != nil {
 			return violation, nil, fmt.Errorf("invalid export message: %w", err)
 		}
-		return violation, append([]byte(nil), value...), nil
+		return violation, value, nil
 	default:
 		return violation, nil, fmt.Errorf("invalid data type: cannot convert data to exportMsg")
 	}

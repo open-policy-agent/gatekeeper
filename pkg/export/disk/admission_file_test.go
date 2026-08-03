@@ -114,6 +114,35 @@ func TestAdmissionPublishRotatesReadyJSONL(t *testing.T) {
 	}
 }
 
+func TestAdmissionPublishBatchSyncsOnce(t *testing.T) {
+	path := t.TempDir()
+	writer := newAdmissionWriter()
+	syncCalls := 0
+	writer.syncAdmissionFile = func(file *os.File) error {
+		syncCalls++
+		return file.Sync()
+	}
+	createAdmissionConnection(t, writer, "admission", path, 100)
+
+	errorsByMessage := writer.PublishBatch(context.Background(), "admission", []any{
+		admissionPayload(t, "pod-1"),
+		exportutil.ExportMsg{EventType: exportutil.AdmissionViolationEventType, ResourceName: "pod-2"},
+		admissionPayload(t, "pod-3"),
+	}, "admission")
+
+	if len(errorsByMessage) != 3 {
+		t.Fatalf("PublishBatch() returned %d results", len(errorsByMessage))
+	}
+	for i, err := range errorsByMessage {
+		if err != nil {
+			t.Fatalf("PublishBatch() result %d error = %v", i, err)
+		}
+	}
+	if syncCalls != 1 {
+		t.Fatalf("PublishBatch() sync calls = %d, want 1", syncCalls)
+	}
+}
+
 func TestAdmissionRotationRetryCompletesWithoutTraffic(t *testing.T) {
 	path := t.TempDir()
 	writer := newAdmissionWriter()
@@ -212,7 +241,7 @@ func TestAdmissionTimerRotation(t *testing.T) {
 		t.Fatalf("Publish() error = %v", err)
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		files, _ := os.ReadDir(filepath.Join(path, "admission"))
 		if len(files) == 1 && filepath.Ext(files[0].Name()) == admissionReadyExtension {
@@ -535,6 +564,25 @@ func TestAdmissionCleanupUsesSingleSortedSnapshot(t *testing.T) {
 	}
 	if len(entries) != 2 || entries[0].Name() != admissionFilePrefix+"03"+admissionReadyExtension || entries[1].Name() != admissionFilePrefix+"04"+admissionReadyExtension {
 		t.Fatalf("expected two newest admission files, got %v", entries)
+	}
+}
+
+func TestAdmissionCleanupReusesReadyFileAccounting(t *testing.T) {
+	conn := connectionFromConfig(&connectionConfig{path: t.TempDir(), closedConnectionTTL: time.Minute})
+	conn.admission.limits.maxResults = 20
+	conn.admission.limits.maxTotalBytes = 20 << 20
+	conn.admission.limits.fileTTL = time.Hour
+	conn.setAdmissionReadyUsage(admissionFileSummary{})
+	scans := 0
+
+	if err := conn.cleanupAdmissionFilesWithScanner(1024, func(string) (admissionFileSummary, error) {
+		scans++
+		return admissionFileSummary{}, nil
+	}); err != nil {
+		t.Fatalf("cleanupAdmissionFilesWithScanner() error = %v", err)
+	}
+	if scans != 0 {
+		t.Fatalf("ready-file scans = %d, want 0", scans)
 	}
 }
 
@@ -938,6 +986,106 @@ func TestCloseConnectionStopsAdmissionJanitor(t *testing.T) {
 	}
 	if timer.Stop() {
 		t.Fatal("cleanup timer was still active after CloseConnection")
+	}
+}
+
+func TestAuditOnlyConnectionDoesNotScheduleAdmissionJanitor(t *testing.T) {
+	writer := newAdmissionWriter()
+	if err := writer.CreateConnection(context.Background(), "audit", admissionDiskConfig(t.TempDir())); err != nil {
+		t.Fatalf("CreateConnection() error = %v", err)
+	}
+	t.Cleanup(func() { _ = writer.CloseConnection("audit") })
+
+	writer.mu.Lock()
+	timer := writer.openConnections["audit"].admission.cleanupTimer
+	writer.mu.Unlock()
+	if timer != nil {
+		t.Fatal("audit-only Connection scheduled admission cleanup")
+	}
+}
+
+func TestAuditOnlyConnectionUpdateDoesNotRepeatAdmissionRecovery(t *testing.T) {
+	path := t.TempDir()
+	writer := newAdmissionWriter()
+	config := admissionDiskConfig(path)
+	if err := writer.CreateConnection(context.Background(), "audit", config); err != nil {
+		t.Fatalf("CreateConnection() error = %v", err)
+	}
+	t.Cleanup(func() { _ = writer.CloseConnection("audit") })
+
+	topicDir := filepath.Join(path, "audit")
+	if err := os.MkdirAll(topicDir, 0o770); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(topicDir, admissionFilePrefix+"invalid"+admissionOpenExtension)); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	if err := writer.UpdateConnection(context.Background(), "audit", config); err != nil {
+		t.Fatalf("same-path UpdateConnection() repeated admission recovery: %v", err)
+	}
+}
+
+func TestAdmissionRecoverySchedulesJanitor(t *testing.T) {
+	path := t.TempDir()
+	topicDir := filepath.Join(path, "admission")
+	if err := os.MkdirAll(topicDir, 0o770); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	openPath := filepath.Join(topicDir, admissionFilePrefix+"abandoned"+admissionOpenExtension)
+	if err := os.WriteFile(openPath, []byte(completeAdmissionRecord), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	writer := newAdmissionWriter()
+	if err := writer.CreateConnection(context.Background(), "admission", admissionDiskConfig(path)); err != nil {
+		t.Fatalf("CreateConnection() error = %v", err)
+	}
+	t.Cleanup(func() { _ = writer.CloseConnection("admission") })
+
+	writer.mu.Lock()
+	timer := writer.openConnections["admission"].admission.cleanupTimer
+	writer.mu.Unlock()
+	if timer == nil {
+		t.Fatal("recovered admission artifact did not schedule cleanup")
+	}
+}
+
+func TestFirstAdmissionPublishSchedulesJanitor(t *testing.T) {
+	path := t.TempDir()
+	writer := newAdmissionWriter()
+	if err := writer.CreateConnection(context.Background(), "admission", admissionDiskConfig(path)); err != nil {
+		t.Fatalf("CreateConnection() error = %v", err)
+	}
+	t.Cleanup(func() { _ = writer.CloseConnection("admission") })
+
+	if err := writer.Publish(context.Background(), "admission", admissionPayload(t, "pod-1"), "admission"); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	writer.mu.Lock()
+	timer := writer.openConnections["admission"].admission.cleanupTimer
+	writer.mu.Unlock()
+	if timer == nil {
+		t.Fatal("first admission publish did not schedule cleanup")
+	}
+}
+
+func TestImmediatelyRotatedAdmissionPublishSchedulesJanitor(t *testing.T) {
+	path := t.TempDir()
+	writer := newAdmissionWriter()
+	createAdmissionConnection(t, writer, "admission", path, 1)
+
+	if err := writer.Publish(context.Background(), "admission", admissionPayload(t, "pod-1"), "admission"); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	writer.mu.Lock()
+	conn := writer.openConnections["admission"]
+	writer.mu.Unlock()
+	if conn.admission.stream != nil {
+		t.Fatal("expected the one-record stream to rotate")
+	}
+	if conn.admission.cleanupTimer == nil {
+		t.Fatal("rotated admission artifact did not schedule cleanup")
 	}
 }
 

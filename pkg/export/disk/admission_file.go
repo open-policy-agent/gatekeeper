@@ -50,6 +50,7 @@ type admissionStream struct {
 	// rename is captured from the owning Writer so publication stays injectable
 	// on paths that finalize a stream without a Writer in scope.
 	rename func(oldPath, newPath string) error
+	sync   func(*os.File) error
 }
 
 // renameFile falls back to os.Rename so a stream built outside a Writer still
@@ -61,6 +62,16 @@ func (stream *admissionStream) renameFile(oldPath, newPath string) error {
 	return stream.rename(oldPath, newPath)
 }
 
+func (stream *admissionStream) syncFile() error {
+	if stream.file == nil {
+		return nil
+	}
+	if stream.sync == nil {
+		return stream.file.Sync()
+	}
+	return stream.sync(stream.file)
+}
+
 // admissionRename resolves the Writer's rename hook. Keeping this per Writer
 // avoids mutating package state that background rotation timers read.
 func (r *Writer) admissionRename() func(oldPath, newPath string) error {
@@ -68,6 +79,13 @@ func (r *Writer) admissionRename() func(oldPath, newPath string) error {
 		return os.Rename
 	}
 	return r.renameAdmissionFile
+}
+
+func (r *Writer) admissionSync() func(*os.File) error {
+	if r.syncAdmissionFile == nil {
+		return func(file *os.File) error { return file.Sync() }
+	}
+	return r.syncAdmissionFile
 }
 
 func (r *Writer) rotationRetryInterval() time.Duration {
@@ -196,101 +214,132 @@ func admissionReadyFileBefore(left, right admissionReadyFile) bool {
 // after the write as limits require. The caller holds the per-Connection lock
 // and must persist the mutated Connection value even when this function fails.
 func (r *Writer) writeAdmissionRecord(ctx context.Context, connectionName string, conn *Connection, topic string, data []byte) error {
+	return r.writeAdmissionRecords(ctx, connectionName, conn, topic, [][]byte{data})
+}
+
+func (r *Writer) writeAdmissionRecords(ctx context.Context, connectionName string, conn *Connection, topic string, records [][]byte) error {
 	if err := validatePathSegment("topic", topic); err != nil {
 		return err
 	}
 	limits := conn.admission.limits
-	if int64(len(data)) > limits.maxRecordBytes {
-		return fmt.Errorf("admission record size %d exceeds maximum %d", len(data), limits.maxRecordBytes)
+	var batchBytes int64
+	for _, data := range records {
+		if int64(len(data)) > limits.maxRecordBytes {
+			return fmt.Errorf("admission record size %d exceeds maximum %d", len(data), limits.maxRecordBytes)
+		}
+		recordBytes := int64(len(data) + 1)
+		if recordBytes > limits.maxFileBytes {
+			return fmt.Errorf("admission record size %d exceeds file maximum %d", recordBytes, limits.maxFileBytes)
+		}
+		if batchBytes > math.MaxInt64-recordBytes {
+			return fmt.Errorf("admission batch size overflow")
+		}
+		batchBytes += recordBytes
 	}
-	recordBytes := int64(len(data) + 1)
-	if recordBytes > limits.maxFileBytes {
-		return fmt.Errorf("admission record size %d exceeds file maximum %d", recordBytes, limits.maxFileBytes)
-	}
-	if err := conn.cleanupAdmissionFilesForWrite(recordBytes); err != nil {
+	if err := conn.cleanupAdmissionFilesForWrite(batchBytes); err != nil {
 		return err
 	}
-	if err := ensureAdmissionFreeSpace(conn.Path, limits.minFreeBytes, recordBytes); err != nil {
-		if cleanupErr := conn.cleanupAdmissionFilesForWrite(recordBytes); cleanupErr != nil {
+	if err := ensureAdmissionFreeSpace(conn.Path, limits.minFreeBytes, batchBytes); err != nil {
+		if cleanupErr := conn.cleanupAdmissionFilesForWrite(batchBytes); cleanupErr != nil {
 			return errors.Join(err, cleanupErr)
 		}
-		if err := ensureAdmissionFreeSpace(conn.Path, limits.minFreeBytes, recordBytes); err != nil {
+		if err := ensureAdmissionFreeSpace(conn.Path, limits.minFreeBytes, batchBytes); err != nil {
 			return err
 		}
 	}
 
-	stream := conn.admission.stream
-	if stream != nil && stream.poisoned {
+	if stream := conn.admission.stream; stream != nil && stream.poisoned {
 		if err := finalizeAdmissionStream(stream); err != nil {
 			r.scheduleAdmissionRotationRetry(connectionName, topic, stream)
 			return fmt.Errorf("recovering poisoned admission stream: %w", err)
 		}
 		conn.admission.stream = nil
+		conn.admission.usageInitialized = false
 		if err := conn.cleanupAdmissionFiles(); err != nil {
 			return err
 		}
-		stream = nil
 	}
+
+	rotated := false
+	for _, data := range records {
+		recordBytes := int64(len(data) + 1)
+		stream := conn.admission.stream
+		if stream == nil {
+			var err error
+			stream, err = r.openAdmissionStream(connectionName, conn, topic)
+			if err != nil {
+				return err
+			}
+			conn.admission.stream = stream
+		} else if stream.records > 0 && (stream.bytes+recordBytes > limits.maxFileBytes || stream.records >= limits.maxFileRecords || time.Since(stream.openedAt) >= limits.maxFileAge) {
+			if err := finalizeAdmissionStream(stream); err != nil {
+				r.scheduleAdmissionRotationRetry(connectionName, topic, stream)
+				return err
+			}
+			conn.admission.usageInitialized = false
+			rotated = true
+			conn.admission.stream = nil
+			var err error
+			stream, err = r.openAdmissionStream(connectionName, conn, topic)
+			if err != nil {
+				return err
+			}
+			conn.admission.stream = stream
+		}
+
+		if err := ctx.Err(); err != nil {
+			return errors.Join(fmt.Errorf("publish canceled: %w", err), r.syncAdmissionBatch(connectionName, topic, conn))
+		}
+		record := make([]byte, len(data)+1)
+		copy(record, data)
+		record[len(data)] = '\n'
+		originalBytes := stream.bytes
+		written, err := stream.file.Write(record)
+		if err != nil || written != len(record) {
+			writeErr := err
+			if writeErr == nil {
+				writeErr = io.ErrShortWrite
+			}
+			rollbackErr := rollbackAdmissionWrite(stream, originalBytes)
+			if rollbackErr != nil {
+				stream.poisoned = true
+				r.scheduleAdmissionRotationRetry(connectionName, topic, stream)
+			}
+			return errors.Join(fmt.Errorf("writing admission record: %w", writeErr), rollbackErr)
+		}
+		stream.bytes += int64(written)
+		stream.records++
+
+		if stream.bytes >= limits.maxFileBytes || stream.records >= limits.maxFileRecords {
+			if err := finalizeAdmissionStream(stream); err != nil {
+				r.scheduleAdmissionRotationRetry(connectionName, topic, stream)
+				return err
+			}
+			conn.admission.usageInitialized = false
+			rotated = true
+			conn.admission.stream = nil
+		}
+	}
+	if err := r.syncAdmissionBatch(connectionName, topic, conn); err != nil {
+		return err
+	}
+	if conn.admission.cleanupTimer == nil && (conn.admission.stream != nil || rotated) {
+		r.scheduleAdmissionCleanup(connectionName, conn)
+	}
+	if rotated {
+		return conn.cleanupAdmissionFiles()
+	}
+	return nil
+}
+
+func (r *Writer) syncAdmissionBatch(connectionName, topic string, conn *Connection) error {
+	stream := conn.admission.stream
 	if stream == nil {
-		var err error
-		stream, err = r.openAdmissionStream(connectionName, conn, topic)
-		if err != nil {
-			return err
-		}
-		conn.admission.stream = stream
-	} else if stream.records > 0 && (stream.bytes+recordBytes > limits.maxFileBytes || stream.records >= limits.maxFileRecords || time.Since(stream.openedAt) >= limits.maxFileAge) {
-		if err := finalizeAdmissionStream(stream); err != nil {
-			r.scheduleAdmissionRotationRetry(connectionName, topic, stream)
-			return err
-		}
-		conn.admission.stream = nil
-		if err := conn.cleanupAdmissionFiles(); err != nil {
-			return err
-		}
-		var err error
-		stream, err = r.openAdmissionStream(connectionName, conn, topic)
-		if err != nil {
-			return err
-		}
-		conn.admission.stream = stream
+		return nil
 	}
-
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("publish canceled: %w", err)
-	}
-	record := make([]byte, len(data)+1)
-	copy(record, data)
-	record[len(data)] = '\n'
-	originalBytes := stream.bytes
-	written, err := stream.file.Write(record)
-	if err != nil || written != len(record) {
-		writeErr := err
-		if writeErr == nil {
-			writeErr = io.ErrShortWrite
-		}
-		rollbackErr := rollbackAdmissionWrite(stream, originalBytes)
-		if rollbackErr != nil {
-			stream.poisoned = true
-			r.scheduleAdmissionRotationRetry(connectionName, topic, stream)
-		}
-		return errors.Join(fmt.Errorf("writing admission record: %w", writeErr), rollbackErr)
-	}
-	stream.bytes += int64(written)
-	stream.records++
-	if err := stream.file.Sync(); err != nil {
+	if err := stream.syncFile(); err != nil {
 		r.scheduleAdmissionRotationRetry(connectionName, topic, stream)
-		return fmt.Errorf("syncing admission record: %w", err)
-	}
-
-	if stream.bytes >= limits.maxFileBytes || stream.records >= limits.maxFileRecords {
-		if err := finalizeAdmissionStream(stream); err != nil {
-			r.scheduleAdmissionRotationRetry(connectionName, topic, stream)
-			return err
-		}
-		conn.admission.stream = nil
-		if err := conn.cleanupAdmissionFiles(); err != nil {
-			return err
-		}
+		return fmt.Errorf("syncing admission records: %w", err)
 	}
 	return nil
 }
@@ -348,6 +397,7 @@ func (r *Writer) openAdmissionStream(connectionName string, conn *Connection, to
 		openedAt: time.Now(),
 		maxBytes: conn.admission.limits.maxFileBytes,
 		rename:   r.admissionRename(),
+		sync:     r.admissionSync(),
 	}
 	stream.timer = time.AfterFunc(conn.admission.limits.maxFileAge, func() {
 		if err := r.rotateAdmissionStream(connectionName, topic, openPath); err != nil {
@@ -397,6 +447,7 @@ func (r *Writer) rotateAdmissionStream(connectionName, topic, expectedPath strin
 		r.scheduleAdmissionRotationRetry(connectionName, topic, stream)
 		return err
 	}
+	conn.admission.usageInitialized = false
 	conn.admission.stream = nil
 	r.mu.Lock()
 	if r.connectionLockIsCurrentLocked(connectionName, connLock) {
@@ -439,7 +490,7 @@ func finalizeAdmissionStream(stream *admissionStream) error {
 	}
 	var syncErr error
 	if stream.file != nil {
-		syncErr = stream.file.Sync()
+		syncErr = stream.syncFile()
 		if closeErr := closeAdmissionStream(stream); closeErr != nil {
 			return errors.Join(syncErr, closeErr)
 		}
@@ -472,7 +523,7 @@ func finalizeAdmissionStream(stream *admissionStream) error {
 func rollbackAdmissionWrite(stream *admissionStream, size int64) error {
 	truncateErr := stream.file.Truncate(size)
 	_, seekErr := stream.file.Seek(0, io.SeekEnd)
-	syncErr := stream.file.Sync()
+	syncErr := stream.syncFile()
 	return errors.Join(truncateErr, seekErr, syncErr)
 }
 
@@ -549,6 +600,13 @@ func (conn *Connection) cleanupAdmissionFilesWithScanner(reservedBytes int64, sc
 	if openBytes > limits.maxTotalBytes-reservedBytes {
 		return fmt.Errorf("admission open files and record exceed total byte limit %d", limits.maxTotalBytes)
 	}
+	maxReadyBytes := limits.maxTotalBytes - openBytes - reservedBytes
+	if conn.admission.usageInitialized {
+		expired := !conn.admission.oldestReadyTime.IsZero() && time.Since(conn.admission.oldestReadyTime) > limits.fileTTL
+		if !expired && conn.admission.readyCount <= limits.maxResults && conn.admission.readyBytes <= maxReadyBytes {
+			return nil
+		}
+	}
 
 	summary, err := scan(conn.Path)
 	if err != nil {
@@ -557,7 +615,7 @@ func (conn *Connection) cleanupAdmissionFilesWithScanner(reservedBytes int64, sc
 		}
 		return err
 	}
-	maxReadyBytes := limits.maxTotalBytes - openBytes - reservedBytes
+	defer func() { conn.setAdmissionReadyUsage(summary) }()
 	now := time.Now()
 	removed := 0
 	for {
@@ -592,6 +650,13 @@ func (conn *Connection) cleanupAdmissionFilesWithScanner(reservedBytes int64, sc
 		}
 		removed++
 	}
+}
+
+func (conn *Connection) setAdmissionReadyUsage(summary admissionFileSummary) {
+	conn.admission.usageInitialized = true
+	conn.admission.readyCount = summary.totalFiles
+	conn.admission.readyBytes = summary.totalBytes
+	conn.admission.oldestReadyTime = summary.oldestModTime()
 }
 
 func (conn *Connection) admissionOpenBytes() int64 {
@@ -709,27 +774,76 @@ func removeAdmissionReadyFile(path string) error {
 // recoverAdmissionFiles repairs abandoned admission files across channel
 // directories, then applies retention. Files locked by a live writer are left
 // untouched.
-func (conn *Connection) recoverAdmissionFiles() error {
+func (conn *Connection) recoverAdmissionFiles() (bool, error) {
+	conn.admission.usageInitialized = false
 	base, err := os.Open(conn.Path)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer base.Close()
 	for {
 		entries, err := base.ReadDir(admissionReadDirBatchSize)
 		if err != nil && !errors.Is(err, io.EOF) {
-			return err
+			return false, err
 		}
 		for _, entry := range entries {
 			if !entry.IsDir() || validatePathSegment("topic", entry.Name()) != nil {
 				continue
 			}
 			if recoverErr := conn.recoverAdmissionTopic(entry.Name()); recoverErr != nil {
-				return recoverErr
+				return false, recoverErr
 			}
 		}
 		if errors.Is(err, io.EOF) {
-			return conn.cleanupAdmissionFiles()
+			if cleanupErr := conn.cleanupAdmissionFiles(); cleanupErr != nil {
+				return false, cleanupErr
+			}
+			return hasAdmissionArtifacts(conn.Path)
+		}
+	}
+}
+
+func hasAdmissionArtifacts(root string) (bool, error) {
+	directory, err := os.Open(root)
+	if err != nil {
+		return false, err
+	}
+	defer directory.Close()
+	for {
+		entries, readErr := directory.ReadDir(admissionReadDirBatchSize)
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return false, readErr
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() || validatePathSegment("topic", entry.Name()) != nil {
+				continue
+			}
+			topicDirectory, openErr := os.Open(filepath.Join(root, entry.Name()))
+			if openErr != nil {
+				return false, openErr
+			}
+			for {
+				topicEntries, topicReadErr := topicDirectory.ReadDir(admissionReadDirBatchSize)
+				if topicReadErr != nil && !errors.Is(topicReadErr, io.EOF) {
+					_ = topicDirectory.Close()
+					return false, topicReadErr
+				}
+				for _, topicEntry := range topicEntries {
+					if !topicEntry.IsDir() && strings.HasPrefix(topicEntry.Name(), admissionFilePrefix) {
+						_ = topicDirectory.Close()
+						return true, nil
+					}
+				}
+				if errors.Is(topicReadErr, io.EOF) {
+					break
+				}
+			}
+			if closeErr := topicDirectory.Close(); closeErr != nil {
+				return false, closeErr
+			}
+		}
+		if errors.Is(readErr, io.EOF) {
+			return false, nil
 		}
 	}
 }
@@ -846,10 +960,14 @@ func (r *Writer) runAdmissionCleanup(connectionName string, cleanupID uint64) {
 	if !exists || conn.admission.cleanupID != cleanupID {
 		return
 	}
-	if err := conn.recoverAdmissionFiles(); err != nil {
+	conn.stopAdmissionCleanup()
+	hasAdmissionArtifacts, err := conn.recoverAdmissionFiles()
+	if err != nil {
 		log.Error(err, "recovering and cleaning admission export files", "connection", connectionName)
+		r.scheduleAdmissionCleanup(connectionName, &conn)
+	} else if hasAdmissionArtifacts {
+		r.scheduleAdmissionCleanup(connectionName, &conn)
 	}
-	r.scheduleAdmissionCleanup(connectionName, &conn)
 	r.mu.Lock()
 	if r.connectionLockIsCurrentLocked(connectionName, connLock) {
 		r.openConnections[connectionName] = conn
