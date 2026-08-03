@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -97,14 +98,131 @@ type admissionExportStatusReport struct {
 
 type fakeAdmissionExportStatusReporter struct {
 	reports chan admissionExportStatusReport
+	report  func(context.Context, string, statusv1alpha1.ConnectionPublishStatus) error
 }
 
-func (f *fakeAdmissionExportStatusReporter) Report(_ context.Context, connectionName string, status statusv1alpha1.ConnectionPublishStatus) error {
+func (f *fakeAdmissionExportStatusReporter) Report(ctx context.Context, connectionName string, status statusv1alpha1.ConnectionPublishStatus) error {
+	if f.report != nil {
+		return f.report(ctx, connectionName, status)
+	}
 	f.reports <- admissionExportStatusReport{
 		connectionName: connectionName,
 		status:         status,
 	}
 	return nil
+}
+
+func TestQueuedAdmissionViolationExporterStatusDoesNotBlockPublishing(t *testing.T) {
+	statusStarted := make(chan struct{})
+	releaseStatus := make(chan struct{})
+	var started sync.Once
+	statusReporter := &fakeAdmissionExportStatusReporter{
+		report: func(context.Context, string, statusv1alpha1.ConnectionPublishStatus) error {
+			started.Do(func() { close(statusStarted) })
+			<-releaseStatus
+			return nil
+		},
+	}
+	system := &fakeAdmissionExportSystem{published: make(chan interface{}, 2)}
+	exporter := newQueuedAdmissionViolationExporter(system, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, statusReporter)
+	exporter.statusInterval = time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- exporter.Start(ctx) }()
+	exporter.Export(&exportutil.ExportMsg{Message: "first"})
+	select {
+	case <-system.published:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first publish")
+	}
+	select {
+	case <-statusStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for status report")
+	}
+
+	exporter.Export(&exportutil.ExportMsg{Message: "second"})
+	select {
+	case <-system.published:
+	case <-time.After(time.Second):
+		t.Fatal("status report blocked the publisher")
+	}
+
+	close(releaseStatus)
+	cancel()
+	require.NoError(t, <-done)
+}
+
+func TestQueuedAdmissionViolationExporterRetainsFailedStatusSnapshot(t *testing.T) {
+	reportErr := errors.New("status unavailable")
+	reports := 0
+	statusReporter := &fakeAdmissionExportStatusReporter{
+		report: func(context.Context, string, statusv1alpha1.ConnectionPublishStatus) error {
+			reports++
+			if reports == 1 {
+				return reportErr
+			}
+			return nil
+		},
+	}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, statusReporter)
+	exporter.recordPublishResult(nil)
+
+	exporter.reportPendingPublishStatus(context.Background(), true)
+	exporter.stateMu.Lock()
+	require.True(t, exporter.state.attempted)
+	exporter.stateMu.Unlock()
+
+	exporter.reportPendingPublishStatus(context.Background(), true)
+	exporter.stateMu.Lock()
+	require.False(t, exporter.state.attempted)
+	exporter.stateMu.Unlock()
+	require.Equal(t, 2, reports)
+}
+
+func TestQueuedAdmissionViolationExporterCoalescesHealthyStatus(t *testing.T) {
+	now := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
+	reports := 0
+	statusReporter := &fakeAdmissionExportStatusReporter{
+		report: func(context.Context, string, statusv1alpha1.ConnectionPublishStatus) error {
+			reports++
+			return nil
+		},
+	}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, statusReporter)
+	exporter.now = func() time.Time { return now }
+
+	exporter.recordPublishResult(nil)
+	exporter.reportPendingPublishStatus(context.Background(), false)
+	require.Equal(t, 1, reports)
+
+	now = now.Add(10 * time.Second)
+	exporter.recordPublishResult(nil)
+	exporter.reportPendingPublishStatus(context.Background(), false)
+	require.Equal(t, 1, reports)
+
+	now = now.Add(exporter.healthyInterval)
+	exporter.reportPendingPublishStatus(context.Background(), false)
+	require.Equal(t, 2, reports)
+}
+
+func TestQueuedAdmissionViolationExporterReportsRecoveryWithoutWaitingForHeartbeat(t *testing.T) {
+	reports := 0
+	statusReporter := &fakeAdmissionExportStatusReporter{
+		report: func(context.Context, string, statusv1alpha1.ConnectionPublishStatus) error {
+			reports++
+			return nil
+		},
+	}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, statusReporter)
+
+	exporter.recordPublishResult(errors.New("backend unavailable"))
+	exporter.reportPendingPublishStatus(context.Background(), false)
+	exporter.recordPublishResult(nil)
+	exporter.reportPendingPublishStatus(context.Background(), false)
+
+	require.Equal(t, 2, reports)
 }
 
 func TestQueuedAdmissionViolationExporterDropsWhenQueueIsFull(t *testing.T) {
@@ -113,8 +231,13 @@ func TestQueuedAdmissionViolationExporterDropsWhenQueueIsFull(t *testing.T) {
 	exporter.queue = make(chan queuedAdmissionViolation, 1)
 
 	exporter.Export(&exportutil.ExportMsg{Message: "first"})
-	exporter.Export(&exportutil.ExportMsg{Message: "second"})
+	built := false
+	exporter.TryExport(func() *exportutil.ExportMsg {
+		built = true
+		return &exportutil.ExportMsg{Message: "second"}
+	})
 
+	require.False(t, built)
 	require.Equal(t, 1, metrics.queued)
 	require.Equal(t, 1, metrics.queueFull)
 	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonQueueFull])
@@ -131,6 +254,30 @@ func TestQueuedAdmissionViolationExporterDropsOversizedMessage(t *testing.T) {
 	require.Zero(t, metrics.queued)
 	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonMessageTooLarge])
 	require.Empty(t, exporter.queue)
+}
+
+func TestQueuedAdmissionViolationExporterReleasesMessageReservationAfterOversizedDrop(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), metrics, nil)
+	exporter.queue = make(chan queuedAdmissionViolation, 1)
+	exporter.maxMessageBytes = 2048
+
+	exporter.Export(&exportutil.ExportMsg{Details: map[string]interface{}{"value": strings.Repeat("x", 4096)}})
+	exporter.Export(&exportutil.ExportMsg{Message: "fits"})
+
+	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonMessageTooLarge])
+	require.Equal(t, 1, metrics.queued)
+	require.Len(t, exporter.queue, 1)
+}
+
+func TestAdmissionExportMessagePreflightAllowsExactEncodedLimit(t *testing.T) {
+	message := &exportutil.ExportMsg{
+		Message: strings.Repeat("<&", 64),
+		Details: map[string]interface{}{"missing": []interface{}{"team", true, float64(1)}},
+	}
+	encoded, err := json.Marshal(message)
+	require.NoError(t, err)
+	require.True(t, admissionExportMessageFitsBudget(message, int64(len(encoded))))
 }
 
 func TestQueuedAdmissionViolationExporterDropsUnencodableMessage(t *testing.T) {
@@ -191,23 +338,15 @@ func TestQueuedAdmissionViolationExporterReportsPublishFailure(t *testing.T) {
 }
 
 func TestAdmissionExportPublishStateBoundsErrors(t *testing.T) {
-	nextError := 0
-	system := &fakeAdmissionExportSystem{
-		publish: func(context.Context, interface{}) error {
-			err := fmt.Errorf("class-%03d: backend unavailable", nextError)
-			nextError++
-			return err
-		},
-	}
-	exporter := newQueuedAdmissionViolationExporter(system, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, nil)
-	state := admissionExportPublishState{errors: make(map[string]error)}
-
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, nil)
 	for i := 0; i < exportutil.MaxConnectionStatusErrors+100; i++ {
-		exporter.publishQueued(context.Background(), queuedAdmissionViolation{}, &state)
+		exporter.recordPublishResult(fmt.Errorf("class-%03d: backend unavailable", i))
 	}
 
-	require.Len(t, state.errors, exportutil.MaxConnectionStatusErrors)
-	require.Contains(t, state.errors, exportutil.AdditionalPublishErrorsOmittedMessage)
+	exporter.stateMu.Lock()
+	defer exporter.stateMu.Unlock()
+	require.Len(t, exporter.state.errors, exportutil.MaxConnectionStatusErrors)
+	require.Contains(t, exporter.state.errors, exportutil.AdditionalPublishErrorsOmittedMessage)
 }
 
 func TestQueuedAdmissionViolationExporterReportsPublishSuccess(t *testing.T) {

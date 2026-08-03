@@ -19,6 +19,21 @@ import (
 
 var testSystem *System
 
+type recordingDriver struct {
+	published []any
+}
+
+func (driver *recordingDriver) Publish(_ context.Context, _ string, data interface{}, _ string) error {
+	driver.published = append(driver.published, data)
+	return nil
+}
+
+func (*recordingDriver) CloseConnection(string) error { return nil }
+
+func (*recordingDriver) UpdateConnection(context.Context, string, interface{}) error { return nil }
+
+func (*recordingDriver) CreateConnection(context.Context, string, interface{}) error { return nil }
+
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 	supportedDrivers = map[string]driver.Driver{
@@ -245,6 +260,24 @@ func TestSystem_Publish(t *testing.T) {
 	}
 }
 
+func TestSystemPublishBatchFallbackPreservesMessageTypes(t *testing.T) {
+	const driverName = "recording"
+	recorder := &recordingDriver{}
+	oldDrivers := supportedDrivers
+	supportedDrivers = map[string]driver.Driver{driverName: recorder}
+	t.Cleanup(func() { supportedDrivers = oldDrivers })
+	system := &System{connectionToDriver: map[string]string{"connection": driverName}}
+	raw := json.RawMessage(`{"eventType":"violation_admission"}`)
+	typed := exportutil.ExportMsg{ID: "audit-1", Message: exportutil.AuditStartedMsg}
+
+	errorsByMessage := system.PublishBatch(context.Background(), "connection", "topic", []any{raw, typed})
+
+	assert.Len(t, errorsByMessage, 2)
+	assert.NoError(t, errorsByMessage[0])
+	assert.NoError(t, errorsByMessage[1])
+	assert.Equal(t, []any{raw, typed}, recorder.published)
+}
+
 func TestSystemSupportsAuditAndAdmissionOnSharedDiskConnection(t *testing.T) {
 	oldDrivers := supportedDrivers
 	supportedDrivers = map[string]driver.Driver{disk.Name: disk.Connections}
@@ -270,8 +303,14 @@ func TestSystemSupportsAuditAndAdmissionOnSharedDiskConnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
-	if err := system.Publish(ctx, connectionName, "audit", json.RawMessage(admission)); err != nil {
-		t.Fatalf("Publish(admission) error = %v", err)
+	batchResults := system.PublishBatch(ctx, connectionName, "audit", []any{
+		json.RawMessage(admission),
+		exportutil.ExportMsg{EventType: exportutil.AdmissionViolationEventType, ResourceName: "second-denied-pod"},
+	})
+	for i, result := range batchResults {
+		if result != nil {
+			t.Fatalf("PublishBatch(admission) result %d error = %v", i, result)
+		}
 	}
 	if err := system.Publish(ctx, connectionName, "audit", exportutil.ExportMsg{ID: "audit-1", Message: exportutil.AuditCompletedMsg}); err != nil {
 		t.Fatalf("Publish(audit end) error = %v", err)

@@ -266,12 +266,17 @@ func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *
 	var denyMsgs, warnMsgs []string
 	resourceName := req.Name
 	obj := &unstructured.Unstructured{}
-	if len(res) > 0 && (h.admissionExporter != nil || *logDenies || *emitAdmissionEvents) {
+	objectDecoded := false
+	decodeObject := func(export bool) {
+		if objectDecoded {
+			return
+		}
+		objectDecoded = true
 		rawObj := getReqObject(req)
 		if len(rawObj) > 0 {
 			decodedObj := &unstructured.Unstructured{}
 			if _, _, err := deserializer.Decode(rawObj, nil, decodedObj); err != nil {
-				if h.admissionExporter != nil {
+				if export {
 					h.log.Error(err, "failed to decode admission request object for violation export")
 				}
 			} else {
@@ -284,10 +289,19 @@ func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *
 			resourceName = obj.GetName()
 		}
 	}
+	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
+		decodeObject(h.admissionExporter != nil)
+	}
 
 	var exportMessage exportutil.ExportMsg
-	if h.admissionExporter != nil && len(res) > 0 {
-		exportMessage = newAdmissionViolationExportMessage(req, obj)
+	exportMessageInitialized := false
+	baseExportMessage := func() *exportutil.ExportMsg {
+		if !exportMessageInitialized {
+			decodeObject(true)
+			exportMessage = newAdmissionViolationExportMessage(req, obj)
+			exportMessageInitialized = true
+		}
+		return &exportMessage
 	}
 	for _, result := range res {
 		if result == nil || result.Constraint == nil {
@@ -301,7 +315,7 @@ func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *
 			continue
 		}
 		if h.admissionExporter != nil {
-			h.exportAdmissionViolation(result, actions, &exportMessage)
+			h.exportAdmissionViolation(result, actions, baseExportMessage)
 		}
 		if *logDenies {
 			h.log.WithValues(
@@ -432,29 +446,31 @@ func newAdmissionViolationExportMessage(req *admission.Request, obj *unstructure
 
 // exportAdmissionViolation emits one best-effort record for an already
 // validated result. Export remains asynchronous and cannot change the response.
-func (h *validationHandler) exportAdmissionViolation(result *rtypes.Result, actions []string, baseMessage *exportutil.ExportMsg) {
-	scopedActions := result.ScopedEnforcementActions
-	if result.EnforcementAction == string(util.Scoped) {
-		scopedActions = actions
-	}
-	var details interface{}
-	if result.Metadata != nil {
-		details = result.Metadata["details"]
-	}
+func (h *validationHandler) exportAdmissionViolation(result *rtypes.Result, actions []string, baseMessage func() *exportutil.ExportMsg) {
+	h.admissionExporter.TryExport(func() *exportutil.ExportMsg {
+		base := baseMessage()
+		scopedActions := result.ScopedEnforcementActions
+		if result.EnforcementAction == string(util.Scoped) {
+			scopedActions = actions
+		}
+		var details interface{}
+		if result.Metadata != nil {
+			details = result.Metadata["details"]
+		}
 
-	message := *baseMessage
-	message.Details = details
-	message.Group = result.Constraint.GroupVersionKind().Group
-	message.Version = result.Constraint.GroupVersionKind().Version
-	message.Kind = result.Constraint.GetKind()
-	message.Name = result.Constraint.GetName()
-	message.Namespace = result.Constraint.GetNamespace()
-	message.Message = result.Msg
-	message.EnforcementAction = result.EnforcementAction
-	message.EnforcementActions = scopedActions
-	message.ConstraintAnnotations = constraintAnnotations(result.Constraint)
-	message.RequestUserGroups = append([]string(nil), baseMessage.RequestUserGroups...)
-	h.admissionExporter.Export(&message)
+		message := *base
+		message.Details = details
+		message.Group = result.Constraint.GroupVersionKind().Group
+		message.Version = result.Constraint.GroupVersionKind().Version
+		message.Kind = result.Constraint.GetKind()
+		message.Name = result.Constraint.GetName()
+		message.Namespace = result.Constraint.GetNamespace()
+		message.Message = result.Msg
+		message.EnforcementAction = result.EnforcementAction
+		message.EnforcementActions = scopedActions
+		message.ConstraintAnnotations = constraintAnnotations(result.Constraint)
+		return &message
+	})
 }
 
 // validatedEnforcementActions returns the actions shared by response handling

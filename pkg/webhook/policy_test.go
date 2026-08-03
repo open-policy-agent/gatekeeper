@@ -1178,7 +1178,8 @@ type fakeAdmissionViolationExporter struct {
 	messages []exportutil.ExportMsg
 }
 
-func (exporter *fakeAdmissionViolationExporter) Export(message *exportutil.ExportMsg) {
+func (exporter *fakeAdmissionViolationExporter) TryExport(build func() *exportutil.ExportMsg) {
+	message := build()
 	exporter.messages = append(exporter.messages, *message)
 }
 

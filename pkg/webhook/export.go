@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-logr/logr"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
@@ -23,12 +24,14 @@ import (
 
 const (
 	defaultAdmissionExportQueueSize = 1024
+	defaultAdmissionExportBatchSize = 64
 	// Bound the complete encoded record, not only the violation message. 64 KiB
 	// leaves room for normal policy and request metadata while preventing one
 	// user-influenced result from consuming a disproportionate share of the queue.
 	defaultAdmissionExportMaxMessageBytes = 64 * 1024
 	defaultAdmissionExportMaxQueueBytes   = 16 * 1024 * 1024
 	defaultAdmissionExportStatusInterval  = 10 * time.Second
+	defaultAdmissionExportHealthyInterval = time.Minute
 	defaultAdmissionExportLogInterval     = time.Minute
 	admissionExportStatusTimeout          = 2 * time.Second
 	admissionExportShutdownTimeout        = 5 * time.Second
@@ -47,7 +50,7 @@ var (
 )
 
 type admissionViolationExporter interface {
-	Export(*exportutil.ExportMsg)
+	TryExport(func() *exportutil.ExportMsg)
 }
 
 type admissionExportMetrics interface {
@@ -83,17 +86,26 @@ type queuedAdmissionViolationExporter struct {
 	// enqueue, which would otherwise leave an unaccounted message in the queue.
 	queueMu sync.RWMutex
 	stopped bool
+	stateMu sync.Mutex
+	state   admissionExportPublishState
 	// queueBytes includes bytes reserved by concurrent exporters that have not
 	// necessarily completed their channel send yet.
-	queueBytes      atomic.Int64
-	maxMessageBytes int64
-	maxQueueBytes   int64
-	statusInterval  time.Duration
-	logInterval     time.Duration
-	shutdownTimeout time.Duration
-	now             func() time.Time
-	lastDropLog     atomic.Int64
-	lastPublishLog  atomic.Int64
+	queueMessages    atomic.Int64
+	queueBytes       atomic.Int64
+	maxMessageBytes  int64
+	maxQueueBytes    int64
+	maxBatchSize     int
+	statusInterval   time.Duration
+	healthyInterval  time.Duration
+	logInterval      time.Duration
+	shutdownTimeout  time.Duration
+	now              func() time.Time
+	lastDropLog      atomic.Int64
+	lastPublishLog   atomic.Int64
+	statusReported   bool
+	lastStatusTime   time.Time
+	lastStatusActive bool
+	lastStatusErrors bool
 }
 
 func newQueuedAdmissionViolationExporter(system export.Exporter, connectionName, channel string, log logr.Logger, metrics admissionExportMetrics, statusReporter admissionExportStatusReporter) *queuedAdmissionViolationExporter {
@@ -107,16 +119,50 @@ func newQueuedAdmissionViolationExporter(system export.Exporter, connectionName,
 		queue:           make(chan queuedAdmissionViolation, defaultAdmissionExportQueueSize),
 		maxMessageBytes: defaultAdmissionExportMaxMessageBytes,
 		maxQueueBytes:   defaultAdmissionExportMaxQueueBytes,
+		maxBatchSize:    defaultAdmissionExportBatchSize,
 		statusInterval:  defaultAdmissionExportStatusInterval,
+		healthyInterval: defaultAdmissionExportHealthyInterval,
 		logInterval:     defaultAdmissionExportLogInterval,
 		shutdownTimeout: admissionExportShutdownTimeout,
 		now:             time.Now,
+		state:           newAdmissionExportPublishState(),
 	}
 }
 
-// Export runs on the admission path. It encodes and attempts a non-blocking
-// enqueue, but never waits for backend I/O or queue capacity.
+// Export is a convenience wrapper for callers that already own a message.
 func (exporter *queuedAdmissionViolationExporter) Export(message *exportutil.ExportMsg) {
+	exporter.TryExport(func() *exportutil.ExportMsg { return message })
+}
+
+// TryExport runs on the admission path. It reserves count capacity before
+// building the message, then encodes and attempts a non-blocking enqueue.
+func (exporter *queuedAdmissionViolationExporter) TryExport(build func() *exportutil.ExportMsg) {
+	exporter.queueMu.RLock()
+	defer exporter.queueMu.RUnlock()
+	if exporter.stopped {
+		exporter.metrics.reportAdmissionExportDropped(admissionExportDropReasonShutdown)
+		exporter.logDrop(context.Canceled, "dropping admission violation export because the exporter is stopping")
+		return
+	}
+	if !exporter.reserveQueueMessage() {
+		exporter.metrics.reportAdmissionExportQueueFull()
+		exporter.metrics.reportAdmissionExportDropped(admissionExportDropReasonQueueFull)
+		exporter.logDrop(errAdmissionExportQueueFull, "dropping admission violation export")
+		return
+	}
+	reservedMessage := true
+	defer func() {
+		if reservedMessage {
+			exporter.queueMessages.Add(-1)
+		}
+	}()
+
+	message := build()
+	if !admissionExportMessageFitsBudget(message, exporter.maxMessageBytes) {
+		exporter.metrics.reportAdmissionExportDropped(admissionExportDropReasonMessageTooLarge)
+		exporter.logDrop(errAdmissionExportMessageTooLarge, "dropping admission violation export", "limit", exporter.maxMessageBytes)
+		return
+	}
 	encoded, err := json.Marshal(message)
 	if err != nil {
 		exporter.metrics.reportAdmissionExportDropped(admissionExportDropReasonMarshalError)
@@ -130,13 +176,6 @@ func (exporter *queuedAdmissionViolationExporter) Export(message *exportutil.Exp
 		exporter.logDrop(errAdmissionExportMessageTooLarge, "dropping admission violation export", "size", size, "limit", exporter.maxMessageBytes)
 		return
 	}
-	exporter.queueMu.RLock()
-	defer exporter.queueMu.RUnlock()
-	if exporter.stopped {
-		exporter.metrics.reportAdmissionExportDropped(admissionExportDropReasonShutdown)
-		exporter.logDrop(context.Canceled, "dropping admission violation export because the exporter is stopping")
-		return
-	}
 	if !exporter.reserveQueueBytes(size) {
 		exporter.metrics.reportAdmissionExportQueueFull()
 		exporter.metrics.reportAdmissionExportDropped(admissionExportDropReasonQueueBytesFull)
@@ -146,6 +185,7 @@ func (exporter *queuedAdmissionViolationExporter) Export(message *exportutil.Exp
 
 	select {
 	case exporter.queue <- queuedAdmissionViolation{data: json.RawMessage(encoded), size: size}:
+		reservedMessage = false
 		exporter.metrics.reportAdmissionExportQueued()
 		exporter.reportQueueState()
 	default:
@@ -154,6 +194,205 @@ func (exporter *queuedAdmissionViolationExporter) Export(message *exportutil.Exp
 		exporter.metrics.reportAdmissionExportDropped(admissionExportDropReasonQueueFull)
 		exporter.reportQueueState()
 		exporter.logDrop(errAdmissionExportQueueFull, "dropping admission violation export")
+	}
+}
+
+// admissionExportMessageFitsBudget computes a lower bound for JSON-compatible
+// values produced by policy evaluation. It only rejects messages that cannot
+// fit; unknown or borderline values fall through to json.Marshal.
+func admissionExportMessageFitsBudget(message *exportutil.ExportMsg, limit int64) bool {
+	if message == nil {
+		return true
+	}
+	budget := limit
+	stringsToEncode := []string{
+		message.ID,
+		message.EventType,
+		message.Group,
+		message.Version,
+		message.Kind,
+		message.Name,
+		message.Namespace,
+		message.Message,
+		message.EnforcementAction,
+		message.ResourceGroup,
+		message.ResourceAPIVersion,
+		message.ResourceKind,
+		message.ResourceNamespace,
+		message.ResourceName,
+		message.Timestamp,
+		message.Operation,
+		message.RequestResource,
+		message.RequestSubresource,
+		message.RequestUsername,
+		message.RequestUserUID,
+	}
+	for _, value := range stringsToEncode {
+		if value != "" && !consumeAdmissionExportJSONString(&budget, value) {
+			return false
+		}
+	}
+	for _, values := range [][]string{message.EnforcementActions, message.RequestUserGroups} {
+		if len(values) == 0 {
+			continue
+		}
+		if !consumeAdmissionExportBudget(&budget, int64(len(values))+1) {
+			return false
+		}
+		for _, value := range values {
+			if !consumeAdmissionExportJSONString(&budget, value) {
+				return false
+			}
+		}
+	}
+	for _, values := range []map[string]string{message.ConstraintAnnotations, message.ResourceLabels} {
+		if len(values) == 0 {
+			continue
+		}
+		if !consumeAdmissionExportBudget(&budget, int64(len(values))*2+1) {
+			return false
+		}
+		for key, value := range values {
+			if !consumeAdmissionExportJSONString(&budget, key) || !consumeAdmissionExportJSONString(&budget, value) {
+				return false
+			}
+		}
+	}
+	if message.Details == nil {
+		return true
+	}
+
+	nodes := 4096
+	withinBudget, known := consumeAdmissionExportJSONValue(&budget, message.Details, 0, &nodes)
+	return !known || withinBudget
+}
+
+func consumeAdmissionExportJSONValue(budget *int64, value interface{}, depth int, nodes *int) (bool, bool) {
+	if depth > 64 || *nodes == 0 {
+		return false, false
+	}
+	*nodes--
+	switch typed := value.(type) {
+	case nil:
+		return consumeAdmissionExportBudget(budget, 4), true
+	case bool:
+		return consumeAdmissionExportBudget(budget, 4), true
+	case string:
+		return consumeAdmissionExportJSONString(budget, typed), true
+	case json.Number:
+		return false, false
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		return consumeAdmissionExportBudget(budget, 1), true
+	case json.RawMessage:
+		return false, false
+	case []byte:
+		encoded := int64(2 + 4*((len(typed)+2)/3))
+		return consumeAdmissionExportBudget(budget, encoded), true
+	case []string:
+		if len(typed) > 0 && !consumeAdmissionExportBudget(budget, int64(len(typed))+1) {
+			return false, true
+		}
+		for _, item := range typed {
+			if !consumeAdmissionExportJSONString(budget, item) {
+				return false, true
+			}
+		}
+		return true, true
+	case []interface{}:
+		if len(typed) > 0 && !consumeAdmissionExportBudget(budget, int64(len(typed))+1) {
+			return false, true
+		}
+		for _, item := range typed {
+			withinBudget, known := consumeAdmissionExportJSONValue(budget, item, depth+1, nodes)
+			if !known || !withinBudget {
+				return withinBudget, known
+			}
+		}
+		return true, true
+	case map[string]string:
+		if len(typed) > 0 && !consumeAdmissionExportBudget(budget, int64(len(typed))*2+1) {
+			return false, true
+		}
+		for key, item := range typed {
+			if !consumeAdmissionExportJSONString(budget, key) || !consumeAdmissionExportJSONString(budget, item) {
+				return false, true
+			}
+		}
+		return true, true
+	case map[string]interface{}:
+		if len(typed) > 0 && !consumeAdmissionExportBudget(budget, int64(len(typed))*2+1) {
+			return false, true
+		}
+		for key, item := range typed {
+			if !consumeAdmissionExportJSONString(budget, key) {
+				return false, true
+			}
+			withinBudget, known := consumeAdmissionExportJSONValue(budget, item, depth+1, nodes)
+			if !known || !withinBudget {
+				return withinBudget, known
+			}
+		}
+		return true, true
+	default:
+		return false, false
+	}
+}
+
+func consumeAdmissionExportBudget(budget *int64, size int64) bool {
+	if size < 0 || size > *budget {
+		return false
+	}
+	*budget -= size
+	return true
+}
+
+func consumeAdmissionExportJSONString(budget *int64, value string) bool {
+	if !consumeAdmissionExportBudget(budget, 2) {
+		return false
+	}
+	for index := 0; index < len(value); {
+		char := value[index]
+		if char < utf8.RuneSelf {
+			size := int64(1)
+			switch char {
+			case '\\', '"', '\n', '\r', '\t', '\b', '\f':
+				size = 2
+			case '<', '>', '&':
+				size = 6
+			default:
+				if char < 0x20 {
+					size = 6
+				}
+			}
+			if !consumeAdmissionExportBudget(budget, size) {
+				return false
+			}
+			index++
+			continue
+		}
+		runeValue, size := utf8.DecodeRuneInString(value[index:])
+		encodedSize := int64(size)
+		if runeValue == utf8.RuneError && size == 1 || runeValue == '\u2028' || runeValue == '\u2029' {
+			encodedSize = 6
+		}
+		if !consumeAdmissionExportBudget(budget, encodedSize) {
+			return false
+		}
+		index += size
+	}
+	return true
+}
+
+func (exporter *queuedAdmissionViolationExporter) reserveQueueMessage() bool {
+	limit := int64(cap(exporter.queue))
+	for {
+		current := exporter.queueMessages.Load()
+		if current >= limit {
+			return false
+		}
+		if exporter.queueMessages.CompareAndSwap(current, current+1) {
+			return true
+		}
 	}
 }
 
@@ -213,87 +452,172 @@ type admissionExportPublishState struct {
 // Backend and status errors are reported through status, logs, and metrics rather
 // than terminating the manager, so Start returns nil after shutdown.
 func (exporter *queuedAdmissionViolationExporter) Start(ctx context.Context) error {
-	ticker := time.NewTicker(exporter.statusInterval)
-	defer ticker.Stop()
-	state := admissionExportPublishState{errors: make(map[string]error)}
+	statusDone := make(chan struct{})
+	if exporter.statusReporter == nil {
+		close(statusDone)
+	} else {
+		go func() {
+			defer close(statusDone)
+			exporter.runStatusReporter(ctx)
+		}()
+	}
 
 	for {
 		// Give cancellation priority over a continuously ready queue. A select
 		// alone could keep choosing records while the cancellation case is ready.
 		if ctx.Err() != nil {
-			exporter.shutdown(&state, nil)
+			<-statusDone
+			exporter.shutdown(nil)
 			return nil
 		}
 		select {
 		case <-ctx.Done():
-			exporter.shutdown(&state, nil)
+			<-statusDone
+			exporter.shutdown(nil)
 			return nil
 		case queued := <-exporter.queue:
 			if ctx.Err() != nil {
-				exporter.shutdown(&state, &queued)
+				<-statusDone
+				exporter.shutdown(&queued)
 				return nil
 			}
-			exporter.publishQueued(ctx, queued, &state)
+			exporter.publishQueuedBatch(ctx, exporter.collectQueuedBatch(queued))
+		}
+	}
+}
+
+func (exporter *queuedAdmissionViolationExporter) runStatusReporter(ctx context.Context) {
+	ticker := time.NewTicker(exporter.statusInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
 			statusCtx, cancel := context.WithTimeout(ctx, admissionExportStatusTimeout)
-			exporter.reportPublishStatus(statusCtx, &state)
+			exporter.reportPendingPublishStatus(statusCtx, false)
 			cancel()
 		}
 	}
 }
 
-func (exporter *queuedAdmissionViolationExporter) publishQueued(ctx context.Context, queued queuedAdmissionViolation, state *admissionExportPublishState) {
-	exporter.queueBytes.Add(-queued.size)
-	exporter.reportQueueState()
-	state.attempted = true
-	state.lastAttemptTime = exporter.now().UTC()
-	if err := exporter.publish(ctx, queued.data); err != nil {
-		exporter.metrics.reportAdmissionExportPublishError()
-		exporter.logPublishError(err)
-		state.errors = exportutil.AddPublishError(state.errors, err)
-		return
+func (exporter *queuedAdmissionViolationExporter) collectQueuedBatch(first queuedAdmissionViolation) []queuedAdmissionViolation {
+	batch := make([]queuedAdmissionViolation, 1, exporter.maxBatchSize)
+	batch[0] = first
+	for len(batch) < exporter.maxBatchSize {
+		select {
+		case queued := <-exporter.queue:
+			batch = append(batch, queued)
+		default:
+			return batch
+		}
 	}
-	exporter.metrics.reportAdmissionExportPublished()
-	state.active = true
-	state.lastSuccessTime = exporter.now().UTC()
+	return batch
 }
 
-func (exporter *queuedAdmissionViolationExporter) publish(ctx context.Context, data json.RawMessage) error {
-	if err := ctx.Err(); err != nil {
-		return err
+func (exporter *queuedAdmissionViolationExporter) publishQueued(ctx context.Context, queued queuedAdmissionViolation) {
+	exporter.publishQueuedBatch(ctx, []queuedAdmissionViolation{queued})
+}
+
+func (exporter *queuedAdmissionViolationExporter) publishQueuedBatch(ctx context.Context, queued []queuedAdmissionViolation) {
+	messages := make([]any, len(queued))
+	for i := range queued {
+		exporter.queueMessages.Add(-1)
+		exporter.queueBytes.Add(-queued[i].size)
+		messages[i] = queued[i].data
 	}
-	result := make(chan error, 1)
+	exporter.reportQueueState()
+
+	errorsByMessage := exporter.publishBatch(ctx, messages)
+	for _, err := range errorsByMessage {
+		exporter.recordPublishResult(err)
+	}
+}
+
+func (exporter *queuedAdmissionViolationExporter) publishBatch(ctx context.Context, messages []any) []error {
+	if err := ctx.Err(); err != nil {
+		return admissionExportPublishErrors(len(messages), err)
+	}
+	result := make(chan []error, 1)
 	go func() {
 		// Keep late completion isolated from exporter state. The buffered channel
 		// lets this goroutine exit if the caller has already stopped waiting.
-		result <- exporter.system.Publish(ctx, exporter.connectionName, exporter.channel, data)
+		result <- exporter.publishBatchUnbounded(ctx, messages)
 	}()
 	select {
-	case err := <-result:
-		return err
+	case errorsByMessage := <-result:
+		return errorsByMessage
 	case <-ctx.Done():
-		return ctx.Err()
+		return admissionExportPublishErrors(len(messages), ctx.Err())
 	}
+}
+
+func (exporter *queuedAdmissionViolationExporter) publishBatchUnbounded(ctx context.Context, messages []any) []error {
+	errorsByMessage := make([]error, len(messages))
+	if batchExporter, ok := exporter.system.(export.BatchExporter); ok && len(messages) > 1 {
+		errorsByMessage = batchExporter.PublishBatch(ctx, exporter.connectionName, exporter.channel, messages)
+		if len(errorsByMessage) != len(messages) {
+			resultCount := len(errorsByMessage)
+			errorsByMessage = make([]error, len(messages))
+			for i := range errorsByMessage {
+				errorsByMessage[i] = fmt.Errorf("batch exporter returned %d results for %d messages", resultCount, len(messages))
+			}
+		}
+	} else {
+		for i := range messages {
+			errorsByMessage[i] = exporter.system.Publish(ctx, exporter.connectionName, exporter.channel, messages[i])
+		}
+	}
+	return errorsByMessage
+}
+
+func admissionExportPublishErrors(count int, err error) []error {
+	errorsByMessage := make([]error, count)
+	for i := range errorsByMessage {
+		errorsByMessage[i] = err
+	}
+	return errorsByMessage
+}
+
+func (exporter *queuedAdmissionViolationExporter) recordPublishResult(err error) {
+	now := exporter.now().UTC()
+	if err != nil {
+		exporter.metrics.reportAdmissionExportPublishError()
+		exporter.logPublishError(err)
+	} else {
+		exporter.metrics.reportAdmissionExportPublished()
+	}
+
+	exporter.stateMu.Lock()
+	defer exporter.stateMu.Unlock()
+	exporter.state.attempted = true
+	exporter.state.lastAttemptTime = now
+	if err != nil {
+		exporter.state.errors = exportutil.AddPublishError(exporter.state.errors, err)
+		return
+	}
+	exporter.state.active = true
+	exporter.state.lastSuccessTime = now
 }
 
 // shutdown first prevents new enqueues, then drains with a fresh timeout because
 // the manager context is already canceled. Any remainder is counted as dropped.
-func (exporter *queuedAdmissionViolationExporter) shutdown(state *admissionExportPublishState, selected *queuedAdmissionViolation) {
+func (exporter *queuedAdmissionViolationExporter) shutdown(selected *queuedAdmissionViolation) {
 	exporter.queueMu.Lock()
 	exporter.stopped = true
 	exporter.queueMu.Unlock()
 
 	drainCtx, cancelDrain := context.WithTimeout(context.Background(), exporter.shutdownTimeout)
 	if selected != nil {
-		exporter.publishQueued(drainCtx, *selected, state)
+		exporter.publishQueued(drainCtx, *selected)
 	}
 	for drainCtx.Err() == nil {
 		select {
 		case queued := <-exporter.queue:
-			exporter.publishQueued(drainCtx, queued, state)
+			exporter.publishQueued(drainCtx, queued)
 		default:
 			cancelDrain()
-			exporter.flushPublishStatus(state)
+			exporter.flushPublishStatus()
 			return
 		}
 	}
@@ -303,6 +627,7 @@ func (exporter *queuedAdmissionViolationExporter) shutdown(state *admissionExpor
 	for {
 		select {
 		case queued := <-exporter.queue:
+			exporter.queueMessages.Add(-1)
 			exporter.queueBytes.Add(-queued.size)
 			exporter.metrics.reportAdmissionExportDropped(admissionExportDropReasonShutdown)
 			dropped++
@@ -311,25 +636,69 @@ func (exporter *queuedAdmissionViolationExporter) shutdown(state *admissionExpor
 			if dropped > 0 {
 				exporter.log.Error(context.DeadlineExceeded, "dropping queued admission violation exports after shutdown drain timed out", "count", dropped)
 			}
-			exporter.flushPublishStatus(state)
+			exporter.flushPublishStatus()
 			return
 		}
 	}
 }
 
-func (exporter *queuedAdmissionViolationExporter) flushPublishStatus(state *admissionExportPublishState) {
+func (exporter *queuedAdmissionViolationExporter) flushPublishStatus() {
 	flushCtx, cancel := context.WithTimeout(context.Background(), admissionExportStatusTimeout)
 	defer cancel()
-	exporter.reportPublishStatus(flushCtx, state)
+	exporter.reportPendingPublishStatus(flushCtx, true)
 }
 
-// reportPublishStatus updates per-pod health only after a publish attempt. State
-// is cleared only after the status write succeeds so transient conflicts retry.
-func (exporter *queuedAdmissionViolationExporter) reportPublishStatus(ctx context.Context, state *admissionExportPublishState) {
-	if exporter.statusReporter == nil || !state.attempted {
+func newAdmissionExportPublishState() admissionExportPublishState {
+	return admissionExportPublishState{errors: make(map[string]error)}
+}
+
+// reportPendingPublishStatus swaps the accumulated state before API I/O so the
+// publisher never waits for status. Failed snapshots merge back with newer work.
+func (exporter *queuedAdmissionViolationExporter) reportPendingPublishStatus(ctx context.Context, force bool) {
+	if exporter.statusReporter == nil {
 		return
 	}
+	exporter.stateMu.Lock()
+	if !exporter.state.attempted {
+		exporter.stateMu.Unlock()
+		return
+	}
+	if !force && exporter.statusReported && !exporter.lastStatusErrors && len(exporter.state.errors) == 0 && exporter.state.active == exporter.lastStatusActive && exporter.now().Sub(exporter.lastStatusTime) < exporter.healthyInterval {
+		exporter.stateMu.Unlock()
+		return
+	}
+	state := exporter.state
+	exporter.state = newAdmissionExportPublishState()
+	exporter.stateMu.Unlock()
 
+	if err := exporter.reportPublishStatus(ctx, &state); err != nil {
+		exporter.logPublishError(fmt.Errorf("reporting admission export connection status: %w", err))
+		exporter.stateMu.Lock()
+		exporter.mergePublishStateLocked(state)
+		exporter.stateMu.Unlock()
+		return
+	}
+	exporter.statusReported = true
+	exporter.lastStatusTime = exporter.now()
+	exporter.lastStatusActive = state.active
+	exporter.lastStatusErrors = len(state.errors) > 0
+}
+
+func (exporter *queuedAdmissionViolationExporter) mergePublishStateLocked(previous admissionExportPublishState) {
+	exporter.state.attempted = exporter.state.attempted || previous.attempted
+	exporter.state.active = exporter.state.active || previous.active
+	if previous.lastAttemptTime.After(exporter.state.lastAttemptTime) {
+		exporter.state.lastAttemptTime = previous.lastAttemptTime
+	}
+	if previous.lastSuccessTime.After(exporter.state.lastSuccessTime) {
+		exporter.state.lastSuccessTime = previous.lastSuccessTime
+	}
+	for _, err := range previous.errors {
+		exporter.state.errors = exportutil.AddPublishError(exporter.state.errors, err)
+	}
+}
+
+func (exporter *queuedAdmissionViolationExporter) reportPublishStatus(ctx context.Context, state *admissionExportPublishState) error {
 	keys := make([]string, 0, len(state.errors))
 	for key := range state.errors {
 		keys = append(keys, key)
@@ -353,13 +722,7 @@ func (exporter *queuedAdmissionViolationExporter) reportPublishStatus(ctx contex
 		lastSuccessTime := metav1.NewTime(state.lastSuccessTime)
 		publishStatus.LastSuccessTime = &lastSuccessTime
 	}
-	if err := exporter.statusReporter.Report(ctx, exporter.connectionName, publishStatus); err != nil {
-		exporter.logPublishError(fmt.Errorf("reporting admission export connection status: %w", err))
-		return
-	}
-	state.attempted = false
-	state.active = false
-	clear(state.errors)
+	return exporter.statusReporter.Report(ctx, exporter.connectionName, publishStatus)
 }
 
 // connectionStatusReporter attributes publish health to the pod that owns this
