@@ -62,6 +62,16 @@ jobs:
             exit 1
           fi
 
+          make e2e-helm-install
+          rendered="$(./.staging/helm/linux-amd64/helm template gatekeeper manifest_staging/charts/gatekeeper \
+            --set enableAdmissionViolationExport=true \
+            --set exportBackend=disk \
+            --set admission.disableExportSidecar=false \
+            --set audit.exportConnection.path=/custom/path \
+            --set-json 'admission.exportSidecar.env=[{"name":"CUSTOM","value":"keep"},{"name":"ROOT_PATH","value":"/wrong"}]')"
+          env_json="$(yq eval-all -o=json 'select(.kind == "Deployment" and .metadata.name == "gatekeeper-controller-manager") | [.spec.template.spec.containers[] | select(.name == "admission-reader") | .env][0]' - <<<"$rendered")"
+          jq -e 'length == 2 and any(.[]; .name == "CUSTOM" and .value == "keep") and ([.[] | select(.name == "ROOT_PATH" and .value == "/custom/path")] | length == 1)' <<<"$env_json"
+
       - name: Run e2e
         run: |
           make docker-buildx IMG=gatekeeper-e2e:latest
