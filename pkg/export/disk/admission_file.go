@@ -220,6 +220,17 @@ func (r *Writer) writeAdmissionRecord(ctx context.Context, connectionName string
 	}
 
 	stream := conn.admission.stream
+	if stream != nil && stream.poisoned {
+		if err := finalizeAdmissionStream(stream); err != nil {
+			r.scheduleAdmissionRotationRetry(connectionName, topic, stream)
+			return fmt.Errorf("recovering poisoned admission stream: %w", err)
+		}
+		conn.admission.stream = nil
+		if err := conn.cleanupAdmissionFiles(); err != nil {
+			return err
+		}
+		stream = nil
+	}
 	if stream == nil {
 		var err error
 		stream, err = r.openAdmissionStream(connectionName, conn, topic)

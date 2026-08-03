@@ -297,6 +297,136 @@ func TestFinalizePoisonedAdmissionStreamRecoversCompleteRecords(t *testing.T) {
 	}
 }
 
+func TestAdmissionPublishRecoversPoisonedStreamBeforeAppend(t *testing.T) {
+	path := t.TempDir()
+	topicDir := filepath.Join(path, "admission")
+	if err := os.MkdirAll(topicDir, 0o770); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	openPath := filepath.Join(topicDir, admissionFilePrefix+"poisoned"+admissionOpenExtension)
+	file, err := os.OpenFile(openPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	poisonedContent := completeAdmissionRecord + "{\"partial\":"
+	if _, err := file.WriteString(poisonedContent); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatalf("Flock() error = %v", err)
+	}
+
+	writer := newAdmissionWriter()
+	conn := connectionFromConfig(&connectionConfig{path: path, closedConnectionTTL: time.Minute})
+	conn.admission.limits.maxFileBytes = 4096
+	conn.admission.limits.maxFileRecords = 100
+	conn.admission.limits.maxTotalBytes = 8192
+	conn.admission.limits.maxRecordBytes = 2048
+	conn.admission.limits.minFreeBytes = 0
+	conn.admission.stream = &admissionStream{
+		file:     file,
+		openPath: openPath,
+		topic:    "admission",
+		openedAt: time.Now(),
+		bytes:    int64(len(poisonedContent)),
+		records:  1,
+		maxBytes: 4096,
+		poisoned: true,
+		rename:   os.Rename,
+	}
+	writer.openConnections["admission"] = conn
+	t.Cleanup(func() { _ = writer.CloseConnection("admission") })
+
+	if err := writer.Publish(context.Background(), "admission", admissionPayload(t, "next"), "admission"); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	recoveredPath := strings.TrimSuffix(openPath, admissionOpenExtension) + ".recovered" + admissionReadyExtension
+	recovered, err := os.ReadFile(recoveredPath)
+	if err != nil {
+		t.Fatalf("ReadFile(recovered) error = %v", err)
+	}
+	if string(recovered) != completeAdmissionRecord {
+		t.Fatalf("unexpected recovered content %q", recovered)
+	}
+
+	writer.mu.Lock()
+	current := writer.openConnections["admission"].admission.stream
+	writer.mu.Unlock()
+	if current == nil || current.openPath == openPath || current.poisoned {
+		t.Fatalf("expected a fresh healthy stream, got %#v", current)
+	}
+	currentContent, err := os.ReadFile(current.openPath)
+	if err != nil {
+		t.Fatalf("ReadFile(current) error = %v", err)
+	}
+	var message exportutil.ExportMsg
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(currentContent))), &message); err != nil {
+		t.Fatalf("current stream contains invalid JSONL %q: %v", currentContent, err)
+	}
+	if message.ResourceName != "next" {
+		t.Fatalf("current stream resource name = %q, want next", message.ResourceName)
+	}
+}
+
+func TestAdmissionPublishRejectsAppendWhenPoisonedRecoveryFails(t *testing.T) {
+	path := t.TempDir()
+	topicDir := filepath.Join(path, "admission")
+	if err := os.MkdirAll(topicDir, 0o770); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	openPath := filepath.Join(topicDir, admissionFilePrefix+"poisoned"+admissionOpenExtension)
+	file, err := os.OpenFile(openPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	poisonedContent := completeAdmissionRecord + "{\"partial\":"
+	if _, err := file.WriteString(poisonedContent); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	writer := newAdmissionWriter()
+	conn := connectionFromConfig(&connectionConfig{path: path, closedConnectionTTL: time.Minute})
+	conn.admission.limits.maxFileBytes = 4096
+	conn.admission.limits.maxFileRecords = 100
+	conn.admission.limits.maxTotalBytes = 8192
+	conn.admission.limits.maxRecordBytes = 2048
+	conn.admission.limits.minFreeBytes = 0
+	conn.admission.stream = &admissionStream{
+		file:     file,
+		openPath: openPath,
+		topic:    "admission",
+		openedAt: time.Now(),
+		bytes:    int64(len(poisonedContent)),
+		records:  1,
+		maxBytes: 4096,
+		poisoned: true,
+	}
+	writer.openConnections["admission"] = conn
+	t.Cleanup(func() { _ = writer.CloseConnection("admission") })
+
+	err = writer.Publish(context.Background(), "admission", admissionPayload(t, "next"), "admission")
+	if err == nil || !strings.Contains(err.Error(), "recovering poisoned admission stream") {
+		t.Fatalf("expected poisoned recovery error, got %v", err)
+	}
+	content, readErr := os.ReadFile(openPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile() error = %v", readErr)
+	}
+	if string(content) != poisonedContent {
+		t.Fatalf("poisoned content changed after rejected append: %q", content)
+	}
+	entries, readErr := os.ReadDir(topicDir)
+	if readErr != nil {
+		t.Fatalf("ReadDir() error = %v", readErr)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(openPath) {
+		t.Fatalf("unexpected files after rejected append: %v", entries)
+	}
+}
+
 func TestAdmissionRetentionBoundsFileCount(t *testing.T) {
 	path := t.TempDir()
 	writer := newAdmissionWriter()
