@@ -247,7 +247,7 @@ func (exporter *queuedAdmissionViolationExporter) publishQueued(ctx context.Cont
 	exporter.reportQueueState()
 	state.attempted = true
 	state.lastAttemptTime = exporter.now().UTC()
-	if err := exporter.system.Publish(ctx, exporter.connectionName, exporter.channel, queued.data); err != nil {
+	if err := exporter.publish(ctx, queued.data); err != nil {
 		exporter.metrics.reportAdmissionExportPublishError()
 		exporter.logPublishError(err)
 		state.errors = exportutil.AddPublishError(state.errors, err)
@@ -256,6 +256,24 @@ func (exporter *queuedAdmissionViolationExporter) publishQueued(ctx context.Cont
 	exporter.metrics.reportAdmissionExportPublished()
 	state.active = true
 	state.lastSuccessTime = exporter.now().UTC()
+}
+
+func (exporter *queuedAdmissionViolationExporter) publish(ctx context.Context, data json.RawMessage) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	result := make(chan error, 1)
+	go func() {
+		// Keep late completion isolated from exporter state. The buffered channel
+		// lets this goroutine exit if the caller has already stopped waiting.
+		result <- exporter.system.Publish(ctx, exporter.connectionName, exporter.channel, data)
+	}()
+	select {
+	case err := <-result:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // shutdown first prevents new enqueues, then drains with a fresh timeout because

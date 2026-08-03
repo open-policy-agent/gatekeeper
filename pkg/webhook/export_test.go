@@ -289,6 +289,54 @@ func TestQueuedAdmissionViolationExporterCountsShutdownDrainTimeout(t *testing.T
 	require.Zero(t, metrics.queueBytes)
 }
 
+func TestQueuedAdmissionViolationExporterBoundsShutdownWhenBackendIgnoresContext(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	publishStarted := make(chan struct{})
+	releasePublish := make(chan struct{})
+	publishDone := make(chan struct{})
+	system := &fakeAdmissionExportSystem{
+		publish: func(context.Context, interface{}) error {
+			close(publishStarted)
+			defer close(publishDone)
+			<-releasePublish
+			return nil
+		},
+	}
+	exporter := newQueuedAdmissionViolationExporter(system, "audit-connection", "admission-channel", logr.Discard(), metrics, nil)
+	exporter.shutdownTimeout = 10 * time.Millisecond
+	exporter.Export(&exportutil.ExportMsg{Message: "first"})
+	exporter.Export(&exportutil.ExportMsg{Message: "second"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- exporter.Start(ctx)
+	}()
+
+	select {
+	case <-publishStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for publish to start")
+	}
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		close(releasePublish)
+		<-publishDone
+		t.Fatal("shutdown exceeded its drain timeout")
+	}
+
+	close(releasePublish)
+	<-publishDone
+	require.Zero(t, metrics.published)
+	require.Equal(t, 1, metrics.publishErrors)
+	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonShutdown])
+	require.Zero(t, metrics.queueDepth)
+	require.Zero(t, metrics.queueBytes)
+}
+
 func TestQueuedAdmissionViolationExporterRateLimitsLogs(t *testing.T) {
 	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, nil)
 
