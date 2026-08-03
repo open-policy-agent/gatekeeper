@@ -354,9 +354,14 @@ e2e-subscriber-deploy:
 	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: fake-subscriber/' | kubectl apply -f -
 	kubectl apply -f test/export/fake-subscriber/manifest/subscriber.yaml
 
-e2e-publisher-deploy:
+e2e-publisher-component-deploy:
 	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -
-	kubectl apply -f test/export/fake-subscriber/manifest/publish-components.yaml
+	yq 'select(.kind == "Component")' test/export/fake-subscriber/manifest/publish-components.yaml | kubectl apply -f -
+
+e2e-publisher-connection-deploy:
+	yq 'select(.kind == "Connection")' test/export/fake-subscriber/manifest/publish-components.yaml | kubectl apply -f -
+
+e2e-publisher-deploy: e2e-publisher-component-deploy e2e-publisher-connection-deploy
 
 e2e-reader-build-image:
 	docker buildx build --platform="$(PLATFORM)" -t ${FAKE_READER_IMAGE} --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
