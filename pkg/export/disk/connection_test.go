@@ -581,6 +581,88 @@ func TestUpdateConnectionPersistsClosedFileOnCleanupError(t *testing.T) {
 	}
 }
 
+func TestUpdateConnectionRecoversTargetBeforeCleaningOldPath(t *testing.T) {
+	oldPath := t.TempDir()
+	newPath := t.TempDir()
+	marker := path.Join(oldPath, "marker")
+	if err := os.WriteFile(marker, []byte("old path"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	auditFile, err := os.CreateTemp(oldPath, "audit")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	if err := syscall.Flock(int(auditFile.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatalf("Flock() error = %v", err)
+	}
+
+	topicDir := path.Join(newPath, "admission")
+	if err := os.MkdirAll(topicDir, 0o770); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	badOpenPath := path.Join(topicDir, admissionFilePrefix+"bad"+admissionOpenExtension)
+	if err := os.Symlink(path.Join(t.TempDir(), "missing"), badOpenPath); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	cleanupCalls := 0
+	writer := newTestWriter(func(conn *Connection) error {
+		cleanupCalls++
+		if conn.File != nil {
+			if err := conn.unlockAndCloseFile(); err != nil {
+				return err
+			}
+			conn.File = nil
+		}
+		return os.RemoveAll(conn.Path)
+	})
+	oldConn := connectionFromConfig(&connectionConfig{
+		path:                oldPath,
+		maxAuditResults:     3,
+		closedConnectionTTL: maxConnectionAge,
+	})
+	oldConn.File = auditFile
+	writer.openConnections["conn1"] = oldConn
+
+	err = writer.UpdateConnection(context.Background(), "conn1", diskConfig(newPath, 3.0))
+	if err == nil {
+		t.Fatal("expected target recovery to fail")
+	}
+	if cleanupCalls != 0 {
+		t.Fatalf("old path cleanup ran before target recovery, calls = %d", cleanupCalls)
+	}
+	writer.mu.Lock()
+	conn := writer.openConnections["conn1"]
+	reserved := writer.pathCleanupInProgressLocked(newPath)
+	writer.mu.Unlock()
+	if conn.Path != oldPath || conn.File != auditFile {
+		t.Fatalf("old connection changed after target recovery failure: %#v", conn)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("old path was changed after target recovery failure: %v", err)
+	}
+	if reserved {
+		t.Fatal("target path reservation was not released after recovery failure")
+	}
+
+	if err := os.Remove(badOpenPath); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if err := writer.UpdateConnection(context.Background(), "conn1", diskConfig(newPath, 3.0)); err != nil {
+		t.Fatalf("UpdateConnection() retry error = %v", err)
+	}
+	if cleanupCalls != 1 {
+		t.Fatalf("expected one old path cleanup after target recovery, got %d", cleanupCalls)
+	}
+	writer.mu.Lock()
+	conn = writer.openConnections["conn1"]
+	writer.mu.Unlock()
+	conn.stopAdmissionCleanup()
+	if conn.Path != newPath || conn.File != nil {
+		t.Fatalf("expected recovered target connection, got %#v", conn)
+	}
+}
+
 func TestUpdateConnectionDoesNotRemoveSharedOldPath(t *testing.T) {
 	writer := &Writer{
 		openConnections:              make(map[string]Connection),

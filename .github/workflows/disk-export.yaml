@@ -46,6 +46,22 @@ jobs:
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
           make e2e-bootstrap
 
+      - name: Validate admission-only Helm arguments
+        run: |
+          output="$(make -n e2e-helm-deploy \
+            HELM_REPO=test HELM_CRD_REPO=test HELM_RELEASE=test \
+            ENABLE_EXPORT=false ENABLE_ADMISSION_EXPORT=true EXPORT_BACKEND=disk \
+            EXPORT_DISK_MOUNT=/custom/mount EXPORT_DISK_PATH=/custom/path \
+            MAX_AUDIT_RESULTS=4 FAKE_READER_IMAGE=fake-reader:test)"
+          grep -q -- '--set audit.exportVolumeMount.path=/custom/mount' <<<"$output"
+          grep -q -- '--set audit.exportConnection.path=/custom/path' <<<"$output"
+          grep -q -- '--set audit.exportConnection.maxAuditResults=4' <<<"$output"
+          grep -q -- '--set admission.exportSidecar.image=fake-reader:test' <<<"$output"
+          if grep -q -- '--set audit.exportSidecar.image=' <<<"$output"; then
+            echo "admission-only deployment unexpectedly configured the audit reader" >&2
+            exit 1
+          fi
+
       - name: Run e2e
         run: |
           make docker-buildx IMG=gatekeeper-e2e:latest

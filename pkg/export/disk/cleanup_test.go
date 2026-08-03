@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"syscall"
@@ -962,6 +963,68 @@ func TestRetryFailedConnectionsRetainsOpenAdmissionFile(t *testing.T) {
 	}
 	if err := file.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
+	}
+}
+
+func TestCloseFileWithBackoffRetriesAdmissionAfterAuditClose(t *testing.T) {
+	dir := t.TempDir()
+	auditFile, err := os.CreateTemp(dir, "audit")
+	if err != nil {
+		t.Fatalf("CreateTemp(audit) error = %v", err)
+	}
+	if err := syscall.Flock(int(auditFile.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatalf("Flock(audit) error = %v", err)
+	}
+
+	openPath := path.Join(dir, admissionFilePrefix+"retry"+admissionOpenExtension)
+	admissionFile, err := os.OpenFile(openPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatalf("OpenFile(admission) error = %v", err)
+	}
+	if err := syscall.Flock(int(admissionFile.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatalf("Flock(admission) error = %v", err)
+	}
+	if _, err := admissionFile.WriteString(completeAdmissionRecord); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+
+	renameCalls := 0
+	stream := &admissionStream{
+		file:     admissionFile,
+		openPath: openPath,
+		topic:    "admission",
+		bytes:    int64(len(completeAdmissionRecord)),
+		records:  1,
+		maxBytes: 4096,
+		rename: func(oldPath, newPath string) error {
+			renameCalls++
+			if renameCalls == 1 {
+				return os.ErrPermission
+			}
+			return os.Rename(oldPath, newPath)
+		},
+	}
+	conn := Connection{
+		File:            auditFile,
+		currentAuditRun: "audit-run",
+		admission: admissionState{
+			stream: stream,
+		},
+	}
+	backoff := wait.Backoff{Duration: time.Millisecond, Factor: 1, Steps: 2}
+
+	if err := closeFileWithBackoff(&conn, backoff); err != nil {
+		t.Fatalf("closeFileWithBackoff() error = %v", err)
+	}
+	if renameCalls != 2 {
+		t.Fatalf("expected admission finalization retry, rename calls = %d", renameCalls)
+	}
+	if conn.File != nil || conn.currentAuditRun != "" || conn.admission.stream != nil {
+		t.Fatalf("expected all file ownership to be cleared, got %#v", conn)
+	}
+	readyPath := strings.TrimSuffix(openPath, admissionOpenExtension) + admissionReadyExtension
+	if _, err := os.Stat(readyPath); err != nil {
+		t.Fatalf("expected finalized admission file: %v", err)
 	}
 }
 

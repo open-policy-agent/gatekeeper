@@ -216,6 +216,7 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 		defer r.releaseCleanupPath(parsed.path)
 	}
 	r.mu.Unlock()
+	pathChanged := conn.Path != parsed.path
 
 	// Create the target directory only after confirming it is not mid-cleanup and
 	// reserving it, so a rejected update never recreates a directory cleanup is
@@ -224,7 +225,17 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
 	}
 
-	if conn.Path != parsed.path {
+	var candidate Connection
+	if pathChanged {
+		// Recover a fresh candidate before destroying the old path. A failed target
+		// recovery must leave the currently usable connection untouched.
+		candidate = connectionFromConfig(&parsed)
+		if err := candidate.recoverAdmissionFiles(); err != nil {
+			return fmt.Errorf("recovering admission files for connection %s: %w", connectionName, err)
+		}
+	}
+
+	if pathChanged {
 		// Keep the old connection visible while cleanup runs so concurrent callers
 		// can find the current lock and wait instead of observing a transient miss.
 		if err := r.closeAndCleanupConnection(connectionName, &conn); err != nil {
@@ -235,17 +246,16 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 			r.mu.Unlock()
 			return fmt.Errorf("error updating connection %s, %w", connectionName, err)
 		}
-		conn.Path = parsed.path
-		conn.File = nil
-	}
-	applyConnectionConfig(&conn, &parsed)
-	// A path migration stops the old janitor. Recover the new path and restart
-	// idle cleanup before publishing the updated Connection value.
-	if conn.admission.cleanupTimer == nil {
-		if err := conn.recoverAdmissionFiles(); err != nil {
-			return fmt.Errorf("recovering admission files for connection %s: %w", connectionName, err)
+		r.scheduleAdmissionCleanup(connectionName, &candidate)
+		conn = candidate
+	} else {
+		applyConnectionConfig(&conn, &parsed)
+		if conn.admission.cleanupTimer == nil {
+			if err := conn.recoverAdmissionFiles(); err != nil {
+				return fmt.Errorf("recovering admission files for connection %s: %w", connectionName, err)
+			}
+			r.scheduleAdmissionCleanup(connectionName, &conn)
 		}
-		r.scheduleAdmissionCleanup(connectionName, &conn)
 	}
 
 	r.mu.Lock()

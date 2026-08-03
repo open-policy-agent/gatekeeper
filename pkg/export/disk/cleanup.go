@@ -45,7 +45,6 @@ func closeFileWithBackoff(conn *Connection, backoff wait.Backoff) error {
 			lastErr = fmt.Errorf("error closing files: %w", err)
 			return false, nil
 		}
-		conn.File = nil
 		lastErr = nil
 		return true, nil
 	})
@@ -69,7 +68,6 @@ func closeAndRemoveFilesWithBackoff(conn *Connection, backoff wait.Backoff, remo
 				lastErr = fmt.Errorf("error closing files: %w", err)
 				return false, nil
 			}
-			conn.File = nil
 		}
 		if err := removeAll(conn.Path); err != nil {
 			lastErr = fmt.Errorf("error deleting violations stored at old path: %w", err)
@@ -93,6 +91,12 @@ func closeConnectionFiles(conn *Connection, finalizeAdmission bool) error {
 	var auditErr error
 	if conn.File != nil {
 		auditErr = conn.unlockAndCloseFile()
+		if auditErr == nil {
+			// Persist partial success so a later admission retry does not attempt to
+			// close the same audit descriptor again.
+			conn.File = nil
+			conn.currentAuditRun = ""
+		}
 	}
 	return errors.Join(auditErr, conn.closeAdmissionStream(finalizeAdmission))
 }

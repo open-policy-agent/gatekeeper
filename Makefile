@@ -46,9 +46,11 @@ HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true
 	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
 
-HELM_DISK_EXPORT_ARGS = --set audit.exportVolumeMount.path=${EXPORT_DISK_MOUNT} \
+HELM_DISK_SHARED_EXPORT_ARGS = --set audit.exportVolumeMount.path=${EXPORT_DISK_MOUNT} \
 	--set audit.exportConnection.path=${EXPORT_DISK_PATH} \
 	--set audit.exportConnection.maxAuditResults=${MAX_AUDIT_RESULTS} \
+
+HELM_DISK_AUDIT_EXPORT_ARGS = \
 	--set audit.exportSidecar.image=${FAKE_READER_IMAGE} \
 	--set audit.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
 
@@ -307,7 +309,8 @@ ifneq ($(filter true,$(ENABLE_EXPORT) $(ENABLE_ADMISSION_EXPORT)),)
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait --timeout ${HELM_TIMEOUT} \
 		$(HELM_EXPORT_ARGS) \
-		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_EXPORT_ARGS)) \
+		$(if $(and $(filter true,$(ENABLE_EXPORT) $(ENABLE_ADMISSION_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_SHARED_EXPORT_ARGS)) \
+		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_AUDIT_EXPORT_ARGS)) \
 		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter dapr,$(EXPORT_BACKEND))),$(HELM_DAPR_EXPORT_ARGS)) \
 		$(if $(and $(filter true,$(ENABLE_ADMISSION_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_ADMISSION_EXPORT_ARGS)) \
 		$(HELM_EXTRA_ARGS)
