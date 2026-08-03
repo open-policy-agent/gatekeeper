@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"syscall"
 	"testing"
@@ -435,6 +436,124 @@ func TestAdmissionCleanupStopsAtRemovalLimit(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Fatalf("expected one file after bounded cleanup, got %d", len(entries))
+	}
+}
+
+func TestScanAdmissionReadyFilesBoundsRemovalCandidates(t *testing.T) {
+	path := t.TempDir()
+	topicDir := filepath.Join(path, "admission")
+	if err := os.MkdirAll(topicDir, 0o770); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	fileCount := maxAdmissionFilesPerCleanup + 32
+	baseTime := time.Now().Add(-time.Hour)
+	for i := range fileCount {
+		filePath := filepath.Join(topicDir, fmt.Sprintf("%s%03d%s", admissionFilePrefix, i, admissionReadyExtension))
+		if err := os.WriteFile(filePath, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+		modTime := baseTime.Add(time.Duration(i) * time.Second)
+		if err := os.Chtimes(filePath, modTime, modTime); err != nil {
+			t.Fatalf("Chtimes() error = %v", err)
+		}
+	}
+
+	summary, err := scanAdmissionReadyFiles(path)
+	if err != nil {
+		t.Fatalf("scanAdmissionReadyFiles() error = %v", err)
+	}
+	if summary.totalFiles != fileCount {
+		t.Fatalf("total files = %d, want %d", summary.totalFiles, fileCount)
+	}
+	if summary.totalBytes != int64(fileCount*len("{}\n")) {
+		t.Fatalf("total bytes = %d, want %d", summary.totalBytes, fileCount*len("{}\n"))
+	}
+	if len(summary.files) != maxAdmissionFilesPerCleanup {
+		t.Fatalf("cleanup candidates = %d, want %d", len(summary.files), maxAdmissionFilesPerCleanup)
+	}
+	for i, file := range summary.files {
+		want := filepath.Join(topicDir, fmt.Sprintf("%s%03d%s", admissionFilePrefix, i, admissionReadyExtension))
+		if file.path != want {
+			t.Fatalf("cleanup candidate %d = %s, want %s", i, file.path, want)
+		}
+	}
+	if !summary.hasNextOldest || !summary.nextOldest.modTime.Equal(baseTime.Add(maxAdmissionFilesPerCleanup*time.Second)) {
+		t.Fatalf("next oldest file = %#v", summary.nextOldest)
+	}
+}
+
+func TestAdmissionReadyFileCollectorKeepsOldestCandidatesRegardlessOfInputOrder(t *testing.T) {
+	fileCount := maxAdmissionFilesPerCleanup + 64
+	baseTime := time.Now().Add(-time.Hour)
+	allFiles := make([]admissionReadyFile, fileCount)
+	for index := range allFiles {
+		allFiles[index] = admissionReadyFile{
+			path:    fmt.Sprintf("topic-%d/%s%03d%s", index%3, admissionFilePrefix, index, admissionReadyExtension),
+			size:    int64(index + 1),
+			modTime: baseTime.Add(time.Duration(index/2) * time.Second),
+		}
+	}
+	want := append([]admissionReadyFile(nil), allFiles...)
+	sort.Slice(want, func(left, right int) bool {
+		return admissionReadyFileBefore(want[left], want[right])
+	})
+
+	var collector admissionReadyFileCollector
+	for offset := range fileCount {
+		// This permutation visits every index and mixes old/new and equal-time files.
+		collector.add(allFiles[(offset*67)%fileCount])
+	}
+	summary := collector.summary()
+	if !slices.Equal(summary.files, want[:maxAdmissionFilesPerCleanup]) {
+		t.Fatal("collector did not retain the globally oldest cleanup candidates")
+	}
+	if !summary.hasNextOldest || summary.nextOldest != want[maxAdmissionFilesPerCleanup] {
+		t.Fatalf("next oldest file = %#v, want %#v", summary.nextOldest, want[maxAdmissionFilesPerCleanup])
+	}
+	if summary.totalFiles != fileCount {
+		t.Fatalf("total files = %d, want %d", summary.totalFiles, fileCount)
+	}
+	var wantBytes int64
+	for _, file := range allFiles {
+		wantBytes += file.size
+	}
+	if summary.totalBytes != wantBytes {
+		t.Fatalf("total bytes = %d, want %d", summary.totalBytes, wantBytes)
+	}
+}
+
+func TestAdmissionCleanupReportsAgeBacklogAfterCandidateLimit(t *testing.T) {
+	path := t.TempDir()
+	topicDir := filepath.Join(path, "admission")
+	if err := os.MkdirAll(topicDir, 0o770); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	oldTime := time.Now().Add(-time.Hour)
+	for i := 0; i < maxAdmissionFilesPerCleanup+1; i++ {
+		filePath := filepath.Join(topicDir, fmt.Sprintf("%s%03d%s", admissionFilePrefix, i, admissionReadyExtension))
+		if err := os.WriteFile(filePath, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+		if err := os.Chtimes(filePath, oldTime, oldTime); err != nil {
+			t.Fatalf("Chtimes() error = %v", err)
+		}
+	}
+
+	conn := connectionFromConfig(&connectionConfig{path: path, closedConnectionTTL: time.Minute})
+	conn.admission.limits.maxResults = maxAdmissionFilesPerCleanup + 1
+	conn.admission.limits.maxTotalBytes = 8192
+	conn.admission.limits.fileTTL = time.Minute
+	conn.admission.limits.minFreeBytes = 0
+	err := conn.cleanupAdmissionFiles()
+	if err == nil || !strings.Contains(err.Error(), "cleanup backlog") {
+		t.Fatalf("expected age cleanup backlog error, got %v", err)
+	}
+	entries, readErr := os.ReadDir(topicDir)
+	if readErr != nil {
+		t.Fatalf("ReadDir() error = %v", readErr)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected one expired file after bounded cleanup, got %d", len(entries))
 	}
 }
 

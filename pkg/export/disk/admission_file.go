@@ -1,6 +1,7 @@
 package disk
 
 import (
+	"container/heap"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -83,8 +84,112 @@ type admissionReadyFile struct {
 }
 
 type admissionFileSummary struct {
-	files      []admissionReadyFile
-	totalBytes int64
+	files         []admissionReadyFile
+	totalFiles    int
+	totalBytes    int64
+	nextOldest    admissionReadyFile
+	hasNextOldest bool
+}
+
+func (summary *admissionFileSummary) oldestModTime() time.Time {
+	if len(summary.files) > 0 {
+		return summary.files[0].modTime
+	}
+	if summary.hasNextOldest {
+		return summary.nextOldest.modTime
+	}
+	return time.Time{}
+}
+
+type admissionReadyFileMaxHeap []admissionReadyFile
+
+func (files admissionReadyFileMaxHeap) Len() int { return len(files) }
+
+func (files admissionReadyFileMaxHeap) Less(left, right int) bool {
+	// Reverse oldest-first order so the root is the newest retained candidate.
+	return admissionReadyFileBefore(files[right], files[left])
+}
+
+func (files admissionReadyFileMaxHeap) Swap(left, right int) {
+	files[left], files[right] = files[right], files[left]
+}
+
+func (files *admissionReadyFileMaxHeap) Push(value any) {
+	file, ok := value.(admissionReadyFile)
+	if !ok {
+		panic("invalid admission cleanup candidate")
+	}
+	*files = append(*files, file)
+}
+
+func (files *admissionReadyFileMaxHeap) Pop() any {
+	previous := *files
+	last := len(previous) - 1
+	value := previous[last]
+	*files = previous[:last]
+	return value
+}
+
+type admissionReadyFileCollector struct {
+	candidates    admissionReadyFileMaxHeap
+	totalFiles    int
+	totalBytes    int64
+	nextOldest    admissionReadyFile
+	hasNextOldest bool
+}
+
+func (collector *admissionReadyFileCollector) add(file admissionReadyFile) {
+	if collector.totalFiles < math.MaxInt {
+		collector.totalFiles++
+	}
+	if collector.totalBytes > math.MaxInt64-file.size {
+		collector.totalBytes = math.MaxInt64
+	} else {
+		collector.totalBytes += file.size
+	}
+
+	if len(collector.candidates) < maxAdmissionFilesPerCleanup {
+		heap.Push(&collector.candidates, file)
+		return
+	}
+	if admissionReadyFileBefore(file, collector.candidates[0]) {
+		excluded, ok := heap.Pop(&collector.candidates).(admissionReadyFile)
+		if !ok {
+			panic("invalid admission cleanup candidate")
+		}
+		collector.recordExcluded(excluded)
+		heap.Push(&collector.candidates, file)
+		return
+	}
+	collector.recordExcluded(file)
+}
+
+func (collector *admissionReadyFileCollector) recordExcluded(file admissionReadyFile) {
+	if !collector.hasNextOldest || admissionReadyFileBefore(file, collector.nextOldest) {
+		collector.nextOldest = file
+		collector.hasNextOldest = true
+	}
+}
+
+func (collector *admissionReadyFileCollector) summary() admissionFileSummary {
+	files := append([]admissionReadyFile(nil), collector.candidates...)
+	sort.Slice(files, func(left, right int) bool {
+		return admissionReadyFileBefore(files[left], files[right])
+	})
+	return admissionFileSummary{
+		files:         files,
+		totalFiles:    collector.totalFiles,
+		totalBytes:    collector.totalBytes,
+		nextOldest:    collector.nextOldest,
+		hasNextOldest: collector.hasNextOldest,
+	}
+}
+
+func admissionReadyFileBefore(left, right admissionReadyFile) bool {
+	if left.modTime.Equal(right.modTime) {
+		return left.path < right.path
+	}
+	return left.modTime.Before(right.modTime)
 }
 
 // writeAdmissionRecord appends one durable JSONL record, rotating before or
@@ -444,18 +549,19 @@ func (conn *Connection) cleanupAdmissionFilesWithScanner(reservedBytes int64, sc
 	maxReadyBytes := limits.maxTotalBytes - openBytes - reservedBytes
 	now := time.Now()
 	removed := 0
-	for len(summary.files) > 0 {
-		oldest := summary.files[0]
-		expired := now.Sub(oldest.modTime) > limits.fileTTL
-		withinCount := len(summary.files) <= limits.maxResults
+	for {
+		oldestModTime := summary.oldestModTime()
+		expired := !oldestModTime.IsZero() && now.Sub(oldestModTime) > limits.fileTTL
+		withinCount := summary.totalFiles <= limits.maxResults
 		withinBytes := summary.totalBytes <= maxReadyBytes
 		// Retention is satisfied only when age, count, and byte limits all hold.
 		if !expired && withinCount && withinBytes {
 			return nil
 		}
-		if removed == maxAdmissionFilesPerCleanup {
+		if removed == maxAdmissionFilesPerCleanup || len(summary.files) == 0 {
 			return fmt.Errorf("admission cleanup backlog remains above configured retention limits")
 		}
+		oldest := summary.files[0]
 		if err := removeAdmissionReadyFile(oldest.path); err != nil {
 			if errors.Is(err, errAdmissionFileBusy) {
 				return fmt.Errorf("admission cleanup blocked by active reader: %w", err)
@@ -463,13 +569,18 @@ func (conn *Connection) cleanupAdmissionFilesWithScanner(reservedBytes int64, sc
 			return err
 		}
 		summary.files = summary.files[1:]
+		if summary.totalFiles != math.MaxInt {
+			summary.totalFiles--
+		}
 		// Keep an overflow-saturated total over-limit rather than risk under-cleanup.
-		if summary.totalBytes != math.MaxInt64 {
+		if summary.totalFiles == 0 {
+			summary.totalBytes = 0
+			summary.hasNextOldest = false
+		} else if summary.totalBytes != math.MaxInt64 {
 			summary.totalBytes -= oldest.size
 		}
 		removed++
 	}
-	return nil
 }
 
 func (conn *Connection) admissionOpenBytes() int64 {
@@ -479,60 +590,46 @@ func (conn *Connection) admissionOpenBytes() int64 {
 	return conn.admission.stream.bytes
 }
 
-// scanAdmissionReadyFiles returns one size summary and a deterministic oldest-first
-// snapshot of completed admission files across all topic directories.
+// scanAdmissionReadyFiles returns exact aggregate usage and a bounded,
+// deterministic oldest-first set of cleanup candidates across all topics.
 func scanAdmissionReadyFiles(root string) (admissionFileSummary, error) {
-	var summary admissionFileSummary
+	var collector admissionReadyFileCollector
 	directory, err := os.Open(root)
 	if err != nil {
-		return summary, err
+		return admissionFileSummary{}, err
 	}
 	defer directory.Close()
 	// ReadDir advances the directory cursor by one bounded batch per call.
 	for {
 		entries, err := directory.ReadDir(admissionReadDirBatchSize)
 		if err != nil && !errors.Is(err, io.EOF) {
-			return summary, err
+			return collector.summary(), err
 		}
 		for _, entry := range entries {
 			if !entry.IsDir() || validatePathSegment("topic", entry.Name()) != nil {
 				continue
 			}
-			topicSummary, summaryErr := scanAdmissionReadyFilesInDir(filepath.Join(root, entry.Name()))
-			if summaryErr != nil {
-				return summary, summaryErr
+			if scanErr := scanAdmissionReadyFilesInDir(filepath.Join(root, entry.Name()), &collector); scanErr != nil {
+				return collector.summary(), scanErr
 			}
-			if summary.totalBytes > math.MaxInt64-topicSummary.totalBytes {
-				summary.totalBytes = math.MaxInt64
-			} else {
-				summary.totalBytes += topicSummary.totalBytes
-			}
-			summary.files = append(summary.files, topicSummary.files...)
 		}
 		if errors.Is(err, io.EOF) {
-			sort.Slice(summary.files, func(i, j int) bool {
-				if summary.files[i].modTime.Equal(summary.files[j].modTime) {
-					return summary.files[i].path < summary.files[j].path
-				}
-				return summary.files[i].modTime.Before(summary.files[j].modTime)
-			})
-			return summary, nil
+			return collector.summary(), nil
 		}
 	}
 }
 
-func scanAdmissionReadyFilesInDir(dir string) (admissionFileSummary, error) {
-	var summary admissionFileSummary
+func scanAdmissionReadyFilesInDir(dir string, collector *admissionReadyFileCollector) error {
 	directory, err := os.Open(dir)
 	if err != nil {
-		return summary, err
+		return err
 	}
 	defer directory.Close()
 	// ReadDir advances the directory cursor by one bounded batch per call.
 	for {
 		entries, err := directory.ReadDir(admissionReadDirBatchSize)
 		if err != nil && !errors.Is(err, io.EOF) {
-			return summary, err
+			return err
 		}
 		for _, entry := range entries {
 			if entry.IsDir() || !strings.HasPrefix(entry.Name(), admissionFilePrefix) || filepath.Ext(entry.Name()) != admissionReadyExtension {
@@ -543,22 +640,17 @@ func scanAdmissionReadyFilesInDir(dir string) (admissionFileSummary, error) {
 				if os.IsNotExist(infoErr) {
 					continue
 				}
-				return summary, infoErr
-			}
-			if summary.totalBytes > math.MaxInt64-info.Size() {
-				summary.totalBytes = math.MaxInt64
-			} else {
-				summary.totalBytes += info.Size()
+				return infoErr
 			}
 			path := filepath.Join(dir, entry.Name())
-			summary.files = append(summary.files, admissionReadyFile{
+			collector.add(admissionReadyFile{
 				path:    path,
 				size:    info.Size(),
 				modTime: info.ModTime(),
 			})
 		}
 		if errors.Is(err, io.EOF) {
-			return summary, nil
+			return nil
 		}
 	}
 }
