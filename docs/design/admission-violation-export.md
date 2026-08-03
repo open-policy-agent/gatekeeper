@@ -148,22 +148,26 @@ and are not source files for this feature.
 flowchart LR
     A[Kubernetes admission request] --> B[Constraint evaluation]
     B --> C[Admission response processing]
-    B --> D[Build one ExportMsg per violation]
-    D --> E{Non-blocking bounded enqueue}
-    E -->|accepted| F[Per-pod in-memory queue]
-    E -->|rejected| G[Drop metric and rate-limited log]
-    F --> H[Single background publisher]
-    H --> I[Export System]
-    I --> J[Disk Connection]
-    J --> K[Locked admission .open segment]
-    K --> L[Atomic rename to admission-*.log]
-    C --> M[Allow, warn, or deny response]
+    B --> D{Reserve message slot}
+    D -->|accepted| E[Build shared request fields lazily]
+    E --> F[Build and encode one ExportMsg]
+    F --> G{Reserve bytes and enqueue}
+    D -->|full| H[Drop metric and rate-limited log]
+    G -->|accepted| I[Per-pod in-memory queue]
+    G -->|rejected| H
+    I --> J[Collect up to 64 ready records]
+    J --> K[PublishBatch or sequential Publish fallback]
+    K --> L[Disk Connection]
+    L --> M[Locked admission .open segment]
+    M --> N[Atomic rename to admission-*.log]
+    C --> O[Allow, warn, or deny response]
 ```
 
 The export path branches after evaluation but before the admission response is
-returned. `Export` has no error return and does not perform backend I/O. The
-admission response is derived from the same validated enforcement actions, but
-its outcome is independent of export success.
+returned. `TryExport` reserves count capacity before invoking its message
+builder, has no error return, and does not perform backend I/O. The admission
+response is derived from the same validated enforcement actions, but its outcome
+is independent of export success.
 
 ### Manager Wiring
 
@@ -183,8 +187,12 @@ system for each Gatekeeper pod that performs export.
 
 ## Admission Message Construction
 
-The handler constructs request-level fields once and then copies the base message
-for each constraint result. Invalid enforcement actions and results without a
+The handler validates a result, then passes a lazy builder to `TryExport`. If the
+exporter reserves count capacity, the builder decodes request metadata and
+constructs the request-level base message on first use. Later accepted results
+reuse that base and copy it before adding constraint-specific fields. A full or
+stopped queue therefore rejects the result without decoding request metadata or
+building the record. Invalid enforcement actions and results without a
 Constraint are not exported.
 
 The JSON record uses `ExportMsg`. Common violation fields include:
@@ -236,10 +244,12 @@ private alpha constants:
 
 | Limit | Value |
 |---|---:|
-| Maximum queued messages | 1,024 |
+| Maximum in-progress or queued messages | 1,024 |
 | Maximum encoded queued bytes | 16 MiB |
 | Maximum encoded JSON record | 64 KiB |
+| Maximum publish batch | 64 messages |
 | Status reporting interval | 10 seconds |
+| Unchanged healthy status heartbeat | 1 minute |
 | Status write timeout | 2 seconds |
 | Shutdown drain timeout | 5 seconds |
 | Repeated log interval | 1 minute |
@@ -255,21 +265,25 @@ enqueue with reason `message_too_large`.
 
 ### Producer Path
 
-For each message, `Export`:
+For each message, `TryExport`:
 
-1. Marshals the message to JSON.
-2. Drops complete encoded records larger than 64 KiB.
-3. Takes a read lock that prevents shutdown from setting `stopped` between byte
-   reservation and queue insertion.
-4. Rejects new messages after shutdown starts.
-5. Atomically reserves the encoded size against the 16 MiB byte limit.
-6. Attempts a non-blocking send to the buffered channel.
-7. On a full channel, releases the byte reservation and drops the message.
+1. Takes a read lock that prevents shutdown from starting during the enqueue.
+2. Atomically reserves one of 1,024 count slots before constructing the message.
+3. Rejects new messages after shutdown starts or when all count slots are held.
+4. Builds the message and computes a bounded lower estimate of its encoded size.
+5. Drops messages that cannot fit within 64 KiB, then marshals the remainder.
+6. Applies the exact 64 KiB encoded limit.
+7. Atomically reserves the encoded size against the 16 MiB byte limit.
+8. Attempts a non-blocking send to the buffered channel.
+9. On any failure, releases all count and byte reservations.
 
 The non-blocking send is required: waiting for queue capacity would put backend
 backpressure on the admission path. Count and byte limits are independent. The
-count limit protects channel and per-record overhead; the byte limit protects
-memory when records are large.
+count limit includes both builders in progress and queued records, bounding
+concurrent construction and channel overhead. The byte limit protects retained
+encoded data when records are large. The lower-bound preflight does not replace
+the final marshal and exact length check; unknown custom values fall through so
+encoding errors keep their normal classification.
 
 Queue depth and byte gauges are approximate snapshots. Concurrent producers may
 change one value between observations. Byte accounting can briefly include a
@@ -277,18 +291,29 @@ producer that reserved bytes but has not yet completed its channel send.
 
 ### Publisher Path
 
-`Start` is the single queue consumer. It serializes calls to
-`ExportSystem.Publish`, which simplifies file ordering and per-Connection driver
-state. On dequeue, queue bytes and gauges are reduced before backend I/O; gauges
-therefore represent messages waiting in the queue, not a message currently in
-flight.
+`Start` is the single queue consumer. It drains up to 64 records that are already
+available without waiting to fill a batch. A driver can implement the optional
+source-neutral batch interface; other drivers retain the single-message
+`Publish` fallback. Batch values use the same arbitrary message representations
+as `Publish`, allowing admission to pass pre-encoded `json.RawMessage` values and
+future audit batching to pass typed `ExportMsg` values. Calls remain serialized,
+which preserves file ordering and per-Connection driver state. On dequeue, queue
+bytes and gauges are reduced before backend I/O; gauges therefore represent
+messages waiting in the queue, not a batch currently in flight.
 
 Publishing is attempted once. A backend error is logged, counted, and aggregated
 for status, but the individual message is not retried.
 
 ### Shutdown
 
-Manager cancellation is given priority over a continuously ready queue. Shutdown:
+Manager cancellation is given priority over a continuously ready queue. If
+cancellation occurs while a normal publish batch is already in flight, that
+batch has already been removed from queue accounting. The publisher stops
+waiting when its context is canceled and records publish errors for the batch;
+it does not requeue those records. A backend call that ignores cancellation may
+finish later in its isolated goroutine, but the late result is not applied.
+
+Shutdown then handles records that remain queued:
 
 1. Acquires the queue lock and rejects future enqueues.
 2. Creates a fresh background context with a five-second deadline because the
@@ -299,20 +324,38 @@ Manager cancellation is given priority over a continuously ready queue. Shutdown
 6. Flushes final publishing status with a two-second timeout.
 
 The runnable returns `nil`; backend and status failures are operational state,
-not manager-fatal errors.
+not manager-fatal errors. The chart's 60-second pod termination grace period is
+longer than the bounded drain and final status flush, but `SIGKILL`, OOM
+termination, and node failure bypass this graceful path. Those events lose all
+queued and in-flight records. Disk records already appended and synced can be
+recovered only if the volume survives.
 
 ## Export Routing
 
-`System` maps a Connection name to a driver. The publisher calls:
+`System` maps a Connection name to a driver. A single ready record uses:
 
 ```text
 Publish(context, connectionName, channel, encodedMessage)
 ```
 
+A ready group of two to 64 records uses the optional batch extension:
+
+```text
+PublishBatch(context, connectionName, channel, []any{json.RawMessage, ...})
+```
+
+`System.PublishBatch` calls `BatchDriver.PublishBatch` when the selected driver
+implements it. Otherwise, it invokes `Publish` sequentially with each original
+value. The returned error slice corresponds one-to-one with input records in
+input order. The batch contract is source-neutral so future audit batching can
+pass typed `ExportMsg` values, but the current webhook producer supplies only
+pre-encoded admission `json.RawMessage` values and the disk batch path accepts
+only `violation_admission` records.
+
 The generic export system does not know whether the message came from audit or
-the webhook. The disk driver decodes enough of the message to inspect
-`eventType`. `violation_admission` selects the admission JSON Lines path; audit
-control and violation messages retain the existing audit file path.
+the webhook. The disk driver decodes only an `eventType` header from raw
+admission messages. `violation_admission` selects the admission JSON Lines path;
+audit control and violation messages retain the existing audit file path.
 
 This keeps source policy out of the transport abstraction. The supported alpha
 configuration restricts admission export to disk through Helm validation even
@@ -336,18 +379,20 @@ group-readable/writeable permissions (`0770` and `0660`).
 
 ### Write Path
 
-Before appending a record, the driver:
+Before appending a batch, the driver:
 
 1. Validates the topic.
-2. Checks the same 64 KiB complete-record limit as the queue and the 1 MiB
-  segment limit.
-3. Cleans completed segments while reserving room for the pending record.
+2. Checks each record against the same 64 KiB complete-record limit as the queue
+  and the 1 MiB segment limit.
+3. Checks cached ready-file accounting while reserving room for the complete
+  batch, scanning completed segments only when accounting is uninitialized or
+  a retention limit requires cleanup.
 4. Checks filesystem blocks available to the current user and preserves a 16 MiB
-   free-space reserve in addition to the pending record.
-5. Rotates the current segment before the write when adding the record would
+  free-space reserve in addition to the complete batch.
+5. Rotates the current segment before a write when adding the record would
    exceed a rotation limit.
-6. Appends the encoded JSON plus one newline.
-7. Calls `fsync` for the record.
+6. Appends each encoded JSON record plus one newline.
+7. Calls `fsync` once for each segment touched by the batch.
 
 A short or partial write is rolled back to the previous complete boundary. If
 rollback fails, the segment is marked poisoned and later recovery publishes only
@@ -389,6 +434,12 @@ also remove abandoned empty `.open` files and `.deleting` remnants before
 retention runs. Directory reads use batches of 128 entries while still
 exhausting every directory.
 
+The Connection caches ready-segment count, bytes, and oldest modification time
+from recovery or cleanup. Appends to an unchanged open segment use that cache;
+rotation and recovery invalidate it before the next cleanup snapshot. This
+avoids a directory scan for each record while preserving count, byte, and TTL
+enforcement.
+
 These limits bound the unconsumed backlog; they do not guarantee 24-hour
 retention. Count or byte pressure can remove a ready segment before it reaches
 the maximum age. If one-minute age rotation is the limiting condition, 20 ready
@@ -410,8 +461,9 @@ check enforces actual filesystem headroom.
 
 ### Recovery
 
-On Connection creation and periodically while idle, recovery scans channel
-directories:
+On Connection creation, recovery scans channel directories once. Recurring
+cleanup starts only when recovery finds admission artifacts or the first
+admission record opens a stream, and stops when no artifacts remain:
 
 - Locked `.open` files are treated as live and left untouched.
 - Abandoned `.open` files are locked, limited to the maximum segment size,
@@ -482,10 +534,13 @@ are retained; the final entry reports `additional publish error classes omitted`
 The stored message is the coalesced class key and is not otherwise
 length-truncated.
 
-Webhook publishing results are accumulated and reported every ten seconds rather
-than issuing one Kubernetes write per message. Failed status writes retain the
-window state for a later retry. Audit reports its source entry at the end of an
-audit run.
+Webhook publishing results are accumulated independently from the publisher. A
+dedicated reporter checks every ten seconds, reports errors and health
+transitions, and coalesces unchanged healthy traffic to a one-minute heartbeat.
+The API call never blocks queue publishing. Failed status writes merge their
+snapshot back with newer results for a later retry. Publish-only status updates
+do not trigger export Connection reconciliation. Audit reports its source entry
+at the end of an audit run.
 
 ## Observability
 
@@ -554,10 +609,12 @@ path.
 | Reader locks required oldest file | Publish backpressures through an error, not admission latency | Publish error and status |
 | Partial disk write | Roll back; poison and recover if rollback fails | Publish error; complete records preserved |
 | Rotation failure | Retain stream and schedule retry | Log and publish error where applicable |
-| Process or container crash | In-memory queue is lost; complete open-file records are recovered when the volume survives restart | Counters reset with process; recovered file |
+| Graceful shutdown with queued records | Attempt queued records for up to five seconds, then drop the remainder | `shutdown` drop counter and rate-limited log |
+| Cancellation with a batch already in flight | Stop waiting, report publish errors, and do not requeue; an uncancelable backend call may finish after its result is no longer observed | Publish-error counter, log, webhook source status |
+| `SIGKILL`, OOM termination, or node failure | Lose queued and in-flight records because no drain runs | Counters reset with process; no per-record signal survives |
+| Container crash with surviving volume | Lose the in-memory queue; recover complete open-file records already written to disk | Recovered ready file |
 | Status conflict | Re-read and retry merge | No cross-source overwrite |
 | Status write failure | Retain accumulated reporting window | Rate-limited log; retry next interval/shutdown |
-| Shutdown exceeds five seconds | Remaining records dropped | `shutdown` drop counter and log |
 
 Admission allow/deny/warn behavior is unchanged in every export failure case.
 
@@ -650,14 +707,16 @@ The implementation is covered at several boundaries:
 
 - Payload tests verify request metadata, enforcement actions, annotations,
   details, nil results, DELETE/CONNECT behavior, and one record per violation.
-- Queue tests verify marshal failure, count and byte rejection, message-size
-  rejection, non-blocking drops, publishing, status, bounded shutdown drain,
-  logging rate limits, and bounded error classes.
+- Queue tests verify lazy construction, marshal failure, count and byte
+  rejection, message-size preflight, non-blocking drops, bounded batch draining,
+  asynchronous status, bounded shutdown drain, logging rate limits, and bounded
+  error classes.
 - Export system tests verify audit and admission share one disk Connection and
   channel while producing distinct files.
-- Disk tests verify JSON Lines content, `.open` to `.log` rotation, timer retry,
-  audit/admission separation, partial-write rollback, crash recovery, retention,
-  reader backpressure, free-space reserve, path safety, cleanup work limits, and
+- Disk tests verify JSON Lines content, batch sync behavior, `.open` to `.log`
+  rotation, timer retry, audit/admission separation, partial-write rollback,
+  crash recovery, cached retention accounting, lazy janitor lifecycle, reader
+  backpressure, free-space reserve, path safety, cleanup work limits, and
   concurrent lifecycle behavior under the race detector.
 - Status tests verify source isolation, generation reset, conflict retry, error
   bounds, and propagation into `Connection.status.byPod`.

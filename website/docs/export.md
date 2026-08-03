@@ -32,7 +32,7 @@ metadata:
 spec:
   driver: "disk"
   config:
-    path: "/tmp/violations/topics"
+    path: "tmp/violations/topics"
     maxAuditResults: 3
 ```
 - `driver` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`, `disk`
@@ -122,7 +122,7 @@ audit:
   connection: audit-connection
   channel: audit-channel
   exportConnection:
-    path: /tmp/violations/topics
+    path: tmp/violations/topics
     maxAuditResults: 3
 admission:
   disableExportSidecar: true
@@ -130,7 +130,7 @@ admission:
 
 Admission disk files use newline-delimited JSON. Audit and admission files can share the same channel directory because their names are distinct: audit uses `<audit-run-id>.log`, while admission uses `admission-<timestamp>-<random>.log`. A writer creates a uniquely named, locked admission `.open` segment. Reaching the fixed byte, record, or age limit flushes and closes the segment, then atomically renames it to `.log`. The demonstration reader selects only the `admission-` prefix in admission mode, so it cannot delete audit run files.
 
-Cleanup removes only completed, unlocked `admission-` segments and enforces fixed file count, total bytes, and TTL limits. Audit cleanup explicitly ignores that prefix. A periodic janitor applies TTL while traffic is idle. Startup recovery ignores files locked by another live writer, truncates an abandoned `.open` file to its final complete JSONL record, and publishes it as a recovered `.log`. The driver also reserves filesystem headroom and rejects new records before exhausting the filesystem.
+Cleanup removes only completed, unlocked `admission-` segments and enforces fixed file count, total bytes, and TTL limits. Audit cleanup explicitly ignores that prefix. Startup recovery ignores files locked by another live writer, truncates an abandoned `.open` file to its final complete JSONL record, and publishes it as a recovered `.log`. A periodic janitor starts only when recovery finds admission files or the first admission record is written, and stops after all admission artifacts are gone. The driver also reserves filesystem headroom and rejects new records before exhausting the filesystem.
 
 Each retention-cleanup invocation removes at most 256 ready segments. Recovery may also remove abandoned empty `.open` files and `.deleting` remnants before retention runs. New disk Connections are rejected while 32 failed cleanup states are retained. Failures from Connections that were already open can temporarily take the retry map above that threshold because descriptor-owning state cannot be safely discarded.
 
@@ -144,8 +144,9 @@ Admission export limits are fixed while the feature is alpha and apply independe
 
 | Layer | Limit | Default |
 |---|---|---:|
-| In-memory queue | Messages waiting to publish | 1,024 |
+| In-memory queue | Messages being constructed or waiting to publish | 1,024 |
 | In-memory queue | Total encoded bytes waiting to publish | 16 MiB |
+| Publisher | Maximum records in one ready batch | 64 |
 | Record | Complete encoded JSON record | 64 KiB |
 | Disk segment | Maximum bytes | 1 MiB |
 | Disk segment | Maximum records | 1,000 |
@@ -165,13 +166,85 @@ The demonstration admission reader logs each record and deletes its completed se
 
 Admission export is best-effort. Backend publishing does not delay or change the admission response:
 
-- Each controller-manager pod has an asynchronous queue limited to 1,024 messages and 16 MiB of encoded data.
+- Each controller-manager pod has an asynchronous queue limited to 1,024 messages, including records being constructed, and 16 MiB of encoded data.
 - A complete encoded JSON record is limited to 64 KiB.
+- The webhook reserves count capacity before constructing a record. The publisher drains up to 64 records that are already queued without waiting to fill a batch.
 - Messages are dropped when encoding fails or an enqueue limit is reached. A failed publish is not retried.
-- Queued messages are drained for up to five seconds during shutdown. Messages still queued after that deadline are dropped and reported with the `shutdown` reason.
+- During graceful termination, messages still in the queue are drained for up to five seconds. Messages still queued after that deadline are dropped and reported with the `shutdown` reason.
+- A batch already removed from the queue when termination begins is not requeued. Gatekeeper stops waiting when its publish context is canceled; a backend call that ignores cancellation may finish later, but its result is not used and the process may exit first.
+- `SIGKILL`, OOM termination, and node failure do not run the drain. Queued and in-flight records are then lost. Complete disk records already written and synced can be recovered only if the volume survives; the default `emptyDir` survives a container restart but not pod deletion or replacement.
 - Repeated drop and publish-error logs are limited to one per minute for each class; use the admission export metrics to detect sustained loss.
-- Webhook publish success and errors are written to the `webhook` entry in `ConnectionPodStatus.status.publishStatuses` every 10 seconds instead of once per message. Audit updates only the `audit` entry at the end of each run.
+- Webhook publish status is reported outside the queue publisher. Errors and health transitions are checked every 10 seconds, while unchanged healthy traffic is coalesced to a one-minute heartbeat. Audit updates only the `audit` entry at the end of each run.
 - A source with no new publish attempts leaves its previous entry unchanged. A later successful reporting window clears only that source's errors; use `lastAttemptTime` and `lastSuccessTime` to evaluate freshness.
+
+### Quick start with exporting admission violations to disk
+
+This quick start enables the demonstration admission reader. It logs completed admission records and deletes each segment after reading it, so use it only to verify the feature.
+
+1. Install or upgrade Gatekeeper with admission export, the disk backend, and the demonstration reader enabled:
+
+    ```shell
+    helm upgrade --install gatekeeper gatekeeper/gatekeeper \
+      --namespace gatekeeper-system \
+      --create-namespace \
+      --set enableAdmissionViolationExport=true \
+      --set exportBackend=disk \
+      --set admission.disableExportSidecar=false \
+      --set audit.connection=audit-connection \
+      --set audit.channel=audit-channel
+
+    kubectl rollout status deployment/gatekeeper-controller-manager \
+      --namespace gatekeeper-system \
+      --timeout=2m
+    ```
+
+2. Install a test policy that requires the `test` label on Pods in the `nginx` namespace:
+
+    ```shell
+    export GATEKEEPER_EXPORT_EXAMPLES=https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/test/export
+
+    kubectl create namespace nginx --dry-run=client --output yaml | kubectl apply -f -
+    kubectl apply -f "${GATEKEEPER_EXPORT_EXAMPLES}/k8srequiredlabels_ct.yaml"
+    until kubectl get crd k8srequiredlabels.constraints.gatekeeper.sh >/dev/null 2>&1; do sleep 1; done
+    kubectl apply -f "${GATEKEEPER_EXPORT_EXAMPLES}/pod_must_have_test.yaml"
+    until kubectl get k8srequiredlabels pod-must-have-test \
+      -o jsonpath='{.status.byPod[*].operations[*]}' 2>/dev/null | grep -qw webhook; do sleep 1; done
+    ```
+
+3. Submit a Pod that violates the policy. The command is expected to fail with a denial:
+
+    ```shell
+    kubectl apply -f - <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: denied-export-pod
+      namespace: nginx
+      labels:
+        app: denied-export
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+    EOF
+    ```
+
+4. Confirm that a controller-manager reader observed the admission record:
+
+    ```shell
+    kubectl logs --namespace gatekeeper-system \
+      --selector control-plane=controller-manager \
+      --container admission-reader \
+      --since=5m | grep '"eventType":"violation_admission"' | grep '"resourceName":"denied-export-pod"'
+    ```
+
+    The webhook publisher also reports health under `source: webhook`:
+
+    ```shell
+    kubectl get connection audit-connection \
+      --namespace gatekeeper-system \
+      --output yaml
+    ```
 
 ### Quick start with exporting audit violations using Dapr and Redis
 
@@ -397,16 +470,15 @@ Admission export is best-effort. Backend publishing does not delay or change the
     spec:
       driver: "disk"
       config:
-        path: "/tmp/violations/topics"
+        path: "tmp/violations/topics"
         maxAuditResults: 3
-        closedConnectionTTL: 600
     ```
 
     | Property        | Description                                                                                                                                                            | Default                  |
     |:----------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |:-------------------------|
-    | path            | (alpha) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "/tmp/violations/topics" |
+    | path            | (alpha) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "tmp/violations/topics" |
     | maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
-    | closedConnectionTTL | (alpha) TTL in seconds for connection to be in the retry queue after it is closed/deleted in case of failure.                                                   | 600                 |
+    | closedConnectionTTL | (alpha) Optional duration string controlling how long a failed closed Connection remains eligible for cleanup retries. Accepted values are `"1m"` through `"10m"`. The chart leaves it unset and the driver defaults to `"10m"`. | `"10m"` |
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
 
