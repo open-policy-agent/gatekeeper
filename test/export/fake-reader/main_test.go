@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,5 +50,44 @@ func TestFindOldestReadyFileAndDelete(t *testing.T) {
 	}
 	if _, err := os.Stat(oldest); !os.IsNotExist(err) {
 		t.Fatalf("expected processed file removal, got %v", err)
+	}
+}
+
+func TestFindNextAuditReadyFile(t *testing.T) {
+	root := t.TempDir()
+	topic := filepath.Join(root, "audit")
+	if err := os.Mkdir(topic, 0o755); err != nil {
+		t.Fatalf("Mkdir() error = %v", err)
+	}
+	first := filepath.Join(topic, "first.log")
+	if err := os.WriteFile(first, []byte("first\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(first) error = %v", err)
+	}
+
+	got, err := findNextReadyFile(root, false, "")
+	if err != nil {
+		t.Fatalf("findNextReadyFile(first) error = %v", err)
+	}
+	if got != first {
+		t.Fatalf("expected %s, got %s", first, got)
+	}
+	if _, err := findNextReadyFile(root, false, first); !errors.Is(err, errNoNewReadyFile) {
+		t.Fatalf("expected no new audit file, got %v", err)
+	}
+
+	second := filepath.Join(topic, "second.log")
+	if err := os.WriteFile(second, []byte("second\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(second) error = %v", err)
+	}
+	newTime := time.Now().Add(time.Second)
+	if err := os.Chtimes(second, newTime, newTime); err != nil {
+		t.Fatalf("Chtimes(second) error = %v", err)
+	}
+	got, err = findNextReadyFile(root, false, first)
+	if err != nil {
+		t.Fatalf("findNextReadyFile(second) error = %v", err)
+	}
+	if got != second {
+		t.Fatalf("expected %s, got %s", second, got)
 	}
 }

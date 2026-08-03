@@ -22,6 +22,8 @@ const (
 	admissionFilePrefix  = "admission-"
 )
 
+var errNoNewReadyFile = errors.New("no new completed export files")
+
 func main() {
 	root := os.Getenv("ROOT_PATH")
 	if root == "" {
@@ -41,8 +43,9 @@ func main() {
 		log.Fatalf("path is not a directory")
 	}
 
+	lastAuditPath := ""
 	for {
-		path, err := findReadyFile(root, deleteAfterRead)
+		path, err := findNextReadyFile(root, deleteAfterRead, lastAuditPath)
 		if err != nil {
 			log.Printf("ready file is not available, retrying: %v", err)
 			time.Sleep(defaultPollInterval)
@@ -54,9 +57,21 @@ func main() {
 			continue
 		}
 		if !deleteAfterRead {
-			time.Sleep(90 * time.Second)
+			lastAuditPath = path
+			time.Sleep(defaultPollInterval)
 		}
 	}
+}
+
+func findNextReadyFile(root string, admissionMode bool, lastAuditPath string) (string, error) {
+	path, err := findReadyFile(root, admissionMode)
+	if err != nil {
+		return "", err
+	}
+	if !admissionMode && path == lastAuditPath {
+		return "", errNoNewReadyFile
+	}
+	return path, nil
 }
 
 func findOldestReadyFile(root string) (string, error) {
