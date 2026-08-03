@@ -102,6 +102,14 @@ rules:
   - update
   - watch
 - apiGroups:
+  - status.gatekeeper.sh
+  resources:
+  - constrainttemplatepodstatuses/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - externaldata.gatekeeper.sh
   resources:
   - providers

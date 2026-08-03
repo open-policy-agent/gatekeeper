@@ -504,7 +504,7 @@ func (r *ReconcileConstraintTemplate) persistPodStatus(ctx context.Context, stat
 	if apiequality.Semantic.DeepEqual(status.Status, *oldStatus) {
 		return nil
 	}
-	return r.Update(ctx, status)
+	return r.Status().Update(ctx, status)
 }
 
 func (r *ReconcileConstraintTemplate) handleUpdate(
@@ -653,6 +653,10 @@ func (r *ReconcileConstraintTemplate) getOrCreatePodStatus(ctx context.Context, 
 		return nil, err
 	}
 	if err := r.Create(ctx, statusObj); err != nil {
+		return nil, err
+	}
+	// With a status subresource, Create does not persist .status; write it explicitly.
+	if err := r.Status().Update(ctx, statusObj); err != nil {
 		return nil, err
 	}
 	return statusObj, nil

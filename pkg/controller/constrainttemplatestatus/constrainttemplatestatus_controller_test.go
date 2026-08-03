@@ -189,6 +189,10 @@ violation[{"msg": "denied!"}] {
 		if err != nil {
 			t.Fatal(err)
 		}
+		err = c.Status().Update(ctx, fakeTStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyTStatusCreated(ctx, c, true), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
 		err = c.Delete(ctx, fakeTStatus)
@@ -214,6 +218,10 @@ violation[{"msg": "denied!"}] {
 		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
 
 		err = c.Create(ctx, fakeTStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = c.Status().Update(ctx, fakeTStatus)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -306,6 +314,10 @@ violation[{"msg": "denied!"}] {
 		}
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 		err = c.Create(ctx, fakeTStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = c.Status().Update(ctx, fakeTStatus)
 		if err != nil {
 			t.Fatal(err)
 		}
