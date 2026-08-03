@@ -3,6 +3,7 @@ package export
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
@@ -122,7 +123,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
 				UpdateFunc: func(e event.TypedUpdateEvent[*statusv1alpha1.ConnectionPodStatus]) bool {
-					return e.ObjectNew.GetNamespace() == util.GetNamespace()
+					return e.ObjectNew.GetNamespace() == util.GetNamespace() && connectionPodStatusUpdateRequiresReconcile(e.ObjectOld, e.ObjectNew)
 				},
 				DeleteFunc: func(e event.TypedDeleteEvent[*statusv1alpha1.ConnectionPodStatus]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
@@ -138,6 +139,20 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	return nil
+}
+
+// connectionPodStatusUpdateRequiresReconcile filters publisher-owned health
+// updates. They must still reach the status aggregator, but cannot change the
+// configured export driver and should not cause an UpsertConnection feedback loop.
+func connectionPodStatusUpdateRequiresReconcile(oldStatus, newStatus *statusv1alpha1.ConnectionPodStatus) bool {
+	if oldStatus == nil || newStatus == nil || !reflect.DeepEqual(oldStatus.GetLabels(), newStatus.GetLabels()) {
+		return true
+	}
+	oldConnectionStatus := oldStatus.Status
+	newConnectionStatus := newStatus.Status
+	oldConnectionStatus.PublishStatuses = nil
+	newConnectionStatus.PublishStatuses = nil
+	return !reflect.DeepEqual(oldConnectionStatus, newConnectionStatus)
 }
 
 // +kubebuilder:rbac:groups=connection.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete

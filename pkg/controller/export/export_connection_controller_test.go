@@ -109,6 +109,30 @@ func TestConnectionStatusErrorsAreCapped(t *testing.T) {
 	require.Len(t, status.ConnectionErrors, exportutil.MaxConnectionStatusErrors)
 }
 
+func TestConnectionPodStatusUpdateRequiresReconcile(t *testing.T) {
+	oldStatus := &statusv1alpha1.ConnectionPodStatus{
+		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"connection": "audit"}},
+		Status: statusv1alpha1.ConnectionPodStatusStatus{
+			ObservedGeneration: 1,
+			PublishStatuses: []statusv1alpha1.ConnectionPublishStatus{
+				{Source: statusv1alpha1.WebhookPublishSource, Active: true},
+			},
+		},
+	}
+	newStatus := oldStatus.DeepCopy()
+	newStatus.Status.PublishStatuses[0].Active = false
+	require.False(t, connectionPodStatusUpdateRequiresReconcile(oldStatus, newStatus))
+
+	newStatus.Status.ConnectionErrors = []*statusv1alpha1.ConnectionError{
+		{Type: statusv1alpha1.UpsertConnectionError, Message: "unavailable"},
+	}
+	require.True(t, connectionPodStatusUpdateRequiresReconcile(oldStatus, newStatus))
+
+	newStatus = oldStatus.DeepCopy()
+	newStatus.Labels["connection"] = "other"
+	require.True(t, connectionPodStatusUpdateRequiresReconcile(oldStatus, newStatus))
+}
+
 type conflictOnceWriter struct {
 	client.Client
 	onConflict func(context.Context) error
@@ -599,7 +623,7 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 	// Start the manager and let it run in the background
 	testutils.StartManager(ctx, t, mgr)
 
-	t.Run("Reconcile called when ConnectionPodStatus updated on the side and reconciled back to expected state", func(t *testing.T) {
+	t.Run("Reconcile ignores publish-only status updates", func(t *testing.T) {
 		connObj := connectionv1alpha1.Connection{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      auditConnectionName,
@@ -669,6 +693,13 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 			g.Expect(connPodStatusObj.Status.ConnectionErrors).Should(gomega.BeEmpty(), "A successful upsert should clear connection errors")
 		}).WithTimeout(timeout).Should(gomega.Succeed())
 
+		expectedReq := reconcile.Request{NamespacedName: typeConnectionNamespacedName}
+		g.Eventually(func() bool {
+			requests.Clear()
+			time.Sleep(50 * time.Millisecond)
+			_, finished := requests.Load(expectedReq)
+			return !finished
+		}).WithTimeout(timeout).Should(gomega.BeTrue(), "Previous status reconciliation should become idle")
 		requests.Clear()
 		g.Eventually(func() error {
 			latest := &statusv1alpha1.ConnectionPodStatus{}
@@ -685,11 +716,10 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 			}
 			return k8sClient.Update(ctx, latest)
 		}).WithTimeout(timeout).Should(gomega.Succeed(), "Updating publish status should succeed")
-		g.Eventually(func() bool {
-			expectedReq := reconcile.Request{NamespacedName: typeConnectionNamespacedName}
+		g.Consistently(func() bool {
 			_, finished := requests.Load(expectedReq)
 			return finished
-		}).WithTimeout(timeout).Should(gomega.BeTrue(), "Reconcile request should finish after updating publish status")
+		}).WithTimeout(time.Second).Should(gomega.BeFalse(), "Publish-only status should not trigger export reconciliation")
 		g.Eventually(func(g gomega.Gomega) {
 			err := k8sClient.Get(ctx, typeStatusNamespacedName, &connPodStatusObj)
 			g.Expect(err).Should(gomega.Succeed(), "Status should still exist after updating publish status")
