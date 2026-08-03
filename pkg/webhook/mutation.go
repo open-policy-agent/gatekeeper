@@ -24,10 +24,10 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -110,8 +110,7 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 		return admission.Allowed("Gatekeeper does not self-manage")
 	}
 
-	if req.Operation != admissionv1.Create &&
-		req.Operation != admissionv1.Update {
+	if !match.IsSupportedMutationOperation(req.Operation) {
 		return admission.Allowed("Mutating only on create or update")
 	}
 
@@ -194,6 +193,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		Namespace: ns,
 		Username:  req.UserInfo.Username,
 		Source:    mutationtypes.SourceTypeOriginal,
+		Operation: req.Operation,
 	}
 	mutated, err := h.mutationSystem.Mutate(ctx, mutable)
 	if err != nil {

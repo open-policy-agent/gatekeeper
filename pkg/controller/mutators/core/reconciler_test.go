@@ -19,6 +19,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 	mutationschema "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/schema"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -231,8 +232,14 @@ func (m *fakeMutator) DeepCopy() mutationtypes.Mutator {
 	}
 }
 
-func (m *fakeMutator) SchemaBindings() []schema.GroupVersionKind {
-	return []schema.GroupVersionKind{rbacv1.SchemeGroupVersion.WithKind("Role")}
+func (m *fakeMutator) SchemaBindings() []mutationschema.Binding {
+	roleGVK := rbacv1.SchemeGroupVersion.WithKind("Role")
+	return []mutationschema.Binding{
+		{GVK: roleGVK, Operation: admissionv1.Create},
+		{GVK: roleGVK, Operation: admissionv1.Update},
+		{GVK: roleGVK, Operation: admissionv1.Delete},
+		{GVK: roleGVK, Operation: admissionv1.Connect},
+	}
 }
 
 func (m *fakeMutator) TerminalType() parser.NodeType {
