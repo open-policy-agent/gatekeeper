@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -783,15 +783,16 @@ func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []str
 		return files, err
 	}
 	defer dir.Close()
+
 	for {
-		names, err := dir.Readdirnames(batchSize)
-		if errors.Is(err, io.EOF) || len(names) == 0 {
-			break
-		}
+		names, done, err := am.readDirNames(dir, batchSize)
 		if err != nil {
 			return files, err
 		}
 		files = append(files, names...)
+		if done {
+			break
+		}
 	}
 	return files, nil
 }
@@ -803,26 +804,42 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 	}
 	defer dir.Close()
 	for {
-		names, err := dir.Readdirnames(batchSize)
-		if errors.Is(err, io.EOF) || len(names) == 0 {
-			break
+		names, done, err := am.readDirNames(dir, batchSize)
+		if err != nil {
+			return err
 		}
 		for _, n := range names {
-			err = os.RemoveAll(path.Join(directory, n))
-			if err != nil {
+			if err := os.RemoveAll(filepath.Join(directory, n)); err != nil {
 				return err
 			}
+		}
+		if done {
+			break
 		}
 	}
 	return nil
 }
 
-func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructured, error) {
-	u := &unstructured.Unstructured{
-		Object: make(map[string]interface{}),
+func (am *Manager) readDirNames(dir *os.File, batchSize int) (names []string, done bool, err error) {
+	names, err = dir.Readdirnames(batchSize)
+	if err == nil {
+		if len(names) == 0 {
+			return nil, true, nil
+		}
+		return names, false, nil
 	}
-	err := json.Unmarshal(jsonBytes, u)
-	if err != nil {
+	if errors.Is(err, io.EOF) {
+		return names, true, nil
+	}
+	if len(names) == 0 {
+		return nil, false, err
+	}
+	return names, false, err
+}
+
+func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructured, error) {
+	u := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, u); err != nil {
 		return nil, err
 	}
 	return u, nil
