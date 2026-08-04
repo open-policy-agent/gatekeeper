@@ -572,7 +572,7 @@ func TestAdmissionCleanupReusesReadyFileAccounting(t *testing.T) {
 	conn.admission.limits.maxResults = 20
 	conn.admission.limits.maxTotalBytes = 20 << 20
 	conn.admission.limits.fileTTL = time.Hour
-	conn.setAdmissionReadyUsage(admissionFileSummary{})
+	conn.setAdmissionReadyUsage(&admissionFileSummary{})
 	scans := 0
 
 	if err := conn.cleanupAdmissionFilesWithScanner(1024, func(string) (admissionFileSummary, error) {

@@ -615,7 +615,7 @@ func (conn *Connection) cleanupAdmissionFilesWithScanner(reservedBytes int64, sc
 		}
 		return err
 	}
-	defer func() { conn.setAdmissionReadyUsage(summary) }()
+	defer func() { conn.setAdmissionReadyUsage(&summary) }()
 	now := time.Now()
 	removed := 0
 	for {
@@ -652,7 +652,7 @@ func (conn *Connection) cleanupAdmissionFilesWithScanner(reservedBytes int64, sc
 	}
 }
 
-func (conn *Connection) setAdmissionReadyUsage(summary admissionFileSummary) {
+func (conn *Connection) setAdmissionReadyUsage(summary *admissionFileSummary) {
 	conn.admission.usageInitialized = true
 	conn.admission.readyCount = summary.totalFiles
 	conn.admission.readyBytes = summary.totalBytes
