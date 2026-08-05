@@ -101,29 +101,6 @@ helm upgrade --install gatekeeper gatekeeper/gatekeeper \
     'auditPodAnnotations.cluster-autoscaler\.kubernetes\.io/safe-to-evict-local-volumes=tmp-volume'
 ```
 
-:::warning
-When violation export is enabled with exportBackend=disk, the audit pod has
-another local volume, named `tmp-violations` by default. It contains audit
-results being handed from Gatekeeper to the export sidecar. Do not include
-this volume in safe-to-evict-local-volumes unless losing incomplete or
-unconsumed export files during pod eviction is acceptable.
-
-To explicitly allow eviction despite both local volumes:
-
-```sh
-helm upgrade --install gatekeeper gatekeeper/gatekeeper \
-    --namespace gatekeeper-system \
-    --create-namespace \
-    --set enableViolationExport=true \
-    --set exportBackend=disk \
-    --set-string \
-    'auditPodAnnotations.cluster-autoscaler\.kubernetes\.io/safe-to-evict-local-volumes=tmp-volume\,tmp-violations'
-```
-
-If `audit.exportVolume.name` is customized, use that volume name instead of
-`tmp-violations`.
-:::
-
 ## Uninstallation
 
 ### Using Prebuilt Image
