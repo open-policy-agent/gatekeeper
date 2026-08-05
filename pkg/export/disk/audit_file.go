@@ -169,7 +169,9 @@ func getLogFilesSortedByModTimeAsc(dirPath string) ([]string, error) {
 		return nil, err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".log" {
+		// Admission segments share the channel directory but have independent
+		// retention and must never count against audit runs.
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".log" || strings.HasPrefix(entry.Name(), admissionFilePrefix) {
 			continue
 		}
 		info, err := entry.Info()

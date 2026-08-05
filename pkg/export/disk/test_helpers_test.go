@@ -39,7 +39,8 @@ func requireCreateConnection(t *testing.T, writer *Writer, connectionName string
 func markClosedConnectionsReady(writer *Writer) {
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
-	for name, failedConn := range writer.closedConnections {
+	for name := range writer.closedConnections {
+		failedConn := writer.closedConnections[name]
 		failedConn.NextRetryAt = time.Now().Add(-time.Second)
 		writer.closedConnections[name] = failedConn
 	}
