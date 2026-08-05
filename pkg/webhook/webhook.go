@@ -16,10 +16,14 @@ limitations under the License.
 package webhook
 
 import (
+	"context"
+
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -28,6 +32,8 @@ type Dependencies struct {
 	ProcessExcluder *process.Excluder
 	MutationSystem  *mutation.System
 	ExpansionSystem *expansion.System
+	ExportSystem    export.Exporter
+	GetPod          func(context.Context) (*corev1.Pod, error)
 }
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager.

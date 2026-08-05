@@ -92,6 +92,7 @@ spec:
             - HELMSUBST_LOG_LEVEL_ENCODER
             - --exempt-namespace={{ .Release.Namespace }}
             - HELMSUBST_CONTROLLER_MANAGER_OPERATIONS
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_ADMISSION_VIOLATION_EXPORT_ARGS
             - --enable-external-data={{ .Values.enableExternalData }}
             - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - --log-mutations={{ .Values.logMutations }}

@@ -21,6 +21,13 @@ type Exporter interface {
 	CloseConnection(connectionName string) error
 }
 
+// BatchExporter is an optional extension for bounded batches. Returned errors
+// correspond one-to-one with messages in input order. Callers fall back to
+// Exporter.Publish when it is unavailable.
+type BatchExporter interface {
+	PublishBatch(ctx context.Context, connectionName string, subject string, messages []any) []error
+}
+
 type System struct {
 	mux                sync.RWMutex
 	connectionToDriver map[string]string
@@ -39,6 +46,32 @@ func (s *System) Publish(ctx context.Context, connectionName string, subject str
 		return supportedDrivers[dName].Publish(ctx, connectionName, msg, subject)
 	}
 	return fmt.Errorf("connection is not initialized, name: %s ", connectionName)
+}
+
+func (s *System) PublishBatch(ctx context.Context, connectionName string, subject string, messages []any) []error {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+	driverName, ok := s.connectionToDriver[connectionName]
+	if !ok {
+		return batchErrors(len(messages), fmt.Errorf("connection is not initialized, name: %s ", connectionName))
+	}
+	connectionDriver := supportedDrivers[driverName]
+	if batchDriver, ok := connectionDriver.(driver.BatchDriver); ok {
+		return batchDriver.PublishBatch(ctx, connectionName, messages, subject)
+	}
+	errorsByMessage := make([]error, len(messages))
+	for i := range messages {
+		errorsByMessage[i] = connectionDriver.Publish(ctx, connectionName, messages[i], subject)
+	}
+	return errorsByMessage
+}
+
+func batchErrors(count int, err error) []error {
+	errorsByMessage := make([]error, count)
+	for i := range errorsByMessage {
+		errorsByMessage[i] = err
+	}
+	return errorsByMessage
 }
 
 func (s *System) UpsertConnection(ctx context.Context, config interface{}, connectionName string, newDriver string) error {

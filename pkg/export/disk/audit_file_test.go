@@ -352,10 +352,13 @@ func TestCleanupOldAuditFiles(t *testing.T) {
 				if _, err := os.Create(path.Join(dir, "nested", "nested.log")); err != nil {
 					return err
 				}
+				if _, err := os.Create(path.Join(dir, admissionFilePrefix+"segment.log")); err != nil {
+					return err
+				}
 				return nil
 			},
 			expectError:   false,
-			expectedFiles: 4,
+			expectedFiles: 5,
 		},
 		{
 			name: "Error getting earliest file",
@@ -431,6 +434,9 @@ func TestGetLogFilesSortedByModTimeAsc(t *testing.T) {
 					}
 				}
 				if _, err := os.Create(path.Join(dir, "ignored.txt")); err != nil {
+					return err
+				}
+				if _, err := os.Create(path.Join(dir, admissionFilePrefix+"segment.log")); err != nil {
 					return err
 				}
 				return nil
