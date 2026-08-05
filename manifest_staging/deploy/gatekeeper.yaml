@@ -34,7 +34,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assign.mutations.gatekeeper.sh
@@ -1211,7 +1211,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assignimage.mutations.gatekeeper.sh
@@ -1579,7 +1579,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assignmetadata.mutations.gatekeeper.sh
@@ -2549,7 +2549,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: configpodstatuses.status.gatekeeper.sh
@@ -2620,7 +2620,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
@@ -2774,7 +2774,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: connectionpodstatuses.status.gatekeeper.sh
@@ -2905,7 +2905,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: connections.connection.gatekeeper.sh
@@ -3058,7 +3058,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: constraintpodstatuses.status.gatekeeper.sh
@@ -3158,7 +3158,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: constrainttemplatepodstatuses.status.gatekeeper.sh
@@ -3725,7 +3725,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: expansiontemplate.expansion.gatekeeper.sh
@@ -3981,7 +3981,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: expansiontemplatepodstatuses.status.gatekeeper.sh
@@ -4058,7 +4058,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: modifyset.mutations.gatekeeper.sh
@@ -5130,7 +5130,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: mutatorpodstatuses.status.gatekeeper.sh
@@ -5210,7 +5210,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: providerpodstatuses.status.gatekeeper.sh
@@ -5523,7 +5523,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: syncsets.syncset.gatekeeper.sh
