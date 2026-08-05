@@ -61,65 +61,58 @@ func newStatusUnitReconciler(t *testing.T, ct *templatesv1beta1.ConstraintTempla
 	}
 }
 
-// TestReconcile_CreatedIsMonotonic verifies that once status.created is set to true, a
-// later reconcile where every pod status reports errors does not flip it back to false.
-// The CRD backing the ConstraintTemplate is never garbage collected unless the
-// ConstraintTemplate itself is deleted, so status.created must not regress.
+// TestReconcile_CreatedIsMonotonic verifies that status.created never regresses from true to
+// false when every current pod status reports errors: it stays true if it was already true
+// (the CRD backing the ConstraintTemplate is never garbage collected unless the
+// ConstraintTemplate itself is deleted), and it stays false if it was never true, so a
+// genuine failure is not masked.
 func TestReconcile_CreatedIsMonotonic(t *testing.T) {
-	uid := types.UID("test-uid")
-	ct := &templatesv1beta1.ConstraintTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: unitTestTemplateName,
-			UID:  uid,
+	tests := []struct {
+		name         string
+		priorCreated bool
+		wantCreated  bool
+	}{
+		{
+			name:         "previously created stays true when all pod statuses have errors",
+			priorCreated: true,
+			wantCreated:  true,
 		},
-		Status: templatesv1beta1.ConstraintTemplateStatus{
-			Created: true,
-		},
-	}
-
-	erroredStatus := newErroredPodStatus(t, "pod1", uid)
-
-	r := newStatusUnitReconciler(t, ct, erroredStatus)
-
-	if _, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: unitTestTemplateName}}); err != nil {
-		t.Fatalf("Reconcile() error = %v", err)
-	}
-
-	got := &templatesv1beta1.ConstraintTemplate{}
-	if err := r.reader.Get(context.Background(), types.NamespacedName{Name: unitTestTemplateName}, got); err != nil {
-		t.Fatal(err)
-	}
-	if !got.Status.Created {
-		t.Errorf("status.created = false, want true: previously-successful status.created must not revert to false when all current pod statuses report errors")
-	}
-}
-
-// TestReconcile_CreatedStaysFalseWithoutPriorSuccess ensures the monotonic behavior does not
-// mask a genuine failure: if status.created was never true, and every pod status has errors,
-// it must remain false.
-func TestReconcile_CreatedStaysFalseWithoutPriorSuccess(t *testing.T) {
-	uid := types.UID("test-uid")
-	ct := &templatesv1beta1.ConstraintTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: unitTestTemplateName,
-			UID:  uid,
+		{
+			name:         "never created stays false when all pod statuses have errors",
+			priorCreated: false,
+			wantCreated:  false,
 		},
 	}
 
-	erroredStatus := newErroredPodStatus(t, "pod1", uid)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uid := types.UID("test-uid")
+			ct := &templatesv1beta1.ConstraintTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: unitTestTemplateName,
+					UID:  uid,
+				},
+				Status: templatesv1beta1.ConstraintTemplateStatus{
+					Created: tt.priorCreated,
+				},
+			}
 
-	r := newStatusUnitReconciler(t, ct, erroredStatus)
+			erroredStatus := newErroredPodStatus(t, "pod1", uid)
 
-	if _, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: unitTestTemplateName}}); err != nil {
-		t.Fatalf("Reconcile() error = %v", err)
-	}
+			r := newStatusUnitReconciler(t, ct, erroredStatus)
 
-	got := &templatesv1beta1.ConstraintTemplate{}
-	if err := r.reader.Get(context.Background(), types.NamespacedName{Name: unitTestTemplateName}, got); err != nil {
-		t.Fatal(err)
-	}
-	if got.Status.Created {
-		t.Errorf("status.created = true, want false: it should stay false until at least one pod status reports no errors")
+			if _, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: unitTestTemplateName}}); err != nil {
+				t.Fatalf("Reconcile() error = %v", err)
+			}
+
+			got := &templatesv1beta1.ConstraintTemplate{}
+			if err := r.reader.Get(context.Background(), types.NamespacedName{Name: unitTestTemplateName}, got); err != nil {
+				t.Fatal(err)
+			}
+			if got.Status.Created != tt.wantCreated {
+				t.Errorf("status.created = %t, want %t", got.Status.Created, tt.wantCreated)
+			}
+		})
 	}
 }
 
