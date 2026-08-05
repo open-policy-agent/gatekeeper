@@ -34,7 +34,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assign.mutations.gatekeeper.sh
@@ -1211,7 +1211,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assignimage.mutations.gatekeeper.sh
@@ -1579,7 +1579,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assignmetadata.mutations.gatekeeper.sh
@@ -2549,7 +2549,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: configpodstatuses.status.gatekeeper.sh
@@ -2620,7 +2620,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
@@ -2774,7 +2774,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: connectionpodstatuses.status.gatekeeper.sh
@@ -2813,17 +2813,9 @@ spec:
           status:
             description: No spec field is defined here, as this is a status-only resource.
             properties:
-              active:
-                description: Indicator for alive connection with at least one successful
-                  publish
-                type: boolean
-              connectionUID:
-                description: |-
-                  UID is a type that holds unique ID values, including UUIDs.  Because we
-                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                  intent and helps make sure that UIDs and names do not get conflated.
-                type: string
-              errors:
+              connectionErrors:
+                description: ConnectionErrors contains errors from creating or updating
+                  the Connection.
                 items:
                   properties:
                     message:
@@ -2834,7 +2826,14 @@ spec:
                   - message
                   - type
                   type: object
+                maxItems: 500
                 type: array
+              connectionUID:
+                description: |-
+                  UID is a type that holds unique ID values, including UUIDs.  Because we
+                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                  intent and helps make sure that UIDs and names do not get conflated.
+                type: string
               id:
                 description: ID is the unique identifier for the pod that wrote the
                   status
@@ -2846,6 +2845,57 @@ spec:
                 items:
                   type: string
                 type: array
+              publishStatuses:
+                description: PublishStatuses reports publishing health independently
+                  for each source.
+                items:
+                  description: ConnectionPublishStatus reports publishing health for
+                    one producer.
+                  properties:
+                    active:
+                      description: |-
+                        Active indicates that the source completed at least one publish in its
+                        latest reporting window.
+                      type: boolean
+                    errors:
+                      description: Errors contains publish failures reported by this
+                        source.
+                      items:
+                        properties:
+                          message:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                        - message
+                        - type
+                        type: object
+                      maxItems: 500
+                      type: array
+                    lastAttemptTime:
+                      description: LastAttemptTime is the most recent publish attempt
+                        represented by this status.
+                      format: date-time
+                      type: string
+                    lastSuccessTime:
+                      description: LastSuccessTime is the most recent successful publish
+                        by this source.
+                      format: date-time
+                      type: string
+                    source:
+                      description: Source identifies the producer that owns this status.
+                      enum:
+                      - audit
+                      - webhook
+                      type: string
+                  required:
+                  - source
+                  type: object
+                maxItems: 2
+                type: array
+                x-kubernetes-list-map-keys:
+                - source
+                x-kubernetes-list-type: map
             type: object
         type: object
     served: true
@@ -2855,7 +2905,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: connections.connection.gatekeeper.sh
@@ -2911,17 +2961,9 @@ spec:
                   description: ConnectionPodStatusStatus defines the observed state
                     of ConnectionPodStatus.
                   properties:
-                    active:
-                      description: Indicator for alive connection with at least one
-                        successful publish
-                      type: boolean
-                    connectionUID:
-                      description: |-
-                        UID is a type that holds unique ID values, including UUIDs.  Because we
-                        don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                        intent and helps make sure that UIDs and names do not get conflated.
-                      type: string
-                    errors:
+                    connectionErrors:
+                      description: ConnectionErrors contains errors from creating
+                        or updating the Connection.
                       items:
                         properties:
                           message:
@@ -2932,7 +2974,14 @@ spec:
                         - message
                         - type
                         type: object
+                      maxItems: 500
                       type: array
+                    connectionUID:
+                      description: |-
+                        UID is a type that holds unique ID values, including UUIDs.  Because we
+                        don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                        intent and helps make sure that UIDs and names do not get conflated.
+                      type: string
                     id:
                       description: ID is the unique identifier for the pod that wrote
                         the status
@@ -2944,6 +2993,58 @@ spec:
                       items:
                         type: string
                       type: array
+                    publishStatuses:
+                      description: PublishStatuses reports publishing health independently
+                        for each source.
+                      items:
+                        description: ConnectionPublishStatus reports publishing health
+                          for one producer.
+                        properties:
+                          active:
+                            description: |-
+                              Active indicates that the source completed at least one publish in its
+                              latest reporting window.
+                            type: boolean
+                          errors:
+                            description: Errors contains publish failures reported
+                              by this source.
+                            items:
+                              properties:
+                                message:
+                                  type: string
+                                type:
+                                  type: string
+                              required:
+                              - message
+                              - type
+                              type: object
+                            maxItems: 500
+                            type: array
+                          lastAttemptTime:
+                            description: LastAttemptTime is the most recent publish
+                              attempt represented by this status.
+                            format: date-time
+                            type: string
+                          lastSuccessTime:
+                            description: LastSuccessTime is the most recent successful
+                              publish by this source.
+                            format: date-time
+                            type: string
+                          source:
+                            description: Source identifies the producer that owns
+                              this status.
+                            enum:
+                            - audit
+                            - webhook
+                            type: string
+                        required:
+                        - source
+                        type: object
+                      maxItems: 2
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - source
+                      x-kubernetes-list-type: map
                   type: object
                 type: array
             type: object
@@ -2957,7 +3058,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: constraintpodstatuses.status.gatekeeper.sh
@@ -3057,7 +3158,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: constrainttemplatepodstatuses.status.gatekeeper.sh
@@ -3624,7 +3725,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: expansiontemplate.expansion.gatekeeper.sh
@@ -3880,7 +3981,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: expansiontemplatepodstatuses.status.gatekeeper.sh
@@ -3957,7 +4058,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: modifyset.mutations.gatekeeper.sh
@@ -5029,7 +5130,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: mutatorpodstatuses.status.gatekeeper.sh
@@ -5109,7 +5210,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: providerpodstatuses.status.gatekeeper.sh
@@ -5422,7 +5523,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: syncsets.syncset.gatekeeper.sh

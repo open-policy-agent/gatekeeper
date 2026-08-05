@@ -99,8 +99,10 @@ func TestReconcile_E2E(t *testing.T) {
 				},
 			},
 			Status: statusv1alpha1.ConnectionPodStatusStatus{
-				Active:             false,
-				Errors:             []*statusv1alpha1.ConnectionError{},
+				ConnectionErrors: []*statusv1alpha1.ConnectionError{},
+				PublishStatuses: []statusv1alpha1.ConnectionPublishStatus{
+					{Source: statusv1alpha1.AuditPublishSource},
+				},
 				ObservedGeneration: connObj.GetGeneration(),
 				ConnectionUID:      connObj.GetUID(),
 				ID:                 pod.Name,
@@ -123,11 +125,13 @@ func TestReconcile_E2E(t *testing.T) {
 			err := k8sClient.Get(ctx, typeConnectionPodStatusNamespacedName, &connPodStatusObj)
 			g.Expect(err).Should(gomega.Succeed(), "Status should exist after creation")
 			g.Expect(connPodStatusObj.GetLabels()).Should(gomega.HaveKeyWithValue(statusv1beta1.ConnectionNameLabel, connObj.Name), "Status should have the correct connection name label")
-			g.Expect(connPodStatusObj.Status.Errors).Should(gomega.BeEmpty(), "Status should not have an error after creation")
+			g.Expect(connPodStatusObj.Status.ConnectionErrors).Should(gomega.BeEmpty(), "Status should not have an error after creation")
 			g.Expect(connPodStatusObj.Status.ObservedGeneration).Should(gomega.Equal(connObj.GetGeneration()), "Observed generation should match the connection object generation")
 			g.Expect(connPodStatusObj.Status.ID).Should(gomega.Equal(pod.Name), "ID should match the pod name")
 			g.Expect(connPodStatusObj.Status.ConnectionUID).Should(gomega.Equal(connObj.GetUID()), "ConnectionPodStatus UID should match the connection object UID")
-			g.Expect(connPodStatusObj.Status.Active).Should(gomega.BeFalse(), "No publish operations have been performed yet, so active status should be false")
+			g.Expect(connPodStatusObj.Status.PublishStatuses).Should(gomega.Equal([]statusv1alpha1.ConnectionPublishStatus{
+				{Source: statusv1alpha1.AuditPublishSource},
+			}))
 		}).WithTimeout(timeout).Should(gomega.Succeed())
 
 		// Assert Connection object and its status
@@ -135,11 +139,13 @@ func TestReconcile_E2E(t *testing.T) {
 			err := k8sClient.Get(ctx, typeConnectionNamespacedName, &connObj)
 			g.Expect(err).Should(gomega.Succeed(), "Conn should exist after updating the connection object")
 			g.Expect(len(connObj.Status.ByPod)).Should(gomega.Equal(1), "Connection object status should have one entry")
-			g.Expect(connObj.Status.ByPod[0].Errors).Should(gomega.BeEmpty(), "Status should not have an error after updating the connection object")
+			g.Expect(connObj.Status.ByPod[0].ConnectionErrors).Should(gomega.BeEmpty(), "Status should not have an error after updating the connection object")
 			g.Expect(connObj.Status.ByPod[0].ObservedGeneration).Should(gomega.Equal(connObj.GetGeneration()), "Observed generation should get updated to match the latest connection object generation after update")
 			g.Expect(connObj.Status.ByPod[0].ID).Should(gomega.Equal(pod.Name), "ID should still match the pod name after update")
 			g.Expect(connObj.Status.ByPod[0].ConnectionUID).Should(gomega.Equal(connObj.GetUID()), "ConnectionPodStatus UID should still match the connection object UID after update")
-			g.Expect(connObj.Status.ByPod[0].Active).Should(gomega.BeFalse(), "No publish operations have been performed yet, so active status should be false")
+			g.Expect(connObj.Status.ByPod[0].PublishStatuses).Should(gomega.Equal([]statusv1alpha1.ConnectionPublishStatus{
+				{Source: statusv1alpha1.AuditPublishSource},
+			}))
 		}).WithTimeout(timeout).Should(gomega.Succeed())
 
 		// Test Update of the Connection object
@@ -165,11 +171,10 @@ func TestReconcile_E2E(t *testing.T) {
 			err := k8sClient.Get(ctx, typeConnectionNamespacedName, &connObj)
 			g.Expect(err).Should(gomega.Succeed(), "Connection object should exist after updating")
 			g.Expect(len(connObj.Status.ByPod)).Should(gomega.Equal(1), "Connection object status should have one entry")
-			g.Expect(connObj.Status.ByPod[0].Errors).Should(gomega.BeEmpty(), "Status should not have an error after updating the Connection object")
+			g.Expect(connObj.Status.ByPod[0].ConnectionErrors).Should(gomega.BeEmpty(), "Status should not have an error after updating the Connection object")
 			g.Expect(connObj.Status.ByPod[0].ObservedGeneration).Should(gomega.Equal(connObj.GetGeneration()), "Observed generation should get updated to match the latest connection object generation after update")
 			g.Expect(connObj.Status.ByPod[0].ID).Should(gomega.Equal(pod.Name), "ID should still match the pod name after update")
 			g.Expect(connObj.Status.ByPod[0].ConnectionUID).Should(gomega.Equal(connObj.GetUID()), "ConnectionPodStatus UID should still match the Connection object UID after update")
-			g.Expect(connObj.Status.ByPod[0].Active).Should(gomega.BeFalse(), "No publish operations have been performed yet, so active status should be false")
 		}).WithTimeout(timeout).Should(gomega.Succeed())
 
 		// Test Delete of the Connection object
