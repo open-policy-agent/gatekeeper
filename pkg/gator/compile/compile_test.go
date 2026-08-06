@@ -29,17 +29,20 @@ func TestCompileFromConstraintTmpl(t *testing.T) {
 	if strings.Contains(output, "file.Read") {
 		t.Fatalf("gomplate snippets were not rendered:\n%s", output)
 	}
+	if strings.Contains(output, "{{") {
+		t.Fatalf("unexpanded template expression left in output:\n%s", output)
+	}
 }
 
 func TestCompileWithExplicitWorkingDir(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := filepath.Join("testdata", "policy-repo")
-	templatePath := filepath.Join(repoRoot, "src", "general", "samplepolicy", "constraint.tmpl")
+	sourceDir := filepath.Join(repoRoot, "src", "general", "samplepolicy")
 
 	output, err := Compile(Options{
-		TemplatePath: templatePath,
-		WorkingDir:   repoRoot,
+		SourceDir:  sourceDir,
+		WorkingDir: repoRoot,
 	})
 	if err != nil {
 		t.Fatalf("Compile() error = %v", err)
@@ -47,31 +50,6 @@ func TestCompileWithExplicitWorkingDir(t *testing.T) {
 
 	if !strings.Contains(output, "package samplepolicy") {
 		t.Fatalf("expected compiled rego in output, got:\n%s", output)
-	}
-}
-
-func TestCompileInjectRegoIntoScaffold(t *testing.T) {
-	t.Parallel()
-
-	templatePath := filepath.Join("testdata", "scaffold", "template.yaml")
-	regoPath := filepath.Join("testdata", "scaffold", "policy.rego")
-
-	output, err := Compile(Options{
-		TemplatePath: templatePath,
-		RegoPaths:    []string{regoPath},
-	})
-	if err != nil {
-		t.Fatalf("Compile() error = %v", err)
-	}
-
-	if !strings.Contains(output, "package scaffoldpolicy") {
-		t.Fatalf("expected injected rego in output, got:\n%s", output)
-	}
-	if !strings.Contains(output, "name: scaffoldpolicy") {
-		t.Fatalf("expected metadata.name preserved in output, got:\n%s", output)
-	}
-	if !strings.Contains(output, "kind: ScaffoldPolicy") {
-		t.Fatalf("expected spec.crd.spec.names.kind preserved in output, got:\n%s", output)
 	}
 }
 
@@ -83,6 +61,15 @@ func TestCompileMissingTemplate(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for missing template")
+	}
+}
+
+func TestCompileRequiresSourceDir(t *testing.T) {
+	t.Parallel()
+
+	_, err := Compile(Options{})
+	if err == nil {
+		t.Fatal("expected error when --source-dir is omitted")
 	}
 }
 
@@ -114,20 +101,158 @@ func TestIndentLines(t *testing.T) {
 	}
 }
 
-func TestRenderGomplateSnippetsMissingFile(t *testing.T) {
+func TestCompileMissingReferencedFile(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	content := `{{ file.Read "missing.rego" | strings.Indent 2 | strings.TrimSuffix "\n" }}`
-	if err := os.WriteFile(filepath.Join(tmpDir, "constraint.tmpl"), []byte(content), 0o600); err != nil {
+	repoRoot := t.TempDir()
+	sourceDir := filepath.Join(repoRoot, "src", "general", "broken")
+	if err := os.MkdirAll(sourceDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	content := `apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: broken
+spec:
+  crd:
+    spec:
+      names:
+        kind: Broken
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+{{ file.Read "src/general/broken/missing.rego" | strings.Indent 14 | strings.TrimSuffix "\n" }}
+`
+	if err := os.WriteFile(filepath.Join(sourceDir, "constraint.tmpl"), []byte(content), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	_, err := Compile(Options{
-		TemplatePath: filepath.Join(tmpDir, "constraint.tmpl"),
-		WorkingDir:   tmpDir,
-	})
+	_, err := Compile(Options{SourceDir: sourceDir})
 	if err == nil {
 		t.Fatal("expected error for missing referenced file")
+	}
+}
+
+func TestCompileRejectsPathEscape(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	sourceDir := filepath.Join(repoRoot, "src", "general", "escape")
+	if err := os.MkdirAll(sourceDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	content := `apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: escape
+spec:
+  crd:
+    spec:
+      names:
+        kind: Escape
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+{{ file.Read "../outside.rego" | strings.Indent 14 | strings.TrimSuffix "\n" }}
+`
+	if err := os.WriteFile(filepath.Join(sourceDir, "constraint.tmpl"), []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err := Compile(Options{SourceDir: sourceDir})
+	if err == nil {
+		t.Fatal("expected error for path escape")
+	}
+	if !strings.Contains(err.Error(), "escapes the working directory") {
+		t.Fatalf("expected path escape error, got: %v", err)
+	}
+}
+
+func TestCompileRejectsUnsupportedExpression(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	sourceDir := filepath.Join(repoRoot, "src", "general", "unsupported")
+	if err := os.MkdirAll(sourceDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	content := `apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: unsupported
+spec:
+  crd:
+    spec:
+      names:
+        kind: Unsupported
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+{{ env.Getenv "HOME" }}
+`
+	if err := os.WriteFile(filepath.Join(sourceDir, "constraint.tmpl"), []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err := Compile(Options{SourceDir: sourceDir})
+	if err == nil {
+		t.Fatal("expected error for unsupported template expression")
+	}
+	if !strings.Contains(err.Error(), "unsupported or unexpanded") {
+		t.Fatalf("expected unsupported expression error, got: %v", err)
+	}
+}
+
+func TestCompileInvalidRegoFails(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	sourceDir := filepath.Join(repoRoot, "src", "general", "badrego")
+	if err := os.MkdirAll(sourceDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	tmpl := `apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: badrego
+spec:
+  crd:
+    spec:
+      names:
+        kind: BadRego
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+{{ file.Read "src/general/badrego/src.rego" | strings.Indent 14 | strings.TrimSuffix "\n" }}
+`
+	if err := os.WriteFile(filepath.Join(sourceDir, "constraint.tmpl"), []byte(tmpl), 0o600); err != nil {
+		t.Fatalf("WriteFile() constraint.tmpl: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "src.rego"), []byte("package badrego\n\nthis is not valid rego !!!"), 0o600); err != nil {
+		t.Fatalf("WriteFile() src.rego: %v", err)
+	}
+
+	_, err := Compile(Options{SourceDir: sourceDir})
+	if err == nil {
+		t.Fatal("expected error for invalid rego")
+	}
+	if !strings.Contains(err.Error(), "compiling ConstraintTemplate") {
+		t.Fatalf("expected compile/validation error, got: %v", err)
 	}
 }
