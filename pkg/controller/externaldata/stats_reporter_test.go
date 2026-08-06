@@ -156,20 +156,14 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 }
 
 func TestReportProviderErrors(t *testing.T) {
-	// Reset shared counter so this test is isolated from other tests.
-	for externaldata.ProviderErrorCount() > 0 {
-		// ProviderErrorCount is cumulative; re-seed by reporting a known delta only after
-		// reading baseline. Use baseline-relative assertion below instead.
-		break
-	}
-	baseline := externaldata.ProviderErrorCount()
+	externaldata.ResetProviderErrorCount()
 
 	want := metricdata.Metrics{
 		Name: providerErrorCountName,
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,
 			DataPoints: []metricdata.DataPoint[int64]{
-				{Attributes: attribute.NewSet(), Value: baseline + 2},
+				{Attributes: attribute.NewSet(), Value: 2},
 			},
 			IsMonotonic: true,
 		},
@@ -198,7 +192,8 @@ func TestReportProviderErrors(t *testing.T) {
 }
 
 func TestProviderErrorCountAlwaysEmitted(t *testing.T) {
-	// Even with no errors recorded, the observable counter should still be exported.
+	// Even with zero errors recorded, the observable counter should still be exported as 0.
+	externaldata.ResetProviderErrorCount()
 	ctx := context.Background()
 	rdr, r := initializeTestInstruments(t)
 	_ = r
@@ -213,7 +208,7 @@ func TestProviderErrorCountAlwaysEmitted(t *testing.T) {
 			sum, ok := m.Data.(metricdata.Sum[int64])
 			require.True(t, ok, "expected Sum data for counter")
 			require.NotEmpty(t, sum.DataPoints)
-			assert.Equal(t, externaldata.ProviderErrorCount(), sum.DataPoints[0].Value)
+			assert.Equal(t, int64(0), sum.DataPoints[0].Value)
 			break
 		}
 	}

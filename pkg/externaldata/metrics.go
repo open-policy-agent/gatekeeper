@@ -17,13 +17,12 @@ package externaldata
 
 import "sync/atomic"
 
-// providerErrorTotal is the cumulative count of external data provider errors.
-// It is shared so both the provider controller and request paths (e.g. mutation)
-// can increment the same gatekeeper_provider_error_count metric.
+// providerErrorTotal is the cumulative count of external data provider
+// reconciliation errors. Shared so the stats reporter can observe it as an
+// Int64ObservableCounter (always exported, including 0).
 var providerErrorTotal atomic.Int64
 
 // ReportProviderError increments the provider error counter.
-// Safe to call from any package when an external data provider operation fails.
 func ReportProviderError() {
 	providerErrorTotal.Add(1)
 }
@@ -31,4 +30,9 @@ func ReportProviderError() {
 // ProviderErrorCount returns the current cumulative provider error count.
 func ProviderErrorCount() int64 {
 	return providerErrorTotal.Load()
+}
+
+// ResetProviderErrorCount sets the counter to zero. For tests only.
+func ResetProviderErrorCount() {
+	providerErrorTotal.Store(0)
 }
