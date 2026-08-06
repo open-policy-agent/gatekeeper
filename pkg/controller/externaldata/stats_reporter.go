@@ -3,8 +3,8 @@ package externaldata
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -34,7 +34,7 @@ func (r *reporter) observeProviderErrorCount(_ context.Context, o metric.Int64Ob
 	// Always observe so the metric is exported even when no errors have occurred yet.
 	// A plain Int64Counter is only exported after the first Add(), which made
 	// gatekeeper_provider_error_count appear missing on healthy clusters.
-	o.Observe(externaldata.ProviderErrorCount())
+	o.Observe(r.providerErrorTotal.Load())
 	return nil
 }
 
@@ -72,14 +72,15 @@ func newStatsReporter() *reporter {
 
 // reportProviderError increments the provider error counter.
 func (r *reporter) reportProviderError(_ context.Context) {
-	externaldata.ReportProviderError()
+	r.providerErrorTotal.Add(1)
 }
 
 type reporter struct {
-	mu           sync.RWMutex
-	cache        map[types.NamespacedName]metrics.Status
-	dirty        bool
-	statusReport map[metrics.Status]int64
+	mu                sync.RWMutex
+	cache             map[types.NamespacedName]metrics.Status
+	dirty             bool
+	statusReport      map[metrics.Status]int64
+	providerErrorTotal atomic.Int64
 }
 
 func (r *reporter) add(key types.NamespacedName, status metrics.Status) {

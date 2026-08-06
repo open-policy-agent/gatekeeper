@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
 	"github.com/stretchr/testify/assert"
@@ -156,8 +155,6 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 }
 
 func TestReportProviderErrors(t *testing.T) {
-	externaldata.ResetProviderErrorCount()
-
 	want := metricdata.Metrics{
 		Name: providerErrorCountName,
 		Data: metricdata.Sum[int64]{
@@ -193,7 +190,6 @@ func TestReportProviderErrors(t *testing.T) {
 
 func TestProviderErrorCountAlwaysEmitted(t *testing.T) {
 	// Even with zero errors recorded, the observable counter should still be exported as 0.
-	externaldata.ResetProviderErrorCount()
 	ctx := context.Background()
 	rdr, r := initializeTestInstruments(t)
 	_ = r
