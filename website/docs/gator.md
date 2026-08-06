@@ -33,10 +33,23 @@ brew install gator
 
 ## The `gator compile` subcommand
 
-`gator compile` renders `ConstraintTemplate` manifests from separate policy source
-files. It supports the [gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library)
-layout where Rego and CEL live in `src.rego` / `src.cel` and are embedded into
-`constraint.tmpl` via gomplate-style `file.Read` snippets.
+`gator compile` renders `ConstraintTemplate` manifests from the
+[gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library)
+source layout. Rego and CEL live beside `constraint.tmpl` (for example
+`src.rego` / `src.cel`) and are embedded through gomplate-style `file.Read`
+snippets.
+
+Supported template expression:
+
+```text
+{{ file.Read "<path>" | strings.Indent <n> | strings.TrimSuffix "\n" }}
+```
+
+`<path>` is resolved relative to the repository root (`--working-dir`). Paths
+that escape that directory are rejected. Any other `{{ ... }}` expression is
+unsupported. After rendering, `gator compile` decodes the manifest and compiles
+it through the same ConstraintTemplate client used by other gator commands, so
+invalid policy source fails immediately.
 
 ### Compile a policy source directory
 
@@ -50,18 +63,8 @@ gator compile --source-dir=src/general/requiredlabels \
 `--working-dir` is omitted, `gator compile` infers the repository root by walking
 up to the parent of a `src/` directory.
 
-### Compile a template file directly
-
 ```shell
-gator compile --filename=src/general/requiredlabels/constraint.tmpl --working-dir=.
-```
-
-### Inject Rego into a template scaffold
-
-When a template does not use gomplate snippets, pass explicit source files:
-
-```shell
-gator compile --filename=template.yaml --rego=src.rego
+gator compile --source-dir=src/general/requiredlabels --working-dir=.
 ```
 
 ## The `gator test` subcommand
