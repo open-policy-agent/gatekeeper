@@ -10,6 +10,7 @@ import (
 )
 
 func TestAssertion_Run(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		assertion *Assertion

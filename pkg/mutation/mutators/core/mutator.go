@@ -9,9 +9,10 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 	patht "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
+	mutationschema "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	admissionv1 "k8s.io/api/admission/v1"
 )
 
 // NewTester returns a path.Tester for the given object name, kind path and
@@ -29,21 +30,27 @@ func NewTester(name string, kind string, path parser.Path, ptests []unversioned.
 	return tester, nil
 }
 
-// NewValidatedBindings returns a slice of gvks from the given applies, or an
+// NewValidatedBindings returns schema bindings from the given applies, or an
 // error if the applies are invalid.
-func NewValidatedBindings(name string, kind string, applies []match.ApplyTo) ([]schema.GroupVersionKind, error) {
+func NewValidatedBindings(name string, kind string, applies []match.MutationApplyTo) ([]mutationschema.Binding, error) {
 	for _, applyTo := range applies {
 		if len(applyTo.Groups) == 0 || len(applyTo.Versions) == 0 || len(applyTo.Kinds) == 0 {
 			return nil, fmt.Errorf("invalid applyTo for %s mutator %s, all of group, version and kind must be specified", kind, name)
 		}
 	}
 
-	gvks := getSortedGVKs(applies)
-	if len(gvks) == 0 {
+	// Validate that all specified operations are valid Kubernetes admission operations
+	if err := match.ValidateOperations(applies); err != nil {
+		return nil, fmt.Errorf("invalid applyTo for %s mutator %s: %w", kind, name, err)
+	}
+
+	if len(applies) == 0 {
 		return nil, fmt.Errorf("applyTo required for %s mutator %s", kind, name)
 	}
 
-	return gvks, nil
+	bindings := getSortedBindings(applies)
+
+	return bindings, nil
 }
 
 func gatherPathTests(mutName string, mutKind string, pts []unversioned.PathTest) ([]patht.Test, error) {
@@ -59,25 +66,48 @@ func gatherPathTests(mutName string, mutKind string, pts []unversioned.PathTest)
 	return pathTests, nil
 }
 
-func getSortedGVKs(bindings []match.ApplyTo) []schema.GroupVersionKind {
-	// deduplicate GVKs
-	gvksMap := map[schema.GroupVersionKind]struct{}{}
-	for _, binding := range bindings {
-		for _, gvk := range binding.Flatten() {
-			gvksMap[gvk] = struct{}{}
+func getSortedBindings(applyTo []match.MutationApplyTo) []mutationschema.Binding {
+	bindingsMap := map[mutationschema.Binding]struct{}{}
+	for _, apply := range applyTo {
+		for _, gvk := range apply.Flatten() {
+			for _, operation := range apply.EffectiveOperations() {
+				bindingsMap[mutationschema.Binding{GVK: gvk, Operation: operation}] = struct{}{}
+			}
 		}
 	}
 
-	var gvks []schema.GroupVersionKind
-	for gvk := range gvksMap {
-		gvks = append(gvks, gvk)
+	var bindings []mutationschema.Binding
+	for binding := range bindingsMap {
+		bindings = append(bindings, binding)
 	}
 
 	// we iterate over the map in a stable order so that
 	// unit tests won't be flaky.
-	sort.Slice(gvks, func(i, j int) bool { return gvks[i].String() < gvks[j].String() })
+	sort.Slice(bindings, func(i, j int) bool {
+		leftGVK := bindings[i].GVK.String()
+		rightGVK := bindings[j].GVK.String()
+		if leftGVK != rightGVK {
+			return leftGVK < rightGVK
+		}
+		return operationRank(bindings[i].Operation) < operationRank(bindings[j].Operation)
+	})
 
-	return gvks
+	return bindings
+}
+
+func operationRank(operation admissionv1.Operation) int {
+	switch operation {
+	case admissionv1.Create:
+		return 0
+	case admissionv1.Update:
+		return 1
+	case admissionv1.Delete:
+		return 2
+	case admissionv1.Connect:
+		return 3
+	default:
+		return 4
+	}
 }
 
 // HasMetadataRoot returns true if the root node at given path references the
@@ -123,9 +153,14 @@ func CheckKeyNotChanged(p parser.Path) error {
 	return nil
 }
 
-func MatchWithApplyTo(mut *types.Mutable, applies []match.ApplyTo, mat *match.Match) (bool, error) {
+func MatchWithApplyTo(mut *types.Mutable, applies []match.MutationApplyTo, mat *match.Match) (bool, error) {
 	gvk := mut.Object.GetObjectKind().GroupVersionKind()
-	if !match.AppliesTo(applies, gvk) {
+
+	// Check that at least one applyTo entry matches BOTH GVK and operation.
+	// These checks must be combined on the same entry to avoid false positives
+	// (e.g., entry[0] matches Pod+CREATE and entry[1] matches Deployment+UPDATE
+	// should not allow Pod+UPDATE).
+	if !match.AppliesGVKAndOperation(applies, gvk, mut.Operation) {
 		return false, nil
 	}
 

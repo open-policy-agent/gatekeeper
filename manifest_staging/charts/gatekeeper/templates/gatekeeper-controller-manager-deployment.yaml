@@ -82,6 +82,10 @@ spec:
         {{- if not .Values.controllerManager.disableGenerateOperation }}
         - --operation=generate
         {{- end }}
+        {{ if hasKey .Values "enableAdmissionViolationExport" }}{{ if and .Values.enableAdmissionViolationExport (ne (.Values.exportBackend | default "" | lower) "disk") }}{{ fail "enableAdmissionViolationExport requires exportBackend to be disk" }}{{ end }}- --enable-admission-violation-export={{ .Values.enableAdmissionViolationExport }}{{ if .Values.enableAdmissionViolationExport }}
+        - --audit-connection={{ .Values.audit.connection }}
+        - --audit-channel={{ .Values.audit.channel }}
+  {{- end }}{{- end }}
         - --enable-external-data={{ .Values.enableExternalData }}
         - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion
           }}
@@ -99,6 +103,10 @@ spec:
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL
           }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+
+        {{- if hasKey .Values "defaultK8sNativeValidationFailurePolicy"}}
+        - --default-k8s-native-validation-failure-policy={{ .Values.defaultK8sNativeValidationFailurePolicy }}
+        {{- end }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}
@@ -219,9 +227,26 @@ spec:
           {{- toYaml .Values.controllerManager.securityContext | nindent 10}}
         volumeMounts:
         {{- include "gatekeeper.extraVolumeMounts" . | nindent 8 }}
+        {{- if and .Values.enableAdmissionViolationExport (eq (.Values.exportBackend | default "" | lower) "disk") }}
+        - mountPath: {{ .Values.audit.exportVolumeMount.path }}
+          name: {{ .Values.audit.exportVolume.name }}
+        {{- end }}
         - mountPath: /certs
           name: cert
           readOnly: true
+      {{- if and .Values.enableAdmissionViolationExport (eq (.Values.exportBackend | default "" | lower) "disk") (not .Values.admission.disableExportSidecar) }}
+      {{- $admissionSidecar := deepCopy .Values.admission.exportSidecar }}
+      {{- $_ := set $admissionSidecar "volumeMounts" (list (dict "mountPath" .Values.audit.exportVolumeMount.path "name" .Values.audit.exportVolume.name)) }}
+      {{- $admissionEnv := list }}
+      {{- range $env := ($admissionSidecar.env | default (list)) }}
+      {{- if ne $env.name "ROOT_PATH" }}
+      {{- $admissionEnv = append $admissionEnv $env }}
+      {{- end }}
+      {{- end }}
+      {{- $admissionEnv = append $admissionEnv (dict "name" "ROOT_PATH" "value" .Values.audit.exportConnection.path) }}
+      {{- $_ := set $admissionSidecar "env" $admissionEnv }}
+      - {{ toYaml $admissionSidecar | nindent 8 }}
+      {{- end }}
       dnsPolicy: {{ .Values.controllerManager.dnsPolicy }}
       hostNetwork: {{ .Values.controllerManager.hostNetwork }}
       imagePullSecrets:
@@ -241,6 +266,9 @@ spec:
         {{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}
       volumes:
       {{- include "gatekeeper.extraVolumes" . | nindent 6 }}
+      {{- if and .Values.enableAdmissionViolationExport (eq (.Values.exportBackend | default "" | lower) "disk") }}
+      - {{- toYaml .Values.audit.exportVolume | nindent 8 }}
+      {{- end }}
       - name: cert
         secret:
           defaultMode: 420

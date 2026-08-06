@@ -15,6 +15,17 @@ In addition to the `admission` scenario, Gatekeeper's audit functionality allows
 
 Finally, Gatekeeper's engine is designed to be portable, allowing administrators to detect and reject non-compliant commits to an infrastructure-as-code system's source-of-truth, further strengthening compliance efforts and preventing bad state from slowing down the organization.
 
+## Validation and mutation
+
+Gatekeeper supports both validation and mutation, but they are configured with different policy resources and have different effects:
+
+| Area | Policy resources | Effect |
+| --- | --- | --- |
+| Validation | [`ConstraintTemplate`](constrainttemplates.md) and `Constraint` resources | Evaluates resources and can deny, warn, dry-run, audit, or report violations without changing the resource. |
+| Mutation | [`AssignMetadata`, `Assign`, `ModifySet`, and `AssignImage`](mutation.md) mutator resources | Changes matching resources during admission before validation evaluates the final object. |
+
+Some concepts apply to both areas, such as match criteria and namespace exclusions. Other concepts are specific to validation constraints, including `enforcementAction`, audit results, and violation status.
+
 ## Looking for sample policies?
 
 Please visit Gatekeeper [policy library](https://open-policy-agent.github.io/gatekeeper-library/website/) to find a collection of sample policies.

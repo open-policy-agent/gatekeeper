@@ -7,21 +7,27 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	regodriver "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -31,6 +37,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func makeTemplateWithRegoAndCELEngine(vapGenerationVal *bool) *templates.ConstraintTemplate {
@@ -524,7 +531,7 @@ func TestShouldGenerateVAP(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			DefaultGenerateVAP = ptr.To[bool](test.vapDefault)
+			configureVAP(t, vapTestConfig{defaultGenerateVAP: ptr.To(test.vapDefault)})
 			generateVAP, err := ShouldGenerateVAP(test.template)
 			if generateVAP != test.expected {
 				t.Errorf("wanted assumeVAP to be %v; got %v", test.expected, generateVAP)
@@ -537,93 +544,57 @@ func TestShouldGenerateVAP(t *testing.T) {
 }
 
 func TestReportErrorOnConstraintStatus(t *testing.T) {
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
+			Errors: []constraintstatusv1beta1.Error{{Message: "existing error"}},
+		},
+	}
+	r := &ReconcileConstraint{}
+	testErr := errors.New("test error")
+
+	if err := r.reportErrorOnConstraintStatus(context.Background(), status, testErr, "test message"); !errors.Is(err, testErr) {
+		t.Fatalf("expected original error %v, got %v", testErr, err)
+	}
+	expected := []constraintstatusv1beta1.Error{
+		{Message: "existing error"},
+		{Message: "test message: test error"},
+	}
+	if !reflect.DeepEqual(status.Status.Errors, expected) {
+		t.Fatalf("expected status errors %v, got %v", expected, status.Status.Errors)
+	}
+}
+
+func TestPersistPodStatus(t *testing.T) {
 	tests := []struct {
-		name                   string
-		status                 *constraintstatusv1beta1.ConstraintPodStatus
-		err                    error
-		message                string
-		updateErr              error
-		expectedError          error
-		expectedStatusErrorLen int
-		expectedStatusError    []constraintstatusv1beta1.Error
+		name        string
+		change      bool
+		writeErr    error
+		wantUpdates int
+		wantErr     bool
 	}{
-		{
-			name: "successful update",
-			status: &constraintstatusv1beta1.ConstraintPodStatus{
-				Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
-			},
-			err:                    errors.New("test error"),
-			message:                "test message",
-			updateErr:              nil,
-			expectedError:          errors.New("test error"),
-			expectedStatusErrorLen: 1,
-			expectedStatusError: []constraintstatusv1beta1.Error{
-				{
-					Message: "test error",
-				},
-			},
-		},
-		{
-			name: "update error",
-			status: &constraintstatusv1beta1.ConstraintPodStatus{
-				Status: constraintstatusv1beta1.ConstraintPodStatusStatus{},
-			},
-			err:                    errors.New("test error"),
-			message:                "test message",
-			updateErr:              errors.New("update error"),
-			expectedError:          errors.New("test message, could not update constraint status: update error: test error"),
-			expectedStatusErrorLen: 1,
-			expectedStatusError: []constraintstatusv1beta1.Error{
-				{
-					Message: "test error",
-				},
-			},
-		},
-		{
-			name: "append status error",
-			status: &constraintstatusv1beta1.ConstraintPodStatus{
-				Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
-					Errors: []constraintstatusv1beta1.Error{
-						{
-							Message: "existing error",
-						},
-					},
-				},
-			},
-			err:                    errors.New("test error"),
-			message:                "test message",
-			updateErr:              nil,
-			expectedError:          errors.New("test error"),
-			expectedStatusErrorLen: 2,
-			expectedStatusError: []constraintstatusv1beta1.Error{
-				{
-					Message: "existing error",
-				},
-				{
-					Message: "test error",
-				},
-			},
-		},
+		{name: "unchanged"},
+		{name: "changed", change: true, wantUpdates: 1},
+		{name: "update error", change: true, writeErr: errors.New("update error"), wantErr: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			writer := &fakeWriter{updateErr: tt.updateErr}
-			r := &ReconcileConstraint{
-				writer: writer,
+			status := &constraintstatusv1beta1.ConstraintPodStatus{
+				Status: constraintstatusv1beta1.ConstraintPodStatusStatus{ID: "test-pod"},
 			}
-
-			err := r.reportErrorOnConstraintStatus(context.TODO(), tt.status, tt.err, tt.message)
-			if err == nil || err.Error() != tt.expectedError.Error() {
-				t.Errorf("expected error %v, got %v", tt.expectedError, err)
+			oldStatus := status.Status.DeepCopy()
+			if tt.change {
+				status.Status.Enforced = true
 			}
+			writer := &trackingWriter{fakeWriter: fakeWriter{updateErr: tt.writeErr}}
+			r := &ReconcileConstraint{writer: writer}
 
-			if len(tt.status.Status.Errors) != tt.expectedStatusErrorLen {
-				t.Errorf("expected %d error in status, got %d", tt.expectedStatusErrorLen, len(tt.status.Status.Errors))
+			err := r.persistPodStatus(context.Background(), status, oldStatus)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("persistPodStatus() error = %v, wantErr %v", err, tt.wantErr)
 			}
-
-			if reflect.DeepEqual(tt.status.Status.Errors, tt.expectedStatusError) {
-				t.Errorf("expected status errors %v, got %v", tt.expectedStatusError, tt.status.Status.Errors)
+			if len(writer.updatedObjects) != tt.wantUpdates {
+				t.Fatalf("expected %d updates, got %d", tt.wantUpdates, len(writer.updatedObjects))
 			}
 		})
 	}
@@ -743,7 +714,6 @@ func TestEventPackerMapFuncFromOwnerRefs_ValidOwner(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(got))
 	}
-	// Expect packed name format: gvk:Kind.Version.Group:Name
 	expectedPrefix := "gvk:MyConstraint.v1beta1.constraints.gatekeeper.sh:"
 	if got[0].Name[:len(expectedPrefix)] != expectedPrefix {
 		t.Fatalf("packed name not as expected: %s", got[0].Name)
@@ -793,6 +763,18 @@ func (f *fakeReader) Get(_ context.Context, key types.NamespacedName, obj client
 	}
 	// Copy stored object data into the output parameter.
 	switch dst := obj.(type) {
+	case *unstructured.Unstructured:
+		src, ok := stored.(*unstructured.Unstructured)
+		if !ok {
+			return fmt.Errorf("type mismatch: expected *unstructured.Unstructured, got %T", stored)
+		}
+		*dst = *src.DeepCopy()
+	case *constraintstatusv1beta1.ConstraintPodStatus:
+		src, ok := stored.(*constraintstatusv1beta1.ConstraintPodStatus)
+		if !ok {
+			return fmt.Errorf("type mismatch: expected *constraintstatusv1beta1.ConstraintPodStatus, got %T", stored)
+		}
+		*dst = *src.DeepCopy()
 	case *templatesv1beta1.ConstraintTemplate:
 		src, ok := stored.(*templatesv1beta1.ConstraintTemplate)
 		if !ok {
@@ -818,8 +800,29 @@ func (f *fakeReader) List(_ context.Context, _ client.ObjectList, _ ...client.Li
 // trackingWriter records Delete calls for assertions.
 type trackingWriter struct {
 	fakeWriter
-	deletedObjects []client.Object
-	createdObjects []client.Object
+	reader                      *fakeReader
+	statusUpdateErr             error
+	statusUpdateErrOnlyOnErrors bool
+	createAttempts              int
+	updateAttempts              int
+	deletedObjects              []client.Object
+	createdObjects              []client.Object
+	updatedObjects              []client.Object
+}
+
+func (t *trackingWriter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	t.updateAttempts++
+	if status, ok := obj.(*constraintstatusv1beta1.ConstraintPodStatus); ok && t.statusUpdateErr != nil {
+		if !t.statusUpdateErrOnlyOnErrors || len(status.Status.Errors) > 0 {
+			return t.statusUpdateErr
+		}
+	}
+	if err := t.fakeWriter.Update(ctx, obj, opts...); err != nil {
+		return err
+	}
+	t.updatedObjects = append(t.updatedObjects, obj)
+	t.store(obj)
+	return nil
 }
 
 func (t *trackingWriter) Delete(_ context.Context, obj client.Object, _ ...client.DeleteOption) error {
@@ -827,9 +830,25 @@ func (t *trackingWriter) Delete(_ context.Context, obj client.Object, _ ...clien
 	return nil
 }
 
-func (t *trackingWriter) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
+func (t *trackingWriter) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	t.createAttempts++
+	if err := t.fakeWriter.Create(ctx, obj, opts...); err != nil {
+		return err
+	}
 	t.createdObjects = append(t.createdObjects, obj)
+	t.store(obj)
 	return nil
+}
+
+func (t *trackingWriter) store(obj client.Object) {
+	if t.reader == nil {
+		return
+	}
+	stored, ok := obj.DeepCopyObject().(client.Object)
+	if !ok {
+		panic(fmt.Sprintf("object %T does not implement client.Object after DeepCopyObject", obj))
+	}
+	t.reader.objects[client.ObjectKeyFromObject(obj)] = stored
 }
 
 // fakeReporter implements StatsReporter for testing.
@@ -850,23 +869,286 @@ func (f *fakeReporter) DeleteVAPBStatus(name types.NamespacedName) {
 	delete(f.vapbStatuses, name)
 }
 
+func newConstraintUnitReconciler(t *testing.T, ct *templates.ConstraintTemplate, instance *unstructured.Unstructured) (*ReconcileConstraint, *fakeReader, *trackingWriter, reconcile.Request) {
+	t.Helper()
+	t.Setenv("POD_NAME", "test-pod")
+
+	scheme := runtime.NewScheme()
+	if err := templatesv1beta1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := constraintstatusv1beta1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := admissionregistrationv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := admissionregistrationv1beta1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	versionedCT := &templatesv1beta1.ConstraintTemplate{}
+	if err := scheme.Convert(ct, versionedCT, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	regoDriver, err := regodriver.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	celDriver, err := k8scel.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfClient, err := constraintclient.NewClient(
+		constraintclient.Targets(&target.K8sValidationTarget{}),
+		constraintclient.Driver(regoDriver),
+		constraintclient.Driver(celDriver),
+		constraintclient.EnforcementPoints(util.AuditEnforcementPoint),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cfClient.AddTemplate(context.Background(), ct); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cfClient.AddConstraint(context.Background(), instance.DeepCopy()); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			client.ObjectKeyFromObject(instance): instance.DeepCopy(),
+			{Name: versionedCT.GetName()}:        versionedCT,
+		},
+		getErrs: make(map[types.NamespacedName]error),
+	}
+	writer := &trackingWriter{reader: reader}
+	tracker := readiness.NewTracker(reader, false, false, false)
+	trackerCtx, cancelTracker := context.WithCancel(context.Background())
+	t.Cleanup(cancelTracker)
+	go func() {
+		_ = tracker.Run(trackerCtx)
+	}()
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: util.GetNamespace()}}
+	r := &ReconcileConstraint{
+		reader:           reader,
+		writer:           writer,
+		scheme:           scheme,
+		cfClient:         cfClient,
+		log:              logf.Log.WithName("test"),
+		reporter:         &fakeReporter{},
+		constraintsCache: NewConstraintsCache(),
+		tracker:          tracker,
+		getPod:           func(context.Context) (*corev1.Pod, error) { return pod, nil },
+		ifWatching:       func(_ schema.GroupVersionKind, fn func() error) (bool, error) { return true, fn() },
+	}
+	requests := util.EventPackerMapFunc()(context.Background(), instance)
+	if len(requests) != 1 {
+		t.Fatalf("expected one packed request, got %d", len(requests))
+	}
+	return r, reader, writer, requests[0]
+}
+
+func makeUnitConstraint() *unstructured.Unstructured {
+	instance := &unstructured.Unstructured{Object: map[string]interface{}{
+		"spec": map[string]interface{}{
+			"enforcementAction": "dryrun",
+		},
+	}}
+	instance.SetGroupVersionKind(schema.GroupVersionKind{Group: constraintstatusv1beta1.ConstraintsGroup, Version: "v1beta1", Kind: "TestKind"})
+	instance.SetName("test-constraint")
+	instance.SetUID("constraint-uid")
+	instance.SetGeneration(1)
+	return instance
+}
+
+type vapTestConfig struct {
+	apiEnabled          *bool
+	defaultGenerateVAP  *bool
+	defaultGenerateVAPB *bool
+}
+
+func configureVAP(t *testing.T, config vapTestConfig) {
+	t.Helper()
+
+	if config.apiEnabled != nil {
+		transform.SetVapAPIEnabled(config.apiEnabled)
+		if *config.apiEnabled {
+			transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
+		} else {
+			transform.SetGroupVersion(nil)
+		}
+		t.Cleanup(func() {
+			transform.SetVapAPIEnabled(nil)
+			transform.SetGroupVersion(nil)
+		})
+	}
+
+	if config.defaultGenerateVAP != nil {
+		original := GetDefaultGenerateVAP()
+		SetDefaultGenerateVAP(*config.defaultGenerateVAP)
+		t.Cleanup(func() { SetDefaultGenerateVAP(original) })
+	}
+
+	if config.defaultGenerateVAPB != nil {
+		original := GetDefaultGenerateVAPB()
+		SetDefaultGenerateVAPB(*config.defaultGenerateVAPB)
+		t.Cleanup(func() { SetDefaultGenerateVAPB(original) })
+	}
+}
+
+func makeUnitCELTemplate() *templates.ConstraintTemplate {
+	ct := makeTemplateWithCELEngine(nil)
+	ct.Spec.CRD.Spec.Names.Kind = "TestKind"
+	ct.Spec.Targets[0].Target = target.Name
+	return ct
+}
+
+func TestReconcileStableVAPAPIErrorSkipsStatusUpdate(t *testing.T) {
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(false),
+		defaultGenerateVAP:  ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
+	})
+
+	ct := makeUnitCELTemplate()
+	instance := makeUnitConstraint()
+	r, reader, writer, request := newConstraintUnitReconciler(t, ct, instance)
+
+	firstResult, firstErr := r.Reconcile(context.Background(), request)
+	if firstErr != nil || firstResult != (reconcile.Result{}) {
+		t.Fatalf("expected successful first reconcile, got result=%v error=%v", firstResult, firstErr)
+	}
+	if writer.createAttempts != 1 || writer.updateAttempts != 1 {
+		t.Fatalf("expected one status create and update, got %d creates and %d updates", writer.createAttempts, writer.updateAttempts)
+	}
+
+	secondResult, secondErr := r.Reconcile(context.Background(), request)
+	if secondErr != nil || secondResult != firstResult {
+		t.Fatalf("expected stable second reconcile, got result=%v error=%v", secondResult, secondErr)
+	}
+	if writer.createAttempts != 1 || writer.updateAttempts != 1 {
+		t.Fatalf("expected identical error to skip a second write, got %d creates and %d updates", writer.createAttempts, writer.updateAttempts)
+	}
+
+	statusName, err := constraintstatusv1beta1.KeyForConstraint("test-pod", instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, ok := reader.objects[types.NamespacedName{Name: statusName, Namespace: util.GetNamespace()}].(*constraintstatusv1beta1.ConstraintPodStatus)
+	if !ok {
+		t.Fatalf("expected stored ConstraintPodStatus, got %T", reader.objects[types.NamespacedName{Name: statusName, Namespace: util.GetNamespace()}])
+	}
+	if len(stored.Status.Errors) != 1 || !strings.Contains(stored.Status.Errors[0].Message, ErrValidatingAdmissionPolicyAPIDisabled.Error()) {
+		t.Fatalf("expected one stable VAP API error, got %v", stored.Status.Errors)
+	}
+}
+
+func TestReconcileStatusCreateErrorIsReturned(t *testing.T) {
+	ct := makeUnitCELTemplate()
+	instance := makeUnitConstraint()
+	r, _, writer, request := newConstraintUnitReconciler(t, ct, instance)
+	statusName, err := constraintstatusv1beta1.KeyForConstraint("test-pod", instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createErr := apierrors.NewAlreadyExists(schema.GroupResource{Group: constraintstatusv1beta1.GroupVersion.Group, Resource: "constraintpodstatuses"}, statusName)
+	writer.createErr = createErr
+
+	result, err := r.Reconcile(context.Background(), request)
+	if !apierrors.IsAlreadyExists(err) {
+		t.Fatalf("expected status create error %v, got %v", createErr, err)
+	}
+	if result != (reconcile.Result{}) {
+		t.Fatalf("expected empty result for status create error, got %v", result)
+	}
+	if writer.createAttempts != 1 || writer.updateAttempts != 0 {
+		t.Fatalf("expected one create and no updates, got %d creates and %d updates", writer.createAttempts, writer.updateAttempts)
+	}
+}
+
+func TestReconcileBaseStatusUpdateErrorPreservesRequeueBehavior(t *testing.T) {
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(false),
+		defaultGenerateVAP:  ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
+	})
+	ct := makeUnitCELTemplate()
+	instance := makeUnitConstraint()
+	r, _, writer, request := newConstraintUnitReconciler(t, ct, instance)
+	updateErr := apierrors.NewConflict(schema.GroupResource{Group: constraintstatusv1beta1.GroupVersion.Group, Resource: "constraintpodstatuses"}, instance.GetName(), errors.New("conflict"))
+	writer.updateErr = updateErr
+
+	result, err := r.Reconcile(context.Background(), request)
+	if err != nil {
+		t.Fatalf("expected status update failure to preserve nil error, got %v", err)
+	}
+	if result != (reconcile.Result{Requeue: true}) {
+		t.Fatalf("expected explicit requeue for base status update failure, got %v", result)
+	}
+	if writer.createAttempts != 1 || writer.updateAttempts != 1 {
+		t.Fatalf("expected one create and one update attempt, got %d creates and %d updates", writer.createAttempts, writer.updateAttempts)
+	}
+}
+
+func TestReconcilePreservesBothVAPBAndStatusErrors(t *testing.T) {
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(true),
+		defaultGenerateVAP:  ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
+	})
+
+	ct := makeUnitCELTemplate()
+	ct.SetAnnotations(map[string]string{VAPBGenerationAnnotation: VAPBGenerationUnblocked})
+	instance := makeUnitConstraint()
+	r, reader, writer, request := newConstraintUnitReconciler(t, ct, instance)
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: util.GetNamespace()}}
+	status, err := constraintstatusv1beta1.NewConstraintStatusForPod(pod, instance, r.scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status.Status.ConstraintUID = instance.GetUID()
+	status.Status.ObservedGeneration = instance.GetGeneration()
+	status.Status.Enforced = true
+	writer.store(status)
+
+	reconcileErr := errors.New("get VAPB")
+	persistErr := apierrors.NewConflict(schema.GroupResource{Group: constraintstatusv1beta1.GroupVersion.Group, Resource: "constraintpodstatuses"}, instance.GetName(), errors.New("conflict"))
+	reader.getErrs[types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}] = reconcileErr
+	writer.statusUpdateErr = persistErr
+	writer.statusUpdateErrOnlyOnErrors = true
+
+	result, err := r.Reconcile(context.Background(), request)
+	if result != (reconcile.Result{}) {
+		t.Fatalf("expected empty result for combined error, got %v", result)
+	}
+	if !errors.Is(err, reconcileErr) {
+		t.Fatalf("expected combined error to preserve VAPB error %v, got %v", reconcileErr, err)
+	}
+	if !errors.Is(err, persistErr) {
+		t.Fatalf("expected combined error to preserve status error %v, got %v", persistErr, err)
+	}
+	wantMessage := fmt.Sprintf("could not get ValidatingAdmissionPolicyBinding, could not update constraint status: %s: %s", persistErr, reconcileErr)
+	if err.Error() != wantMessage {
+		t.Fatalf("expected unchanged combined error message %q, got %q", wantMessage, err)
+	}
+	if writer.createAttempts != 0 || writer.updateAttempts != 1 {
+		t.Fatalf("expected no create and one update attempt, got %d creates and %d updates", writer.createAttempts, writer.updateAttempts)
+	}
+}
+
 func TestManageVAPB_CleansUpStaleVAPB(t *testing.T) {
 	// Regression test for https://github.com/open-policy-agent/gatekeeper/issues/4441
 	// When vap.k8s.io is removed from scopedEnforcementActions, the stale VAPB must be deleted.
 
-	// Set up the VAP API as enabled with v1 group version.
-	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	transform.SetVapAPIEnabled(ptr.To(true))
-	transform.SetGroupVersion(&gv)
-	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(nil)
-		transform.SetGroupVersion(nil)
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
 	})
-
-	// Ensure DefaultGenerateVAPB is true (default).
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
 
 	// Constraint with scoped enforcement — only webhook + audit, no vap.k8s.io.
 	instance := &unstructured.Unstructured{
@@ -952,20 +1234,214 @@ func TestManageVAPB_CleansUpStaleVAPB(t *testing.T) {
 	}
 }
 
+func TestManageVAPB_RegoOnlyTemplateSkipsVAPAPIDisabledError(t *testing.T) {
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(false),
+		defaultGenerateVAP:  ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
+	})
+
+	scheme := runtime.NewScheme()
+	if err := templatesv1beta1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	ct := &templatesv1beta1.ConstraintTemplate{}
+	if err := scheme.Convert(makeTemplateWithRegoEngine(), ct, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"generation": int64(1),
+				"name":       "test-constraint",
+				"uid":        "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "dryrun",
+			},
+		},
+	}
+
+	writer := &trackingWriter{}
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
+			Errors: []constraintstatusv1beta1.Error{{
+				Message: fmt.Sprintf("cannot generate ValidatingAdmissionPolicyBinding: %s", ErrValidatingAdmissionPolicyAPIDisabled),
+			}},
+		},
+	}
+	r := &ReconcileConstraint{
+		reader: &fakeReader{
+			objects: map[types.NamespacedName]client.Object{
+				{Name: "testkind"}: ct,
+			},
+		},
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   scheme,
+	}
+
+	oldStatus := status.Status.DeepCopy()
+	status.Status.Errors = nil
+	requeueAfter, err := r.manageVAPB(context.Background(), util.Dryrun, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+	if requeueAfter != 0 {
+		t.Fatalf("expected no requeue delay, got %s", requeueAfter)
+	}
+	if len(status.Status.Errors) != 0 {
+		t.Fatalf("expected no VAP API error for Rego-only template, got %v", status.Status.Errors)
+	}
+	if len(status.Status.EnforcementPointsStatus) != 1 {
+		t.Fatalf("expected one enforcement point status, got %d", len(status.Status.EnforcementPointsStatus))
+	}
+	if got := status.Status.EnforcementPointsStatus[0]; got.EnforcementPoint != util.VAPEnforcementPoint || got.State != ErrGenerateVAPBState {
+		t.Fatalf("expected VAP enforcement point state %q, got %#v", ErrGenerateVAPBState, got)
+	}
+	if len(writer.updatedObjects) != 0 {
+		t.Fatalf("expected manageVAPB to leave status persistence to Reconcile, got %d updates", len(writer.updatedObjects))
+	}
+	if err := r.persistPodStatus(context.Background(), status, oldStatus); err != nil {
+		t.Fatalf("persistPodStatus returned unexpected error: %v", err)
+	}
+	if len(writer.updatedObjects) != 1 {
+		t.Fatalf("expected one update to replace the stale API error, got %d", len(writer.updatedObjects))
+	}
+
+	oldStatus = status.Status.DeepCopy()
+	status.Status.Errors = nil
+	if _, err := r.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil {
+		t.Fatalf("second manageVAPB returned unexpected error: %v", err)
+	}
+	if err := r.persistPodStatus(context.Background(), status, oldStatus); err != nil {
+		t.Fatalf("second persistPodStatus returned unexpected error: %v", err)
+	}
+	if len(writer.updatedObjects) != 1 {
+		t.Fatalf("expected stable status to skip a second update, got %d updates", len(writer.updatedObjects))
+	}
+
+	celCT := &templatesv1beta1.ConstraintTemplate{}
+	if err := scheme.Convert(makeTemplateWithCELEngine(nil), celCT, nil); err != nil {
+		t.Fatal(err)
+	}
+	reader, ok := r.reader.(*fakeReader)
+	if !ok {
+		t.Fatalf("expected fake reader, got %T", r.reader)
+	}
+	reader.objects[types.NamespacedName{Name: "testkind"}] = celCT
+
+	oldStatus = status.Status.DeepCopy()
+	status.Status.Errors = nil
+	if _, err := r.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil {
+		t.Fatalf("CEL-eligible manageVAPB returned unexpected error: %v", err)
+	}
+	apiError := fmt.Sprintf("cannot generate ValidatingAdmissionPolicyBinding: %s", ErrValidatingAdmissionPolicyAPIDisabled)
+	if len(status.Status.Errors) != 1 || status.Status.Errors[0].Message != apiError {
+		t.Fatalf("expected VAP API error %q, got %v", apiError, status.Status.Errors)
+	}
+	for _, ep := range status.Status.EnforcementPointsStatus {
+		if ep.EnforcementPoint == util.VAPEnforcementPoint {
+			t.Fatalf("expected stale missing-CEL enforcement point status to be removed, got %#v", ep)
+		}
+	}
+	if err := r.persistPodStatus(context.Background(), status, oldStatus); err != nil {
+		t.Fatalf("persisting CEL-eligible status returned unexpected error: %v", err)
+	}
+	if len(writer.updatedObjects) != 2 {
+		t.Fatalf("expected one update for the Rego-to-CEL transition, got %d total updates", len(writer.updatedObjects))
+	}
+
+	oldStatus = status.Status.DeepCopy()
+	status.Status.Errors = nil
+	if _, err := r.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil {
+		t.Fatalf("stable CEL-eligible manageVAPB returned unexpected error: %v", err)
+	}
+	if err := r.persistPodStatus(context.Background(), status, oldStatus); err != nil {
+		t.Fatalf("persisting stable CEL-eligible status returned unexpected error: %v", err)
+	}
+	if len(writer.updatedObjects) != 2 {
+		t.Fatalf("expected stable CEL-eligible status to skip another update, got %d total updates", len(writer.updatedObjects))
+	}
+}
+
+func TestManageVAPB_VAPAPIDisabledStatusIsIdempotent(t *testing.T) {
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(false),
+		defaultGenerateVAP:  ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
+	})
+
+	scheme := runtime.NewScheme()
+	if err := templatesv1beta1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	ct := &templatesv1beta1.ConstraintTemplate{}
+	if err := scheme.Convert(makeTemplateWithCELEngine(nil), ct, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"generation": int64(1),
+				"name":       "test-constraint",
+				"uid":        "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "dryrun",
+			},
+		},
+	}
+
+	errorMessage := fmt.Sprintf("cannot generate ValidatingAdmissionPolicyBinding: %s", ErrValidatingAdmissionPolicyAPIDisabled)
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
+			Errors: []constraintstatusv1beta1.Error{{Message: errorMessage}},
+		},
+	}
+	oldStatus := status.Status.DeepCopy()
+	status.Status.Errors = nil
+	writer := &trackingWriter{}
+	r := &ReconcileConstraint{
+		reader: &fakeReader{
+			objects: map[types.NamespacedName]client.Object{
+				{Name: "testkind"}: ct,
+			},
+		},
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   scheme,
+	}
+
+	if _, err := r.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+	if len(status.Status.Errors) != 1 || status.Status.Errors[0].Message != errorMessage {
+		t.Fatalf("expected stable VAP API error %q, got %v", errorMessage, status.Status.Errors)
+	}
+	if err := r.persistPodStatus(context.Background(), status, oldStatus); err != nil {
+		t.Fatalf("persistPodStatus returned unexpected error: %v", err)
+	}
+	if len(writer.updatedObjects) != 0 {
+		t.Fatalf("expected unchanged API-disabled status to skip update, got %d", len(writer.updatedObjects))
+	}
+}
+
 func TestManageVAPB_NoStaleVAPB_NoDelete(t *testing.T) {
 	// When vap.k8s.io is removed and no VAPB exists, Delete should not be called.
 
-	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	transform.SetVapAPIEnabled(ptr.To(true))
-	transform.SetGroupVersion(&gv)
-	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(nil)
-		transform.SetGroupVersion(nil)
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
 	})
-
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
 
 	instance := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1040,17 +1516,10 @@ func TestManageVAPB_SkipsDeleteIfNotOwner(t *testing.T) {
 	// Regression test: a VAPB owned by a different constraint kind with the same name
 	// must NOT be deleted by this constraint's cleanup path.
 
-	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	transform.SetVapAPIEnabled(ptr.To(true))
-	transform.SetGroupVersion(&gv)
-	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(nil)
-		transform.SetGroupVersion(nil)
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
 	})
-
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
 
 	// This constraint does NOT use vap.k8s.io.
 	instance := &unstructured.Unstructured{
@@ -1199,17 +1668,10 @@ func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-			transform.SetVapAPIEnabled(ptr.To(true))
-			transform.SetGroupVersion(&gv)
-			t.Cleanup(func() {
-				transform.SetVapAPIEnabled(nil)
-				transform.SetGroupVersion(nil)
+			configureVAP(t, vapTestConfig{
+				apiEnabled:          ptr.To(true),
+				defaultGenerateVAPB: ptr.To(true),
 			})
-
-			origDefault := *DefaultGenerateVAPB
-			*DefaultGenerateVAPB = true
-			t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
 
 			epName := util.WebhookEnforcementPoint
 			if tt.useVAPEnforcement {
@@ -1314,18 +1776,108 @@ func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
 	}
 }
 
-func TestManageVAPB_PreservesErrorMetricWhenGenerationFails(t *testing.T) {
-	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	transform.SetVapAPIEnabled(ptr.To(true))
-	transform.SetGroupVersion(&gv)
-	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(nil)
-		transform.SetGroupVersion(nil)
+func TestManageVAPB_WaitStatusIsIdempotent(t *testing.T) {
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(true),
+		defaultGenerateVAP:  ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
 	})
 
-	origDefault := *DefaultGenerateVAPB
-	*DefaultGenerateVAPB = true
-	t.Cleanup(func() { *DefaultGenerateVAPB = origDefault })
+	scheme := runtime.NewScheme()
+	if err := templatesv1beta1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	unversionedCT := makeTemplateWithCELEngine(nil)
+	ct := &templatesv1beta1.ConstraintTemplate{}
+	if err := scheme.Convert(unversionedCT, ct, nil); err != nil {
+		t.Fatal(err)
+	}
+	unblockAt := time.Now().Add(30 * time.Second).Format(time.RFC3339)
+	ct.Annotations = map[string]string{
+		BlockVAPBGenerationUntilAnnotation: unblockAt,
+		VAPBGenerationAnnotation:           VAPBGenerationBlocked,
+	}
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"generation": int64(1),
+				"name":       "test-constraint",
+				"uid":        "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.VAPEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	reader := &fakeReader{
+		objects: map[types.NamespacedName]client.Object{
+			{Name: "testkind"}: ct,
+		},
+	}
+	writer := &trackingWriter{}
+	status := &constraintstatusv1beta1.ConstraintPodStatus{}
+	r := &ReconcileConstraint{
+		reader:   reader,
+		writer:   writer,
+		log:      logf.Log.WithName("test"),
+		reporter: &fakeReporter{},
+		scheme:   scheme,
+	}
+
+	requeueAfter, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("manageVAPB returned unexpected error: %v", err)
+	}
+	if requeueAfter <= 0 {
+		t.Fatalf("expected positive requeue delay while VAPB generation is blocked, got %s", requeueAfter)
+	}
+	if len(writer.updatedObjects) != 0 {
+		t.Fatalf("expected manageVAPB to leave status persistence to Reconcile, got %d updates", len(writer.updatedObjects))
+	}
+	if len(status.Status.EnforcementPointsStatus) != 1 {
+		t.Fatalf("expected one enforcement point status, got %d", len(status.Status.EnforcementPointsStatus))
+	}
+	firstEPStatus := status.Status.EnforcementPointsStatus[0]
+	if firstEPStatus.State != WaitVAPBState {
+		t.Fatalf("expected EP state %q, got %q", WaitVAPBState, firstEPStatus.State)
+	}
+	if want := fmt.Sprintf("waiting until %s before generating ValidatingAdmissionPolicyBinding to make sure api-server has cached constraint CRD", unblockAt); firstEPStatus.Message != want {
+		t.Fatalf("expected stable wait message %q, got %q", want, firstEPStatus.Message)
+	}
+
+	beforeSecondReconcile := status.DeepCopy()
+	requeueAfter, err = r.manageVAPB(context.Background(), util.Scoped, instance, status)
+	if err != nil {
+		t.Fatalf("second manageVAPB returned unexpected error: %v", err)
+	}
+	if requeueAfter <= 0 {
+		t.Fatalf("expected positive requeue delay on second wait reconcile, got %s", requeueAfter)
+	}
+	if len(writer.updatedObjects) != 0 {
+		t.Fatalf("expected manageVAPB to leave status persistence to Reconcile, got %d total updates", len(writer.updatedObjects))
+	}
+	if !reflect.DeepEqual(beforeSecondReconcile.Status, status.Status) {
+		t.Fatalf("expected second wait reconcile to leave status unchanged; diff: %s", spew.Sdump(status.Status))
+	}
+}
+
+func TestManageVAPB_PreservesErrorMetricWhenGenerationFails(t *testing.T) {
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
+	})
 
 	instance := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1412,6 +1964,7 @@ func TestManageVAPB_PreservesErrorMetricWhenGenerationFails(t *testing.T) {
 
 type fakeWriter struct {
 	updateErr error
+	createErr error
 }
 
 func (f *fakeWriter) Update(_ context.Context, _ client.Object, _ ...client.UpdateOption) error {
@@ -1419,7 +1972,7 @@ func (f *fakeWriter) Update(_ context.Context, _ client.Object, _ ...client.Upda
 }
 
 func (f *fakeWriter) Create(_ context.Context, _ client.Object, _ ...client.CreateOption) error {
-	return nil
+	return f.createErr
 }
 
 func (f *fakeWriter) Delete(_ context.Context, _ client.Object, _ ...client.DeleteOption) error {
@@ -1513,13 +2066,7 @@ func TestCleanupLegacyVAPB(t *testing.T) {
 	// When a new-format VAPB has been created, the old-format (legacy) VAPB
 	// owned by the same constraint must be cleaned up.
 
-	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	transform.SetVapAPIEnabled(ptr.To(true))
-	transform.SetGroupVersion(&gv)
-	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(nil)
-		transform.SetGroupVersion(nil)
-	})
+	gv := admissionregistrationv1.SchemeGroupVersion
 
 	instance := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1582,13 +2129,7 @@ func TestCleanupLegacyVAPB(t *testing.T) {
 func TestCleanupLegacyVAPB_SkipsIfNotOwner(t *testing.T) {
 	// Legacy VAPB owned by a different constraint must NOT be deleted.
 
-	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	transform.SetVapAPIEnabled(ptr.To(true))
-	transform.SetGroupVersion(&gv)
-	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(nil)
-		transform.SetGroupVersion(nil)
-	})
+	gv := admissionregistrationv1.SchemeGroupVersion
 
 	instance := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1641,13 +2182,7 @@ func TestCleanupLegacyVAPB_SkipsIfNotOwner(t *testing.T) {
 }
 
 func TestCleanupLegacyVAPB_FallsBackToOwnerCoordinatesWhenUIDMissing(t *testing.T) {
-	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	transform.SetVapAPIEnabled(ptr.To(true))
-	transform.SetGroupVersion(&gv)
-	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(nil)
-		transform.SetGroupVersion(nil)
-	})
+	gv := admissionregistrationv1.SchemeGroupVersion
 
 	instance := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -1697,13 +2232,7 @@ func TestCleanupLegacyVAPB_FallsBackToOwnerCoordinatesWhenUIDMissing(t *testing.
 }
 
 func TestCleanupLegacyVAPB_SkipsFallbackWhenOwnerCoordinatesDoNotMatch(t *testing.T) {
-	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
-	transform.SetVapAPIEnabled(ptr.To(true))
-	transform.SetGroupVersion(&gv)
-	t.Cleanup(func() {
-		transform.SetVapAPIEnabled(nil)
-		transform.SetGroupVersion(nil)
-	})
+	gv := admissionregistrationv1.SchemeGroupVersion
 
 	instance := &unstructured.Unstructured{
 		Object: map[string]interface{}{

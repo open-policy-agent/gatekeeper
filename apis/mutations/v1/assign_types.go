@@ -33,7 +33,7 @@ type AssignSpec struct {
 	// ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
 	// This is necessary because every mutation implies part of an object schema and object
 	// schemas are associated with specific GVKs.
-	ApplyTo []match.ApplyTo `json:"applyTo,omitempty"`
+	ApplyTo []match.MutationApplyTo `json:"applyTo,omitempty"`
 
 	// Match allows the user to limit which resources get mutated.
 	// Individual match criteria are AND-ed together. An undefined
@@ -102,8 +102,4 @@ type AssignList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Assign `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Assign{}, &AssignList{})
 }

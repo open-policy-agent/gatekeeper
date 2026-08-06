@@ -143,6 +143,13 @@ Limitations/drawbacks of exporting violations:
 - Additional dependency on the backend system provided. For example, using pubsub tools to export violations.
 
 ## Running Audit
+
+### Why Audit Runs as a Singleton
+
+Gatekeeper audit is designed to run as a singleton because it writes audit results to Constraint status. Multiple audit instances can contend on the same Constraint status fields. In Gatekeeper v3.18 and later, the audit deployment may also run the `generate` operation, which creates or updates Constraint CRDs and, when VAP/VAPB generation is enabled, ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding resources. The `generate` operation should also run as a singleton.
+
+If your setup only consumes audit results from logs or exports, setting `--constraint-violations-limit=0` avoids storing individual violations in Constraint `.status.violations`. This does not disable all Constraint status writes: audit still updates fields such as `.status.auditTimestamp` and `.status.totalViolations`, so running multiple audit replicas can still cause status update contention. If you scale the audit deployment beyond one replica, ensure that only one instance runs the `generate` operation, or disable it for the audit deployment, for example with Helm's `audit.disableGenerateOperation=true`. If VAP/VAPB generation is enabled, ensure it is handled by a singleton generator or disable it with `defaultCreateVAPForTemplates=false` and `defaultCreateVAPBindingForConstraints=false` (or the equivalent runtime flags).
+
 For more details on how to deploy audit and 
 number of instances to run, please refer to [operations audit](operations.md#audit). 
 
@@ -160,6 +167,14 @@ number of instances to run, please refer to [operations audit](operations.md#aud
     ```
 
 By default, audit will request each resource from the Kubernetes API during each audit cycle. To rely on the audit informer cache instead, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into the audit cache before they can be evaluated against the enforced policies. Refer to the [Replicating data](sync.md) section for more information.
+
+### Disabling Audit
+
+If you want to completely disable the audit process (for example, to reduce CPU or Memory usage), you must be careful not to break other singleton operations like CRD generation and status aggregation, which are also handled by the audit pod.
+
+Instead of completely removing the audit deployment (e.g., by setting `disableAudit: true` in Helm), you should disable just the audit operation:
+- In Helm, set `audit.disableAuditOperation: true`.
+- If not using Helm, remove the `--operation=audit` flag from the audit deployment manifest.
 
 ### Audit using kinds specified in the constraints only
 

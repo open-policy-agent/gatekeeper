@@ -23,7 +23,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag will be removed in a future release.")
+var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag is deprecated and will be removed in Gatekeeper v3.24.")
 
 func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, nil)
@@ -109,7 +109,12 @@ func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.Rul
 			if !intersection.Equal(ctOpsSet) {
 				errs = append(errs, ErrOperationMismatch)
 			}
-			operations = intersection.UnsortedList()
+			// Emit in canonical allOps order for deterministic output.
+			for _, op := range allOps {
+				if intersection.Has(op) {
+					operations = append(operations, op)
+				}
+			}
 		}
 
 		resourceRules = append(resourceRules, admissionregistrationv1beta1.NamedRuleWithOperations{

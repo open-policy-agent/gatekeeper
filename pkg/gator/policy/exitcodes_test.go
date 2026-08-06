@@ -7,6 +7,7 @@ import (
 )
 
 func TestExitError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		createErr    func() *ExitError
@@ -66,6 +67,7 @@ func TestExitError(t *testing.T) {
 }
 
 func TestExitCodes(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, 0, ExitSuccess)
 	assert.Equal(t, 1, ExitGeneralError)
 	assert.Equal(t, 2, ExitClusterError)

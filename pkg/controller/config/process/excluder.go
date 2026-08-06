@@ -2,6 +2,7 @@ package process
 
 import (
 	"reflect"
+	"sort"
 	"sync"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
@@ -112,6 +113,8 @@ func (s *Excluder) GetExcludedNamespaces(process Process) []string {
 	for ns := range s.excludedNamespaces[process] {
 		excludedNamespaces = append(excludedNamespaces, string(ns))
 	}
+	// Sort for deterministic ordering; map iteration order is not stable.
+	sort.Strings(excludedNamespaces)
 
 	return excludedNamespaces
 }

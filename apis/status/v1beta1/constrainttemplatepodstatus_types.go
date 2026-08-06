@@ -64,10 +64,6 @@ type ConstraintTemplatePodStatusList struct {
 	Items           []ConstraintTemplatePodStatus `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&ConstraintTemplatePodStatus{}, &ConstraintTemplatePodStatusList{})
-}
-
 // NewConstraintTemplateStatusForPod returns a constraint template status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the constraint template status controller.
@@ -86,11 +82,8 @@ func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, sch
 		PodLabel:                    pod.Name,
 	})
 
-	// Skip OwnerReference in remote cluster mode
-	if !util.ShouldSkipPodOwnerRef() {
-		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-			return nil, err
-		}
+	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+		return nil, err
 	}
 
 	return obj, nil

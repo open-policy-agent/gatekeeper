@@ -36,10 +36,42 @@ type ConnectionPodStatusStatus struct {
 	ConnectionUID      types.UID `json:"connectionUID,omitempty"`
 	Operations         []string  `json:"operations,omitempty"`
 	ObservedGeneration int64     `json:"observedGeneration,omitempty"`
-	// Indicator for alive connection with at least one successful publish
-	Active bool               `json:"active,omitempty"`
+	// ConnectionErrors contains errors from creating or updating the Connection.
+	// +kubebuilder:validation:MaxItems=500
+	ConnectionErrors []*ConnectionError `json:"connectionErrors,omitempty"`
+	// PublishStatuses reports publishing health independently for each source.
+	// +kubebuilder:validation:MaxItems=2
+	// +listType=map
+	// +listMapKey=source
+	PublishStatuses []ConnectionPublishStatus `json:"publishStatuses,omitempty"`
+}
+
+// ConnectionPublishStatus reports publishing health for one producer.
+type ConnectionPublishStatus struct {
+	// Source identifies the producer that owns this status.
+	Source ConnectionPublishSource `json:"source"`
+	// Active indicates that the source completed at least one publish in its
+	// latest reporting window.
+	Active bool `json:"active,omitempty"`
+	// LastAttemptTime is the most recent publish attempt represented by this status.
+	LastAttemptTime *metav1.Time `json:"lastAttemptTime,omitempty"`
+	// LastSuccessTime is the most recent successful publish by this source.
+	LastSuccessTime *metav1.Time `json:"lastSuccessTime,omitempty"`
+	// Errors contains publish failures reported by this source.
+	// +kubebuilder:validation:MaxItems=500
 	Errors []*ConnectionError `json:"errors,omitempty"`
 }
+
+// ConnectionPublishSource identifies a producer that publishes violations.
+// +kubebuilder:validation:Enum=audit;webhook
+type ConnectionPublishSource string
+
+const (
+	// AuditPublishSource identifies the periodic audit publisher.
+	AuditPublishSource ConnectionPublishSource = "audit"
+	// WebhookPublishSource identifies the validation webhook publisher.
+	WebhookPublishSource ConnectionPublishSource = "webhook"
+)
 
 type ConnectionError struct {
 	Type    connectionErrorType `json:"type"`
@@ -88,11 +120,8 @@ func NewConnectionStatusForPod(pod *corev1.Pod, connectionNamespace, connectionN
 		v1beta1.PodLabel:            pod.Name,
 	})
 
-	// Skip OwnerReference in remote cluster mode
-	if !util.ShouldSkipPodOwnerRef() {
-		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-			return nil, err
-		}
+	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+		return nil, err
 	}
 
 	return obj, nil
@@ -101,8 +130,4 @@ func NewConnectionStatusForPod(pod *corev1.Pod, connectionNamespace, connectionN
 // KeyForConnection returns a unique status object name given the Pod ID and a connection object.
 func KeyForConnection(id string, connectionNamespace string, connectionName string) (string, error) {
 	return v1beta1.DashPacker(id, connectionNamespace, connectionName)
-}
-
-func init() {
-	SchemeBuilder.Register(&ConnectionPodStatus{}, &ConnectionPodStatusList{})
 }

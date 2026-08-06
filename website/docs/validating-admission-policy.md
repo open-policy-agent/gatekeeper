@@ -9,7 +9,11 @@ Feature State: Gatekeeper version v3.18 (stable)
 :::note
 Set `--enable-k8s-native-validation=false` to disable evaluating Validating Admission Policy CEL in constraint templates.
 
-The `--sync-vap-enforcement-scope` flag (enabled by default) ensures Gatekeeper generates ValidatingAdmissionPolicy (VAP) resources while fully honoring the match criteria and namespace exclusions you have configured whether via [ValidatingWebhookConfig](https://github.com/open-policy-agent/gatekeeper/blob/master/charts/gatekeeper/templates/gatekeeper-validating-webhook-configuration-validatingwebhookconfiguration.yaml#L35), the [Gatekeeper `Config` resource](https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces/#exempting-namespaces-from-gatekeeper-using-config-resource), or [namespace exemption flags](https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces/#exempting-namespaces-from-the-gatekeeper-admission-webhook-using---exempt-namespace-flag). This ensures the enforcement scope of generated VAPs always matches Gatekeeper's own boundaries. This flag will be removed in a future release when this becomes the standard behavior. Set `--sync-vap-enforcement-scope=false` to disable this behavior. 
+The `--sync-vap-enforcement-scope` flag (enabled by default) ensures Gatekeeper generates ValidatingAdmissionPolicy (VAP) resources while fully honoring the match criteria and namespace exclusions you have configured whether via [ValidatingWebhookConfig](https://github.com/open-policy-agent/gatekeeper/blob/master/charts/gatekeeper/templates/gatekeeper-validating-webhook-configuration-validatingwebhookconfiguration.yaml#L35), the [Gatekeeper `Config` resource](https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces/#exempting-namespaces-from-gatekeeper-using-config-resource), or [namespace exemption flags](https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces/#exempting-namespaces-from-the-gatekeeper-admission-webhook-using---exempt-namespace-flag). This ensures the enforcement scope of generated VAPs always matches Gatekeeper's own boundaries. Set `--sync-vap-enforcement-scope=false` to disable this behavior.
+:::
+
+:::warning
+The `--sync-vap-enforcement-scope` flag is deprecated and will be removed in Gatekeeper v3.24.
 :::
 
 VAP management through Gatekeeper:
@@ -120,6 +124,10 @@ For some policies, you may want admission requests to be handled by the K8s Vali
 The K8s Validating Admission Controller requires both the Validating Admission Policy (VAP) and Validating Admission Policy Binding (VAPB) resources to exist to enforce a policy. Gatekeeper can be configured to generate both of these resources. To generate VAP Bindings for all Constraints, ensure the Gatekeeper 
 `--default-create-vap-binding-for-constraints` flag is set to `true`. To generate VAP as part of all Constraint Templates with the VAP CEL engine `K8sNativeValidation`, ensure the Gatekeeper `--default-create-vap-for-templates=true` flag is set to `true`. By default both flags are set to `true` now that the feature is in beta.
 
+If a K8sNativeValidation source omits `failurePolicy`, Gatekeeper uses `--default-k8s-native-validation-failure-policy`, which defaults to `Fail`, for both Gatekeeper's CEL evaluation and generated VAP resources. An explicit `source.failurePolicy` takes precedence over this default. This is separate from `validatingWebhookFailurePolicy`, which controls how Kubernetes handles failures when calling Gatekeeper's validating webhook and does not set CEL or generated VAP failure policy defaults.
+
+When the Kubernetes API server cannot resolve the Constraint resource referenced by a generated VAP's `paramKind`, `failurePolicy: Fail` rejects matching requests. Clusters that need admission to remain available during transient bootstrap or resource-discovery failures can set `--default-k8s-native-validation-failure-policy=Ignore`, or set the Helm value `defaultK8sNativeValidationFailurePolicy: Ignore`. `Ignore` allows requests affected by policy configuration or evaluation errors; validations that evaluate to `false` continue to use the VAP binding's configured validation actions.
+
 To override the `--default-create-vap-for-templates` flag's behavior for a constraint template, set `generateVAP` to `true` explicitly under the K8sNativeValidation engine's `source` in the constraint template. 
 
 ```yaml
@@ -186,6 +194,48 @@ Below is the mapping of Gatekeeper's `enforcementActions` to `validatingAdmissio
 | `deny` | `Deny` |
 | `warn` | `Warn` |
 | `dryrun` | `Audit` |
+
+## Configuring VAP Operations
+
+When Gatekeeper generates a ValidatingAdmissionPolicy (VAP) from a ConstraintTemplate, the VAP's `operations` are determined by the **intersection** of:
+
+1. The operations configured on Gatekeeper's **validating webhook** (e.g., `CREATE`, `UPDATE`, and optionally `DELETE`)
+2. The `operations` specified in the ConstraintTemplate's `targets[].operations` field
+
+The `targets[].operations` field is **optional**. When omitted, the generated VAP inherits the webhook's operations directly with no intersection filtering.
+
+When `targets[].operations` is specified, it can be set in the ConstraintTemplate as follows:
+
+```yaml
+spec:
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      operations: ["CREATE", "UPDATE", "DELETE"]
+      code:
+        - engine: K8sNativeValidation
+          source:
+            ...
+```
+
+This means a ConstraintTemplate that targets `DELETE` will only produce a VAP with `DELETE` in its resource rules if the webhook is also configured to handle `DELETE` operations.
+
+### Enabling DELETE for VAP policies
+
+By default, Gatekeeper's webhook only handles `CREATE` and `UPDATE`. To use `DELETE` in a ConstraintTemplate's operations and have it reflected in the generated VAP, you must enable delete operations on the webhook.
+
+**Helm:**
+
+```yaml
+enableDeleteOperations: true
+```
+
+For other methods, see [Customizing Admission Behavior](customize-admission.md#enable-validation-of-delete-operations).
+
+:::warning
+If there is **partial overlap** between the ConstraintTemplate's operations and the webhook's operations (e.g., the CT specifies `CREATE` and `DELETE` but the webhook only has `CREATE` and `UPDATE`), the VAP is still generated using only the intersecting operations (`CREATE` in this example). A non-fatal warning is logged to indicate the mismatch.
+
+If there is **no overlap** at all (e.g., CT has only `DELETE` but the webhook only has `CREATE` and `UPDATE`), the VAP resource **will not be generated**.
+:::
 
 ## FAQs
 

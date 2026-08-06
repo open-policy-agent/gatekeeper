@@ -52,7 +52,7 @@ webhooks:
         {{- $list = append $value $.Release.Namespace | uniq -}}
       {{- end }}
       {{- range $list }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}
   objectSelector: {{ toYaml .Values.validatingWebhookObjectSelector | nindent 4 }}
