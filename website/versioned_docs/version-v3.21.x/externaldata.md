@@ -204,7 +204,7 @@ external_data(request) = response {
   request.provider == "dummy-provider"
   request.keys != ["system_error_image"]
   response := {
-    "errors": [[key, "not allowed"] | key := request.keys[_]; key == "error_image"],
+    "errors": [[key, sprintf("%s_invalid", [key])] | key := request.keys[_]; key == "error_image"],
     "responses": [[key, "allowed"] | key := request.keys[_]; key != "error_image"],
     "status_code": 200,
     "system_error": "",
@@ -212,7 +212,9 @@ external_data(request) = response {
 }
 ```
 
-Add more `external_data` rules to return different responses for different key sets, including provider errors or system errors. If you prefer to mock `external_data` with the [`with` keyword](https://www.openpolicyagent.org/docs/latest/policy-testing/#data-and-function-mocking), add the `external_data` built-in signature to an OPA capabilities file and run tests with `opa test --capabilities capabilities.json .`.
+Because the example ConstraintTemplate uses Rego v0 syntax, run the test with `opa test --v0-compatible .`.
+
+Add more `external_data` rules to return different responses for different key sets, including provider errors or system errors. If you prefer to mock `external_data` with the [`with` keyword](https://www.openpolicyagent.org/docs/latest/policy-testing/#data-and-function-mocking), add the `external_data` built-in signature to an OPA capabilities file and run tests with `opa test --v0-compatible --capabilities capabilities.json .`.
 
 ## External data for Gatekeeper mutating webhook
 
