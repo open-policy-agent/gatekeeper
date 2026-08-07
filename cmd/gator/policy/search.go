@@ -99,10 +99,12 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 		if strings.Contains(nameLower, query) || strings.Contains(descLower, query) {
 			results = append(results, output.SearchResult{
-				Name:        policy.Name,
-				Version:     policy.Version,
-				Category:    policy.Category,
-				Description: policy.Description,
+				Name:                 policy.Name,
+				Version:              policy.Version,
+				Category:             policy.Category,
+				Description:          policy.Description,
+				MinKubernetesVersion: policy.MinKubernetesVersion,
+				MaxKubernetesVersion: policy.MaxKubernetesVersion,
 			})
 		}
 	}
