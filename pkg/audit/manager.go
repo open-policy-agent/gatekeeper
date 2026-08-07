@@ -803,12 +803,14 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if errors.Is(err, io.EOF) || len(names) == 0 {
+		if len(names) == 0 {
+			if !errors.Is(err, io.EOF) {
+				return err
+			}
 			break
 		}
 		for _, n := range names {
-			err = os.RemoveAll(path.Join(directory, n))
-			if err != nil {
+			if err := os.RemoveAll(path.Join(directory, n)); err != nil {
 				return err
 			}
 		}
@@ -817,11 +819,8 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 }
 
 func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructured, error) {
-	u := &unstructured.Unstructured{
-		Object: make(map[string]interface{}),
-	}
-	err := json.Unmarshal(jsonBytes, u)
-	if err != nil {
+	u := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, u); err != nil {
 		return nil, err
 	}
 	return u, nil
