@@ -185,9 +185,9 @@ https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/du
 
 ### Testing policies that use `external_data`
 
-The `external_data` built-in is registered by Gatekeeper, so the standard `opa test` command does not know about it by default. For unit tests, define a test-only `external_data` function in a `*_test.rego` file in the same package as the policy under test. OPA compiles the policy and test files together, so the test-only function is used while tests run and is not included in the ConstraintTemplate you deploy to Gatekeeper.
+The `external_data` built-in is registered by Gatekeeper, so the standard `opa test` command does not know about it by default. To test Rego embedded in a ConstraintTemplate, copy the Rego module from `spec.targets[].rego` into a standalone file such as `policy.rego`; `opa test` does not compile Rego embedded in YAML. Define a test-only `external_data` function in `policy_test.rego` in the same package as the policy under test. OPA compiles both Rego files together, so the test-only function is used while tests run and is not included in the ConstraintTemplate you deploy to Gatekeeper.
 
-For example, keep the policy's call to `external_data` in the ConstraintTemplate, and add the mock responses in the test file:
+For example, keep the policy's call to `external_data` in `policy.rego`, and add the mock responses in `policy_test.rego`:
 
 ```rego
 package k8sexternaldata
@@ -219,9 +219,9 @@ external_data(request) = response {
 }
 ```
 
-Because the example ConstraintTemplate uses Rego v0 syntax, run the test with `opa test --v0-compatible .`.
+Because the example ConstraintTemplate uses Rego v0 syntax, run the test with `opa test --v0-compatible policy.rego policy_test.rego`.
 
-Add more `external_data` rules to return different responses for different key sets, including provider errors or system errors. If you prefer to mock `external_data` with the [`with` keyword](https://www.openpolicyagent.org/docs/latest/policy-testing/#data-and-function-mocking), add the `external_data` built-in signature to an OPA capabilities file and run tests with `opa test --v0-compatible --capabilities capabilities.json .`.
+Add more `external_data` rules to return different responses for different key sets, including provider errors or system errors. If you prefer to mock `external_data` with the [`with` keyword](https://www.openpolicyagent.org/docs/latest/policy-testing/#data-and-function-mocking), add the `external_data` built-in signature to an OPA capabilities file and run tests with `opa test --v0-compatible --capabilities capabilities.json policy.rego policy_test.rego`.
 
 ## External data for Gatekeeper mutating webhook
 
