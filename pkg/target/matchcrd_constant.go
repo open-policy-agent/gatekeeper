@@ -198,6 +198,20 @@ spec:
                   pattern: ^\*?[-:a-z0-9]*\*?$
                   type: string
                 type: array
+              processes:
+                description: |-
+                  Processes scopes excludedNamespaces to specific Gatekeeper processes.
+                  Accepts `+"`"+`audit`+"`"+`, `+"`"+`webhook`+"`"+`, `+"`"+`sync`+"`"+`, `+"`"+`mutation-webhook`+"`"+`, or `+"`"+`*`+"`"+`.
+                  When omitted or set to `+"`"+`*`+"`"+`, excludedNamespaces applies to all processes.
+                items:
+                  enum:
+                  - audit
+                  - webhook
+                  - sync
+                  - mutation-webhook
+                  - '*'
+                  type: string
+                type: array
               scope:
                 description: |-
                   Scope determines if cluster-scoped and/or namespaced-scoped resources

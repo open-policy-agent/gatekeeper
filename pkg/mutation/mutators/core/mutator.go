@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 	patht "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
@@ -168,6 +169,7 @@ func MatchWithApplyTo(mut *types.Mutable, applies []match.MutationApplyTo, mat *
 		Object:    mut.Object,
 		Namespace: mut.Namespace,
 		Source:    mut.Source,
+		Process:   process.Mutation,
 	}
 	matches, err := match.Matches(mat, target)
 	if err != nil {

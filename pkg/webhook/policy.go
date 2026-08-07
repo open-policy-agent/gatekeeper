@@ -850,6 +850,7 @@ func (h *validationHandler) createReviewForRequest(ctx context.Context, req *adm
 		AdmissionRequest: &req.AdmissionRequest,
 		Source:           mutationtypes.SourceTypeOriginal,
 		IsAdmission:      true,
+		EnforcementPoint: util.WebhookEnforcementPoint,
 	}
 	if req.Namespace != "" {
 		ns := &corev1.Namespace{}
@@ -871,10 +872,11 @@ func (h *validationHandler) createReviewForRequest(ctx context.Context, req *adm
 
 func createReviewForResultant(obj *unstructured.Unstructured, ns *corev1.Namespace, operation admissionv1.Operation) *target.AugmentedUnstructured {
 	return &target.AugmentedUnstructured{
-		Object:    *obj,
-		Namespace: ns,
-		Operation: operation,
-		Source:    mutationtypes.SourceTypeGenerated,
+		Object:           *obj,
+		Namespace:        ns,
+		Operation:        operation,
+		Source:           mutationtypes.SourceTypeGenerated,
+		EnforcementPoint: util.WebhookEnforcementPoint,
 	}
 }
 

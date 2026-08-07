@@ -38,10 +38,10 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 		ns = m.cache.GetNamespace(gkReq.Namespace)
 	}
 
-	return matchAny(m, ns, gkReq.source, obj, oldObj)
+	return matchAny(m, ns, gkReq.source, gkReq.enforcementPoint, obj, oldObj)
 }
 
-func matchAny(m *Matcher, ns *corev1.Namespace, source types.SourceType, objs ...*unstructured.Unstructured) (bool, error) {
+func matchAny(m *Matcher, ns *corev1.Namespace, source types.SourceType, enforcementPoint string, objs ...*unstructured.Unstructured) (bool, error) {
 	nilObj := 0
 	for _, obj := range objs {
 		if obj == nil || obj.Object == nil {
@@ -53,6 +53,7 @@ func matchAny(m *Matcher, ns *corev1.Namespace, source types.SourceType, objs ..
 			Object:    obj,
 			Namespace: ns,
 			Source:    source,
+			Process:   processFromEnforcementPoint(enforcementPoint),
 		}
 		matched, err := match.Matches(m.match, t)
 		if err != nil {
