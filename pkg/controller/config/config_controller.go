@@ -29,7 +29,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/configstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplate"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
@@ -303,13 +302,13 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	var configChanged bool
-	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.ctEvents != nil {
+	if operations.IsAssigned(operations.Generate) && r.ctEvents != nil {
 		configChanged = r.cacheManager.ExcluderChangedForProcess(process.Webhook, newExcluder)
 	}
 
 	r.cacheManager.ExcludeProcesses(newExcluder)
 	var ctTriggerError error
-	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.ctEvents != nil {
+	if operations.IsAssigned(operations.Generate) && r.ctEvents != nil {
 		if configChanged {
 			ctTriggerError = r.triggerConstraintTemplateReconciliation(ctx)
 			if ctTriggerError != nil {
