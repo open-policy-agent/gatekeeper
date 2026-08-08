@@ -95,6 +95,8 @@ The following table describes each property in the `status.byPod` section:
 
 Each publisher replaces only the entry it owns. Audit updates `source: audit`, while admission violation export from the validation webhook updates `source: webhook`; either update preserves the other entry. If a source observes more than 500 distinct error classes before a successful status update, the final entry reports that additional classes were omitted. Each stored error message is the coalesced class text before the first colon and is not otherwise length-truncated.
 
+> **Alpha status schema change (v3.24):** `ConnectionPodStatus` no longer uses the aggregate `active` and `errors` fields. Those were replaced with `connectionErrors` (Connection create/update failures) and source-keyed `publishStatuses` (per-source `active`/`errors` and timestamps). Clients that read the alpha `ConnectionPodStatus` resource must update for the new shape. See [PR #4716](https://github.com/open-policy-agent/gatekeeper/pull/4716).
+
 ## Enabling Gatekeeper to export admission violations
 
 Admission violation export is independent from audit export and is disabled by default. Set `--enable-admission-violation-export=true` on the controller-manager deployment to enable it. Enabling `--enable-violation-export` on the audit deployment does not enable admission export.
