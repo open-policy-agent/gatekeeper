@@ -318,12 +318,11 @@ func findBundleConstraints(templateDir, libraryRoot string, bundles []string) ma
 	return result
 }
 
-// constraintFilenames are the file names a sample constraint may use.
-var constraintFilenames = []string{"constraint.yaml", "constraint.yml"}
-
 // findConstraintFile returns the path to the constraint file in dir, or "" if
 // none exists.
 func findConstraintFile(dir string) string {
+	// constraintFilenames are the file names a sample constraint may use.
+	constraintFilenames := []string{"constraint.yaml", "constraint.yml"}
 	for _, name := range constraintFilenames {
 		path := filepath.Join(dir, name)
 		if _, err := os.Stat(path); err == nil {
@@ -512,12 +511,12 @@ func ValidateK8sVersion(v string) error {
 // inverted, i.e. no cluster version could satisfy both bounds. An empty bound or
 // an unparseable value is treated as non-contradictory.
 //
-// It is defined in terms of K8sVersionInRange so schema validation and the
-// enforcement gate share one comparison: the range is contradictory exactly
-// when minVersion — the lowest version the range admits — is itself rejected by
-// maxVersion. This keeps the two in lock-step on whole-minor ceilings, where a
-// patch-less "v1.21" admits every patch of that minor (so min "v1.21.3" with max
-// "v1.21" is a valid range, not a contradiction).
+// It shares maxVersionSatisfied with K8sVersionInRange so schema validation and
+// the enforcement gate agree on one comparison: the range is contradictory
+// exactly when minVersion — the lowest version the range admits — does not
+// itself satisfy maxVersion. This keeps the two in lock-step on whole-minor
+// ceilings, where a patch-less "v1.21" admits every patch of that minor (so min
+// "v1.21.3" with max "v1.21" is a valid range, not a contradiction).
 //
 // The install/upgrade compatibility gate uses it to distinguish invalid policy
 // metadata (a contradictory range that no cluster can satisfy) from a genuine
@@ -527,13 +526,35 @@ func VersionRangeContradicts(minVersion, maxVersion string) bool {
 	if minVersion == "" || maxVersion == "" {
 		return false
 	}
-	inRange, err := K8sVersionInRange(minVersion, "", maxVersion)
+	minV, err := version.ParseGeneric(minVersion)
 	if err != nil {
 		// An unparseable bound is treated as non-contradictory; catalog schema
 		// validation flags bad version strings separately, up front.
 		return false
 	}
-	return !inRange
+	maxV, err := version.ParseGeneric(maxVersion)
+	if err != nil {
+		return false
+	}
+	return !maxVersionSatisfied(minV, maxV)
+}
+
+// maxVersionSatisfied reports whether v does not exceed maxV. A patch-level
+// ceiling (e.g. "v1.30.5") is honored exactly, but a whole-minor ceiling
+// written without a patch (e.g. a derived "v1.21") admits every patch of that
+// minor: the targeted API is present throughout the minor, so v1.21.8 must not
+// be excluded by "v1.21".
+//
+// It is the single source of truth for the max-bound comparison, shared by
+// K8sVersionInRange (cluster version vs. a policy's maxKubernetesVersion) and
+// VersionRangeContradicts (a policy's minKubernetesVersion vs. its
+// maxKubernetesVersion), so the two agree on how a whole-minor ceiling is
+// interpreted.
+func maxVersionSatisfied(v, maxV *version.Version) bool {
+	if len(maxV.Components()) >= 3 {
+		return !v.GreaterThan(maxV)
+	}
+	return v.Major() < maxV.Major() || (v.Major() == maxV.Major() && v.Minor() <= maxV.Minor())
 }
 
 // K8sVersionInRange reports whether serverVersion falls within the inclusive
@@ -567,15 +588,7 @@ func K8sVersionInRange(serverVersion, minVersion, maxVersion string) (bool, erro
 		if err != nil {
 			return false, fmt.Errorf("parsing maxKubernetesVersion %q: %w", maxVersion, err)
 		}
-		// A patch-level ceiling (e.g. "v1.30.5") is honored exactly, but a
-		// whole-minor ceiling written without a patch (e.g. a derived "v1.21")
-		// admits every patch of that minor: the targeted API is present
-		// throughout the minor, so v1.21.8 must not be excluded by "v1.21".
-		if len(mv.Components()) >= 3 {
-			if sv.GreaterThan(mv) {
-				return false, nil
-			}
-		} else if sv.Major() > mv.Major() || (sv.Major() == mv.Major() && sv.Minor() > mv.Minor()) {
+		if !maxVersionSatisfied(sv, mv) {
 			return false, nil
 		}
 	}

@@ -152,6 +152,9 @@ func (c *K8sClient) ServerVersion(ctx context.Context) (string, error) {
 	if err := json.Unmarshal(body, &info); err != nil {
 		return "", fmt.Errorf("parsing server version: %w", err)
 	}
+	if info.GitVersion == "" {
+		return "", fmt.Errorf("parsing server version: response is missing gitVersion")
+	}
 	return info.GitVersion, nil
 }
 

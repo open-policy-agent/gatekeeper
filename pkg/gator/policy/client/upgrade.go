@@ -266,15 +266,36 @@ func GetUpgradableCount(installed []InstalledPolicy, cat *catalog.PolicyCatalog,
 	return len(GetUpgradablePolicies(installed, cat, serverVersion))
 }
 
+// PolicyNeedsVersionGate reports whether any installed policy with a newer
+// catalog version declares a Kubernetes version bound. Callers use this to
+// skip resolving the cluster version (an extra API server round trip) before
+// calling GetUpgradablePolicies/GetUpgradableCount when the gate could never
+// apply, e.g. because no installed policy has bounds at all.
+func PolicyNeedsVersionGate(installed []InstalledPolicy, cat *catalog.PolicyCatalog) bool {
+	for _, p := range installed {
+		policy := cat.GetPolicy(p.Name)
+		if policy == nil || policy.Version == p.Version {
+			continue
+		}
+		if policyHasVersionBounds(policy) {
+			return true
+		}
+	}
+	return false
+}
+
 // GetUpgradablePolicies returns a list of policies that have updates available.
 //
 // A newer catalog version alone is not enough: `gator policy upgrade` skips a
 // policy whose supported Kubernetes range excludes the cluster, so counting it
 // here would overstate the upgrades that can actually be applied. serverVersion
-// is the cluster's Kubernetes version used to filter out such policies. When it
-// is empty (cluster version unknown) or a policy's bound is unparseable, the
-// gate is skipped for that policy and the upgrade is still reported, so an
-// undeterminable version never hides an available upgrade.
+// is the cluster's Kubernetes version used to filter out such policies. When
+// serverVersion is empty (cluster version unknown), the gate is skipped and the
+// upgrade is still reported, so an undeterminable cluster version never hides
+// an available upgrade. A policy with an unparseable version bound is instead
+// excluded here, matching installPolicy's fail-closed handling of the same
+// malformed catalog metadata — otherwise it would be hinted as upgradable and
+// then fail when `gator policy upgrade` actually runs it.
 func GetUpgradablePolicies(installed []InstalledPolicy, cat *catalog.PolicyCatalog, serverVersion string) []VersionChange {
 	var changes []VersionChange
 	for _, p := range installed {
@@ -282,11 +303,12 @@ func GetUpgradablePolicies(installed []InstalledPolicy, cat *catalog.PolicyCatal
 		if policy == nil || policy.Version == p.Version {
 			continue
 		}
-		// Skip policies the cluster's Kubernetes version can't run: upgrade would
-		// classify them as incompatible and skip them without --force.
+		// Skip policies the cluster's Kubernetes version can't run (or whose
+		// bound can't even be evaluated): upgrade would classify them as
+		// incompatible, or fail them outright, without --force.
 		if serverVersion != "" && policyHasVersionBounds(policy) {
 			inRange, err := catalog.K8sVersionInRange(serverVersion, policy.MinKubernetesVersion, policy.MaxKubernetesVersion)
-			if err == nil && !inRange {
+			if err != nil || !inRange {
 				continue
 			}
 		}

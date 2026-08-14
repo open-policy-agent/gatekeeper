@@ -275,26 +275,30 @@ func resolveGateServerVersion(ctx context.Context, k8sClient Client, force, hasB
 
 func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts *InstallOptions, result *InstallResult, resolveVersion func() (string, error)) (skipped bool, incompatible *IncompatibleEntry, err error) {
 	// Check for an existing template using only the catalog policy's name and
-	// version - before ever fetching the remote artifact. This lets the no-op
-	// check and the compatibility gate run first, so an out-of-range policy
+	// version - before ever fetching the remote artifact.An out-of-range policy
 	// with a missing or malformed artifact is recorded as Incompatible and
-	// skipped rather than surfacing a hard fetch/parse failure that can
-	// fail-fast the whole batch.
+	// skipped. An ownership conflict (an existing template not managed by gator) is
+	// recorded here but not returned yet: surfacing it immediately would let it
+	// preempt the compatibility gate below, so an incompatible policy that also
+	// happens to conflict would be misreported as a hard conflict failure
+	// instead of cleanly skipped as Incompatible.
 	templateAlreadyInstalled := false
+	var conflictErr *ConflictError
 	if !opts.DryRun {
 		existing, err := k8sClient.GetTemplate(ctx, policy.Name)
 		if err == nil {
 			// Template exists - check if managed by gator
 			if !labels.IsManagedByGator(existing) {
-				return false, nil, &ConflictError{
+				conflictErr = &ConflictError{
 					ResourceKind: "ConstraintTemplate",
 					ResourceName: policy.Name,
 				}
-			}
-			// Check if same version
-			existingVersion := labels.GetPolicyVersion(existing)
-			if existingVersion == policy.Version {
-				templateAlreadyInstalled = true
+			} else {
+				// Check if same version
+				existingVersion := labels.GetPolicyVersion(existing)
+				if existingVersion == policy.Version {
+					templateAlreadyInstalled = true
+				}
 			}
 		} else if !apierrors.IsNotFound(err) {
 			return false, nil, fmt.Errorf("checking existing template: %w", err)
@@ -365,6 +369,12 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 				}, nil
 			}
 		}
+	}
+
+	// The policy passed the compatibility gate (or is unbounded/forced): only
+	// now surface an ownership conflict recorded above.
+	if conflictErr != nil {
+		return false, nil, conflictErr
 	}
 
 	// A pure no-op writes nothing, so the remote artifact is never needed.

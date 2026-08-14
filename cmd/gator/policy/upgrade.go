@@ -96,9 +96,6 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// versions to compute the upgrade preview.
 	k8sClient, err := client.NewK8sClient()
 	if err != nil {
-		if upgradeDryRun {
-			return fmt.Errorf("creating Kubernetes client: %w (upgrade --dry-run still requires cluster access to read installed policy versions)", err)
-		}
 		return fmt.Errorf("creating Kubernetes client: %w", err)
 	}
 

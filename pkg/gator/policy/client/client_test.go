@@ -131,6 +131,22 @@ func TestK8sClient_ServerVersion_Discovery(t *testing.T) {
 		assert.Equal(t, "v1.30.2", version)
 	})
 
+	t.Run("response missing gitVersion is a genuine error, not a silent empty version", func(t *testing.T) {
+		// Callers rely on a non-empty version for compatibility checks (see
+		// resolveGateServerVersion), so a response that decodes successfully but
+		// carries no gitVersion must not be allowed to flow through as ("", nil).
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+		}))
+		defer server.Close()
+
+		client := newDiscoveryK8sClient(t, server)
+		_, err := client.ServerVersion(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing gitVersion")
+	})
+
 	t.Run("server error response is a genuine error", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1293,6 +1309,44 @@ func TestGetUpgradablePolicies_K8sVersionGate(t *testing.T) {
 
 	t.Run("cluster within range keeps the upgrade", func(t *testing.T) {
 		assert.Equal(t, 2, GetUpgradableCount(installed, cat, "v1.31.2"))
+	})
+
+	t.Run("unparseable version bound is excluded, matching Upgrade's fail-closed handling", func(t *testing.T) {
+		malformed := []InstalledPolicy{{Name: "malformed", Version: "v1.0.0"}}
+		malformedCat := &catalog.PolicyCatalog{
+			Policies: []catalog.Policy{
+				{Name: "malformed", Version: "v2.0.0", MinKubernetesVersion: "not-a-version"},
+			},
+		}
+		changes := GetUpgradablePolicies(malformed, malformedCat, v1_30_0)
+		assert.Empty(t, changes)
+		assert.Equal(t, 0, GetUpgradableCount(malformed, malformedCat, v1_30_0))
+	})
+}
+
+func TestPolicyNeedsVersionGate(t *testing.T) {
+	t.Run("false when no upgrade candidate has version bounds", func(t *testing.T) {
+		installed := []InstalledPolicy{{Name: "foo", Version: "v1.0.0"}}
+		cat := &catalog.PolicyCatalog{
+			Policies: []catalog.Policy{{Name: "foo", Version: "v2.0.0"}},
+		}
+		assert.False(t, PolicyNeedsVersionGate(installed, cat))
+	})
+
+	t.Run("false when the only bounded policy is already current", func(t *testing.T) {
+		installed := []InstalledPolicy{{Name: "foo", Version: "v2.0.0"}}
+		cat := &catalog.PolicyCatalog{
+			Policies: []catalog.Policy{{Name: "foo", Version: "v2.0.0", MinKubernetesVersion: "v1.31.0"}},
+		}
+		assert.False(t, PolicyNeedsVersionGate(installed, cat))
+	})
+
+	t.Run("true when an upgrade candidate has version bounds", func(t *testing.T) {
+		installed := []InstalledPolicy{{Name: "foo", Version: "v1.0.0"}}
+		cat := &catalog.PolicyCatalog{
+			Policies: []catalog.Policy{{Name: "foo", Version: "v2.0.0", MinKubernetesVersion: "v1.31.0"}},
+		}
+		assert.True(t, PolicyNeedsVersionGate(installed, cat))
 	})
 }
 

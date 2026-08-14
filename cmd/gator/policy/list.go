@@ -74,8 +74,13 @@ func runList(cmd *cobra.Command, _ []string) error {
 		cat, err := cache.LoadCatalog()
 		if err == nil {
 			// Resolve the cluster version so incompatible upgrades are not
-			// advertised (upgrade would skip them).
-			serverVersion, _ := k8sClient.ServerVersion(ctx)
+			// advertised (upgrade would skip them). Only bother querying the
+			// cluster when some upgrade candidate actually has a version bound
+			// to gate on.
+			var serverVersion string
+			if client.PolicyNeedsVersionGate(policies, cat) {
+				serverVersion, _ = k8sClient.ServerVersion(ctx)
+			}
 			upgradable := client.GetUpgradableCount(policies, cat, serverVersion)
 			if upgradable > 0 {
 				fmt.Fprintf(os.Stderr, "Hint: %d policy(ies) have updates available. Run 'gator policy update' then 'gator policy upgrade --all'.\n\n", upgradable)

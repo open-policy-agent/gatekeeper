@@ -908,51 +908,52 @@ func TestIsValidVersion(t *testing.T) {
 
 func TestK8sVersionInRange(t *testing.T) {
 	tests := []struct {
-		name          string
-		serverVersion string
-		minVer        string
-		maxVer        string
-		want          bool
-		wantErr       bool
+		name            string
+		serverVersion   string
+		minVer          string
+		maxVer          string
+		want            bool
+		wantErr         bool
+		wantErrContains string
 	}{
-		{"no bounds always compatible", "v1.10.0", "", "", true, false},
-		{"within range", "v1.25.0", "v1.21.0", "v1.30.0", true, false},
-		{"equal to min", "v1.21.0", "v1.21.0", "v1.30.0", true, false},
-		{"equal to max", "v1.30.0", "v1.21.0", "v1.30.0", true, false},
-		{"below min", "v1.20.9", "v1.21.0", "v1.30.0", false, false},
-		{"above max", "v1.31.0", "v1.21.0", "v1.30.0", false, false},
-		{"min only, above", "v1.25.0", "v1.21.0", "", true, false},
-		{"min only, below", "v1.20.0", "v1.21.0", "", false, false},
-		{"max only, below", "v1.25.0", "", "v1.30.0", true, false},
-		{"max only, above", "v1.31.0", "", "v1.30.0", false, false},
-		{"two-component bounds", "v1.25.0", "1.21", "1.30", true, false},
+		{"no bounds always compatible", "v1.10.0", "", "", true, false, ""},
+		{"within range", "v1.25.0", "v1.21.0", "v1.30.0", true, false, ""},
+		{"equal to min", "v1.21.0", "v1.21.0", "v1.30.0", true, false, ""},
+		{"equal to max", "v1.30.0", "v1.21.0", "v1.30.0", true, false, ""},
+		{"below min", "v1.20.9", "v1.21.0", "v1.30.0", false, false, ""},
+		{"above max", "v1.31.0", "v1.21.0", "v1.30.0", false, false, ""},
+		{"min only, above", "v1.25.0", "v1.21.0", "", true, false, ""},
+		{"min only, below", "v1.20.0", "v1.21.0", "", false, false, ""},
+		{"max only, below", "v1.25.0", "", "v1.30.0", true, false, ""},
+		{"max only, above", "v1.31.0", "", "v1.30.0", false, false, ""},
+		{"two-component bounds", "v1.25.0", "1.21", "1.30", true, false, ""},
 		// maxKubernetesVersion is compared at patch precision: a patch above the
 		// ceiling is out of range even within the same minor; a patch at or below
 		// it stays in range.
-		{"patch above max is out of range", "v1.21.1", "", "v1.21.0", false, false},
-		{"higher patch above max is out of range", "v1.21.9", "v1.21.0", "v1.21.0", false, false},
-		{"patch equal to max in range", "v1.21.5", "", "v1.21.5", true, false},
-		{"patch below max in range", "v1.21.3", "", "v1.21.5", true, false},
-		{"next minor above max", "v1.22.0", "", "v1.21.0", false, false},
+		{"patch above max is out of range", "v1.21.1", "", "v1.21.0", false, false, ""},
+		{"higher patch above max is out of range", "v1.21.9", "v1.21.0", "v1.21.0", false, false, ""},
+		{"patch equal to max in range", "v1.21.5", "", "v1.21.5", true, false, ""},
+		{"patch below max in range", "v1.21.3", "", "v1.21.5", true, false, ""},
+		{"next minor above max", "v1.22.0", "", "v1.21.0", false, false, ""},
 		// A whole-minor ceiling (no patch component, e.g. a derived "v1.21")
 		// admits every patch of that minor, unlike an explicit patch-level bound.
-		{"patch within whole-minor ceiling", "v1.21.8", "", "v1.21", true, false},
-		{"zero patch within whole-minor ceiling", "v1.21.0", "", "v1.21", true, false},
-		{"next minor above whole-minor ceiling", "v1.22.0", "", "v1.21", false, false},
-		{"distro suffix within whole-minor ceiling", "v1.21.8-gke.1", "", "v1.21", true, false},
+		{"patch within whole-minor ceiling", "v1.21.8", "", "v1.21", true, false, ""},
+		{"zero patch within whole-minor ceiling", "v1.21.0", "", "v1.21", true, false, ""},
+		{"next minor above whole-minor ceiling", "v1.22.0", "", "v1.21", false, false, ""},
+		{"distro suffix within whole-minor ceiling", "v1.21.8-gke.1", "", "v1.21", true, false, ""},
 		// Distro suffixes must not affect the comparison: 1.30.2-gke.x is treated
 		// as 1.30.2 and compared at patch precision against the max.
-		{"distro suffix above patch max", "v1.30.2-gke.1234", "v1.21.0", "v1.30.0", false, false},
-		{"distro suffix within patch max", "v1.30.2-gke.1234", "v1.21.0", "v1.30.5", true, false},
-		{"distro suffix above max minor", "v1.31.2-gke.1234", "v1.21.0", "v1.30.0", false, false},
-		{"distro suffix within range", "v1.28.3-eks.5", "v1.21.0", "v1.30.0", true, false},
+		{"distro suffix above patch max", "v1.30.2-gke.1234", "v1.21.0", "v1.30.0", false, false, ""},
+		{"distro suffix within patch max", "v1.30.2-gke.1234", "v1.21.0", "v1.30.5", true, false, ""},
+		{"distro suffix above max minor", "v1.31.2-gke.1234", "v1.21.0", "v1.30.0", false, false, ""},
+		{"distro suffix within range", "v1.28.3-eks.5", "v1.21.0", "v1.30.0", true, false, ""},
 		// A distro build of exactly the min must still count as >= min: the
 		// suffix is uninterpreted extra data, not a semver pre-release that would
 		// rank below the release.
-		{"distro suffix equal to min", "v1.21.0-gke.100", "v1.21.0", "", true, false},
-		{"invalid server version", "notaversion", "v1.21.0", "", false, true},
-		{"invalid min", "v1.25.0", "bogus", "", false, true},
-		{"invalid max", "v1.25.0", "", "bogus", false, true},
+		{"distro suffix equal to min", "v1.21.0-gke.100", "v1.21.0", "", true, false, ""},
+		{"invalid server version", "notaversion", "v1.21.0", "", false, true, "parsing server version"},
+		{"invalid min", "v1.25.0", "bogus", "", false, true, "parsing minKubernetesVersion"},
+		{"invalid max", "v1.25.0", "", "bogus", false, true, "parsing maxKubernetesVersion"},
 	}
 
 	for _, tt := range tests {
@@ -961,6 +962,9 @@ func TestK8sVersionInRange(t *testing.T) {
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.wantErrContains) {
+					t.Errorf("K8sVersionInRange(%q, %q, %q) error = %q, want substring %q", tt.serverVersion, tt.minVer, tt.maxVer, err.Error(), tt.wantErrContains)
 				}
 				return
 			}
