@@ -39,13 +39,15 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConfigSpec defines the desired state of Config.
+            description: spec defines the desired state of Config.
             properties:
               match:
-                description: Configuration for namespace exclusion
+                description: match is the configuration for namespace exclusion
                 items:
                   properties:
                     excludedNamespaces:
+                      description: excludedNamespaces lists the namespaces excluded
+                        from the listed processes.
                       items:
                         description: |-
                           A string that supports globbing at its front and end. Ex: "kube-*" will match "kube-system" or
@@ -55,92 +57,122 @@ spec:
                         type: string
                       type: array
                     processes:
+                      description: processes lists the Gatekeeper processes this exclusion
+                        applies to.
                       items:
                         type: string
                       type: array
                   type: object
                 type: array
               readiness:
-                description: Configuration for readiness tracker
+                description: readiness is the configuration for readiness tracker
                 properties:
                   statsEnabled:
+                    description: statsEnabled enables reporting of readiness tracker
+                      statistics.
                     type: boolean
                 type: object
               sync:
-                description: Configuration for syncing k8s objects
+                description: sync is the configuration for syncing k8s objects
                 properties:
                   syncOnly:
-                    description: If non-empty, only entries on this list will be replicated
-                      into OPA
+                    description: |-
+                      syncOnly restricts replication into OPA to only the entries on this list,
+                      when non-empty
                     items:
                       properties:
                         group:
+                          description: group is the API group of the resource to sync.
                           type: string
                         kind:
+                          description: kind is the kind of the resource to sync.
                           type: string
                         version:
+                          description: version is the API version of the resource
+                            to sync.
                           type: string
                       type: object
                     type: array
                 type: object
               validation:
-                description: Configuration for validation
+                description: validation is the configuration for validation
                 properties:
                   traces:
-                    description: List of requests to trace. Both "user" and "kinds"
-                      must be specified
+                    description: traces is the list of requests to trace. Both "user"
+                      and "kinds" must be specified
                     items:
                       properties:
                         dump:
-                          description: Also dump the state of OPA with the trace.
+                          description: dump also dumps the state of OPA with the trace.
                             Set to `All` to dump everything.
                           type: string
                         kind:
-                          description: Only trace requests of the following GroupVersionKind
+                          description: kind restricts tracing to requests of the following
+                            GroupVersionKind
                           properties:
                             group:
+                              description: group is the API group of the resource.
                               type: string
                             kind:
+                              description: kind is the kind of the resource.
                               type: string
                             version:
+                              description: version is the API version of the resource.
                               type: string
                           type: object
                         user:
-                          description: Only trace requests from the specified user
+                          description: user restricts tracing to requests from the
+                            specified user
                           type: string
                       type: object
                     type: array
                 type: object
             type: object
           status:
-            description: ConfigStatus defines the observed state of Config.
+            description: status is the observed state of Config.
             properties:
               byPod:
+                description: byPod lists the observed status of this Config for each
+                  pod.
                 items:
                   properties:
                     configUID:
                       description: |-
-                        UID is a type that holds unique ID values, including UUIDs.  Because we
-                        don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                        intent and helps make sure that UIDs and names do not get conflated.
+                        configUID is the UID of the Config resource this status reports on, used to
+                        detect drift, such as when the Config has been recreated after its CRD was
+                        deleted out from under it, interrupting the watch.
                       type: string
                     errors:
+                      description: errors lists any errors encountered while processing
+                        the Config.
                       items:
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
+                            description: |-
+                              type indicates a specific class of error for use by controller code. If not
+                              present, the error should be treated as not matching any known type.
                             type: string
                         required:
                         - message
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the Config that was last processed by
+                        this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
