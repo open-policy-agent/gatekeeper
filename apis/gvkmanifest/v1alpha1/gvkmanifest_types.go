@@ -5,6 +5,7 @@ import (
 )
 
 type GVKManifestSpec struct {
+	// groups maps an API group name to the versions and kinds it contains.
 	Groups map[string]Versions `json:"groups,omitempty"`
 }
 
@@ -13,7 +14,9 @@ type Versions map[string]Kinds
 type Kinds []string
 
 type Version struct {
-	Name  string   `json:"name,omitempty"`
+	// name is the name of the API version.
+	Name string `json:"name,omitempty"`
+	// kinds lists the kinds available in this API version.
 	Kinds []string `json:"kinds,omitempty"`
 }
 
@@ -22,9 +25,11 @@ type Version struct {
 
 // GVKManifest is the Schema for the GVKManifest API.
 type GVKManifest struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// spec defines the desired state of GVKManifest.
 	Spec GVKManifestSpec `json:"spec,omitempty"`
 }
 

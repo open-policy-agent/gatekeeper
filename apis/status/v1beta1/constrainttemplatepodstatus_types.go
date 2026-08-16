@@ -29,19 +29,37 @@ import (
 // ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus.
 type ConstraintTemplatePodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
-	ID                  string                             `json:"id,omitempty"`
-	TemplateUID         types.UID                          `json:"templateUID,omitempty"`
-	Operations          []string                           `json:"operations,omitempty"`
-	ObservedGeneration  int64                              `json:"observedGeneration,omitempty"`
-	Errors              []*templatesv1beta1.CreateCRDError `json:"errors,omitempty"`
-	VAPGenerationStatus *VAPGenerationStatus               `json:"vapGenerationStatus,omitempty"`
+
+	// id is the name of the pod that generated this status.
+	ID string `json:"id,omitempty"`
+	// templateUID is the UID of the ConstraintTemplate this status reports on, used
+	// to detect drift, such as when the ConstraintTemplate has been recreated after
+	// its CRD was deleted out from under it, interrupting the watch.
+	TemplateUID types.UID `json:"templateUID,omitempty"`
+	// operations lists the Gatekeeper operations assigned to the pod that generated
+	// this status.
+	Operations []string `json:"operations,omitempty"`
+	// observedGeneration is the generation of the ConstraintTemplate that was last
+	// processed by this pod.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// errors lists any errors encountered while creating the CRD for the
+	// ConstraintTemplate on this pod.
+	Errors []*templatesv1beta1.CreateCRDError `json:"errors,omitempty"`
+	// vapGenerationStatus reports the status of generating a ValidatingAdmissionPolicy
+	// for the ConstraintTemplate on this pod.
+	VAPGenerationStatus *VAPGenerationStatus `json:"vapGenerationStatus,omitempty"`
 }
 
 // VAPGenerationStatus represents the status of VAP generation.
 type VAPGenerationStatus struct {
-	State              string `json:"state,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	Warning            string `json:"warning,omitempty"`
+	// state is the current state of ValidatingAdmissionPolicy generation.
+	State string `json:"state,omitempty"`
+	// observedGeneration is the generation of the ConstraintTemplate that was last
+	// processed for ValidatingAdmissionPolicy generation.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// warning contains a human-readable warning encountered while generating the
+	// ValidatingAdmissionPolicy, if any.
+	Warning string `json:"warning,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -49,9 +67,11 @@ type VAPGenerationStatus struct {
 
 // ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses API.
 type ConstraintTemplatePodStatus struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// status is the observed state of the ConstraintTemplate for this pod.
 	Status ConstraintTemplatePodStatusStatus `json:"status,omitempty"`
 }
 

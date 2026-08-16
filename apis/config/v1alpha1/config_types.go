@@ -26,42 +26,46 @@ import (
 type ConfigSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Configuration for syncing k8s objects
+	// sync is the configuration for syncing k8s objects
 	Sync Sync `json:"sync,omitempty"`
 
-	// Configuration for validation
+	// validation is the configuration for validation
 	Validation Validation `json:"validation,omitempty"`
 
-	// Configuration for namespace exclusion
+	// match is the configuration for namespace exclusion
 	Match []MatchEntry `json:"match,omitempty"`
 
-	// Configuration for readiness tracker
+	// readiness is the configuration for readiness tracker
 	Readiness ReadinessSpec `json:"readiness,omitempty"`
 }
 
 type Validation struct {
-	// List of requests to trace. Both "user" and "kinds" must be specified
+	// traces is the list of requests to trace. Both "user" and "kinds" must be specified
 	Traces []Trace `json:"traces,omitempty"`
 }
 
 type Trace struct {
-	// Only trace requests from the specified user
+	// user restricts tracing to requests from the specified user
 	User string `json:"user,omitempty"`
-	// Only trace requests of the following GroupVersionKind
+	// kind restricts tracing to requests of the following GroupVersionKind
 	Kind GVK `json:"kind,omitempty"`
-	// Also dump the state of OPA with the trace. Set to `All` to dump everything.
+	// dump also dumps the state of OPA with the trace. Set to `All` to dump everything.
 	Dump string `json:"dump,omitempty"`
 }
 
 type Sync struct {
-	// If non-empty, only entries on this list will be replicated into OPA
+	// syncOnly restricts replication into OPA to only the entries on this list,
+	// when non-empty
 	SyncOnly []SyncOnlyEntry `json:"syncOnly,omitempty"`
 }
 
 type SyncOnlyEntry struct {
-	Group   string `json:"group,omitempty"`
+	// group is the API group of the resource to sync.
+	Group string `json:"group,omitempty"`
+	// version is the API version of the resource to sync.
 	Version string `json:"version,omitempty"`
-	Kind    string `json:"kind,omitempty"`
+	// kind is the kind of the resource to sync.
+	Kind string `json:"kind,omitempty"`
 }
 
 func (e *SyncOnlyEntry) ToGroupVersionKind() schema.GroupVersionKind {
@@ -73,23 +77,30 @@ func (e *SyncOnlyEntry) ToGroupVersionKind() schema.GroupVersionKind {
 }
 
 type MatchEntry struct {
-	Processes          []string            `json:"processes,omitempty"`
+	// processes lists the Gatekeeper processes this exclusion applies to.
+	Processes []string `json:"processes,omitempty"`
+	// excludedNamespaces lists the namespaces excluded from the listed processes.
 	ExcludedNamespaces []wildcard.Wildcard `json:"excludedNamespaces,omitempty"`
 }
 
 type ReadinessSpec struct {
+	// statsEnabled enables reporting of readiness tracker statistics.
 	StatsEnabled bool `json:"statsEnabled,omitempty"`
 }
 
 // ConfigStatus defines the observed state of Config.
 type ConfigStatus struct { // Important: Run "make" to regenerate code after modifying this file
+	// byPod lists the observed status of this Config for each pod.
 	ByPod []status.ConfigPodStatusStatus `json:"byPod,omitempty"`
 }
 
 type GVK struct {
-	Group   string `json:"group,omitempty"`
+	// group is the API group of the resource.
+	Group string `json:"group,omitempty"`
+	// version is the API version of the resource.
 	Version string `json:"version,omitempty"`
-	Kind    string `json:"kind,omitempty"`
+	// kind is the kind of the resource.
+	Kind string `json:"kind,omitempty"`
 }
 
 // +kubebuilder:resource:scope=Namespaced
@@ -99,10 +110,13 @@ type GVK struct {
 
 // Config is the Schema for the configs API.
 type Config struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ConfigSpec   `json:"spec,omitempty"`
+	// spec defines the desired state of Config.
+	Spec ConfigSpec `json:"spec,omitempty"`
+	// status is the observed state of Config.
 	Status ConfigStatus `json:"status,omitempty"`
 }
 

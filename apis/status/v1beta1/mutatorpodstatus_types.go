@@ -35,22 +35,31 @@ const MutationsGroup = "mutations.gatekeeper.sh"
 type MutatorPodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// id is the name of the pod that generated this status.
 	ID string `json:"id,omitempty"`
-	// Storing the mutator UID allows us to detect drift, such as
+	// mutatorUID is the UID of the mutator this status reports on. Storing the
+	// mutator UID allows us to detect drift, such as
 	// when a mutator has been recreated after its CRD was deleted
 	// out from under it, interrupting the watch
-	MutatorUID         types.UID      `json:"mutatorUID,omitempty"`
-	Operations         []string       `json:"operations,omitempty"`
-	Enforced           bool           `json:"enforced,omitempty"`
-	Errors             []MutatorError `json:"errors,omitempty"`
-	ObservedGeneration int64          `json:"observedGeneration,omitempty"`
+	MutatorUID types.UID `json:"mutatorUID,omitempty"`
+	// operations lists the Gatekeeper operations assigned to the pod that generated
+	// this status.
+	Operations []string `json:"operations,omitempty"`
+	// enforced indicates whether the mutator is currently enforced on this pod.
+	Enforced bool `json:"enforced,omitempty"`
+	// errors lists any errors encountered while adding the mutator on this pod.
+	Errors []MutatorError `json:"errors,omitempty"`
+	// observedGeneration is the generation of the mutator that was last processed
+	// by this pod.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // MutatorError represents a single error caught while adding a mutator to a system.
 type MutatorError struct {
-	// Type indicates a specific class of error for use by controller code.
+	// type indicates a specific class of error for use by controller code.
 	// If not present, the error should be treated as not matching any known type.
-	Type    string `json:"type,omitempty"`
+	Type string `json:"type,omitempty"`
+	// message is a human-readable description of the error.
 	Message string `json:"message"`
 }
 
@@ -59,9 +68,11 @@ type MutatorError struct {
 
 // MutatorPodStatus is the Schema for the mutationpodstatuses API.
 type MutatorPodStatus struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// status is the observed state of the mutator for this pod.
 	Status MutatorPodStatusStatus `json:"status,omitempty"`
 }
 
