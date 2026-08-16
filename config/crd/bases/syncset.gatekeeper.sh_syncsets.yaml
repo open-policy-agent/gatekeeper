@@ -39,15 +39,21 @@ spec:
           metadata:
             type: object
           spec:
+            description: spec defines the desired state of SyncSet.
             properties:
               gvks:
+                description: gvks lists the group, version and kind of the resources
+                  to be synced.
                 items:
                   properties:
                     group:
+                      description: group is the API group of the resource to sync.
                       type: string
                     kind:
+                      description: kind is the kind of the resource to sync.
                       type: string
                     version:
+                      description: version is the API version of the resource to sync.
                       type: string
                   type: object
                 type: array

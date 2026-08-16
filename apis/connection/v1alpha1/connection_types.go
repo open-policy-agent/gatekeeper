@@ -26,9 +26,10 @@ import (
 
 // ConnectionSpec defines the desired state of Connection.
 type ConnectionSpec struct {
+	// driver is the name of one of the expected drivers i.e. dapr, disk
 	// +kubebuilder:validation:Required
-	// Driver is the name of one of the expected drivers i.e. dapr, disk
 	Driver string `json:"driver"`
+	// config is the driver-specific configuration for this connection.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -37,6 +38,7 @@ type ConnectionSpec struct {
 
 // ConnectionStatus defines the observed state of Connection.
 type ConnectionStatus struct {
+	// byPod lists the observed status of this Connection for each pod.
 	ByPod []statusv1alpha1.ConnectionPodStatusStatus `json:"byPod,omitempty"`
 }
 
@@ -46,10 +48,13 @@ type ConnectionStatus struct {
 // +kubebuilder:storageversion
 // Connection is the Schema for the connections API.
 type Connection struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ConnectionSpec   `json:"spec,omitempty"`
+	// spec defines the desired state of Connection.
+	Spec ConnectionSpec `json:"spec,omitempty"`
+	// status is the observed state of Connection.
 	Status ConnectionStatus `json:"status,omitempty"`
 }
 

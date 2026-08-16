@@ -6,13 +6,17 @@ import (
 )
 
 type SyncSetSpec struct {
+	// gvks lists the group, version and kind of the resources to be synced.
 	GVKs []GVKEntry `json:"gvks,omitempty"`
 }
 
 type GVKEntry struct {
-	Group   string `json:"group,omitempty"`
+	// group is the API group of the resource to sync.
+	Group string `json:"group,omitempty"`
+	// version is the API version of the resource to sync.
 	Version string `json:"version,omitempty"`
-	Kind    string `json:"kind,omitempty"`
+	// kind is the kind of the resource to sync.
+	Kind string `json:"kind,omitempty"`
 }
 
 func (e *GVKEntry) ToGroupVersionKind() schema.GroupVersionKind {
@@ -28,9 +32,11 @@ func (e *GVKEntry) ToGroupVersionKind() schema.GroupVersionKind {
 
 // SyncSet defines which resources Gatekeeper will cache. The union of all SyncSets plus the syncOnly field of Gatekeeper's Config resource defines the sets of resources that will be synced.
 type SyncSet struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// spec defines the desired state of SyncSet.
 	Spec SyncSetSpec `json:"spec,omitempty"`
 }
 
