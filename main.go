@@ -609,6 +609,8 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 			ProcessExcluder: processExcluder,
 			MutationSystem:  mutationSystem,
 			ExpansionSystem: expansionSystem,
+			ExportSystem:    exportSystem,
+			GetPod:          opts.GetPod,
 		}
 		if err := webhook.AddToManager(mgr, webhookDeps); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")

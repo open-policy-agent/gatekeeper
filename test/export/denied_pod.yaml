@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: denied-export-pod
+  namespace: nginx
+  labels:
+    app: denied-export
+spec:
+  containers:
+  - name: nginx
+    image: nginx:latest

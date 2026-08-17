@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"syscall"
@@ -893,33 +894,19 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 			},
 		}
 
-		shortConfig := map[string]interface{}{
-			"path":            t.TempDir(),
-			"maxAuditResults": 5.0,
+		now := time.Now()
+		writer.closedConnections["short-conn"] = FailedConnection{
+			Connection:  Connection{ClosedConnectionTTL: 100 * time.Millisecond},
+			FailedAt:    now.Add(-time.Second),
+			RetryCount:  1,
+			NextRetryAt: now.Add(time.Minute),
 		}
-		err := writer.CreateConnection(context.Background(), "short-conn", shortConfig)
-		if err != nil {
-			t.Fatalf("Failed to create short connection: %v", err)
+		writer.closedConnections["long-conn"] = FailedConnection{
+			Connection:  Connection{ClosedConnectionTTL: 10 * time.Second},
+			FailedAt:    now,
+			RetryCount:  1,
+			NextRetryAt: now.Add(time.Minute),
 		}
-		longConfig := map[string]interface{}{
-			"path":            t.TempDir(),
-			"maxAuditResults": 5.0,
-		}
-		err = writer.CreateConnection(context.Background(), "long-conn", longConfig)
-		if err != nil {
-			t.Fatalf("Failed to create long connection: %v", err)
-		}
-		writer.mu.Lock()
-		conn := writer.openConnections["short-conn"]
-		conn.ClosedConnectionTTL = 100 * time.Millisecond
-		writer.openConnections["short-conn"] = conn
-		conn = writer.openConnections["long-conn"]
-		conn.ClosedConnectionTTL = 10 * time.Second
-		writer.openConnections["long-conn"] = conn
-		writer.mu.Unlock()
-
-		_ = writer.CloseConnection("short-conn")
-		_ = writer.CloseConnection("long-conn")
 
 		writer.mu.Lock()
 		shortCount := len(writer.closedConnections)
@@ -928,8 +915,6 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 		if shortCount != 2 {
 			t.Errorf("Expected 2 connections in closedConnections, got %d", shortCount)
 		}
-
-		time.Sleep(100 * time.Millisecond)
 
 		writer.retryFailedConnections()
 		writer.mu.Lock()
@@ -946,4 +931,113 @@ func TestTTLBasedConnectionRemoval(t *testing.T) {
 			t.Errorf("Expected 1 connection remaining, got %d", finalCount)
 		}
 	})
+}
+
+func TestRetryFailedConnectionsRetainsOpenAdmissionFile(t *testing.T) {
+	writer := newTestWriter(func(_ *Connection) error {
+		return fmt.Errorf("persistent close failure")
+	})
+	file, err := os.CreateTemp(t.TempDir(), "admission-*.open")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	writer.closedConnections["admission"] = FailedConnection{
+		Connection: Connection{
+			ClosedConnectionTTL: time.Minute,
+			admission: admissionState{
+				stream: &admissionStream{file: file, openPath: file.Name()},
+			},
+		},
+		FailedAt:    time.Now().Add(-time.Hour),
+		RetryCount:  maxRetryAttempts,
+		NextRetryAt: time.Now().Add(-time.Second),
+	}
+
+	writer.retryFailedConnections()
+
+	writer.mu.Lock()
+	_, exists := writer.closedConnections["admission"]
+	writer.mu.Unlock()
+	if !exists {
+		t.Fatal("cleanup state owning an open admission file must not be discarded")
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+}
+
+func TestCloseFileWithBackoffRetriesAdmissionAfterAuditClose(t *testing.T) {
+	dir := t.TempDir()
+	auditFile, err := os.CreateTemp(dir, "audit")
+	if err != nil {
+		t.Fatalf("CreateTemp(audit) error = %v", err)
+	}
+	if err := syscall.Flock(int(auditFile.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatalf("Flock(audit) error = %v", err)
+	}
+
+	openPath := path.Join(dir, admissionFilePrefix+"retry"+admissionOpenExtension)
+	admissionFile, err := os.OpenFile(openPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatalf("OpenFile(admission) error = %v", err)
+	}
+	if err := syscall.Flock(int(admissionFile.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatalf("Flock(admission) error = %v", err)
+	}
+	if _, err := admissionFile.WriteString(completeAdmissionRecord); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+
+	renameCalls := 0
+	stream := &admissionStream{
+		file:     admissionFile,
+		openPath: openPath,
+		topic:    "admission",
+		bytes:    int64(len(completeAdmissionRecord)),
+		records:  1,
+		maxBytes: 4096,
+		rename: func(oldPath, newPath string) error {
+			renameCalls++
+			if renameCalls == 1 {
+				return os.ErrPermission
+			}
+			return os.Rename(oldPath, newPath)
+		},
+	}
+	conn := Connection{
+		File:            auditFile,
+		currentAuditRun: "audit-run",
+		admission: admissionState{
+			stream: stream,
+		},
+	}
+	backoff := wait.Backoff{Duration: time.Millisecond, Factor: 1, Steps: 2}
+
+	if err := closeFileWithBackoff(&conn, backoff); err != nil {
+		t.Fatalf("closeFileWithBackoff() error = %v", err)
+	}
+	if renameCalls != 2 {
+		t.Fatalf("expected admission finalization retry, rename calls = %d", renameCalls)
+	}
+	if conn.File != nil || conn.currentAuditRun != "" || conn.admission.stream != nil {
+		t.Fatalf("expected all file ownership to be cleared, got %#v", conn)
+	}
+	readyPath := strings.TrimSuffix(openPath, admissionOpenExtension) + admissionReadyExtension
+	if _, err := os.Stat(readyPath); err != nil {
+		t.Fatalf("expected finalized admission file: %v", err)
+	}
+}
+
+func TestCreateConnectionBoundsState(t *testing.T) {
+	writer := newTestWriter(nil)
+	for i := 0; i < maxFailedConnectionStates; i++ {
+		writer.closedConnections[fmt.Sprintf("pending-%d", i)] = FailedConnection{}
+	}
+	err := writer.CreateConnection(context.Background(), "too-many", diskConfig(t.TempDir(), 1))
+	if err == nil || !strings.Contains(err.Error(), "maximum failed disk connection states") {
+		t.Fatalf("expected bounded state error, got %v", err)
+	}
+	if connectionLockExists(writer, "too-many") {
+		t.Fatal("failed CreateConnection must not retain a connection lock")
+	}
 }
