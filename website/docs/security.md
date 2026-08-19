@@ -84,7 +84,7 @@ docker buildx imagetools inspect openpolicyagent/gatekeeper:v3.12.0-rc.0 --forma
 
 # Vulnerability-Patched Images
 
-In addition to the canonical release images, Gatekeeper publishes automatically **patched** variants of recent releases that pick up fixed versions of Go dependencies and the Go standard library **without waiting for the next release**. They are produced on a weekly schedule using [Project Copacetic (Copa)](https://github.com/project-copacetic/copacetic) and published to the same repositories as the regular `gatekeeper` and `gator` images:
+In addition to the regular release images, Gatekeeper publishes automatically **patched** variants of recent releases that pick up fixed versions of Go dependencies and the Go standard library **without waiting for the next release**. They are produced on a weekly schedule using [Project Copacetic (Copa)](https://github.com/project-copacetic/copacetic) and published to the same repositories as the regular `gatekeeper` and `gator` images:
 
 - Docker Hub: `openpolicyagent/gatekeeper`, `openpolicyagent/gator`
 - GHCR: `ghcr.io/open-policy-agent/gatekeeper`, `ghcr.io/open-policy-agent/gator`
@@ -93,11 +93,11 @@ The latest stable release and the previous minor release are patched. The `gatek
 
 ## Tags
 
-For a release `vX.Y.Z`, patched images are published under **new, separate** tags — the canonical `vX.Y.Z` tag is never modified:
+For a release `vX.Y.Z`, patched images are published under **new, separate** tags — the original `vX.Y.Z` tag is never modified:
 
 | Tag | Meaning |
 | --- | --- |
-| `vX.Y.Z` | The original, canonical release. **Never** changed by patching. |
+| `vX.Y.Z` | The original release. **Never** changed by patching. |
 | `vX.Y.Z-R` | An **immutable** patch revision (`R` = `1`, `2`, …). Each run that fixes newly-available CVEs publishes the next number. |
 | `vX.Y.Z-patched` | A **floating** tag that always points at the newest `vX.Y.Z-R`. Use this to track the latest patched build of that release. |
 
@@ -108,9 +108,9 @@ All published architectures `linux/amd64`, `linux/arm64`, and `linux/arm/v7` are
 1. The published release image is scanned with [Trivy](https://trivy.dev/) for **fixable** Go-library vulnerabilities.
 2. If any are found, Copa rebuilds the affected Go binaries from the corresponding public source, pulling in the fixed dependency and standard-library versions.
 3. The result is **re-scanned** to confirm the vulnerability count went down; a patch that does not reduce vulnerabilities is discarded and never published.
-4. The patched image is **re-wrapped** so it carries the same [SBOM and SLSA provenance attestations](#build-attestations) as canonical images.
+4. The patched image is **re-wrapped** so it carries the same [SBOM and SLSA provenance attestations](#build-attestations) as the release images.
 
-Because the binaries are recompiled, patched images differ from the originals (build timestamps, toolchain version, and so on), so their digests will not match the canonical `vX.Y.Z` image. This is expected.
+Because the binaries are recompiled, patched images differ from the originals (build timestamps, toolchain version, and so on), so their digests will not match the original `vX.Y.Z` image. This is expected.
 
 ### Best-effort library patching
 
@@ -124,23 +124,8 @@ Each run's job summary lists any packages that could not be raised to their fixe
 
 ## Trust tier
 
-Patched images are a **complementary, best-effort security refresh** — not a replacement for canonical releases:
+Patched images are a **complementary, best-effort security refresh** — not a replacement for tagged releases:
 
-- They carry the **same attestation format** (BuildKit SBOM + SLSA provenance) and are verified exactly like canonical images (see [Build Attestations](#build-attestations)). The SBOM reflects the patched contents; the provenance describes the automated patch pipeline rather than the full release pipeline.
+- They carry the **same attestation format** (BuildKit SBOM + SLSA provenance) and are verified exactly like the release images (see [Build Attestations](#build-attestations)). The SBOM reflects the patched contents; the provenance describes the automated patch pipeline rather than the full release pipeline.
 - They are rebuilt from **public** upstream source and are **not** run through the full release end-to-end test suite.
-- Use `vX.Y.Z-patched` (or a pinned `vX.Y.Z-R`) when you want dependency and standard-library CVE fixes ahead of the next tagged release. Use the canonical `vX.Y.Z` tag when you require the fully-tested, canonical artifact.
-
-## Verifying a patched image
-
-Patched images are inspected and verified exactly like canonical images:
-
-```shell
-# List platforms and attestation manifests
-docker buildx imagetools inspect openpolicyagent/gatekeeper:vX.Y.Z-patched
-
-# SBOM (all platforms)
-docker buildx imagetools inspect openpolicyagent/gatekeeper:vX.Y.Z-patched --format '{{ json .SBOM }}'
-
-# SLSA provenance
-docker buildx imagetools inspect openpolicyagent/gatekeeper:vX.Y.Z-patched --format '{{ json .Provenance }}'
-```
+- Use `vX.Y.Z-patched` (or a pinned `vX.Y.Z-R`) when you want dependency and standard-library CVE fixes ahead of the next tagged release. Use the `vX.Y.Z` release tag when you require the fully-tested release artifact.
