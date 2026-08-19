@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	admissionv1 "k8s.io/api/admission/v1"
@@ -830,6 +831,21 @@ func TestMatchExcludedNamespacesGlob(t *testing.T) {
 					t.Error(err)
 				}
 			})
+		}
+	}
+}
+
+func TestMatchGlobalExemptedNamespacesGlobRequiresIgnoreLabel(t *testing.T) {
+	mc := MatchGlobalExemptedNamespacesGlobV1Beta1(`"team-*"`)
+
+	expectedChecks := []string{
+		"has(namespaceObject.metadata.labels)",
+		`("admission.gatekeeper.sh/ignore" in namespaceObject.metadata.labels)`,
+	}
+
+	for _, check := range expectedChecks {
+		if !strings.Contains(mc.Expression, check) {
+			t.Fatalf("expected expression to contain %q, got: %s", check, mc.Expression)
 		}
 	}
 }
