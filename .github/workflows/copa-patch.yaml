@@ -1,0 +1,560 @@
+name: copa-patch
+
+# Recurring Copa image-patching workflow.
+#
+# It scans published release images for fixable Go-library CVEs, rebuilds/patches them with
+# Copa, re-scans to confirm the fix, re-wraps them with BuildKit SBOM + SLSA provenance
+# attestations, and publishes immutable `vX.Y.Z-R` + floating `vX.Y.Z-patched` multi-arch
+# tags. Canonical release tags are never touched.
+#
+# Modes (input `target`; the weekly schedule always runs `canonical`):
+#   - dry-run   (default for manual runs): scan/patch only, write a local OCI layout, push nothing.
+#   - staging  : push patched (unattested) images to the owner's copa-staging namespace.
+#   - canonical: re-wrap WITH attestations and publish to openpolicyagent/* (Docker Hub) +
+#                ghcr.io/open-policy-agent/* (GHCR).
+
+on:
+  # Weekly canonical run — gated OFF for the initial merge.
+  # schedule:
+  #   - cron: "17 8 * * 1"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to patch (e.g. v3.23.0). Blank = latest stable + previous minor."
+        required: false
+        type: string
+      target:
+        description: "Where to send patched images."
+        required: false
+        type: choice
+        options: [dry-run, staging, canonical]
+        default: dry-run
+      staging_registry:
+        description: "Namespace for `staging` mode and the canonical intermediate. Blank = ghcr.io/<owner>/copa-staging."
+        required: false
+        type: string
+
+permissions: read-all
+
+# Serialize every run on a ref (weekly schedule + any manual dispatch) so two runs can't race
+# on the same vX.Y.Z-N revision number or -patched promotion.
+concurrency:
+  group: copa-patch-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TRIVY_VERSION: "0.69.3"
+  COPA_VERSION: "0.14.2"
+  CRANE_VERSION: "0.21.7"
+  # GHCR is also the source registry for the release images to patch.
+  SOURCE_REGISTRY: "ghcr.io/open-policy-agent"
+  DOCKERHUB_NAMESPACE: "openpolicyagent"
+  # Arches to patch (all platforms gatekeeper/gator publish).
+  PATCH_ARCHES: "linux/amd64 linux/arm64 linux/arm/v7"
+
+jobs:
+  resolve-releases:
+    name: Resolve target releases
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      releases: ${{ steps.resolve.outputs.matrix }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Resolve releases
+        id: resolve
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${RELEASE_TAG}" ]]; then
+            matrix=$(jq -cn --arg t "${RELEASE_TAG}" '[$t]')
+          else
+            # Stable tags only: vMAJOR.MINOR.PATCH (exclude -beta/-rc pre-releases).
+            mapfile -t stable < <(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V)
+            if [[ ${#stable[@]} -eq 0 ]]; then
+              echo "::error::no stable release tags found"; exit 1
+            fi
+            latest="${stable[-1]}"
+            latest_minor="${latest%.*}" # vX.Y
+            prev=$(printf '%s\n' "${stable[@]}" | grep -v "^${latest_minor}\." | sort -V | tail -1 || true)
+            if [[ -n "${prev}" ]]; then
+              matrix=$(jq -cn --arg a "${latest}" --arg b "${prev}" '[$a,$b]')
+            else
+              matrix=$(jq -cn --arg a "${latest}" '[$a]')
+            fi
+          fi
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+          echo "Resolved releases: ${matrix}"
+          echo "### Resolved releases: \`${matrix}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  patch:
+    name: Patch ${{ matrix.image }}:${{ matrix.release }}
+    needs: resolve-releases
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write # push to GHCR only when target != dry-run
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [gatekeeper, gator]
+        release: ${{ fromJson(needs.resolve-releases.outputs.releases) }}
+    # Matrix values reused across steps.
+    env:
+      IMAGE: ${{ matrix.image }}
+      RELEASE: ${{ matrix.release }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      # Untrusted inputs (release_tag, target, staging_registry) are passed via env and never
+      # interpolated directly into run scripts.
+      - name: Resolve mode, source + target refs
+        id: cfg
+        env:
+          INPUT_TARGET: ${{ inputs.target }}
+          STAGING_INPUT: ${{ inputs.staging_registry }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # inputs are empty on the schedule event => default to canonical there.
+          mode="${INPUT_TARGET:-canonical}"
+          case "${mode}" in dry-run|staging|canonical) ;; *) echo "::error::invalid target '${mode}'"; exit 1;; esac
+          # Safety: `dry-run` pushes nothing; `staging` pushes only to the owner's own
+          # ghcr.io/<owner>/copa-staging/* namespace; `canonical` (the only mode that writes to the
+          # official repos) is locked to the upstream repo below. Forks have no credential path
+          # upstream regardless — no upstream package scope, no Docker Hub secrets.
+          if [[ "${mode}" == "canonical" && "${REPO}" != "open-policy-agent/gatekeeper" ]]; then
+            echo "::error::target=canonical is only allowed on open-policy-agent/gatekeeper (here: ${REPO})"; exit 1
+          fi
+          staging="${STAGING_INPUT:-ghcr.io/${{ github.repository_owner }}/copa-staging}"
+          intermediate_repo="${staging}/${IMAGE}"
+          source_ref="${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}"
+          # The staging/intermediate repo must never be a canonical repo.
+          if [[ "${intermediate_repo}" == "${SOURCE_REGISTRY}/${IMAGE}" || "${intermediate_repo}" == "${DOCKERHUB_NAMESPACE}/${IMAGE}" ]]; then
+            echo "::error::staging/intermediate repo '${intermediate_repo}' must not be a canonical repo"; exit 1
+          fi
+          if [[ "${mode}" == "canonical" ]]; then primary_repo="${SOURCE_REGISTRY}/${IMAGE}"; else primary_repo="${intermediate_repo}"; fi
+          {
+            echo "mode=${mode}"
+            echo "source_ref=${source_ref}"
+            echo "intermediate_repo=${intermediate_repo}"
+            echo "primary_repo=${primary_repo}"
+          } >> "$GITHUB_OUTPUT"
+          echo "mode=${mode} | source=${source_ref} | intermediate=${intermediate_repo} | primary=${primary_repo}"
+
+      # Register QEMU for non-amd64 emulated patching.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+
+      - name: Set up Buildx
+        run: docker buildx create --use --bootstrap
+
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: steps.cfg.outputs.mode == 'canonical'
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Install Trivy
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)"
+          pushd "${dir}"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          wget -q "${base}/${tarball}" "${base}/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " ${tarball}\$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum -c -
+          tar zxf "${tarball}"
+          echo "${dir}" >> "$GITHUB_PATH"
+          popd
+
+      - name: Install Copa
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)"
+          pushd "${dir}"
+          base="https://github.com/project-copacetic/copacetic/releases/download/v${COPA_VERSION}"
+          tarball="copa_${COPA_VERSION}_linux_amd64.tar.gz"
+          wget -q "${base}/${tarball}" "${base}/copacetic_checksums.txt"
+          grep " ${tarball}\$" copacetic_checksums.txt | sha256sum -c -
+          tar zxf "${tarball}"
+          echo "${dir}" >> "$GITHUB_PATH"
+          popd
+
+      - name: Install crane
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)"
+          pushd "${dir}"
+          base="https://github.com/google/go-containerregistry/releases/download/v${CRANE_VERSION}"
+          tarball="go-containerregistry_Linux_x86_64.tar.gz"
+          wget -q "${base}/${tarball}" "${base}/checksums.txt"
+          grep " ${tarball}\$" checksums.txt | sha256sum -c -
+          tar zxf "${tarball}" crane
+          echo "${dir}" >> "$GITHUB_PATH"
+          popd
+
+      - name: Download Trivy DB
+        run: |
+          trivy image --download-db-only \
+            --db-repository=ghcr.io/aquasecurity/trivy-db,public.ecr.aws/aquasecurity/trivy-db,docker.io/aquasec/trivy-db
+
+      # Record the canonical release tag digests up front, to confirm afterwards that the run
+      # never mutated a canonical `vX.Y.Z` tag (only `-R`/`-patched` are added).
+      - name: Capture canonical base digests
+        id: base
+        if: steps.cfg.outputs.mode == 'canonical'
+        run: |
+          set -euo pipefail
+          ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}" 2>/dev/null || echo absent)
+          dh=$(crane digest "${DOCKERHUB_NAMESPACE}/${IMAGE}:${RELEASE}" 2>/dev/null || echo absent)
+          {
+            echo "ghcr=${ghcr}"
+            echo "dh=${dh}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Canonical base digests — ghcr:${ghcr} dockerhub:${dh}"
+
+      # Scan the canonical source per arch. The reports Copa consumes live in copa-reports/
+      # (one per platform => Copa patches exactly those arches).
+      - name: Scan source for fixable library CVEs
+        id: scan
+        env:
+          SOURCE_REF: ${{ steps.cfg.outputs.source_ref }}
+        run: |
+          set -euo pipefail
+          mkdir -p copa-reports
+          total=0
+          stdlib_total=0
+          for p in $PATCH_ARCHES; do
+            a="${p#linux/}"; a="${a//\//-}" # arm/v7 -> arm-v7 so the report is a flat file
+            trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
+              -f json -o "copa-reports/${a}.json" "${SOURCE_REF}"
+            arch_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "copa-reports/${a}.json")
+            arch_stdlib=$(jq '[.Results[]?.Vulnerabilities[]? | select(.PkgName == "stdlib")] | length' "copa-reports/${a}.json")
+            total=$(( total + arch_total ))
+            stdlib_total=$(( stdlib_total + arch_stdlib ))
+            echo "  ${a}: fixable=${arch_total} (stdlib=${arch_stdlib})"
+          done
+          echo "before=${total}" >> "$GITHUB_OUTPUT"
+          echo "before_stdlib=${stdlib_total}" >> "$GITHUB_OUTPUT"
+          echo "Fixable library CVEs in ${SOURCE_REF} (${PATCH_ARCHES}): ${total} (stdlib=${stdlib_total})"
+
+      # Stop if the source is already clean, and stay idempotent by also stopping if an
+      # existing `-patched` already fixes everything currently fixable.
+      - name: Skip-gate + idempotency check
+        id: gate
+        env:
+          PRIMARY_REPO: ${{ steps.cfg.outputs.primary_repo }}
+          MODE: ${{ steps.cfg.outputs.mode }}
+          BEFORE: ${{ steps.scan.outputs.before }}
+        run: |
+          set -euo pipefail
+          if [[ "${BEFORE}" -eq 0 ]]; then
+            echo "has_fixes=false" >> "$GITHUB_OUTPUT"
+            echo "Source has no fixable library CVEs, nothing to patch." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Idempotency only applies when publishing and a prior -patched already exists.
+          if [[ "${MODE}" != "dry-run" ]] && crane digest "${PRIMARY_REPO}:${RELEASE}-patched" >/dev/null 2>&1; then
+            total=0
+            for p in $PATCH_ARCHES; do
+              a="${p#linux/}"; a="${a//\//-}"
+              trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
+                -f json -o "scan-existing-${a}.json" "${PRIMARY_REPO}:${RELEASE}-patched"
+              total=$(( total + $(jq '[.Results[]?.Vulnerabilities[]?] | length' "scan-existing-${a}.json") ))
+            done
+            if [[ "${total}" -eq 0 ]]; then
+              echo "has_fixes=false" >> "$GITHUB_OUTPUT"
+              echo "Existing ${RELEASE}-patched already fixes all current CVEs — skipping (idempotent)." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+          echo "has_fixes=true" >> "$GITHUB_OUTPUT"
+
+      # Immutable revision = next integer after the highest existing vX.Y.Z-N in the primary repo
+      # (the staging repo for `staging`, the canonical GHCR repo for `canonical`).
+      - name: Compute revision
+        id: rev
+        if: steps.gate.outputs.has_fixes == 'true'
+        env:
+          PRIMARY_REPO: ${{ steps.cfg.outputs.primary_repo }}
+          MODE: ${{ steps.cfg.outputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "${MODE}" != "dry-run" ]]; then
+            last=$(crane ls "${PRIMARY_REPO}" 2>/dev/null | grep -E "^${RELEASE}-[0-9]+$" | sed "s/^${RELEASE}-//" | sort -n | tail -1 || true)
+            rev=$(( ${last:-0} + 1 ))
+          else
+            rev="dryrun"
+          fi
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+          echo "Revision: ${RELEASE}-${rev}"
+
+      # Report-driven multi-arch patch: Copa patches every arch with a report in copa-reports/
+      # and passes any other source arch through untouched.
+      - name: Copa patch
+        id: patch
+        if: steps.gate.outputs.has_fixes == 'true'
+        env:
+          SOURCE_REF: ${{ steps.cfg.outputs.source_ref }}
+          INTERMEDIATE_REPO: ${{ steps.cfg.outputs.intermediate_repo }}
+          MODE: ${{ steps.cfg.outputs.mode }}
+          REV: ${{ steps.rev.outputs.rev }}
+        run: |
+          set -euo pipefail
+          tag="${RELEASE}-${REV}"
+          if [[ "${MODE}" == "dry-run" ]]; then
+            out=(--oci-dir ./patched-oci)
+            echo "patched_ref=./patched-oci" >> "$GITHUB_OUTPUT"
+          else
+            out=(--push)
+            echo "patched_ref=${INTERMEDIATE_REPO}:${tag}" >> "$GITHUB_OUTPUT"
+          fi
+          COPA_EXPERIMENTAL=1 copa patch \
+            -i "${SOURCE_REF}" \
+            --report copa-reports/ \
+            --pkg-types library \
+            --library-patch-level minor \
+            --toolchain-patch-level patch \
+            --ignore-errors \
+            --timeout 120m \
+            "${out[@]}" \
+            -t "${INTERMEDIATE_REPO}:${tag}"
+
+      # Guard: every target arch must be present in the pushed index. Copa silently *ignores* an
+      # arch it can't emulate instead of failing, so without this a drop would ship a -patched
+      # index missing an arch.
+      - name: Verify all target arches present
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run'
+        env:
+          PATCHED_REF: ${{ steps.patch.outputs.patched_ref }}
+        run: |
+          set -euo pipefail
+          present=$(docker buildx imagetools inspect "${PATCHED_REF}" --raw \
+            | jq -r '.manifests[]? | select(.platform.os == "linux" and .platform.architecture != "unknown")
+                     | .platform | .os + "/" + .architecture + (if .variant then "/" + .variant else "" end)')
+          echo "Arches in ${PATCHED_REF}:"; echo "${present}"
+          spaced=" $(echo ${present}) "   # collapse to a single space-delimited line for matching
+          missing=""
+          for p in $PATCH_ARCHES; do
+            case "${spaced}" in *" ${p} "*) : ;; *) missing="${missing} ${p}" ;; esac
+          done
+          if [[ -n "${missing}" ]]; then
+            echo "::error::patched index ${PATCHED_REF} is missing target arch(es):${missing}"; exit 1
+          fi
+          echo "All target arches present in the patched index."
+
+      # Verify the patch actually reduced the total fixable CVE count across arches.
+      - name: Verify patched image (re-scan)
+        if: steps.gate.outputs.has_fixes == 'true'
+        env:
+          PATCHED_REF: ${{ steps.patch.outputs.patched_ref }}
+          MODE: ${{ steps.cfg.outputs.mode }}
+          REV: ${{ steps.rev.outputs.rev }}
+          BEFORE: ${{ steps.scan.outputs.before }}
+          BEFORE_STDLIB: ${{ steps.scan.outputs.before_stdlib }}
+        run: |
+          set -euo pipefail
+          total=0
+          stdlib_total=0
+          residual_md=""
+          unimproved=""
+          {
+            echo "### ${IMAGE}:${RELEASE} → ${RELEASE}-${REV} (${MODE})"
+            echo ""
+            echo "| Arch | fixable | stdlib |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for p in $PATCH_ARCHES; do
+            a="${p#linux/}"; a="${a//\//-}"
+            if [[ "${MODE}" == "dry-run" ]]; then
+              trivy image --quiet --input "${PATCHED_REF}" --platform "$p" --pkg-types library --ignore-unfixed \
+                -f json -o "scan-after-${a}.json"
+            else
+              trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
+                -f json -o "scan-after-${a}.json" "${PATCHED_REF}"
+            fi
+            arch_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "scan-after-${a}.json")
+            arch_stdlib=$(jq '[.Results[]?.Vulnerabilities[]? | select(.PkgName == "stdlib")] | length' "scan-after-${a}.json")
+            # Per-arch "before" = the source scan the scan step already wrote to copa-reports/.
+            arch_before=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "copa-reports/${a}.json" 2>/dev/null || echo 0)
+            arch_before_stdlib=$(jq '[.Results[]?.Vulnerabilities[]? | select(.PkgName == "stdlib")] | length' "copa-reports/${a}.json" 2>/dev/null || echo 0)
+            total=$(( total + arch_total ))
+            stdlib_total=$(( stdlib_total + arch_stdlib ))
+            # Flag an arch that had fixable CVEs but didn't improve — likely a Copa failure on it.
+            if [[ "${arch_before}" -gt 0 && "${arch_total}" -ge "${arch_before}" ]]; then
+              unimproved+=" ${p}(${arch_before}->${arch_total})"
+            fi
+            echo "  ${a}: fixable after=${arch_total} (stdlib=${arch_stdlib})"
+            echo "| ${p} | ${arch_before} → ${arch_total} | ${arch_before_stdlib} → ${arch_stdlib} |" >> "$GITHUB_STEP_SUMMARY"
+            # Library packages Copa left below their fixed version on this arch (stdlib is reported separately).
+            pkgs=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.PkgName != "stdlib") | {p: .PkgName, i: .InstalledVersion, f: (.FixedVersion // "?")}]
+                          | group_by(.p + " " + .i)
+                          | map("- " + .[0].p + " " + .[0].i + " → needs " + ([.[].f] | unique | join(", ")))
+                          | .[]' "scan-after-${a}.json")
+            if [[ -n "${pkgs}" ]]; then
+              residual_md+=$'\n'"**${p}**"$'\n\n'"${pkgs}"$'\n'
+            fi
+          done
+          echo "CVE totals across ${PATCH_ARCHES}: before=${BEFORE} after=${total} | stdlib before=${BEFORE_STDLIB} after=${stdlib_total}"
+          echo "| **all** | **${BEFORE} → ${total}** | **${BEFORE_STDLIB} → ${stdlib_total}** |" >> "$GITHUB_STEP_SUMMARY"
+          # Surface fixable library CVEs Copa couldn't reach.
+          library_total=$(( total - stdlib_total ))
+          if [[ -n "${residual_md}" ]]; then
+            {
+              echo ""
+              echo "<details><summary>${library_total} fixable library CVE(s) remain; Copa could not reach these fixed versions</summary>"
+              echo ""
+              printf '%s\n' "${residual_md}"
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::${library_total} fixable library CVE(s) remain after patching."
+          fi
+          if [[ -n "${unimproved}" ]]; then
+            echo "::warning::arch(es) not improved despite fixable CVEs:${unimproved} — likely a Copa failure on those arches"
+            echo "> **Not improved despite fixable CVEs:**${unimproved}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ "${total}" -ge "${BEFORE}" ]]; then
+            echo "::error::patch did not reduce fixable CVEs (before=${BEFORE}, after=${total})"
+            exit 1
+          fi
+          # Surface any stdlib CVEs left unfixed by --toolchain-patch-level.
+          if [[ "${stdlib_total}" -gt 0 ]]; then
+            echo "::warning::${stdlib_total} Go stdlib CVE(s) remain after toolchain patch (may require a newer Go minor)"
+          fi
+
+      - name: Re-wrap with attestations and publish to canonical
+        id: rewrap
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical'
+        env:
+          INTERMEDIATE_REF: ${{ steps.patch.outputs.patched_ref }}
+          REV: ${{ steps.rev.outputs.rev }}
+        run: |
+          set -euo pipefail
+          ghcr_ref="${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV}"
+          dh_ref="${DOCKERHUB_NAMESPACE}/${IMAGE}:${RELEASE}-${REV}"
+          platforms=$(docker buildx imagetools inspect "${INTERMEDIATE_REF}" --raw \
+            | jq -r '[ .manifests[]
+                       | select(.platform != null and .platform.os != null and .platform.architecture != "unknown")
+                       | .platform | (.os + "/" + .architecture + (if .variant then "/" + .variant else "" end)) ]
+                     | unique | join(",")')
+          if [[ -z "${platforms}" ]]; then echo "::error::could not determine platforms to re-wrap"; exit 1; fi
+          echo "Re-wrapping platforms: ${platforms}"
+          workdir="$(mktemp -d)"
+          printf 'FROM %s\n' "${INTERMEDIATE_REF}" > "${workdir}/Dockerfile"
+          docker buildx build \
+            --platform "${platforms}" \
+            --attest type=sbom \
+            --attest type=provenance,mode=max \
+            -t "${ghcr_ref}" \
+            -t "${dh_ref}" \
+            --push \
+            "${workdir}"
+          {
+            echo "ghcr_ref=${ghcr_ref}"
+            echo "dh_ref=${dh_ref}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify attestations present
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical'
+        env:
+          GHCR_REF: ${{ steps.rewrap.outputs.ghcr_ref }}
+        run: |
+          set -euo pipefail
+          n=$(docker buildx imagetools inspect "${GHCR_REF}" --raw \
+            | jq '[.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest")] | length')
+          echo "Attestation manifests on ${GHCR_REF}: ${n}"
+          if [[ "${n}" -lt 1 ]]; then echo "::error::no attestations on ${GHCR_REF}"; exit 1; fi
+
+      # prove the run never mutated a canonical release tag.
+      - name: Verify canonical release tags untouched
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical'
+        env:
+          BASE_GHCR: ${{ steps.base.outputs.ghcr }}
+          BASE_DH: ${{ steps.base.outputs.dh }}
+        run: |
+          set -euo pipefail
+          now_ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}" 2>/dev/null || echo absent)
+          now_dh=$(crane digest "${DOCKERHUB_NAMESPACE}/${IMAGE}:${RELEASE}" 2>/dev/null || echo absent)
+          if [[ "${now_ghcr}" != "${BASE_GHCR}" || "${now_dh}" != "${BASE_DH}" ]]; then
+            echo "::error::canonical release tag digest changed (ghcr ${BASE_GHCR}->${now_ghcr}, dockerhub ${BASE_DH}->${now_dh})"; exit 1
+          fi
+          echo "Canonical release tags unchanged (ghcr ${now_ghcr}, dockerhub ${now_dh})."
+
+      # Move the floating -patched tag onto the just verified immutable revision.
+      - name: Promote floating -patched tag
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run'
+        env:
+          MODE: ${{ steps.cfg.outputs.mode }}
+          INTERMEDIATE_REPO: ${{ steps.cfg.outputs.intermediate_repo }}
+          REV: ${{ steps.rev.outputs.rev }}
+        run: |
+          set -euo pipefail
+          if [[ "${MODE}" == "staging" ]]; then
+            crane tag "${INTERMEDIATE_REPO}:${RELEASE}-${REV}" "${RELEASE}-patched"
+            echo "Published ${INTERMEDIATE_REPO}:${RELEASE}-${REV} and moved ${RELEASE}-patched onto it." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            crane tag "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV}" "${RELEASE}-patched"
+            crane tag "${DOCKERHUB_NAMESPACE}/${IMAGE}:${RELEASE}-${REV}" "${RELEASE}-patched"
+            {
+              echo "Published attested ${RELEASE}-${REV} and moved ${RELEASE}-patched on:"
+              echo "- ${SOURCE_REGISTRY}/${IMAGE}"
+              echo "- ${DOCKERHUB_NAMESPACE}/${IMAGE}"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Smoke test patched image
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run'
+        env:
+          MODE: ${{ steps.cfg.outputs.mode }}
+          INTERMEDIATE_REPO: ${{ steps.cfg.outputs.intermediate_repo }}
+          REV: ${{ steps.rev.outputs.rev }}
+        run: |
+          set -euo pipefail
+          if [[ "${MODE}" == "canonical" ]]; then
+            ref="${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV}"
+          else
+            ref="${INTERMEDIATE_REPO}:${RELEASE}-${REV}"
+          fi
+          for p in $PATCH_ARCHES; do
+            set +e
+            docker run --rm --pull always --platform "$p" "${ref}" --help >/dev/null 2>&1
+            ec=$?
+            set -e
+            if [[ "${ec}" != "0" && "${ec}" != "2" ]]; then
+              echo "::error::smoke test failed for ${ref} on ${p} (exit ${ec})"; exit 1
+            fi
+            echo "Smoke: ${ref} (${p}) entrypoint executed (exit ${ec})."
+          done
+
+      - name: Confirm no registry writes (dry-run)
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'dry-run'
+        run: |
+          set -euo pipefail
+          test -f ./patched-oci/index.json
+          echo "Dry-run: OCI layout written locally; nothing pushed. Platforms present:"
+          jq -r '.manifests[] | select(.platform != null) | "\(.platform.os)/\(.platform.architecture)"' \
+            ./patched-oci/index.json || true
