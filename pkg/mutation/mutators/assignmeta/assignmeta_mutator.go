@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/core"
@@ -59,6 +60,7 @@ func (m *Mutator) Matches(mutable *types.Mutable) (bool, error) {
 		Object:    mutable.Object,
 		Namespace: mutable.Namespace,
 		Source:    mutable.Source,
+		Process:   process.Mutation,
 	}
 	matches, err := match.Matches(&m.assignMetadata.Spec.Match, target)
 	if err != nil {
