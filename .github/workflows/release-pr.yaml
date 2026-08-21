@@ -22,12 +22,12 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: go.mod
           check-latest: true
@@ -104,7 +104,7 @@ jobs:
             Before merging this PR, please ensure the following items are completed:
 
             ### Pre-Release Dependencies Check
-            - [ ] **Dependabot PRs**: All open [Dependabot PRs](https://github.com/open-policy-agent/gatekeeper/pulls?q=is%3Apr+author%3Aapp%2Fdependabot) have been reviewed and merged
+            - [ ] **Renovate PRs**: All open [Renovate PRs](https://github.com/open-policy-agent/gatekeeper/pulls?q=is%3Apr+is%3Aopen+label%3Adependencies) have been reviewed and merged
             - [ ] **OPA**: Updated to latest stable version from [OPA releases](https://github.com/open-policy-agent/opa/releases)
             - [ ] **cert-controller**: Updated to latest commit from [cert-controller](https://github.com/open-policy-agent/cert-controller/)
             - [ ] **Constraint Framework**: Updated to latest commit from [frameworks releases](https://github.com/open-policy-agent/frameworks/)

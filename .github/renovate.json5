@@ -1,0 +1,96 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+
+  // Routine dependency updates on the default branch; security-only fixes on the maintained
+  // release branches.
+
+  // Confine routine PRs to Monday morning (UTC). Security fixes ignore `schedule` and always open.
+  schedule: ["* 6-11 * * 1"],
+
+  enabledManagers: ["npm", "github-actions", "gomod", "dockerfile"],
+
+  // Keep /test/** in scope so the test Dockerfiles stay covered.
+  ignorePaths: ["**/node_modules/**"],
+
+  semanticCommits: "enabled",
+  semanticCommitType: "chore",       // commit as chore(deps): — parsed by cliff.toml
+  minimumReleaseAge: "3 days",       // cooldown to avoid just-published versions
+  minimumReleaseAgeBehaviour: "timestamp-optional", // don't stall versions that lack a release timestamp
+  postUpdateOptions: ["gomodTidy"],  // run `go mod tidy` after gomod changes
+  dependencyDashboard: true,         // tracking issue for pending updates
+
+  labels: ["dependencies"],
+
+  reviewers: ["team:gatekeeper-maintainers"],
+
+  // Default branch + maintained release lines. The workflow narrows the release branches actually
+  // processed to n/n-1 at runtime via RENOVATE_BASE_BRANCH_PATTERNS, so this stays a generic regex.
+  baseBranchPatterns: ["$default", "/^release-3\\.\\d+$/"],
+
+  // OSV scans branch content, so it surfaces vulnerabilities on the release branches too.
+  osvVulnerabilityAlerts: true,
+  vulnerabilityAlerts: {
+    enabled: true,
+    vulnerabilityFixStrategy: "lowest", // take the earliest fixed version
+    addLabels: ["security"],
+  },
+
+  packageRules: [
+    // ---- Ecosystem labels ----
+    { matchManagers: ["npm"], addLabels: ["javascript"] },
+    { matchManagers: ["dockerfile"], addLabels: ["docker"] },
+    { matchManagers: ["gomod"], addLabels: ["go"] },
+    { matchManagers: ["github-actions"], addLabels: ["github_actions"] },
+
+    // ---- Routine updates ----
+    {
+      // Patch only for gomod: no routine minor/major. Release branches disable all routine updates
+      // anyway, so this only bites the default branch; security bumps still flow via vulnerabilityAlerts.
+      matchManagers: ["gomod"],
+      matchUpdateTypes: ["minor", "major"],
+      enabled: false,
+    },
+    {
+      // Group all k8s.io / sigs.k8s.io updates.
+      matchManagers: ["gomod"],
+      matchPackageNames: ["k8s.io/**", "sigs.k8s.io/**"],
+      groupName: "k8s",
+    },
+    {
+      // Group all GitHub Actions updates into one PR.
+      matchManagers: ["github-actions"],
+      matchDepTypes: ["action"],
+      groupName: "github-actions",
+      separateMajorMinor: false,
+    },
+
+    // ---- Maintained release branches: security-only, backport labelled ----
+    {
+      matchBaseBranches: ["/^release-3\\.\\d+$/"],
+      addLabels: ["backport"],
+    },
+    {
+      // Allow security fixes for indirect Go deps.
+      matchBaseBranches: ["/^release-3\\.\\d+$/"],
+      matchManagers: ["gomod"],
+      matchDepTypes: ["indirect"],
+      enabled: true,
+    },
+    {
+      // Disable routine updates on release branches; security fixes still open via `force`.
+      matchBaseBranches: ["/^release-3\\.\\d+$/"],
+      matchUpdateTypes: [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "pinDigest",
+        "lockFileMaintenance",
+        "rollback",
+        "replacement",
+      ],
+      enabled: false,
+    },
+  ],
+}
