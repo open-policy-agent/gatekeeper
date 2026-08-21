@@ -90,7 +90,16 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	if err == nil {
 		installed, err := k8sClient.ListManagedTemplates(ctx)
 		if err == nil && len(installed) > 0 {
-			upgradable := client.GetUpgradablePolicies(installed, cat)
+			// Resolve the cluster version so incompatible upgrades are not listed
+			// (upgrade would skip them). Non-fatal: an empty version disables the
+			// gate and falls back to catalog-version comparison alone. Only
+			// bother querying the cluster when some upgrade candidate actually
+			// has a version bound to gate on.
+			var serverVersion string
+			if client.PolicyNeedsVersionGate(installed, cat) {
+				serverVersion, _ = k8sClient.ServerVersion(ctx)
+			}
+			upgradable := client.GetUpgradablePolicies(installed, cat, serverVersion)
 			for _, change := range upgradable {
 				result.Upgradable = append(result.Upgradable, output.UpgradeEntry{
 					Name:        change.Name,

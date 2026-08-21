@@ -56,7 +56,7 @@ func newGenerateCatalogCommand() *cobra.Command {
 	cmd.Flags().StringVar(&libraryPath, "library-path", ".", "Path to the gatekeeper-library repository root")
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "catalog.yaml", "Output path for the generated catalog")
 	cmd.Flags().StringVar(&catalogName, "name", "gatekeeper-library", "Name of the catalog")
-	cmd.Flags().StringVar(&catalogVersion, "version", "v1.0.0", "Version of the catalog")
+	cmd.Flags().StringVar(&catalogVersion, "version", "v1.1.0", "Version of the catalog")
 	cmd.Flags().StringVar(&bundlesFile, "bundles", "", "Path to bundles definition file (optional)")
 	cmd.Flags().StringVar(&baseURL, "base-url", "", "Base URL for template/constraint paths (e.g., https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master)")
 	cmd.Flags().BoolVar(&validate, "validate", true, "Validate the generated catalog")
