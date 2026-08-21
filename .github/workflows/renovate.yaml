@@ -20,13 +20,13 @@ on:
 permissions: read-all
 
 concurrency:
-  group: renovate-${{ github.ref }}
+  group: renovate
   cancel-in-progress: false
 
 jobs:
   renovate:
     name: Renovate
-    if: github.repository == 'open-policy-agent/gatekeeper'
+    if: github.repository == 'open-policy-agent/gatekeeper' && vars.RENOVATE_APP_ID != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -35,7 +35,7 @@ jobs:
       issues: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
 

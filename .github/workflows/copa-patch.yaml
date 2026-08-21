@@ -10,8 +10,7 @@ name: copa-patch
 # Modes (input `target`; the weekly schedule always runs `canonical`):
 #   - dry-run   (default for manual runs): scan/patch only, write a local OCI layout, push nothing.
 #   - staging  : push patched (unattested) images to the owner's copa-staging namespace.
-#   - canonical: re-wrap WITH attestations and publish to openpolicyagent/* (Docker Hub) +
-#                ghcr.io/open-policy-agent/* (GHCR).
+#   - canonical: re-wrap WITH attestations and publish to ghcr.io/open-policy-agent/* (GHCR).
 
 on:
   # Weekly canonical run — gated OFF for the initial merge.
@@ -29,26 +28,21 @@ on:
         type: choice
         options: [dry-run, staging, canonical]
         default: dry-run
-      staging_registry:
-        description: "Namespace for `staging` mode and the canonical intermediate. Blank = ghcr.io/<owner>/copa-staging."
-        required: false
-        type: string
 
 permissions: read-all
 
-# Serialize every run on a ref (weekly schedule + any manual dispatch) so two runs can't race
+# Serialize every scheduled or manual run so two runs can't race
 # on the same vX.Y.Z-N revision number or -patched promotion.
 concurrency:
-  group: copa-patch-${{ github.ref }}
+  group: copa-patch
   cancel-in-progress: false
 
 env:
   TRIVY_VERSION: "0.69.3"
   COPA_VERSION: "0.14.2"
   CRANE_VERSION: "0.21.7"
-  # GHCR is also the source registry for the release images to patch.
+  # GHCR is the source registry for the release images to patch and the publish destination.
   SOURCE_REGISTRY: "ghcr.io/open-policy-agent"
-  DOCKERHUB_NAMESPACE: "openpolicyagent"
   # Arches to patch (all platforms gatekeeper/gator publish).
   PATCH_ARCHES: "linux/amd64 linux/arm64 linux/arm/v7"
 
@@ -61,7 +55,7 @@ jobs:
       releases: ${{ steps.resolve.outputs.matrix }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
 
@@ -116,37 +110,31 @@ jobs:
       RELEASE: ${{ matrix.release }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
 
-      # Untrusted inputs (release_tag, target, staging_registry) are passed via env and never
+      # Untrusted inputs (release_tag, target) are passed via env and never
       # interpolated directly into run scripts.
       - name: Resolve mode, source + target refs
         id: cfg
         env:
           INPUT_TARGET: ${{ inputs.target }}
-          STAGING_INPUT: ${{ inputs.staging_registry }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # inputs are empty on the schedule event => default to canonical there.
           mode="${INPUT_TARGET:-canonical}"
           case "${mode}" in dry-run|staging|canonical) ;; *) echo "::error::invalid target '${mode}'"; exit 1;; esac
           # Safety: `dry-run` pushes nothing; `staging` pushes only to the owner's own
           # ghcr.io/<owner>/copa-staging/* namespace; `canonical` (the only mode that writes to the
-          # official repos) is locked to the upstream repo below. Forks have no credential path
-          # upstream regardless — no upstream package scope, no Docker Hub secrets.
+          # official repos) is locked to the upstream repo below.
           if [[ "${mode}" == "canonical" && "${REPO}" != "open-policy-agent/gatekeeper" ]]; then
             echo "::error::target=canonical is only allowed on open-policy-agent/gatekeeper (here: ${REPO})"; exit 1
           fi
-          staging="${STAGING_INPUT:-ghcr.io/${{ github.repository_owner }}/copa-staging}"
+          # Staging/intermediate writes are pinned to the owner's dedicated copa-staging namespace.
+          staging="ghcr.io/${{ github.repository_owner }}/copa-staging"
           intermediate_repo="${staging}/${IMAGE}"
           source_ref="${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}"
-          # The staging/intermediate repo must never be a canonical repo.
-          if [[ "${intermediate_repo}" == "${SOURCE_REGISTRY}/${IMAGE}" || "${intermediate_repo}" == "${DOCKERHUB_NAMESPACE}/${IMAGE}" ]]; then
-            echo "::error::staging/intermediate repo '${intermediate_repo}' must not be a canonical repo"; exit 1
-          fi
           if [[ "${mode}" == "canonical" ]]; then primary_repo="${SOURCE_REGISTRY}/${IMAGE}"; else primary_repo="${intermediate_repo}"; fi
           {
             echo "mode=${mode}"
@@ -169,14 +157,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Docker Hub
-        if: steps.cfg.outputs.mode == 'canonical'
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
-        with:
-          registry: docker.io
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Install Trivy
         run: |
@@ -222,20 +202,16 @@ jobs:
           trivy image --download-db-only \
             --db-repository=ghcr.io/aquasecurity/trivy-db,public.ecr.aws/aquasecurity/trivy-db,docker.io/aquasec/trivy-db
 
-      # Record the canonical release tag digests up front, to confirm afterwards that the run
+      # Record the canonical release tag digest up front, to confirm afterwards that the run
       # never mutated a canonical `vX.Y.Z` tag (only `-R`/`-patched` are added).
-      - name: Capture canonical base digests
+      - name: Capture canonical base digest
         id: base
         if: steps.cfg.outputs.mode == 'canonical'
         run: |
           set -euo pipefail
           ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}" 2>/dev/null || echo absent)
-          dh=$(crane digest "${DOCKERHUB_NAMESPACE}/${IMAGE}:${RELEASE}" 2>/dev/null || echo absent)
-          {
-            echo "ghcr=${ghcr}"
-            echo "dh=${dh}"
-          } >> "$GITHUB_OUTPUT"
-          echo "Canonical base digests — ghcr:${ghcr} dockerhub:${dh}"
+          echo "ghcr=${ghcr}" >> "$GITHUB_OUTPUT"
+          echo "Canonical base digest — ghcr:${ghcr}"
 
       # Scan the canonical source per arch. The reports Copa consumes live in copa-reports/
       # (one per platform => Copa patches exactly those arches).
@@ -286,6 +262,8 @@ jobs:
                 -f json -o "scan-existing-${a}.json" "${PRIMARY_REPO}:${RELEASE}-patched"
               total=$(( total + $(jq '[.Results[]?.Vulnerabilities[]?] | length' "scan-existing-${a}.json") ))
             done
+            # Record the existing -patched residual so the re-scan step publishes only on improvement.
+            echo "existing_total=${total}" >> "$GITHUB_OUTPUT"
             if [[ "${total}" -eq 0 ]]; then
               echo "has_fixes=false" >> "$GITHUB_OUTPUT"
               echo "Existing ${RELEASE}-patched already fixes all current CVEs — skipping (idempotent)." | tee -a "$GITHUB_STEP_SUMMARY"
@@ -307,6 +285,9 @@ jobs:
           if [[ "${MODE}" != "dry-run" ]]; then
             last=$(crane ls "${PRIMARY_REPO}" 2>/dev/null | grep -E "^${RELEASE}-[0-9]+$" | sed "s/^${RELEASE}-//" | sort -n | tail -1 || true)
             rev=$(( ${last:-0} + 1 ))
+            if crane digest "${PRIMARY_REPO}:${RELEASE}-${rev}" >/dev/null 2>&1; then
+              echo "::error::${PRIMARY_REPO}:${RELEASE}-${rev} already exists; refusing to overwrite an immutable revision"; exit 1
+            fi
           else
             rev="dryrun"
           fi
@@ -369,6 +350,7 @@ jobs:
 
       # Verify the patch actually reduced the total fixable CVE count across arches.
       - name: Verify patched image (re-scan)
+        id: verify
         if: steps.gate.outputs.has_fixes == 'true'
         env:
           PATCHED_REF: ${{ steps.patch.outputs.patched_ref }}
@@ -376,6 +358,7 @@ jobs:
           REV: ${{ steps.rev.outputs.rev }}
           BEFORE: ${{ steps.scan.outputs.before }}
           BEFORE_STDLIB: ${{ steps.scan.outputs.before_stdlib }}
+          EXISTING_TOTAL: ${{ steps.gate.outputs.existing_total }}
         run: |
           set -euo pipefail
           total=0
@@ -445,17 +428,42 @@ jobs:
           if [[ "${stdlib_total}" -gt 0 ]]; then
             echo "::warning::${stdlib_total} Go stdlib CVE(s) remain after toolchain patch (may require a newer Go minor)"
           fi
+          # Publish only when the candidate improves on the existing -patched.
+          if [[ -n "${EXISTING_TOTAL}" && "${total}" -ge "${EXISTING_TOTAL}" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Candidate has ${total} residual CVE(s); existing ${RELEASE}-patched has ${EXISTING_TOTAL} — no improvement, skipping publish." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Smoke-test the verified intermediate before publishing canonical tags or moving -patched,
+      # so a broken binary can never reach a published vX.Y.Z-R / -patched.
+      - name: Smoke test patched image
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run' && steps.verify.outputs.publish == 'true'
+        env:
+          PATCHED_REF: ${{ steps.patch.outputs.patched_ref }}
+        run: |
+          set -euo pipefail
+          for p in $PATCH_ARCHES; do
+            set +e
+            docker run --rm --pull always --platform "$p" "${PATCHED_REF}" --help >/dev/null 2>&1
+            ec=$?
+            set -e
+            if [[ "${ec}" != "0" && "${ec}" != "2" ]]; then
+              echo "::error::smoke test failed for ${PATCHED_REF} on ${p} (exit ${ec})"; exit 1
+            fi
+            echo "Smoke: ${PATCHED_REF} (${p}) entrypoint executed (exit ${ec})."
+          done
 
       - name: Re-wrap with attestations and publish to canonical
         id: rewrap
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical'
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical' && steps.verify.outputs.publish == 'true'
         env:
           INTERMEDIATE_REF: ${{ steps.patch.outputs.patched_ref }}
           REV: ${{ steps.rev.outputs.rev }}
         run: |
           set -euo pipefail
           ghcr_ref="${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV}"
-          dh_ref="${DOCKERHUB_NAMESPACE}/${IMAGE}:${RELEASE}-${REV}"
           platforms=$(docker buildx imagetools inspect "${INTERMEDIATE_REF}" --raw \
             | jq -r '[ .manifests[]
                        | select(.platform != null and .platform.os != null and .platform.architecture != "unknown")
@@ -470,16 +478,12 @@ jobs:
             --attest type=sbom \
             --attest type=provenance,mode=max \
             -t "${ghcr_ref}" \
-            -t "${dh_ref}" \
             --push \
             "${workdir}"
-          {
-            echo "ghcr_ref=${ghcr_ref}"
-            echo "dh_ref=${dh_ref}"
-          } >> "$GITHUB_OUTPUT"
+          echo "ghcr_ref=${ghcr_ref}" >> "$GITHUB_OUTPUT"
 
       - name: Verify attestations present
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical'
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical' && steps.verify.outputs.publish == 'true'
         env:
           GHCR_REF: ${{ steps.rewrap.outputs.ghcr_ref }}
         run: |
@@ -490,23 +494,21 @@ jobs:
           if [[ "${n}" -lt 1 ]]; then echo "::error::no attestations on ${GHCR_REF}"; exit 1; fi
 
       # prove the run never mutated a canonical release tag.
-      - name: Verify canonical release tags untouched
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical'
+      - name: Verify canonical release tag untouched
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical' && steps.verify.outputs.publish == 'true'
         env:
           BASE_GHCR: ${{ steps.base.outputs.ghcr }}
-          BASE_DH: ${{ steps.base.outputs.dh }}
         run: |
           set -euo pipefail
           now_ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}" 2>/dev/null || echo absent)
-          now_dh=$(crane digest "${DOCKERHUB_NAMESPACE}/${IMAGE}:${RELEASE}" 2>/dev/null || echo absent)
-          if [[ "${now_ghcr}" != "${BASE_GHCR}" || "${now_dh}" != "${BASE_DH}" ]]; then
-            echo "::error::canonical release tag digest changed (ghcr ${BASE_GHCR}->${now_ghcr}, dockerhub ${BASE_DH}->${now_dh})"; exit 1
+          if [[ "${now_ghcr}" != "${BASE_GHCR}" ]]; then
+            echo "::error::canonical release tag digest changed (ghcr ${BASE_GHCR}->${now_ghcr})"; exit 1
           fi
-          echo "Canonical release tags unchanged (ghcr ${now_ghcr}, dockerhub ${now_dh})."
+          echo "Canonical release tag unchanged (ghcr ${now_ghcr})."
 
       # Move the floating -patched tag onto the just verified immutable revision.
       - name: Promote floating -patched tag
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run'
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run' && steps.verify.outputs.publish == 'true'
         env:
           MODE: ${{ steps.cfg.outputs.mode }}
           INTERMEDIATE_REPO: ${{ steps.cfg.outputs.intermediate_repo }}
@@ -518,37 +520,8 @@ jobs:
             echo "Published ${INTERMEDIATE_REPO}:${RELEASE}-${REV} and moved ${RELEASE}-patched onto it." | tee -a "$GITHUB_STEP_SUMMARY"
           else
             crane tag "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV}" "${RELEASE}-patched"
-            crane tag "${DOCKERHUB_NAMESPACE}/${IMAGE}:${RELEASE}-${REV}" "${RELEASE}-patched"
-            {
-              echo "Published attested ${RELEASE}-${REV} and moved ${RELEASE}-patched on:"
-              echo "- ${SOURCE_REGISTRY}/${IMAGE}"
-              echo "- ${DOCKERHUB_NAMESPACE}/${IMAGE}"
-            } | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "Published attested ${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV} and moved ${RELEASE}-patched onto it." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
-
-      - name: Smoke test patched image
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run'
-        env:
-          MODE: ${{ steps.cfg.outputs.mode }}
-          INTERMEDIATE_REPO: ${{ steps.cfg.outputs.intermediate_repo }}
-          REV: ${{ steps.rev.outputs.rev }}
-        run: |
-          set -euo pipefail
-          if [[ "${MODE}" == "canonical" ]]; then
-            ref="${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV}"
-          else
-            ref="${INTERMEDIATE_REPO}:${RELEASE}-${REV}"
-          fi
-          for p in $PATCH_ARCHES; do
-            set +e
-            docker run --rm --pull always --platform "$p" "${ref}" --help >/dev/null 2>&1
-            ec=$?
-            set -e
-            if [[ "${ec}" != "0" && "${ec}" != "2" ]]; then
-              echo "::error::smoke test failed for ${ref} on ${p} (exit ${ec})"; exit 1
-            fi
-            echo "Smoke: ${ref} (${p}) entrypoint executed (exit ${ec})."
-          done
 
       - name: Confirm no registry writes (dry-run)
         if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'dry-run'

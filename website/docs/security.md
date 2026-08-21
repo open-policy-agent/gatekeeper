@@ -84,9 +84,8 @@ docker buildx imagetools inspect openpolicyagent/gatekeeper:v3.12.0-rc.0 --forma
 
 # Vulnerability-Patched Images
 
-In addition to the regular release images, Gatekeeper publishes automatically **patched** variants of recent releases that pick up fixed versions of Go dependencies and the Go standard library **without waiting for the next release**. They are produced on a weekly schedule using [Project Copacetic (Copa)](https://github.com/project-copacetic/copacetic) and published to the same repositories as the regular `gatekeeper` and `gator` images:
+In addition to the regular release images, Gatekeeper publishes automatically **patched** variants of recent releases that pick up fixed versions of Go dependencies and the Go standard library **without waiting for the next release**. They are produced by a recurring [Project Copacetic (Copa)](https://github.com/project-copacetic/copacetic) workflow and published to **GHCR** (the regular release images are additionally published to Docker Hub):
 
-- Docker Hub: `openpolicyagent/gatekeeper`, `openpolicyagent/gator`
 - GHCR: `ghcr.io/open-policy-agent/gatekeeper`, `ghcr.io/open-policy-agent/gator`
 
 The latest stable release and the previous minor release are patched. The `gatekeeper-crds` image is not patched (it contains no Gatekeeper binary).

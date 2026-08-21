@@ -32,7 +32,7 @@
   vulnerabilityAlerts: {
     enabled: true,
     vulnerabilityFixStrategy: "lowest", // take the earliest fixed version
-    labels: ["security"],               // `backport` is added per release branch below
+    addLabels: ["security"],
   },
 
   packageRules: [
