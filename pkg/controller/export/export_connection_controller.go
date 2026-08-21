@@ -8,6 +8,7 @@ import (
 
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/connectionstatus"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
@@ -15,12 +16,14 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -272,18 +275,25 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	}
 	shouldCreate := true
 	connPodStatusObj := &statusv1alpha1.ConnectionPodStatus{}
+	var oldStatus *statusv1alpha1.ConnectionPodStatus
 
 	err = reader.Get(ctx, types.NamespacedName{Namespace: statusNS, Name: statusName}, connPodStatusObj)
 
 	switch {
 	case err == nil:
 		shouldCreate = false
+		oldStatus = connPodStatusObj.DeepCopy()
 	case apierrors.IsNotFound(err):
 		if connPodStatusObj, err = newConnectionPodStatus(scheme, pod, connObj); err != nil {
 			return fmt.Errorf("creating new connection connPodStatusObj: %w", err)
 		}
 	default:
 		return fmt.Errorf("getting connection object status in name %s, namespace %s: %w", connObj.GetName(), connObj.GetNamespace(), err)
+	}
+	if !shouldCreate {
+		if err := repairConnectionPodStatusMetadata(scheme, connPodStatusObj, pod, connObj); err != nil {
+			return fmt.Errorf("repairing connection status metadata: %w", err)
+		}
 	}
 
 	generationChanged := connPodStatusObj.Status.ObservedGeneration != connObj.GetGeneration()
@@ -305,8 +315,33 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 		log.Info("Creating new ConnectionPodStatus object", "name", connPodStatusObj.GetName())
 		return writer.Create(ctx, connPodStatusObj)
 	}
+	if apiequality.Semantic.DeepEqual(connPodStatusObj, oldStatus) {
+		return nil
+	}
 	log.Info("Updating existing ConnectionPodStatus object", "name", connPodStatusObj.GetName())
 	return writer.Update(ctx, connPodStatusObj)
+}
+
+func repairConnectionPodStatusMetadata(scheme *runtime.Scheme, status *statusv1alpha1.ConnectionPodStatus, pod *corev1.Pod, connObj *connectionv1alpha1.Connection) error {
+	mergeLabels(status, map[string]string{
+		statusv1beta1.ConnectionNameLabel: connObj.GetName(),
+		statusv1beta1.PodLabel:            pod.Name,
+	})
+	if scheme == nil {
+		return nil
+	}
+	return controllerutil.SetOwnerReference(pod, status, scheme)
+}
+
+func mergeLabels(obj client.Object, labels map[string]string) {
+	merged := obj.GetLabels()
+	if merged == nil {
+		merged = make(map[string]string, len(labels))
+	}
+	for key, value := range labels {
+		merged[key] = value
+	}
+	obj.SetLabels(merged)
 }
 
 // setConnectionPublishStatus updates one keyed source while retaining every
