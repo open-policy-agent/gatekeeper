@@ -26,13 +26,18 @@ import (
 
 // AssignMetadataSpec defines the desired state of AssignMetadata.
 type AssignMetadataSpec struct {
-	Match      match.Match        `json:"match,omitempty"`
-	Location   string             `json:"location,omitempty"`
+	// match allows the user to limit which resources get mutated.
+	// Individual match criteria are AND-ed together. An undefined
+	// match criteria matches everything.
+	Match match.Match `json:"match,omitempty"`
+	// location describes the path to be mutated, for example: `metadata.labels.foo`.
+	Location string `json:"location,omitempty"`
+	// parameters define the behavior of the mutator.
 	Parameters MetadataParameters `json:"parameters,omitempty"`
 }
 
 type MetadataParameters struct {
-	// Assign.value holds the value to be assigned
+	// assign holds the value to be assigned via its `value` field.
 	Assign AssignField `json:"assign,omitempty"`
 }
 
@@ -40,6 +45,8 @@ type MetadataParameters struct {
 type AssignMetadataStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// byPod lists the observed status of this AssignMetadata for each pod.
 	ByPod []v1beta1.MutatorPodStatusStatus `json:"byPod,omitempty"`
 }
 
@@ -50,10 +57,13 @@ type AssignMetadataStatus struct {
 
 // AssignMetadata is the Schema for the assignmetadata API.
 type AssignMetadata struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AssignMetadataSpec   `json:"spec,omitempty"`
+	// spec defines the desired state of AssignMetadata.
+	Spec AssignMetadataSpec `json:"spec,omitempty"`
+	// status is the observed state of AssignMetadata.
 	Status AssignMetadataStatus `json:"status,omitempty"`
 }
 

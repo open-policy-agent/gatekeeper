@@ -40,10 +40,13 @@ spec:
           metadata:
             type: object
           status:
-            description: ConstraintTemplatePodStatusStatus defines the observed state
-              of ConstraintTemplatePodStatus.
+            description: status is the observed state of the ConstraintTemplate for
+              this pod.
             properties:
               errors:
+                description: |-
+                  errors lists any errors encountered while creating the CRD for the
+                  ConstraintTemplate on this pod.
                 items:
                   description: CreateCRDError represents a single error caught during
                     parsing, compiling, etc.
@@ -60,31 +63,46 @@ spec:
                   type: object
                 type: array
               id:
-                description: 'Important: Run "make" to regenerate code after modifying
-                  this file'
+                description: id is the name of the pod that generated this status.
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the ConstraintTemplate that was last
+                  processed by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
               templateUID:
                 description: |-
-                  UID is a type that holds unique ID values, including UUIDs.  Because we
-                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                  intent and helps make sure that UIDs and names do not get conflated.
+                  templateUID is the UID of the ConstraintTemplate this status reports on, used
+                  to detect drift, such as when the ConstraintTemplate has been recreated after
+                  its CRD was deleted out from under it, interrupting the watch.
                 type: string
               vapGenerationStatus:
-                description: VAPGenerationStatus represents the status of VAP generation.
+                description: |-
+                  vapGenerationStatus reports the status of generating a ValidatingAdmissionPolicy
+                  for the ConstraintTemplate on this pod.
                 properties:
                   observedGeneration:
+                    description: |-
+                      observedGeneration is the generation of the ConstraintTemplate that was last
+                      processed for ValidatingAdmissionPolicy generation.
                     format: int64
                     type: integer
                   state:
+                    description: state is the current state of ValidatingAdmissionPolicy
+                      generation.
                     type: string
                   warning:
+                    description: |-
+                      warning contains a human-readable warning encountered while generating the
+                      ValidatingAdmissionPolicy, if any.
                     type: string
                 type: object
             type: object

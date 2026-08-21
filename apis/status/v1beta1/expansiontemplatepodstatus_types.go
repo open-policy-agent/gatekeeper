@@ -13,17 +13,30 @@ import (
 // ExpansionTemplatePodStatusStatus defines the observed state of ExpansionTemplatePodStatus.
 type ExpansionTemplatePodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
-	ID                 string                    `json:"id,omitempty"`
-	TemplateUID        types.UID                 `json:"templateUID,omitempty"`
-	Operations         []string                  `json:"operations,omitempty"`
-	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
-	Errors             []*ExpansionTemplateError `json:"errors,omitempty"`
+
+	// id is the name of the pod that generated this status.
+	ID string `json:"id,omitempty"`
+	// templateUID is the UID of the ExpansionTemplate this status reports on, used
+	// to detect drift, such as when the ExpansionTemplate has been recreated after
+	// its CRD was deleted out from under it, interrupting the watch.
+	TemplateUID types.UID `json:"templateUID,omitempty"`
+	// operations lists the Gatekeeper operations assigned to the pod that generated
+	// this status.
+	Operations []string `json:"operations,omitempty"`
+	// observedGeneration is the generation of the ExpansionTemplate that was last
+	// processed by this pod.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// errors lists any errors encountered while processing the ExpansionTemplate.
+	Errors []*ExpansionTemplateError `json:"errors,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
 
 type ExpansionTemplateError struct {
-	Type    string `json:"type,omitempty"`
+	// type indicates a specific class of error for use by controller code. If not
+	// present, the error should be treated as not matching any known type.
+	Type string `json:"type,omitempty"`
+	// message is a human-readable description of the error.
 	Message string `json:"message"`
 }
 
@@ -32,9 +45,11 @@ type ExpansionTemplateError struct {
 
 // ExpansionTemplatePodStatus is the Schema for the expansiontemplatepodstatuses API.
 type ExpansionTemplatePodStatus struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// status is the observed state of the ExpansionTemplate for this pod.
 	Status ExpansionTemplatePodStatusStatus `json:"status,omitempty"`
 }
 

@@ -15,17 +15,29 @@ import (
 // +kubebuilder:object:generate=true
 
 type ConfigPodStatusStatus struct {
-	ID                 string         `json:"id,omitempty"`
-	ConfigUID          types.UID      `json:"configUID,omitempty"`
-	Operations         []string       `json:"operations,omitempty"`
-	ObservedGeneration int64          `json:"observedGeneration,omitempty"`
-	Errors             []*ConfigError `json:"errors,omitempty"`
+	// id is the name of the pod that generated this status.
+	ID string `json:"id,omitempty"`
+	// configUID is the UID of the Config resource this status reports on, used to
+	// detect drift, such as when the Config has been recreated after its CRD was
+	// deleted out from under it, interrupting the watch.
+	ConfigUID types.UID `json:"configUID,omitempty"`
+	// operations lists the Gatekeeper operations assigned to the pod that generated
+	// this status.
+	Operations []string `json:"operations,omitempty"`
+	// observedGeneration is the generation of the Config that was last processed by
+	// this pod.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// errors lists any errors encountered while processing the Config.
+	Errors []*ConfigError `json:"errors,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
 
 type ConfigError struct {
-	Type    string `json:"type,omitempty"`
+	// type indicates a specific class of error for use by controller code. If not
+	// present, the error should be treated as not matching any known type.
+	Type string `json:"type,omitempty"`
+	// message is a human-readable description of the error.
 	Message string `json:"message"`
 }
 
@@ -35,9 +47,11 @@ type ConfigError struct {
 // +kubebuilder:resource:scope=Namespaced
 
 type ConfigPodStatus struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// status is the observed state of Config for this pod.
 	Status ConfigPodStatusStatus `json:"status,omitempty"`
 }
 
