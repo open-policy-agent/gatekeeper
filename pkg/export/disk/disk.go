@@ -3,22 +3,13 @@ package disk
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"math"
 	"os"
-	"path"
-	"path/filepath"
-	"sort"
-	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/util/retry"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -36,118 +27,270 @@ type Connection struct {
 
 	// current audit run file name
 	currentAuditRun string
+	// admission owns private alpha limits and resources that must close with the Connection.
+	admission admissionState
 }
 
-// FailedConnection wraps a Connection with retry metadata.
-type FailedConnection struct {
-	Connection
-	FailedAt    time.Time
-	RetryCount  int
-	NextRetryAt time.Time
+// admissionLimits bounds the private admission spool. These are fixed alpha
+// defaults rather than Connection configuration until operational data justifies
+// exposing individual knobs.
+type admissionLimits struct {
+	maxResults     int
+	maxFileBytes   int64
+	maxFileRecords int64
+	maxFileAge     time.Duration
+	maxTotalBytes  int64
+	fileTTL        time.Duration
+	maxRecordBytes int64
+	minFreeBytes   int64
+}
+
+// admissionState groups resources whose lifecycle is owned by the Connection.
+// Pointer fields remain shared when a Connection value is copied out of a map.
+type admissionState struct {
+	limits           admissionLimits
+	stream           *admissionStream
+	cleanupTimer     *time.Timer
+	cleanupID        uint64
+	usageInitialized bool
+	readyCount       int
+	readyBytes       int64
+	oldestReadyTime  time.Time
 }
 
 type Writer struct {
-	mu                           sync.RWMutex
+	mu                           sync.Mutex
 	openConnections              map[string]Connection
+	connectionLocks              map[string]*sync.Mutex
+	cleanupPaths                 map[string]struct{}
 	closedConnections            map[string]FailedConnection
 	cleanupDone                  chan struct{}
 	cleanupOnce                  sync.Once
 	cleanupStopped               bool
-	closeAndRemoveFilesWithRetry func(conn Connection) error
+	closeAndRemoveFilesWithRetry func(conn *Connection) error
+	// Admission rotation hooks are per Writer so tests can inject failures
+	// without racing background timers through shared package state.
+	renameAdmissionFile            func(oldPath, newPath string) error
+	admissionRotationRetryInterval time.Duration
+	syncAdmissionFile              func(*os.File) error
 }
 
 const (
-	Name                = "disk"
-	maxAllowedAuditRuns = 5
-	maxAuditResults     = "maxAuditResults"
-	violationPath       = "path"
-	cleanupInterval     = 2 * time.Minute
-	maxRetryAttempts    = 10
-	maxConnectionAge    = 10 * time.Minute
-	minConnectionAge    = 1 * time.Minute
-	baseRetryDelay      = 15 * time.Second
-	retryBackoffFactor  = 2.0
-	maxRetryDelay       = 10 * time.Minute
-	Jitter              = 0.1
+	Name                           = "disk"
+	maxAllowedAuditRuns            = 5
+	maxAuditResults                = "maxAuditResults"
+	violationPath                  = "path"
+	cleanupInterval                = 2 * time.Minute
+	maxRetryAttempts               = 10
+	maxConnectionAge               = 10 * time.Minute
+	minConnectionAge               = 1 * time.Minute
+	baseRetryDelay                 = 15 * time.Second
+	retryBackoffFactor             = 2.0
+	maxRetryDelay                  = 10 * time.Minute
+	Jitter                         = 0.1
+	defaultMaxAdmissionResults     = 20
+	defaultMaxAdmissionFileBytes   = 1 << 20
+	defaultMaxAdmissionFileRecords = 1000
+	defaultMaxAdmissionFileAge     = time.Minute
+	defaultMaxAdmissionTotalBytes  = 20 << 20
+	defaultAdmissionFileTTL        = 24 * time.Hour
+	// Keep direct disk publishes under the same complete-record bound enforced
+	// by the webhook queue so they cannot bypass its memory and spool protection.
+	defaultMaxAdmissionRecordBytes = 64 << 10
+	defaultMinAdmissionFreeBytes   = 16 << 20
+	minAdmissionFileAge            = time.Second
+	// Failed states can own live descriptors, but bounding their count prevents
+	// repeated close failures from growing memory and descriptor use forever.
+	maxFailedConnectionStates = 32
 )
 
 var Connections = &Writer{
-	openConnections:   make(map[string]Connection),
-	closedConnections: make(map[string]FailedConnection),
-	cleanupDone:       make(chan struct{}),
-	closeAndRemoveFilesWithRetry: func(conn Connection) error {
-		return wait.ExponentialBackoff(retry.DefaultBackoff, func() (bool, error) {
-			if conn.File != nil {
-				if err := conn.unlockAndCloseFile(); err != nil {
-					return false, fmt.Errorf("error closing file: %w", err)
-				}
-			}
-			if err := os.RemoveAll(conn.Path); err != nil {
-				return false, fmt.Errorf("error deleting violations stored at old path: %w", err)
-			}
-			return true, nil
-		})
-	},
+	openConnections:              make(map[string]Connection),
+	closedConnections:            make(map[string]FailedConnection),
+	cleanupDone:                  make(chan struct{}),
+	closeAndRemoveFilesWithRetry: closeAndRemoveFilesWithRetry,
 }
 
 var log = logf.Log.WithName("disk-driver").WithValues(logging.Process, "export")
 
 func (r *Writer) CreateConnection(_ context.Context, connectionName string, config interface{}) error {
-	path, maxResults, ttl, err := unmarshalConfig(config)
+	parsed, err := parseConnectionConfig(config)
 	if err != nil {
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
 	}
 
-	r.openConnections[connectionName] = Connection{
-		Path:                path,
-		MaxAuditResults:     int(maxResults),
-		ClosedConnectionTTL: ttl,
+	connLock, _ := r.acquireCurrentConnectionLock(connectionName, true)
+	defer connLock.Unlock()
+
+	r.mu.Lock()
+	if _, exists := r.openConnections[connectionName]; exists {
+		r.mu.Unlock()
+		return fmt.Errorf("connection %s already exists for disk driver", connectionName)
 	}
+	if len(r.closedConnections) >= maxFailedConnectionStates {
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			delete(r.connectionLocks, connectionName)
+		}
+		r.mu.Unlock()
+		return fmt.Errorf("maximum failed disk connection states reached: %d", maxFailedConnectionStates)
+	}
+	if r.pathCleanupInProgressLocked(parsed.path) {
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			delete(r.connectionLocks, connectionName)
+		}
+		r.mu.Unlock()
+		return fmt.Errorf("error creating connection %s: path %s is being cleaned up", connectionName, parsed.path)
+	}
+	if r.pathOwnedByFailedConnectionLocked(parsed.path) {
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			delete(r.connectionLocks, connectionName)
+		}
+		r.mu.Unlock()
+		return fmt.Errorf("error creating connection %s: path %s is still in use", connectionName, parsed.path)
+	}
+	// Register the connection before creating its directory: once it is in
+	// openConnections, pathInUseLocked(path) holds, so a concurrent cleanup will
+	// not remove this path while ensureDirectory runs below.
+	conn := connectionFromConfig(&parsed)
+	r.openConnections[connectionName] = conn
+	r.mu.Unlock()
+
+	if err := ensureDirectory(parsed.path); err != nil {
+		r.mu.Lock()
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			delete(r.openConnections, connectionName)
+			delete(r.connectionLocks, connectionName)
+		}
+		r.mu.Unlock()
+		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
+	}
+	// Recovery is prefix-filtered and therefore safe for audit-only Connections.
+	// Running it at creation repairs crash remnants before new admission traffic.
+	hasAdmissionArtifacts, err := conn.recoverAdmissionFiles()
+	if err != nil {
+		r.mu.Lock()
+		delete(r.openConnections, connectionName)
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			delete(r.connectionLocks, connectionName)
+		}
+		r.mu.Unlock()
+		return fmt.Errorf("recovering admission files for connection %s: %w", connectionName, err)
+	}
+	if hasAdmissionArtifacts {
+		r.scheduleAdmissionCleanup(connectionName, &conn)
+	}
+	r.mu.Lock()
+	if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+		r.openConnections[connectionName] = conn
+	}
+	r.mu.Unlock()
 	return nil
 }
 
 func (r *Writer) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
-	conn, exists := r.openConnections[connectionName]
-	if !exists {
-		return fmt.Errorf("connection %s for disk driver not found", connectionName)
-	}
-
-	path, maxResults, ttl, err := unmarshalConfig(config)
+	parsed, err := parseConnectionConfig(config)
 	if err != nil {
 		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
 	}
 
-	if conn.Path != path {
-		if err := r.closeAndRemoveFilesWithRetry(conn); err != nil {
-			return fmt.Errorf("error updating connection %s, %w", connectionName, err)
+	connLock, exists := r.acquireCurrentConnectionLock(connectionName, false)
+	if !exists {
+		return fmt.Errorf("connection %s for disk driver not found", connectionName)
+	}
+	defer connLock.Unlock()
+
+	r.mu.Lock()
+	conn, exists := r.openConnections[connectionName]
+	if !exists || !r.connectionLockIsCurrentLocked(connectionName, connLock) {
+		r.mu.Unlock()
+		return fmt.Errorf("connection %s for disk driver not found", connectionName)
+	}
+	if conn.Path != parsed.path {
+		if r.pathCleanupInProgressLocked(parsed.path) {
+			r.mu.Unlock()
+			return fmt.Errorf("error updating connection %s: path %s is being cleaned up", connectionName, parsed.path)
 		}
-		conn.Path = path
-		conn.File = nil
+		if r.pathOwnedByFailedConnectionLocked(parsed.path) {
+			r.mu.Unlock()
+			return fmt.Errorf("error updating connection %s: path %s is still in use", connectionName, parsed.path)
+		}
+		// Reserve the target path before releasing r.mu so a concurrent cleanup
+		// cannot remove it during the unlocked window below while ensureDirectory
+		// creates it and the connection migrates onto it. The connection still
+		// points at its old path, so pathInUseLocked does not yet protect the
+		// target; the reservation is released once the migration commits and
+		// pathInUseLocked takes over.
+		r.markCleanupPathLocked(parsed.path)
+		defer r.releaseCleanupPath(parsed.path)
+	}
+	r.mu.Unlock()
+	pathChanged := conn.Path != parsed.path
+
+	// Create the target directory only after confirming it is not mid-cleanup and
+	// reserving it, so a rejected update never recreates a directory cleanup is
+	// removing and an accepted update is not raced by a concurrent removal.
+	if err := ensureDirectory(parsed.path); err != nil {
+		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
 	}
 
-	conn.MaxAuditResults = int(maxResults)
-	conn.ClosedConnectionTTL = ttl
+	var candidate Connection
+	var hasAdmissionArtifacts bool
+	if pathChanged {
+		// Recover a fresh candidate before destroying the old path. A failed target
+		// recovery must leave the currently usable connection untouched.
+		candidate = connectionFromConfig(&parsed)
+		hasAdmissionArtifacts, err = candidate.recoverAdmissionFiles()
+		if err != nil {
+			return fmt.Errorf("recovering admission files for connection %s: %w", connectionName, err)
+		}
+	}
 
+	if pathChanged {
+		// Keep the old connection visible while cleanup runs so concurrent callers
+		// can find the current lock and wait instead of observing a transient miss.
+		if err := r.closeAndCleanupConnection(connectionName, &conn); err != nil {
+			r.mu.Lock()
+			if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+				r.openConnections[connectionName] = conn
+			}
+			r.mu.Unlock()
+			return fmt.Errorf("error updating connection %s, %w", connectionName, err)
+		}
+		if hasAdmissionArtifacts {
+			r.scheduleAdmissionCleanup(connectionName, &candidate)
+		}
+		conn = candidate
+	} else {
+		applyConnectionConfig(&conn, &parsed)
+	}
+
+	r.mu.Lock()
 	r.openConnections[connectionName] = conn
+	r.mu.Unlock()
 	return nil
 }
 
 func (r *Writer) CloseConnection(connectionName string) error {
+	connLock, exists := r.acquireCurrentConnectionLock(connectionName, false)
+	if !exists {
+		return fmt.Errorf("connection %s not found for disk driver", connectionName)
+	}
+	defer connLock.Unlock()
+
 	r.mu.Lock()
 	conn, ok := r.openConnections[connectionName]
-	if !ok {
+	if !ok || !r.connectionLockIsCurrentLocked(connectionName, connLock) {
 		r.mu.Unlock()
 		return fmt.Errorf("connection %s not found for disk driver", connectionName)
 	}
 	delete(r.openConnections, connectionName)
 	r.mu.Unlock()
 
-	err := r.closeAndRemoveFilesWithRetry(conn)
+	err := r.closeAndCleanupConnection(connectionName, &conn)
 	if err != nil {
 		now := time.Now()
-
 		r.mu.Lock()
-		// Store the failed connection with retry metadata with a unique key to avoid conflicts.
+		// Store the failed connection with retry metadata under a timestamped key to avoid replacing prior failures.
 		r.closedConnections[connectionName+now.String()] = FailedConnection{
 			Connection:  conn,
 			FailedAt:    now,
@@ -159,304 +302,238 @@ func (r *Writer) CloseConnection(connectionName string) error {
 			r.cleanupDone = make(chan struct{})
 			r.cleanupStopped = false
 		}
+		done := r.cleanupDone
 		r.cleanupOnce.Do(func() {
-			go r.backgroundCleanup()
+			go r.backgroundCleanup(done)
 		})
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			delete(r.connectionLocks, connectionName)
+		}
 		r.mu.Unlock()
+		return err
 	}
-	return err
+
+	r.mu.Lock()
+	if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+		delete(r.connectionLocks, connectionName)
+	}
+	r.mu.Unlock()
+	return nil
 }
 
-func (r *Writer) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
-	conn, ok := r.openConnections[connectionName]
-	if !ok {
-		return fmt.Errorf("invalid connection: %s not found for disk driver", connectionName)
+func (r *Writer) Publish(ctx context.Context, connectionName string, data interface{}, topic string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("publish canceled: %w", err)
 	}
 
-	var violation util.ExportMsg
-	if violation, ok = data.(util.ExportMsg); !ok {
-		return fmt.Errorf("invalid data type: cannot convert data to exportMsg")
+	connLock, exists := r.acquireCurrentConnectionLock(connectionName, false)
+	if !exists {
+		return fmt.Errorf("invalid connection: %s not found for disk driver", connectionName)
 	}
+	defer connLock.Unlock()
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("publish canceled: %w", err)
+	}
+
+	r.mu.Lock()
+	conn, ok := r.openConnections[connectionName]
+	if !ok || !r.connectionLockIsCurrentLocked(connectionName, connLock) {
+		r.mu.Unlock()
+		return fmt.Errorf("invalid connection: %s not found for disk driver", connectionName)
+	}
+	r.mu.Unlock()
+
+	violation, jsonData, encodeErr := decodeExportMessage(data)
+	if violation.EventType == util.AdmissionViolationEventType {
+		if encodeErr != nil {
+			return encodeErr
+		}
+		if err := r.writeAdmissionRecord(ctx, connectionName, &conn, topic, jsonData); err != nil {
+			r.mu.Lock()
+			if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+				r.openConnections[connectionName] = conn
+			}
+			r.mu.Unlock()
+			return fmt.Errorf("writing admission violation: %w", err)
+		}
+		r.mu.Lock()
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			r.openConnections[connectionName] = conn
+		}
+		r.mu.Unlock()
+		return nil
+	}
+	connChanged := false
+	defer func() {
+		if !connChanged {
+			return
+		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.connectionLockIsCurrentLocked(connectionName, connLock) {
+			r.openConnections[connectionName] = conn
+		}
+	}()
 
 	if violation.Message == util.AuditStartedMsg {
 		err := conn.handleAuditStart(violation.ID, topic)
 		if err != nil {
 			return fmt.Errorf("error handling audit start: %w", err)
 		}
-		r.openConnections[connectionName] = conn
+		connChanged = true
 	}
-
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("error marshaling data: %w", err)
+	if encodeErr != nil {
+		return encodeErr
 	}
-
 	if conn.File == nil {
 		return fmt.Errorf("failed to write violation: no file provided")
 	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("publish canceled: %w", err)
+	}
 
-	_, err = conn.File.WriteString(string(jsonData) + "\n")
+	_, err := conn.File.Write(append(jsonData, '\n'))
 	if err != nil {
 		return fmt.Errorf("error writing message to disk: %w", err)
 	}
 
 	if violation.Message == util.AuditCompletedMsg {
-		err := conn.handleAuditEnd(topic)
-		if err != nil {
+		connChanged = true
+		if err := conn.handleAuditEnd(topic); err != nil {
 			return fmt.Errorf("error handling audit end: %w", err)
 		}
 		conn.File = nil
 		conn.currentAuditRun = ""
+	}
+	return nil
+}
+
+// PublishBatch writes admission records under one Connection lock. Validation
+// failures remain per-message; a shared storage failure applies to every valid
+// record in the batch because their durability cannot be distinguished safely.
+func (r *Writer) PublishBatch(ctx context.Context, connectionName string, messages []any, topic string) []error {
+	errorsByMessage := make([]error, len(messages))
+	validMessages := make([][]byte, 0, len(messages))
+	validIndexes := make([]int, 0, len(messages))
+	for i := range messages {
+		message, jsonData, err := decodeExportMessage(messages[i])
+		if err != nil {
+			errorsByMessage[i] = err
+			continue
+		}
+		if message.EventType != util.AdmissionViolationEventType {
+			errorsByMessage[i] = fmt.Errorf("batch publishing only supports admission violations")
+			continue
+		}
+		validMessages = append(validMessages, jsonData)
+		validIndexes = append(validIndexes, i)
+	}
+	if len(validMessages) == 0 {
+		return errorsByMessage
+	}
+	if err := ctx.Err(); err != nil {
+		setBatchErrors(errorsByMessage, validIndexes, fmt.Errorf("publish canceled: %w", err))
+		return errorsByMessage
+	}
+
+	connLock, exists := r.acquireCurrentConnectionLock(connectionName, false)
+	if !exists {
+		setBatchErrors(errorsByMessage, validIndexes, fmt.Errorf("invalid connection: %s not found for disk driver", connectionName))
+		return errorsByMessage
+	}
+	defer connLock.Unlock()
+
+	r.mu.Lock()
+	conn, exists := r.openConnections[connectionName]
+	if !exists || !r.connectionLockIsCurrentLocked(connectionName, connLock) {
+		r.mu.Unlock()
+		setBatchErrors(errorsByMessage, validIndexes, fmt.Errorf("invalid connection: %s not found for disk driver", connectionName))
+		return errorsByMessage
+	}
+	r.mu.Unlock()
+
+	err := r.writeAdmissionRecords(ctx, connectionName, &conn, topic, validMessages)
+	r.mu.Lock()
+	if r.connectionLockIsCurrentLocked(connectionName, connLock) {
 		r.openConnections[connectionName] = conn
 	}
-	return nil
-}
-
-func (conn *Connection) handleAuditStart(auditID string, topic string) error {
-	// Replace ':' with '_' to avoid issues with file names in windows
-	conn.currentAuditRun = strings.ReplaceAll(auditID, ":", "_")
-
-	dir := path.Join(conn.Path, topic)
-	if err := os.MkdirAll(dir, 0o777); err != nil {
-		return fmt.Errorf("failed to create directories: %w", err)
-	}
-
-	// Set the dir permissions to make sure reader can modify files if need be after the lock is released.
-	if err := os.Chmod(dir, 0o777); err != nil {
-		return fmt.Errorf("failed to set directory permissions: %w", err)
-	}
-
-	file, err := os.OpenFile(path.Join(dir, appendExtension(conn.currentAuditRun, "txt")), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+	r.mu.Unlock()
 	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
+		setBatchErrors(errorsByMessage, validIndexes, fmt.Errorf("writing admission violations: %w", err))
 	}
-	conn.File = file
-	err = retry.OnError(retry.DefaultBackoff, func(_ error) bool {
-		return true
-	}, func() error {
-		return syscall.Flock(int(conn.File.Fd()), syscall.LOCK_EX)
-	})
-	if err != nil {
-		return fmt.Errorf("failed to acquire lock: %w", err)
-	}
-	log.Info("Writing latest violations in", "filename", conn.File.Name())
-	return nil
+	return errorsByMessage
 }
 
-func (conn *Connection) handleAuditEnd(topic string) error {
-	if err := retry.OnError(retry.DefaultBackoff, func(_ error) bool {
-		return true
-	}, conn.unlockAndCloseFile); err != nil {
-		return fmt.Errorf("error closing file: %w, %s", err, conn.currentAuditRun)
+func setBatchErrors(errorsByMessage []error, indexes []int, err error) {
+	for _, index := range indexes {
+		errorsByMessage[index] = err
 	}
-	conn.File = nil
-
-	readyFilePath := path.Join(conn.Path, topic, appendExtension(conn.currentAuditRun, "log"))
-	if err := os.Rename(path.Join(conn.Path, topic, appendExtension(conn.currentAuditRun, "txt")), readyFilePath); err != nil {
-		return fmt.Errorf("failed to rename file: %w, %s", err, conn.currentAuditRun)
-	}
-	// Set the file permissions to make sure reader can modify files if need be after the lock is released.
-	if err := os.Chmod(readyFilePath, 0o777); err != nil {
-		return fmt.Errorf("failed to set file permissions: %w", err)
-	}
-	log.Info("File renamed", "filename", readyFilePath)
-
-	return conn.cleanupOldAuditFiles(topic)
 }
 
-func (conn *Connection) unlockAndCloseFile() error {
-	if conn.File == nil {
-		return fmt.Errorf("no file to close")
-	}
-	fd := int(conn.File.Fd())
-	if fd < 0 {
-		return fmt.Errorf("invalid file descriptor")
-	}
-	if err := syscall.Flock(fd, syscall.LOCK_UN); err != nil {
-		return fmt.Errorf("failed to release lock: %w", err)
-	}
-	if err := conn.File.Close(); err != nil {
-		return fmt.Errorf("failed to close file: %w", err)
-	}
-	return nil
-}
-
-func (conn *Connection) cleanupOldAuditFiles(topic string) error {
-	dirPath := path.Join(conn.Path, topic)
-	files, err := getFilesSortedByModTimeAsc(dirPath)
-	if err != nil {
-		return fmt.Errorf("failed removing older audit files, error getting files sorted by mod time: %w", err)
-	}
-	var errs []error
-	for i := 0; i < len(files)-conn.MaxAuditResults; i++ {
-		if e := os.Remove(files[i]); e != nil {
-			errs = append(errs, fmt.Errorf("error removing file: %w", e))
-		}
-	}
-
-	return errors.Join(errs...)
-}
-
-func getFilesSortedByModTimeAsc(dirPath string) ([]string, error) {
-	type fileInfo struct {
-		path    string
-		modTime time.Time
-	}
-	var filesInfo []fileInfo
-
-	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+// decodeExportMessage accepts the value forms used by audit and the queued
+// admission exporter. Raw messages are validated but returned byte-for-byte so
+// the disk driver does not alter the encoded admission payload.
+func decodeExportMessage(data interface{}) (util.ExportMsg, []byte, error) {
+	var violation util.ExportMsg
+	switch value := data.(type) {
+	case util.ExportMsg:
+		encoded, err := json.Marshal(value)
 		if err != nil {
-			return err
+			return value, nil, fmt.Errorf("error marshaling data: %w", err)
 		}
-		if !info.IsDir() {
-			filesInfo = append(filesInfo, fileInfo{path: path, modTime: info.ModTime()})
+		return value, encoded, nil
+	case *util.ExportMsg:
+		if value == nil {
+			return violation, nil, fmt.Errorf("invalid data type: nil exportMsg")
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	sort.Slice(filesInfo, func(i, j int) bool {
-		return filesInfo[i].modTime.Before(filesInfo[j].modTime)
-	})
-
-	var sortedFiles []string
-	for _, fi := range filesInfo {
-		sortedFiles = append(sortedFiles, fi.path)
-	}
-
-	return sortedFiles, nil
-}
-
-func appendExtension(name string, ext string) string {
-	return name + "." + ext
-}
-
-// validatePath checks if the provided path is valid and writable.
-func validatePath(path string) error {
-	if path == "" {
-		return fmt.Errorf("path cannot be empty")
-	}
-	if strings.Contains(path, "..") {
-		return fmt.Errorf("path must not contain '..', dir traversal is not allowed")
-	}
-	// validate if the path is writable
-	if err := os.MkdirAll(path, 0o777); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-	return nil
-}
-
-func unmarshalConfig(config interface{}) (string, float64, time.Duration, error) {
-	cfg, ok := config.(map[string]interface{})
-	if !ok {
-		return "", 0.0, 0, fmt.Errorf("invalid config format, expected map[string]interface{}")
-	}
-
-	path, pathOk := cfg[violationPath].(string)
-	if !pathOk {
-		return "", 0.0, 0, fmt.Errorf("missing or invalid 'path'")
-	}
-	if err := validatePath(path); err != nil {
-		return "", 0.0, 0, fmt.Errorf("invalid path: %w", err)
-	}
-	maxResults, maxResultsOk := cfg[maxAuditResults].(float64)
-	if !maxResultsOk {
-		return "", 0.0, 0, fmt.Errorf("missing or invalid 'maxAuditResults'")
-	}
-	if maxResults < 0 {
-		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be negative")
-	}
-	if maxResults > maxAllowedAuditRuns {
-		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
-	}
-	ttl := maxConnectionAge
-	if ttlStr, ok := cfg["closedConnectionTTL"].(string); ok {
-		duration, err := time.ParseDuration(ttlStr)
+		encoded, err := json.Marshal(value)
 		if err != nil {
-			return "", 0.0, 0, fmt.Errorf("invalid ttl format: %w", err)
+			return *value, nil, fmt.Errorf("error marshaling data: %w", err)
 		}
-		ttl = duration
-	}
-	if ttl > maxConnectionAge {
-		return "", 0.0, 0, fmt.Errorf("closedConnectionTTL %s exceeds maximum allowed: %s", ttl, maxConnectionAge)
-	}
-	if ttl < minConnectionAge {
-		return "", 0.0, 0, fmt.Errorf("closedConnectionTTL %s is too short, must be at least 1 minute", ttl)
-	}
-	return path, maxResults, ttl, nil
-}
-
-// backgroundCleanup runs periodically to retry closing failed connections.
-func (r *Writer) backgroundCleanup() {
-	ticker := time.NewTicker(cleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			r.retryFailedConnections()
-		case <-r.cleanupDone:
-			log.Info("Background cleanup stopped")
-			return
+		return *value, encoded, nil
+	case json.RawMessage:
+		var header struct {
+			EventType string `json:"eventType,omitempty"`
 		}
+		if err := json.Unmarshal(value, &header); err != nil {
+			return violation, nil, fmt.Errorf("invalid export message: %w", err)
+		}
+		if header.EventType == util.AdmissionViolationEventType {
+			violation.EventType = header.EventType
+			return violation, value, nil
+		}
+		if err := json.Unmarshal(value, &violation); err != nil {
+			return violation, nil, fmt.Errorf("invalid export message: %w", err)
+		}
+		return violation, value, nil
+	default:
+		return violation, nil, fmt.Errorf("invalid data type: cannot convert data to exportMsg")
 	}
 }
 
-// retryFailedConnections attempts to close connections that previously failed to close.
-func (r *Writer) retryFailedConnections() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	now := time.Now()
-	var toRemove []string
-
-	for name, failedConn := range r.closedConnections {
-		if now.Sub(failedConn.FailedAt) > failedConn.ClosedConnectionTTL {
-			log.Info("Removing expired failed connection", "connection", name, "age", now.Sub(failedConn.FailedAt))
-			toRemove = append(toRemove, name)
-			continue
-		}
-
-		if now.Before(failedConn.NextRetryAt) {
-			continue
-		}
-
-		if failedConn.RetryCount >= maxRetryAttempts {
-			log.Info("Max retry attempts exceeded for failed connection", "connection", name, "attempts", failedConn.RetryCount)
-			toRemove = append(toRemove, name)
-			continue
-		}
-
-		err := r.closeAndRemoveFilesWithRetry(failedConn.Connection)
-		if err == nil {
-			log.Info("Successfully closed previously failed connection", "connection", name)
-			toRemove = append(toRemove, name)
-		} else {
-			log.Info("Failed to close connection on retry", "connection", name, "error", err, "attempt", failedConn.RetryCount+1)
-
-			failedConn.RetryCount++
-			delay := time.Duration(float64(baseRetryDelay) * math.Pow(retryBackoffFactor, float64(failedConn.RetryCount)))
-			if maxRetryDelay > 0 && delay > maxRetryDelay {
-				delay = maxRetryDelay
-			}
-			// Apply jitter to the retry delay
-			delay = wait.Jitter(delay, Jitter)
-			failedConn.NextRetryAt = now.Add(delay)
-			r.closedConnections[name] = failedConn
-		}
+// connectionFromConfig applies user-configured audit settings and initializes
+// the admission spool with private safety defaults.
+func connectionFromConfig(config *connectionConfig) Connection {
+	conn := Connection{
+		admission: admissionState{
+			limits: admissionLimits{
+				maxResults:     defaultMaxAdmissionResults,
+				maxFileBytes:   defaultMaxAdmissionFileBytes,
+				maxFileRecords: defaultMaxAdmissionFileRecords,
+				maxFileAge:     defaultMaxAdmissionFileAge,
+				maxTotalBytes:  defaultMaxAdmissionTotalBytes,
+				fileTTL:        defaultAdmissionFileTTL,
+				maxRecordBytes: defaultMaxAdmissionRecordBytes,
+				minFreeBytes:   defaultMinAdmissionFreeBytes,
+			},
+		},
 	}
+	applyConnectionConfig(&conn, config)
+	return conn
+}
 
-	for _, name := range toRemove {
-		delete(r.closedConnections, name)
-	}
-
-	if len(r.closedConnections) > 0 {
-		log.Info("Failed connections remaining", "count", len(r.closedConnections))
-	} else {
-		log.Info("No failed connections remaining, cleanup done")
-		r.cleanupStopped = true
-		close(r.cleanupDone)
-	}
+func applyConnectionConfig(conn *Connection, config *connectionConfig) {
+	conn.Path = config.path
+	conn.MaxAuditResults = config.maxAuditResults
+	conn.ClosedConnectionTTL = config.closedConnectionTTL
 }

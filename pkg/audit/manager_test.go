@@ -4,11 +4,13 @@ import (
 	"container/heap"
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"path"
 	"reflect"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/gomega"
@@ -839,9 +841,16 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 				g.Expect(err).ToNot(gomega.HaveOccurred(), "Failed to add scheme")
 			}
 
+			lastAttemptTime := time.Unix(1, 0).UTC()
+			lastSuccessTime := time.Time{}
+			if test.successCount > 0 {
+				lastSuccessTime = time.Unix(2, 0).UTC()
+			}
 			auditExportPublishingState := auditExportPublishingState{
-				SuccessCount: test.successCount,
-				Errors:       test.errorsMap,
+				SuccessCount:    test.successCount,
+				Errors:          test.errorsMap,
+				LastAttemptTime: lastAttemptTime,
+				LastSuccessTime: lastSuccessTime,
 			}
 
 			client := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
@@ -865,7 +874,7 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 
 			// Validate the operation is idempotent by re-running
 			for i := 0; i < 2; i++ {
-				reportExportConnectionErrors(context.Background(), auditExportPublishingState, logr.Logger{}, client, scheme.Scheme, getPod)
+				reportExportConnectionErrors(context.Background(), auditExportPublishingState, logr.Logger{}, client, client, scheme.Scheme, getPod)
 
 				// Await the ConnectionPodStatus
 				connPodStatusName, _ := statusv1alpha1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
@@ -877,9 +886,6 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 					}, &connPodStatus)).Should(gomega.Succeed(), "Status should exist after creation")
 				}).Should(gomega.Succeed())
 
-				// Assert the ConnectionPodStatus expected
-				g.Expect(connPodStatus.Status.Active).To(gomega.Equal(test.wantActiveConn), "Active status unexpected")
-				g.Expect(len(connPodStatus.Status.Errors)).To(gomega.Equal(len(test.errorsMap)), "Length of errors unexpected")
 				expected := make([]*statusv1alpha1.ConnectionError, 0, len(test.errorsMap))
 				for key := range test.errorsMap {
 					expected = append(expected, &statusv1alpha1.ConnectionError{
@@ -888,7 +894,20 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 					})
 				}
 
-				g.Expect(connPodStatus.Status.Errors).To(gomega.ConsistOf(expected), "Error slice unexpected")
+				g.Expect(connPodStatus.Status.ConnectionErrors).To(gomega.BeEmpty())
+				g.Expect(connPodStatus.Status.PublishStatuses).To(gomega.HaveLen(1))
+				publishStatus := connPodStatus.Status.PublishStatuses[0]
+				g.Expect(publishStatus.Source).To(gomega.Equal(statusv1alpha1.AuditPublishSource))
+				g.Expect(publishStatus.Active).To(gomega.Equal(test.wantActiveConn))
+				g.Expect(publishStatus.Errors).To(gomega.ConsistOf(expected))
+				g.Expect(publishStatus.LastAttemptTime).ToNot(gomega.BeNil())
+				g.Expect(publishStatus.LastAttemptTime.Time.Equal(lastAttemptTime)).To(gomega.BeTrue())
+				if test.successCount > 0 {
+					g.Expect(publishStatus.LastSuccessTime).ToNot(gomega.BeNil())
+					g.Expect(publishStatus.LastSuccessTime.Time.Equal(lastSuccessTime)).To(gomega.BeTrue())
+				} else {
+					g.Expect(publishStatus.LastSuccessTime).To(gomega.BeNil())
+				}
 			}
 		})
 	}
@@ -958,4 +977,14 @@ func Test_stopAuditResultsUpdateLoop(t *testing.T) {
 
 	am.stopAuditResultsUpdateLoop()
 	require.Nil(t, am.ucloop)
+}
+
+func TestAuditExportPublishingStateBoundsErrors(t *testing.T) {
+	state := auditExportPublishingState{Errors: make(map[string]error)}
+	for i := 0; i < exportutil.MaxConnectionStatusErrors+100; i++ {
+		state.recordPublishResult(fmt.Errorf("class-%03d: backend unavailable", i))
+	}
+
+	require.Len(t, state.Errors, exportutil.MaxConnectionStatusErrors)
+	require.Contains(t, state.Errors, exportutil.AdditionalPublishErrorsOmittedMessage)
 }

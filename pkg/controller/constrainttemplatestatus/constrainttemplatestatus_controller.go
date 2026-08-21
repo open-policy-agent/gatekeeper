@@ -178,10 +178,17 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 	copy(statusObjs, sObjs.Items)
 	sort.Sort(statusObjs)
 
-	var s []interface{}
-	// created is true if at least one Pod hasn't reported any errors
-	var created bool
+	// created is true if at least one Pod hasn't reported any errors. Once
+	// true, it must never revert to false: the constraint CRD is never
+	// garbage collected unless the ConstraintTemplate itself is deleted, so
+	// a later round of errors (e.g. all pods failing to recompile after an
+	// update) does not mean the CRD stopped existing.
+	created, _, err := unstructured.NestedBool(template.Object, "status", "created")
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
+	var s []interface{}
 	for i := range statusObjs {
 		// Don't report status if it's not for the correct object. This can happen
 		// if a watch gets interrupted, causing the constraint status to be deleted
