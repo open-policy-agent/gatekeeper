@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+type connectionConfig struct {
+	path                string
+	maxAuditResults     int
+	closedConnectionTTL time.Duration
+}
+
 // validatePath validates the provided path and returns its cleaned form. It
 // performs no filesystem mutations so it is safe to call while parsing config;
 // directory creation is handled separately by ensureDirectory.
@@ -43,52 +49,63 @@ func ensureDirectory(path string) error {
 }
 
 func unmarshalConfig(config interface{}) (string, float64, time.Duration, error) {
+	parsed, err := parseConnectionConfig(config)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	return parsed.path, float64(parsed.maxAuditResults), parsed.closedConnectionTTL, nil
+}
+
+func parseConnectionConfig(config interface{}) (connectionConfig, error) {
+	parsed := connectionConfig{
+		closedConnectionTTL: maxConnectionAge,
+	}
 	cfg, ok := config.(map[string]interface{})
 	if !ok {
-		return "", 0.0, 0, fmt.Errorf("invalid config format, expected map[string]interface{}")
+		return connectionConfig{}, fmt.Errorf("invalid config format, expected map[string]interface{}")
 	}
 
 	path, pathOk := cfg[violationPath].(string)
 	if !pathOk {
-		return "", 0.0, 0, fmt.Errorf("missing or invalid 'path'")
+		return connectionConfig{}, fmt.Errorf("missing or invalid 'path'")
 	}
 	cleanPath, err := validatePath(path)
 	if err != nil {
-		return "", 0.0, 0, fmt.Errorf("invalid path: %w", err)
+		return connectionConfig{}, fmt.Errorf("invalid path: %w", err)
 	}
-	path = cleanPath
+	parsed.path = cleanPath
 	maxResults, maxResultsOk := cfg[maxAuditResults].(float64)
 	if !maxResultsOk {
-		return "", 0.0, 0, fmt.Errorf("missing or invalid 'maxAuditResults'")
+		return connectionConfig{}, fmt.Errorf("missing or invalid 'maxAuditResults'")
 	}
 	if maxResults < 0 {
-		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be negative")
+		return connectionConfig{}, fmt.Errorf("maxAuditResults cannot be negative")
 	}
 	if maxResults != math.Trunc(maxResults) {
-		return "", 0.0, 0, fmt.Errorf("maxAuditResults must be an integer")
+		return connectionConfig{}, fmt.Errorf("maxAuditResults must be an integer")
 	}
 	if maxResults > maxAllowedAuditRuns {
-		return "", 0.0, 0, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
+		return connectionConfig{}, fmt.Errorf("maxAuditResults cannot be greater than the maximum allowed audit runs: %d", maxAllowedAuditRuns)
 	}
-	ttl := maxConnectionAge
+	parsed.maxAuditResults = int(maxResults)
 	if ttlValue, ok := cfg["closedConnectionTTL"]; ok {
 		ttlStr, ok := ttlValue.(string)
 		if !ok {
-			return "", 0.0, 0, fmt.Errorf("invalid ttl format: expected string")
+			return connectionConfig{}, fmt.Errorf("invalid ttl format: expected string")
 		}
-		duration, err := time.ParseDuration(ttlStr)
+		parsed.closedConnectionTTL, err = time.ParseDuration(ttlStr)
 		if err != nil {
-			return "", 0.0, 0, fmt.Errorf("invalid ttl format: %w", err)
+			return connectionConfig{}, fmt.Errorf("invalid ttl format: %w", err)
 		}
-		ttl = duration
 	}
-	if ttl > maxConnectionAge {
-		return "", 0.0, 0, fmt.Errorf("closedConnectionTTL %s exceeds maximum allowed: %s", ttl, maxConnectionAge)
+	if parsed.closedConnectionTTL > maxConnectionAge {
+		return connectionConfig{}, fmt.Errorf("closedConnectionTTL %s exceeds maximum allowed: %s", parsed.closedConnectionTTL, maxConnectionAge)
 	}
-	if ttl < minConnectionAge {
-		return "", 0.0, 0, fmt.Errorf("closedConnectionTTL %s is too short, must be at least 1 minute", ttl)
+	if parsed.closedConnectionTTL < minConnectionAge {
+		return connectionConfig{}, fmt.Errorf("closedConnectionTTL %s is too short, must be at least 1 minute", parsed.closedConnectionTTL)
 	}
-	return path, maxResults, ttl, nil
+
+	return parsed, nil
 }
 
 // retryConfig holds the tunable retry parameters for failed-connection

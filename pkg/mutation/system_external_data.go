@@ -104,11 +104,11 @@ func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.
 			defer mutex.Unlock()
 
 			if err != nil {
-				errors[provider.Name] = fmt.Errorf("failed to send external data request to provider %s: %w", provider.Name, err)
+					errors[provider.Name] = fmt.Errorf("failed to send external data request to provider %s: %w", provider.Name, err)
 				return
 			}
 			if err := validateExternalDataResponse(resp); err != nil {
-				errors[provider.Name] = fmt.Errorf("failed to validate external data response from provider %s: %w", provider.Name, err)
+					errors[provider.Name] = fmt.Errorf("failed to validate external data response from provider %s: %w", provider.Name, err)
 				return
 			}
 

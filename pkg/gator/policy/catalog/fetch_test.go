@@ -42,6 +42,19 @@ func TestHTTPFetcher_PathTraversalProtection(t *testing.T) {
 	assert.Contains(t, err.Error(), "path traversal")
 }
 
+func TestHTTPFetcher_AllowsFilenamesContainingDotDot(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "template..yaml")
+	require.NoError(t, os.WriteFile(testFile, []byte("test: content"), 0o600))
+
+	fetcher := NewHTTPFetcher(DefaultTimeout)
+	fetcher.SetBaseURL((&url.URL{Scheme: fileScheme, Path: filepath.Join(tempDir, "catalog.yaml")}).String())
+
+	content, err := fetcher.FetchContent(context.Background(), "template..yaml")
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "test: content")
+}
+
 func TestHTTPFetcher_FileBaseAtRoot(t *testing.T) {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "template.yaml")

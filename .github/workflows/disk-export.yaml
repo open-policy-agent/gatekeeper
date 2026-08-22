@@ -2,13 +2,27 @@ name: disk-export
 on:
   push:
     paths:
-      - "pkg/export/dapr"
-      - "pkg/export/disk"
+      - ".github/workflows/disk-export.yaml"
+      - "Makefile"
+      - "pkg/export/disk/**"
+      - "pkg/export/util/**"
+      - "pkg/controller/export/**"
+      - "pkg/webhook/**"
+      - "cmd/build/helmify/**"
+      - "manifest_staging/charts/gatekeeper/**"
+      - "test/bats/**"
       - "test/export/**"
   pull_request:
     paths:
-      - "pkg/export/dapr"
-      - "pkg/export/disk"
+      - ".github/workflows/disk-export.yaml"
+      - "Makefile"
+      - "pkg/export/disk/**"
+      - "pkg/export/util/**"
+      - "pkg/controller/export/**"
+      - "pkg/webhook/**"
+      - "cmd/build/helmify/**"
+      - "manifest_staging/charts/gatekeeper/**"
+      - "test/bats/**"
       - "test/export/**"
 permissions: read-all
 
@@ -19,18 +33,44 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Bootstrap e2e
         run: |
           mkdir -p $GITHUB_WORKSPACE/bin
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
           make e2e-bootstrap
+
+      - name: Validate admission-only Helm arguments
+        run: |
+          output="$(make -n e2e-helm-deploy \
+            HELM_REPO=test HELM_CRD_REPO=test HELM_RELEASE=test \
+            ENABLE_EXPORT=false ENABLE_ADMISSION_EXPORT=true EXPORT_BACKEND=disk \
+            EXPORT_DISK_MOUNT=/custom/mount EXPORT_DISK_PATH=/custom/path \
+            MAX_AUDIT_RESULTS=4 FAKE_READER_IMAGE=fake-reader:test)"
+          grep -q -- '--set audit.exportVolumeMount.path=/custom/mount' <<<"$output"
+          grep -q -- '--set audit.exportConnection.path=/custom/path' <<<"$output"
+          grep -q -- '--set audit.exportConnection.maxAuditResults=4' <<<"$output"
+          grep -q -- '--set admission.exportSidecar.image=fake-reader:test' <<<"$output"
+          if grep -q -- '--set audit.exportSidecar.image=' <<<"$output"; then
+            echo "admission-only deployment unexpectedly configured the audit reader" >&2
+            exit 1
+          fi
+
+          make e2e-helm-install
+          rendered="$(./.staging/helm/linux-amd64/helm template gatekeeper manifest_staging/charts/gatekeeper \
+            --set enableAdmissionViolationExport=true \
+            --set exportBackend=disk \
+            --set admission.disableExportSidecar=false \
+            --set audit.exportConnection.path=/custom/path \
+            --set-json 'admission.exportSidecar.env=[{"name":"CUSTOM","value":"keep"},{"name":"ROOT_PATH","value":"/wrong"}]')"
+          env_json="$(yq eval-all -o=json 'select(.kind == "Deployment" and .metadata.name == "gatekeeper-controller-manager") | [.spec.template.spec.containers[] | select(.name == "admission-reader") | .env][0]' - <<<"$rendered")"
+          jq -e 'length == 2 and any(.[]; .name == "CUSTOM" and .value == "keep") and ([.[] | select(.name == "ROOT_PATH" and .value == "/custom/path")] | length == 1)' <<<"$env_json"
 
       - name: Run e2e
         run: |
@@ -41,15 +81,16 @@ jobs:
           kind load docker-image --name kind gatekeeper-e2e:latest fake-reader:latest gatekeeper-crds:latest
           kubectl create ns gatekeeper-system
 
-          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG EXPORT_BACKEND=disk FAKE_READER_IMAGE_PULL_POLICY=Never AUDIT_CONNECTION=audit-connection AUDIT_CHANNEL=audit-channel EXPORT_DISK_MOUNT=/tmp/violations EXPORT_DISK_PATH=/tmp/violations/topics MAX_AUDIT_RESULTS=3 FAKE_READER_IMAGE=fake-reader:latest HELM_TIMEOUT=10m
+          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true ENABLE_ADMISSION_EXPORT=true LOG_LEVEL=DEBUG EXPORT_BACKEND=disk FAKE_READER_IMAGE_PULL_POLICY=Never AUDIT_CONNECTION=audit-connection AUDIT_CHANNEL=audit-channel EXPORT_DISK_MOUNT=/tmp/violations EXPORT_DISK_PATH=/tmp/violations/topics MAX_AUDIT_RESULTS=3 FAKE_READER_IMAGE=fake-reader:latest HELM_TIMEOUT=10m
 
-          make test-e2e ENABLE_EXPORT_TESTS=1 EXPORT_BACKEND=disk
+          make test-e2e ENABLE_EXPORT_TESTS=1 ENABLE_ADMISSION_EXPORT_TESTS=1 EXPORT_BACKEND=disk AUDIT_CONNECTION=audit-connection
 
       - name: Save logs
         if: ${{ always() }}
         run: |
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c manager --tail=-1 > logs-audit-manager.json || true
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c reader --tail=-1 > logs-audit-export.json || true
+          kubectl logs -n gatekeeper-system -l control-plane=controller-manager -c admission-reader --tail=-1 > logs-admission-export.json || true
           kubectl get pods -A -o wide > k8s-pods.txt || true
           kubectl get events -A --sort-by=.metadata.creationTimestamp > k8s-events.txt || true
           kubectl describe pods -n gatekeeper-system > k8s-gatekeeper-system-pods.txt || true

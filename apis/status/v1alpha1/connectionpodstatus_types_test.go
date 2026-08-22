@@ -2,6 +2,7 @@ package v1alpha1_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
@@ -10,6 +11,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -66,5 +68,36 @@ func TestNewConnectionStatusForPod(t *testing.T) {
 	}
 	if status.Name != n {
 		t.Fatal("got status.Name != n, want equal")
+	}
+}
+
+func TestConnectionPodStatusDeepCopyPublishStatuses(t *testing.T) {
+	attemptTime := metav1.NewTime(time.Unix(1, 0))
+	successTime := metav1.NewTime(time.Unix(2, 0))
+	status := &v1alpha1.ConnectionPodStatus{
+		Status: v1alpha1.ConnectionPodStatusStatus{
+			PublishStatuses: []v1alpha1.ConnectionPublishStatus{
+				{
+					Source:          v1alpha1.WebhookPublishSource,
+					Active:          true,
+					LastAttemptTime: &attemptTime,
+					LastSuccessTime: &successTime,
+					Errors: []*v1alpha1.ConnectionError{
+						{Type: v1alpha1.PublishError, Message: "original"},
+					},
+				},
+			},
+		},
+	}
+
+	copy := status.DeepCopy()
+	copy.Status.PublishStatuses[0].Errors[0].Message = "changed"
+	copy.Status.PublishStatuses[0].LastAttemptTime.Time = time.Unix(3, 0)
+
+	if diff := cmp.Diff("original", status.Status.PublishStatuses[0].Errors[0].Message); diff != "" {
+		t.Fatal(diff)
+	}
+	if diff := cmp.Diff(attemptTime, *status.Status.PublishStatuses[0].LastAttemptTime); diff != "" {
+		t.Fatal(diff)
 	}
 }

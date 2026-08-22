@@ -749,6 +749,16 @@ __expansion_audit_test() {
 
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels pod-must-have-test"
 
+  if [ -n "$ENABLE_ADMISSION_EXPORT_TESTS" ]; then
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "admission_export_connection_ready"
+    admission_violation_count_before="$(admission_violation_count)"
+    run kubectl apply -f test/export/denied_pod.yaml
+    assert_match 'denied' "${output}"
+    assert_failure
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "admission_violation_count_greater_than ${admission_violation_count_before}"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "admission_export_connection_active"
+  fi
+
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "total_violations ${EXPORT_BACKEND}"
 
   run kubectl delete -f test/export/k8srequiredlabels_ct.yaml --ignore-not-found

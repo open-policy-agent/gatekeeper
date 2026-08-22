@@ -256,6 +256,28 @@ func TestUnmarshalConfig(t *testing.T) {
 	}
 }
 
+func TestConnectionUsesFixedAdmissionDefaults(t *testing.T) {
+	parsed, err := parseConnectionConfig(map[string]interface{}{
+		"path":            t.TempDir(),
+		"maxAuditResults": float64(2),
+	})
+	if err != nil {
+		t.Fatalf("parseConnectionConfig() error = %v", err)
+	}
+	conn := connectionFromConfig(&parsed)
+	limits := conn.admission.limits
+	if limits.maxResults != defaultMaxAdmissionResults ||
+		limits.maxFileBytes != defaultMaxAdmissionFileBytes ||
+		limits.maxFileRecords != defaultMaxAdmissionFileRecords ||
+		limits.maxFileAge != defaultMaxAdmissionFileAge ||
+		limits.maxTotalBytes != defaultMaxAdmissionTotalBytes ||
+		limits.fileTTL != defaultAdmissionFileTTL ||
+		limits.maxRecordBytes != defaultMaxAdmissionRecordBytes ||
+		limits.minFreeBytes != defaultMinAdmissionFreeBytes {
+		t.Fatalf("unexpected admission defaults: %+v", conn)
+	}
+}
+
 func TestConnectionTTL(t *testing.T) {
 	tests := []struct {
 		name        string

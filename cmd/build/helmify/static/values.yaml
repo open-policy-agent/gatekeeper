@@ -89,14 +89,14 @@ extraVolumes: []
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.23.0-beta.0
+  release: v3.24.0-beta.0
   pullPolicy: IfNotPresent
   pullSecrets: []
 preInstall:
   crdRepository:
     image:
       repository: null
-      tag: v3.23.0-beta.0
+      tag: v3.24.0-beta.0
 postUpgrade:
   labelNamespace:
     serviceAccount:
@@ -105,7 +105,7 @@ postUpgrade:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.23.0-beta.0
+      tag: v3.24.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -142,7 +142,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.23.0-beta.0
+      tag: v3.24.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -189,7 +189,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.23.0-beta.0
+      tag: v3.24.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     priorityClassName: ""
@@ -276,8 +276,30 @@ controllerManager:
       #       cidr: 0.0.0.0/0
   disableWebhookOperation: false
   disableGenerateOperation: true
+admission:
+  exportSidecar:
+    name: admission-reader
+    image: ghcr.io/open-policy-agent/fake-reader:latest
+    imagePullPolicy: Always
+    env:
+      - name: DELETE_AFTER_READ
+        value: "true"
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+      runAsGroup: 999
+      runAsNonRoot: true
+      runAsUser: 1000
+      seccompProfile:
+        type: RuntimeDefault
+  disableExportSidecar: true
 exportBackend: ""
 audit:
+  connection: audit-connection
+  channel: audit-channel
   exportConnection:
     path: /tmp/violations/topics
     maxAuditResults: 3

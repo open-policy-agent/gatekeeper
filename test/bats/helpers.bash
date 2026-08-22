@@ -141,16 +141,49 @@ mutator_enforced() {
 
 total_violations() {
   local backend="$1"
-  ct_total_violations="$(kubectl get k8srequiredlabels pod-must-have-test -n gatekeeper-system -ojson | jq '.status.totalViolations')"
-  audit_id="$(kubectl get k8srequiredlabels pod-must-have-test -n gatekeeper-system -ojson | jq '.status.auditTimestamp')"
+  local constraint_name="pod-must-have-test"
+  local constraint
+  local export_logs
+  constraint="$(kubectl get k8srequiredlabels "${constraint_name}" -n gatekeeper-system -ojson)" || return 1
+  ct_total_violations="$(jq -r '.status.totalViolations // 0' <<<"${constraint}")" || return 1
+  audit_id="$(jq -r '.status.auditTimestamp // empty' <<<"${constraint}")" || return 1
+  [[ -n "${audit_id}" ]] || return 1
   violations=""
   if [[ "${backend}" == "dapr" ]]; then
-    violations="$(kubectl logs -n fake-subscriber -l app=sub -c go-sub --tail=-1 | grep $audit_id | grep violation_audited | wc -l)"
+    export_logs="$(kubectl logs -n fake-subscriber -l app=sub -c go-sub --tail=-1)" || return 1
+    violations="$(awk -v audit_id="${audit_id}" -v constraint_name="${constraint_name}" 'index($0, "ID:\"" audit_id "\"") && index($0, "EventType:\"violation_audited\"") && index($0, "Name:\"" constraint_name "\"") {count++} END {print count+0}' <<<"${export_logs}")"
   elif [[ "${backend}" == "disk" ]]; then
-    violations="$(kubectl logs -n gatekeeper-system -l gatekeeper.sh/operation=audit -c reader --tail=-1 | grep $audit_id | grep violation_audited | wc -l)"
+    export_logs="$(kubectl logs -n gatekeeper-system -l gatekeeper.sh/operation=audit -c reader --tail=-1)" || return 1
+    violations="$(awk -v audit_id="${audit_id}" -v constraint_name="${constraint_name}" 'index($0, "\"id\":\"" audit_id "\"") && index($0, "\"eventType\":\"violation_audited\"") && index($0, "\"name\":\"" constraint_name "\"") {count++} END {print count+0}' <<<"${export_logs}")"
   else
     echo "Unknown backend: ${backend}"
     return 1
   fi
   [[ "${ct_total_violations}" -eq "${violations}" ]]
+}
+
+admission_violation_count() {
+  kubectl logs -n ${GATEKEEPER_NAMESPACE} -l control-plane=controller-manager -c admission-reader --tail=-1 | awk '/violation_admission/ && /denied-export-pod/ {count++} END {print count+0}'
+}
+
+admission_violation_count_greater_than() {
+  local previous_count="$1"
+  local current_count
+  current_count="$(admission_violation_count)"
+  [[ "${current_count}" -gt "${previous_count}" ]]
+}
+
+admission_export_connection_active() {
+  local connection="${AUDIT_CONNECTION:-audit}"
+  local ready_pods
+  ready_pods="$(kubectl get pods -n "${GATEKEEPER_NAMESPACE}" -l control-plane=controller-manager -ojson | jq '[.items[] | select(.status.phase == "Running") | select(any(.status.containerStatuses[]?; .name == "manager" and .ready == true)) | .metadata.name]')"
+  kubectl get connection "${connection}" -n "${GATEKEEPER_NAMESPACE}" -ojson | jq -e --argjson ready "${ready_pods}" '.metadata.generation as $generation | [.status.byPod[]? | select(.observedGeneration == $generation) | select((.operations // []) | index("webhook")) | select(((.connectionErrors // []) | length) == 0) | select(any(.publishStatuses[]?; .source == "webhook" and .active == true)) | .id] as $active | any($ready[]; . as $pod | $active | index($pod))'
+}
+
+admission_export_connection_ready() {
+  local connection="${AUDIT_CONNECTION:-audit}"
+  local ready_pods
+  ready_pods="$(kubectl get pods -n "${GATEKEEPER_NAMESPACE}" -l control-plane=controller-manager -ojson | jq '[.items[] | select(.status.phase == "Running") | select(any(.status.containerStatuses[]?; .name == "manager" and .ready == true)) | .metadata.name]')"
+  [[ "$(jq 'length' <<<"${ready_pods}")" -gt 0 ]] || return 1
+  kubectl get connection "${connection}" -n "${GATEKEEPER_NAMESPACE}" -ojson | jq -e --argjson ready "${ready_pods}" '.metadata.generation as $generation | [.status.byPod[]? | select(.observedGeneration == $generation) | select((.operations // []) | index("webhook")) | select(((.connectionErrors // []) | length) == 0) | .id] as $reconciled | ($ready - $reconciled | length) == 0'
 }

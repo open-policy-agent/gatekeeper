@@ -23,15 +23,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Keeping Helm 3 here because the 3.9.2 base release requires Kubernetes 1.24 (for PodSecurityPolicy),
+        # which is long past EOL and falls outside Helm 4's supported version skew.
         HELM_VERSION: ["3.17.4"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Bootstrap e2e
         run: |
