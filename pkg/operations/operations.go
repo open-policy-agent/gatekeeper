@@ -131,3 +131,11 @@ func AssignedStringList() []string {
 func HasValidationOperations() bool {
 	return IsAssigned(Audit) || IsAssigned(Status) || IsAssigned(Webhook)
 }
+
+// HasExpansionConsumerOperations returns `true` if there are any operations
+// assigned that evaluate expanded resources, i.e. Audit and Webhook. Status,
+// Generate, and mutation-only processes do not evaluate expanded resources
+// and therefore do not need the expansion ingestion controller.
+func HasExpansionConsumerOperations() bool {
+	return IsAssigned(Audit) || IsAssigned(Webhook)
+}
