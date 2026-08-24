@@ -48,3 +48,33 @@ func Test_Flags(t *testing.T) {
 		})
 	}
 }
+
+// Validates HasExpansionConsumerOperations only reports true for the
+// operations that actually evaluate expanded resources.
+func Test_HasExpansionConsumerOperations(t *testing.T) {
+	tests := map[string]struct {
+		assigned map[Operation]bool
+		expected bool
+	}{
+		"audit only":            {assigned: map[Operation]bool{Audit: true}, expected: true},
+		"webhook only":          {assigned: map[Operation]bool{Webhook: true}, expected: true},
+		"audit and webhook":     {assigned: map[Operation]bool{Audit: true, Webhook: true}, expected: true},
+		"status only":           {assigned: map[Operation]bool{Status: true}, expected: false},
+		"generate only":         {assigned: map[Operation]bool{Generate: true}, expected: false},
+		"mutation-status only":  {assigned: map[Operation]bool{MutationStatus: true}, expected: false},
+		"mutation-webhook only": {assigned: map[Operation]bool{MutationWebhook: true}, expected: false},
+		"none assigned":         {assigned: map[Operation]bool{}, expected: false},
+	}
+
+	original := operations
+	defer func() { operations = original }()
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			operations = &opSet{assignedOperations: tc.assigned}
+			if got := HasExpansionConsumerOperations(); got != tc.expected {
+				t.Errorf("HasExpansionConsumerOperations() = %v, want %v", got, tc.expected)
+			}
+		})
+	}
+}
