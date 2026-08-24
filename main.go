@@ -510,7 +510,10 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		}
 	}
 
-	mutationSystem := mutation.NewSystem(mutationOpts)
+	var mutationSystem *mutation.System
+	if mutation.Enabled() {
+		mutationSystem = mutation.NewSystem(mutationOpts)
+	}
 	expansionSystem := expansion.NewSystem(mutationSystem)
 	exportSystem := export.NewSystem()
 
