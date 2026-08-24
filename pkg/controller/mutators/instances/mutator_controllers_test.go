@@ -2,13 +2,40 @@ package instances
 
 import (
 	"context"
+	"flag"
 	"testing"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
+
+// TestAddSkipsRegistrationWhenMutationDisabled guards against unconditionally
+// registering the conflict-routing runnable (and the mutator controllers behind
+// it) for pods that have no mutation operation assigned. Before this guard,
+// Add dereferenced the manager (e.g. mgr.GetScheme()) before ever consulting
+// mutation.Enabled(), so passing a nil manager panics unless the early return
+// below is in place.
+//
+// This test narrows the process-wide "operation" flag to audit-only and
+// deliberately does not restore it afterward: opSet.Set (pkg/operations)
+// only resets the assigned-operation set on the very first call in the
+// process and merely adds to it on every call thereafter, so widening back
+// to "all operations" here would make the flag permanently un-narrowable and
+// break this test under repeated runs (e.g. `go test -count=2`). No other
+// test in this package depends on the default operation set.
+func TestAddSkipsRegistrationWhenMutationDisabled(t *testing.T) {
+	if err := flag.CommandLine.Set("operation", string(operations.Audit)); err != nil {
+		t.Fatalf("setting operation flag: %v", err)
+	}
+
+	a := &Adder{}
+	if err := a.Add(nil); err != nil {
+		t.Fatalf("Add returned error: %v", err)
+	}
+}
 
 func TestRouteConflictEventsRoutesByKind(t *testing.T) {
 	t.Parallel()
