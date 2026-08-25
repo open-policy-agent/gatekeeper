@@ -165,17 +165,12 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	// Register the connection before creating its directory: once it is in
 	// openConnections, pathInUseLocked(path) holds, so a concurrent cleanup will
 	// not remove this path while ensureDirectory runs below.
-	r.openConnections[connectionName] = Connection{
-		Path:                path,
-		MaxAuditResults:     int(maxResults),
-		ClosedConnectionTTL: ttl,
-		MaxRetryAttempts:    rc.maxRetryAttempts,
-		BaseRetryDelay:      rc.baseRetryDelay,
-		RetryBackoffFactor:  rc.retryBackoffFactor,
-		MaxRetryDelay:       rc.maxRetryDelay,
-	}
-	conn := connectionFromConfig(&parsed)
-	r.openConnections[connectionName] = conn
+conn := connectionFromConfig(&parsed)
+conn.MaxRetryAttempts = rc.maxRetryAttempts
+conn.BaseRetryDelay = rc.baseRetryDelay
+conn.RetryBackoffFactor = rc.retryBackoffFactor
+conn.MaxRetryDelay = rc.maxRetryDelay
+r.openConnections[connectionName] = conn
 	r.mu.Unlock()
 
 	if err := ensureDirectory(parsed.path); err != nil {
