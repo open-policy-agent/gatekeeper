@@ -25,9 +25,26 @@ import (
 const (
 	defaultAdmissionExportQueueSize = 1024
 	defaultAdmissionExportBatchSize = 64
-	// Bound the complete encoded record, not only the violation message. 64 KiB
-	// leaves room for normal policy and request metadata while preventing one
-	// user-influenced result from consuming a disproportionate share of the queue.
+	// defaultAdmissionExportMaxMessageBytes bounds the complete encoded record,
+	// not only the violation message. The limit is measured against the full
+	// JSON-marshaled ExportMsg: the violation message and constraint annotations,
+	// but also details emitted by the policy, every label on the reviewed
+	// resource, and the request identity (user, groups, UID).
+	//
+	// 64 KiB is a good limit because it is generous for realistic policies while
+	// still capping the fields an author or requester can inflate without bound.
+	// A typical violation from community policy libraries encodes to only a few
+	// kilobytes (short messages, empty or tiny details, a handful of
+	// annotations), so 64 KiB leaves roughly an order of magnitude of headroom
+	// for normal policy and request metadata. At the same time the two fields
+	// that are not bounded by any policy catalog -- the policy-provided details
+	// and the reviewed resource's labels -- cannot grow the record without limit:
+	// a single hostile or verbose result is prevented from consuming a
+	// disproportionate share of the in-memory queue and the on-disk spool, which
+	// are themselves bounded (see defaultAdmissionExportMaxQueueBytes and the
+	// disk spool limits). Records above the limit are dropped before enqueue and
+	// reported with drop reason message_too_large rather than silently truncated,
+	// so a torn partial record is never exported.
 	defaultAdmissionExportMaxMessageBytes = 64 * 1024
 	defaultAdmissionExportMaxQueueBytes   = 16 * 1024 * 1024
 	defaultAdmissionExportStatusInterval  = 10 * time.Second
