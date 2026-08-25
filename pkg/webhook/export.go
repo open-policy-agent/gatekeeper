@@ -26,8 +26,9 @@ const (
 	defaultAdmissionExportQueueSize = 1024
 	defaultAdmissionExportBatchSize = 64
 	// Bound the complete encoded record, not only the violation message. 64 KiB
-	// leaves room for normal policy and request metadata while preventing one
-	// user-influenced result from consuming a disproportionate share of the queue.
+	// is large enough for ordinary policy messages, request metadata, and common
+	// annotations while still preventing one user-influenced result from
+	// consuming a disproportionate share of the queue or disk spool.
 	defaultAdmissionExportMaxMessageBytes = 64 * 1024
 	defaultAdmissionExportMaxQueueBytes   = 16 * 1024 * 1024
 	defaultAdmissionExportStatusInterval  = 10 * time.Second
