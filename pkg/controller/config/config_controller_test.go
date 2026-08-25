@@ -164,7 +164,7 @@ func TestReconcile(t *testing.T) {
 		fakes.WithName("no-pod"),
 	)
 
-	rec, err := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil }, nil)
+	rec, err := newReconciler(mgr, cacheManager, processExcluder, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil }, nil)
 	require.NoError(t, err)
 
 	// Wrap the Controller Reconcile function so it writes each request to a map when it is finished reconciling.
@@ -456,7 +456,7 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 		fakes.WithName("no-pod"),
 	)
 
-	rec, err := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil }, nil)
+	rec, err := newReconciler(mgr, cacheManager, processExcluder, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil }, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating reconciler: %w", err)
 	}
@@ -634,7 +634,7 @@ func TestConfig_Retries(t *testing.T) {
 		fakes.WithName("no-pod"),
 	)
 
-	rec, _ := newReconciler(mgr, cacheManager, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil }, nil)
+	rec, _ := newReconciler(mgr, cacheManager, processExcluder, tracker, func(context.Context) (*v1.Pod, error) { return pod, nil }, nil)
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)

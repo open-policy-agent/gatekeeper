@@ -542,41 +542,47 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	// Setup all Controllers
 	setupLog.Info("setting up controllers")
 
-	// Events ch will be used to receive events from dynamic watches registered
-	// via the registrar below.
-	events := make(chan event.GenericEvent, 1024)
-	reg, err := wm.NewRegistrar(
-		cachemanager.RegistrarName,
-		events)
-	if err != nil {
-		setupLog.Error(err, "unable to set up watch registrar for cache manager")
-		return err
-	}
+	// The cache manager and everything hanging off it only exist for operations
+	// that sync referential data for validation. Other operations read process
+	// exclusions from the Config resource without any of this.
+	var (
+		events chan event.GenericEvent
+		cm     *cachemanager.CacheManager
+	)
+	if operations.NeedsValidationDataSync() {
+		// Events ch will be used to receive events from dynamic watches registered
+		// via the registrar below.
+		events = make(chan event.GenericEvent, 1024)
+		reg, err := wm.NewRegistrar(
+			cachemanager.RegistrarName,
+			events)
+		if err != nil {
+			setupLog.Error(err, "unable to set up watch registrar for cache manager")
+			return err
+		}
 
-	syncMetricsCache := syncutil.NewMetricsCache()
+		cmConfig := &cachemanager.Config{
+			SyncMetricsCache: syncutil.NewMetricsCache(),
+			Tracker:          tracker,
+			ProcessExcluder:  processExcluder,
+			Registrar:        reg,
+			Reader:           mgr.GetCache(),
+		}
 
-	cmConfig := &cachemanager.Config{
-		SyncMetricsCache: syncMetricsCache,
-		Tracker:          tracker,
-		ProcessExcluder:  processExcluder,
-		Registrar:        reg,
-		Reader:           mgr.GetCache(),
-	}
+		if client != nil {
+			cmConfig.CfClient = client
+		}
 
-	if client != nil {
-		cmConfig.CfClient = client
-	}
+		cm, err = cachemanager.NewCacheManager(cmConfig)
+		if err != nil {
+			setupLog.Error(err, "unable to create cache manager")
+			return err
+		}
 
-	cm, err := cachemanager.NewCacheManager(cmConfig)
-	if err != nil {
-		setupLog.Error(err, "unable to create cache manager")
-		return err
-	}
-
-	err = mgr.Add(pruner.NewExpectationsPruner(cm, tracker))
-	if err != nil {
-		setupLog.Error(err, "adding expectations pruner to manager")
-		return err
+		if err := mgr.Add(pruner.NewExpectationsPruner(cm, tracker)); err != nil {
+			setupLog.Error(err, "adding expectations pruner to manager")
+			return err
+		}
 	}
 
 	opts := controller.Dependencies{
