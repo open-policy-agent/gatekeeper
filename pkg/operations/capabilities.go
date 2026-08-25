@@ -45,10 +45,23 @@ func NeedsGenerateConfigNotifications() bool {
 	return IsAssigned(Generate)
 }
 
+// NeedsReadinessStats returns true when the pod runs a readiness tracker whose
+// verbose logging Config.spec.readiness.statsEnabled switches on. Setup builds
+// a tracker for every operation set - mutation-only pods included, and their
+// mutator expectations are exactly what that logging reports - so this holds
+// unconditionally. It is named rather than inlined because the Config
+// reconciler is the only place that reads the field, which is what forces
+// Config reconciliation onto pods that use nothing else from the resource.
+func NeedsReadinessStats() bool {
+	return true
+}
+
 // NeedsConfigReconciliation returns true when the Config controller has work to
-// do: process exclusions, validation data sync, or generate notifications.
+// do: process exclusions, validation data sync, generate notifications, or the
+// readiness stats switch.
 func NeedsConfigReconciliation() bool {
 	return NeedsProcessExclusions() ||
 		NeedsValidationDataSync() ||
-		NeedsGenerateConfigNotifications()
+		NeedsGenerateConfigNotifications() ||
+		NeedsReadinessStats()
 }

@@ -34,26 +34,25 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// TestAdderSkipsPodsThatDoNotUseConfig pins the registration gate: a pod that
-// neither excludes processes nor syncs data must not build the Config
-// controller, while a pod that does must still fail loudly on a missing
-// dependency.
-func TestAdderSkipsPodsThatDoNotUseConfig(t *testing.T) {
-	mgr, _ := setupManager(t)
+// TestAdderRegistersWithoutDataSync pins that the Config controller is built
+// for operation sets that do not sync validation data - mutation-only pods
+// included, because this reconciler is the only consumer of
+// Config.spec.readiness.statsEnabled - and that a missing dependency still
+// fails setup loudly instead of silently skipping registration.
+func TestAdderRegistersWithoutDataSync(t *testing.T) {
+	for _, op := range []operations.Operation{operations.MutationStatus, operations.MutationWebhook} {
+		t.Run(string(op), func(t *testing.T) {
+			t.Cleanup(operations.AssignForTest(op))
 
-	t.Run("mutation status only", func(t *testing.T) {
-		t.Cleanup(operations.AssignForTest(operations.MutationStatus))
+			mgr, _ := setupManager(t)
+			require.NoError(t, (&Adder{ProcessExcluder: process.New()}).Add(mgr))
 
-		// Neither a cache manager nor a process excluder is set, so building the
-		// reconciler would fail: a nil error proves nothing was registered.
-		require.NoError(t, (&Adder{}).Add(mgr))
-	})
-
-	t.Run("mutation webhook", func(t *testing.T) {
-		t.Cleanup(operations.AssignForTest(operations.MutationWebhook))
-
-		require.Error(t, (&Adder{}).Add(mgr))
-	})
+			// Without a process excluder there is nowhere to put the exclusions
+			// the reconciler parses, so setup has to fail.
+			mgr, _ = setupManager(t)
+			require.Error(t, (&Adder{}).Add(mgr))
+		})
+	}
 }
 
 // TestReconcileWithoutDataSync covers the mutation-webhook-only pod: process

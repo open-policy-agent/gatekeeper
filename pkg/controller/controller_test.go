@@ -101,9 +101,20 @@ func TestDependenciesValidate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:     "mutation status needs nothing",
+			// Mutation status syncs no data, but the Config controller still
+			// registers for the readiness stats switch and needs somewhere to
+			// put the exclusions it parses.
+			name:     "mutation status needs only a process excluder",
+			assigned: []operations.Operation{operations.MutationStatus},
+			deps: func() *Dependencies {
+				return &Dependencies{ProcessExcluder: process.New()}
+			},
+		},
+		{
+			name:     "mutation status without a process excluder",
 			assigned: []operations.Operation{operations.MutationStatus},
 			deps:     func() *Dependencies { return &Dependencies{} },
+			wantErr:  true,
 		},
 	}
 
