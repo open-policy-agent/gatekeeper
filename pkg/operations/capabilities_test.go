@@ -27,9 +27,12 @@ func TestCapabilities(t *testing.T) {
 		configReconciliation  bool
 	}{
 		{
+			// Even here: the readiness tracker exists regardless of the
+			// operation set, and only the Config controller can switch its
+			// verbose logging on.
 			name:                 "no operations",
 			assigned:             nil,
-			configReconciliation: false,
+			configReconciliation: true,
 		},
 		{
 			name:                 "audit",
@@ -52,14 +55,16 @@ func TestCapabilities(t *testing.T) {
 			configReconciliation: true,
 		},
 		{
+			// Mutation-only pods read nothing else off the Config resource, but
+			// their readiness stats switch still lives there.
 			name:                 "mutation status only",
 			assigned:             []Operation{MutationStatus},
-			configReconciliation: false,
+			configReconciliation: true,
 		},
 		{
 			name:                 "mutation controller only",
 			assigned:             []Operation{MutationController},
-			configReconciliation: false,
+			configReconciliation: true,
 		},
 		{
 			name:                  "generate only",
@@ -90,6 +95,9 @@ func TestCapabilities(t *testing.T) {
 			}
 			if got := NeedsGenerateConfigNotifications(); got != tt.generateNotifications {
 				t.Errorf("NeedsGenerateConfigNotifications() = %t, want %t", got, tt.generateNotifications)
+			}
+			if got := NeedsReadinessStats(); !got {
+				t.Errorf("NeedsReadinessStats() = %t, want true", got)
 			}
 			if got := NeedsConfigReconciliation(); got != tt.configReconciliation {
 				t.Errorf("NeedsConfigReconciliation() = %t, want %t", got, tt.configReconciliation)

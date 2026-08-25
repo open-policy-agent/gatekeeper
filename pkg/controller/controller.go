@@ -150,7 +150,10 @@ func (deps *Dependencies) Validate() error {
 		return fmt.Errorf("cache manager was built but no operation in %v syncs validation data", operations.AssignedStringList())
 	}
 
-	if operations.NeedsProcessExclusions() && deps.ProcessExcluder == nil {
+	// The Config reconciler writes the exclusions it parses into this excluder,
+	// so it is required wherever the Config controller registers, not only where
+	// the exclusions are read back.
+	if operations.NeedsConfigReconciliation() && deps.ProcessExcluder == nil {
 		return fmt.Errorf("process excluder is required for operations %v", operations.AssignedStringList())
 	}
 
