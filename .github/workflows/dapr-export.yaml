@@ -20,12 +20,12 @@ jobs:
         DAPR_VERSION: ["1.12"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Bootstrap e2e
         run: |
@@ -49,8 +49,9 @@ jobs:
           make docker-buildx-crds CRD_IMG=gatekeeper-crds:latest CI=true
           kind load docker-image --name kind gatekeeper-e2e:latest gatekeeper-crds:latest
           kubectl create ns gatekeeper-system
+          make e2e-publisher-component-deploy
           make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest ENABLE_EXPORT=true LOG_LEVEL=DEBUG AUDIT_CHANNEL=audit-channel EXPORT_BACKEND=dapr HELM_TIMEOUT=10m
-          make e2e-publisher-deploy
+          make e2e-publisher-connection-deploy
           make test-e2e ENABLE_EXPORT_TESTS=1 EXPORT_BACKEND=dapr
 
       - name: Save logs

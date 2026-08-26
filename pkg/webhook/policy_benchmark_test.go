@@ -354,7 +354,7 @@ func BenchmarkValidationMessagesDenyScale(b *testing.B) {
 		b.Run("results-"+strconv.Itoa(resultCount), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				denyMsgs, warnMsgs := h.getValidationMessages(results, &req)
+				denyMsgs, warnMsgs := h.processValidationResults(results, &req)
 				if len(denyMsgs) != resultCount || len(warnMsgs) != 0 {
 					b.Fatalf("deny,warn counts = %d,%d; want %d,0", len(denyMsgs), len(warnMsgs), resultCount)
 				}

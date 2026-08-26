@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
@@ -21,6 +22,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	expansionfixtures "github.com/open-policy-agent/gatekeeper/v3/pkg/expansion/fixtures"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -37,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/yaml"
@@ -1265,7 +1268,225 @@ func newConstraint(kind, name string, enforcementAction string, t *testing.T) *u
 	return c
 }
 
-func TestGetValidationMessages(t *testing.T) {
+type fakeAdmissionViolationExporter struct {
+	messages []exportutil.ExportMsg
+}
+
+func (exporter *fakeAdmissionViolationExporter) TryExport(build func() *exportutil.ExportMsg) {
+	message := build()
+	exporter.messages = append(exporter.messages, *message)
+}
+
+func TestHandleExportsDryrunAdmissionViolation(t *testing.T) {
+	ctx := context.Background()
+	opa, err := makeOpaClient()
+	require.NoError(t, err)
+
+	_, err = opa.AddTemplate(ctx, validRegoTemplate())
+	require.NoError(t, err)
+	constraint := validRegoTemplateConstraint()
+	constraint.SetAnnotations(map[string]string{
+		"owner":                        "platform",
+		lastAppliedConfigurationAnnKey: "ignored",
+	})
+	require.NoError(t, unstructured.SetNestedField(constraint.Object, string(util.Dryrun), "spec", "enforcementAction"))
+	_, err = opa.AddConstraint(ctx, constraint)
+	require.NoError(t, err)
+
+	exporter := &fakeAdmissionViolationExporter{}
+	processExcluder := process.New()
+	handler := validationHandler{
+		opa:               opa,
+		expansionSystem:   expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+		admissionExporter: exporter,
+		webhookHandler: webhookHandler{
+			injectedConfig:  &v1alpha1.Config{},
+			client:          &nsGetter{},
+			reader:          &nsGetter{},
+			processExcluder: processExcluder,
+		},
+		log: log,
+	}
+	dryRun := false
+	review := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			UID: types.UID("request-1"),
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			},
+			Resource: metav1.GroupVersionResource{
+				Version:  "v1",
+				Resource: "pods",
+			},
+			Object: runtime.RawExtension{
+				Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"acbd","namespace":"ns1","labels":{"app":"demo"}}}`),
+			},
+			Namespace: "ns1",
+			Operation: admissionv1.Create,
+			UserInfo: authenticationv1.UserInfo{
+				Username: "alice@example.com",
+				UID:      "user-1",
+				Groups:   []string{"developers", "system:authenticated"},
+			},
+			DryRun: &dryRun,
+		},
+	}
+
+	resp := handler.Handle(ctx, review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.Warnings)
+	require.Len(t, exporter.messages, 1)
+
+	message := exporter.messages[0]
+	require.Equal(t, "request-1", message.ID)
+	require.Equal(t, exportutil.AdmissionViolationEventType, message.EventType)
+	require.Equal(t, "Maybe this will work?", message.Message)
+	require.Equal(t, string(util.Dryrun), message.EnforcementAction)
+	require.Equal(t, "K8sGoodRego", message.Kind)
+	require.Equal(t, "constraint", message.Name)
+	require.Equal(t, map[string]string{"owner": "platform"}, message.ConstraintAnnotations)
+	require.Equal(t, "", message.ResourceGroup)
+	require.Equal(t, "v1", message.ResourceAPIVersion)
+	require.Equal(t, "Pod", message.ResourceKind)
+	require.Equal(t, "ns1", message.ResourceNamespace)
+	require.Equal(t, "acbd", message.ResourceName)
+	require.Equal(t, map[string]string{"app": "demo"}, message.ResourceLabels)
+	_, err = time.Parse(time.RFC3339Nano, message.Timestamp)
+	require.NoError(t, err)
+	require.Equal(t, string(admissionv1.Create), message.Operation)
+	require.Equal(t, "pods", message.RequestResource)
+	require.Empty(t, message.RequestSubresource)
+	require.Equal(t, "alice@example.com", message.RequestUsername)
+	require.Equal(t, "user-1", message.RequestUserUID)
+	require.Equal(t, []string{"developers", "system:authenticated"}, message.RequestUserGroups)
+	require.NotNil(t, message.DryRun)
+	require.False(t, *message.DryRun)
+}
+
+func TestProcessValidationResultsExportsAdmissionViolations(t *testing.T) {
+	exporter := &fakeAdmissionViolationExporter{}
+	handler := validationHandler{
+		admissionExporter: exporter,
+		log:               log,
+	}
+	dryRun := true
+	review := &admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			UID: types.UID("delete-request"),
+			Kind: metav1.GroupVersionKind{
+				Version: "v1",
+				Kind:    "Pod",
+			},
+			OldObject: runtime.RawExtension{
+				Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"deleted-pod","namespace":"ns1","labels":{"app":"demo"}}}`),
+			},
+			Operation:          admissionv1.Delete,
+			RequestResource:    &metav1.GroupVersionResource{Version: "v1", Resource: "pods"},
+			RequestSubResource: "status",
+			UserInfo: authenticationv1.UserInfo{
+				Username: "system:serviceaccount:ns1:controller",
+				UID:      "service-account-1",
+				Groups:   []string{"system:serviceaccounts", "system:authenticated"},
+			},
+			DryRun: &dryRun,
+		},
+	}
+	results := []*rtypes.Result{
+		nil,
+		{
+			Msg:               "missing constraint",
+			EnforcementAction: string(util.Deny),
+		},
+		{
+			Msg:               "deny",
+			Constraint:        newConstraint("Foo", "deny", string(util.Deny), t),
+			EnforcementAction: string(util.Deny),
+		},
+		{
+			Msg:               "warn",
+			Constraint:        newConstraint("Foo", "warn", string(util.Warn), t),
+			EnforcementAction: string(util.Warn),
+		},
+		{
+			Msg:               "dryrun",
+			Constraint:        newConstraint("Foo", "dryrun", string(util.Dryrun), t),
+			EnforcementAction: string(util.Dryrun),
+		},
+		{
+			Msg:                      "scoped",
+			Constraint:               newConstraint("Foo", "scoped", string(util.Scoped), t),
+			EnforcementAction:        string(util.Scoped),
+			ScopedEnforcementActions: []string{string(util.Deny), string(util.Warn)},
+		},
+		{
+			Msg:               "invalid",
+			Constraint:        newConstraint("Foo", "invalid", "invalid", t),
+			EnforcementAction: "invalid",
+		},
+	}
+
+	denyMsgs, warnMsgs := handler.processValidationResults(results, review)
+
+	require.Len(t, denyMsgs, 2)
+	require.Len(t, warnMsgs, 2)
+	require.Len(t, exporter.messages, 4)
+	timestamp := exporter.messages[0].Timestamp
+	_, err := time.Parse(time.RFC3339Nano, timestamp)
+	require.NoError(t, err)
+	for _, message := range exporter.messages {
+		require.Equal(t, "delete-request", message.ID)
+		require.Equal(t, "ns1", message.ResourceNamespace)
+		require.Equal(t, "deleted-pod", message.ResourceName)
+		require.Equal(t, map[string]string{"app": "demo"}, message.ResourceLabels)
+		require.Equal(t, timestamp, message.Timestamp)
+		require.Equal(t, string(admissionv1.Delete), message.Operation)
+		require.Equal(t, "pods", message.RequestResource)
+		require.Equal(t, "status", message.RequestSubresource)
+		require.Equal(t, "system:serviceaccount:ns1:controller", message.RequestUsername)
+		require.Equal(t, "service-account-1", message.RequestUserUID)
+		require.Equal(t, []string{"system:serviceaccounts", "system:authenticated"}, message.RequestUserGroups)
+		require.NotNil(t, message.DryRun)
+		require.True(t, *message.DryRun)
+	}
+	require.Equal(t, string(util.Deny), exporter.messages[0].EnforcementAction)
+	require.Equal(t, string(util.Warn), exporter.messages[1].EnforcementAction)
+	require.Equal(t, string(util.Dryrun), exporter.messages[2].EnforcementAction)
+	require.Equal(t, string(util.Scoped), exporter.messages[3].EnforcementAction)
+	require.Equal(t, []string{string(util.Deny), string(util.Warn)}, exporter.messages[3].EnforcementActions)
+}
+
+func TestNewAdmissionViolationExportMessageConnect(t *testing.T) {
+	review := &admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			UID: types.UID("connect-request"),
+			Kind: metav1.GroupVersionKind{
+				Version: "v1",
+				Kind:    "PodExecOptions",
+			},
+			Resource: metav1.GroupVersionResource{
+				Version:  "v1",
+				Resource: "pods",
+			},
+			SubResource: "exec",
+			Name:        "example",
+			Namespace:   "default",
+			Operation:   admissionv1.Connect,
+		},
+	}
+
+	message := newAdmissionViolationExportMessage(review, &unstructured.Unstructured{})
+
+	require.Equal(t, "connect-request", message.ID)
+	require.Equal(t, string(admissionv1.Connect), message.Operation)
+	require.Equal(t, "pods", message.RequestResource)
+	require.Equal(t, "exec", message.RequestSubresource)
+	require.Equal(t, "default", message.ResourceNamespace)
+	require.Equal(t, "example", message.ResourceName)
+}
+
+func TestProcessValidationResults(t *testing.T) {
 	resDryRun := &rtypes.Result{
 		Msg:               "test",
 		Constraint:        newConstraint("Foo", "ph", "dryrun", t),
@@ -1401,7 +1622,7 @@ func TestGetValidationMessages(t *testing.T) {
 					},
 				},
 			}
-			denyMsgs, warnMsgs := handler.getValidationMessages(tt.Result, review)
+			denyMsgs, warnMsgs := handler.processValidationResults(tt.Result, review)
 			if len(denyMsgs) != tt.ExpectedDenyMsgCount {
 				t.Errorf("denyMsgs: expected count = %d; actual count = %d", tt.ExpectedDenyMsgCount, len(denyMsgs))
 			}

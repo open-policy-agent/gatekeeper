@@ -2,17 +2,37 @@ package export
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/dapr"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/driver"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/testdriver"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/stretchr/testify/assert"
 )
 
 var testSystem *System
+
+type recordingDriver struct {
+	published []any
+}
+
+func (driver *recordingDriver) Publish(_ context.Context, _ string, data interface{}, _ string) error {
+	driver.published = append(driver.published, data)
+	return nil
+}
+
+func (*recordingDriver) CloseConnection(string) error { return nil }
+
+func (*recordingDriver) UpdateConnection(context.Context, string, interface{}) error { return nil }
+
+func (*recordingDriver) CreateConnection(context.Context, string, interface{}) error { return nil }
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -237,6 +257,78 @@ func TestSystem_Publish(t *testing.T) {
 				t.Errorf("System.Publish() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestSystemPublishBatchFallbackPreservesMessageTypes(t *testing.T) {
+	const driverName = "recording"
+	recorder := &recordingDriver{}
+	oldDrivers := supportedDrivers
+	supportedDrivers = map[string]driver.Driver{driverName: recorder}
+	t.Cleanup(func() { supportedDrivers = oldDrivers })
+	system := &System{connectionToDriver: map[string]string{"connection": driverName}}
+	raw := json.RawMessage(`{"eventType":"violation_admission"}`)
+	typed := exportutil.ExportMsg{ID: "audit-1", Message: exportutil.AuditStartedMsg}
+
+	errorsByMessage := system.PublishBatch(context.Background(), "connection", "topic", []any{raw, typed})
+
+	assert.Len(t, errorsByMessage, 2)
+	assert.NoError(t, errorsByMessage[0])
+	assert.NoError(t, errorsByMessage[1])
+	assert.Equal(t, []any{raw, typed}, recorder.published)
+}
+
+func TestSystemSupportsAuditAndAdmissionOnSharedDiskConnection(t *testing.T) {
+	oldDrivers := supportedDrivers
+	supportedDrivers = map[string]driver.Driver{disk.Name: disk.Connections}
+	t.Cleanup(func() { supportedDrivers = oldDrivers })
+
+	ctx := context.Background()
+	system := NewSystem()
+	connectionName := "shared-disk-sources"
+	path := t.TempDir()
+	config := map[string]interface{}{
+		"path":            path,
+		"maxAuditResults": float64(1),
+	}
+	if err := system.UpsertConnection(ctx, config, connectionName, disk.Name); err != nil {
+		t.Fatalf("UpsertConnection() error = %v", err)
+	}
+	t.Cleanup(func() { _ = system.CloseConnection(connectionName) })
+
+	if err := system.Publish(ctx, connectionName, "audit", exportutil.ExportMsg{ID: "audit-1", Message: exportutil.AuditStartedMsg}); err != nil {
+		t.Fatalf("Publish(audit start) error = %v", err)
+	}
+	admission, err := json.Marshal(exportutil.ExportMsg{EventType: exportutil.AdmissionViolationEventType, ResourceName: "denied-pod"})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	batchResults := system.PublishBatch(ctx, connectionName, "audit", []any{
+		json.RawMessage(admission),
+		exportutil.ExportMsg{EventType: exportutil.AdmissionViolationEventType, ResourceName: "second-denied-pod"},
+	})
+	for i, result := range batchResults {
+		if result != nil {
+			t.Fatalf("PublishBatch(admission) result %d error = %v", i, result)
+		}
+	}
+	if err := system.Publish(ctx, connectionName, "audit", exportutil.ExportMsg{ID: "audit-1", Message: exportutil.AuditCompletedMsg}); err != nil {
+		t.Fatalf("Publish(audit end) error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(path, "audit", "audit-1.log")); err != nil {
+		t.Fatalf("expected audit file: %v", err)
+	}
+	files, err := os.ReadDir(filepath.Join(path, "audit"))
+	if err != nil || len(files) != 2 {
+		t.Fatalf("expected audit and admission files in one channel, files=%v err=%v", files, err)
+	}
+	var foundAdmission bool
+	for _, file := range files {
+		foundAdmission = foundAdmission || strings.HasPrefix(file.Name(), "admission-")
+	}
+	if !foundAdmission {
+		t.Fatalf("expected admission-prefixed file, got %v", files)
 	}
 }
 

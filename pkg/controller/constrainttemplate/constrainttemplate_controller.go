@@ -42,7 +42,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
-	errorpkg "github.com/pkg/errors"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -282,6 +281,21 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 var _ reconcile.Reconciler = &ReconcileConstraintTemplate{}
 
+type reportedStatusError struct {
+	err error
+}
+
+func (e *reportedStatusError) Error() string { return e.err.Error() }
+func (e *reportedStatusError) Unwrap() error { return e.err }
+
+type combinedStatusError struct {
+	message string
+	errs    []error
+}
+
+func (e *combinedStatusError) Error() string   { return e.message }
+func (e *combinedStatusError) Unwrap() []error { return e.errs }
+
 // ReconcileConstraintTemplate reconciles a ConstraintTemplate object.
 type ReconcileConstraintTemplate struct {
 	client.Client
@@ -308,7 +322,7 @@ type ReconcileConstraintTemplate struct {
 
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
 // and what is in the ConstraintTemplate.Spec.
-func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request reconcile.Request) (result reconcile.Result, reconcileErr error) {
 	logger := logger.WithValues("template_name", request.Name)
 
 	defer r.metrics.registry.report(ctx, r.metrics)
@@ -383,6 +397,32 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	oldStatus := status.Status.DeepCopy()
+	persistStatus := false
+	persistErrorMessage := ""
+	defer func() {
+		var reportedErr *reportedStatusError
+		reported := errors.As(reconcileErr, &reportedErr)
+		if !reported && !persistStatus {
+			return
+		}
+
+		if persistErr := r.persistPodStatus(ctx, status, oldStatus); persistErr != nil {
+			if reported {
+				reconcileErr = &combinedStatusError{
+					message: fmt.Sprintf("Could not update status: %s: %s", persistErr, reportedErr.err),
+					errs:    []error{reportedErr.err, persistErr},
+				}
+				return
+			}
+			logger.Error(persistErr, persistErrorMessage)
+			result = reconcile.Result{Requeue: true}
+			reconcileErr = nil
+			return
+		}
+		if reported {
+			reconcileErr = reportedErr.err
+		}
+	}()
 	status.Status.TemplateUID = ct.GetUID()
 	status.Status.ObservedGeneration = ct.GetGeneration()
 	status.Status.Errors = nil
@@ -396,10 +436,8 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
 		status.Status.Errors = append(status.Status.Errors, createErr)
 
-		if updateErr := r.Update(ctx, status); updateErr != nil {
-			logger.Error(updateErr, "update status error")
-			return reconcile.Result{Requeue: true}, nil
-		}
+		persistStatus = true
+		persistErrorMessage = "update status error"
 		logError(request.Name)
 		return reconcile.Result{}, nil
 	}
@@ -435,7 +473,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	result, err := r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status, oldStatus)
+	result, err = r.handleUpdate(ctx, ct, unversionedCT, proposedCRD, currentCRD, status)
 	if err != nil {
 		logger.Error(err, "handle update error")
 		logError(request.Name)
@@ -446,20 +484,26 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		logAction(ct, action)
 		r.metrics.registry.add(request.NamespacedName, metrics.ActiveStatus)
 	}
+	persistStatus = true
+	persistErrorMessage = "update ct pod status error"
 	return result, err
 }
 
-func (r *ReconcileConstraintTemplate) reportErrorOnCTStatus(ctx context.Context, code, message string, status *statusv1beta1.ConstraintTemplatePodStatus, err error) error {
+func (r *ReconcileConstraintTemplate) reportErrorOnCTStatus(_ context.Context, code, message string, status *statusv1beta1.ConstraintTemplatePodStatus, err error) error {
 	status.Status.Errors = []*v1beta1.CreateCRDError{}
 	createErr := &v1beta1.CreateCRDError{
 		Code:    code,
 		Message: fmt.Sprintf("%s: %s", message, err),
 	}
 	status.Status.Errors = append(status.Status.Errors, createErr)
-	if err2 := r.Update(ctx, status); err2 != nil {
-		return errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
+	return &reportedStatusError{err: err}
+}
+
+func (r *ReconcileConstraintTemplate) persistPodStatus(ctx context.Context, status *statusv1beta1.ConstraintTemplatePodStatus, oldStatus *statusv1beta1.ConstraintTemplatePodStatusStatus) error {
+	if apiequality.Semantic.DeepEqual(status.Status, *oldStatus) {
+		return nil
 	}
-	return err
+	return r.Update(ctx, status)
 }
 
 func (r *ReconcileConstraintTemplate) handleUpdate(
@@ -468,7 +512,6 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	unversionedCT *templates.ConstraintTemplate,
 	proposedCRD, currentCRD *apiextensionsv1.CustomResourceDefinition,
 	status *statusv1beta1.ConstraintTemplatePodStatus,
-	oldStatus *statusv1beta1.ConstraintTemplatePodStatusStatus,
 ) (reconcile.Result, error) {
 	name := proposedCRD.GetName()
 	logger := logger.WithValues("name", ct.GetName(), "crdName", name)
@@ -525,18 +568,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if err := r.updatePodStatusIfChanged(ctx, status, oldStatus); err != nil {
-		logger.Error(err, "update ct pod status error")
-		return reconcile.Result{Requeue: true}, nil
-	}
 	return reconcile.Result{RequeueAfter: requeueAfter}, nil
-}
-
-func (r *ReconcileConstraintTemplate) updatePodStatusIfChanged(ctx context.Context, status *statusv1beta1.ConstraintTemplatePodStatus, oldStatus *statusv1beta1.ConstraintTemplatePodStatusStatus) error {
-	if apiequality.Semantic.DeepEqual(status.Status, *oldStatus) {
-		return nil
-	}
-	return r.Update(ctx, status)
 }
 
 func (r *ReconcileConstraintTemplate) handleDelete(
@@ -911,8 +943,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 	if generateVap && (!isVapAPIEnabled || groupVersion == nil) {
 		r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 		logger.Error(constraint.ErrValidatingAdmissionPolicyAPIDisabled, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", "name", ct.GetName())
-		err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, constraint.ErrValidatingAdmissionPolicyAPIDisabled)
-		return err
+		return r.reportErrorOnCTStatus(ctx, ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, constraint.ErrValidatingAdmissionPolicyAPIDisabled)
 	}
 	// generating VAP resources
 	if generateVap && isVapAPIEnabled && groupVersion != nil {

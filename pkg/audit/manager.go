@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -267,11 +268,10 @@ func (am *Manager) audit(ctx context.Context) error {
 		Errors:       make(map[string]error),
 	}
 	if *exportutil.ExportEnabled {
-		if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
+		err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp})
+		auditExportPublishingState.recordPublishResult(err)
+		if err != nil {
 			am.log.Error(err, "failed to export audit start message")
-			auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
-		} else {
-			auditExportPublishingState.SuccessCount++
 		}
 	}
 	// record audit latency
@@ -286,14 +286,13 @@ func (am *Manager) audit(ctx context.Context) error {
 			am.log.Error(err, "failed to report run end time")
 		}
 		if *exportutil.ExportEnabled {
-			if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
+			err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp})
+			auditExportPublishingState.recordPublishResult(err)
+			if err != nil {
 				am.log.Error(err, "failed to export audit end message")
-				auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
-			} else {
-				auditExportPublishingState.SuccessCount++
 			}
 			// At the end of the Audit update the Connection status with any errors collected during publishing
-			reportExportConnectionErrors(ctx, auditExportPublishingState, am.log, am.mgr.GetClient(), am.mgr.GetScheme(), am.getPod)
+			reportExportConnectionErrors(ctx, auditExportPublishingState, am.log, am.mgr.GetAPIReader(), am.mgr.GetClient(), am.mgr.GetScheme(), am.getPod)
 		}
 	}()
 
@@ -1082,11 +1081,8 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		labels := r.obj.GetLabels()
 		logViolation(am.log, constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels)
 		if *exportutil.ExportEnabled {
-			if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp)); err != nil {
-				auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
-			} else {
-				auditExportPublishingState.SuccessCount++
-			}
+			err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
+			auditExportPublishingState.recordPublishResult(err)
 		}
 		if *emitAuditEvents {
 			log.Info("Warning: Alpha flag emit-audit-events is set to true. This flag may change in the future.")
@@ -1468,8 +1464,21 @@ func mergeErrors(errs []error) error {
 }
 
 type auditExportPublishingState struct {
-	SuccessCount int
-	Errors       map[string]error
+	SuccessCount    int
+	Errors          map[string]error
+	LastAttemptTime time.Time
+	LastSuccessTime time.Time
+}
+
+func (state *auditExportPublishingState) recordPublishResult(err error) {
+	now := time.Now().UTC()
+	state.LastAttemptTime = now
+	if err != nil {
+		state.Errors = exportutil.AddPublishError(state.Errors, err)
+		return
+	}
+	state.SuccessCount++
+	state.LastSuccessTime = now
 }
 
 // Write the export errors to the ConnectionPodStatus.
@@ -1477,12 +1486,19 @@ func reportExportConnectionErrors(
 	ctx context.Context,
 	auditExportPublishingState auditExportPublishingState,
 	logger logr.Logger,
-	client client.Client,
+	reader client.Reader,
+	writer client.Writer,
 	scheme *runtime.Scheme,
 	getPod func(context.Context) (*corev1.Pod, error),
 ) {
 	exportErrors := []*statusv1alpha1.ConnectionError{}
-	for staticErrMsg, v := range auditExportPublishingState.Errors {
+	errorKeys := make([]string, 0, len(auditExportPublishingState.Errors))
+	for staticErrMsg := range auditExportPublishingState.Errors {
+		errorKeys = append(errorKeys, staticErrMsg)
+	}
+	sort.Strings(errorKeys)
+	for _, staticErrMsg := range errorKeys {
+		v := auditExportPublishingState.Errors[staticErrMsg]
 		logger.Error(v, "failed to export audit violation")
 		exportErrors = append(exportErrors, &statusv1alpha1.ConnectionError{
 			Type:    statusv1alpha1.PublishError,
@@ -1492,8 +1508,21 @@ func reportExportConnectionErrors(
 
 	// Connection is considered active if there were any successful publishes
 	activeConnection := auditExportPublishingState.SuccessCount > 0
+	publishStatus := statusv1alpha1.ConnectionPublishStatus{
+		Source: statusv1alpha1.AuditPublishSource,
+		Active: activeConnection,
+		Errors: exportErrors,
+	}
+	if !auditExportPublishingState.LastAttemptTime.IsZero() {
+		lastAttemptTime := metav1.NewTime(auditExportPublishingState.LastAttemptTime)
+		publishStatus.LastAttemptTime = &lastAttemptTime
+	}
+	if !auditExportPublishingState.LastSuccessTime.IsZero() {
+		lastSuccessTime := metav1.NewTime(auditExportPublishingState.LastSuccessTime)
+		publishStatus.LastSuccessTime = &lastSuccessTime
+	}
 
-	if err := exportController.UpdateOrCreateConnectionPodStatus(ctx, client, client, scheme, *exportutil.AuditConnection, exportErrors, &activeConnection, getPod); err != nil {
+	if err := exportController.UpdateConnectionPodPublishStatus(ctx, reader, writer, scheme, *exportutil.AuditConnection, publishStatus, getPod); err != nil {
 		logger.Error(err, "failed to write export errors to the connection pod status")
 	}
 }

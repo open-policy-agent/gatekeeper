@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/verify"
 	"github.com/spf13/cobra"
@@ -40,6 +41,8 @@ var (
 	flagEnableK8sCel bool
 )
 
+var flagDefaultFailurePolicyForK8sNativeValidation string
+
 func init() {
 	Cmd.Flags().StringVarP(&run, "run", "r", "",
 		`regular expression which filters tests to run by name`)
@@ -49,6 +52,7 @@ func init() {
 		`include a trace for the underlying constraint framework evaluation`)
 	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "enable-k8s-native-validation", "", true,
 		`Beta: enable the validating admission policy driver`)
+	Cmd.Flags().StringVar(&flagDefaultFailurePolicyForK8sNativeValidation, celSchema.DefaultFailurePolicyForK8sNativeValidationFlag, celSchema.DefaultFailurePolicyForK8sNativeValidationDefault, celSchema.DefaultFailurePolicyForK8sNativeValidationUsage)
 }
 
 // Cmd is the gator verify subcommand.
@@ -62,6 +66,10 @@ var Cmd = &cobra.Command{
 
 func runE(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
+	if err := celSchema.SetDefaultFailurePolicyForK8sNativeValidation(flagDefaultFailurePolicyForK8sNativeValidation); err != nil {
+		return fmt.Errorf("invalid default K8sNativeValidation failure policy: %w", err)
+	}
+
 	originalPath := args[0]
 
 	targetPath := originalPath

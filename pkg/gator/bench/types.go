@@ -31,6 +31,9 @@ type Opts struct {
 	// TempDir is the directory for unpacking OCI images.
 	TempDir string
 
+	// AllowPlainHTTP uses plain HTTP instead of HTTPS for OCI image pulls.
+	AllowPlainHTTP bool
+
 	// Engine specifies which policy engine(s) to benchmark.
 	Engine Engine
 

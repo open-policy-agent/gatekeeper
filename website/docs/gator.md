@@ -228,6 +228,8 @@ metadata:
 
 :::note
 Flag `enable-k8s-native-validation` enables ConstraintTemplate containing "validating admission policy styled CEL". By default, this flag is enabled and set to `true`.
+
+Flag `default-k8s-native-validation-failure-policy` sets the default failure policy for K8sNativeValidation sources that omit `failurePolicy`. It defaults to `Fail` and accepts `Fail` or `Ignore`; set it to match Gatekeeper's runtime default when testing policies shift-left.
 :::
 
 #### Specifying inputs
@@ -261,13 +263,14 @@ the `--tempdir`
 flag. Only files with the aforementioned extensions will be processed. For
 information on how to create OCI policy bundles, see
 the [Bundling Policy into OCI Artifacts](#bundling-policy-into-oci-artifacts)
-section.
+section. Image pulls use HTTPS by default. Use `--plain-http` to pull from a
+plain HTTP registry such as `localhost:5000`.
 
 For example, to test a manifest (piped via stdin) against an OCI Artifact
 containing policies:
 
 ```shell
-cat my-manifest.yaml | gator test --image=localhost:5000/gator/template-library:v1 \
+cat my-manifest.yaml | gator test --plain-http --image=localhost:5000/gator/template-library:v1 \
   --image=localhost:5000/gator/constraints:v1
 ```
 
@@ -317,6 +320,8 @@ gator test --filename=manifests-and-policies/ --output=json
 
 :::note
 Flag `enable-k8s-native-validation` enables ConstraintTemplate containing "validating admission policy styled CEL". By default, this flag is enabled and set to `true`.
+
+Flag `default-k8s-native-validation-failure-policy` sets the default failure policy for K8sNativeValidation sources that omit `failurePolicy`. It defaults to `Fail` and accepts `Fail` or `Ignore`; set it to match Gatekeeper's runtime default when verifying policies shift-left.
 :::
 
 ### Writing Test Suites
@@ -594,7 +599,7 @@ gator expand --filename="manifest.yaml" –filename="expansion-policy/"
 Or, using an OCI Artifact for the expansion configuration:
 
 ```shell
-gator expand --filename="my-deployment.yaml" --image=localhost:5000/gator/expansion-policy:v1
+gator expand --filename="my-deployment.yaml" --plain-http --image=localhost:5000/gator/expansion-policy:v1
 ```
 
 By default, `gator expand` will output to stdout, but a `–outputfile` flag can be
@@ -763,7 +768,7 @@ gator sync test --filename="template.yaml" –-filename="syncsets/" --filename="
 Or, using an OCI Artifact containing templates as described previously:
 
 ```
-gator sync test --filename="config.yaml" --image=localhost:5000/gator/template-library:v1
+gator sync test --filename="config.yaml" --plain-http --image=localhost:5000/gator/template-library:v1
 ```
 
 The manifest of GVKs supported by the cluster should be passed as a GVKManifest resource (CRD visible under the apis directory in the repo):
@@ -835,6 +840,7 @@ gator bench --filename=policies/
 |------|-------|---------|-------------|
 | `--filename` | `-f` | | File or directory containing ConstraintTemplates, Constraints, and resources. Repeatable. |
 | `--image` | `-i` | | OCI image URL containing policies. Repeatable. |
+| `--plain-http` | | `false` | Use plain HTTP for OCI image pulls. |
 | `--engine` | `-e` | `cel` | Policy engine to benchmark: `rego`, `cel`, or `all` |
 | `--iterations` | `-n` | `1000` | Number of benchmark iterations. Use ≥1000 for reliable P99 percentiles. |
 | `--warmup` | | `10` | Warmup iterations before measurement |
@@ -1195,6 +1201,9 @@ artifacts. For example, to push a bundle containing the 2 local directories
 oras push localhost:5000/gator/policy-bundle:v1 ./constraints/:application/vnd.oci.image.layer.v1.tar+gzip \
   ./template_library/:application/vnd.oci.image.layer.v1.tar+gzip
 ```
+
+Because `localhost:5000` is a plain HTTP registry in this example, add
+`--plain-http` to the `gator` command when consuming the artifact.
 
 This expects that the `constraints` and `template_library` directories are at
 the path that this command is being run from.
