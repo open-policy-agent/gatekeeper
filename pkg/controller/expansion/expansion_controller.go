@@ -11,6 +11,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -44,6 +45,9 @@ type Adder struct {
 
 func (a *Adder) Add(mgr manager.Manager) error {
 	if !*expansion.ExpansionEnabled {
+		return nil
+	}
+	if !operations.HasExpansionEvaluationOperations() {
 		return nil
 	}
 	r := newReconciler(mgr, a.ExpansionSystem, a.GetPod, a.Tracker)

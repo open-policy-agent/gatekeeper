@@ -3,6 +3,7 @@ package expansion
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
@@ -201,4 +203,36 @@ func newET(name string) *v1beta1.ExpansionTemplate {
 	}
 	et.SetGroupVersionKind(v1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
 	return et
+}
+
+func TestAddSkipsWhenExpansionDisabled(t *testing.T) {
+	operations.ResetForTest()
+	t.Cleanup(operations.ResetForTest)
+
+	old := *expansion.ExpansionEnabled
+	*expansion.ExpansionEnabled = false
+	t.Cleanup(func() { *expansion.ExpansionEnabled = old })
+
+	// Add must return before touching the manager when the feature is off.
+	a := &Adder{}
+	if err := a.Add(nil); err != nil {
+		t.Fatalf("Add() with expansion disabled = %v, want nil", err)
+	}
+}
+
+func TestAddSkipsNonEvaluationOperations(t *testing.T) {
+	operations.ResetForTest()
+	t.Cleanup(operations.ResetForTest)
+
+	// A process that does not evaluate expanded resources (no webhook or
+	// audit operation) must not register the ingestion controller, even
+	// though expansion defaults to enabled.
+	if err := flag.Set("operation", "status"); err != nil {
+		t.Fatalf("setting operation flag: %v", err)
+	}
+
+	a := &Adder{}
+	if err := a.Add(nil); err != nil {
+		t.Fatalf("Add() without evaluation operations = %v, want nil", err)
+	}
 }

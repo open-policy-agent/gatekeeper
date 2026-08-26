@@ -131,3 +131,20 @@ func AssignedStringList() []string {
 func HasValidationOperations() bool {
 	return IsAssigned(Audit) || IsAssigned(Status) || IsAssigned(Webhook)
 }
+
+// HasExpansionEvaluationOperations returns true when the pod runs operations
+// that evaluate expanded resources, namely the validating webhook or audit.
+// Expansion status aggregation is tracked separately by the status
+// operation.
+func HasExpansionEvaluationOperations() bool {
+	return IsAssigned(Webhook) || IsAssigned(Audit)
+}
+
+// ResetForTest restores the process-wide operation set to its uninitialized
+// state where all operations are assigned. It is intended for tests that
+// override the --operation flag and need to clean up after themselves.
+func ResetForTest() {
+	operationsMtx.Lock()
+	defer operationsMtx.Unlock()
+	operations = newOperationSet()
+}
