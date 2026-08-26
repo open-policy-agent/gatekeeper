@@ -292,7 +292,7 @@ var replacements = map[string]string{
     resources:
     - '*'
     # Explicitly list all known subresources except "status" (to avoid destabilizing the cluster and increasing load on gatekeeper).
-    # You can find a rough list of subresources by doing a case-sensitive search in the Kubernetes codebase for 'Subresource("'
+    # You can find the current list of subresources in the Kubernetes API discovery data.
     {{- range .Values.validatingWebhookSubResources }}
     - {{ . }}
     {{- end }}

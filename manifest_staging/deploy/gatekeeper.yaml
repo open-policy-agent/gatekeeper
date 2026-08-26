@@ -6118,6 +6118,25 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+    - namespaces/finalize
+    - pods/ephemeralcontainers
+    - pods/exec
+    - pods/log
+    - pods/eviction
+    - pods/portforward
+    - pods/proxy
+    - pods/attach
+    - pods/binding
+    - pods/resize
+    - deployments/scale
+    - replicasets/scale
+    - statefulsets/scale
+    - replicationcontrollers/scale
+    - serviceaccounts/token
+    - services/proxy
+    - nodes/proxy
+    - certificatesigningrequests/approval
+    - services/status
   sideEffects: None
   timeoutSeconds: 1
 ---
@@ -6157,6 +6176,7 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+    - namespaces/finalize
     - pods/ephemeralcontainers
     - pods/exec
     - pods/log
@@ -6170,8 +6190,10 @@ webhooks:
     - replicasets/scale
     - statefulsets/scale
     - replicationcontrollers/scale
+    - serviceaccounts/token
     - services/proxy
     - nodes/proxy
+    - certificatesigningrequests/approval
     - services/status
   sideEffects: None
   timeoutSeconds: 3

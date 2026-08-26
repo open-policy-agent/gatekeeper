@@ -19,6 +19,7 @@ validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 validatingWebhookSubResources:
   [
+    "namespaces/finalize",
     "pods/ephemeralcontainers",
     "pods/exec",
     "pods/log",
@@ -32,8 +33,10 @@ validatingWebhookSubResources:
     "replicasets/scale",
     "statefulsets/scale",
     "replicationcontrollers/scale",
+    "serviceaccounts/token",
     "services/proxy",
     "nodes/proxy",
+    "certificatesigningrequests/approval",
     "services/status",
   ]
 validatingWebhookURL: null
@@ -55,6 +58,7 @@ mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
 mutatingWebhookSubResources:
   [
+    "namespaces/finalize",
     "pods/ephemeralcontainers",
     "pods/exec",
     "pods/log",
@@ -63,12 +67,15 @@ mutatingWebhookSubResources:
     "pods/proxy",
     "pods/attach",
     "pods/binding",
+    "pods/resize",
     "deployments/scale",
     "replicasets/scale",
     "statefulsets/scale",
     "replicationcontrollers/scale",
+    "serviceaccounts/token",
     "services/proxy",
     "nodes/proxy",
+    "certificatesigningrequests/approval",
     "services/status",
   ]
 mutatingWebhookURL: null
