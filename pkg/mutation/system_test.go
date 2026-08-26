@@ -840,13 +840,14 @@ func TestSystem_Upsert_ReplaceMutator(t *testing.T) {
 	}
 }
 
-func TestSystem_Mutate_RecomputesCandidatesAfterGVKChange(t *testing.T) {
+func TestSystem_Mutate_UsesAllCandidatesWhenMutatorMayChangeGVK(t *testing.T) {
 	configMapGVK := schema.GroupVersionKind{Version: candidateTestVersionV1, Kind: candidateTestKindConfigMap}
 	deploymentGVK := schema.GroupVersionKind{Group: candidateTestGroupApps, Version: candidateTestVersionV1, Kind: candidateTestKindDeployment}
 
 	s := NewSystem(SystemOpts{})
 	gvkChanger := &fakeMutator{
 		MID:    id("a-gvk-changer"),
+		MPath:  mustParse(candidateTestAPIVersionKey),
 		GVKs:   []schema.GroupVersionKind{configMapGVK},
 		NewGVK: &deploymentGVK,
 	}
@@ -864,7 +865,13 @@ func TestSystem_Mutate_RecomputesCandidatesAfterGVKChange(t *testing.T) {
 
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	obj.SetGroupVersionKind(configMapGVK)
-	mutated, err := s.Mutate(context.Background(), &types.Mutable{Object: obj, Operation: admissionv1.Create})
+	mutable := &types.Mutable{Object: obj, Operation: admissionv1.Create}
+	wantCandidates := []types.ID{gvkChanger.MID, deploymentMutator.MID}
+	if diff := cmp.Diff(wantCandidates, s.mutationCandidateIDs(mutable)); diff != "" {
+		t.Fatalf("mutationCandidateIDs() mismatch (-want +got):\n%s", diff)
+	}
+
+	mutated, err := s.Mutate(context.Background(), mutable)
 	if err != nil {
 		t.Fatalf("Mutate() error = %v, want <nil>", err)
 	}
