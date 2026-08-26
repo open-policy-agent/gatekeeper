@@ -259,3 +259,39 @@ spec:
 ConstraintTemplates support multiple ways to define policy code with the following precedence rules: (1) The legacy `spec.targets[].rego` field takes precedence over any Rego engine defined in `spec.targets[].code[]`. (2) When multiple engines are defined in the `code` array, only one engine is evaluated—the `K8sNativeValidation` (CEL) engine has higher priority than the `Rego` engine with no fallback mechanism. **Best practice:** Use the `code` array exclusively and define policy logic in only one engine (either Rego for complex policies with referential constraints and external data, or CEL for simpler validations) to avoid confusion about which policy will be evaluated.
 
 For more information on CEL integration and engine precedence, see the [Integration with Kubernetes Validating Admission Policy](validating-admission-policy.md) documentation.
+
+## Managing Rego at Scale with Helm
+
+When managing many policies or writing complex policies, it is often desirable to keep the Rego logic in separate `.rego` files. This allows you to leverage tools like `opa fmt` and `opa test` for unit testing, and maintain better code readability.
+
+Instead of manually copying and pasting your Rego code into the `ConstraintTemplate` YAML, you can use Helm to compile the template. 
+
+By utilizing the `Files.Get` function in Helm, you can inject the contents of an external Rego file directly into your `ConstraintTemplate` at deployment time.
+
+For example, your Helm template (`templates/constrainttemplate.yaml`) might look like this:
+
+```yaml
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        {{ .Files.Get "policies/requiredlabels.rego" | indent 8 }}
+```
+
+With this approach, you can maintain `policies/requiredlabels.rego` alongside your unit tests in the same repository, and Helm will seamlessly inline it when you install or upgrade the chart.
