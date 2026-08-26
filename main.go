@@ -53,6 +53,7 @@ import (
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
@@ -510,7 +511,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
 	expansionSystem := expansion.NewSystem(mutationSystem)
-	exportSystem := export.NewSystem()
+	exportSystem := newExportSystem()
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -609,8 +610,10 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 			ProcessExcluder: processExcluder,
 			MutationSystem:  mutationSystem,
 			ExpansionSystem: expansionSystem,
-			ExportSystem:    exportSystem,
 			GetPod:          opts.GetPod,
+		}
+		if exportSystem != nil {
+			webhookDeps.ExportSystem = exportSystem
 		}
 		if err := webhook.AddToManager(mgr, webhookDeps); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
@@ -642,6 +645,16 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	}
 
 	return nil
+}
+
+// newExportSystem constructs the violation export system only when an export
+// feature is enabled. Disabled processes should not carry the unused export
+// dependency, and enabling export keeps consumers receiving a non-nil system.
+func newExportSystem() *export.System {
+	if !*exportutil.ExportEnabled && !*exportutil.AdmissionExportEnabled {
+		return nil
+	}
+	return export.NewSystem()
 }
 
 func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {

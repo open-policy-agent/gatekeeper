@@ -263,7 +263,7 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)
 		}
-		if a2, ok := a.(ExportInjector); ok {
+		if a2, ok := a.(ExportInjector); ok && deps.ExportSystem != nil {
 			a2.InjectExportSystem(deps.ExportSystem)
 		}
 		if a2, ok := a.(CacheManagerInjector); ok {
