@@ -275,7 +275,7 @@ func resolveGateServerVersion(ctx context.Context, k8sClient Client, force, hasB
 
 func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts *InstallOptions, result *InstallResult, resolveVersion func() (string, error)) (skipped bool, incompatible *IncompatibleEntry, err error) {
 	// Check for an existing template using only the catalog policy's name and
-	// version - before ever fetching the remote artifact.An out-of-range policy
+	// version - before ever fetching the remote artifact. An out-of-range policy
 	// with a missing or malformed artifact is recorded as Incompatible and
 	// skipped. An ownership conflict (an existing template not managed by gator) is
 	// recorded here but not returned yet: surfacing it immediately would let it
