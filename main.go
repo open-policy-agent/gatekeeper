@@ -426,7 +426,9 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	if *externaldata.ExternalDataEnabled {
 		providerCache = frameworksexternaldata.NewCache()
 		args = append(args, rego.AddExternalDataProviderCache(providerCache))
-		mutationOpts.ProviderCache = providerCache
+		if mutation.Enabled() {
+			mutationOpts.ProviderCache = providerCache
+		}
 
 		switch {
 		case *externaldataProviderResponseCacheTTL > 0:
@@ -460,7 +462,9 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
 
 		// register the client cert watcher to the mutation system
-		mutationOpts.ClientCertWatcher = certWatcher
+		if mutation.Enabled() {
+			mutationOpts.ClientCertWatcher = certWatcher
+		}
 	}
 
 	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
@@ -508,7 +512,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		}
 	}
 
-	mutationSystem := mutation.NewSystem(mutationOpts)
+	mutationSystem := newMutationSystem(mutationOpts)
 	expansionSystem := expansion.NewSystem(mutationSystem)
 	exportSystem := export.NewSystem()
 
@@ -642,6 +646,17 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	}
 
 	return nil
+}
+
+// newMutationSystem constructs the mutation system only when a mutation
+// operation is assigned, so non-mutation processes do not carry an unused
+// mutation system. expansion.System accepts a nil mutation system and skips
+// applying mutators in that case.
+func newMutationSystem(opts mutation.SystemOpts) *mutation.System {
+	if !mutation.Enabled() {
+		return nil
+	}
+	return mutation.NewSystem(opts)
 }
 
 func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {

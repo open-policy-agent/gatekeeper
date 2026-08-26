@@ -2,6 +2,7 @@ package instances
 
 import (
 	"context"
+	"flag"
 	"testing"
 	"time"
 
@@ -141,4 +142,20 @@ func awaitCondition(t *testing.T, cond func() bool, message string) {
 	}
 
 	t.Fatal(message)
+}
+
+func TestAddSkipsSetupWhenMutationDisabled(t *testing.T) {
+	// Restrict this process to a non-mutation operation. The operation set
+	// is process-global and only accumulates via the flag, so this test
+	// must not run in parallel with operation-dependent tests.
+	if err := flag.Set("operation", "audit"); err != nil {
+		t.Fatalf("setting operation flag: %v", err)
+	}
+
+	// When mutation is disabled Add must return before touching the manager,
+	// registering the conflict-routing runnable, or building any channels.
+	a := &Adder{}
+	if err := a.Add(nil); err != nil {
+		t.Fatalf("Add() with mutation disabled = %v, want nil", err)
+	}
 }
