@@ -500,6 +500,8 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 
 		cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
 
+		// Initialize OPA client only if validation operations are required.
+		// This avoids unnecessary dependency on the OPA client for purely mutation operations (Related to #3964).
 		var clientErr error
 		client, clientErr = constraintclient.NewClient(cfArgs...)
 		if clientErr != nil {
