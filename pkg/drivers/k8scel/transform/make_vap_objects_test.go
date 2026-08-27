@@ -67,7 +67,12 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 							{
 								RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
 									Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
-									Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
+									Rule: admissionregistrationv1beta1.Rule{
+										APIGroups:   []string{"*"},
+										APIVersions: []string{"*"},
+										Resources:   []string{"*"},
+										Scope:       ptr.To(admissionregistrationv1beta1.AllScopes),
+									},
 								},
 							},
 						},
@@ -1697,6 +1702,9 @@ func TestBuildDefaultMatchConstraints(t *testing.T) {
 	}
 	if len(rule.Resources) != 1 || rule.Resources[0] != "*" {
 		t.Errorf("expected wildcard Resources, got %v", rule.Resources)
+	}
+	if rule.Scope == nil || *rule.Scope != admissionregistrationv1beta1.AllScopes {
+		t.Errorf("expected all scopes, got %v", rule.Scope)
 	}
 }
 

@@ -828,6 +828,7 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 						APIGroups:   rule.APIGroups,
 						APIVersions: rule.APIVersions,
 						Resources:   rule.Resources,
+						Scope:       rule.Scope,
 					},
 				},
 			}
