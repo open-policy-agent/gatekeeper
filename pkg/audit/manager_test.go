@@ -939,6 +939,53 @@ func Test_hasConstraintInstances(t *testing.T) {
 	})
 }
 
+func TestHandleNoConstraints(t *testing.T) {
+	originalAPICacheDir := *apiCacheDir
+	originalAuditFromCache := *auditFromCache
+	t.Cleanup(func() {
+		*apiCacheDir = originalAPICacheDir
+		*auditFromCache = originalAuditFromCache
+	})
+
+	newManager := func() *Manager {
+		return &Manager{log: logr.Discard(), reporter: &reporter{}}
+	}
+	totals := map[util.EnforcementAction]int64{util.Deny: 0}
+
+	t.Run("removes stale discovery spool", func(t *testing.T) {
+		cacheDir := t.TempDir()
+		spoolDir := path.Join(cacheDir, "Pod_0")
+		require.NoError(t, os.Mkdir(spoolDir, 0o750))
+		require.NoError(t, os.WriteFile(path.Join(spoolDir, auditObjectsFile), []byte(`[{"kind":"Secret"}]`), 0o600))
+		*apiCacheDir = cacheDir
+		*auditFromCache = false
+
+		require.NoError(t, newManager().handleNoConstraints(totals))
+		entries, err := os.ReadDir(cacheDir)
+		require.NoError(t, err)
+		require.Empty(t, entries)
+	})
+
+	t.Run("allows missing discovery spool", func(t *testing.T) {
+		*apiCacheDir = path.Join(t.TempDir(), "missing")
+		*auditFromCache = false
+
+		require.NoError(t, newManager().handleNoConstraints(totals))
+	})
+
+	t.Run("does not touch cache audit directory", func(t *testing.T) {
+		cacheDir := t.TempDir()
+		marker := path.Join(cacheDir, "keep")
+		require.NoError(t, os.WriteFile(marker, []byte("keep"), 0o600))
+		*apiCacheDir = cacheDir
+		*auditFromCache = true
+
+		require.NoError(t, newManager().handleNoConstraints(totals))
+		_, err := os.Stat(marker)
+		require.NoError(t, err)
+	})
+}
+
 func BenchmarkHasConstraintInstancesNoConstraints(b *testing.B) {
 	const constraintKinds = 100
 	constraintGVKs := make([]schema.GroupVersionKind, constraintKinds)

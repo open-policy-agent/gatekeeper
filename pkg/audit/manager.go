@@ -332,14 +332,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	if err != nil {
 		am.log.Error(err, "unable to determine whether constraints exist; continuing audit")
 	} else if !hasConstraints {
-		am.log.Info("Audit exits, no constraint instances found")
-		am.stopAuditResultsUpdateLoop()
-		for k, v := range totalViolationsPerEnforcementAction {
-			if err := am.reporter.reportTotalViolations(k, v); err != nil {
-				am.log.Error(err, "failed to report total violations")
-			}
-		}
-		return nil
+		return am.handleNoConstraints(totalViolationsPerEnforcementAction)
 	}
 
 	if *auditFromCache {
@@ -1027,6 +1020,22 @@ func (am *Manager) hasConstraintInstances(ctx context.Context, constraintsGVKs [
 		}
 	}
 	return false, nil
+}
+
+func (am *Manager) handleNoConstraints(totalViolationsPerEnforcementAction map[util.EnforcementAction]int64) error {
+	am.log.Info("Audit exits, no constraint instances found")
+	am.stopAuditResultsUpdateLoop()
+	if !*auditFromCache {
+		if err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("cleaning audit cache directory: %w", err)
+		}
+	}
+	for action, total := range totalViolationsPerEnforcementAction {
+		if err := am.reporter.reportTotalViolations(action, total); err != nil {
+			am.log.Error(err, "failed to report total violations")
+		}
+	}
+	return nil
 }
 
 func (am *Manager) addAuditResponsesToUpdateLists(
