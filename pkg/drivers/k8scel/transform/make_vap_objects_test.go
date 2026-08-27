@@ -243,6 +243,131 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 	}
 }
 
+func TestTemplateToPolicyDefinitionFailurePolicy(t *testing.T) {
+	original := schema.GetDefaultFailurePolicyForK8sNativeValidation()
+	t.Cleanup(func() {
+		if err := schema.SetDefaultFailurePolicyForK8sNativeValidation(original); err != nil {
+			t.Errorf("restoring default K8sNativeValidation failure policy: %v", err)
+		}
+	})
+
+	tests := []struct {
+		name                 string
+		defaultFailurePolicy string
+		sourceFailurePolicy  *string
+		want                 admissionregistrationv1beta1.FailurePolicyType
+	}{
+		{
+			name:                 "omitted policy uses Fail default",
+			defaultFailurePolicy: string(admissionregistrationv1.Fail),
+			want:                 admissionregistrationv1beta1.Fail,
+		},
+		{
+			name:                 "omitted policy uses Ignore default",
+			defaultFailurePolicy: string(admissionregistrationv1.Ignore),
+			want:                 admissionregistrationv1beta1.Ignore,
+		},
+		{
+			name:                 "explicit Fail overrides Ignore default",
+			defaultFailurePolicy: string(admissionregistrationv1.Ignore),
+			sourceFailurePolicy:  ptr.To(string(admissionregistrationv1.Fail)),
+			want:                 admissionregistrationv1beta1.Fail,
+		},
+		{
+			name:                 "explicit Ignore overrides Fail default",
+			defaultFailurePolicy: string(admissionregistrationv1.Fail),
+			sourceFailurePolicy:  ptr.To(string(admissionregistrationv1.Ignore)),
+			want:                 admissionregistrationv1beta1.Ignore,
+		},
+	}
+
+	webhookConfig := &webhookconfigcache.WebhookMatchingConfig{
+		Rules: []admissionregistrationv1.RuleWithOperations{
+			{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+				Rule: admissionregistrationv1.Rule{
+					APIGroups:   []string{"*"},
+					APIVersions: []string{"*"},
+					Resources:   []string{"*"},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := schema.SetDefaultFailurePolicyForK8sNativeValidation(test.defaultFailurePolicy); err != nil {
+				t.Fatalf("setting default K8sNativeValidation failure policy: %v", err)
+			}
+
+			source := &schema.Source{
+				FailurePolicy: test.sourceFailurePolicy,
+				Validations: []schema.Validation{
+					{
+						Expression: "true",
+						Message:    "always passes",
+					},
+				},
+			}
+			rawSrc := source.MustToUnstructured()
+			template := &templates.ConstraintTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "somepolicy"},
+				Spec: templates.ConstraintTemplateSpec{
+					CRD: templates.CRD{
+						Spec: templates.CRDSpec{
+							Names: templates.Names{
+								Kind: "SomePolicy",
+							},
+						},
+					},
+					Targets: []templates.Target{
+						{
+							Code: []templates.Code{
+								{
+									Engine: schema.Name,
+									Source: &templates.Anything{
+										Value: rawSrc,
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			constructors := []struct {
+				name string
+				call func() (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error)
+			}{
+				{
+					name: "default match configuration",
+					call: func() (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+						return TemplateToPolicyDefinition(template)
+					},
+				},
+				{
+					name: "synced webhook configuration",
+					call: func() (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+						return TemplateToPolicyDefinitionWithWebhookConfig(template, webhookConfig, nil, nil)
+					},
+				},
+			}
+
+			for _, constructor := range constructors {
+				t.Run(constructor.name, func(t *testing.T) {
+					policy, err := constructor.call()
+					if err != nil {
+						t.Fatalf("constructing policy returned an unexpected error: %v", err)
+					}
+					if policy.Spec.FailurePolicy == nil || *policy.Spec.FailurePolicy != test.want {
+						t.Fatalf("FailurePolicy = %v, want %s", policy.Spec.FailurePolicy, test.want)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 	baseSource := &schema.Source{
 		FailurePolicy: ptr.To[string]("Fail"),

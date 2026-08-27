@@ -9,6 +9,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	cmdutils "github.com/open-policy-agent/gatekeeper/v3/cmd/gator/util"
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/test"
@@ -54,6 +55,8 @@ var (
 	flagVerbose      bool
 )
 
+var flagDefaultFailurePolicyForK8sNativeValidation string
+
 const (
 	flagNameFilename = "filename"
 	flagNameOutput   = "output"
@@ -74,6 +77,7 @@ func init() {
 	Cmd.Flags().BoolVarP(&flagIncludeTrace, "trace", "t", false, "include a trace for the underlying Constraint Framework evaluation.")
 	Cmd.Flags().BoolVarP(&flagGatherStats, "stats", "", false, "include performance stats returned from the Constraint Framework.")
 	Cmd.Flags().BoolVarP(&flagEnableK8sCel, "enable-k8s-native-validation", "", true, "enable the validating admission policy driver")
+	Cmd.Flags().StringVar(&flagDefaultFailurePolicyForK8sNativeValidation, celSchema.DefaultFailurePolicyForK8sNativeValidationFlag, celSchema.DefaultFailurePolicyForK8sNativeValidationDefault, celSchema.DefaultFailurePolicyForK8sNativeValidationUsage)
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 	Cmd.Flags().BoolVarP(&flagDenyOnly, "deny-only", "", false, "output only denied constraints")
@@ -81,6 +85,10 @@ func init() {
 }
 
 func run(_ *cobra.Command, _ []string) {
+	if err := celSchema.SetDefaultFailurePolicyForK8sNativeValidation(flagDefaultFailurePolicyForK8sNativeValidation); err != nil {
+		cmdutils.ErrFatalf("invalid default K8sNativeValidation failure policy: %v", err)
+	}
+
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
 		cmdutils.ErrFatalf("reading: %v", err)
