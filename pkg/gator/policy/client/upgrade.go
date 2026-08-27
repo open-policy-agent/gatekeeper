@@ -119,13 +119,7 @@ func Upgrade(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		candidates = append(candidates, upgradeCandidate{policy: policy, installed: installed})
 	}
 
-	// Resolve the cluster version once for the whole batch; each upgradePolicy
-	// call reuses it rather than issuing its own discovery request per policy.
-	// This runs during dry-run too: dry-run has cluster access, and applying the
-	// gate keeps the preview accurate (an incompatible policy is shown as skipped,
-	// matching what a real upgrade would do). Gate only on the policies actually
-	// being upgraded, so a batch with no bounded candidates never contacts the
-	// cluster for a version.
+	// Resolve the cluster version once for the whole batch;
 	anyBounded := false
 	for _, c := range candidates {
 		if policyHasVersionBounds(c.policy) {
@@ -134,13 +128,7 @@ func Upgrade(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		}
 	}
 
-	// A failure here is not fatal to the whole batch: it only prevents gating
-	// policies that declare a version bound. Those are recorded as failed in the
-	// loop below while unbounded policies still upgrade, matching the per-policy
-	// continue-on-error behavior.
-	// allowQuery is true: upgrade always has cluster access (it must read the
-	// installed versions), so it resolves the version even during dry-run and
-	// passes it into install as a pre-resolved value, keeping the preview accurate.
+	// A failure here is not fatal to the whole batch:
 	serverVersion, gateErr := resolveGateServerVersion(ctx, k8sClient, opts.Force, anyBounded, true, "")
 
 	// Upgrade each candidate policy
@@ -188,16 +176,13 @@ func Upgrade(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		})
 	}
 
-	return result, nil
+	// gateErr is nil on the happy path
+	return result, gateErr
 }
 
 // upgradePolicy upgrades a single policy. It returns a non-nil *IncompatibleEntry
 // (and nil error) when the policy is skipped because the cluster's Kubernetes
-// version is outside the policy's supported range; a non-nil error indicates a
-// genuine failure. The returned bool reports whether the policy was actually
-// upgraded: it is false when the install was skipped because the cluster was
-// already at the target version. serverVersion is the pre-resolved cluster
-// version (empty when the compatibility gate is off).
+// version is outside the policy's supported range
 func upgradePolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts UpgradeOptions, serverVersion string) (*IncompatibleEntry, bool, error) {
 	// Use install with the existing bundle name to preserve constraint installation behavior
 	var bundles []string
@@ -237,10 +222,7 @@ func upgradePolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	// The sub-catalog holds exactly this one policy, so Install reports its
 	// outcome as a single entry; inspect the slices directly rather than
 	// matching by name.
-
-	// Install reports a Kubernetes-version-incompatible policy as a skip
-	// (nil error), not a failure. Surface it to the caller so the upgrade is not
-	// falsely recorded as successful, without treating it as a hard failure.
+	
 	if len(installResult.Incompatible) > 0 {
 		return &installResult.Incompatible[0], false, nil
 	}

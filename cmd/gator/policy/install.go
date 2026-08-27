@@ -151,11 +151,12 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		}
 		// Install can return a partial result alongside an error when the cluster
 		// Kubernetes version could not be resolved for bounded policies: unbounded
-		// and no-op policies still installed
+		// and no-op policies still installed.
 		if result == nil {
 			return err
 		}
 	}
+	installErr := err
 
 	// Build output result
 	outResult := &output.InstallResult{
@@ -191,6 +192,19 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Return appropriate error for non-success cases
+	//
+	// A cluster-version resolution failure (e.g. /version unreachable or
+	// forbidden) leaves every bounded policy in result.Failed, but it is a
+	// cluster-connectivity problem, not a batch that partly succeeded. Per the
+	// documented CLI contract, unreachable/permission-denied clusters map to
+	// exit code 2, and exit code 4 is reserved for batches where some policy
+	// actually installed. Only fold this into partial success when something
+	// did install (e.g. unbounded or no-op policies alongside failed bounded
+	// ones).
+	if installErr != nil && len(result.Installed) == 0 {
+		return gatorpolicy.NewClusterError(installErr.Error())
+	}
+
 	if len(result.Failed) > 0 {
 		if result.ConflictErr != nil {
 			return gatorpolicy.NewConflictError(fmt.Sprintf("installation incomplete: %s", result.ConflictErr.Error()))

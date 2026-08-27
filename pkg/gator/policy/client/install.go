@@ -130,19 +130,10 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 	}
 
 	// Lazily resolve the cluster version for the Kubernetes-version compatibility
-	// gate. Resolution is deferred to the first policy that would actually write
-	// and declares a version bound, then cached (value and error) for the rest of
-	// the batch. Deferring it keeps an idempotent no-op reinstall — a template-only
-	// policy already at the target version — from being aborted by an unreachable
-	// or unparseable cluster version, since such a policy never reaches the gate.
-	//
+	// gate.
 	// A dry-run is an offline preview: it never issues its own cluster query
 	// (allowQuery is !opts.DryRun). It still applies the gate when a caller injects
-	// a pre-resolved version (e.g. Upgrade, which already has cluster access);
-	// otherwise the gate is left disabled and the policy is previewed as installable.
-	//
-	// sync.OnceValues memoizes the (version, error) result so the cluster is
-	// queried at most once per batch, no matter how many bounded policies call it.
+	// a pre-resolved version
 	resolveVersion := sync.OnceValues(func() (string, error) {
 		v, err := resolveGateServerVersion(ctx, k8sClient, opts.Force, true, !opts.DryRun, preResolvedServerVersion)
 		if err != nil {
@@ -177,20 +168,11 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		installBundle := policyBundle[policyName]
 
 		// The Kubernetes-version compatibility gate is applied inside installPolicy,
-		// after it determines whether a write would actually occur: an idempotent
-		// reinstall of a policy already at the target version is a no-op and must
-		// not be reported as incompatible on an out-of-range cluster. It resolves
-		// the cluster version lazily (via resolveVersion) only when a would-write,
-		// bounded policy needs it.
+		// after it determines whether a write would actually occur
 		skipped, incompatible, err := installPolicy(ctx, k8sClient, fetcher, policy, installBundle, opts, result, resolveVersion)
 		if err != nil {
 			// A failure to resolve the cluster version only prevents gating this
-			// bounded policy; it must not abort the whole batch. Record it as a
-			// per-policy failure (the error carries the --force hint) and keep
-			// going so unbounded and no-op policies still install. The resolution
-			// error is remembered and returned alongside the partial result once
-			// the batch completes. No-op policies never reach this, because the
-			// gate only resolves the version when a policy would actually write.
+			// bounded policy;
 			var vErr *versionResolutionError
 			if errors.As(err, &vErr) {
 				result.Failed = append(result.Failed, policyName)
@@ -237,19 +219,7 @@ func policyHasVersionBounds(p *catalog.Policy) bool {
 // disabled) when force is set or hasBounds is false. A non-empty preResolved
 // version is used as-is instead of querying the cluster, letting a caller (e.g.
 // Upgrade) resolve the version once for a whole batch.
-//
-// allowQuery gates whether a fresh cluster query may be issued when no
-// preResolved version is supplied. Install's own dry-run passes false: a dry-run
-// is an offline preview that never contacts the cluster, so without a
-// caller-provided version the gate is simply left disabled (returns "", nil).
-// Real installs and Upgrade (which always has cluster access) pass true.
-//
-// --force is the single, explicit fail-open path: it disables the gate up front.
-// Otherwise, when compatibility genuinely cannot be established the caller is
-// given an actionable error rather than proceeding blindly. A cluster-version
-// that does not parse is such a case (bounded policies must not install as
-// "compatible" against a version the gate cannot reason about), as is a
-// cluster-connectivity failure while discovering the version.
+
 func resolveGateServerVersion(ctx context.Context, k8sClient Client, force, hasBounds, allowQuery bool, preResolved string) (string, error) {
 	if force || !hasBounds {
 		return "", nil
@@ -277,11 +247,7 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	// Check for an existing template using only the catalog policy's name and
 	// version - before ever fetching the remote artifact. An out-of-range policy
 	// with a missing or malformed artifact is recorded as Incompatible and
-	// skipped. An ownership conflict (an existing template not managed by gator) is
-	// recorded here but not returned yet: surfacing it immediately would let it
-	// preempt the compatibility gate below, so an incompatible policy that also
-	// happens to conflict would be misreported as a hard conflict failure
-	// instead of cleanly skipped as Incompatible.
+	// skipped.
 	templateAlreadyInstalled := false
 	var conflictErr *ConflictError
 	if !opts.DryRun {
@@ -314,11 +280,7 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	//
 	// A bundle policy is deliberately NOT treated as a no-op even when its
 	// template is already current: installConstraint always upserts the
-	// constraint (see above), which is a real write. So a bundle reinstall on an
-	// out-of-range cluster is correctly gated (and can be blocked by an
-	// unreachable/unparseable cluster version), unlike a template-only reinstall
-	// which is exempt because it writes nothing. The asymmetry is intentional:
-	// the exemption tracks "would this write?", not "is this a reinstall?".
+	// constraint
 	isNoOp := templateAlreadyInstalled && !hasConstraint
 
 	// Determine whether applying this policy would write anything to the cluster.
@@ -395,15 +357,7 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	}
 
 	// The preflight conflict check, the templateAlreadyInstalled determination,
-	// and the no-op/compatibility gate above all keyed off policy.Name. The
-	// catalog contract requires policy.Name to equal the ConstraintTemplate's
-	// metadata.name (see catalog.Policy.Name), and the generator guarantees it,
-	// but ParseCatalog does not run schema validation - so a hand-edited catalog
-	// could still point to a template whose metadata.name differs. If it does,
-	// InstallTemplate would target a different object than the one checked for a
-	// conflict - silently overwriting a possibly user-owned, unmanaged
-	// ConstraintTemplate. Enforce the documented contract here rather than bypass
-	// that protection.
+	// and the no-op/compatibility gate above all keyed off policy.Name.
 	if actualName := template.GetName(); actualName != policy.Name {
 		return false, nil, fmt.Errorf("template artifact for policy %q declares metadata.name %q; catalog policy name and ConstraintTemplate name must match", policy.Name, actualName)
 	}
@@ -513,10 +467,7 @@ func constraintGVR(kind string) schema.GroupVersionResource {
 }
 
 // versionResolutionError wraps a failure to resolve the cluster Kubernetes
-// version for the compatibility gate. install records each bounded policy it
-// affects as a per-policy failure (the wrapped error carries the --force hint)
-// and keeps going, so unbounded and no-op policies still install; the wrapped
-// error is also returned alongside the partial result.
+// version for the compatibility gate.
 type versionResolutionError struct {
 	err error
 }
