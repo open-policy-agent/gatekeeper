@@ -66,7 +66,7 @@ func TestUpdateOrCreateConnectionPodStatusSkipsStableSecondUpdate(t *testing.T) 
 			Generation: 1,
 		},
 	}
-	k8sClient := &countingClient{Client: crfake.NewClientBuilder().WithScheme(k8sscheme.Scheme).Build()}
+	k8sClient := &countingClient{Client: fake.NewClientBuilder().WithScheme(k8sscheme.Scheme).Build()}
 	getPod := func(context.Context) (*corev1.Pod, error) { return pod, nil }
 
 	require.NoError(t, updateOrCreateConnectionPodStatus(ctx, k8sClient, k8sClient, k8sscheme.Scheme, connObj, nil, nil, getPod))
@@ -96,7 +96,7 @@ func TestUpdateOrCreateConnectionPodStatusRepairsMetadata(t *testing.T) {
 	status.Status.ConnectionUID = connObj.GetUID()
 	status.Status.ObservedGeneration = connObj.GetGeneration()
 
-	k8sClient := &countingClient{Client: crfake.NewClientBuilder().WithScheme(k8sscheme.Scheme).WithObjects(status).Build()}
+	k8sClient := &countingClient{Client: fake.NewClientBuilder().WithScheme(k8sscheme.Scheme).WithObjects(status).Build()}
 	getPod := func(context.Context) (*corev1.Pod, error) { return pod, nil }
 
 	require.NoError(t, updateOrCreateConnectionPodStatus(ctx, k8sClient, k8sClient, k8sscheme.Scheme, connObj, nil, nil, getPod))
