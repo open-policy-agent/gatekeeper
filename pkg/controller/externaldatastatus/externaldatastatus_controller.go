@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -98,6 +99,9 @@ func PodStatusToProviderMapper(selfOnly bool) handler.TypedMapFunc[*statusv1beta
 // Add creates a new externaldata status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
+	if err := indexStatusLabel(context.Background(), mgr, &statusv1beta1.ProviderPodStatus{}, statusv1beta1.ProviderNameLabel); err != nil {
+		return err
+	}
 	c, err := controller.New("externaldata-status-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
@@ -120,6 +124,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	return nil
+}
+
+func indexStatusLabel(ctx context.Context, mgr manager.Manager, obj client.Object, field string) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, obj, field, func(obj client.Object) []string {
+		value := obj.GetLabels()[field]
+		if value == "" {
+			return nil
+		}
+		return []string{value}
+	})
 }
 
 var _ reconcile.Reconciler = &ReconcileProviderStatus{}
@@ -155,7 +169,7 @@ func (r *ReconcileProviderStatus) Reconcile(ctx context.Context, request reconci
 	if err := r.reader.List(
 		ctx,
 		sObjs,
-		client.MatchingLabels{statusv1beta1.ProviderNameLabel: request.Name},
+		client.MatchingFields{statusv1beta1.ProviderNameLabel: request.Name},
 		client.InNamespace(util.GetNamespace()),
 	); err != nil {
 		return reconcile.Result{}, err
@@ -174,6 +188,10 @@ func (r *ReconcileProviderStatus) Reconcile(ctx context.Context, request reconci
 			continue
 		}
 		s = append(s, toProviderPodStatusStatus(&statusObjs[i].Status))
+	}
+
+	if apiequality.Semantic.DeepEqual(providerObj.Status.ByPod, s) {
+		return reconcile.Result{}, nil
 	}
 
 	providerObj.Status.ByPod = s
