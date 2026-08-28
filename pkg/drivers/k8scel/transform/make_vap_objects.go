@@ -22,10 +22,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
-	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, nil)
-}
-
 // quoteNamespaces wraps each namespace string in quotes for proper CEL syntax.
 func quoteNamespaces(namespaces []string) []string {
 	quoted := make([]string, len(namespaces))

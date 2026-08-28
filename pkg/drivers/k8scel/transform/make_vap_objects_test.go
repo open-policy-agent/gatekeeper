@@ -237,7 +237,7 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 				},
 			}
 
-			obj, err := TemplateToPolicyDefinition(template)
+			obj, err := TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, nil)
 			if !errors.Is(err, test.expectedErr) {
 				t.Errorf("unexpected error. got %v; wanted %v", err, test.expectedErr)
 			}
@@ -347,7 +347,7 @@ func TestTemplateToPolicyDefinitionFailurePolicy(t *testing.T) {
 				{
 					name: "default match configuration",
 					call: func() (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
-						return TemplateToPolicyDefinition(template)
+						return TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, nil)
 					},
 				},
 				{
