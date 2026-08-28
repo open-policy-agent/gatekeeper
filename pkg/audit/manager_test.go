@@ -984,6 +984,22 @@ func TestHandleNoConstraints(t *testing.T) {
 		_, err := os.Stat(marker)
 		require.NoError(t, err)
 	})
+
+	t.Run("reports zero totals when discovery spool cleanup fails", func(t *testing.T) {
+		*apiCacheDir = "\x00"
+		*auditFromCache = false
+
+		am := newManager()
+		zeroTotals := make(map[util.EnforcementAction]int64, len(util.KnownEnforcementActions))
+		for _, action := range util.KnownEnforcementActions {
+			zeroTotals[action] = 0
+			require.NoError(t, am.reporter.reportTotalViolations(action, 1))
+		}
+
+		err := am.handleNoConstraints(zeroTotals)
+		require.ErrorContains(t, err, "cleaning audit cache directory")
+		require.Equal(t, zeroTotals, am.reporter.totalViolationsPerEnforcementAction)
+	})
 }
 
 func BenchmarkHasConstraintInstancesNoConstraints(b *testing.B) {

@@ -1025,9 +1025,10 @@ func (am *Manager) hasConstraintInstances(ctx context.Context, constraintsGVKs [
 func (am *Manager) handleNoConstraints(totalViolationsPerEnforcementAction map[util.EnforcementAction]int64) error {
 	am.log.Info("Audit exits, no constraint instances found")
 	am.stopAuditResultsUpdateLoop()
+	var cleanupErr error
 	if !*auditFromCache {
 		if err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("cleaning audit cache directory: %w", err)
+			cleanupErr = fmt.Errorf("cleaning audit cache directory: %w", err)
 		}
 	}
 	for action, total := range totalViolationsPerEnforcementAction {
@@ -1035,7 +1036,7 @@ func (am *Manager) handleNoConstraints(totalViolationsPerEnforcementAction map[u
 			am.log.Error(err, "failed to report total violations")
 		}
 	}
-	return nil
+	return cleanupErr
 }
 
 func (am *Manager) addAuditResponsesToUpdateLists(
