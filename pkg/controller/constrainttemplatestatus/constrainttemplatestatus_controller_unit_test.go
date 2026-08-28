@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -48,6 +49,13 @@ func newStatusUnitReconciler(t *testing.T, ct *templatesv1beta1.ConstraintTempla
 	}
 	fakeClient := clientfake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&statusv1beta1.ConstraintTemplatePodStatus{}, statusv1beta1.ConstraintTemplateNameLabel, func(obj client.Object) []string {
+			value := obj.GetLabels()[statusv1beta1.ConstraintTemplateNameLabel]
+			if value == "" {
+				return nil
+			}
+			return []string{value}
+		}).
 		WithStatusSubresource(&templatesv1beta1.ConstraintTemplate{}).
 		WithRuntimeObjects(objs...).
 		Build()

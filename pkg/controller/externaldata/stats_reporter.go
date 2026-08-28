@@ -76,10 +76,10 @@ func (r *reporter) reportProviderError(_ context.Context) {
 }
 
 type reporter struct {
-	mu                sync.RWMutex
-	cache             map[types.NamespacedName]metrics.Status
-	dirty             bool
-	statusReport      map[metrics.Status]int64
+	mu                 sync.RWMutex
+	cache              map[types.NamespacedName]metrics.Status
+	dirty              bool
+	statusReport       map[metrics.Status]int64
 	providerErrorTotal atomic.Int64
 }
 

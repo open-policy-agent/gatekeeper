@@ -2,6 +2,9 @@ package syncutil
 
 import (
 	"context"
+	"fmt"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,6 +35,57 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 	return rdr, r
 }
 
+func useStatsReporter(t *testing.T, reporter *Reporter) {
+	t.Helper()
+
+	oldReporter := r
+	r = reporter
+	t.Cleanup(func() {
+		r = oldReporter
+	})
+}
+
+func findMetricByName(t *testing.T, rm *metricdata.ResourceMetrics, name string) metricdata.Metrics {
+	t.Helper()
+
+	var (
+		result metricdata.Metrics
+		found  bool
+	)
+
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name == name {
+				if found {
+					t.Fatalf("multiple metrics found with name %q", name)
+				}
+				result = m
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		t.Fatalf("metric %q not found", name)
+	}
+
+	return result
+}
+
+func reporterSyncReport(t *testing.T, reporter *Reporter) map[Tags]int64 {
+	t.Helper()
+
+	reporter.mu.RLock()
+	defer reporter.mu.RUnlock()
+
+	result := make(map[Tags]int64, len(reporter.syncReport))
+	for tags, count := range reporter.syncReport {
+		result[tags] = count
+	}
+
+	return result
+}
+
 func TestReportSync(t *testing.T) {
 	wantTags := Tags{
 		Kind:   "Pod",
@@ -48,14 +102,12 @@ func TestReportSync(t *testing.T) {
 			name:        "reporting sync",
 			ctx:         context.Background(),
 			expectedErr: nil,
-			c: &MetricsCache{
-				Cache: map[string]Tags{
-					"Pod": wantTags,
-				},
-				KnownKinds: map[string]bool{
-					"Pod": true,
-				},
-			},
+			c: func() *MetricsCache {
+				c := NewMetricsCache()
+				c.AddKind("Pod")
+				c.AddObject("Pod", wantTags)
+				return c
+			}(),
 			want: metricdata.Metrics{
 				Name: syncMetricName,
 				Data: metricdata.Gauge[int64]{
@@ -71,32 +123,87 @@ func TestReportSync(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rdr, r := initializeTestInstruments(t)
-			totals := make(map[Tags]int)
-			for _, v := range tt.c.Cache {
-				totals[v]++
-			}
-
-			for kind := range tt.c.KnownKinds {
-				for _, status := range metrics.AllStatuses {
-					if err := r.ReportSync(
-						Tags{
-							Kind:   kind,
-							Status: status,
-						},
-						int64(totals[Tags{
-							Kind:   kind,
-							Status: status,
-						}])); err != nil {
-						log.Error(err, "failed to report sync")
-					}
-				}
-			}
+			useStatsReporter(t, r)
+			tt.c.ReportSync()
 
 			rm := &metricdata.ResourceMetrics{}
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
-			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+			metricdatatest.AssertEqual(t, tt.want, findMetricByName(t, rm, syncMetricName), metricdatatest.IgnoreTimestamp())
 		})
 	}
+}
+
+func TestMetricsCacheReportSyncTracksTotals(t *testing.T) {
+	_, reporter := initializeTestInstruments(t)
+	useStatsReporter(t, reporter)
+
+	c := NewMetricsCache()
+	c.AddKind("Pod")
+	c.AddKind("Namespace")
+
+	c.AddObject(GetKeyForSyncMetrics("default", "pod-a"), Tags{Kind: "Pod", Status: metrics.ActiveStatus})
+	c.AddObject(GetKeyForSyncMetrics("default", "pod-b"), Tags{Kind: "Pod", Status: metrics.ActiveStatus})
+	c.AddObject(GetKeyForSyncMetrics("default", "pod-b"), Tags{Kind: "Pod", Status: metrics.ErrorStatus})
+	c.AddObject(GetKeyForSyncMetrics("", "namespace-a"), Tags{Kind: "Namespace", Status: metrics.ActiveStatus})
+	c.DeleteObject(GetKeyForSyncMetrics("", "namespace-a"))
+	c.DeleteObject(GetKeyForSyncMetrics("default", "missing"))
+
+	c.ReportSync()
+
+	assert.Equal(t, map[Tags]int64{
+		{Kind: "Pod", Status: metrics.ActiveStatus}:       1,
+		{Kind: "Pod", Status: metrics.ErrorStatus}:        1,
+		{Kind: "Namespace", Status: metrics.ActiveStatus}: 0,
+		{Kind: "Namespace", Status: metrics.ErrorStatus}:  0,
+	}, reporterSyncReport(t, reporter))
+
+	c.ResetCache()
+	c.ReportSync()
+
+	assert.Equal(t, map[Tags]int64{
+		{Kind: "Pod", Status: metrics.ActiveStatus}:       0,
+		{Kind: "Pod", Status: metrics.ErrorStatus}:        0,
+		{Kind: "Namespace", Status: metrics.ActiveStatus}: 0,
+		{Kind: "Namespace", Status: metrics.ErrorStatus}:  0,
+	}, reporterSyncReport(t, reporter))
+}
+
+func TestMetricsCacheConcurrentAccess(t *testing.T) {
+	_, reporter := initializeTestInstruments(t)
+	useStatsReporter(t, reporter)
+
+	c := NewMetricsCache()
+	c.AddKind("Pod")
+
+	const workers = 8
+	const objectsPerWorker = 100
+
+	var wg sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+
+			for i := 0; i < objectsPerWorker; i++ {
+				key := GetKeyForSyncMetrics("default", fmt.Sprintf("pod-%d-%d", worker, i))
+				c.AddObject(key, Tags{Kind: "Pod", Status: metrics.ActiveStatus})
+				c.ReportSync()
+				if i%2 == 0 {
+					c.AddObject(key, Tags{Kind: "Pod", Status: metrics.ErrorStatus})
+				}
+				if i%4 == 0 {
+					c.DeleteObject(key)
+				}
+			}
+		}(worker)
+	}
+	wg.Wait()
+
+	c.ReportSync()
+	report := reporterSyncReport(t, reporter)
+
+	assert.Equal(t, int64(400), report[Tags{Kind: "Pod", Status: metrics.ActiveStatus}])
+	assert.Equal(t, int64(200), report[Tags{Kind: "Pod", Status: metrics.ErrorStatus}])
 }
 
 func TestReportSyncLatency(t *testing.T) {
@@ -173,5 +280,100 @@ func TestLastRunSync(t *testing.T) {
 
 			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
 		})
+	}
+}
+
+func BenchmarkMetricsCacheReportSync(b *testing.B) {
+	for _, objects := range []int{100, 10000, 100000} {
+		b.Run("cached_totals/objects="+strconv.Itoa(objects), func(b *testing.B) {
+			useBenchmarkStatsReporter(b)
+			c := newBenchmarkMetricsCache(objects)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				c.ReportSync()
+			}
+		})
+
+		b.Run("scan_cache/objects="+strconv.Itoa(objects), func(b *testing.B) {
+			useBenchmarkStatsReporter(b)
+			c := newBenchmarkMetricsCache(objects)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				reportSyncByScanning(c)
+			}
+		})
+	}
+}
+
+func useBenchmarkStatsReporter(b *testing.B) {
+	b.Helper()
+
+	oldReporter := r
+	r = &Reporter{
+		now:        now,
+		syncReport: make(map[Tags]int64),
+	}
+	b.Cleanup(func() {
+		r = oldReporter
+	})
+}
+
+func newBenchmarkMetricsCache(objects int) *MetricsCache {
+	const kinds = 4
+
+	c := NewMetricsCache()
+	kindNames := make([]string, 0, kinds)
+	for i := 0; i < kinds; i++ {
+		kind := "Kind" + strconv.Itoa(i)
+		c.AddKind(kind)
+		kindNames = append(kindNames, kind)
+	}
+
+	for i := 0; i < objects; i++ {
+		status := metrics.ActiveStatus
+		if i%2 == 0 {
+			status = metrics.ErrorStatus
+		}
+
+		kind := kindNames[i%len(kindNames)]
+		c.AddObject(GetKeyForSyncMetrics("default", kind+"-"+strconv.Itoa(i)), Tags{Kind: kind, Status: status})
+	}
+
+	return c
+}
+
+func reportSyncByScanning(c *MetricsCache) {
+	reporter, err := NewStatsReporter()
+	if err != nil {
+		log.Error(err, "failed to initialize reporter")
+		return
+	}
+
+	c.mux.RLock()
+	defer c.mux.RUnlock()
+
+	totals := make(map[Tags]int)
+	for _, v := range c.Cache {
+		totals[v]++
+	}
+
+	for kind := range c.KnownKinds {
+		for _, status := range metrics.AllStatuses {
+			if err := reporter.ReportSync(
+				Tags{
+					Kind:   kind,
+					Status: status,
+				},
+				int64(totals[Tags{
+					Kind:   kind,
+					Status: status,
+				}])); err != nil {
+				log.Error(err, "failed to report sync")
+			}
+		}
 	}
 }
