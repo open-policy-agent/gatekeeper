@@ -833,9 +833,13 @@ func TestCacheManagerReplayGVKsCancelsInFlightListOnStop(t *testing.T) {
 	}
 }
 
-func TestCacheManagerManageCacheDoesNotHoldLockWhileStoppingRelist(t *testing.T) {
+func TestCacheManagerManageCacheStopsRelistBeforeWipeWithoutHoldingLock(t *testing.T) {
 	reader := newCompletesListOnCancelReader(*fakes.UnstructuredFor(configMapGVK, "default", "cm"))
 	cm := newSyncGVKContentionCacheManager(configMapGVK, reader)
+	cfClient := &fakes.FakeCfClient{}
+	_, err := cfClient.AddData(context.Background(), fakes.UnstructuredFor(podGVK, "default", "existing"))
+	require.NoError(t, err)
+	cm.cfClient = cfClient
 	ticks := make(chan time.Time)
 	cm.backgroundManagementTicker = time.Ticker{C: ticks}
 	cm.needToList = true
@@ -848,7 +852,7 @@ func TestCacheManagerManageCacheDoesNotHoldLockWhileStoppingRelist(t *testing.T)
 	<-reader.started
 
 	cm.mu.Lock()
-	cm.needToList = true
+	cm.gvksToDeleteFromCache.Add(configMapGVK)
 	cm.mu.Unlock()
 	ticks <- time.Now()
 	<-reader.completed
@@ -864,6 +868,11 @@ func TestCacheManagerManageCacheDoesNotHoldLockWhileStoppingRelist(t *testing.T)
 	case <-time.After(time.Second):
 		t.Fatal("cache manager held its lock while waiting for the previous relist to exit")
 	}
+
+	// Wait until manageCache receives another tick, which proves the prior cycle
+	// finished the wipe and started its replacement relist.
+	ticks <- time.Now()
+	require.Zero(t, cfClient.Len(), "an object from the stopped relist was added after the cache wipe")
 }
 
 func BenchmarkCacheManagerSyncGVKSourceUpdateContention(b *testing.B) {

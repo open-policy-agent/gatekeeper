@@ -417,6 +417,7 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 	// when needing to create another one. This ensures that we are essentially
 	// only using a singleton routine to relist gvks.
 	waitToCloseChan := make(chan struct{})
+	relistStopRequested := false
 
 	// edge case: the 0th relist goroutine is "stopped", by definition, so we close the wait channel
 	// but it's also "running" so we don't close the kill channel in order to do so in the for loop below.
@@ -436,8 +437,8 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 				}
 			}
 
-			c.wipeCacheIfNeeded(ctx)
-			if !c.needToList {
+			refreshNeeded := c.needToList || c.gvksToDeleteFromCache.Size() > 0 || c.excluderChanged
+			if !refreshNeeded {
 				// this means that there are no changes needed
 				// such that any gvks need to be relisted.
 				// any in flight goroutines can finish relisiting.
@@ -445,26 +446,42 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 				continue
 			}
 
-			// otherwise, spin up new goroutines to relist gvks as there has been a wipe
-
-			// Stop any goroutines that were relisting before, as we may no longer
-			// be interested in those GVKs. Do not hold c.mu while waiting: a relist
-			// that finishes its LIST can still need the lock through AddObject.
-			close(relistStopChan)
+			// Stop the current relist before wiping the cache. Otherwise, a LIST that
+			// completed just before cancellation could add stale objects after the
+			// wipe. Do not hold c.mu while waiting because the relist can still need
+			// the lock through AddObject.
+			if !relistStopRequested {
+				close(relistStopChan)
+				relistStopRequested = true
+			}
 			c.mu.Unlock()
 			select {
 			case <-waitToCloseChan:
 				// child goroutine exited gracefully
+				relistStopRequested = false
 			case <-time.After(time.Second * 10):
 				log.Error(fmt.Errorf("internal: background relist did not exit gracefully"), "possible goroutine leak")
-				// do not close waitToCloseChan as the goroutine may eventually exit and call close on the channel
+				// Keep waiting on the same relist during the next management cycle. Wiping
+				// or starting another relist while it is still running can restore stale data.
+				continue
 			case <-ctx.Done():
 				return
 			}
 
-			// Assume all GVKs need to be relisted. Copy them while holding the lock
-			// so the relist goroutine does not need to read shared state.
 			c.mu.Lock()
+			c.wipeCacheIfNeeded(ctx)
+			if !c.needToList {
+				// The wipe failed, so there is no active relist. Reset the channels to
+				// the initial stopped state before retrying on the next tick.
+				relistStopChan = make(chan struct{})
+				waitToCloseChan = make(chan struct{})
+				close(waitToCloseChan)
+				c.mu.Unlock()
+				continue
+			}
+
+			// Assume all GVKs need to be relisted. Copy them while holding the lock
+			// so the relist goroutine does not need to read gvksToSync concurrently.
 			gvksToRelist := c.gvksToSync.GVKs()
 
 			// clean state
