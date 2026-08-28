@@ -6118,7 +6118,6 @@ webhooks:
     - UPDATE
     resources:
     - '*'
-    - namespaces/finalize
     - pods/ephemeralcontainers
     - pods/exec
     - pods/log
@@ -6176,7 +6175,6 @@ webhooks:
     - UPDATE
     resources:
     - '*'
-    - namespaces/finalize
     - pods/ephemeralcontainers
     - pods/exec
     - pods/log

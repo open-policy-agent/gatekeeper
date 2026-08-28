@@ -19,7 +19,6 @@ validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 validatingWebhookSubResources:
   [
-    "namespaces/finalize",
     "pods/ephemeralcontainers",
     "pods/exec",
     "pods/log",
@@ -58,7 +57,6 @@ mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
 mutatingWebhookSubResources:
   [
-    "namespaces/finalize",
     "pods/ephemeralcontainers",
     "pods/exec",
     "pods/log",
