@@ -195,7 +195,7 @@ func generateConstraints(m int, crList []unstructured.Unstructured) []unstructur
 	result := make([]unstructured.Unstructured, m)
 	for i := 0; i < m; i++ {
 		r := crList[i%len(crList)]
-		result[i] = *(r.DeepCopy())
+		result[i] = *r.DeepCopy()
 		r.SetName(genRandString(10))
 	}
 	return result

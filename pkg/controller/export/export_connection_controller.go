@@ -296,6 +296,12 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 		}
 	}
 
+	if !shouldCreate {
+		if err := repairConnectionPodStatusMetadata(scheme, connPodStatusObj, pod, connObj); err != nil {
+			return fmt.Errorf("repairing connection status metadata: %w", err)
+		}
+	}
+
 	generationChanged := connPodStatusObj.Status.ObservedGeneration != connObj.GetGeneration()
 	if generationChanged {
 		connPodStatusObj.Status.PublishStatuses = nil

@@ -427,56 +427,57 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-c.backgroundManagementTicker.C:
-			func() {
-				c.mu.Lock()
-				defer c.mu.Unlock()
+			c.mu.Lock()
 
-				// first make sure there is no drift between c.gvksToSync and watch manager
-				if c.danglingWatches.Size() > 0 {
-					if err := c.replaceWatchSet(ctx); err != nil {
-						log.V(logging.DebugLevel).Info("error replacing watch set", "error", err)
-					}
+			// first make sure there is no drift between c.gvksToSync and watch manager
+			if c.danglingWatches.Size() > 0 {
+				if err := c.replaceWatchSet(ctx); err != nil {
+					log.V(logging.DebugLevel).Info("error replacing watch set", "error", err)
 				}
+			}
 
-				c.wipeCacheIfNeeded(ctx)
-				if !c.needToList {
-					// this means that there are no changes needed
-					// such that any gvks need to be relisted.
-					// any in flight goroutines can finish relisiting.
-					return
-				}
+			c.wipeCacheIfNeeded(ctx)
+			if !c.needToList {
+				// this means that there are no changes needed
+				// such that any gvks need to be relisted.
+				// any in flight goroutines can finish relisiting.
+				c.mu.Unlock()
+				continue
+			}
 
-				// otherwise, spin up new goroutines to relist gvks as there has been a wipe
+			// otherwise, spin up new goroutines to relist gvks as there has been a wipe
 
-				// stop any goroutines that were relisting before
-				// as we may no longer be interested in those gvks
-				// and wait with a timeout for the child gorountine to stop.
-				close(relistStopChan)
-				select {
-				case <-waitToCloseChan:
-					// child goroutine exited gracefully
-					break
-				case <-time.After(time.Second * 10):
-					log.Error(fmt.Errorf("internal: background relist did not exit gracefully"), "possible goroutine leak")
-					// do not close waitToCloseChan as the goroutine may eventually exit and call close on the channel
-					break
-				}
+			// Stop any goroutines that were relisting before, as we may no longer
+			// be interested in those GVKs. Do not hold c.mu while waiting: a relist
+			// that finishes its LIST can still need the lock through AddObject.
+			close(relistStopChan)
+			c.mu.Unlock()
+			select {
+			case <-waitToCloseChan:
+				// child goroutine exited gracefully
+			case <-time.After(time.Second * 10):
+				log.Error(fmt.Errorf("internal: background relist did not exit gracefully"), "possible goroutine leak")
+				// do not close waitToCloseChan as the goroutine may eventually exit and call close on the channel
+			case <-ctx.Done():
+				return
+			}
 
-				// assume all gvks need to be relisted
-				// and while under lock, make a copy of
-				// all gvks so we can pass it in the goroutine
-				// without needing to read lock this data
-				gvksToRelist := c.gvksToSync.GVKs()
+			// Assume all GVKs need to be relisted. Copy them while holding the lock
+			// so the relist goroutine does not need to read shared state.
+			c.mu.Lock()
+			gvksToRelist := c.gvksToSync.GVKs()
 
-				// clean state
-				c.needToList = false
-				relistStopChan = make(chan struct{})
-				waitToCloseChan = make(chan struct{})
+			// clean state
+			c.needToList = false
+			relistStopChan = make(chan struct{})
+			waitToCloseChan = make(chan struct{})
+			stopCh := relistStopChan
+			doneCh := waitToCloseChan
+			c.mu.Unlock()
 
-				go func() {
-					c.replayGVKs(ctx, gvksToRelist, relistStopChan)
-					close(waitToCloseChan)
-				}()
+			go func() {
+				c.replayGVKs(ctx, gvksToRelist, stopCh)
+				close(doneCh)
 			}()
 		}
 	}

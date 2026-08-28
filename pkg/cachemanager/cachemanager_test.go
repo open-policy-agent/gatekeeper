@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -666,6 +667,46 @@ type blockingReader struct {
 	items   []unstructured.Unstructured
 }
 
+type completesListOnCancelReader struct {
+	once      sync.Once
+	started   chan struct{}
+	completed chan struct{}
+	item      unstructured.Unstructured
+}
+
+func newCompletesListOnCancelReader(item unstructured.Unstructured) *completesListOnCancelReader {
+	return &completesListOnCancelReader{
+		started:   make(chan struct{}),
+		completed: make(chan struct{}),
+		item:      item,
+	}
+}
+
+func (r *completesListOnCancelReader) Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
+	return nil
+}
+
+func (r *completesListOnCancelReader) List(ctx context.Context, list client.ObjectList, _ ...client.ListOption) error {
+	first := false
+	r.once.Do(func() {
+		first = true
+		close(r.started)
+	})
+
+	<-ctx.Done()
+	if !first {
+		return ctx.Err()
+	}
+
+	unstructuredList, ok := list.(*unstructured.UnstructuredList)
+	if !ok {
+		return fmt.Errorf("expected *unstructured.UnstructuredList, got %T", list)
+	}
+	unstructuredList.Items = append(unstructuredList.Items, r.item)
+	close(r.completed)
+	return nil
+}
+
 func newBlockingReader() *blockingReader {
 	return &blockingReader{
 		started: make(chan struct{}),
@@ -789,6 +830,39 @@ func TestCacheManagerReplayGVKsCancelsInFlightListOnStop(t *testing.T) {
 		close(reader.release)
 		<-replayDone
 		t.Fatal("replayGVKs did not cancel an in-flight List after stopCh closed")
+	}
+}
+
+func TestCacheManagerManageCacheDoesNotHoldLockWhileStoppingRelist(t *testing.T) {
+	reader := newCompletesListOnCancelReader(*fakes.UnstructuredFor(configMapGVK, "default", "cm"))
+	cm := newSyncGVKContentionCacheManager(configMapGVK, reader)
+	ticks := make(chan time.Time)
+	cm.backgroundManagementTicker = time.Ticker{C: ticks}
+	cm.needToList = true
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go cm.manageCache(ctx)
+
+	ticks <- time.Now()
+	<-reader.started
+
+	cm.mu.Lock()
+	cm.needToList = true
+	cm.mu.Unlock()
+	ticks <- time.Now()
+	<-reader.completed
+
+	lockAvailable := make(chan struct{})
+	go func() {
+		cm.WatchedGVKs()
+		close(lockAvailable)
+	}()
+
+	select {
+	case <-lockAvailable:
+	case <-time.After(time.Second):
+		t.Fatal("cache manager held its lock while waiting for the previous relist to exit")
 	}
 }
 
