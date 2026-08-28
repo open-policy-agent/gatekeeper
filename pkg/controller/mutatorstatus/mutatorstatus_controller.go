@@ -17,7 +17,6 @@ package mutatorstatus
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -162,6 +162,12 @@ func eventPackerMapFuncHardcodeGVKForModifySet(gvk schema.GroupVersionKind) hand
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
+	if err := indexStatusLabel(context.Background(), mgr, &v1beta1.MutatorPodStatus{}, v1beta1.MutatorNameLabel); err != nil {
+		return err
+	}
+	if err := indexStatusLabel(context.Background(), mgr, &v1beta1.MutatorPodStatus{}, v1beta1.MutatorKindLabel); err != nil {
+		return err
+	}
 	// Create a new controller
 	c, err := controller.New("mutator-status-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -202,6 +208,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		source.Kind(mgr.GetCache(), &mutationsv1.ModifySet{},
 			handler.TypedEnqueueRequestsFromMapFunc(eventPackerMapFuncHardcodeGVKForModifySet(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "ModifySet"})),
 		))
+}
+
+func indexStatusLabel(ctx context.Context, mgr manager.Manager, obj client.Object, field string) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, obj, field, func(obj client.Object) []string {
+		value := obj.GetLabels()[field]
+		if value == "" {
+			return nil
+		}
+		return []string{value}
+	})
 }
 
 var _ reconcile.Reconciler = &ReconcileMutatorStatus{}
@@ -251,7 +267,7 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	if err := r.reader.List(
 		ctx,
 		sObjs,
-		client.MatchingLabels{
+		client.MatchingFields{
 			v1beta1.MutatorNameLabel: instance.GetName(),
 			v1beta1.MutatorKindLabel: instance.GetKind(),
 		},
@@ -272,15 +288,15 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 		if statusObjs[i].Status.MutatorUID != instance.GetUID() {
 			continue
 		}
-		j, err := json.Marshal(statusObjs[i].Status)
+		o, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&statusObjs[i].Status)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		var o map[string]interface{}
-		if err := json.Unmarshal(j, &o); err != nil {
-			return reconcile.Result{}, err
-		}
 		s = append(s, o)
+	}
+
+	if byPodStatusMatches(instance.Object, s) {
+		return reconcile.Result{}, nil
 	}
 
 	if err := unstructured.SetNestedSlice(instance.Object, s, "status", "byPod"); err != nil {
@@ -292,6 +308,15 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func byPodStatusMatches(obj map[string]interface{}, desired []interface{}) bool {
+	current, found, err := unstructured.NestedFieldNoCopy(obj, "status", "byPod")
+	if !found || err != nil {
+		return false
+	}
+
+	return apiequality.Semantic.DeepEqual(current, desired)
 }
 
 type sortableStatuses []v1beta1.MutatorPodStatus
