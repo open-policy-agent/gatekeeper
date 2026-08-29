@@ -467,7 +467,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 
 	var client *constraintclient.Client
 
-	if operations.HasValidationOperations() {
+	if operations.HasConstraintControllers() {
 		if *enableK8sCel {
 			k8sDriver, err := k8scel.New()
 			if err != nil {
@@ -477,8 +477,10 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 			cfArgs = append(cfArgs, constraintclient.Driver(k8sDriver))
 		}
 
+		// Referential inventory is a review-time dependency. Generate-only
+		// compiles and transforms templates; it does not evaluate reviews.
 		externs := rego.Externs()
-		if *enableReferential {
+		if *enableReferential && operations.HasValidationOperations() {
 			externs = rego.Externs("inventory")
 		}
 		args = append(args, externs)
@@ -490,18 +492,14 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		}
 		cfArgs = append(cfArgs, constraintclient.Driver(driver))
 
-		eps := []string{}
-		if operations.IsAssigned(operations.Audit) {
-			eps = append(eps, util.AuditEnforcementPoint)
-		}
-		if operations.IsAssigned(operations.Webhook) {
-			eps = append(eps, util.WebhookEnforcementPoint)
+		eps := operations.ConstraintClientEnforcementPoints()
+		if len(eps) > 0 {
+			cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
 		}
 
-		cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
-
-		// Initialize OPA client only if validation operations are required.
-		// This avoids unnecessary dependency on the OPA client for purely mutation operations (Related to #3964).
+		// Initialize the constraint client for review operations and for
+		// generate-only compilation/transformation (CreateCRD, AddTemplate).
+		// This avoids constructing a client for purely mutation operations (Related to #3964).
 		var clientErr error
 		client, clientErr = constraintclient.NewClient(cfArgs...)
 		if clientErr != nil {

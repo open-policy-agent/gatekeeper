@@ -94,7 +94,7 @@ type Adder struct {
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	if !operations.HasValidationOperations() {
+	if !operations.HasConstraintControllers() {
 		return nil
 	}
 	// constraintEvents will be used to receive events from dynamic watches registered for constraint controller
