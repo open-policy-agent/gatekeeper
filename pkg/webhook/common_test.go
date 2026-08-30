@@ -94,7 +94,7 @@ func TestTLSConfig(t *testing.T) {
 			WantError: true,
 			Msg:       "",
 			Client:    badHTTPClient,
-			Error:     fmt.Errorf("Get \"%s\": remote error: tls: bad certificate", ts.URL),
+			Error:     fmt.Errorf("remote error: tls: bad certificate"),
 		},
 		{
 			Name:      "Connecting to server with invalid certificate that has expected CN name",
