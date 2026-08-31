@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/v3/pkg/controller/sync"
@@ -36,6 +37,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
@@ -49,10 +51,12 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	k8sscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -63,7 +67,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const timeout = time.Second * 20
+const (
+	timeout              = time.Second * 20
+	statusTestConfigName = "config"
+)
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -97,6 +104,88 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	return mgr, wm
 }
 
+type countingClient struct {
+	client.Client
+	creates int
+	updates int
+}
+
+func (c *countingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	c.creates++
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+func (c *countingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	c.updates++
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+func TestUpdateOrCreatePodStatusSkipsStableSecondUpdate(t *testing.T) {
+	ctx := context.Background()
+	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("status-pod"), fakes.WithUID("status-pod-uid"))
+	cfg := &configv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       statusTestConfigName,
+			Namespace:  util.GetNamespace(),
+			UID:        "config-uid",
+			Generation: 1,
+		},
+	}
+
+	k8sClient := &countingClient{Client: crfake.NewClientBuilder().WithScheme(k8sscheme.Scheme).Build()}
+	reconciler := &ReconcileConfig{
+		reader: k8sClient,
+		writer: k8sClient,
+		scheme: k8sscheme.Scheme,
+		getPod: func(context.Context) (*v1.Pod, error) { return pod, nil },
+	}
+
+	require.NoError(t, reconciler.updateOrCreatePodStatus(ctx, cfg, nil))
+	require.Equal(t, 1, k8sClient.creates)
+	require.Equal(t, 0, k8sClient.updates)
+
+	require.NoError(t, reconciler.updateOrCreatePodStatus(ctx, cfg, nil))
+	require.Equal(t, 1, k8sClient.creates)
+	require.Equal(t, 0, k8sClient.updates)
+}
+
+func TestUpdateOrCreatePodStatusRepairsMetadata(t *testing.T) {
+	ctx := context.Background()
+	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("status-pod"), fakes.WithUID("status-pod-uid"))
+	cfg := &configv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       statusTestConfigName,
+			Namespace:  util.GetNamespace(),
+			UID:        "config-uid",
+			Generation: 1,
+		},
+	}
+	status, err := statusv1beta1.NewConfigStatusForPod(pod, cfg.GetNamespace(), cfg.GetName(), k8sscheme.Scheme)
+	require.NoError(t, err)
+	status.SetLabels(nil)
+	status.SetOwnerReferences(nil)
+	status.Status.ConfigUID = cfg.GetUID()
+	status.Status.ObservedGeneration = cfg.GetGeneration()
+
+	k8sClient := &countingClient{Client: crfake.NewClientBuilder().WithScheme(k8sscheme.Scheme).WithObjects(status).Build()}
+	reconciler := &ReconcileConfig{
+		reader: k8sClient,
+		writer: k8sClient,
+		scheme: k8sscheme.Scheme,
+		getPod: func(context.Context) (*v1.Pod, error) { return pod, nil },
+	}
+
+	require.NoError(t, reconciler.updateOrCreatePodStatus(ctx, cfg, nil))
+	require.Equal(t, 0, k8sClient.creates)
+	require.Equal(t, 1, k8sClient.updates)
+
+	got := &statusv1beta1.ConfigPodStatus{}
+	require.NoError(t, k8sClient.Get(ctx, client.ObjectKeyFromObject(status), got))
+	require.Equal(t, cfg.GetName(), got.Labels[statusv1beta1.ConfigNameLabel])
+	require.Equal(t, pod.GetName(), got.Labels[statusv1beta1.PodLabel])
+	require.Len(t, got.OwnerReferences, 1)
+}
+
 func TestReconcile(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
@@ -105,7 +194,7 @@ func TestReconcile(t *testing.T) {
 
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "config",
+			Name:      statusTestConfigName,
 			Namespace: "gatekeeper-system",
 		},
 		Spec: configv1alpha1.ConfigSpec{
@@ -188,7 +277,7 @@ func TestReconcile(t *testing.T) {
 	}()
 	g.Eventually(func() bool {
 		expectedReq := reconcile.Request{NamespacedName: types.NamespacedName{
-			Name:      "config",
+			Name:      statusTestConfigName,
 			Namespace: "gatekeeper-system",
 		}}
 		_, ok := requests.Load(expectedReq)
@@ -312,7 +401,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	// create the Config object and expect the Reconcile to be created when controller starts
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "config",
+			Name:      statusTestConfigName,
 			Namespace: "gatekeeper-system",
 		},
 		Spec: configv1alpha1.ConfigSpec{
@@ -958,7 +1047,7 @@ func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 			Kind:       "Config",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "config",
+			Name:      statusTestConfigName,
 			Namespace: "gatekeeper-system",
 		},
 		Spec: configv1alpha1.ConfigSpec{
