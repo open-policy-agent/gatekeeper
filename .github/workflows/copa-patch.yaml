@@ -247,24 +247,23 @@ jobs:
           echo "before=${total}" >> "$GITHUB_OUTPUT"
           echo "Fixable library CVEs in ${SOURCE_REF} (${PATCH_ARCHES}): ${total} (stdlib=${stdlib_total})"
 
-      # Stop if the source is already clean, and stay idempotent by also stopping if an
-      # existing `-patched` already fixes everything currently fixable.
+      # Skip only when the image users actually pull is already clean
+      # (an existing -patched with no fixable CVEs, or a clean source before any -patched exists).
       - name: Skip-gate + idempotency check
         id: gate
         env:
           PRIMARY_REPO: ${{ steps.cfg.outputs.primary_repo }}
+          SOURCE_REF: ${{ steps.cfg.outputs.source_ref }}
           MODE: ${{ steps.cfg.outputs.mode }}
           BEFORE: ${{ steps.scan.outputs.before }}
         run: |
           set -euo pipefail
-          if [[ "${BEFORE}" -eq 0 ]]; then
-            echo "has_fixes=false" >> "$GITHUB_OUTPUT"
-            echo "Source has no fixable library CVEs, nothing to patch." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          # Idempotency only applies when publishing and a prior -patched already exists. Classify the
-          # lookup: present = compare; explicit not-found = first patch; operational error = fail
-          # closed in canonical so we never publish without proving the candidate improves on it.
+          patch_input="${SOURCE_REF}"
+          report_dir="copa-reports"
+          # Classify the lookup: present = scan it; explicit not-found = first patch;
+          # operational error = fail closed in canonical so we never skip/patch on an unknown state.
+          existing=0
+          patched_state="absent"
           if [[ "${MODE}" != "dry-run" ]]; then
             if digest_out=$(crane digest "${PRIMARY_REPO}:${RELEASE}-patched" 2>&1 >/dev/null); then
               patched_state="present"
@@ -276,21 +275,37 @@ jobs:
               patched_state="absent"
             fi
             if [[ "${patched_state}" == "present" ]]; then
-              total=0
+              mkdir -p copa-reports-patched
               for p in $PATCH_ARCHES; do
                 a="${p#linux/}"; a="${a//\//-}"
                 trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
-                  -f json -o "scan-existing-${a}.json" "${PRIMARY_REPO}:${RELEASE}-patched"
-                total=$(( total + $(jq '[.Results[]?.Vulnerabilities[]?] | length' "scan-existing-${a}.json") ))
+                  -f json -o "copa-reports-patched/${a}.json" "${PRIMARY_REPO}:${RELEASE}-patched"
+                existing=$(( existing + $(jq '[.Results[]?.Vulnerabilities[]?] | length' "copa-reports-patched/${a}.json") ))
               done
-              if [[ "${total}" -eq 0 ]]; then
-                echo "has_fixes=false" >> "$GITHUB_OUTPUT"
-                echo "Existing ${RELEASE}-patched already fixes all current CVEs — skipping (idempotent)." | tee -a "$GITHUB_STEP_SUMMARY"
-                exit 0
-              fi
             fi
           fi
-          echo "has_fixes=true" >> "$GITHUB_OUTPUT"
+          # Skip only when what users pull is already clean.
+          if [[ "${patched_state}" == "present" ]]; then
+            if [[ "${existing}" -eq 0 ]]; then
+              echo "has_fixes=false" >> "$GITHUB_OUTPUT"
+              echo "Existing ${RELEASE}-patched already fixes all current CVEs — skipping (idempotent)." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          elif [[ "${BEFORE}" -eq 0 ]]; then
+            echo "has_fixes=false" >> "$GITHUB_OUTPUT"
+            echo "Source has no fixable library CVEs and no -patched exists, nothing to patch." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [[ "${BEFORE}" -eq 0 && "${existing}" -gt 0 ]]; then
+            patch_input="${PRIMARY_REPO}:${RELEASE}-patched"
+            report_dir="copa-reports-patched"
+            echo "Source clean; re-patching existing ${RELEASE}-patched (${existing} fixable CVE(s))." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          {
+            echo "has_fixes=true"
+            echo "patch_input=${patch_input}"
+            echo "report_dir=${report_dir}"
+          } >> "$GITHUB_OUTPUT"
 
       # Immutable revision = next integer after the highest existing vX.Y.Z-N in the primary repo
       # (the staging repo for `staging`, the canonical GHCR repo for `canonical`).
@@ -328,13 +343,15 @@ jobs:
           echo "rev=${rev}" >> "$GITHUB_OUTPUT"
           echo "Revision: ${RELEASE}-${rev}"
 
-      # Report-driven multi-arch patch: Copa patches every arch with a report in copa-reports/
-      # and passes any other source arch through untouched.
+      # Report-driven multi-arch patch: Copa patches every arch with a report in the chosen report dir
+      # and passes any other arch through untouched. Input is the source, or the existing -patched when
+      # the source is clean but the -patched drifted into a fixable CVE.
       - name: Copa patch
         id: patch
         if: steps.gate.outputs.has_fixes == 'true'
         env:
-          SOURCE_REF: ${{ steps.cfg.outputs.source_ref }}
+          PATCH_INPUT: ${{ steps.gate.outputs.patch_input }}
+          REPORT_DIR: ${{ steps.gate.outputs.report_dir }}
           INTERMEDIATE_REPO: ${{ steps.cfg.outputs.intermediate_repo }}
           MODE: ${{ steps.cfg.outputs.mode }}
           REV: ${{ steps.rev.outputs.rev }}
@@ -349,8 +366,8 @@ jobs:
             echo "patched_ref=${INTERMEDIATE_REPO}:${tag}" >> "$GITHUB_OUTPUT"
           fi
           COPA_EXPERIMENTAL=1 copa patch \
-            -i "${SOURCE_REF}" \
-            --report copa-reports/ \
+            -i "${PATCH_INPUT}" \
+            --report "${REPORT_DIR}/" \
             --pkg-types library \
             --library-patch-level minor \
             --toolchain-patch-level patch \
@@ -390,6 +407,7 @@ jobs:
           PATCHED_REF: ${{ steps.patch.outputs.patched_ref }}
           MODE: ${{ steps.cfg.outputs.mode }}
           REV: ${{ steps.rev.outputs.rev }}
+          REPORT_DIR: ${{ steps.gate.outputs.report_dir }}
         run: |
           set -euo pipefail
           before_total=0; before_stdlib=0
@@ -422,16 +440,15 @@ jobs:
               trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
                 -f json -o "scan-after-${a}.json" "${PATCHED_REF}"
             fi
-            jq "$NORMALIZE_JQ" "copa-reports/${a}.json" > "norm-source-${a}.json"
+            jq "$NORMALIZE_JQ" "${REPORT_DIR}/${a}.json" > "norm-source-${a}.json"
             jq "$NORMALIZE_JQ" "scan-after-${a}.json"  > "norm-after-${a}.json"
             read -r a_before a_before_stdlib < <(jq -r '[length, ([.[] | select(.pkg == "stdlib")] | length)] | @tsv' "norm-source-${a}.json")
             read -r a_after a_after_stdlib a_after_library < <(jq -r '[length, ([.[] | select(.pkg == "stdlib")] | length), ([.[] | select(.pkg != "stdlib")] | length)] | @tsv' "norm-after-${a}.json")
             before_total=$(( before_total + a_before )); before_stdlib=$(( before_stdlib + a_before_stdlib ))
             after_total=$(( after_total + a_after )); after_stdlib=$(( after_stdlib + a_after_stdlib )); after_library=$(( after_library + a_after_library ))
-            # Normalize the existing -patched too (if any).
-            if [[ -f "scan-existing-${a}.json" ]]; then
+            if [[ -f "copa-reports-patched/${a}.json" ]]; then
               existing_present=1
-              jq "$NORMALIZE_JQ" "scan-existing-${a}.json" > "norm-existing-${a}.json"
+              jq "$NORMALIZE_JQ" "copa-reports-patched/${a}.json" > "norm-existing-${a}.json"
               existing_total=$(( existing_total + $(jq 'length' "norm-existing-${a}.json") ))
             fi
             # Flag an arch that had fixable CVEs but didn't improve.
@@ -502,7 +519,9 @@ jobs:
             echo "Smoke: ${PATCHED_REF} (${p}) --help exited 0."
           done
 
-      - name: Re-wrap with attestations and publish to canonical
+      # Re-wrap the patched image with attestations and push it to a staging RC tag and NOT the canonical
+      # -R. Every guard runs against the RC so the immutable -R is only published once they all pass.
+      - name: Re-wrap with attestations to staging RC
         id: rewrap
         if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical' && steps.verify.outputs.publish == 'true'
         env:
@@ -510,7 +529,7 @@ jobs:
           REV: ${{ steps.rev.outputs.rev }}
         run: |
           set -euo pipefail
-          ghcr_ref="${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV}"
+          rc_ref="${INTERMEDIATE_REF}-rc"
           platforms=$(docker buildx imagetools inspect "${INTERMEDIATE_REF}" --raw \
             | jq -r '[ .manifests[]
                        | select(.platform != null and .platform.os != null and .platform.architecture != "unknown")
@@ -524,33 +543,33 @@ jobs:
             --platform "${platforms}" \
             --attest type=sbom \
             --attest type=provenance,mode=max \
-            -t "${ghcr_ref}" \
+            -t "${rc_ref}" \
             --push \
             "${workdir}"
-          echo "ghcr_ref=${ghcr_ref}" >> "$GITHUB_OUTPUT"
+          echo "rc_ref=${rc_ref}" >> "$GITHUB_OUTPUT"
 
       - name: Verify attestations present
         if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical' && steps.verify.outputs.publish == 'true'
         env:
-          GHCR_REF: ${{ steps.rewrap.outputs.ghcr_ref }}
+          RC_REF: ${{ steps.rewrap.outputs.rc_ref }}
         run: |
           set -euo pipefail
-          repo="${GHCR_REF%:*}"
-          idx=$(crane manifest "${GHCR_REF}")
-          # Every published platform manifest must have its own attestation manifest carrying BOTH an
-          # SBOM and SLSA provenance predicate.
+          repo="${RC_REF%:*}"
+          idx=$(crane manifest "${RC_REF}")
+          # Every platform manifest must have its own attestation manifest carrying BOTH an SBOM and a
+          # SLSA provenance predicate.
           mapfile -t imgs < <(jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture != "unknown") | .digest' <<<"${idx}")
           want=$(echo ${PATCH_ARCHES} | wc -w | tr -d ' ')
-          [[ "${#imgs[@]}" -eq "${want}" ]] || { echo "::error::${GHCR_REF}: expected ${want} platform manifests, found ${#imgs[@]}"; exit 1; }
+          [[ "${#imgs[@]}" -eq "${want}" ]] || { echo "::error::${RC_REF}: expected ${want} platform manifests, found ${#imgs[@]}"; exit 1; }
           for imgd in "${imgs[@]}"; do
             attd=$(jq -r --arg d "${imgd}" '.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest" and .annotations["vnd.docker.reference.digest"] == $d) | .digest' <<<"${idx}")
-            [[ -n "${attd}" ]] || { echo "::error::${GHCR_REF}: platform ${imgd} has no attestation manifest"; exit 1; }
+            [[ -n "${attd}" ]] || { echo "::error::${RC_REF}: platform ${imgd} has no attestation manifest"; exit 1; }
             preds=$(crane manifest "${repo}@${attd}" | jq -r '.layers[].annotations["in-toto.io/predicate-type"] // empty')
-            grep -q 'spdx.dev' <<<"${preds}" || { echo "::error::${GHCR_REF}: platform ${imgd} missing SBOM attestation"; exit 1; }
-            grep -q 'slsa.dev/provenance' <<<"${preds}" || { echo "::error::${GHCR_REF}: platform ${imgd} missing provenance attestation"; exit 1; }
+            grep -q 'spdx.dev' <<<"${preds}" || { echo "::error::${RC_REF}: platform ${imgd} missing SBOM attestation"; exit 1; }
+            grep -q 'slsa.dev/provenance' <<<"${preds}" || { echo "::error::${RC_REF}: platform ${imgd} missing provenance attestation"; exit 1; }
             echo "  ${imgd}: SBOM + provenance present."
           done
-          echo "All ${#imgs[@]} published platform(s) carry SBOM + provenance attestations."
+          echo "All ${#imgs[@]} candidate platform(s) carry SBOM + provenance attestations."
 
       # prove the run never mutated a canonical release tag.
       - name: Verify canonical release tag untouched
@@ -564,6 +583,29 @@ jobs:
             echo "::error::canonical release tag digest changed (ghcr ${BASE_GHCR}->${now_ghcr})"; exit 1
           fi
           echo "Canonical release tag unchanged (ghcr ${now_ghcr})."
+
+      - name: Promote validated image to canonical
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical' && steps.verify.outputs.publish == 'true'
+        env:
+          RC_REF: ${{ steps.rewrap.outputs.rc_ref }}
+          REV: ${{ steps.rev.outputs.rev }}
+        run: |
+          set -euo pipefail
+          rtag="${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV}"
+          if digest_err=$(crane digest "${rtag}" 2>&1 >/dev/null); then
+            echo "::error::${rtag} already exists; refusing to overwrite an immutable revision"; exit 1
+          elif grep -qiE 'MANIFEST_UNKNOWN|manifest unknown|not found|404' <<<"${digest_err}"; then
+            :
+          else
+            echo "::error::could not confirm ${rtag} is absent (registry error): ${digest_err}"; exit 1
+          fi
+          crane copy "${RC_REF}" "${rtag}"
+          rc_digest=$(crane digest "${RC_REF}")
+          got_digest=$(crane digest "${rtag}")
+          if [[ "${got_digest}" != "${rc_digest}" ]]; then
+            echo "::error::canonical ${rtag} digest ${got_digest} != validated RC ${rc_digest}"; exit 1
+          fi
+          echo "Published attested ${rtag} (digest ${got_digest}) from validated RC." | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Move the floating -patched tag onto the just verified immutable revision.
       - name: Promote floating -patched tag
