@@ -71,6 +71,9 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -n "${RELEASE_TAG}" ]]; then
+            if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::release_tag must be a stable vMAJOR.MINOR.PATCH tag, got '${RELEASE_TAG}'"; exit 1
+            fi
             matrix=$(jq -cn --arg t "${RELEASE_TAG}" '[$t]')
           else
             # Stable tags only: vMAJOR.MINOR.PATCH (exclude -beta/-rc pre-releases).
@@ -412,8 +415,8 @@ jobs:
           set -euo pipefail
           before_total=0; before_stdlib=0
           after_total=0; after_stdlib=0; after_library=0
-          existing_total=0; existing_present=0
-          residual_md=""; unimproved=""
+          existing_present=0; improved_vs_existing=0
+          residual_md=""; unimproved=""; regressed=""; regressed_vs_existing=""
           {
             echo "### ${IMAGE}:${RELEASE} - ${RELEASE}-${REV} (${MODE})"
             echo ""
@@ -446,13 +449,21 @@ jobs:
             read -r a_after a_after_stdlib a_after_library < <(jq -r '[length, ([.[] | select(.pkg == "stdlib")] | length), ([.[] | select(.pkg != "stdlib")] | length)] | @tsv' "norm-after-${a}.json")
             before_total=$(( before_total + a_before )); before_stdlib=$(( before_stdlib + a_before_stdlib ))
             after_total=$(( after_total + a_after )); after_stdlib=$(( after_stdlib + a_after_stdlib )); after_library=$(( after_library + a_after_library ))
+            # Compare against the existing -patched per arch, so a win on one arch can't hide a regression on another when deciding whether to publish.
             if [[ -f "copa-reports-patched/${a}.json" ]]; then
               existing_present=1
               jq "$NORMALIZE_JQ" "copa-reports-patched/${a}.json" > "norm-existing-${a}.json"
-              existing_total=$(( existing_total + $(jq 'length' "norm-existing-${a}.json") ))
+              a_existing=$(jq 'length' "norm-existing-${a}.json")
+              if [[ "${a_after}" -gt "${a_existing}" ]]; then
+                regressed_vs_existing+=" ${p}(${a_existing}->${a_after})"
+              elif [[ "${a_after}" -lt "${a_existing}" ]]; then
+                improved_vs_existing=1
+              fi
             fi
-            # Flag an arch that had fixable CVEs but didn't improve.
-            if [[ "${a_before}" -gt 0 && "${a_after}" -ge "${a_before}" ]]; then
+            # A per-arch increase vs source is a regression (fail later); an equal count is best-effort (warn).
+            if [[ "${a_after}" -gt "${a_before}" ]]; then
+              regressed+=" ${p}(${a_before}->${a_after})"
+            elif [[ "${a_before}" -gt 0 && "${a_after}" -eq "${a_before}" ]]; then
               unimproved+=" ${p}(${a_before}->${a_after})"
             fi
             echo "  ${a}: before=${a_before} after=${a_after} (stdlib=${a_after_stdlib} library=${a_after_library})"
@@ -478,22 +489,27 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             echo "::warning::${after_library} fixable library CVE(s) remain after patching."
           fi
-          if [[ -n "${unimproved}" ]]; then
-            echo "::warning::arch(es) not improved despite fixable CVEs:${unimproved} - likely a Copa failure on those arches"
-            echo "> **Not improved despite fixable CVEs:**${unimproved}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          if [[ "${after_total}" -ge "${before_total}" ]]; then
-            echo "::error::patch did not reduce fixable CVEs (before=${before_total}, after=${after_total})"
+          # Fail on any per-arch regression.
+          if [[ -n "${regressed}" ]]; then
+            echo "::error::patch increased fixable CVEs vs source on:${regressed}"
             exit 1
+          fi
+          if [[ -n "${unimproved}" ]]; then
+            echo "::warning::arch(es) with unchanged fixable CVE count (best-effort; Copa could not reduce):${unimproved}"
+            echo "> **Unchanged fixable CVE count (best-effort):**${unimproved}" >> "$GITHUB_STEP_SUMMARY"
           fi
           # Surface any stdlib CVEs left unfixed by --toolchain-patch-level.
           if [[ "${after_stdlib}" -gt 0 ]]; then
             echo "::warning::${after_stdlib} Go stdlib CVE(s) remain after toolchain patch (may require a newer Go minor)"
           fi
-          # Publish only when the candidate improves on the existing -patched.
-          if [[ "${existing_present}" -eq 1 && "${after_total}" -ge "${existing_total}" ]]; then
+          # Publish only when the candidate regresses on no arch vs the existing -patched and improves on
+          # at least one — per arch.
+          if [[ "${existing_present}" -eq 1 && -n "${regressed_vs_existing}" ]]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "Candidate has ${after_total} residual finding(s); existing ${RELEASE}-patched has ${existing_total} — no improvement, skipping publish." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "Candidate regresses vs existing ${RELEASE}-patched on:${regressed_vs_existing} — skipping publish." | tee -a "$GITHUB_STEP_SUMMARY"
+          elif [[ "${existing_present}" -eq 1 && "${improved_vs_existing}" -ne 1 ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Candidate does not improve on existing ${RELEASE}-patched — skipping publish." | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
