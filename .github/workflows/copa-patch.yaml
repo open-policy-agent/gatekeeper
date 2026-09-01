@@ -60,7 +60,7 @@ jobs:
           egress-policy: audit
 
       - name: Check out code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -108,6 +108,14 @@ jobs:
     env:
       IMAGE: ${{ matrix.image }}
       RELEASE: ${{ matrix.release }}
+      # Normalize a raw Trivy report into a deduped finding set (keyed by VulnerabilityID and PkgName).
+      NORMALIZE_JQ: |
+        [ .Results[]?.Vulnerabilities[]?
+          | { id: .VulnerabilityID, pkg: .PkgName, sev: (.Severity // "UNKNOWN"),
+              installed: (.InstalledVersion // ""), fixed: (.FixedVersion // "") } ]
+        | group_by(.id + "\u0000" + .pkg)
+        | map( .[0] + { installed: ([ .[].installed ] | unique),
+                        fixed: ([ .[].fixed ] | map(select(. != "")) | unique) } )
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -147,6 +155,8 @@ jobs:
       # Register QEMU for non-amd64 emulated patching.
       - name: Set up QEMU
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          image: docker.io/tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 # qemu-v10.2.3-68
 
       - name: Set up Buildx
         run: docker buildx create --use --bootstrap
@@ -209,7 +219,7 @@ jobs:
         if: steps.cfg.outputs.mode == 'canonical'
         run: |
           set -euo pipefail
-          ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}" 2>/dev/null || echo absent)
+          ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}")
           echo "ghcr=${ghcr}" >> "$GITHUB_OUTPUT"
           echo "Canonical base digest — ghcr:${ghcr}"
 
@@ -235,7 +245,6 @@ jobs:
             echo "  ${a}: fixable=${arch_total} (stdlib=${arch_stdlib})"
           done
           echo "before=${total}" >> "$GITHUB_OUTPUT"
-          echo "before_stdlib=${stdlib_total}" >> "$GITHUB_OUTPUT"
           echo "Fixable library CVEs in ${SOURCE_REF} (${PATCH_ARCHES}): ${total} (stdlib=${stdlib_total})"
 
       # Stop if the source is already clean, and stay idempotent by also stopping if an
@@ -253,21 +262,32 @@ jobs:
             echo "Source has no fixable library CVEs, nothing to patch." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          # Idempotency only applies when publishing and a prior -patched already exists.
-          if [[ "${MODE}" != "dry-run" ]] && crane digest "${PRIMARY_REPO}:${RELEASE}-patched" >/dev/null 2>&1; then
-            total=0
-            for p in $PATCH_ARCHES; do
-              a="${p#linux/}"; a="${a//\//-}"
-              trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
-                -f json -o "scan-existing-${a}.json" "${PRIMARY_REPO}:${RELEASE}-patched"
-              total=$(( total + $(jq '[.Results[]?.Vulnerabilities[]?] | length' "scan-existing-${a}.json") ))
-            done
-            # Record the existing -patched residual so the re-scan step publishes only on improvement.
-            echo "existing_total=${total}" >> "$GITHUB_OUTPUT"
-            if [[ "${total}" -eq 0 ]]; then
-              echo "has_fixes=false" >> "$GITHUB_OUTPUT"
-              echo "Existing ${RELEASE}-patched already fixes all current CVEs — skipping (idempotent)." | tee -a "$GITHUB_STEP_SUMMARY"
-              exit 0
+          # Idempotency only applies when publishing and a prior -patched already exists. Classify the
+          # lookup: present = compare; explicit not-found = first patch; operational error = fail
+          # closed in canonical so we never publish without proving the candidate improves on it.
+          if [[ "${MODE}" != "dry-run" ]]; then
+            if digest_out=$(crane digest "${PRIMARY_REPO}:${RELEASE}-patched" 2>&1 >/dev/null); then
+              patched_state="present"
+            elif grep -qiE 'MANIFEST_UNKNOWN|manifest unknown|not found|404' <<<"${digest_out}"; then
+              patched_state="absent"
+            elif [[ "${MODE}" == "canonical" ]]; then
+              echo "::error::could not determine whether ${PRIMARY_REPO}:${RELEASE}-patched exists (registry error): ${digest_out}"; exit 1
+            else
+              patched_state="absent"
+            fi
+            if [[ "${patched_state}" == "present" ]]; then
+              total=0
+              for p in $PATCH_ARCHES; do
+                a="${p#linux/}"; a="${a//\//-}"
+                trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
+                  -f json -o "scan-existing-${a}.json" "${PRIMARY_REPO}:${RELEASE}-patched"
+                total=$(( total + $(jq '[.Results[]?.Vulnerabilities[]?] | length' "scan-existing-${a}.json") ))
+              done
+              if [[ "${total}" -eq 0 ]]; then
+                echo "has_fixes=false" >> "$GITHUB_OUTPUT"
+                echo "Existing ${RELEASE}-patched already fixes all current CVEs — skipping (idempotent)." | tee -a "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
             fi
           fi
           echo "has_fixes=true" >> "$GITHUB_OUTPUT"
@@ -283,9 +303,23 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${MODE}" != "dry-run" ]]; then
-            last=$(crane ls "${PRIMARY_REPO}" 2>/dev/null | grep -E "^${RELEASE}-[0-9]+$" | sed "s/^${RELEASE}-//" | sort -n | tail -1 || true)
+            if [[ "${MODE}" == "canonical" ]]; then
+              tags=$(crane ls "${PRIMARY_REPO}")
+            else
+              tags=$(crane ls "${PRIMARY_REPO}" 2>/dev/null || true)
+            fi
+            # empty result here means only "no vX.Y.Z-N tags yet", not a failed lookup.
+            last=$(printf '%s\n' "${tags}" | { grep -E "^${RELEASE}-[0-9]+$" || true; } | sed "s/^${RELEASE}-//" | sort -n | tail -1)
             rev=$(( ${last:-0} + 1 ))
-            if crane digest "${PRIMARY_REPO}:${RELEASE}-${rev}" >/dev/null 2>&1; then
+            if [[ "${MODE}" == "canonical" ]]; then
+              if digest_err=$(crane digest "${PRIMARY_REPO}:${RELEASE}-${rev}" 2>&1 >/dev/null); then
+                echo "::error::${PRIMARY_REPO}:${RELEASE}-${rev} already exists; refusing to overwrite an immutable revision"; exit 1
+              elif grep -qiE 'MANIFEST_UNKNOWN|manifest unknown|not found|404' <<<"${digest_err}"; then
+                :
+              else
+                echo "::error::could not confirm ${PRIMARY_REPO}:${RELEASE}-${rev} is absent (registry error): ${digest_err}"; exit 1
+              fi
+            elif crane digest "${PRIMARY_REPO}:${RELEASE}-${rev}" >/dev/null 2>&1; then
               echo "::error::${PRIMARY_REPO}:${RELEASE}-${rev} already exists; refusing to overwrite an immutable revision"; exit 1
             fi
           else
@@ -348,7 +382,7 @@ jobs:
           fi
           echo "All target arches present in the patched index."
 
-      # Verify the patch actually reduced the total fixable CVE count across arches.
+      # Verify the patch reduced fixable CVEs, deriving every number from one normalized finding set.
       - name: Verify patched image (re-scan)
         id: verify
         if: steps.gate.outputs.has_fixes == 'true'
@@ -356,82 +390,93 @@ jobs:
           PATCHED_REF: ${{ steps.patch.outputs.patched_ref }}
           MODE: ${{ steps.cfg.outputs.mode }}
           REV: ${{ steps.rev.outputs.rev }}
-          BEFORE: ${{ steps.scan.outputs.before }}
-          BEFORE_STDLIB: ${{ steps.scan.outputs.before_stdlib }}
-          EXISTING_TOTAL: ${{ steps.gate.outputs.existing_total }}
         run: |
           set -euo pipefail
-          total=0
-          stdlib_total=0
-          residual_md=""
-          unimproved=""
+          before_total=0; before_stdlib=0
+          after_total=0; after_stdlib=0; after_library=0
+          existing_total=0; existing_present=0
+          residual_md=""; unimproved=""
           {
-            echo "### ${IMAGE}:${RELEASE} → ${RELEASE}-${REV} (${MODE})"
+            echo "### ${IMAGE}:${RELEASE} - ${RELEASE}-${REV} (${MODE})"
             echo ""
-            echo "| Arch | fixable | stdlib |"
-            echo "| --- | --- | --- |"
+            echo "| Arch | fixable (before - after) | stdlib | library residual |"
+            echo "| --- | --- | --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${MODE}" == "dry-run" ]]; then
+            cp "${PATCHED_REF}/index.json" "${PATCHED_REF}/index.json.orig"
+            trap 'mv -f "${PATCHED_REF}/index.json.orig" "${PATCHED_REF}/index.json" 2>/dev/null || true' EXIT
+          fi
           for p in $PATCH_ARCHES; do
             a="${p#linux/}"; a="${a//\//-}"
             if [[ "${MODE}" == "dry-run" ]]; then
-              trivy image --quiet --input "${PATCHED_REF}" --platform "$p" --pkg-types library --ignore-unfixed \
+              # Resolve this arch manifest, scan a single-manifest index, then assert the arch.
+              want="${p#linux/}"; want="${want%%/*}"
+              dig=$(jq -r --arg ar "${want}" '.manifests[] | select(.platform.os=="linux" and .platform.architecture==$ar) | .digest' "${PATCHED_REF}/index.json.orig")
+              [[ -n "${dig}" ]] || { echo "::error::no ${p} manifest in ${PATCHED_REF}"; exit 1; }
+              jq --arg d "${dig}" '{schemaVersion:2, mediaType:"application/vnd.oci.image.index.v1+json", manifests:[.manifests[]|select(.digest==$d)]}' "${PATCHED_REF}/index.json.orig" > "${PATCHED_REF}/index.json"
+              trivy image --quiet --input "${PATCHED_REF}" --pkg-types library --ignore-unfixed \
                 -f json -o "scan-after-${a}.json"
+              got=$(jq -r '.Metadata.ImageConfig.architecture // ""' "scan-after-${a}.json")
+              [[ "${got}" == "${want}" ]] || { echo "::error::dry-run ${p}: scanned arch '${got}', expected '${want}'"; exit 1; }
             else
               trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
                 -f json -o "scan-after-${a}.json" "${PATCHED_REF}"
             fi
-            arch_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "scan-after-${a}.json")
-            arch_stdlib=$(jq '[.Results[]?.Vulnerabilities[]? | select(.PkgName == "stdlib")] | length' "scan-after-${a}.json")
-            # Per-arch "before" = the source scan the scan step already wrote to copa-reports/.
-            arch_before=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "copa-reports/${a}.json" 2>/dev/null || echo 0)
-            arch_before_stdlib=$(jq '[.Results[]?.Vulnerabilities[]? | select(.PkgName == "stdlib")] | length' "copa-reports/${a}.json" 2>/dev/null || echo 0)
-            total=$(( total + arch_total ))
-            stdlib_total=$(( stdlib_total + arch_stdlib ))
-            # Flag an arch that had fixable CVEs but didn't improve — likely a Copa failure on it.
-            if [[ "${arch_before}" -gt 0 && "${arch_total}" -ge "${arch_before}" ]]; then
-              unimproved+=" ${p}(${arch_before}->${arch_total})"
+            jq "$NORMALIZE_JQ" "copa-reports/${a}.json" > "norm-source-${a}.json"
+            jq "$NORMALIZE_JQ" "scan-after-${a}.json"  > "norm-after-${a}.json"
+            read -r a_before a_before_stdlib < <(jq -r '[length, ([.[] | select(.pkg == "stdlib")] | length)] | @tsv' "norm-source-${a}.json")
+            read -r a_after a_after_stdlib a_after_library < <(jq -r '[length, ([.[] | select(.pkg == "stdlib")] | length), ([.[] | select(.pkg != "stdlib")] | length)] | @tsv' "norm-after-${a}.json")
+            before_total=$(( before_total + a_before )); before_stdlib=$(( before_stdlib + a_before_stdlib ))
+            after_total=$(( after_total + a_after )); after_stdlib=$(( after_stdlib + a_after_stdlib )); after_library=$(( after_library + a_after_library ))
+            # Normalize the existing -patched too (if any).
+            if [[ -f "scan-existing-${a}.json" ]]; then
+              existing_present=1
+              jq "$NORMALIZE_JQ" "scan-existing-${a}.json" > "norm-existing-${a}.json"
+              existing_total=$(( existing_total + $(jq 'length' "norm-existing-${a}.json") ))
             fi
-            echo "  ${a}: fixable after=${arch_total} (stdlib=${arch_stdlib})"
-            echo "| ${p} | ${arch_before} → ${arch_total} | ${arch_before_stdlib} → ${arch_stdlib} |" >> "$GITHUB_STEP_SUMMARY"
-            # Library packages Copa left below their fixed version on this arch (stdlib is reported separately).
-            pkgs=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.PkgName != "stdlib") | {p: .PkgName, i: .InstalledVersion, f: (.FixedVersion // "?")}]
-                          | group_by(.p + " " + .i)
-                          | map("- " + .[0].p + " " + .[0].i + " → needs " + ([.[].f] | unique | join(", ")))
-                          | .[]' "scan-after-${a}.json")
+            # Flag an arch that had fixable CVEs but didn't improve.
+            if [[ "${a_before}" -gt 0 && "${a_after}" -ge "${a_before}" ]]; then
+              unimproved+=" ${p}(${a_before}->${a_after})"
+            fi
+            echo "  ${a}: before=${a_before} after=${a_after} (stdlib=${a_after_stdlib} library=${a_after_library})"
+            echo "| ${p} | ${a_before} → ${a_after} | ${a_before_stdlib} → ${a_after_stdlib} | ${a_after_library} |" >> "$GITHUB_STEP_SUMMARY"
+            pkgs=$(jq -r '[.[] | select(.pkg != "stdlib")] | group_by(.pkg)[]
+                          | "- " + .[0].pkg + " " + (.[0].installed | join(",")) + " → needs " + ([.[].fixed[]] | unique | join(", "))' "norm-after-${a}.json")
             if [[ -n "${pkgs}" ]]; then
               residual_md+=$'\n'"**${p}**"$'\n\n'"${pkgs}"$'\n'
             fi
           done
-          echo "CVE totals across ${PATCH_ARCHES}: before=${BEFORE} after=${total} | stdlib before=${BEFORE_STDLIB} after=${stdlib_total}"
-          echo "| **all** | **${BEFORE} → ${total}** | **${BEFORE_STDLIB} → ${stdlib_total}** |" >> "$GITHUB_STEP_SUMMARY"
-          # Surface fixable library CVEs Copa couldn't reach.
-          library_total=$(( total - stdlib_total ))
+          [[ $(( after_stdlib + after_library )) -eq "${after_total}" ]] || { echo "::error::finding-set partition invariant violated (stdlib ${after_stdlib} + library ${after_library} != total ${after_total})"; exit 1; }
+          sev_line=$(jq -rs 'add | group_by(.sev) | map("\(.[0].sev)=\(length)") | join(" ")' norm-after-*.json)
+          echo "CVE totals across ${PATCH_ARCHES}: before=${before_total} after=${after_total} | stdlib ${before_stdlib}→${after_stdlib} | library=${after_library} | severities: ${sev_line}"
+          echo "| **all** | **${before_total} → ${after_total}** | **${before_stdlib} → ${after_stdlib}** | **${after_library}** |" >> "$GITHUB_STEP_SUMMARY"
+          echo "Residual severities: ${sev_line:-none}" >> "$GITHUB_STEP_SUMMARY"
           if [[ -n "${residual_md}" ]]; then
             {
               echo ""
-              echo "<details><summary>${library_total} fixable library CVE(s) remain; Copa could not reach these fixed versions</summary>"
+              echo "<details><summary>${after_library} fixable library CVE(s) remain; Copa could not reach these fixed versions</summary>"
               echo ""
               printf '%s\n' "${residual_md}"
               echo "</details>"
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning::${library_total} fixable library CVE(s) remain after patching."
+            echo "::warning::${after_library} fixable library CVE(s) remain after patching."
           fi
           if [[ -n "${unimproved}" ]]; then
-            echo "::warning::arch(es) not improved despite fixable CVEs:${unimproved} — likely a Copa failure on those arches"
+            echo "::warning::arch(es) not improved despite fixable CVEs:${unimproved} - likely a Copa failure on those arches"
             echo "> **Not improved despite fixable CVEs:**${unimproved}" >> "$GITHUB_STEP_SUMMARY"
           fi
-          if [[ "${total}" -ge "${BEFORE}" ]]; then
-            echo "::error::patch did not reduce fixable CVEs (before=${BEFORE}, after=${total})"
+          if [[ "${after_total}" -ge "${before_total}" ]]; then
+            echo "::error::patch did not reduce fixable CVEs (before=${before_total}, after=${after_total})"
             exit 1
           fi
           # Surface any stdlib CVEs left unfixed by --toolchain-patch-level.
-          if [[ "${stdlib_total}" -gt 0 ]]; then
-            echo "::warning::${stdlib_total} Go stdlib CVE(s) remain after toolchain patch (may require a newer Go minor)"
+          if [[ "${after_stdlib}" -gt 0 ]]; then
+            echo "::warning::${after_stdlib} Go stdlib CVE(s) remain after toolchain patch (may require a newer Go minor)"
           fi
           # Publish only when the candidate improves on the existing -patched.
-          if [[ -n "${EXISTING_TOTAL}" && "${total}" -ge "${EXISTING_TOTAL}" ]]; then
+          if [[ "${existing_present}" -eq 1 && "${after_total}" -ge "${existing_total}" ]]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "Candidate has ${total} residual CVE(s); existing ${RELEASE}-patched has ${EXISTING_TOTAL} — no improvement, skipping publish." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "Candidate has ${after_total} residual finding(s); existing ${RELEASE}-patched has ${existing_total} — no improvement, skipping publish." | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
@@ -446,13 +491,15 @@ jobs:
           set -euo pipefail
           for p in $PATCH_ARCHES; do
             set +e
-            docker run --rm --pull always --platform "$p" "${PATCHED_REF}" --help >/dev/null 2>&1
+            out=$(docker run --rm --pull always --platform "$p" "${PATCHED_REF}" --help 2>&1)
             ec=$?
             set -e
-            if [[ "${ec}" != "0" && "${ec}" != "2" ]]; then
-              echo "::error::smoke test failed for ${PATCHED_REF} on ${p} (exit ${ec})"; exit 1
+            if [[ "${ec}" != "0" ]]; then
+              echo "::error::smoke test failed for ${PATCHED_REF} on ${p} (exit ${ec})"
+              printf '%s\n' "${out}" | head -20
+              exit 1
             fi
-            echo "Smoke: ${PATCHED_REF} (${p}) entrypoint executed (exit ${ec})."
+            echo "Smoke: ${PATCHED_REF} (${p}) --help exited 0."
           done
 
       - name: Re-wrap with attestations and publish to canonical
@@ -488,10 +535,22 @@ jobs:
           GHCR_REF: ${{ steps.rewrap.outputs.ghcr_ref }}
         run: |
           set -euo pipefail
-          n=$(docker buildx imagetools inspect "${GHCR_REF}" --raw \
-            | jq '[.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest")] | length')
-          echo "Attestation manifests on ${GHCR_REF}: ${n}"
-          if [[ "${n}" -lt 1 ]]; then echo "::error::no attestations on ${GHCR_REF}"; exit 1; fi
+          repo="${GHCR_REF%:*}"
+          idx=$(crane manifest "${GHCR_REF}")
+          # Every published platform manifest must have its own attestation manifest carrying BOTH an
+          # SBOM and SLSA provenance predicate.
+          mapfile -t imgs < <(jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture != "unknown") | .digest' <<<"${idx}")
+          want=$(echo ${PATCH_ARCHES} | wc -w | tr -d ' ')
+          [[ "${#imgs[@]}" -eq "${want}" ]] || { echo "::error::${GHCR_REF}: expected ${want} platform manifests, found ${#imgs[@]}"; exit 1; }
+          for imgd in "${imgs[@]}"; do
+            attd=$(jq -r --arg d "${imgd}" '.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest" and .annotations["vnd.docker.reference.digest"] == $d) | .digest' <<<"${idx}")
+            [[ -n "${attd}" ]] || { echo "::error::${GHCR_REF}: platform ${imgd} has no attestation manifest"; exit 1; }
+            preds=$(crane manifest "${repo}@${attd}" | jq -r '.layers[].annotations["in-toto.io/predicate-type"] // empty')
+            grep -q 'spdx.dev' <<<"${preds}" || { echo "::error::${GHCR_REF}: platform ${imgd} missing SBOM attestation"; exit 1; }
+            grep -q 'slsa.dev/provenance' <<<"${preds}" || { echo "::error::${GHCR_REF}: platform ${imgd} missing provenance attestation"; exit 1; }
+            echo "  ${imgd}: SBOM + provenance present."
+          done
+          echo "All ${#imgs[@]} published platform(s) carry SBOM + provenance attestations."
 
       # prove the run never mutated a canonical release tag.
       - name: Verify canonical release tag untouched
@@ -500,7 +559,7 @@ jobs:
           BASE_GHCR: ${{ steps.base.outputs.ghcr }}
         run: |
           set -euo pipefail
-          now_ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}" 2>/dev/null || echo absent)
+          now_ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}")
           if [[ "${now_ghcr}" != "${BASE_GHCR}" ]]; then
             echo "::error::canonical release tag digest changed (ghcr ${BASE_GHCR}->${now_ghcr})"; exit 1
           fi
