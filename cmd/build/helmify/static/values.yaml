@@ -32,8 +32,10 @@ validatingWebhookSubResources:
     "replicasets/scale",
     "statefulsets/scale",
     "replicationcontrollers/scale",
+    "serviceaccounts/token",
     "services/proxy",
     "nodes/proxy",
+    "certificatesigningrequests/approval",
     "services/status",
   ]
 validatingWebhookURL: null
@@ -63,12 +65,15 @@ mutatingWebhookSubResources:
     "pods/proxy",
     "pods/attach",
     "pods/binding",
+    "pods/resize",
     "deployments/scale",
     "replicasets/scale",
     "statefulsets/scale",
     "replicationcontrollers/scale",
+    "serviceaccounts/token",
     "services/proxy",
     "nodes/proxy",
+    "certificatesigningrequests/approval",
     "services/status",
   ]
 mutatingWebhookURL: null
