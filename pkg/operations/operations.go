@@ -96,6 +96,20 @@ func IsAssigned(op Operation) bool {
 	return operations.assignedOperations[op]
 }
 
+// AssignedSet returns a copy of the operations assigned to this process.
+func AssignedSet() Set {
+	operationsMtx.RLock()
+	defer operationsMtx.RUnlock()
+
+	out := make(Set, len(operations.assignedOperations))
+	for k, v := range operations.assignedOperations {
+		if v {
+			out[k] = true
+		}
+	}
+	return out
+}
+
 // AssignedStringList returns a list of all operations assigned to the pod
 // as a sorted list of strings.
 func AssignedStringList() []string {
@@ -128,6 +142,16 @@ func AssignedStringList() []string {
 // HasValidationOperations returns `true` if there
 // are any operations that would require a constraint or template controller
 // or a sync controller.
+//
+// This matches Plan.Clients.ConstraintClient for the assigned operations.
 func HasValidationOperations() bool {
-	return IsAssigned(Audit) || IsAssigned(Status) || IsAssigned(Webhook)
+	return hasValidationOperations(AssignedSet())
+}
+
+func hasValidationOperations(ops Set) bool {
+	return ops[Audit] || ops[Status] || ops[Webhook]
+}
+
+func hasMutationOperations(ops Set) bool {
+	return ops[MutationStatus] || ops[MutationWebhook] || ops[MutationController]
 }
