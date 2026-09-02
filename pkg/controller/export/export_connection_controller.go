@@ -290,7 +290,6 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	default:
 		return fmt.Errorf("getting connection object status in name %s, namespace %s: %w", connObj.GetName(), connObj.GetNamespace(), err)
 	}
-
 	if !shouldCreate {
 		if err := repairConnectionPodStatusMetadata(scheme, connPodStatusObj, pod, connObj); err != nil {
 			return fmt.Errorf("repairing connection status metadata: %w", err)

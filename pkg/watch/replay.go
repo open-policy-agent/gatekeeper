@@ -261,9 +261,9 @@ func (wm *Manager) replayEvents(ctx context.Context, r *Registrar, gvk schema.Gr
 		return fmt.Errorf("listing resources %+v: %w", gvk, err)
 	}
 
-	for _, o := range lst.Items {
+	for i := range lst.Items {
 		e := event.GenericEvent{
-			Object: &o,
+			Object: &lst.Items[i],
 		}
 		select {
 		case r.events <- e:

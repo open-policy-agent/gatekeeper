@@ -290,7 +290,7 @@ func buildResponses(fns []addFn) *types.Responses {
 }
 
 func prefixMsg(parentName string, msg string) string {
-	return fmt.Sprintf("%s %s", fmt.Sprintf(childMsgPrefix, parentName), msg)
+	return "[Implied by " + parentName + "] " + msg
 }
 
 func addViolation(target string, msgs ...string) func(base *types.Responses) {
@@ -305,5 +305,25 @@ func addViolation(target string, msgs ...string) func(base *types.Responses) {
 		}
 
 		base.ByTarget[target].Results = append(base.ByTarget[target].Results, results...)
+	}
+}
+
+func BenchmarkAggregateResponsesFanout(b *testing.B) {
+	for _, resultCount := range []int{100, 1000, 10000} {
+		b.Run(fmt.Sprintf("results-%d", resultCount), func(b *testing.B) {
+			childMsgs := make([]string, resultCount)
+			for i := 0; i < resultCount; i++ {
+				childMsgs[i] = fmt.Sprintf("child violation %d", i)
+			}
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				parent := buildResponses(nil)
+				child := buildResponses([]addFn{addViolation("targetA", childMsgs...)})
+				AggregateResponses("template-a", parent, child)
+				if got := len(parent.ByTarget["targetA"].Results); got != resultCount {
+					b.Fatalf("results = %d, want %d", got, resultCount)
+				}
+			}
+		})
 	}
 }

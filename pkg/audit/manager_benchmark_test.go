@@ -148,3 +148,69 @@ func writeBenchmarkPerObjectFiles(tb testing.TB, directory string, objects []uns
 		require.NoError(tb, os.WriteFile(path.Join(directory, strconv.Itoa(i)), jsonBytes, 0o600))
 	}
 }
+
+func TestShouldAuditKind(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		matchedKinds map[string]bool
+		kind         string
+		want         bool
+	}{
+		{name: "explicit match", matchedKinds: map[string]bool{"Pod": true}, kind: "Pod", want: true},
+		{name: "explicit mismatch", matchedKinds: map[string]bool{"Pod": true}, kind: "ConfigMap"},
+		{name: "wildcard", matchedKinds: map[string]bool{"*": true}, kind: "ConfigMap", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldAuditKind(tc.matchedKinds, tc.kind); got != tc.want {
+				t.Fatalf("shouldAuditKind(%v, %q) = %t, want %t", tc.matchedKinds, tc.kind, got, tc.want)
+			}
+		})
+	}
+}
+
+func BenchmarkAuditSkippedKindAvoidsCacheCleanup(b *testing.B) {
+	const staleDirs = 100
+	am := benchmarkAuditManager(b)
+	matchedKinds := map[string]bool{"Pod": true}
+
+	b.Run("old_order_cleanup_before_skip", func(b *testing.B) {
+		root := b.TempDir()
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			populateAuditCacheDirs(b, root, staleDirs)
+			if err := am.removeAllFromDir(root, *auditChunkSize); err != nil {
+				b.Fatal(err)
+			}
+			if shouldAuditKind(matchedKinds, "ConfigMap") {
+				b.Fatal("expected ConfigMap to be skipped")
+			}
+		}
+	})
+
+	b.Run("new_order_skip_before_cleanup", func(b *testing.B) {
+		root := b.TempDir()
+		populateAuditCacheDirs(b, root, staleDirs)
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if !shouldAuditKind(matchedKinds, "ConfigMap") {
+				continue
+			}
+			if err := am.removeAllFromDir(root, *auditChunkSize); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func populateAuditCacheDirs(tb testing.TB, root string, count int) {
+	tb.Helper()
+	for i := 0; i < count; i++ {
+		dir := path.Join(root, "stale-"+strconv.Itoa(i))
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			tb.Fatal(err)
+		}
+		if err := os.WriteFile(path.Join(dir, auditObjectsFile), []byte("[]"), 0o600); err != nil {
+			tb.Fatal(err)
+		}
+	}
+}

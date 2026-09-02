@@ -189,6 +189,18 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		return nil, err
 	}
 
+	// Convert namespace from map[string]interface{} to *corev1.Namespace once
+	// per review. This enables CEL expressions to access namespaceObject for
+	// namespace-based policies without paying a JSON round trip per constraint.
+	var namespace *corev1.Namespace
+	if cfg.Namespace != nil {
+		namespace, err = mapToNamespace(cfg.Namespace)
+		if err != nil {
+			log.Error(err, "failed to convert namespace to corev1.Namespace, continuing without namespace")
+			namespace = nil
+		}
+	}
+
 	results := []*types.Result{}
 
 	for _, constraint := range constraints {
@@ -204,17 +216,6 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		// this should never happen, but best not to panic if the pointer is ever nil.
 		if validator == nil {
 			return nil, fmt.Errorf("nil validator for constraint template %v", strings.ToLower(constraint.GetKind()))
-		}
-
-		// Convert namespace from map[string]interface{} to *corev1.Namespace if provided.
-		// This enables CEL expressions to access namespaceObject for namespace-based policies.
-		var namespace *corev1.Namespace
-		if cfg.Namespace != nil {
-			namespace, err = mapToNamespace(cfg.Namespace)
-			if err != nil {
-				log.Error(err, "failed to convert namespace to corev1.Namespace, continuing without namespace")
-				namespace = nil
-			}
 		}
 
 		response := validator.Validate(ctx, versionedAttr.GetResource(), versionedAttr, constraint, namespace, celAPI.PerCallLimit, nil)

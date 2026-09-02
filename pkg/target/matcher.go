@@ -14,12 +14,13 @@ var _ constraints.Matcher = &Matcher{}
 
 // Matcher implements constraint.Matcher.
 type Matcher struct {
-	match *match.Match
-	cache *nsCache
+	match         *match.Match
+	compiledMatch *match.CompiledMatch
+	cache         *nsCache
 }
 
 func (m *Matcher) Match(review interface{}) (bool, error) {
-	if m.match == nil {
+	if m.match == nil && m.compiledMatch == nil {
 		// No-op if Match unspecified.
 		return true, nil
 	}
@@ -54,7 +55,15 @@ func matchAny(m *Matcher, ns *corev1.Namespace, source types.SourceType, objs ..
 			Namespace: ns,
 			Source:    source,
 		}
-		matched, err := match.Matches(m.match, t)
+		compiledMatch := m.compiledMatch
+		if compiledMatch == nil {
+			var err error
+			compiledMatch, err = match.Compile(m.match)
+			if err != nil {
+				return false, fmt.Errorf("%w: %v :%w", ErrMatching, obj.GetName(), err)
+			}
+		}
+		matched, err := compiledMatch.Matches(t)
 		if err != nil {
 			return false, fmt.Errorf("%w: %v :%w", ErrMatching, obj.GetName(), err)
 		}
