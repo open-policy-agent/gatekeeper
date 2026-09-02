@@ -51,8 +51,10 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
@@ -420,10 +422,23 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
+	plan := operations.CurrentPlan(operations.Features{
+		ExpansionEnabled:          *expansion.ExpansionEnabled,
+		ExternalDataEnabled:       *externaldata.ExternalDataEnabled,
+		ViolationExportEnabled:    *exportutil.ExportEnabled,
+		AdmissionExportEnabled:    *exportutil.AdmissionExportEnabled,
+		SyncVAPEnforcementScope:   *transform.SyncVAPScope,
+		EnableK8sNativeValidation: *enableK8sCel,
+	})
+	if err := plan.Validate(); err != nil {
+		setupLog.Error(err, "invalid controller wiring plan")
+		return err
+	}
+
 	var providerCache *frameworksexternaldata.ProviderCache
 	args := []rego.Arg{rego.Tracing(false), rego.DisableBuiltins(disabledBuiltins.ToSlice()...)}
 	mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
-	if *externaldata.ExternalDataEnabled {
+	if plan.Systems.ProviderCache {
 		providerCache = frameworksexternaldata.NewCache()
 		args = append(args, rego.AddExternalDataProviderCache(providerCache))
 		mutationOpts.ProviderCache = providerCache
@@ -440,35 +455,37 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 			return err
 		}
 
-		certFile := filepath.Join(*certDir, certName)
-		keyFile := filepath.Join(*certDir, keyName)
+		if plan.Runnables.ClientCertWatcher {
+			certFile := filepath.Join(*certDir, certName)
+			keyFile := filepath.Join(*certDir, keyName)
 
-		// certWatcher is used to watch for changes to Gatekeeper's certificate and key files.
-		certWatcher, err := certwatcher.New(certFile, keyFile)
-		if err != nil {
-			setupLog.Error(err, "unable to create client cert watcher")
-			return err
+			// certWatcher is used to watch for changes to Gatekeeper's certificate and key files.
+			certWatcher, err := certwatcher.New(certFile, keyFile)
+			if err != nil {
+				setupLog.Error(err, "unable to create client cert watcher")
+				return err
+			}
+
+			setupLog.Info("setting up client cert watcher")
+			if err := mgr.Add(certWatcher); err != nil {
+				setupLog.Error(err, "unable to register client cert watcher")
+				return err
+			}
+
+			// register the client cert watcher to the driver
+			args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
+
+			// register the client cert watcher to the mutation system
+			mutationOpts.ClientCertWatcher = certWatcher
 		}
-
-		setupLog.Info("setting up client cert watcher")
-		if err := mgr.Add(certWatcher); err != nil {
-			setupLog.Error(err, "unable to register client cert watcher")
-			return err
-		}
-
-		// register the client cert watcher to the driver
-		args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
-
-		// register the client cert watcher to the mutation system
-		mutationOpts.ClientCertWatcher = certWatcher
 	}
 
 	cfArgs := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 
 	var client *constraintclient.Client
 
-	if operations.HasValidationOperations() {
-		if *enableK8sCel {
+	if plan.Clients.ConstraintClient {
+		if plan.Clients.K8sCelDriver {
 			k8sDriver, err := k8scel.New()
 			if err != nil {
 				setupLog.Error(err, "unable to set up K8s native driver")
@@ -491,10 +508,10 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		cfArgs = append(cfArgs, constraintclient.Driver(driver))
 
 		eps := []string{}
-		if operations.IsAssigned(operations.Audit) {
+		if plan.Clients.AuditEnforcement {
 			eps = append(eps, util.AuditEnforcementPoint)
 		}
-		if operations.IsAssigned(operations.Webhook) {
+		if plan.Clients.WebhookEnforcement {
 			eps = append(eps, util.WebhookEnforcementPoint)
 		}
 
@@ -510,9 +527,18 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		}
 	}
 
-	mutationSystem := mutation.NewSystem(mutationOpts)
-	expansionSystem := expansion.NewSystem(mutationSystem)
-	exportSystem := export.NewSystem()
+	var mutationSystem *mutation.System
+	if plan.Systems.MutationSystem {
+		mutationSystem = mutation.NewSystem(mutationOpts)
+	}
+	var expansionSystem *expansion.System
+	if plan.Systems.ExpansionSystem {
+		expansionSystem = expansion.NewSystem(mutationSystem)
+	}
+	var exportSystem *export.System
+	if plan.Systems.ExportSystem {
+		exportSystem = export.NewSystem()
+	}
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -522,63 +548,78 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		return err
 	}
 
-	setupLog.Info("setting up metrics")
-	if err := metrics.AddToManager(mgr); err != nil {
-		setupLog.Error(err, "unable to register metrics with the manager")
-		return err
+	if plan.Runnables.Metrics {
+		setupLog.Info("setting up metrics")
+		if err := metrics.AddToManager(mgr); err != nil {
+			setupLog.Error(err, "unable to register metrics with the manager")
+			return err
+		}
 	}
 
-	wm, err := watch.New(dc)
-	if err != nil {
-		setupLog.Error(err, "unable to create watch manager")
-		return err
-	}
-	if err := mgr.Add(wm); err != nil {
-		setupLog.Error(err, "unable to register watch manager with the manager")
-		return err
+	var wm *watch.Manager
+	if plan.Runnables.WatchManager {
+		var err error
+		wm, err = watch.New(dc)
+		if err != nil {
+			setupLog.Error(err, "unable to create watch manager")
+			return err
+		}
+		if err := mgr.Add(wm); err != nil {
+			setupLog.Error(err, "unable to register watch manager with the manager")
+			return err
+		}
 	}
 
-	// processExcluder is used for namespace exclusion for specified processes in config
-	processExcluder := process.Get()
+	var processExcluder *process.Excluder
+	if plan.Systems.ProcessExcluder {
+		// processExcluder is used for namespace exclusion for specified processes in config
+		processExcluder = process.Get()
+	}
 
 	// Setup all Controllers
 	setupLog.Info("setting up controllers")
 
-	// Events ch will be used to receive events from dynamic watches registered
-	// via the registrar below.
-	events := make(chan event.GenericEvent, 1024)
-	reg, err := wm.NewRegistrar(
-		cachemanager.RegistrarName,
-		events)
-	if err != nil {
-		setupLog.Error(err, "unable to set up watch registrar for cache manager")
-		return err
+	var events chan event.GenericEvent
+	var cm *cachemanager.CacheManager
+	if plan.Runnables.CacheManager {
+		// Events ch will be used to receive events from dynamic watches registered
+		// via the registrar below.
+		events = make(chan event.GenericEvent, 1024)
+		reg, err := wm.NewRegistrar(
+			cachemanager.RegistrarName,
+			events)
+		if err != nil {
+			setupLog.Error(err, "unable to set up watch registrar for cache manager")
+			return err
+		}
+
+		syncMetricsCache := syncutil.NewMetricsCache()
+
+		cmConfig := &cachemanager.Config{
+			SyncMetricsCache: syncMetricsCache,
+			Tracker:          tracker,
+			ProcessExcluder:  processExcluder,
+			Registrar:        reg,
+			Reader:           mgr.GetCache(),
+		}
+
+		if client != nil {
+			cmConfig.CfClient = client
+		}
+
+		cm, err = cachemanager.NewCacheManager(cmConfig)
+		if err != nil {
+			setupLog.Error(err, "unable to create cache manager")
+			return err
+		}
 	}
 
-	syncMetricsCache := syncutil.NewMetricsCache()
-
-	cmConfig := &cachemanager.Config{
-		SyncMetricsCache: syncMetricsCache,
-		Tracker:          tracker,
-		ProcessExcluder:  processExcluder,
-		Registrar:        reg,
-		Reader:           mgr.GetCache(),
-	}
-
-	if client != nil {
-		cmConfig.CfClient = client
-	}
-
-	cm, err := cachemanager.NewCacheManager(cmConfig)
-	if err != nil {
-		setupLog.Error(err, "unable to create cache manager")
-		return err
-	}
-
-	err = mgr.Add(pruner.NewExpectationsPruner(cm, tracker))
-	if err != nil {
-		setupLog.Error(err, "adding expectations pruner to manager")
-		return err
+	if plan.Runnables.ExpectationsPruner {
+		err := mgr.Add(pruner.NewExpectationsPruner(cm, tracker))
+		if err != nil {
+			setupLog.Error(err, "adding expectations pruner to manager")
+			return err
+		}
 	}
 
 	opts := controller.Dependencies{
@@ -594,7 +635,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		ExportSystem:    exportSystem,
 	}
 
-	if operations.IsAssigned(operations.Generate) {
+	if plan.Systems.ConstraintTemplateEvents || plan.Systems.WebhookConfigCache {
 		opts.CtEvents = make(chan event.GenericEvent, 1024)
 		opts.WebhookConfigCache = webhookconfigcache.NewWebhookConfigCache()
 	}
@@ -604,7 +645,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		return err
 	}
 
-	if operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook) {
+	if plan.Webhooks.Validation || plan.Webhooks.Mutation || plan.Webhooks.NamespaceLabel {
 		setupLog.Info("setting up webhooks")
 		webhookDeps := webhook.Dependencies{
 			OpaClient:       client,
@@ -620,7 +661,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		}
 	}
 
-	if operations.IsAssigned(operations.Audit) {
+	if plan.Runnables.Audit {
 		setupLog.Info("setting up audit")
 		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), cm)
 		auditDeps := audit.Dependencies{
@@ -637,10 +678,12 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		}
 	}
 
-	setupLog.Info("setting up upgrade")
-	if err := upgrade.AddToManager(mgr); err != nil {
-		setupLog.Error(err, "unable to register upgrade with the manager")
-		return err
+	if plan.Runnables.Upgrade {
+		setupLog.Info("setting up upgrade")
+		if err := upgrade.AddToManager(mgr); err != nil {
+			setupLog.Error(err, "unable to register upgrade with the manager")
+			return err
+		}
 	}
 
 	return nil
