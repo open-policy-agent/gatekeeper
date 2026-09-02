@@ -430,15 +430,16 @@ jobs:
           for p in $PATCH_ARCHES; do
             a="${p#linux/}"; a="${a//\//-}"
             if [[ "${MODE}" == "dry-run" ]]; then
-              # Resolve this arch manifest, scan a single-manifest index, then assert the arch.
+              # Resolve this arch manifest.
               want="${p#linux/}"; want="${want%%/*}"
               dig=$(jq -r --arg ar "${want}" '.manifests[] | select(.platform.os=="linux" and .platform.architecture==$ar) | .digest' "${PATCHED_REF}/index.json.orig")
               [[ -n "${dig}" ]] || { echo "::error::no ${p} manifest in ${PATCHED_REF}"; exit 1; }
               jq --arg d "${dig}" '{schemaVersion:2, mediaType:"application/vnd.oci.image.index.v1+json", manifests:[.manifests[]|select(.digest==$d)]}' "${PATCHED_REF}/index.json.orig" > "${PATCHED_REF}/index.json"
               trivy image --quiet --input "${PATCHED_REF}" --pkg-types library --ignore-unfixed \
                 -f json -o "scan-after-${a}.json"
-              got=$(jq -r '.Metadata.ImageConfig.architecture // ""' "scan-after-${a}.json")
-              [[ "${got}" == "${want}" ]] || { echo "::error::dry-run ${p}: scanned arch '${got}', expected '${want}'"; exit 1; }
+              want_cfg=$(jq -r '.config.digest' "${PATCHED_REF}/blobs/sha256/${dig#sha256:}")
+              got_cfg=$(jq -r '.Metadata.ImageID // ""' "scan-after-${a}.json")
+              [[ "${got_cfg}" == "${want_cfg}" ]] || { echo "::error::dry-run ${p}: scanned config '${got_cfg}', expected ${dig}'s config '${want_cfg}'"; exit 1; }
             else
               trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
                 -f json -o "scan-after-${a}.json" "${PATCHED_REF}"
