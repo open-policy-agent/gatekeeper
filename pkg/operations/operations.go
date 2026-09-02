@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 )
 
 type Operation string
@@ -127,7 +129,37 @@ func AssignedStringList() []string {
 
 // HasValidationOperations returns `true` if there
 // are any operations that would require a constraint or template controller
-// or a sync controller.
+// or a sync controller for policy review / status aggregation.
+// Generate is intentionally excluded: CRD/VAP/VAPB generation is not a
+// review enforcement point and must not start audit, webhook, or sync.
 func HasValidationOperations() bool {
 	return IsAssigned(Audit) || IsAssigned(Status) || IsAssigned(Webhook)
+}
+
+// HasConstraintControllers reports whether the ConstraintTemplate and
+// Constraint reconcilers should run. Generation owns CRD/VAP/VAPB
+// reconciliation and is separate from review enforcement (audit/webhook)
+// and from status aggregation.
+func HasConstraintControllers() bool {
+	return IsAssigned(Generate) || HasValidationOperations()
+}
+
+// ConstraintClientEnforcementPoints returns the constraint-client
+// enforcement points for this process.
+//
+// Review operations keep their existing audit/webhook points. Generate-only
+// uses vap.k8s.io so compilation/transformation can start without modeling
+// generation as an audit or webhook enforcement point.
+func ConstraintClientEnforcementPoints() []string {
+	var eps []string
+	if IsAssigned(Audit) {
+		eps = append(eps, util.AuditEnforcementPoint)
+	}
+	if IsAssigned(Webhook) {
+		eps = append(eps, util.WebhookEnforcementPoint)
+	}
+	if len(eps) == 0 && IsAssigned(Generate) {
+		eps = append(eps, util.VAPEnforcementPoint)
+	}
+	return eps
 }
