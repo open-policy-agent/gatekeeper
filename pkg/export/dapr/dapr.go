@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	daprClient "github.com/dapr/go-sdk/client"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 )
 
 type Connection struct {
@@ -29,6 +30,15 @@ var Connections = &Dapr{
 }
 
 func (r *Dapr) Publish(_ context.Context, connectionName string, data interface{}, topic string) error {
+	// Admission violation export is an alpha feature that relies on the durable,
+	// bounded on-disk spool implemented only by the disk driver (record-size
+	// limits, rotation, retention, and crash recovery). The Dapr driver provides
+	// none of those guarantees, so reject admission violations here to fail fast
+	// instead of silently publishing them over the message bus.
+	if isAdmissionViolation(data) {
+		return fmt.Errorf("admission violation export is not supported by the Dapr driver; set the export backend to disk")
+	}
+
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("error marshaling data: %w", err)
@@ -44,6 +54,26 @@ func (r *Dapr) Publish(_ context.Context, connectionName string, data interface{
 	}
 
 	return nil
+}
+
+// isAdmissionViolation reports whether data is an admission violation export
+// message. It mirrors the message shapes accepted by the disk driver so the
+// guard holds regardless of how the caller passes the payload.
+func isAdmissionViolation(data interface{}) bool {
+	switch value := data.(type) {
+	case util.ExportMsg:
+		return value.EventType == util.AdmissionViolationEventType
+	case *util.ExportMsg:
+		return value != nil && value.EventType == util.AdmissionViolationEventType
+	case json.RawMessage:
+		var msg util.ExportMsg
+		if err := json.Unmarshal(value, &msg); err != nil {
+			return false
+		}
+		return msg.EventType == util.AdmissionViolationEventType
+	default:
+		return false
+	}
 }
 
 func (r *Dapr) CloseConnection(connectionName string) error {
