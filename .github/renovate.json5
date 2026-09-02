@@ -18,6 +18,9 @@
   minimumReleaseAgeBehaviour: "timestamp-optional", // don't stall versions that lack a release timestamp
   postUpdateOptions: ["gomodTidy"],  // run `go mod tidy` after gomod changes
   dependencyDashboard: true,         // tracking issue for pending updates
+  // Observation mode while Dependabot still runs: Renovate lists updates on the dashboard but opens
+  // no PRs (no duplicates). Remove with dependabot.yml so Renovate starts opening PRs automatically.
+  dependencyDashboardApproval: true,
 
   labels: ["dependencies"],
 
