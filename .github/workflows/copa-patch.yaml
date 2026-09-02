@@ -372,7 +372,7 @@ jobs:
             -i "${PATCH_INPUT}" \
             --report "${REPORT_DIR}/" \
             --pkg-types library \
-            --library-patch-level minor \
+            --library-patch-level patch \
             --toolchain-patch-level patch \
             --ignore-errors \
             --timeout 120m \
