@@ -18,6 +18,7 @@ var (
 	upgradeBundles           []string
 	upgradeEnforcementAction string
 	upgradeDryRun            bool
+	upgradeForce             bool
 	upgradeOutput            string
 )
 
@@ -49,6 +50,7 @@ gator policy upgrade --all -o json`,
 	cmd.Flags().StringSliceVar(&upgradeBundles, "bundle", nil, "Upgrade all policies in a bundle (may be specified multiple times)")
 	cmd.Flags().StringVar(&upgradeEnforcementAction, "enforcement-action", "", "Override enforcement action (deny, warn, dryrun)")
 	cmd.Flags().BoolVar(&upgradeDryRun, "dry-run", false, "Preview changes without applying (requires cluster access to check current state)")
+	cmd.Flags().BoolVar(&upgradeForce, "force", false, "Upgrade even if the cluster Kubernetes version is outside a policy's supported range")
 	cmd.Flags().StringVarP(&upgradeOutput, "output", "o", "table", "Output format: table, json")
 
 	return cmd
@@ -89,7 +91,9 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading catalog: %w", err)
 	}
 
-	// Create Kubernetes client
+	// Create Kubernetes client. Note: unlike install, upgrade --dry-run still
+	// requires cluster access because it must read the currently-installed
+	// versions to compute the upgrade preview.
 	k8sClient, err := client.NewK8sClient()
 	if err != nil {
 		return fmt.Errorf("creating Kubernetes client: %w", err)
@@ -125,6 +129,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		All:               upgradeAll,
 		EnforcementAction: upgradeEnforcementAction,
 		DryRun:            upgradeDryRun,
+		Force:             upgradeForce,
 	}
 
 	// Perform upgrade
@@ -136,8 +141,14 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 			fmt.Fprintln(os.Stderr, err.Error())
 			return gatorpolicy.NewClusterError(err.Error())
 		}
-		return err
+		// Upgrade can return a partial result alongside an error when the
+		// cluster Kubernetes version could not be resolved for bounded
+		// candidates: unbounded candidates still upgrade.
+		if result == nil {
+			return err
+		}
 	}
+	upgradeErr := err
 
 	// Build output result
 	outResult := &output.UpgradeResult{
@@ -155,6 +166,8 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		})
 	}
 
+	outResult.Incompatible = result.Incompatible
+
 	for _, name := range result.Failed {
 		outResult.Failed = append(outResult.Failed, output.FailedEntry{
 			Name:  name,
@@ -168,8 +181,32 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 
 	// Return appropriate error for non-success cases
+	//
+	// A cluster-version resolution failure (e.g. /version unreachable or
+	// forbidden) leaves every bounded candidate in result.Failed, but it is a
+	// cluster-connectivity problem, not a batch that partly succeeded. Per the
+	// documented CLI contract, unreachable/permission-denied clusters map to
+	// exit code 2, and exit code 4 is reserved for batches where some
+	// candidate actually upgraded.
+	if upgradeErr != nil && len(result.Upgraded) == 0 {
+		return gatorpolicy.NewClusterError(upgradeErr.Error())
+	}
+
 	if len(result.Failed) > 0 {
-		return gatorpolicy.NewPartialSuccessError("upgrade incomplete: some policies failed to upgrade")
+		msg := "upgrade incomplete: some policies failed to upgrade"
+		// When incompatible policies are also present, the Incompatible branch
+		// below is unreachable, so fold its guidance into this message rather than
+		// dropping the "--force" hint (mirrors install).
+		if len(result.Incompatible) > 0 {
+			msg += incompatibleSkipSuffix(len(result.Incompatible))
+		}
+		return gatorpolicy.NewPartialSuccessError(msg)
+	}
+
+	// Policies skipped as incompatible were requested but not upgraded, so signal
+	// partial success rather than exiting 0 as if everything succeeded.
+	if len(result.Incompatible) > 0 {
+		return gatorpolicy.NewPartialSuccessError("upgrade incomplete:" + incompatibleSkipSuffix(len(result.Incompatible)))
 	}
 
 	return nil

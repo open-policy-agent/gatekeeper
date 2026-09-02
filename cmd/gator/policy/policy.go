@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +30,20 @@ gator policy uninstall k8srequiredlabels
 
 # Generate a catalog from gatekeeper-library
 gator policy generate-catalog --library-path=/path/to/gatekeeper-library`
+
+	// incompatibleGuidance is the shared hint appended to install/upgrade
+	// result messages when policies were skipped for being incompatible with
+	// the cluster's Kubernetes version, so install and upgrade can't drift
+	// apart in wording.
+	incompatibleGuidance = "incompatible Kubernetes version, use --force to override"
 )
+
+// incompatibleSkipSuffix renders the "(N skipped: <guidance>)" fragment appended
+// to install/upgrade partial-success messages when n policies were skipped for
+// being incompatible with the cluster's Kubernetes version.
+func incompatibleSkipSuffix(n int) string {
+	return fmt.Sprintf(" (%d skipped: %s)", n, incompatibleGuidance)
+}
 
 // Cmd is the gator policy subcommand.
 var Cmd = &cobra.Command{

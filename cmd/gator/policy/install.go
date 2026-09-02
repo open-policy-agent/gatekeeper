@@ -21,6 +21,7 @@ var (
 	installBundles           []string
 	installEnforcementAction string
 	installDryRun            bool
+	installForce             bool
 	installOutput            string
 )
 
@@ -50,6 +51,9 @@ gator policy install --bundle pod-security-baseline --enforcement-action=warn
 # Preview changes without applying
 gator policy install --bundle pod-security-baseline --dry-run
 
+# Install even if the cluster Kubernetes version is outside a policy's supported range
+gator policy install k8srequiredlabels --force
+
 # Output as JSON for scripting
 gator policy install --bundle pod-security-baseline --dry-run -o json`,
 		RunE: runInstall,
@@ -58,6 +62,7 @@ gator policy install --bundle pod-security-baseline --dry-run -o json`,
 	cmd.Flags().StringSliceVar(&installBundles, "bundle", nil, "Install a policy bundle (may be specified multiple times)")
 	cmd.Flags().StringVar(&installEnforcementAction, "enforcement-action", "", "Override enforcement action (deny, warn, dryrun). Note: 'scoped' is not supported in this release.")
 	cmd.Flags().BoolVar(&installDryRun, "dry-run", false, "Preview changes without applying (does not require cluster access)")
+	cmd.Flags().BoolVar(&installForce, "force", false, "Install even if the cluster Kubernetes version is outside a policy's supported range")
 	cmd.Flags().StringVarP(&installOutput, "output", "o", "table", "Output format: table, json")
 
 	return cmd
@@ -113,7 +118,9 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	// Create fetcher for templates/constraints with the cached catalog source URL as base
 	fetcher := catalog.NewHTTPFetcherWithBaseURL(catalog.DefaultTimeout, catalogSourceURL)
 
-	// Create Kubernetes client (unless dry-run)
+	// Create Kubernetes client (unless dry-run). A dry-run is an offline preview:
+	// it never contacts the cluster, so it uses a no-op client and does not apply
+	// the Kubernetes-version compatibility gate.
 	var k8sClient client.Client
 	if !installDryRun {
 		k8sClient, err = client.NewK8sClient()
@@ -130,6 +137,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		Bundles:           installBundles,
 		EnforcementAction: installEnforcementAction,
 		DryRun:            installDryRun,
+		Force:             installForce,
 	}
 
 	// Perform installation
@@ -141,8 +149,14 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			fmt.Fprintln(os.Stderr, err.Error())
 			return gatorpolicy.NewClusterError(err.Error())
 		}
-		return err
+		// Install can return a partial result alongside an error when the cluster
+		// Kubernetes version could not be resolved for bounded policies: unbounded
+		// and no-op policies still installed.
+		if result == nil {
+			return err
+		}
 	}
+	installErr := err
 
 	// Build output result
 	outResult := &output.InstallResult{
@@ -163,6 +177,8 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 	outResult.Skipped = result.Skipped
 
+	outResult.Incompatible = result.Incompatible
+
 	for _, name := range result.Failed {
 		outResult.Failed = append(outResult.Failed, output.FailedEntry{
 			Name:  name,
@@ -176,6 +192,19 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Return appropriate error for non-success cases
+	//
+	// A cluster-version resolution failure (e.g. /version unreachable or
+	// forbidden) leaves every bounded policy in result.Failed, but it is a
+	// cluster-connectivity problem, not a batch that partly succeeded. Per the
+	// documented CLI contract, unreachable/permission-denied clusters map to
+	// exit code 2, and exit code 4 is reserved for batches where some policy
+	// actually installed. Only fold this into partial success when something
+	// did install (e.g. unbounded or no-op policies alongside failed bounded
+	// ones).
+	if installErr != nil && len(result.Installed) == 0 {
+		return gatorpolicy.NewClusterError(installErr.Error())
+	}
+
 	if len(result.Failed) > 0 {
 		if result.ConflictErr != nil {
 			return gatorpolicy.NewConflictError(fmt.Sprintf("installation incomplete: %s", result.ConflictErr.Error()))
@@ -183,18 +212,40 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 		msg := fmt.Sprintf("installation incomplete: %d of %d policies installed",
 			len(result.Installed), result.TotalRequested)
+		// When incompatible policies are also present, the Incompatible branch
+		// below is unreachable, so fold its guidance into this message rather than
+		// dropping the "--force" hint.
+		if len(result.Incompatible) > 0 {
+			msg += incompatibleSkipSuffix(len(result.Incompatible))
+		}
 		fmt.Fprintln(os.Stderr, "\nRe-run command to continue (already installed will be skipped).")
+		return gatorpolicy.NewPartialSuccessError(msg)
+	}
+
+	// Policies skipped as incompatible with the cluster's Kubernetes version were
+	// explicitly requested but not installed, so signal partial success rather
+	// than exiting 0 as if everything succeeded.
+	if len(result.Incompatible) > 0 {
+		msg := fmt.Sprintf("installation incomplete: %d of %d policies installed",
+			len(result.Installed), result.TotalRequested) + incompatibleSkipSuffix(len(result.Incompatible))
 		return gatorpolicy.NewPartialSuccessError(msg)
 	}
 
 	return nil
 }
 
-// dryRunClient is a no-op client for dry-run mode.
+// dryRunClient is a no-op client for dry-run mode. A dry-run is an offline
+// preview that never contacts the cluster, so every method is a no-op. In
+// particular ServerVersion is never invoked: the compatibility gate does not run
+// during dry-run (it is skipped absent a caller-provided cluster version).
 type dryRunClient struct{}
 
 func (c *dryRunClient) GatekeeperInstalled(_ context.Context) (bool, error) {
 	return true, nil
+}
+
+func (c *dryRunClient) ServerVersion(_ context.Context) (string, error) {
+	return "", nil
 }
 
 func (c *dryRunClient) ListManagedTemplates(_ context.Context) ([]client.InstalledPolicy, error) {

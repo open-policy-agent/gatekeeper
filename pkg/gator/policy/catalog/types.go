@@ -43,7 +43,13 @@ type Bundle struct {
 
 // Policy represents a single policy available in the catalog.
 type Policy struct {
-	// Name is the unique identifier for this policy, typically matching the ConstraintTemplate name.
+	// Name is the unique identifier for this policy. It must match the
+	// metadata.name of the ConstraintTemplate at TemplatePath: the catalog keys
+	// its conflict, no-op, and compatibility checks off this name before the
+	// template artifact is fetched, and install rejects a template whose
+	// metadata.name differs. The generator sets this from the template's
+	// metadata.name, so generated catalogs always satisfy the contract; a
+	// hand-edited catalog must preserve it.
 	Name string `json:"name" yaml:"name"`
 	// Version is the semantic version of this policy (e.g., "v1.2.3").
 	Version string `json:"version" yaml:"version"`
@@ -61,6 +67,12 @@ type Policy struct {
 	DocumentationURL string `json:"documentationUrl,omitempty" yaml:"documentationUrl,omitempty"`
 	// Bundles lists which bundles include this policy (reverse reference for discovery).
 	Bundles []string `json:"bundles,omitempty" yaml:"bundles,omitempty"`
+	// MinKubernetesVersion is the minimum Kubernetes version required by this policy (e.g., "v1.21.0").
+	// Sourced from the metadata.gatekeeper.sh/minKubernetesVersion annotation on the ConstraintTemplate.
+	MinKubernetesVersion string `json:"minKubernetesVersion,omitempty" yaml:"minKubernetesVersion,omitempty"`
+	// MaxKubernetesVersion is the maximum Kubernetes version this policy has been tested against (e.g., "v1.30.0").
+	// Sourced from the metadata.gatekeeper.sh/maxKubernetesVersion annotation on the ConstraintTemplate.
+	MaxKubernetesVersion string `json:"maxKubernetesVersion,omitempty" yaml:"maxKubernetesVersion,omitempty"`
 }
 
 // GetPolicy returns the policy with the given name, or nil if not found.
