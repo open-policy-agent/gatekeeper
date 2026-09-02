@@ -84,10 +84,11 @@ docker buildx imagetools inspect openpolicyagent/gatekeeper:v3.12.0-rc.0 --forma
 
 # Vulnerability-Patched Images
 
-In addition to the regular release images, Gatekeeper can publish automatically **patched** variants of recent releases that pick up fixed versions of Go dependencies and the Go standard library **without waiting for the next release**. They are produced by a [Project Copacetic (Copa)](https://github.com/project-copacetic/copacetic) workflow and published to **GHCR** (the regular release images are additionally published to Docker Hub):
+In addition to the regular release images, Gatekeeper can publish **patched** variants of recent releases that pick up fixed versions of Go dependencies and the Go standard library **without waiting for the next release**. They are produced by a [Project Copacetic (Copa)](https://github.com/project-copacetic/copacetic) workflow and published to **GHCR** (the regular release images are additionally published to Docker Hub):
 
 - GHCR: `ghcr.io/open-policy-agent/gatekeeper`, `ghcr.io/open-policy-agent/gator`
 
+> **Note:** Copa patching is currently **manual**: the workflow's recurring schedule is disabled, so patched tags are produced only when run manually. Enabling the weekly schedule turns on automatic production.
 
 The latest stable release and the previous minor release are patched. The `gatekeeper-crds` image is not patched (it contains no Gatekeeper binary).
 
@@ -101,7 +102,7 @@ For a release `vX.Y.Z`, patched images are published under **new, separate** tag
 | `vX.Y.Z-R` | An **immutable** patch revision (`R` = `1`, `2`, …). Each run that fixes newly-available CVEs publishes the next number. |
 | `vX.Y.Z-patched` | A **floating** tag that always points at the newest `vX.Y.Z-R`. Use this to track the latest patched build of that release. |
 
-All published architectures `linux/amd64`, `linux/arm64`, and `linux/arm/v7` are rebuilt and patched.
+All published architectures — `linux/amd64`, `linux/arm64`, and `linux/arm/v7` are included in the patched image and scanned for applicable fixes. Patching is best-effort per architecture, so an architecture may pass through unchanged or retain fixable CVEs (see [Best-effort library patching](#best-effort-library-patching) below).
 
 ## How patched images are produced
 
