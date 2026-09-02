@@ -95,7 +95,7 @@ type Adder struct {
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.HasValidationOperations() {
-		return nil
+		return addStatusControllers(mgr, nil, nil)
 	}
 	// constraintEvents will be used to receive events from dynamic watches registered for constraint controller
 	constraintEvents := make(chan event.GenericEvent, 1024)
@@ -146,11 +146,6 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 	if err != nil {
 		return nil, err
 	}
-	statusW, err := wm.NewRegistrar(ctrlName+"-status", regEvents)
-	if err != nil {
-		return nil, err
-	}
-
 	// via the registrar below.
 
 	constraintAdder := constraint.Adder{
@@ -167,25 +162,16 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 		return nil, fmt.Errorf("registering constraint controller: %w", err)
 	}
 
+	var statusW *watch.Registrar
 	if operations.IsAssigned(operations.Status) {
 		// statusEvents will be used to receive events from dynamic watches registered
 		// via the registrar below.
 		statusEvents := make(chan event.GenericEvent, 1024)
-		csAdder := constraintstatus.Adder{
-			CFClient:     cfClient,
-			WatchManager: wm,
-			Events:       statusEvents,
-			IfWatching:   statusW.IfWatching,
-		}
-		if err := csAdder.Add(mgr); err != nil {
+		statusW, err = wm.NewRegistrar(ctrlName+"-status", statusEvents)
+		if err != nil {
 			return nil, err
 		}
-
-		ctsAdder := constrainttemplatestatus.Adder{
-			CfClient:     cfClient,
-			WatchManager: wm,
-		}
-		if err := ctsAdder.Add(mgr); err != nil {
+		if err := addStatusControllers(mgr, statusEvents, statusW.IfWatching); err != nil {
 			return nil, err
 		}
 	}
@@ -209,6 +195,18 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 		reconciler.getPod = reconciler.defaultGetPod
 	}
 	return reconciler, nil
+}
+
+func addStatusControllers(mgr manager.Manager, events <-chan event.GenericEvent, ifWatching func(schema.GroupVersionKind, func() error) (bool, error)) error {
+	csAdder := constraintstatus.Adder{
+		Events:     events,
+		IfWatching: ifWatching,
+	}
+	if err := csAdder.Add(mgr); err != nil {
+		return err
+	}
+
+	return (&constrainttemplatestatus.Adder{}).Add(mgr)
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
@@ -662,12 +660,18 @@ func (r *ReconcileConstraintTemplate) addWatch(ctx context.Context, kind schema.
 	if err := r.watcher.AddWatch(ctx, kind); err != nil {
 		return err
 	}
+	if r.statusWatcher == nil {
+		return nil
+	}
 	return r.statusWatcher.AddWatch(ctx, kind)
 }
 
 func (r *ReconcileConstraintTemplate) removeWatch(ctx context.Context, kind schema.GroupVersionKind) error {
 	if err := r.watcher.RemoveWatch(ctx, kind); err != nil {
 		return err
+	}
+	if r.statusWatcher == nil {
+		return nil
 	}
 	return r.statusWatcher.RemoveWatch(ctx, kind)
 }

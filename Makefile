@@ -196,14 +196,14 @@ all: lint test manager
 native-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
+	go test . ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
 
 # Run tests with race detector
 .PHONY: native-race-test
 native-race-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
+	go test . ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
 
 # Run benchmarks only (no unit tests)
 .PHONY: native-bench-test
