@@ -32,27 +32,41 @@ import (
 type ProviderPodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// id is the name of the pod that generated this status.
 	ID string `json:"id,omitempty"`
-	// Storing the provider UID allows us to detect drift, such as
+	// providerUID is the UID of the provider this status reports on. Storing the
+	// provider UID allows us to detect drift, such as
 	// when a provider has been recreated after its CRD was deleted
 	// out from under it, interrupting the watch
-	ProviderUID         types.UID        `json:"providerUID,omitempty"`
-	Operations          []string         `json:"operations,omitempty"`
-	Active              bool             `json:"active,omitempty"`
-	Errors              []*ProviderError `json:"errors,omitempty"`
-	ObservedGeneration  int64            `json:"observedGeneration,omitempty"`
-	LastTransitionTime  *metav1.Time     `json:"lastTransitionTime,omitempty"`
-	LastCacheUpdateTime *metav1.Time     `json:"lastCacheUpdateTime,omitempty"`
+	ProviderUID types.UID `json:"providerUID,omitempty"`
+	// operations lists the Gatekeeper operations assigned to the pod that generated
+	// this status.
+	Operations []string `json:"operations,omitempty"`
+	// active indicates whether the provider is currently active on this pod.
+	Active bool `json:"active,omitempty"`
+	// errors lists any errors encountered while managing the provider on this pod.
+	Errors []*ProviderError `json:"errors,omitempty"`
+	// observedGeneration is the generation of the provider that was last processed
+	// by this pod.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// lastTransitionTime is the last time the provider's active state changed.
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+	// lastCacheUpdateTime is the last time the provider's cache was updated.
+	LastCacheUpdateTime *metav1.Time `json:"lastCacheUpdateTime,omitempty"`
 }
 
 // ProviderError represents a single error caught while managing providers.
 type ProviderError struct {
-	// Type indicates a specific class of error for use by controller code.
+	// type indicates a specific class of error for use by controller code.
 	// If not present, the error should be treated as not matching any known type.
-	Type           providerErrorType `json:"type"`
-	Message        string            `json:"message"`
-	Retryable      bool              `json:"retryable"`
-	ErrorTimestamp *metav1.Time      `json:"errorTimestamp"`
+	Type providerErrorType `json:"type"`
+	// message is a human-readable description of the error.
+	Message string `json:"message"`
+	// retryable indicates whether the operation that produced this error can be
+	// retried.
+	Retryable bool `json:"retryable"`
+	// errorTimestamp is the time at which the error occurred.
+	ErrorTimestamp *metav1.Time `json:"errorTimestamp"`
 }
 
 // providerErrorType represents different types of provider errors.
@@ -68,9 +82,12 @@ const (
 // +kubebuilder:object:root=true
 // ProviderPodStatus is the Schema for the providerpodstatuses API.
 type ProviderPodStatus struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	// No spec field is defined here, as this is a status-only resource.
+
+	// status is the observed state of the provider for this pod.
 	Status ProviderPodStatusStatus `json:"status,omitempty"`
 }
 

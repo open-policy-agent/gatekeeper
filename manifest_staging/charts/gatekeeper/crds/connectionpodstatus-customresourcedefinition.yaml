@@ -40,16 +40,21 @@ spec:
           metadata:
             type: object
           status:
-            description: No spec field is defined here, as this is a status-only resource.
+            description: status is the observed state of the Connection for this pod.
             properties:
               connectionErrors:
-                description: ConnectionErrors contains errors from creating or updating
+                description: connectionErrors contains errors from creating or updating
                   the Connection.
                 items:
                   properties:
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                     type:
+                      description: |-
+                        type indicates a specific class of error for use by controller code. If not
+                        present, the error should be treated as not matching any known type.
                       type: string
                   required:
                   - message
@@ -59,23 +64,29 @@ spec:
                 type: array
               connectionUID:
                 description: |-
-                  UID is a type that holds unique ID values, including UUIDs.  Because we
-                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                  intent and helps make sure that UIDs and names do not get conflated.
+                  connectionUID is the UID of the Connection this status reports on, used to
+                  detect drift, such as when the Connection has been recreated after its CRD
+                  was deleted out from under it, interrupting the watch.
                 type: string
               id:
-                description: ID is the unique identifier for the pod that wrote the
+                description: id is the unique identifier for the pod that wrote the
                   status
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the Connection that was last processed
+                  by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
               publishStatuses:
-                description: PublishStatuses reports publishing health independently
+                description: publishStatuses reports publishing health independently
                   for each source.
                 items:
                   description: ConnectionPublishStatus reports publishing health for
@@ -83,17 +94,22 @@ spec:
                   properties:
                     active:
                       description: |-
-                        Active indicates that the source completed at least one publish in its
+                        active indicates that the source completed at least one publish in its
                         latest reporting window.
                       type: boolean
                     errors:
-                      description: Errors contains publish failures reported by this
+                      description: errors contains publish failures reported by this
                         source.
                       items:
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
+                            description: |-
+                              type indicates a specific class of error for use by controller code. If not
+                              present, the error should be treated as not matching any known type.
                             type: string
                         required:
                         - message
@@ -102,17 +118,17 @@ spec:
                       maxItems: 500
                       type: array
                     lastAttemptTime:
-                      description: LastAttemptTime is the most recent publish attempt
+                      description: lastAttemptTime is the most recent publish attempt
                         represented by this status.
                       format: date-time
                       type: string
                     lastSuccessTime:
-                      description: LastSuccessTime is the most recent successful publish
+                      description: lastSuccessTime is the most recent successful publish
                         by this source.
                       format: date-time
                       type: string
                     source:
-                      description: Source identifies the producer that owns this status.
+                      description: source identifies the producer that owns this status.
                       enum:
                       - audit
                       - webhook

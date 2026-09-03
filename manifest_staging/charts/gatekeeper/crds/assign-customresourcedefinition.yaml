@@ -43,11 +43,11 @@ spec:
                 type: string
             type: object
           spec:
-            description: AssignSpec defines the desired state of Assign.
+            description: spec defines the desired state of Assign.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+                  applyTo lists the specific groups, versions and kinds a mutation will be applied to.
                   This is necessary because every mutation implies part of an object schema and object
                   schemas are associated with specific GVKs.
                 items:
@@ -87,12 +87,12 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
+                description: 'location describes the path to be mutated, for example:
                   `spec.containers[name: main]`.'
                 type: string
               match:
                 description: |-
-                  Match allows the user to limit which resources get mutated.
+                  match allows the user to limit which resources get mutated.
                   Individual match criteria are AND-ed together. An undefined
                   match criteria matches everything.
                 properties:
@@ -274,19 +274,20 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
+                description: parameters define the behavior of the mutator.
                 properties:
                   assign:
-                    description: Assign.value holds the value to be assigned
+                    description: assign holds the value to be assigned via its `value`
+                      field.
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider
+                        description: externalData describes the external data provider
                           to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
                             description: |-
-                              DataSource specifies where to extract the data that will be sent
+                              dataSource specifies where to extract the data that will be sent
                               to the external data provider as parameters.
                             enum:
                             - ValueAtLocation
@@ -294,13 +295,13 @@ spec:
                             type: string
                           default:
                             description: |-
-                              Default specifies the default value to use when the external data
+                              default specifies the default value to use when the external data
                               provider returns an error and the failure policy is set to "UseDefault".
                             type: string
                           failurePolicy:
                             default: Fail
                             description: |-
-                              FailurePolicy specifies the policy to apply when the external data
+                              failurePolicy specifies the policy to apply when the external data
                               provider returns an error.
                             enum:
                             - UseDefault
@@ -308,18 +309,18 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data
+                            description: provider is the name of the external data
                               provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified
+                        description: fromMetadata assigns a value from the specified
                           metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides
+                            description: field specifies which metadata field provides
                               the assigned value. Valid fields are `namespace` and
                               `name`.
                             type: string
@@ -330,6 +331,9 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                   pathTests:
+                    description: |-
+                      pathTests are a series of existence tests that can be checked
+                      before a mutation is applied.
                     items:
                       description: |-
                         PathTest allows the user to customize how the mutation works if parent
@@ -344,38 +348,48 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
+                          description: condition is the existence test to apply to
+                            `subPath`.
                           enum:
                           - MustExist
                           - MustNotExist
                           type: string
                         subPath:
+                          description: subPath is the path, relative to `location`,
+                            that must satisfy `condition`.
                           type: string
                       type: object
                     type: array
                 type: object
             type: object
           status:
-            description: AssignStatus defines the observed state of Assign.
+            description: status is the observed state of Assign.
             properties:
               byPod:
+                description: byPod lists the observed status of this Assign for each
+                  pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -383,17 +397,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -428,11 +450,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: AssignSpec defines the desired state of Assign.
+            description: spec defines the desired state of Assign.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+                  applyTo lists the specific groups, versions and kinds a mutation will be applied to.
                   This is necessary because every mutation implies part of an object schema and object
                   schemas are associated with specific GVKs.
                 items:
@@ -472,12 +494,12 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
+                description: 'location describes the path to be mutated, for example:
                   `spec.containers[name: main]`.'
                 type: string
               match:
                 description: |-
-                  Match allows the user to limit which resources get mutated.
+                  match allows the user to limit which resources get mutated.
                   Individual match criteria are AND-ed together. An undefined
                   match criteria matches everything.
                 properties:
@@ -659,19 +681,20 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
+                description: parameters define the behavior of the mutator.
                 properties:
                   assign:
-                    description: Assign.value holds the value to be assigned
+                    description: assign holds the value to be assigned via its `value`
+                      field.
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider
+                        description: externalData describes the external data provider
                           to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
                             description: |-
-                              DataSource specifies where to extract the data that will be sent
+                              dataSource specifies where to extract the data that will be sent
                               to the external data provider as parameters.
                             enum:
                             - ValueAtLocation
@@ -679,13 +702,13 @@ spec:
                             type: string
                           default:
                             description: |-
-                              Default specifies the default value to use when the external data
+                              default specifies the default value to use when the external data
                               provider returns an error and the failure policy is set to "UseDefault".
                             type: string
                           failurePolicy:
                             default: Fail
                             description: |-
-                              FailurePolicy specifies the policy to apply when the external data
+                              failurePolicy specifies the policy to apply when the external data
                               provider returns an error.
                             enum:
                             - UseDefault
@@ -693,18 +716,18 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data
+                            description: provider is the name of the external data
                               provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified
+                        description: fromMetadata assigns a value from the specified
                           metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides
+                            description: field specifies which metadata field provides
                               the assigned value. Valid fields are `namespace` and
                               `name`.
                             type: string
@@ -715,6 +738,9 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                   pathTests:
+                    description: |-
+                      pathTests are a series of existence tests that can be checked
+                      before a mutation is applied.
                     items:
                       description: |-
                         PathTest allows the user to customize how the mutation works if parent
@@ -729,38 +755,48 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
+                          description: condition is the existence test to apply to
+                            `subPath`.
                           enum:
                           - MustExist
                           - MustNotExist
                           type: string
                         subPath:
+                          description: subPath is the path, relative to `location`,
+                            that must satisfy `condition`.
                           type: string
                       type: object
                     type: array
                 type: object
             type: object
           status:
-            description: AssignStatus defines the observed state of Assign.
+            description: status is the observed state of Assign.
             properties:
               byPod:
+                description: byPod lists the observed status of this Assign for each
+                  pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -768,17 +804,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -813,11 +857,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: AssignSpec defines the desired state of Assign.
+            description: spec defines the desired state of Assign.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+                  applyTo lists the specific groups, versions and kinds a mutation will be applied to.
                   This is necessary because every mutation implies part of an object schema and object
                   schemas are associated with specific GVKs.
                 items:
@@ -857,12 +901,12 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
+                description: 'location describes the path to be mutated, for example:
                   `spec.containers[name: main]`.'
                 type: string
               match:
                 description: |-
-                  Match allows the user to limit which resources get mutated.
+                  match allows the user to limit which resources get mutated.
                   Individual match criteria are AND-ed together. An undefined
                   match criteria matches everything.
                 properties:
@@ -1044,19 +1088,20 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
+                description: parameters define the behavior of the mutator.
                 properties:
                   assign:
-                    description: Assign.value holds the value to be assigned
+                    description: assign holds the value to be assigned via its `value`
+                      field.
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider
+                        description: externalData describes the external data provider
                           to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
                             description: |-
-                              DataSource specifies where to extract the data that will be sent
+                              dataSource specifies where to extract the data that will be sent
                               to the external data provider as parameters.
                             enum:
                             - ValueAtLocation
@@ -1064,13 +1109,13 @@ spec:
                             type: string
                           default:
                             description: |-
-                              Default specifies the default value to use when the external data
+                              default specifies the default value to use when the external data
                               provider returns an error and the failure policy is set to "UseDefault".
                             type: string
                           failurePolicy:
                             default: Fail
                             description: |-
-                              FailurePolicy specifies the policy to apply when the external data
+                              failurePolicy specifies the policy to apply when the external data
                               provider returns an error.
                             enum:
                             - UseDefault
@@ -1078,18 +1123,18 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data
+                            description: provider is the name of the external data
                               provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified
+                        description: fromMetadata assigns a value from the specified
                           metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides
+                            description: field specifies which metadata field provides
                               the assigned value. Valid fields are `namespace` and
                               `name`.
                             type: string
@@ -1100,6 +1145,9 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                   pathTests:
+                    description: |-
+                      pathTests are a series of existence tests that can be checked
+                      before a mutation is applied.
                     items:
                       description: |-
                         PathTest allows the user to customize how the mutation works if parent
@@ -1114,38 +1162,48 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
+                          description: condition is the existence test to apply to
+                            `subPath`.
                           enum:
                           - MustExist
                           - MustNotExist
                           type: string
                         subPath:
+                          description: subPath is the path, relative to `location`,
+                            that must satisfy `condition`.
                           type: string
                       type: object
                     type: array
                 type: object
             type: object
           status:
-            description: AssignStatus defines the observed state of Assign.
+            description: status is the observed state of Assign.
             properties:
               byPod:
+                description: byPod lists the observed status of this Assign for each
+                  pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -1153,17 +1211,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array

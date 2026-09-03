@@ -39,25 +39,35 @@ spec:
           metadata:
             type: object
           status:
-            description: No spec field is defined here, as this is a status-only resource.
+            description: status is the observed state of the provider for this pod.
             properties:
               active:
+                description: active indicates whether the provider is currently active
+                  on this pod.
                 type: boolean
               errors:
+                description: errors lists any errors encountered while managing the
+                  provider on this pod.
                 items:
                   description: ProviderError represents a single error caught while
                     managing providers.
                   properties:
                     errorTimestamp:
+                      description: errorTimestamp is the time at which the error occurred.
                       format: date-time
                       type: string
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                     retryable:
+                      description: |-
+                        retryable indicates whether the operation that produced this error can be
+                        retried.
                       type: boolean
                     type:
                       description: |-
-                        Type indicates a specific class of error for use by controller code.
+                        type indicates a specific class of error for use by controller code.
                         If not present, the error should be treated as not matching any known type.
                       type: string
                   required:
@@ -68,23 +78,35 @@ spec:
                   type: object
                 type: array
               id:
+                description: id is the name of the pod that generated this status.
                 type: string
               lastCacheUpdateTime:
+                description: lastCacheUpdateTime is the last time the provider's cache
+                  was updated.
                 format: date-time
                 type: string
               lastTransitionTime:
+                description: lastTransitionTime is the last time the provider's active
+                  state changed.
                 format: date-time
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the provider that was last processed
+                  by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
               providerUID:
                 description: |-
-                  Storing the provider UID allows us to detect drift, such as
+                  providerUID is the UID of the provider this status reports on. Storing the
+                  provider UID allows us to detect drift, such as
                   when a provider has been recreated after its CRD was deleted
                   out from under it, interrupting the watch
                 type: string
