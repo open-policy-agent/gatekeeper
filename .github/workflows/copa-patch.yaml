@@ -417,6 +417,8 @@ jobs:
           after_total=0; after_stdlib=0; after_library=0
           existing_present=0; improved_vs_existing=0
           residual_md=""; unimproved=""; regressed=""; regressed_vs_existing=""
+          # CVE identity set for a normalized report: sorted unique "id|pkg" lines.
+          cve_keys() { jq -r '.[] | .id + "|" + .pkg' "$1" | sort -u; }
           {
             echo "### ${IMAGE}:${RELEASE} - ${RELEASE}-${REV} (${MODE})"
             echo ""
@@ -446,26 +448,32 @@ jobs:
             fi
             jq "$NORMALIZE_JQ" "${REPORT_DIR}/${a}.json" > "norm-source-${a}.json"
             jq "$NORMALIZE_JQ" "scan-after-${a}.json"  > "norm-after-${a}.json"
+            cve_keys "norm-source-${a}.json" > "src-${a}.keys"
+            cve_keys "norm-after-${a}.json"  > "aft-${a}.keys"
             read -r a_before a_before_stdlib < <(jq -r '[length, ([.[] | select(.pkg == "stdlib")] | length)] | @tsv' "norm-source-${a}.json")
             read -r a_after a_after_stdlib a_after_library < <(jq -r '[length, ([.[] | select(.pkg == "stdlib")] | length), ([.[] | select(.pkg != "stdlib")] | length)] | @tsv' "norm-after-${a}.json")
             before_total=$(( before_total + a_before )); before_stdlib=$(( before_stdlib + a_before_stdlib ))
             after_total=$(( after_total + a_after )); after_stdlib=$(( after_stdlib + a_after_stdlib )); after_library=$(( after_library + a_after_library ))
-            # Compare against the existing -patched per arch, so a win on one arch can't hide a regression on another when deciding whether to publish.
+            # Decide by CVE identity.
+            introduced=$(comm -13 "src-${a}.keys" "aft-${a}.keys")
+            removed=$(comm -23 "src-${a}.keys" "aft-${a}.keys")
+            if [[ -n "${introduced}" ]]; then
+              regressed+=" ${p}($(cut -d'|' -f1 <<<"${introduced}" | sort -u | paste -sd, -))"
+            elif [[ "${a_before}" -gt 0 && -z "${removed}" ]]; then
+              unimproved+=" ${p}"
+            fi
+            # Compare against the existing -patched per arch by identity, so a win on one arch can't
+            # hide a regression on another when deciding whether to publish.
             if [[ -f "copa-reports-patched/${a}.json" ]]; then
               existing_present=1
               jq "$NORMALIZE_JQ" "copa-reports-patched/${a}.json" > "norm-existing-${a}.json"
-              a_existing=$(jq 'length' "norm-existing-${a}.json")
-              if [[ "${a_after}" -gt "${a_existing}" ]]; then
-                regressed_vs_existing+=" ${p}(${a_existing}->${a_after})"
-              elif [[ "${a_after}" -lt "${a_existing}" ]]; then
+              cve_keys "norm-existing-${a}.json" > "exi-${a}.keys"
+              if [[ -n "$(comm -13 "exi-${a}.keys" "aft-${a}.keys")" ]]; then
+                regressed_vs_existing+=" ${p}"
+              fi
+              if [[ -n "$(comm -23 "exi-${a}.keys" "aft-${a}.keys")" ]]; then
                 improved_vs_existing=1
               fi
-            fi
-            # A per-arch increase vs source is a regression (fail later); an equal count is best-effort (warn).
-            if [[ "${a_after}" -gt "${a_before}" ]]; then
-              regressed+=" ${p}(${a_before}->${a_after})"
-            elif [[ "${a_before}" -gt 0 && "${a_after}" -eq "${a_before}" ]]; then
-              unimproved+=" ${p}(${a_before}->${a_after})"
             fi
             echo "  ${a}: before=${a_before} after=${a_after} (stdlib=${a_after_stdlib} library=${a_after_library})"
             echo "| ${p} | ${a_before} → ${a_after} | ${a_before_stdlib} → ${a_after_stdlib} | ${a_after_library} |" >> "$GITHUB_STEP_SUMMARY"
@@ -490,14 +498,14 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             echo "::warning::${after_library} fixable library CVE(s) remain after patching."
           fi
-          # Fail on any per-arch regression.
+          # Fail if the patch introduced any fixable CVE the source did not have (per arch, by identity).
           if [[ -n "${regressed}" ]]; then
-            echo "::error::patch increased fixable CVEs vs source on:${regressed}"
+            echo "::error::patch introduced new fixable CVE(s) not in the source on:${regressed}"
             exit 1
           fi
           if [[ -n "${unimproved}" ]]; then
-            echo "::warning::arch(es) with unchanged fixable CVE count (best-effort; Copa could not reduce):${unimproved}"
-            echo "> **Unchanged fixable CVE count (best-effort):**${unimproved}" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::arch(es) with an unchanged fixable CVE set (best-effort; Copa could not reduce):${unimproved}"
+            echo "> **Unchanged fixable CVE set (best-effort):**${unimproved}" >> "$GITHUB_STEP_SUMMARY"
           fi
           # Surface any stdlib CVEs left unfixed by --toolchain-patch-level.
           if [[ "${after_stdlib}" -gt 0 ]]; then
