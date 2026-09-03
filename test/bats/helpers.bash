@@ -73,6 +73,127 @@ wait_for_process() {
   return 1
 }
 
+kube_apiserver_audit_log() {
+  local control_plane_node
+  control_plane_node="$(kubectl get nodes -l node-role.kubernetes.io/control-plane -o jsonpath='{.items[0].metadata.name}')" || return 1
+  if [[ -z "${control_plane_node}" ]]; then
+    echo "could not find kind control-plane node"
+    return 1
+  fi
+
+  docker exec "${control_plane_node}" cat /var/log/kubernetes/kube-apiserver-audit.log
+}
+
+webhook_admission_audit_annotation_matches() {
+  local resource_name="$1"
+  local constraint_name="$2"
+  local audit_log
+  audit_log="$(kube_apiserver_audit_log)" || return 1
+
+  jq -e --arg resource_name "${resource_name}" --arg constraint_name "${constraint_name}" '
+    select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
+    | .annotations["validation.gatekeeper.sh/evaluation"]?
+    | fromjson?
+    | select(
+        .schemaVersion == "v1" and
+        .eventType == "validation_admission" and
+        .allowed == false and
+        .totalViolations == 1 and
+        .includedViolations == 1 and
+        .truncated == false
+      )
+    | select(any(.violations[]?;
+        .constraintKind == "K8sRequiredLabels" and
+        .constraintName == $constraint_name and
+        .enforcementAction == "deny"
+      ))
+  ' <<<"${audit_log}" >/dev/null
+}
+
+webhook_admission_audit_annotation_without_violations_matches() {
+  local resource_name="$1"
+  local audit_log
+  audit_log="$(kube_apiserver_audit_log)" || return 1
+
+  jq -e --arg resource_name "${resource_name}" '
+    select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
+    | .annotations["validation.gatekeeper.sh/evaluation"]?
+    | fromjson?
+    | select(
+        .schemaVersion == "v1" and
+        .eventType == "validation_admission" and
+        .allowed == true and
+        .totalViolations == 0 and
+        .includedViolations == 0 and
+        .truncated == false and
+        (.violations | length) == 0
+      )
+  ' <<<"${audit_log}" >/dev/null
+}
+
+vap_admission_audit_configuration_ready() {
+  local policy_name="$1"
+  local binding_name="$2"
+  local value_expression="params == null ? '' : string(params.metadata.name)"
+  local policy
+  local binding
+
+  policy="$(kubectl get validatingadmissionpolicy "${policy_name}" -o json)" || return 1
+  binding="$(kubectl get validatingadmissionpolicybinding "${binding_name}" -o json)" || return 1
+
+  jq -e --arg value_expression "${value_expression}" '
+    any(.spec.auditAnnotations[]?;
+      .key == "evaluation" and
+      .valueExpression == $value_expression
+    )
+  ' <<<"${policy}" >/dev/null || return 1
+
+  jq -e '
+    (.spec.validationActions | index("Deny")) != null and
+    (.spec.validationActions | index("Audit")) != null
+  ' <<<"${binding}" >/dev/null
+}
+
+vap_admission_enforced() {
+  local resource_name="$1"
+  local policy_name="$2"
+  local binding_name="$3"
+  local output
+
+  if output="$(kubectl create namespace "${resource_name}" --dry-run=server 2>&1)"; then
+    return 1
+  fi
+
+  [[ "${output}" == *"ValidatingAdmissionPolicy '${policy_name}' with binding '${binding_name}' denied request"* ]]
+}
+
+vap_admission_audit_annotations_match() {
+  local resource_name="$1"
+  local policy_name="$2"
+  local constraint_name="$3"
+  local binding_name="${policy_name}-${constraint_name}"
+  local evaluation_key="${policy_name}/evaluation"
+  local audit_log
+  audit_log="$(kube_apiserver_audit_log)" || return 1
+
+  jq -e \
+    --arg resource_name "${resource_name}" \
+    --arg evaluation_key "${evaluation_key}" \
+    --arg constraint_name "${constraint_name}" \
+    --arg policy_name "${policy_name}" \
+    --arg binding_name "${binding_name}" '
+      select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
+      | select(.annotations[$evaluation_key] == $constraint_name)
+      | (.annotations["validation.policy.admission.k8s.io/validation_failure"]? | fromjson?) as $failures
+      | select(any($failures[]?;
+          .policy == $policy_name and
+          .binding == $binding_name and
+          (.validationActions | index("Deny")) != null and
+          (.validationActions | index("Audit")) != null
+        ))
+    ' <<<"${audit_log}" >/dev/null
+}
+
 get_ca_cert() {
   destination="$1"
   if [ $(kubectl get secret -n ${GATEKEEPER_NAMESPACE} gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | wc -w) -eq 0 ]; then

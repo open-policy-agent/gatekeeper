@@ -2318,6 +2318,12 @@ func TestV1beta1ToV1PreservesResourceRuleScope(t *testing.T) {
 					},
 				},
 			},
+			AuditAnnotations: []admissionregistrationv1beta1.AuditAnnotation{
+				{
+					Key:             "evaluation",
+					ValueExpression: "params == null ? '' : string(params.metadata.name)",
+				},
+			},
 			FailurePolicy: &failurePolicy,
 		},
 	}
@@ -2327,6 +2333,12 @@ func TestV1beta1ToV1PreservesResourceRuleScope(t *testing.T) {
 	require.NotNil(t, v1VAP.Spec.MatchConstraints)
 	require.Len(t, v1VAP.Spec.MatchConstraints.ResourceRules, 1)
 	require.Equal(t, &scope, v1VAP.Spec.MatchConstraints.ResourceRules[0].Scope)
+	require.Equal(t, []admissionregistrationv1.AuditAnnotation{
+		{
+			Key:             "evaluation",
+			ValueExpression: "params == null ? '' : string(params.metadata.name)",
+		},
+	}, v1VAP.Spec.AuditAnnotations)
 }
 
 func TestReconcile_VAPV1Beta1RecreatedWhenDeleted(t *testing.T) {

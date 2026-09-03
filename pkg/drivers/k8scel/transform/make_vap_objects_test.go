@@ -1273,11 +1273,12 @@ func newTestConstraint(enforcementAction string, namespaceSelector, labelSelecto
 
 func TestConstraintToBinding(t *testing.T) {
 	tests := []struct {
-		name               string
-		constraint         *unstructured.Unstructured
-		enforcementActions []string
-		expectedErr        error
-		expected           *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding
+		name                 string
+		constraint           *unstructured.Unstructured
+		enforcementActions   []string
+		emitAuditAnnotations bool
+		expectedErr          error
+		expected             *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding
 	}{
 		{
 			name:               "empty constraint",
@@ -1420,6 +1421,66 @@ func TestConstraintToBinding(t *testing.T) {
 			},
 		},
 		{
+			name:                 "audit annotations add Audit to deny",
+			enforcementActions:   []string{"deny"},
+			emitAuditAnnotations: true,
+			constraint:           newTestConstraint("deny", nil, nil, &unstructured.Unstructured{}),
+			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "gatekeeper-footemplate-foo-name",
+				},
+				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+					PolicyName: "gatekeeper-footemplate",
+					ParamRef: &admissionregistrationv1beta1.ParamRef{
+						Name:                    "foo-name",
+						ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
+					},
+					MatchResources:    &admissionregistrationv1beta1.MatchResources{},
+					ValidationActions: []admissionregistrationv1beta1.ValidationAction{admissionregistrationv1beta1.Deny, admissionregistrationv1beta1.Audit},
+				},
+			},
+		},
+		{
+			name:                 "audit annotations add Audit to warn",
+			enforcementActions:   []string{"warn"},
+			emitAuditAnnotations: true,
+			constraint:           newTestConstraint("warn", nil, nil, &unstructured.Unstructured{}),
+			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "gatekeeper-footemplate-foo-name",
+				},
+				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+					PolicyName: "gatekeeper-footemplate",
+					ParamRef: &admissionregistrationv1beta1.ParamRef{
+						Name:                    "foo-name",
+						ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
+					},
+					MatchResources:    &admissionregistrationv1beta1.MatchResources{},
+					ValidationActions: []admissionregistrationv1beta1.ValidationAction{admissionregistrationv1beta1.Warn, admissionregistrationv1beta1.Audit},
+				},
+			},
+		},
+		{
+			name:                 "audit annotations do not duplicate dryrun Audit",
+			enforcementActions:   []string{"dryrun"},
+			emitAuditAnnotations: true,
+			constraint:           newTestConstraint("dryrun", nil, nil, &unstructured.Unstructured{}),
+			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "gatekeeper-footemplate-foo-name",
+				},
+				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+					PolicyName: "gatekeeper-footemplate",
+					ParamRef: &admissionregistrationv1beta1.ParamRef{
+						Name:                    "foo-name",
+						ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
+					},
+					MatchResources:    &admissionregistrationv1beta1.MatchResources{},
+					ValidationActions: []admissionregistrationv1beta1.ValidationAction{admissionregistrationv1beta1.Audit},
+				},
+			},
+		},
+		{
 			name:               "unrecognized enforcement action",
 			enforcementActions: []string{"magicunicorns"},
 			constraint:         newTestConstraint("magicunicorns", nil, nil, &unstructured.Unstructured{}),
@@ -1429,7 +1490,7 @@ func TestConstraintToBinding(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			binding, err := ConstraintToBinding(test.constraint, test.enforcementActions)
+			binding, err := constraintToBinding(test.constraint, test.enforcementActions, test.emitAuditAnnotations)
 			if !errors.Is(err, test.expectedErr) {
 				t.Errorf("unexpected error. got %v; wanted %v", err, test.expectedErr)
 			}
@@ -1437,6 +1498,22 @@ func TestConstraintToBinding(t *testing.T) {
 				t.Errorf("got %+v\n\nwant %+v", *binding, *test.expected)
 			}
 		})
+	}
+}
+
+func TestVAPAuditAnnotations(t *testing.T) {
+	if got := vapAuditAnnotations(false); got != nil {
+		t.Fatalf("expected disabled VAP audit annotations to be nil, got %#v", got)
+	}
+
+	want := []admissionregistrationv1beta1.AuditAnnotation{
+		{
+			Key:             vapEvaluationAuditAnnotationKey,
+			ValueExpression: "params == null ? '' : string(params.metadata.name)",
+		},
+	}
+	if got := vapAuditAnnotations(true); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
 	}
 }
 

@@ -21,6 +21,8 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS": `{{ if hasKey .Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}`,
 
+	"- HELMSUBST_EMIT_ADMISSION_AUDIT_ANNOTATIONS": `{{ if hasKey .Values "emitAdmissionAuditAnnotations" }}- --emit-admission-audit-annotations={{ .Values.emitAdmissionAuditAnnotations }}{{- end }}`,
+
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION": `{{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK": `{{ .Values.audit.hostNetwork }}`,
