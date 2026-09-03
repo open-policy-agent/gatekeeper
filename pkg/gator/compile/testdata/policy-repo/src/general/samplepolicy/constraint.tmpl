@@ -1,0 +1,16 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: samplepolicy
+spec:
+  crd:
+    spec:
+      names:
+        kind: SamplePolicy
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            rego: |
+{{ file.Read "src/general/samplepolicy/src.rego" | strings.Indent 14 | strings.TrimSuffix "\n" }}
