@@ -305,11 +305,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE": `{{ .Values.pdb.controllerManager.minAvailable }}`,
 
-	`HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""`: `{{- if .Values.image.release }}
-        image: {{ .Values.image.repository }}:{{ .Values.image.release }}
-        {{- else }}
-        image: {{ .Values.image.repository }}
-        {{- end }}`,
+	`HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""`: `image: {{ include "gatekeeper.image" (dict "registry" .Values.image.registry "repository" .Values.image.repository "tag" .Values.image.release) }}`,
 
 	`HELMSUBST_SERVICE_TYPE: ""`: `{{- if .Values.service }}
   type: {{ .Values.service.type | default "ClusterIP" }}
