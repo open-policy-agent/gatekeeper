@@ -321,7 +321,7 @@ func innerMain() int {
 	}
 
 	// Setup tracker and register readiness probe.
-	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled, *expansion.ExpansionEnabled)
+	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled, *expansion.ExpansionEnabled && operations.HasExpansionConsumerOperations())
 	if err != nil {
 		setupLog.Error(err, "unable to register readiness tracker")
 		return 1

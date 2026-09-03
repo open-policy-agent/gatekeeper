@@ -3,6 +3,7 @@ package expansion
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"testing"
 
@@ -29,6 +30,34 @@ var cfg *rest.Config
 
 func TestMain(m *testing.M) {
 	testutils.StartControlPlane(m, &cfg, 3)
+}
+
+// TestAdd_RequiresExpansionConsumerOperation verifies that the expansion
+// ingestion controller is skipped for processes that don't evaluate expanded
+// resources (e.g. status-only), even though expansion defaults to enabled.
+// This fails if the old feature-flag-only gating in Add is restored, since a
+// nil manager would then be dereferenced while registering the controller.
+func TestAdd_RequiresExpansionConsumerOperation(t *testing.T) {
+	if !*expansion.ExpansionEnabled {
+		t.Fatal("expected expansion to be enabled by default for this test")
+	}
+
+	if err := flag.Set("operation", "status"); err != nil {
+		t.Fatalf("setting operation flag: %v", err)
+	}
+	t.Cleanup(func() {
+		// Set is additive once the flag has been set explicitly once, so this
+		// only needs to add back the operations this test didn't assign; the
+		// "status" set above remains and combines with these into the default.
+		if err := flag.Set("operation", "audit,generate,mutation-controller,mutation-status,mutation-webhook,webhook"); err != nil {
+			t.Fatalf("restoring operation flag: %v", err)
+		}
+	})
+
+	a := &Adder{}
+	if err := a.Add(nil); err != nil {
+		t.Errorf("Add() error = %v, want nil", err)
+	}
 }
 
 func TestReconcile(t *testing.T) {
