@@ -122,6 +122,120 @@ not subject to the backwards compatibility design:
 should be considered part of our API and subject to backwards compatibility
 requirements.
 
+## Feature/API Stage Requirements
+
+> **Note:** These requirements will be enforced starting with Gatekeeper v3.21 and later releases.
+
+Gatekeeper follows the Kubernetes [API versioning conventions](https://kubernetes.io/docs/reference/using-api/#api-versioning) 
+and maturity levels (Alpha, Beta, GA) to signal stability and compatibility guarantees.
+
+### Terminology
+
+- **API**: A Kubernetes Custom Resource Definition (CRD) that defines the schema and structure of resources (e.g., `Config`, `Assign`, `ExpansionTemplate`). APIs are versioned through their API group version (e.g., `v1alpha1`, `v1beta1`, `v1`).
+- **Feature**: Functional behavior or capabilities that may or may not involve new APIs (e.g., audit functionality, external data integration, mutation engine, VAP generation). Features are controlled through runtime flags or configuration.
+
+### Alpha Stage Requirements
+
+Alpha APIs and features are experimental and may change or be removed without notice.
+
+**API Requirements:**
+- API version must be `v1alpha1` or similar alpha designation
+- APIs may change in backward-incompatible ways without migration path
+- May be removed entirely in future releases
+
+**Feature Requirements:**
+- Must be disabled by default and behind a feature flag or opt-in configuration
+- A warning must be logged when an alpha feature flag is enabled, indicating the feature is experimental and subject to change
+- Features may be removed entirely in future releases
+- Changes to feature behavior do not require deprecation notices
+
+**Common Requirements (APIs and Features):**
+- Documentation must:
+  - Clearly mark as "Alpha" with a warning banner in user-facing docs
+  - Include warnings about stability and potential for breaking changes
+  - Document opt-in mechanism for features (flags, configuration)
+  - Provide basic usage examples
+- Testing must include:
+  - Basic unit tests for core functionality
+  - At least one integration test demonstrating functionality
+  - Test coverage documenting happy path scenarios
+- Must have a documented graduation plan outlining:
+  - Required functionality for Beta promotion
+  - Known limitations and gaps
+  - Anticipated timeline for Beta consideration
+- No performance or reliability SLOs required
+
+### Beta Stage Requirements
+
+Beta APIs and features are well-tested and considered stable enough for production use, though details may still change in compatible ways.
+
+**API Requirements:**
+- API version must be `v1beta1` or similar beta designation
+- Multiple API versions may be served simultaneously with automatic conversion between them
+- API schema changes must be backward compatible or provide conversion webhooks
+- Breaking API changes require deprecation notices and migration paths
+
+**Feature Requirements:**
+- Must be enabled by default (may have feature flag for disabling as a rollback mechanism)
+- Alpha experimental warnings must be removed from logs and documentation
+- Feature behavior changes require deprecation notices for users
+
+**Common Requirements (APIs and Features):**
+- Documentation must:
+  - Mark as "Beta" in user-facing docs
+  - Include comprehensive usage guides and examples
+- Testing must include:
+  - Comprehensive unit test coverage (>80% for new code)
+  - Integration tests covering major use cases
+  - E2E tests in CI demonstrating real-world scenarios
+- Metrics must be exported (may be marked as beta/experimental)
+- Performance characteristics must be documented
+- Security review completed for admission control features
+
+### GA (General Availability) Stage Requirements
+
+GA APIs and features are stable, production-ready, and carry strong backward compatibility guarantees per this document's compatibility policy.
+
+**Requirements:**
+- API version must be `v1` (no alpha/beta designation)
+- Documentation must:
+  - Remove any Alpha/Beta warnings
+  - Be comprehensive and production-ready
+  - Provide complete reference documentation
+- Testing must include:
+  - Complete unit and integration test coverage
+  - Soak tests demonstrating stability over time
+- Metrics must be stable and documented
+- Security review completed and documented
+- Backward compatibility guarantees enforced per this document
+- Deprecation policy:
+  - Deprecated elements must be announced in release notes
+  - Minimum deprecation period: one minor release cycle
+  - Migration path must be documented before deprecation
+
+### Feature Flag Lifecycle
+
+Feature flags follow a structured lifecycle:
+
+1. **Alpha:** Feature disabled by default, requires explicit flag to enable
+2. **Beta:** Feature enabled by default, flag allows disabling for rollback
+3. **GA:** Flag may be deprecated and eventually removed (after deprecation period)
+
+### Graduation Criteria Checklist
+
+Before promoting a feature, verify:
+
+- [ ] All requirements for target stage are met (see above)
+- [ ] API review completed by maintainers
+- [ ] Security implications reviewed and addressed
+- [ ] Performance impact measured and acceptable
+- [ ] Documentation updated to reflect new stage
+- [ ] Release notes updated with promotion announcement
+- [ ] Test coverage meets stage requirements
+- [ ] Metrics instrumentation completed (Beta+)
+- [ ] Backward compatibility verified (Beta+)
+- [ ] Upgrade/downgrade testing completed (GA)
+
 ## Practical Effects
 
 ### Project velocity
