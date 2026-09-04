@@ -867,7 +867,15 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", celSchema.ErrBadFailurePolicy, *v1beta1Obj.Spec.FailurePolicy)
 	}
 	obj.Spec.FailurePolicy = &failurePolicy
-	obj.Spec.AuditAnnotations = nil
+	if len(v1beta1Obj.Spec.AuditAnnotations) > 0 {
+		obj.Spec.AuditAnnotations = make([]admissionregistrationv1.AuditAnnotation, 0, len(v1beta1Obj.Spec.AuditAnnotations))
+		for _, annotation := range v1beta1Obj.Spec.AuditAnnotations {
+			obj.Spec.AuditAnnotations = append(obj.Spec.AuditAnnotations, admissionregistrationv1.AuditAnnotation{
+				Key:             annotation.Key,
+				ValueExpression: annotation.ValueExpression,
+			})
+		}
+	}
 
 	for _, v := range v1beta1Obj.Spec.Variables {
 		obj.Spec.Variables = append(obj.Spec.Variables, admissionregistrationv1.Variable{

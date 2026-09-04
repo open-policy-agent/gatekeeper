@@ -1,0 +1,21 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabelsVap
+metadata:
+  name: admission-audit-annotations-vap
+  labels:
+    gatekeeper.sh/tests: "yes"
+spec:
+  enforcementAction: scoped
+  scopedEnforcementActions:
+    - action: deny
+      enforcementPoints:
+        - name: vap.k8s.io
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    message: All namespaces must have an owner label that points to your company username
+    labels:
+      - key: owner
+        allowedRegex: ^[a-zA-Z]+[.]agilebank[.]demo$

@@ -127,10 +127,11 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 		admissionExporter = queuedExporter
 	}
 	handler := &validationHandler{
-		opa:               deps.OpaClient,
-		mutationSystem:    deps.MutationSystem,
-		expansionSystem:   deps.ExpansionSystem,
-		admissionExporter: admissionExporter,
+		opa:                           deps.OpaClient,
+		mutationSystem:                deps.MutationSystem,
+		expansionSystem:               deps.ExpansionSystem,
+		admissionExporter:             admissionExporter,
+		emitAdmissionAuditAnnotations: util.GetEmitAdmissionAuditAnnotations(),
 		webhookHandler: webhookHandler{
 			client:          mgr.GetClient(),
 			reader:          mgr.GetAPIReader(),
@@ -155,12 +156,13 @@ var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
 	webhookHandler
-	opa               *constraintclient.Client
-	mutationSystem    *mutation.System
-	expansionSystem   *expansion.System
-	admissionExporter admissionViolationExporter
-	semaphore         chan struct{}
-	log               logr.Logger
+	opa                           *constraintclient.Client
+	mutationSystem                *mutation.System
+	expansionSystem               *expansion.System
+	admissionExporter             admissionViolationExporter
+	emitAdmissionAuditAnnotations bool
+	semaphore                     chan struct{}
+	log                           logr.Logger
 }
 
 // Handle the validation request
@@ -231,7 +233,14 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	res := resp.Results()
-	denyMsgs, warnMsgs := h.processValidationResults(res, &req)
+	denyMsgs, warnMsgs, auditResults := h.processValidationResults(res, &req)
+	var auditAnnotations map[string]string
+	if h.emitAdmissionAuditAnnotations {
+		auditAnnotations, err = buildAdmissionAuditAnnotations(&req, len(denyMsgs) == 0, auditResults)
+		if err != nil {
+			h.log.Error(err, "failed to build admission audit annotation")
+		}
+	}
 
 	if len(denyMsgs) > 0 {
 		requestResponse = denyResponse
@@ -243,7 +252,8 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 					Code:    http.StatusForbidden,
 					Message: strings.Join(denyMsgs, "\n"),
 				},
-				Warnings: warnMsgs,
+				Warnings:         warnMsgs,
+				AuditAnnotations: auditAnnotations,
 			},
 		}
 	}
@@ -255,7 +265,8 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 			Result: &metav1.Status{
 				Code: http.StatusOK,
 			},
-			Warnings: warnMsgs,
+			Warnings:         warnMsgs,
+			AuditAnnotations: auditAnnotations,
 		},
 	}
 	if len(warnMsgs) > 0 {
@@ -264,8 +275,9 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	return vResp
 }
 
-func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *admission.Request) ([]string, []string) {
+func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *admission.Request) ([]string, []string, admissionAuditResults) {
 	var denyMsgs, warnMsgs []string
+	var auditResults admissionAuditResults
 	resourceName := req.Name
 	obj := &unstructured.Unstructured{}
 	objectDecoded := false
@@ -307,14 +319,17 @@ func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *
 	}
 	for _, result := range res {
 		if result == nil || result.Constraint == nil {
-			if h.admissionExporter != nil {
-				h.log.Error(errors.New("constraint is nil"), "skipping admission violation export")
+			if h.admissionExporter != nil || h.emitAdmissionAuditAnnotations {
+				h.log.Error(errors.New("constraint is nil"), "skipping invalid admission violation result")
 			}
 			continue
 		}
 		actions, valid := h.validatedEnforcementActions(result)
 		if !valid {
 			continue
+		}
+		if h.emitAdmissionAuditAnnotations {
+			auditResults.add(result, actions)
 		}
 		if h.admissionExporter != nil {
 			h.exportAdmissionViolation(result, actions, baseExportMessage)
@@ -397,7 +412,7 @@ func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *
 			}
 		}
 	}
-	return denyMsgs, warnMsgs
+	return denyMsgs, warnMsgs, auditResults
 }
 
 // newAdmissionViolationExportMessage prepares the fields shared by all
