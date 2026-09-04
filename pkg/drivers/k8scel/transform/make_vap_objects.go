@@ -26,7 +26,10 @@ import (
 
 var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag is deprecated and will be removed in Gatekeeper v3.24.")
 
-const vapEvaluationAuditAnnotationKey = "evaluation"
+const (
+	vapEvaluationAuditAnnotationKey             = "evaluation"
+	vapEvaluationAuditAnnotationValueExpression = "params == null ? '' : 'true'"
+)
 
 func vapAuditAnnotations(enabled bool) []admissionregistrationv1beta1.AuditAnnotation {
 	if !enabled {
@@ -34,8 +37,10 @@ func vapAuditAnnotations(enabled bool) []admissionregistrationv1beta1.AuditAnnot
 	}
 	return []admissionregistrationv1beta1.AuditAnnotation{
 		{
-			Key:             vapEvaluationAuditAnnotationKey,
-			ValueExpression: "params == null ? '' : string(params.metadata.name)",
+			Key: vapEvaluationAuditAnnotationKey,
+			// Kubernetes joins distinct values from matching bindings without a total size limit.
+			// A constant value is deduplicated by the API server and remains bounded.
+			ValueExpression: vapEvaluationAuditAnnotationValueExpression,
 		},
 	}
 }

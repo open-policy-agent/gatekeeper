@@ -134,7 +134,8 @@ webhook_admission_audit_annotation_without_violations_matches() {
 vap_admission_audit_configuration_ready() {
   local policy_name="$1"
   local binding_name="$2"
-  local value_expression="params == null ? '' : string(params.metadata.name)"
+  local validation_action="${3:-Deny}"
+  local value_expression="params == null ? '' : 'true'"
   local policy
   local binding
 
@@ -148,9 +149,10 @@ vap_admission_audit_configuration_ready() {
     )
   ' <<<"${policy}" >/dev/null || return 1
 
-  jq -e '
-    (.spec.validationActions | index("Deny")) != null and
-    (.spec.validationActions | index("Audit")) != null
+  jq -e --arg validation_action "${validation_action}" '
+    (.spec.validationActions | index($validation_action)) != null and
+    (.spec.validationActions | index("Audit")) != null and
+    (.spec.validationActions | length) == (if $validation_action == "Audit" then 1 else 2 end)
   ' <<<"${binding}" >/dev/null
 }
 
@@ -183,7 +185,7 @@ vap_admission_audit_annotations_match() {
     --arg policy_name "${policy_name}" \
     --arg binding_name "${binding_name}" '
       select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
-      | select(.annotations[$evaluation_key] == $constraint_name)
+      | select(.annotations[$evaluation_key] == "true")
       | (.annotations["validation.policy.admission.k8s.io/validation_failure"]? | fromjson?) as $failures
       | select(any($failures[]?;
           .policy == $policy_name and
@@ -191,6 +193,34 @@ vap_admission_audit_annotations_match() {
           (.validationActions | index("Deny")) != null and
           (.validationActions | index("Audit")) != null
         ))
+    ' <<<"${audit_log}" >/dev/null
+}
+
+vap_admission_warns_for_bindings() {
+  local resource_name="$1"
+  local policy_name="$2"
+  local first_binding_name="$3"
+  local second_binding_name="$4"
+  local output
+
+  output="$(kubectl create namespace "${resource_name}" --dry-run=server 2>&1)" || return 1
+
+  [[ "${output}" == *"ValidatingAdmissionPolicy '${policy_name}' with binding '${first_binding_name}'"* ]] &&
+    [[ "${output}" == *"ValidatingAdmissionPolicy '${policy_name}' with binding '${second_binding_name}'"* ]]
+}
+
+vap_multiple_binding_audit_annotation_matches() {
+  local resource_name="$1"
+  local policy_name="$2"
+  local evaluation_key="${policy_name}/evaluation"
+  local audit_log
+  audit_log="$(kube_apiserver_audit_log)" || return 1
+
+  jq -e \
+    --arg resource_name "${resource_name}" \
+    --arg evaluation_key "${evaluation_key}" '
+      select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
+      | select(.annotations[$evaluation_key] == "true")
     ' <<<"${audit_log}" >/dev/null
 }
 

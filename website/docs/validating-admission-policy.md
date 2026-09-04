@@ -195,7 +195,7 @@ Below is the mapping of Gatekeeper's `enforcementActions` to `validatingAdmissio
 | `warn` | `Warn` |
 | `dryrun` | `Audit` |
 
-When `--emit-admission-audit-annotations=true`, Gatekeeper appends `Audit` to generated bindings that otherwise use `Deny` or `Warn`; bindings generated from `dryrun` continue to contain one `Audit` action. Generated policies also publish an `evaluation` audit annotation for matching Constraint parameters. This gives native VAP evaluation and validation failures API server audit coverage consistent with Gatekeeper's validation webhook. The flag must be enabled on the process performing the `generate` operation. If both enforcement points are selected, both may add entries to the same request's audit event.
+When `--emit-admission-audit-annotations=true`, Gatekeeper appends `Audit` to generated bindings that otherwise use `Deny` or `Warn`; bindings generated from `dryrun` continue to contain one `Audit` action. Generated policies also publish an `evaluation` audit annotation with the value `true` when at least one binding evaluates the request. Kubernetes deduplicates the constant value across matching bindings, keeping the annotation bounded; failed validations identify the policy and binding in Kubernetes' standard `validation.policy.admission.k8s.io/validation_failure` annotation. The flag must be enabled on the process performing the `generate` operation. If both enforcement points are selected, both may add entries to the same request's audit event.
 
 ## Configuring VAP Operations
 

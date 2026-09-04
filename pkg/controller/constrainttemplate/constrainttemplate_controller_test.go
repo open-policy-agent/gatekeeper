@@ -2321,7 +2321,7 @@ func TestV1beta1ToV1PreservesResourceRuleScope(t *testing.T) {
 			AuditAnnotations: []admissionregistrationv1beta1.AuditAnnotation{
 				{
 					Key:             "evaluation",
-					ValueExpression: "params == null ? '' : string(params.metadata.name)",
+					ValueExpression: "params == null ? '' : 'true'",
 				},
 			},
 			FailurePolicy: &failurePolicy,
@@ -2336,7 +2336,7 @@ func TestV1beta1ToV1PreservesResourceRuleScope(t *testing.T) {
 	require.Equal(t, []admissionregistrationv1.AuditAnnotation{
 		{
 			Key:             "evaluation",
-			ValueExpression: "params == null ? '' : string(params.metadata.name)",
+			ValueExpression: "params == null ? '' : 'true'",
 		},
 	}, v1VAP.Spec.AuditAnnotations)
 }

@@ -1509,7 +1509,7 @@ func TestVAPAuditAnnotations(t *testing.T) {
 	want := []admissionregistrationv1beta1.AuditAnnotation{
 		{
 			Key:             vapEvaluationAuditAnnotationKey,
-			ValueExpression: "params == null ? '' : string(params.metadata.name)",
+			ValueExpression: vapEvaluationAuditAnnotationValueExpression,
 		},
 	}
 	if got := vapAuditAnnotations(true); !reflect.DeepEqual(got, want) {
