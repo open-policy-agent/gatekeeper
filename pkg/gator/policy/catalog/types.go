@@ -67,12 +67,13 @@ type Policy struct {
 	DocumentationURL string `json:"documentationUrl,omitempty" yaml:"documentationUrl,omitempty"`
 	// Bundles lists which bundles include this policy (reverse reference for discovery).
 	Bundles []string `json:"bundles,omitempty" yaml:"bundles,omitempty"`
-	// MinKubernetesVersion is the minimum Kubernetes version required by this policy (e.g., "v1.21.0").
-	// Sourced from the metadata.gatekeeper.sh/minKubernetesVersion annotation on the ConstraintTemplate.
+	// MinKubernetesVersion is the minimum Kubernetes version required by this
+	// policy (e.g., "v1.21.0"). A hard floor: install/upgrade block a cluster
+	// version below this value (use --force to override). It is the only
+	// Kubernetes-version bound; a policy with no minimum is compatible with
+	// every cluster. Sourced from the
+	// metadata.gatekeeper.sh/minKubernetesVersion annotation on the ConstraintTemplate.
 	MinKubernetesVersion string `json:"minKubernetesVersion,omitempty" yaml:"minKubernetesVersion,omitempty"`
-	// MaxKubernetesVersion is the maximum Kubernetes version this policy has been tested against (e.g., "v1.30.0").
-	// Sourced from the metadata.gatekeeper.sh/maxKubernetesVersion annotation on the ConstraintTemplate.
-	MaxKubernetesVersion string `json:"maxKubernetesVersion,omitempty" yaml:"maxKubernetesVersion,omitempty"`
 }
 
 // GetPolicy returns the policy with the given name, or nil if not found.

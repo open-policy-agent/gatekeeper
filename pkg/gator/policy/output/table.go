@@ -59,7 +59,8 @@ func (p *TablePrinter) PrintSearchResults(w io.Writer, results []SearchResult) e
 		if len(desc) > 50 {
 			desc = desc[:47] + "..."
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.Name, r.Version, r.Category, catalog.FormatK8sVersionRange(r.MinKubernetesVersion, r.MaxKubernetesVersion), desc)
+		k8sVersion := catalog.FormatMinK8sVersion(r.MinKubernetesVersion)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.Name, r.Version, r.Category, k8sVersion, desc)
 	}
 
 	return nil
@@ -107,6 +108,18 @@ func (p *TablePrinter) PrintInstallResult(w io.Writer, result *InstallResult) er
 	}
 
 	printIncompatible(w, result.Incompatible)
+	if result.DryRun {
+		// An offline dry-run cannot verify a bounded policy's cluster
+		// compatibility, but the policy is still previewed as installable with an
+		// advisory note rather than hidden. A real install re-checks and may
+		// reject it as incompatible.
+		for _, entry := range result.Unknown {
+			fmt.Fprintf(w, "%s%s (would install)\n", prefix, entry.Name)
+			fmt.Fprintf(w, "    note: %s\n", entry.Reason)
+		}
+	} else {
+		printUnknown(w, result.Unknown)
+	}
 
 	for _, f := range result.Failed {
 		fmt.Fprintf(w, "✗ %s - failed: %s\n", f.Name, f.Error)
@@ -126,6 +139,16 @@ func (p *TablePrinter) PrintInstallResult(w io.Writer, result *InstallResult) er
 func printIncompatible(w io.Writer, entries []SkippedEntry) {
 	for _, entry := range entries {
 		fmt.Fprintf(w, "- %s (skipped: %s)\n", entry.Name, entry.Reason)
+	}
+}
+
+// printUnknown writes the skip line for each policy whose Kubernetes-version
+// compatibility could not be determined. This is the non-dry-run rendering; a
+// dry-run instead previews such policies as installable with an advisory note
+// (see PrintInstallResult).
+func printUnknown(w io.Writer, entries []SkippedEntry) {
+	for _, entry := range entries {
+		fmt.Fprintf(w, "- %s (compatibility unknown: %s)\n", entry.Name, entry.Reason)
 	}
 }
 

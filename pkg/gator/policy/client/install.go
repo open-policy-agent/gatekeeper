@@ -36,7 +36,7 @@ type InstallOptions struct {
 }
 
 // IncompatibleEntry describes a policy skipped because the cluster's Kubernetes
-// version falls outside the policy's supported range.
+// version is below the policy's minimum.
 type IncompatibleEntry struct {
 	// Name is the policy name.
 	Name string `json:"name"`
@@ -52,6 +52,11 @@ type InstallResult struct {
 	Skipped []string
 	// Incompatible is the list of policies skipped due to Kubernetes version incompatibility.
 	Incompatible []IncompatibleEntry
+	// Unknown is the list of policies whose Kubernetes version compatibility
+	// could not be determined (an offline dry-run preview with no cluster
+	// version available). Reuses IncompatibleEntry's Name/Reason shape since
+	// it is the same "skipped policy, with a reason" concept.
+	Unknown []IncompatibleEntry
 	// Failed is the list of policies that failed to install.
 	Failed []string
 	// Errors contains error messages for failed policies.
@@ -171,6 +176,13 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 		// after it determines whether a write would actually occur
 		skipped, incompatible, err := installPolicy(ctx, k8sClient, fetcher, policy, installBundle, opts, result, resolveVersion)
 		if err != nil {
+			// An offline dry-run preview with no cluster version available cannot
+			// determine compatibility; record it as unknown rather than a failure.
+			var uErr *unknownCompatibilityError
+			if errors.As(err, &uErr) {
+				result.Unknown = append(result.Unknown, uErr.entry)
+				continue
+			}
 			// A failure to resolve the cluster version only prevents gating this
 			// bounded policy;
 			var vErr *versionResolutionError
@@ -180,6 +192,15 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 				versionErr = vErr.err
 				continue
 			}
+			// Invalid policy metadata (an unparseable minKubernetesVersion) fails
+			// only this policy; the batch continues so a single bad policy does
+			// not block the others, even under --force.
+			var bErr *policyBoundsError
+			if errors.As(err, &bErr) {
+				result.Failed = append(result.Failed, policyName)
+				result.Errors[policyName] = bErr.err.Error()
+				continue
+			}
 			result.Failed = append(result.Failed, policyName)
 			result.Errors[policyName] = err.Error()
 			// Preserve typed error for conflict detection
@@ -187,8 +208,12 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 			if errors.As(err, &conflictErr) {
 				result.ConflictErr = conflictErr
 			}
-			// Fail fast - stop on first error
-			return result, nil
+			// Fail fast - stop on first error. Return any pending versionErr
+			// (nil on the happy path) rather than discarding it: a bounded
+			// policy earlier in the batch may have failed cluster-version
+			// resolution, and dropping that here would mis-map the exit code
+			// (ExitClusterError) to partial success.
+			return result, versionErr
 		}
 		if incompatible != nil {
 			result.Incompatible = append(result.Incompatible, *incompatible)
@@ -208,10 +233,10 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 	return result, versionErr
 }
 
-// policyHasVersionBounds reports whether a policy declares a minimum or maximum
-// Kubernetes version, i.e. whether the compatibility gate can fire for it.
+// policyHasVersionBounds reports whether a policy declares a minimum Kubernetes
+// version, i.e. whether the compatibility gate can fire for it.
 func policyHasVersionBounds(p *catalog.Policy) bool {
-	return p != nil && (p.MinKubernetesVersion != "" || p.MaxKubernetesVersion != "")
+	return p != nil && p.MinKubernetesVersion != ""
 }
 
 // resolveGateServerVersion resolves the cluster Kubernetes version used by the
@@ -291,43 +316,55 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	// would actually write and declare a version bound, mirroring Upgrade (which
 	// classifies already-current policies before gating): an idempotent reinstall
 	// must not be reported as incompatible — or blocked by an unreachable cluster —
-	// when no write would occur. Only here is the cluster version resolved (lazily,
-	// via resolveVersion), so a pure no-op never queries it. --force skips the gate.
+	// when no write would occur.
 	//
-	// resolveVersion returns "" when the gate is disabled — for a dry-run that has
-	// no pre-resolved cluster version (an offline preview never queries the cluster
-	// itself), the check is skipped and the policy is previewed as installable.
-	if !opts.Force && wouldWrite && policyHasVersionBounds(policy) {
-		serverVersion, verr := resolveVersion()
-		if verr != nil {
-			return false, nil, verr
+	// The policy's own bound is validated unconditionally, regardless of
+	// --force: an unparseable minKubernetesVersion is invalid policy metadata,
+	// not a cluster-compatibility question, so it is satisfiable by no cluster
+	// and must not be waved through by a flag documented to skip only the
+	// cluster Kubernetes version check. ParseCatalog does not run schema
+	// validation, so a cached/custom catalog can carry such a defect straight
+	// into this path.
+	//
+	// --force skips only the cluster-version comparison below. Only there is the
+	// cluster version resolved (lazily, via resolveVersion), so a pure no-op
+	// never queries it. resolveVersion returns "" for a dry-run with no
+	// pre-resolved cluster version (an offline preview never queries the cluster
+	// itself): compatibility genuinely cannot be determined, so the policy is
+	// reported via unknownCompatibilityError rather than previewed as
+	// installable — a real install may still reject it as incompatible.
+	if wouldWrite && policyHasVersionBounds(policy) {
+		if err := catalog.ValidatePolicyVersionBounds(policy); err != nil {
+			// Invalid policy metadata (an unparseable bound) fails this policy,
+			// but it is a per-policy defect, not a reason to abort the batch:
+			// later policies must still be attempted.
+			return false, nil, &policyBoundsError{err: err}
 		}
-		if serverVersion != "" {
-			// A contradictory range (minKubernetesVersion > maxKubernetesVersion)
-			// is satisfiable by no cluster, so K8sVersionInRange would report every
-			// cluster as out of range and the policy would be misreported as a
-			// normal cluster incompatibility. It is instead invalid policy metadata:
-			// ParseCatalog does not run schema validation, so a cached/custom catalog
-			// can carry such a range. Detect it with the same comparison
-			// ValidateCatalogSchema uses and fail the affected policy up front.
-			if catalog.VersionRangeContradicts(policy.MinKubernetesVersion, policy.MaxKubernetesVersion) {
-				return false, nil, fmt.Errorf("policy %s has minKubernetesVersion (%s) greater than maxKubernetesVersion (%s)",
-					policy.Name, policy.MinKubernetesVersion, policy.MaxKubernetesVersion)
+
+		if !opts.Force {
+			serverVersion, verr := resolveVersion()
+			if verr != nil {
+				return false, nil, verr
 			}
-			// serverVersion was validated in resolveGateServerVersion, so a parse
-			// error here can only come from a malformed minKubernetesVersion /
-			// maxKubernetesVersion on the policy itself. Fail such a policy rather
-			// than fail open, since ParseCatalog does not run schema validation and
-			// cached/custom catalogs can carry bad bounds.
-			inRange, verr := catalog.K8sVersionInRange(serverVersion, policy.MinKubernetesVersion, policy.MaxKubernetesVersion)
+			if serverVersion == "" {
+				return false, nil, &unknownCompatibilityError{entry: IncompatibleEntry{
+					Name: policy.Name,
+					// Surfaced as a note under the previewed "would install" line in
+					// dry-run table output, and standalone in JSON, so it reads well
+					// on its own.
+					Reason: fmt.Sprintf("minimum Kubernetes version %s not verified in this offline dry-run preview; compatibility is re-checked on a real install",
+						policy.MinKubernetesVersion),
+				}}
+			}
+			meetsMin, verr := catalog.K8sVersionMeetsMinimum(serverVersion, policy.MinKubernetesVersion)
 			if verr != nil {
 				return false, nil, fmt.Errorf("evaluating Kubernetes version compatibility: %w", verr)
 			}
-			if !inRange {
+			if !meetsMin {
 				return false, &IncompatibleEntry{
 					Name: policy.Name,
-					Reason: fmt.Sprintf("cluster Kubernetes version %s is outside the supported range %s",
-						serverVersion, catalog.FormatK8sVersionRange(policy.MinKubernetesVersion, policy.MaxKubernetesVersion)),
+					Reason: fmt.Sprintf("cluster Kubernetes version %s is below the policy's minimum %s",
+						serverVersion, policy.MinKubernetesVersion),
 				}, nil
 			}
 		}
@@ -475,6 +512,29 @@ type versionResolutionError struct {
 func (e *versionResolutionError) Error() string { return e.err.Error() }
 
 func (e *versionResolutionError) Unwrap() error { return e.err }
+
+// unknownCompatibilityError signals that a bounded policy's Kubernetes-version
+// compatibility could not be determined — an offline dry-run preview with no
+// cluster version available. install()'s loop records it in
+// InstallResult.Unknown instead of treating it as a hard failure.
+type unknownCompatibilityError struct {
+	entry IncompatibleEntry
+}
+
+func (e *unknownCompatibilityError) Error() string { return e.entry.Reason }
+
+// policyBoundsError signals that a policy declares invalid version-bound
+// metadata (an unparseable minKubernetesVersion). It is satisfiable by no
+// cluster, so it fails the policy regardless of --force; install()'s loop
+// records it in InstallResult.Failed but keeps going so a single defective
+// policy does not abort the whole batch.
+type policyBoundsError struct {
+	err error
+}
+
+func (e *policyBoundsError) Error() string { return e.err.Error() }
+
+func (e *policyBoundsError) Unwrap() error { return e.err }
 
 // GatekeeperNotInstalledError is returned when Gatekeeper CRDs are not found.
 type GatekeeperNotInstalledError struct{}

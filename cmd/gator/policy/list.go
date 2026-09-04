@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -79,7 +80,9 @@ func runList(cmd *cobra.Command, _ []string) error {
 			// to gate on.
 			var serverVersion string
 			if client.PolicyNeedsVersionGate(policies, cat) {
-				serverVersion, _ = k8sClient.ServerVersion(ctx)
+				versionCtx, cancel := context.WithTimeout(ctx, versionLookupTimeout)
+				serverVersion, _ = k8sClient.ServerVersion(versionCtx)
+				cancel()
 			}
 			upgradable := client.GetUpgradableCount(policies, cat, serverVersion)
 			if upgradable > 0 {

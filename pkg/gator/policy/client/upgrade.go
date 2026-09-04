@@ -182,7 +182,7 @@ func Upgrade(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 
 // upgradePolicy upgrades a single policy. It returns a non-nil *IncompatibleEntry
 // (and nil error) when the policy is skipped because the cluster's Kubernetes
-// version is outside the policy's supported range
+// version is below the policy's minimum.
 func upgradePolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts UpgradeOptions, serverVersion string) (*IncompatibleEntry, bool, error) {
 	// Use install with the existing bundle name to preserve constraint installation behavior
 	var bundles []string
@@ -222,7 +222,6 @@ func upgradePolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	// The sub-catalog holds exactly this one policy, so Install reports its
 	// outcome as a single entry; inspect the slices directly rather than
 	// matching by name.
-	
 	if len(installResult.Incompatible) > 0 {
 		return &installResult.Incompatible[0], false, nil
 	}
@@ -269,7 +268,7 @@ func PolicyNeedsVersionGate(installed []InstalledPolicy, cat *catalog.PolicyCata
 // GetUpgradablePolicies returns a list of policies that have updates available.
 //
 // A newer catalog version alone is not enough: `gator policy upgrade` skips a
-// policy whose supported Kubernetes range excludes the cluster, so counting it
+// policy whose minimum Kubernetes version excludes the cluster, so counting it
 // here would overstate the upgrades that can actually be applied. serverVersion
 // is the cluster's Kubernetes version used to filter out such policies. When
 // serverVersion is empty (cluster version unknown), the gate is skipped and the
@@ -288,10 +287,21 @@ func GetUpgradablePolicies(installed []InstalledPolicy, cat *catalog.PolicyCatal
 		// Skip policies the cluster's Kubernetes version can't run (or whose
 		// bound can't even be evaluated): upgrade would classify them as
 		// incompatible, or fail them outright, without --force.
-		if serverVersion != "" && policyHasVersionBounds(policy) {
-			inRange, err := catalog.K8sVersionInRange(serverVersion, policy.MinKubernetesVersion, policy.MaxKubernetesVersion)
-			if err != nil || !inRange {
+		if policyHasVersionBounds(policy) {
+			// A malformed bound is invalid policy metadata regardless of the
+			// cluster's version; upgrade fails it outright, so exclude it here
+			// even when serverVersion is unknown, matching installPolicy's
+			// fail-closed handling.
+			if err := catalog.ValidatePolicyVersionBounds(policy); err != nil {
 				continue
+			}
+			// A well-formed bound is only compared when the cluster version is
+			// known; an undeterminable version never hides an available upgrade.
+			if serverVersion != "" {
+				meetsMin, err := catalog.K8sVersionMeetsMinimum(serverVersion, policy.MinKubernetesVersion)
+				if err != nil || !meetsMin {
+					continue
+				}
 			}
 		}
 		changes = append(changes, VersionChange{

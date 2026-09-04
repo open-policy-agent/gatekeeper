@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -97,7 +98,9 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 			// has a version bound to gate on.
 			var serverVersion string
 			if client.PolicyNeedsVersionGate(installed, cat) {
-				serverVersion, _ = k8sClient.ServerVersion(ctx)
+				versionCtx, cancel := context.WithTimeout(ctx, versionLookupTimeout)
+				serverVersion, _ = k8sClient.ServerVersion(versionCtx)
+				cancel()
 			}
 			upgradable := client.GetUpgradablePolicies(installed, cat, serverVersion)
 			for _, change := range upgradable {

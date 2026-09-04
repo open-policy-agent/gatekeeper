@@ -509,8 +509,8 @@ metadata:
 // TestInstall_K8sVersionCompatibility tests the cluster Kubernetes version gate.
 func TestInstall_K8sVersionCompatibility(t *testing.T) {
 	// versionedCatalog builds a catalog with a single policy carrying the given
-	// min/max Kubernetes version bounds.
-	versionedCatalog := func(minVer, maxVer string) *catalog.PolicyCatalog {
+	// minimum Kubernetes version bound.
+	versionedCatalog := func(minVer string) *catalog.PolicyCatalog {
 		return &catalog.PolicyCatalog{
 			Policies: []catalog.Policy{
 				{
@@ -518,7 +518,6 @@ func TestInstall_K8sVersionCompatibility(t *testing.T) {
 					Version:              "v1.0.0",
 					TemplatePath:         "templates/test.yaml",
 					MinKubernetesVersion: minVer,
-					MaxKubernetesVersion: maxVer,
 				},
 			},
 		}
@@ -541,7 +540,7 @@ metadata:
 		fakeClient := NewFakeClient()
 		fakeClient.serverVersion = "v1.20.5"
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", ""), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 		})
 		require.NoError(t, err)
@@ -551,11 +550,11 @@ metadata:
 		assert.Contains(t, result.Incompatible[0].Reason, "v1.20.5")
 	})
 
-	t.Run("cluster within range installs", func(t *testing.T) {
+	t.Run("cluster at or above min installs", func(t *testing.T) {
 		fakeClient := NewFakeClient()
 		fakeClient.serverVersion = v1_25_0
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", v1_30_0), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 		})
 		require.NoError(t, err)
@@ -565,11 +564,11 @@ metadata:
 
 	t.Run("distro version suffix is ignored", func(t *testing.T) {
 		fakeClient := NewFakeClient()
-		// Core version 1.28.3 is within range; the "-eks.5" suffix must not
-		// change the comparison.
+		// Core version 1.28.3 is at or above the minimum; the "-eks.5" suffix must
+		// not change the comparison.
 		fakeClient.serverVersion = "v1.28.3-eks.5"
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", v1_30_0), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 		})
 		require.NoError(t, err)
@@ -581,7 +580,7 @@ metadata:
 		fakeClient := NewFakeClient()
 		fakeClient.serverVersion = v1_20_0
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", ""), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 			Force:    true,
 		})
@@ -619,7 +618,7 @@ metadata:
 		// --force is the single, explicit fail-open path: the gate is disabled up
 		// front, so the unparseable version is never consulted and the policy
 		// installs.
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", ""), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 			Force:    true,
 		})
@@ -636,7 +635,7 @@ metadata:
 		// the policy's own bound. ParseCatalog does not run schema validation, so
 		// such bad data can reach the gate via a cached/custom catalog. It must
 		// fail the policy rather than fail open and install as "compatible".
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", "not-a-version"), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("not-a-version"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 		})
 		require.NoError(t, err)
@@ -644,57 +643,69 @@ metadata:
 		assert.Empty(t, result.Incompatible)
 		require.Len(t, result.Failed, 1)
 		assert.Equal(t, "versioned-policy", result.Failed[0])
-		assert.Contains(t, result.Errors["versioned-policy"], "maxKubernetesVersion")
+		assert.Contains(t, result.Errors["versioned-policy"], "minKubernetesVersion")
 	})
 
-	t.Run("a contradictory version range fails the policy as invalid metadata, not a cluster incompatibility", func(t *testing.T) {
+	t.Run("force does not bypass a malformed policy bound", func(t *testing.T) {
 		fakeClient := NewFakeClient()
-		fakeClient.serverVersion = v1_25_0 // within neither bound; would look "out of range"
+		fakeClient.serverVersion = v1_25_0
 
-		// min (v1.30.0) > max (v1.21.0) is satisfiable by no cluster: both bounds
-		// parse, so K8sVersionInRange alone would report the cluster as out of range
-		// and mislabel this as a normal incompatibility. ParseCatalog does not run
-		// schema validation, so such an inverted range can reach the gate via a
-		// cached/custom catalog and must fail the policy as invalid metadata.
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog(v1_30_0, "v1.21.0"), &InstallOptions{
+		// --force is documented to skip only the cluster-version compatibility
+		// check. An unparseable bound is invalid policy metadata, so it must still
+		// fail the policy even when forced.
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("not-a-version"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
+			Force:    true,
 		})
 		require.NoError(t, err)
-		assert.Empty(t, result.Installed, "a policy with a contradictory range must not install")
-		assert.Empty(t, result.Incompatible, "a contradictory range is invalid metadata, not a cluster incompatibility")
+		assert.Empty(t, result.Installed, "a malformed bound must not install even with --force")
 		require.Len(t, result.Failed, 1)
 		assert.Equal(t, "versioned-policy", result.Failed[0])
-		assert.Contains(t, result.Errors["versioned-policy"], "greater than maxKubernetesVersion")
+		assert.Contains(t, result.Errors["versioned-policy"], "minKubernetesVersion")
 	})
 
-	t.Run("force bypasses the gate even for a contradictory version range", func(t *testing.T) {
+	t.Run("a malformed bound fails only its own policy; the batch continues even under --force", func(t *testing.T) {
 		fakeClient := NewFakeClient()
 		fakeClient.serverVersion = v1_25_0
 
-		// --force disables the gate entirely (serverVersion is left empty), so the
-		// contradictory range is never evaluated and the policy installs.
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog(v1_30_0, "v1.21.0"), &InstallOptions{
-			Policies: []string{"versioned-policy"},
+		// The first policy carries an unparseable bound (invalid metadata,
+		// satisfiable by no cluster). It must fail, but as a per-policy defect it
+		// must not abort the batch: the second, valid policy must still install.
+		// --force does not wave the bad bound through, yet it must not turn one bad
+		// policy into a batch-wide stop either.
+		cat := &catalog.PolicyCatalog{
+			Policies: []catalog.Policy{
+				{Name: "bad", Version: "v1.0.0", TemplatePath: "templates/bad.yaml", MinKubernetesVersion: "not-a-version"},
+				{Name: "good", Version: "v1.0.0", TemplatePath: "templates/good.yaml", MinKubernetesVersion: "v1.21.0"},
+			},
+		}
+		fetcher := &FakeFetcher{
+			content: map[string][]byte{
+				"templates/bad.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: bad
+`),
+				"templates/good.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: good
+`),
+			},
+		}
+
+		result, err := Install(context.Background(), fakeClient, fetcher, cat, &InstallOptions{
+			Policies: []string{"bad", "good"},
 			Force:    true,
 		})
 		require.NoError(t, err)
-		assert.Empty(t, result.Failed)
-		assert.Len(t, result.Installed, 1)
-	})
-
-	t.Run("force bypasses the gate even for a malformed policy bound", func(t *testing.T) {
-		fakeClient := NewFakeClient()
-		fakeClient.serverVersion = v1_25_0
-
-		// --force disables the gate entirely (serverVersion is left empty), so a
-		// malformed bound is never parsed and the policy installs.
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", "not-a-version"), &InstallOptions{
-			Policies: []string{"versioned-policy"},
-			Force:    true,
-		})
-		require.NoError(t, err)
-		assert.Empty(t, result.Failed)
-		assert.Len(t, result.Installed, 1)
+		assert.Equal(t, []string{"good"}, result.Installed, "a valid policy after a defective one must still install")
+		require.Len(t, result.Failed, 1)
+		assert.Equal(t, "bad", result.Failed[0])
+		assert.Contains(t, result.Errors["bad"], "minKubernetesVersion")
+		assert.Empty(t, result.Incompatible, "a malformed bound is invalid metadata, not a cluster incompatibility")
 	})
 
 	t.Run("idempotent reinstall on an out-of-range cluster is a no-op, not incompatible", func(t *testing.T) {
@@ -713,7 +724,7 @@ metadata:
 		labels.AddManagedLabels(existing, "v1.0.0", "", catalog.DefaultRepository)
 		fakeClient.templates["versioned-policy"] = existing
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", ""), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 		})
 		require.NoError(t, err)
@@ -738,7 +749,7 @@ metadata:
 		labels.AddManagedLabels(existing, "v1.0.0", "", catalog.DefaultRepository)
 		fakeClient.templates["versioned-policy"] = existing
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", ""), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 		})
 		require.NoError(t, err)
@@ -748,36 +759,42 @@ metadata:
 		assert.Zero(t, fakeClient.serverVersionCalls, "a no-op reinstall must not query the cluster version")
 	})
 
-	t.Run("dry-run is offline and does not apply the gate", func(t *testing.T) {
+	t.Run("dry-run reports unknown compatibility when the cluster version can't be checked", func(t *testing.T) {
 		fakeClient := NewFakeClient()
 		// A dry-run is an offline preview: it never queries the cluster version,
-		// so the compatibility gate does not run and even a bounded policy that
-		// would be incompatible is previewed as installable.
+		// so a bounded policy's compatibility genuinely cannot be determined. It
+		// must not be previewed as installable, since a real install might reject
+		// it as incompatible.
 		fakeClient.serverVersion = v1_20_0 // below the policy's minimum
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", ""), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 			DryRun:   true,
 		})
 		require.NoError(t, err)
 		assert.Zero(t, fakeClient.serverVersionCalls, "ServerVersion must not be queried during an offline dry-run")
 		assert.Empty(t, result.Incompatible)
-		assert.Len(t, result.Installed, 1)
+		assert.Empty(t, result.Installed)
+		require.Len(t, result.Unknown, 1)
+		assert.Equal(t, "versioned-policy", result.Unknown[0].Name)
 	})
 
 	t.Run("dry-run does not fail on an unreachable cluster", func(t *testing.T) {
 		fakeClient := NewFakeClient()
 		// Even if the cluster version could not be resolved, an offline dry-run
-		// never attempts to, so a bounded policy still previews successfully.
+		// never attempts to; a bounded policy is reported as unknown compatibility
+		// rather than failing the whole preview.
 		fakeClient.serverVersionErr = errors.New("discovery unavailable")
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", ""), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 			DryRun:   true,
 		})
 		require.NoError(t, err)
 		assert.Zero(t, fakeClient.serverVersionCalls, "ServerVersion must not be queried during an offline dry-run")
-		assert.Len(t, result.Installed, 1)
+		assert.Empty(t, result.Failed)
+		require.Len(t, result.Unknown, 1)
+		assert.Equal(t, "versioned-policy", result.Unknown[0].Name)
 	})
 
 	t.Run("dry-run honors a pre-resolved version so the gate still fires", func(t *testing.T) {
@@ -786,7 +803,7 @@ metadata:
 		// it in; the dry-run preview must apply the gate without re-querying.
 		fakeClient.serverVersionErr = errors.New("discovery unavailable")
 
-		result, err := install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", ""), &InstallOptions{
+		result, err := install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 			DryRun:   true,
 		}, v1_20_0) // below the policy's minimum
@@ -800,7 +817,7 @@ metadata:
 	t.Run("dry-run with a pre-resolved version but --force bypasses the gate", func(t *testing.T) {
 		fakeClient := NewFakeClient()
 
-		result, err := install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", ""), &InstallOptions{
+		result, err := install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 			DryRun:   true,
 			Force:    true,
@@ -814,7 +831,7 @@ metadata:
 		fakeClient := NewFakeClient()
 		fakeClient.serverVersion = "v1.10.0"
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("", ""), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog(""), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 		})
 		require.NoError(t, err)
@@ -827,7 +844,7 @@ metadata:
 		// A failing ServerVersion must not break an install of unbounded policies.
 		fakeClient.serverVersionErr = errors.New("discovery unavailable")
 
-		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("", ""), &InstallOptions{
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog(""), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 		})
 		require.NoError(t, err)
@@ -839,7 +856,7 @@ metadata:
 		fakeClient := NewFakeClient()
 		fakeClient.serverVersionErr = errors.New("discovery unavailable")
 
-		_, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0", ""), &InstallOptions{
+		_, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
 			Policies: []string{"versioned-policy"},
 		})
 		require.Error(t, err)
@@ -1322,6 +1339,21 @@ func TestGetUpgradablePolicies_K8sVersionGate(t *testing.T) {
 		assert.Empty(t, changes)
 		assert.Equal(t, 0, GetUpgradableCount(malformed, malformedCat, v1_30_0))
 	})
+
+	t.Run("unparseable version bound is excluded even when cluster version is unknown", func(t *testing.T) {
+		// A malformed bound is invalid metadata regardless of the cluster's
+		// version, so Upgrade fails it outright. It must not be advertised as
+		// upgradable just because the cluster version could not be resolved.
+		malformed := []InstalledPolicy{{Name: "malformed", Version: "v1.0.0"}}
+		malformedCat := &catalog.PolicyCatalog{
+			Policies: []catalog.Policy{
+				{Name: "malformed", Version: "v2.0.0", MinKubernetesVersion: "not-a-version"},
+			},
+		}
+		changes := GetUpgradablePolicies(malformed, malformedCat, "")
+		assert.Empty(t, changes)
+		assert.Equal(t, 0, GetUpgradableCount(malformed, malformedCat, ""))
+	})
 }
 
 func TestPolicyNeedsVersionGate(t *testing.T) {
@@ -1554,6 +1586,76 @@ spec:
 	require.NotNil(t, constraint)
 	action, _, _ := unstructured.NestedString(constraint.Object, "spec", "enforcementAction")
 	assert.Equal(t, "warn", action)
+}
+
+// TestInstall_IncompatibleWithUnmanagedConflictDoesNotBlockBatch locks in the
+// ordering inside installPolicy between the Kubernetes-version compatibility
+// gate and the ownership-conflict check: an incompatible policy whose target
+// template collides with a pre-existing, unmanaged ConstraintTemplate must
+// resolve as Incompatible, not a ConflictError. Incompatible is non-fatal, so
+// a second, compatible policy in the same Install() call must still install —
+// whereas a ConflictError would abort the whole batch (see install()'s
+// "fail fast" loop) and block it.
+func TestInstall_IncompatibleWithUnmanagedConflictDoesNotBlockBatch(t *testing.T) {
+	fakeClient := NewFakeClient()
+	fakeClient.serverVersion = v1_20_0 // below incompatible-policy's minimum
+
+	// A pre-existing, unmanaged (user-owned) ConstraintTemplate already
+	// occupies the name "incompatible-policy" would install to.
+	unmanaged := &unstructured.Unstructured{}
+	unmanaged.SetName("incompatible-policy")
+	unmanaged.SetAnnotations(map[string]string{"owner": "user"})
+	fakeClient.templates["incompatible-policy"] = unmanaged
+
+	cat := &catalog.PolicyCatalog{
+		Policies: []catalog.Policy{
+			{
+				Name:                 "incompatible-policy",
+				Version:              "v1.0.0",
+				TemplatePath:         "templates/incompatible.yaml",
+				MinKubernetesVersion: "v1.21.0",
+			},
+			{
+				Name:         "compatible-policy",
+				Version:      "v1.0.0",
+				TemplatePath: "templates/compatible.yaml",
+			},
+		},
+	}
+
+	// The incompatible policy's template is deliberately absent from the
+	// fetcher: the compatibility gate must reject it before the artifact is
+	// ever fetched. If the ordering regressed and it were fetched, the test
+	// would fail loudly (as a Failed policy) rather than passing accidentally.
+	fetcher := &FakeFetcher{
+		content: map[string][]byte{
+			"templates/compatible.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: compatible-policy
+`),
+		},
+	}
+
+	result, err := Install(context.Background(), fakeClient, fetcher, cat, &InstallOptions{
+		Policies: []string{"incompatible-policy", "compatible-policy"},
+	})
+	require.NoError(t, err)
+
+	require.Len(t, result.Incompatible, 1)
+	assert.Equal(t, "incompatible-policy", result.Incompatible[0].Name)
+	assert.Nil(t, result.ConflictErr)
+	assert.Empty(t, result.Failed)
+
+	// Non-fatal outcome: the batch continues and the compatible policy installs.
+	assert.Equal(t, []string{"compatible-policy"}, result.Installed)
+
+	// The pre-existing unmanaged template is completely untouched.
+	got := fakeClient.templates["incompatible-policy"]
+	require.NotNil(t, got)
+	assert.False(t, labels.IsManagedByGator(got), "unmanaged template must not be relabeled")
+	assert.Equal(t, "user", got.GetAnnotations()["owner"], "unmanaged template must not be overwritten")
 }
 
 func TestInstallConstraintConflict(t *testing.T) {

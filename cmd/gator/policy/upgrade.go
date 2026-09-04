@@ -50,7 +50,7 @@ gator policy upgrade --all -o json`,
 	cmd.Flags().StringSliceVar(&upgradeBundles, "bundle", nil, "Upgrade all policies in a bundle (may be specified multiple times)")
 	cmd.Flags().StringVar(&upgradeEnforcementAction, "enforcement-action", "", "Override enforcement action (deny, warn, dryrun)")
 	cmd.Flags().BoolVar(&upgradeDryRun, "dry-run", false, "Preview changes without applying (requires cluster access to check current state)")
-	cmd.Flags().BoolVar(&upgradeForce, "force", false, "Upgrade even if the cluster Kubernetes version is outside a policy's supported range")
+	cmd.Flags().BoolVar(&upgradeForce, "force", false, "Upgrade even if the cluster Kubernetes version is below a policy's minimum")
 	cmd.Flags().StringVarP(&upgradeOutput, "output", "o", "table", "Output format: table, json")
 
 	return cmd

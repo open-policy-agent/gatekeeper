@@ -153,7 +153,6 @@ policies:
     category: pod-security
     templatePath: library/pod-security-policy/privileged-containers/template.yaml
     minKubernetesVersion: v1.21.0
-    maxKubernetesVersion: v1.30.0
     bundleConstraints:
       pod-security-baseline: library/pod-security-policy/privileged-containers/samples/psp-privileged-container/constraint.yaml
       pod-security-restricted: library/pod-security-policy/privileged-containers/samples/psp-privileged-container/constraint.yaml
@@ -195,9 +194,9 @@ policies:
 | `sampleConstraintPath` | string | No | Relative path to sample Constraint |
 | `documentationUrl` | string | No | Link to documentation |
 | `bundles` | []string | No | Bundle(s) this policy belongs to |
-| `minKubernetesVersion` | string | No | Minimum Kubernetes version the policy supports (e.g. `v1.21.0`). Sourced from the `metadata.gatekeeper.sh/minKubernetesVersion` annotation. Accepts the tolerant Kubernetes version format (not strict SemVer). |
-| `maxKubernetesVersion` | string | No | Maximum Kubernetes version the policy supports (e.g. `v1.30.0`). Sourced from the `metadata.gatekeeper.sh/maxKubernetesVersion` annotation. Accepts the tolerant Kubernetes version format (not strict SemVer). A two-component maximum such as `v1.30` includes every patch release in that minor; a three-component maximum such as `v1.30.0` is an exact patch ceiling. |
-`gator policy install` and `gator policy upgrade` skip policies outside this range; pass `--force` to bypass the compatibility check.
+| `minKubernetesVersion` | string | No | Minimum Kubernetes version the policy supports (e.g. `v1.21.0`). A hard, enforced floor: `install`/`upgrade` block any cluster version below it. It is the only Kubernetes-version bound; a policy with no minimum is compatible with every cluster. Sourced from the `metadata.gatekeeper.sh/minKubernetesVersion` annotation. Accepts the tolerant Kubernetes version format (not strict SemVer). |
+
+`gator policy install` and `gator policy upgrade` skip a policy whose `minKubernetesVersion` is above the cluster's version; pass `--force` to bypass this compatibility check.
 
 #### Path Resolution Rules
 
@@ -223,7 +222,7 @@ The `templatePath`, `bundleConstraints`, and `sampleConstraintPath` fields are *
 Schema version history:
 
 - `v1.0.0` — initial catalog schema.
-- `v1.1.0` — added the optional `minKubernetesVersion` / `maxKubernetesVersion` policy fields.
+- `v1.1.0` — added the optional `minKubernetesVersion` policy field, a hard floor that `install`/`upgrade` enforce (bypassable with `--force`).
 
 #### Version Behavior
 

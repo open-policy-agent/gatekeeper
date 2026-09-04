@@ -32,7 +32,6 @@ type SearchResult struct {
 	Category             string `json:"category"`
 	Description          string `json:"description"`
 	MinKubernetesVersion string `json:"minKubernetesVersion,omitempty"`
-	MaxKubernetesVersion string `json:"maxKubernetesVersion,omitempty"`
 }
 
 // InstallResult represents the result of an install operation for output.
@@ -40,6 +39,7 @@ type InstallResult struct {
 	Installed            []InstallEntry `json:"installed,omitempty"`
 	Skipped              []string       `json:"skipped,omitempty"`
 	Incompatible         []SkippedEntry `json:"incompatible,omitempty"`
+	Unknown              []SkippedEntry `json:"unknown,omitempty"`
 	Failed               []FailedEntry  `json:"failed,omitempty"`
 	TemplatesInstalled   int            `json:"templatesInstalled"`
 	ConstraintsInstalled int            `json:"constraintsInstalled"`

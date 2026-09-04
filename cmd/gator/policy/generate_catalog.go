@@ -19,7 +19,7 @@ gator policy generate-catalog --library-path=. --output=catalog.yaml
 gator policy generate-catalog --library-path=. --bundles=bundles.yaml
 
 # Generate with custom version
-gator policy generate-catalog --library-path=. --version=v1.2.0
+gator policy generate-catalog --library-path=. --version=v1.1.0
 
 # Generate with URLs instead of local paths (for publishing)
 gator policy generate-catalog --library-path=. --base-url=https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master`

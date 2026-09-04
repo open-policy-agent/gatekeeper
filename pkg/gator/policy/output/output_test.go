@@ -82,22 +82,12 @@ func TestTablePrinter_PrintSearchResults_K8sVersionRange(t *testing.T) {
 		wantCol string
 	}{
 		{
-			name:    "both min and max",
-			result:  SearchResult{Name: "p", Version: "v1.0.0", Category: "general", MinKubernetesVersion: "v1.21.0", MaxKubernetesVersion: "v1.30.0"},
-			wantCol: "v1.21.0 - v1.30.0",
-		},
-		{
-			name:    "min only",
+			name:    "min set",
 			result:  SearchResult{Name: "p", Version: "v1.0.0", Category: "general", MinKubernetesVersion: "v1.21.0"},
 			wantCol: ">=v1.21.0",
 		},
 		{
-			name:    "max only",
-			result:  SearchResult{Name: "p", Version: "v1.0.0", Category: "general", MaxKubernetesVersion: "v1.30.0"},
-			wantCol: "<=v1.30.0",
-		},
-		{
-			name:    "neither",
+			name:    "no minimum",
 			result:  SearchResult{Name: "p", Version: "v1.0.0", Category: "general"},
 			wantCol: "-",
 		},
@@ -167,7 +157,6 @@ func TestJSONPrinter_PrintSearchResults(t *testing.T) {
 			Category:             "general",
 			Description:          "Requires labels",
 			MinKubernetesVersion: "v1.21.0",
-			MaxKubernetesVersion: "v1.30.0",
 		},
 	}
 
@@ -184,7 +173,6 @@ func TestJSONPrinter_PrintSearchResults(t *testing.T) {
 	assert.Len(t, output.Results, 1)
 	assert.Equal(t, "k8srequiredlabels", output.Results[0].Name)
 	assert.Equal(t, "v1.21.0", output.Results[0].MinKubernetesVersion)
-	assert.Equal(t, "v1.30.0", output.Results[0].MaxKubernetesVersion)
 }
 
 func TestNewPrinter(t *testing.T) {
@@ -219,7 +207,8 @@ func TestTablePrinter_PrintInstallResult(t *testing.T) {
 			{Name: "policy2", Version: "v2.0.0"},
 		},
 		Skipped:              []string{"policy3"},
-		Incompatible:         []SkippedEntry{{Name: "policy4", Reason: "cluster Kubernetes version v1.20.0 is outside the supported range >=v1.21.0"}},
+		Incompatible:         []SkippedEntry{{Name: "policy4", Reason: "cluster Kubernetes version v1.20.0 is below the policy's minimum >=v1.21.0"}},
+		Unknown:              []SkippedEntry{{Name: "policy5", Reason: "cluster Kubernetes version is unknown in this offline dry-run preview"}},
 		TemplatesInstalled:   2,
 		ConstraintsInstalled: 1,
 	}
@@ -238,6 +227,10 @@ func TestTablePrinter_PrintInstallResult(t *testing.T) {
 	assert.Contains(t, output, "policy4")
 	assert.Contains(t, output, "skipped")
 	assert.Contains(t, output, "v1.20.0")
+	// Unknown-compatibility policies are rendered with their reason, distinct
+	// from a confirmed incompatibility.
+	assert.Contains(t, output, "policy5")
+	assert.Contains(t, output, "compatibility unknown")
 }
 
 func TestTablePrinter_PrintInstallResult_DryRun(t *testing.T) {
@@ -249,7 +242,10 @@ func TestTablePrinter_PrintInstallResult_DryRun(t *testing.T) {
 		Installed: []InstallEntry{
 			{Name: "policy1", Version: "v1.0.0"},
 		},
-		DryRun: true,
+		// A bounded policy whose compatibility couldn't be verified offline is
+		// previewed as installable with an advisory note, not hidden.
+		Unknown: []SkippedEntry{{Name: "policy2", Reason: "minimum Kubernetes version >=v1.21.0 not verified in this offline dry-run preview; compatibility is re-checked on a real install"}},
+		DryRun:  true,
 	}
 
 	err := printer.PrintInstallResult(&buf, result)
@@ -259,6 +255,12 @@ func TestTablePrinter_PrintInstallResult_DryRun(t *testing.T) {
 	assert.Contains(t, output, "policy1")
 	assert.Contains(t, output, "v1.0.0")
 	assert.NotContains(t, output, "✓")
+	// The unknown-compatibility policy is previewed as installable with a note,
+	// not rendered as a skip.
+	assert.Contains(t, output, "policy2")
+	assert.Contains(t, output, "would install")
+	assert.Contains(t, output, "note:")
+	assert.NotContains(t, output, "compatibility unknown")
 }
 
 func TestTablePrinter_PrintUninstallResult(t *testing.T) {
@@ -294,7 +296,7 @@ func TestTablePrinter_PrintUpgradeResult(t *testing.T) {
 			{Name: "policy1", FromVersion: "v1.0.0", ToVersion: "v2.0.0"},
 		},
 		AlreadyCurrent: []string{"policy2"},
-		Incompatible:   []SkippedEntry{{Name: "policy3", Reason: "cluster Kubernetes version v1.20.0 is outside the supported range >=v1.31.0"}},
+		Incompatible:   []SkippedEntry{{Name: "policy3", Reason: "cluster Kubernetes version v1.20.0 is below the policy's minimum >=v1.31.0"}},
 	}
 
 	err := printer.PrintUpgradeResult(&buf, result)
@@ -321,6 +323,9 @@ func TestJSONPrinter_PrintInstallResult(t *testing.T) {
 		Installed: []InstallEntry{
 			{Name: "policy1", Version: "v1.0.0"},
 		},
+		Unknown: []SkippedEntry{
+			{Name: "policy2", Reason: "cluster Kubernetes version is unknown in this offline dry-run preview"},
+		},
 		TemplatesInstalled:   1,
 		ConstraintsInstalled: 0,
 	}
@@ -339,6 +344,8 @@ func TestJSONPrinter_PrintInstallResult(t *testing.T) {
 	assert.Equal(t, "InstallResult", output.Kind)
 	assert.Len(t, output.Result.Installed, 1)
 	assert.Equal(t, "policy1", output.Result.Installed[0].Name)
+	require.Len(t, output.Result.Unknown, 1)
+	assert.Equal(t, "policy2", output.Result.Unknown[0].Name)
 }
 
 func TestJSONPrinter_PrintUninstallResult(t *testing.T) {

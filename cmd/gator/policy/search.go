@@ -104,7 +104,6 @@ func runSearch(cmd *cobra.Command, args []string) error {
 				Category:             policy.Category,
 				Description:          policy.Description,
 				MinKubernetesVersion: policy.MinKubernetesVersion,
-				MaxKubernetesVersion: policy.MaxKubernetesVersion,
 			})
 		}
 	}

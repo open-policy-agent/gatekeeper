@@ -75,6 +75,10 @@ type Client interface {
 type K8sClient struct {
 	dynamicClient   dynamic.Interface
 	discoveryClient discovery.DiscoveryInterface
+	// discoveryErr records why discoveryClient could not be built, so the
+	// compatibility gate can attribute the failure to client construction
+	// rather than reporting a misleading "cluster unreachable" error.
+	discoveryErr error
 }
 
 // NewK8sClient creates a new K8sClient using the default kubeconfig.
@@ -102,6 +106,8 @@ func NewK8sClientWithConfig(config *rest.Config) (*K8sClient, error) {
 	// keep working, and informational callers such as list/update tolerate failure.
 	if discoveryClient, derr := discovery.NewDiscoveryClientForConfig(config); derr == nil {
 		c.discoveryClient = discoveryClient
+	} else {
+		c.discoveryErr = derr
 	}
 
 	return c, nil
@@ -137,6 +143,9 @@ func (c *K8sClient) GatekeeperInstalled(ctx context.Context) (bool, error) {
 // ServerVersion returns the cluster's Kubernetes version (e.g. "v1.30.2").
 func (c *K8sClient) ServerVersion(ctx context.Context) (string, error) {
 	if c.discoveryClient == nil {
+		if c.discoveryErr != nil {
+			return "", fmt.Errorf("creating discovery client: %w", c.discoveryErr)
+		}
 		return "", fmt.Errorf("discovery client not configured")
 	}
 	// The discovery client's own ServerVersion() ignores context (it issues the
