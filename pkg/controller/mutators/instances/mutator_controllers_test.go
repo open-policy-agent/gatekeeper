@@ -3,6 +3,8 @@ package instances
 import (
 	"context"
 	"flag"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -12,28 +14,87 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
+// gatekeeperInstancesAdderSubprocessEnvVar marks a re-exec'd child process that
+// actually calls Adder.Add. pkg/operations only allows the process-wide
+// "operation" flag to be narrowed once (subsequent Set calls add to the
+// existing set rather than replacing it), so TestAddSkipsRegistrationWhenMutationDisabled
+// and TestAddProceedsWhenMutationEnabled each run their assertion in a fresh
+// subprocess instead of sharing that global state.
+const gatekeeperInstancesAdderSubprocessEnvVar = "GATEKEEPER_INSTANCES_ADDER_SUBPROCESS"
+
+// gatekeeperTestOperationEnvVar carries the desired --operation value into the subprocess.
+const gatekeeperTestOperationEnvVar = "GATEKEEPER_TEST_OPERATION"
+
+// runAddInSubprocess re-execs the current test binary, running only testName with
+// the "operation" flag set to op before Add is called.
+func runAddInSubprocess(t *testing.T, testName, op string) (string, error) {
+	t.Helper()
+
+	cmd := exec.Command(os.Args[0], "-test.run=^"+testName+"$")
+	cmd.Env = append(os.Environ(),
+		gatekeeperInstancesAdderSubprocessEnvVar+"=1",
+		gatekeeperTestOperationEnvVar+"="+op,
+	)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func setOperationFromEnv(t *testing.T) {
+	t.Helper()
+
+	op := os.Getenv(gatekeeperTestOperationEnvVar)
+	if err := flag.CommandLine.Set("operation", op); err != nil {
+		t.Fatalf("setting operation flag to %q: %v", op, err)
+	}
+}
+
 // TestAddSkipsRegistrationWhenMutationDisabled guards against unconditionally
 // registering the conflict-routing runnable (and the mutator controllers behind
 // it) for pods that have no mutation operation assigned. Before this guard,
 // Add dereferenced the manager (e.g. mgr.GetScheme()) before ever consulting
 // mutation.Enabled(), so passing a nil manager panics unless the early return
 // below is in place.
-//
-// This test narrows the process-wide "operation" flag to audit-only and
-// deliberately does not restore it afterward: opSet.Set (pkg/operations)
-// only resets the assigned-operation set on the very first call in the
-// process and merely adds to it on every call thereafter, so widening back
-// to "all operations" here would make the flag permanently un-narrowable and
-// break this test under repeated runs (e.g. `go test -count=2`). No other
-// test in this package depends on the default operation set.
 func TestAddSkipsRegistrationWhenMutationDisabled(t *testing.T) {
-	if err := flag.CommandLine.Set("operation", string(operations.Audit)); err != nil {
-		t.Fatalf("setting operation flag: %v", err)
+	if os.Getenv(gatekeeperInstancesAdderSubprocessEnvVar) == "1" {
+		setOperationFromEnv(t)
+
+		a := &Adder{}
+		if err := a.Add(nil); err != nil {
+			t.Fatalf("Add returned error: %v", err)
+		}
+		return
 	}
 
-	a := &Adder{}
-	if err := a.Add(nil); err != nil {
-		t.Fatalf("Add returned error: %v", err)
+	out, err := runAddInSubprocess(t, "TestAddSkipsRegistrationWhenMutationDisabled", string(operations.Audit))
+	if err != nil {
+		t.Fatalf("audit-only Add(nil) should return nil without touching the manager: %v\n%s", err, out)
+	}
+}
+
+// TestAddProceedsWhenMutationEnabled is the mutation-only counterpart to
+// TestAddSkipsRegistrationWhenMutationDisabled: it verifies Add does not take the
+// early-return path when a mutation operation is assigned. It can't exercise full
+// controller registration without a real manager, so it instead confirms Add moves
+// past the mutation.Enabled() guard by asserting it panics on mgr.GetScheme()
+// against the nil manager, the same signal the pre-fix code panicked on unconditionally.
+func TestAddProceedsWhenMutationEnabled(t *testing.T) {
+	if os.Getenv(gatekeeperInstancesAdderSubprocessEnvVar) == "1" {
+		setOperationFromEnv(t)
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("Add(nil) returned without touching the manager; expected it to proceed past the mutation.Enabled() guard and panic dereferencing the nil manager")
+			}
+		}()
+
+		a := &Adder{}
+		_ = a.Add(nil)
+		return
+	}
+
+	out, err := runAddInSubprocess(t, "TestAddProceedsWhenMutationEnabled", string(operations.MutationWebhook))
+	if err != nil {
+		t.Fatalf("mutation-webhook-only Add(nil) subprocess failed: %v\n%s", err, out)
 	}
 }
 
