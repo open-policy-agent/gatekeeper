@@ -26,7 +26,7 @@ const gatekeeperMainTestOperationEnvVar = "GATEKEEPER_MAIN_TEST_OPERATION"
 func runNewMutationSystemInSubprocess(t *testing.T, testName, op string) (string, error) {
 	t.Helper()
 
-	cmd := exec.Command(os.Args[0], "-test.run=^"+testName+"$")
+	cmd := exec.Command(os.Args[0], "-test.run=^"+testName+"$") //nolint:gosec // os.Args[0] is the current test binary; testName is always a compile-time string literal passed by the callers below
 	cmd.Env = append(os.Environ(),
 		gatekeeperMainSubprocessEnvVar+"=1",
 		gatekeeperMainTestOperationEnvVar+"="+op,
