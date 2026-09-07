@@ -30,7 +30,7 @@ const gatekeeperTestOperationEnvVar = "GATEKEEPER_TEST_OPERATION"
 func runAddInSubprocess(t *testing.T, testName, op string) (string, error) {
 	t.Helper()
 
-	cmd := exec.Command(os.Args[0], "-test.run=^"+testName+"$")
+	cmd := exec.Command(os.Args[0], "-test.run=^"+testName+"$") //nolint:gosec // os.Args[0] is the current test binary; testName is always a compile-time string literal passed by the callers below
 	cmd.Env = append(os.Environ(),
 		gatekeeperInstancesAdderSubprocessEnvVar+"=1",
 		gatekeeperTestOperationEnvVar+"="+op,
