@@ -46,11 +46,28 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		log.Info("Export functionality is disabled, skipping export connection controller setup")
 		return nil
 	}
-	if a.ExportSystem == nil || reflect.ValueOf(a.ExportSystem).IsNil() {
+	if isNilExporter(a.ExportSystem) {
 		return fmt.Errorf("export connection controller requires an export system")
 	}
 	r := newReconciler(mgr, a.ExportSystem, *exportutil.AuditConnection, a.GetPod)
 	return add(mgr, r)
+}
+
+// isNilExporter reports whether system is nil, including the case where it is
+// a non-nil interface wrapping a nil pointer (e.g. a typed-nil *export.System).
+// It only consults reflection for kinds that support IsNil, since calling
+// IsNil on a value-typed Exporter implementation (e.g. a struct) would panic.
+func isNilExporter(system export.Exporter) bool {
+	if system == nil {
+		return true
+	}
+	v := reflect.ValueOf(system)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 func (a *Adder) InjectTracker(_ *readiness.Tracker) {}

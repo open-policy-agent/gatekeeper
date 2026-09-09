@@ -78,6 +78,35 @@ func TestAdderAddRejectsTypedNilExportSystemWhenExportEnabled(t *testing.T) {
 	require.Error(t, a.Add(nil))
 }
 
+// TestIsNilExporterDoesNotPanicOnValueTypeExportSystem guards against a
+// reflect.Value.IsNil panic: value-type Exporter implementations (e.g. a
+// struct, as opposed to a pointer) are not nilable, so the nil check must not
+// call IsNil on them.
+func TestIsNilExporterDoesNotPanicOnValueTypeExportSystem(t *testing.T) {
+	var got bool
+	require.NotPanics(t, func() {
+		got = isNilExporter(valueExportSystem{})
+	})
+	require.False(t, got)
+}
+
+// valueExportSystem is a value-type (non-pointer) implementation of
+// export.Exporter, used to exercise the case where reflect.Value.IsNil
+// cannot be called since the underlying kind is not nilable.
+type valueExportSystem struct{}
+
+func (valueExportSystem) Publish(_ context.Context, _ string, _ string, _ interface{}) error {
+	return nil
+}
+
+func (valueExportSystem) UpsertConnection(_ context.Context, _ interface{}, _ string, _ string) error {
+	return nil
+}
+
+func (valueExportSystem) CloseConnection(_ string) error {
+	return nil
+}
+
 func TestUpdateOrCreateConnectionPodStatusSkipsStableSecondUpdate(t *testing.T) {
 	ctx := context.Background()
 	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("status-pod"), fakes.WithUID("status-pod-uid"))
