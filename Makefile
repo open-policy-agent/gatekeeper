@@ -228,7 +228,7 @@ test: __test-image
 
 .PHONY: test-e2e
 test-e2e:
-	bats -t ${BATS_TESTS_FILE}
+	bats -t test/bats/helpers_test.bats ${BATS_TESTS_FILE}
 
 test-e2e-owner-ref:
 	@bash test/with-admission-plugin/test-e2e-owner-ref.sh

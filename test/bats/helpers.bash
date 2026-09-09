@@ -90,23 +90,25 @@ webhook_admission_audit_annotation_matches() {
   local audit_log
   audit_log="$(kube_apiserver_audit_log)" || return 1
 
-  jq -e --arg resource_name "${resource_name}" --arg constraint_name "${constraint_name}" '
-    select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
-    | .annotations["validation.gatekeeper.sh/evaluation"]?
-    | fromjson?
-    | select(
-        .schemaVersion == "v1" and
-        .eventType == "validation_admission" and
-        .allowed == false and
-        .totalViolations == 1 and
-        .includedViolations == 1 and
-        .truncated == false
-      )
-    | select(any(.violations[]?;
-        .constraintKind == "K8sRequiredLabels" and
-        .constraintName == $constraint_name and
-        .enforcementAction == "deny"
-      ))
+  jq -n -e --arg resource_name "${resource_name}" --arg constraint_name "${constraint_name}" '
+    any(inputs;
+      select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
+      | .annotations["validation.gatekeeper.sh/evaluation"]?
+      | fromjson?
+      | select(
+          .schemaVersion == "v1" and
+          .eventType == "validation_admission" and
+          .allowed == false and
+          .totalViolations == 1 and
+          .includedViolations == 1 and
+          .truncated == false
+        )
+      | select(any(.violations[]?;
+          .constraintKind == "K8sRequiredLabels" and
+          .constraintName == $constraint_name and
+          .enforcementAction == "deny"
+        ))
+    )
   ' <<<"${audit_log}" >/dev/null
 }
 
@@ -115,19 +117,21 @@ webhook_admission_audit_annotation_without_violations_matches() {
   local audit_log
   audit_log="$(kube_apiserver_audit_log)" || return 1
 
-  jq -e --arg resource_name "${resource_name}" '
-    select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
-    | .annotations["validation.gatekeeper.sh/evaluation"]?
-    | fromjson?
-    | select(
-        .schemaVersion == "v1" and
-        .eventType == "validation_admission" and
-        .allowed == true and
-        .totalViolations == 0 and
-        .includedViolations == 0 and
-        .truncated == false and
-        (.violations | length) == 0
-      )
+  jq -n -e --arg resource_name "${resource_name}" '
+    any(inputs;
+      select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
+      | .annotations["validation.gatekeeper.sh/evaluation"]?
+      | fromjson?
+      | select(
+          .schemaVersion == "v1" and
+          .eventType == "validation_admission" and
+          .allowed == true and
+          .totalViolations == 0 and
+          .includedViolations == 0 and
+          .truncated == false and
+          (.violations | length) == 0
+        )
+    )
   ' <<<"${audit_log}" >/dev/null
 }
 
@@ -178,21 +182,23 @@ vap_admission_audit_annotations_match() {
   local audit_log
   audit_log="$(kube_apiserver_audit_log)" || return 1
 
-  jq -e \
+  jq -n -e \
     --arg resource_name "${resource_name}" \
     --arg evaluation_key "${evaluation_key}" \
     --arg constraint_name "${constraint_name}" \
     --arg policy_name "${policy_name}" \
     --arg binding_name "${binding_name}" '
-      select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
-      | select(.annotations[$evaluation_key] == "true")
-      | (.annotations["validation.policy.admission.k8s.io/validation_failure"]? | fromjson?) as $failures
-      | select(any($failures[]?;
-          .policy == $policy_name and
-          .binding == $binding_name and
-          (.validationActions | index("Deny")) != null and
-          (.validationActions | index("Audit")) != null
-        ))
+      any(inputs;
+        select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
+        | select(.annotations[$evaluation_key] == "true")
+        | (.annotations["validation.policy.admission.k8s.io/validation_failure"]? | fromjson?) as $failures
+        | select(any($failures[]?;
+            .policy == $policy_name and
+            .binding == $binding_name and
+            (.validationActions | index("Deny")) != null and
+            (.validationActions | index("Audit")) != null
+          ))
+      )
     ' <<<"${audit_log}" >/dev/null
 }
 
@@ -216,11 +222,13 @@ vap_multiple_binding_audit_annotation_matches() {
   local audit_log
   audit_log="$(kube_apiserver_audit_log)" || return 1
 
-  jq -e \
+  jq -n -e \
     --arg resource_name "${resource_name}" \
     --arg evaluation_key "${evaluation_key}" '
-      select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
-      | select(.annotations[$evaluation_key] == "true")
+      any(inputs;
+        select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
+        | select(.annotations[$evaluation_key] == "true")
+      )
     ' <<<"${audit_log}" >/dev/null
 }
 
