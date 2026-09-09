@@ -228,6 +228,9 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 
 // New creates a new manager for audit.
 func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
+	if *exportutil.ExportEnabled && deps.ExportSystem == nil {
+		return nil, errors.New("audit violation export requires an export system")
+	}
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")

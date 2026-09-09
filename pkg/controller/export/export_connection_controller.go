@@ -42,11 +42,14 @@ type Adder struct {
 }
 
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.ExportSystem, *exportutil.AuditConnection, a.GetPod)
-	if r == nil {
+	if !*exportutil.ExportEnabled && !*exportutil.AdmissionExportEnabled {
 		log.Info("Export functionality is disabled, skipping export connection controller setup")
 		return nil
 	}
+	if a.ExportSystem == nil || reflect.ValueOf(a.ExportSystem).IsNil() {
+		return fmt.Errorf("export connection controller requires an export system")
+	}
+	r := newReconciler(mgr, a.ExportSystem, *exportutil.AuditConnection, a.GetPod)
 	return add(mgr, r)
 }
 

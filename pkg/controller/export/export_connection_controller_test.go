@@ -55,6 +55,29 @@ func (c *countingClient) Update(ctx context.Context, obj client.Object, opts ...
 	return c.Client.Update(ctx, obj, opts...)
 }
 
+func TestAdderAddRejectsMissingExportSystemWhenExportEnabled(t *testing.T) {
+	origExport := *exportutil.ExportEnabled
+	defer func() { *exportutil.ExportEnabled = origExport }()
+	*exportutil.ExportEnabled = true
+
+	a := &Adder{ExportSystem: nil}
+	require.Error(t, a.Add(nil))
+}
+
+// TestAdderAddRejectsTypedNilExportSystemWhenExportEnabled guards against the
+// typed-nil interface footgun: main.go injects ExportSystem as a concrete
+// *export.System, so a nil *export.System wrapped in the export.Exporter
+// interface must still be rejected, not just a literal nil interface.
+func TestAdderAddRejectsTypedNilExportSystemWhenExportEnabled(t *testing.T) {
+	origExport := *exportutil.ExportEnabled
+	defer func() { *exportutil.ExportEnabled = origExport }()
+	*exportutil.ExportEnabled = true
+
+	var typedNilSystem *export.System
+	a := &Adder{ExportSystem: typedNilSystem}
+	require.Error(t, a.Add(nil))
+}
+
 func TestUpdateOrCreateConnectionPodStatusSkipsStableSecondUpdate(t *testing.T) {
 	ctx := context.Background()
 	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("status-pod"), fakes.WithUID("status-pod-uid"))
