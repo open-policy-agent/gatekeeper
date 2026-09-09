@@ -2211,7 +2211,7 @@ func TestReconcileStatusUpdateErrorPreservesRequeueBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected status update failure to preserve nil error, got %v", err)
 	}
-	if result != (reconcile.Result{Requeue: true}) {
+	if result != (reconcile.Result{RequeueAfter: requeueDelayOnTransientError}) {
 		t.Fatalf("expected explicit requeue for status update failure, got %v", result)
 	}
 	if trackingClient.statusCreates != 1 || trackingClient.statusUpdates != 1 {

@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/go-logr/logr"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
@@ -42,6 +43,11 @@ import (
 )
 
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "config_status_controller")
+
+// requeueDelayOnTransientError is used in place of the deprecated Result.Requeue, which
+// deferred to the workqueue's rate limiter; a fixed short delay is used instead to retry
+// a transient status update failure without hammering the API server.
+const requeueDelayOnTransientError = time.Second
 
 type Adder struct {
 	WatchManager *watch.Manager
@@ -195,7 +201,7 @@ func (r *ReconcileConfigStatus) Reconcile(ctx context.Context, request reconcile
 	cfg.Status.ByPod = s
 
 	if err := r.statusClient.Status().Update(ctx, cfg); err != nil {
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{RequeueAfter: requeueDelayOnTransientError}, nil
 	}
 	return reconcile.Result{}, nil
 }

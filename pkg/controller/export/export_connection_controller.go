@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"time"
 
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
@@ -34,6 +35,11 @@ import (
 )
 
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
+
+// requeueDelayOnTransientError is used in place of the deprecated Result.Requeue, which
+// deferred to the workqueue's rate limiter; a fixed short delay is used instead to retry
+// a transient connection/status failure without hammering the API server.
+const requeueDelayOnTransientError = time.Second
 
 type Adder struct {
 	ExportSystem export.Exporter
@@ -177,7 +183,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		err := r.system.CloseConnection(request.Name)
 		if err != nil {
 			log.Error(err, "failed to close connection", "name", request.Name)
-			return reconcile.Result{Requeue: true}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
+			return reconcile.Result{RequeueAfter: requeueDelayOnTransientError}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
 		}
 		log.Info("removed connection", "name", request.Name)
 		return reconcile.Result{}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
@@ -191,7 +197,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	err = r.system.UpsertConnection(ctx, connObj.Spec.Config.Value, request.Name, connObj.Spec.Driver)
 	if err != nil {
 		log.Error(err, "failed to upsert connection", "name", request.Name)
-		return reconcile.Result{Requeue: true}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}, nil, r.getPod)
+		return reconcile.Result{RequeueAfter: requeueDelayOnTransientError}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}, nil, r.getPod)
 	}
 
 	log.Info("Connection upsert successful", "name", request.Name, "driver", connObj.Spec.Driver)

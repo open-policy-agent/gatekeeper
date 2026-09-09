@@ -1087,7 +1087,7 @@ func TestReconcileBaseStatusUpdateErrorPreservesRequeueBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected status update failure to preserve nil error, got %v", err)
 	}
-	if result != (reconcile.Result{Requeue: true}) {
+	if result != (reconcile.Result{RequeueAfter: requeueDelayOnTransientError}) {
 		t.Fatalf("expected explicit requeue for base status update failure, got %v", result)
 	}
 	if writer.createAttempts != 1 || writer.updateAttempts != 1 {

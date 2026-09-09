@@ -73,6 +73,11 @@ const (
 	WaitVAPBState                      = "waiting"
 	VAPBGenerationBlocked              = "blocked"
 	VAPBGenerationUnblocked            = "unblocked"
+
+	// requeueDelayOnTransientError is used in place of the deprecated Result.Requeue, which
+	// deferred to the workqueue's rate limiter; a fixed short delay is used instead to retry
+	// a transient status persist failure without hammering the API server.
+	requeueDelayOnTransientError = time.Second
 )
 
 var (
@@ -375,7 +380,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				baseStatusChanged := statusBeforeVAPB != nil && !apiequality.Semantic.DeepEqual(*statusBeforeVAPB, *oldStatus)
 				switch {
 				case baseStatusChanged:
-					result = reconcile.Result{Requeue: true}
+					result = reconcile.Result{RequeueAfter: requeueDelayOnTransientError}
 					reconcileErr = nil
 				case reported:
 					log.Error(persistErr, reportedErr.message, "error", "could not update constraint status")
