@@ -3,12 +3,16 @@ package audit
 import (
 	"container/heap"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path"
 	"reflect"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,8 +41,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	controllerruntimemanager "sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 func Test_SVQueue(t *testing.T) {
@@ -606,6 +612,130 @@ func Test_removeAllFromDir(t *testing.T) {
 			t.Errorf("Expected 0 files when all files have been removed, got %d", len(files))
 		}
 	})
+}
+
+type auditResourcesTestManager struct {
+	controllerruntimemanager.Manager
+	config *rest.Config
+}
+
+func (m *auditResourcesTestManager) GetConfig() *rest.Config {
+	return m.config
+}
+
+type auditResourcesTestClient struct {
+	client.Client
+	cacheDir            string
+	constraintListCalls int
+	resourceListCalls   int
+}
+
+func (c *auditResourcesTestClient) List(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+	switch list.GetObjectKind().GroupVersionKind().Kind {
+	case "ConfigMapList":
+		c.resourceListCalls++
+		return nil
+	case "K8sRequiredLabelsList":
+		c.constraintListCalls++
+	default:
+		return fmt.Errorf("unexpected list GVK %s", list.GetObjectKind().GroupVersionKind())
+	}
+
+	constraintList, ok := list.(*unstructured.UnstructuredList)
+	if !ok {
+		return fmt.Errorf("unexpected list type %T", list)
+	}
+	constraintList.Items = []unstructured.Unstructured{{Object: map[string]interface{}{
+		"spec": map[string]interface{}{
+			"match": map[string]interface{}{
+				"kinds": []interface{}{
+					map[string]interface{}{"kinds": []interface{}{"Pod"}},
+				},
+			},
+		},
+	}}}
+
+	sentinelDir := path.Join(c.cacheDir, "sentinel")
+	if err := os.Mkdir(sentinelDir, 0o750); err != nil {
+		return err
+	}
+	return os.WriteFile(path.Join(sentinelDir, auditObjectsFile), []byte("[]"), 0o600)
+}
+
+func TestAuditResourcesSkipsUnmatchedKindBeforeCleanup(t *testing.T) {
+	oldAPICacheDir := *apiCacheDir
+	oldAuditMatchKindOnly := *auditMatchKindOnly
+	t.Cleanup(func() {
+		*apiCacheDir = oldAPICacheDir
+		*auditMatchKindOnly = oldAuditMatchKindOnly
+	})
+
+	cacheDir := t.TempDir()
+	*apiCacheDir = cacheDir
+	*auditMatchKindOnly = true
+
+	var coreResourcesDiscovered atomic.Bool
+	discoveryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var response interface{}
+		switch r.URL.Path {
+		case "/api":
+			response = metav1.APIVersions{
+				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "APIVersions"},
+				Versions: []string{"v1"},
+			}
+		case "/api/v1":
+			coreResourcesDiscovered.Store(true)
+			response = metav1.APIResourceList{
+				GroupVersion: "v1",
+				APIResources: []metav1.APIResource{{
+					Name:       "configmaps",
+					Namespaced: true,
+					Kind:       "ConfigMap",
+					Verbs:      metav1.Verbs{"list"},
+				}},
+			}
+		case "/apis":
+			response = metav1.APIGroupList{
+				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "APIGroupList"},
+			}
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Errorf("encoding discovery response: %v", err)
+		}
+	}))
+	t.Cleanup(discoveryServer.Close)
+
+	testClient := &auditResourcesTestClient{
+		Client:   fake.NewClientBuilder().Build(),
+		cacheDir: cacheDir,
+	}
+	am := &Manager{
+		client: testClient,
+		mgr: &auditResourcesTestManager{
+			config: &rest.Config{Host: discoveryServer.URL},
+		},
+		log: logr.Discard(),
+	}
+
+	err := am.auditResources(
+		context.Background(),
+		[]schema.GroupVersionKind{{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabelsList"}},
+		map[util.KindVersionName]*LimitQueue{},
+		map[util.KindVersionName]int64{},
+		map[util.EnforcementAction]int64{},
+		"test-timestamp",
+		&auditExportPublishingState{Errors: map[string]error{}},
+	)
+	require.NoError(t, err)
+	require.True(t, coreResourcesDiscovered.Load(), "core resources were not discovered")
+	require.Equal(t, 1, testClient.constraintListCalls)
+	require.Zero(t, testClient.resourceListCalls, "resource List called for unmatched ConfigMap")
+	_, err = os.Stat(path.Join(cacheDir, "sentinel", auditObjectsFile))
+	require.NoError(t, err, "cache cleanup ran for unmatched ConfigMap")
 }
 
 func Test_readUnstructured(t *testing.T) {
