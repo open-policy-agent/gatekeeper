@@ -532,7 +532,7 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 		// Call Reconcile directly to assert the behavior on failures without having controller go through requeues
 		result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeConnectionNamespacedName})
 		// The system upsert error causes a requeue but the error doesn't get returned only the status update errors do
-		g.Expect(result.Requeue).Should(gomega.Equal(true), "Reconcile should requeue after an error") // nolint:staticcheck
+		g.Expect(result.RequeueAfter).Should(gomega.Equal(requeueDelayOnTransientError), "Reconcile should requeue after an error")
 		g.Expect(err).Should(gomega.BeNil(), "Reconcile should not return an error on initial creation")
 
 		// Assert the ConnectionPodStatus - Errors should be present after unsuccessful upsert
@@ -568,7 +568,7 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 		reconciler.system = fakeExportSystem
 		result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeConnectionNamespacedName})
 		// The system connection error causes a requeue but the error doesn't get returned only the status update errors do
-		g.Expect(result.Requeue).Should(gomega.Equal(true), "Reconcile should requeue after an error") // nolint:staticcheck
+		g.Expect(result.RequeueAfter).Should(gomega.Equal(requeueDelayOnTransientError), "Reconcile should requeue after an error")
 		g.Expect(err).Should(gomega.BeNil(), "Reconcile should not return an error on initial creation")
 		g.Expect(fakeExportSystem.UpsertConnectionCalledCount).Should(gomega.Equal(0), "UpsertConnection count")
 		g.Expect(fakeExportSystem.CloseConnectionCalledCount).Should(gomega.Equal(1), "CloseConnection count")
