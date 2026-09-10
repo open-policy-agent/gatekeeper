@@ -25,9 +25,27 @@ import (
 const (
 	defaultAdmissionExportQueueSize = 1024
 	defaultAdmissionExportBatchSize = 64
-	// Bound the complete encoded record, not only the violation message. 64 KiB
-	// leaves room for normal policy and request metadata while preventing one
-	// user-influenced result from consuming a disproportionate share of the queue.
+	// Bound the complete encoded record, not only the violation message.
+	//
+	// A typical record encodes to roughly 1.7 KiB: violation messages in
+	// community policy libraries top out near 350 bytes, and the surrounding
+	// envelope of constraint identity, request identity, resource labels, and
+	// annotations accounts for the rest. 64 KiB therefore accepts a normal
+	// record with roughly thirty times headroom, so the limit is not reached by
+	// message content alone.
+	//
+	// The headroom exists for the fields this package cannot bound. Constraint
+	// annotations, resource labels, request user groups, and policy-provided
+	// details are copied through verbatim, and Kubernetes permits far more
+	// annotation data on a single object than a record may occupy. Truncating
+	// those fields would silently misreport a violation, so an oversized record
+	// is dropped whole and counted under admissionExportDropReasonMessageTooLarge.
+	// Keeping the bound well above ordinary records makes that outcome a signal
+	// of unusual metadata rather than routine policy output.
+	//
+	// The limit also protects the layers downstream: it caps how much of the
+	// queue byte budget one result can reserve, and it stays below the disk
+	// driver's per-segment size so a single record can always be written.
 	defaultAdmissionExportMaxMessageBytes = 64 * 1024
 	defaultAdmissionExportMaxQueueBytes   = 16 * 1024 * 1024
 	defaultAdmissionExportStatusInterval  = 10 * time.Second

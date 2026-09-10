@@ -156,9 +156,35 @@ Admission export limits are fixed while the feature is alpha and apply independe
 | Disk spool | Maximum completed-segment age | 24 hours |
 | Filesystem | Free-space reserve | 16 MiB |
 
-The 64 KiB record limit applies to the entire JSON object after encoding, not only to the violation message. JSON field names and escaping, policy-provided details, constraint annotations, resource labels, and request identity all count toward the limit. KiB measures bytes, so the number of characters that fit varies with UTF-8 and JSON escaping. The limit leaves room for normal policy and request metadata while preventing one user-influenced result from consuming a disproportionate share of the queue and disk spool. The `kubectl.kubernetes.io/last-applied-configuration` constraint annotation is omitted, but other annotations still count. An oversized record is dropped before enqueue and reported with drop reason `message_too_large`.
+#### Understanding the 64 KiB record limit
+
+The 64 KiB limit applies to the **entire JSON object after encoding**, not only to the violation message. Everything in the record counts: JSON field names and escaping, the constraint identity, policy-provided `details`, constraint annotations, resource labels, and request identity. Because KiB measures bytes, the number of characters that fit varies with UTF-8 and JSON escaping — roughly 64,000 ASCII characters, but only about half that for escape-heavy content and about a quarter for CJK or emoji. Gatekeeper accounts for escaping exactly when it measures a record, so a string of quotes, control characters, or `<`, `>`, and `&` consumes more budget than its raw length suggests.
+
+In practice a violation record encodes to **around 1.7 KiB**, so the limit is far from ordinary output. Violation messages are not the constraining factor: messages produced by community policy libraries are typically 60–110 bytes and rarely exceed 350 bytes even when a policy interpolates an entire allow-list into the message. The remaining space is the envelope described below.
+
+The headroom exists because several record fields are copied through verbatim from the cluster and cannot be bounded by Gatekeeper:
+
+| Field | Source | Practical ceiling |
+|---|---|---|
+| `constraintAnnotations` | Annotations on the constraint | Kubernetes allows up to 256 KiB of annotations per object, which exceeds the record limit |
+| `resourceLabels` | Labels on the reviewed object | Kubernetes caps each label value at 63 characters but does not cap the number of labels |
+| `requestUserGroups` | The requesting user's group memberships | No practical cap |
+| `details` | Returned by the policy itself | Determined by the policy author |
+
+A record therefore exceeds 64 KiB only when one of these carries unusual volume — for example a constraint annotated by GitOps or policy-management tooling with tens of kilobytes of metadata, or an object bearing several hundred labels. The `kubectl.kubernetes.io/last-applied-configuration` constraint annotation is the most common large annotation and is omitted for this reason; all other annotations still count.
+
+An oversized record is **dropped whole** before enqueue and reported with drop reason `message_too_large`. Gatekeeper does not truncate the record, because a partially serialized violation would misreport what was denied. Two consequences are worth planning for:
+
+- The condition is **systematic, not occasional**. If a constraint's annotations push its records past the limit, *every* violation from that constraint is dropped for as long as the annotations remain, not just an occasional large one.
+- The condition is **silent apart from telemetry**. Drops are visible only in the admission export metrics and in a rate-limited log line. Alert on the `message_too_large` drop reason if a complete violation record is required.
+
+If you observe `message_too_large` drops, inspect the annotations on the constraint and the labels on the objects being reviewed rather than the violation message.
+
+#### Segment rotation and spool retention
 
 Segment rotation occurs when any byte, record-count, or age limit is reached. The spool limits bound unconsumed backlog; they do not guarantee that records remain available for 24 hours. Cleanup removes the oldest completed segments until the count, byte, and age limits all hold, so count or byte pressure can remove a segment long before its maximum age. When one-minute age rotation is the limiting factor, 20 completed segments provide roughly 20 minutes of backlog; higher volume can rotate segments sooner. A reader must therefore drain segments fast enough for the workload.
+
+At sustained volume the 24-hour age limit is effectively unreachable: once the workload produces more than about ten records per minute, the 20-segment count limit evicts segments first. Treat the spool as a short buffer sized in minutes, not as a day of history. Segments removed before a reader consumes them are not reported in `ConnectionPodStatus`; use the admission export metrics to detect a reader that has fallen behind.
 
 The demonstration admission reader logs each record and deletes its completed segment after a successful read. It demonstrates consumption and is not a retention archive. Retain exported records in the downstream system when longer history is required.
 
@@ -167,13 +193,13 @@ The demonstration admission reader logs each record and deletes its completed se
 Admission export is best-effort. Backend publishing does not delay or change the admission response:
 
 - Each controller-manager pod has an asynchronous queue limited to 1,024 messages, including records being constructed, and 16 MiB of encoded data.
-- A complete encoded JSON record is limited to 64 KiB.
+- A complete encoded JSON record is limited to 64 KiB, measured after encoding and including all metadata.
 - The webhook reserves count capacity before constructing a record. The publisher drains up to 64 records that are already queued without waiting to fill a batch.
 - Messages are dropped when encoding fails or an enqueue limit is reached. A failed publish is not retried.
 - During graceful termination, messages still in the queue are drained for up to five seconds. Messages still queued after that deadline are dropped and reported with the `shutdown` reason.
 - A batch already removed from the queue when termination begins is not requeued. Gatekeeper stops waiting when its publish context is canceled; a backend call that ignores cancellation may finish later, but its result is not used and the process may exit first.
 - `SIGKILL`, OOM termination, and node failure do not run the drain. Queued and in-flight records are then lost. Complete disk records already written and synced can be recovered only if the volume survives; the default `emptyDir` survives a container restart but not pod deletion or replacement.
-- Repeated drop and publish-error logs are limited to one per minute for each class; use the admission export metrics to detect sustained loss.
+- Repeated logs are rate-limited to one per minute for drops and one per minute for publish errors. All drop reasons share a single limiter, so a burst of one reason can suppress the log line for another within the same minute. Use the admission export metrics, which count every drop by reason, to detect sustained loss.
 - Webhook publish status is reported outside the queue publisher. Errors and health transitions are checked every 10 seconds, while unchanged healthy traffic is coalesced to a one-minute heartbeat. Audit updates only the `audit` entry at the end of each run.
 - A source with no new publish attempts leaves its previous entry unchanged. A later successful reporting window clears only that source's errors; use `lastAttemptTime` and `lastSuccessTime` to evaluate freshness.
 
