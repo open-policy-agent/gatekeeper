@@ -1,15 +1,11 @@
 package expansion
 
 import (
-	"fmt"
-
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 )
 
 const (
-	childMsgPrefix = "[Implied by %s]"
-
 	ChildStatLabel = "Implied by"
 )
 
@@ -34,10 +30,10 @@ func AggregateStats(templateName string, parent *types.Responses, child *types.R
 	childStatsEntries := child.StatsEntries
 
 	for _, se := range childStatsEntries {
-		se.Labels = append(se.Labels, []*instrumentation.Label{{
+		se.Labels = append(se.Labels, &instrumentation.Label{
 			Name:  ChildStatLabel,
 			Value: templateName,
-		}}...)
+		})
 	}
 
 	parent.StatsEntries = append(parent.StatsEntries, child.StatsEntries...)
@@ -57,7 +53,8 @@ func OverrideEnforcementAction(action string, resps *types.Responses) {
 }
 
 func addPrefixToChildMsgs(templateName string, res *types.Response) {
+	prefix := "[Implied by " + templateName + "] "
 	for _, r := range res.Results {
-		r.Msg = fmt.Sprintf("%s %s", fmt.Sprintf(childMsgPrefix, templateName), r.Msg)
+		r.Msg = prefix + r.Msg
 	}
 }

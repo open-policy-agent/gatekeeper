@@ -27,30 +27,92 @@ type Matchable struct {
 	Source    types.SourceType
 }
 
+// CompiledMatch holds immutable match criteria with parsed selectors for repeated matching.
+// +kubebuilder:object:generate=false
+type CompiledMatch struct {
+	match                *Match
+	labelSelector        labels.Selector
+	namespaceSelector    labels.Selector
+	hasLabelSelector     bool
+	hasNamespaceSelector bool
+}
+
+// Compile parses selector criteria once so a match can be reused on hot paths.
+func Compile(match *Match) (*CompiledMatch, error) {
+	return compileMatch(match, true)
+}
+
+func compileMatch(match *Match, snapshot bool) (*CompiledMatch, error) {
+	if match == nil {
+		match = &Match{}
+	}
+	if snapshot {
+		match = match.DeepCopy()
+	}
+
+	compiled := &CompiledMatch{match: match}
+	if match.LabelSelector != nil {
+		selector, err := metav1.LabelSelectorAsSelector(match.LabelSelector)
+		if err != nil {
+			return nil, err
+		}
+		compiled.labelSelector = selector
+		compiled.hasLabelSelector = true
+	}
+	if match.NamespaceSelector != nil {
+		selector, err := metav1.LabelSelectorAsSelector(match.NamespaceSelector)
+		if err != nil {
+			return nil, err
+		}
+		compiled.namespaceSelector = selector
+		compiled.hasNamespaceSelector = true
+	}
+
+	return compiled, nil
+}
+
 // Matches verifies if the given object belonging to the given namespace
 // matches Match. Only returns true if all parts of the Match succeed.
 func Matches(match *Match, target *Matchable) (bool, error) {
-	if reflect.ValueOf(target.Object).IsNil() {
+	if err := validateTarget(target); err != nil {
+		return false, err
+	}
+	compiled, err := compileMatch(match, false)
+	if err != nil {
+		return false, fmt.Errorf("%w: %w", ErrMatch, err)
+	}
+	return compiled.Matches(target)
+}
+
+func validateTarget(target *Matchable) error {
+	if target == nil || reflect.ValueOf(target.Object).IsNil() {
 		// Simply checking if obj == nil is insufficient here.
 		// obj can be an interface pointer to nil, such as client.Object(nil), which
 		// is not equal to just "nil".
-		return false, fmt.Errorf("%w: obj must be non-nil", ErrMatch)
+		return fmt.Errorf("%w: obj must be non-nil", ErrMatch)
+	}
+	return nil
+}
+
+func (m *CompiledMatch) Matches(target *Matchable) (bool, error) {
+	if err := validateTarget(target); err != nil {
+		return false, err
 	}
 
 	// We fail the match if any of these returns false.
-	topLevelMatchers := []matchFunc{
-		kindsMatch,
-		scopeMatch,
-		namespacesMatch,
-		excludedNamespacesMatch,
-		labelSelectorMatch,
-		namespaceSelectorMatch,
-		namesMatch,
-		sourceMatch,
+	topLevelMatchers := []compiledMatchFunc{
+		compiledKindsMatch,
+		compiledScopeMatch,
+		compiledNamespacesMatch,
+		compiledExcludedNamespacesMatch,
+		compiledLabelSelectorMatch,
+		compiledNamespaceSelectorMatch,
+		compiledNamesMatch,
+		compiledSourceMatch,
 	}
 
 	for _, fn := range topLevelMatchers {
-		matches, err := fn(match, target)
+		matches, err := fn(m, target)
 		if err != nil {
 			return false, fmt.Errorf("%w: %w", ErrMatch, err)
 		}
@@ -64,17 +126,43 @@ func Matches(match *Match, target *Matchable) (bool, error) {
 	return true, nil
 }
 
-// matchFunc defines the matching logic of a Top Level Matcher.  A TLM receives the match criteria,
-// an object, and the namespace of the object and decides if there is a reason why the object does
-// not match.  If the TLM associated with the matching function is not defined by the user, the
-// matchFunc should return true.
-type matchFunc func(match *Match, target *Matchable) (bool, error)
+// compiledMatchFunc defines the matching logic of a Top Level Matcher. A TLM receives
+// compiled match criteria, an object, and the namespace of the object and decides if
+// there is a reason why the object does not match. If the TLM associated with the
+// matching function is not defined by the user, the compiledMatchFunc should return true.
+type (
+	compiledMatchFunc func(match *CompiledMatch, target *Matchable) (bool, error)
+)
 
-func namespaceSelectorMatch(match *Match, target *Matchable) (bool, error) {
+func compiledKindsMatch(match *CompiledMatch, target *Matchable) (bool, error) {
+	return kindsMatch(match.match, target)
+}
+
+func compiledScopeMatch(match *CompiledMatch, target *Matchable) (bool, error) {
+	return scopeMatch(match.match, target)
+}
+
+func compiledNamespacesMatch(match *CompiledMatch, target *Matchable) (bool, error) {
+	return namespacesMatch(match.match, target)
+}
+
+func compiledExcludedNamespacesMatch(match *CompiledMatch, target *Matchable) (bool, error) {
+	return excludedNamespacesMatch(match.match, target)
+}
+
+func compiledNamesMatch(match *CompiledMatch, target *Matchable) (bool, error) {
+	return namesMatch(match.match, target)
+}
+
+func compiledSourceMatch(match *CompiledMatch, target *Matchable) (bool, error) {
+	return sourceMatch(match.match, target)
+}
+
+func compiledNamespaceSelectorMatch(match *CompiledMatch, target *Matchable) (bool, error) {
 	obj := target.Object
 	ns := target.Namespace
 
-	if match.NamespaceSelector == nil {
+	if !match.hasNamespaceSelector {
 		return true, nil
 	}
 
@@ -84,35 +172,25 @@ func namespaceSelectorMatch(match *Match, target *Matchable) (bool, error) {
 		return true, nil
 	}
 
-	selector, err := metav1.LabelSelectorAsSelector(match.NamespaceSelector)
-	if err != nil {
-		return false, err
-	}
-
 	if isNamespace {
-		return selector.Matches(labels.Set(obj.GetLabels())), nil
+		return match.namespaceSelector.Matches(labels.Set(obj.GetLabels())), nil
 	}
 
 	if ns == nil {
 		return false, fmt.Errorf("namespace selector for namespace-scoped object but missing Namespace")
 	}
 
-	return selector.Matches(labels.Set(ns.Labels)), nil
+	return match.namespaceSelector.Matches(labels.Set(ns.Labels)), nil
 }
 
-func labelSelectorMatch(match *Match, target *Matchable) (bool, error) {
+func compiledLabelSelectorMatch(match *CompiledMatch, target *Matchable) (bool, error) {
 	obj := target.Object
 
-	if match.LabelSelector == nil {
+	if !match.hasLabelSelector {
 		return true, nil
 	}
 
-	selector, err := metav1.LabelSelectorAsSelector(match.LabelSelector)
-	if err != nil {
-		return false, err
-	}
-
-	return selector.Matches(labels.Set(obj.GetLabels())), nil
+	return match.labelSelector.Matches(labels.Set(obj.GetLabels())), nil
 }
 
 func excludedNamespacesMatch(match *Match, target *Matchable) (bool, error) {
