@@ -177,7 +177,9 @@ func BenchmarkAuditSkippedKindAvoidsCacheCleanup(b *testing.B) {
 		root := b.TempDir()
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
+			b.StopTimer()
 			populateAuditCacheDirs(b, root, staleDirs)
+			b.StartTimer()
 			if err := am.removeAllFromDir(root, *auditChunkSize); err != nil {
 				b.Fatal(err)
 			}

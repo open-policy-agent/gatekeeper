@@ -105,10 +105,12 @@ func BenchmarkModifySetSetterSetValueScale(b *testing.B) {
 		})
 
 		b.Run(fmt.Sprintf("merge-missing/list-%d", listSize), func(b *testing.B) {
-			obj := map[string]interface{}{"field": benchmarkModifySetList(listSize)}
 			s := setter{values: []interface{}{"missing-value"}, op: unversioned.MergeOp}
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				obj := map[string]interface{}{"field": benchmarkModifySetList(listSize)}
+				b.StartTimer()
 				if err := s.SetValue(obj, "field"); err != nil {
 					b.Fatal(err)
 				}
