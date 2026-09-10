@@ -92,7 +92,6 @@ spec:
         {{ if hasKey .Values.audit "channel" }}
         - --audit-channel={{ .Values.audit.channel }}
         {{- end }}
-        {{ if hasKey .Values "syncVAPEnforcementScope" }}- --sync-vap-enforcement-scope={{ .Values.syncVAPEnforcementScope }}{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}
         - --logtostderr
         - --health-addr=:{{ .Values.audit.healthPort }}
