@@ -3,7 +3,6 @@ package expansion
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"testing"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
@@ -48,17 +48,8 @@ func TestAdd_RequiresExpansionConsumerOperation(t *testing.T) {
 		t.Fatal("expected expansion to be enabled by default for this test")
 	}
 
-	if err := flag.Set("operation", "status"); err != nil {
-		t.Fatalf("setting operation flag: %v", err)
-	}
-	t.Cleanup(func() {
-		// Set is additive once the flag has been set explicitly once, so this
-		// only needs to add back the operations this test didn't assign; the
-		// "status" set above remains and combines with these into the default.
-		if err := flag.Set("operation", "audit,generate,mutation-controller,mutation-status,mutation-webhook,webhook"); err != nil {
-			t.Fatalf("restoring operation flag: %v", err)
-		}
-	})
+	restore := operations.AssignForTest(operations.Status)
+	defer restore()
 
 	a := &Adder{}
 	if err := a.Add(nil); err != nil {
