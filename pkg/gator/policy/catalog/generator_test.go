@@ -452,6 +452,115 @@ spec:
 	}
 }
 
+func TestParsePolicyFromTemplate_K8sVersionAnnotations(t *testing.T) {
+	tempDir := t.TempDir()
+
+	libraryDir := filepath.Join(tempDir, "library")
+	generalDir := filepath.Join(libraryDir, "general")
+	policyDir := filepath.Join(generalDir, "versionedpolicy")
+	if err := os.MkdirAll(policyDir, 0o755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		annotations string
+		wantMin     string
+	}{
+		{
+			name:        "min set",
+			annotations: `    metadata.gatekeeper.sh/minKubernetesVersion: "v1.21.0"`,
+			wantMin:     "v1.21.0",
+		},
+		{
+			name:        "min set without v prefix is normalized",
+			annotations: `    metadata.gatekeeper.sh/minKubernetesVersion: "1.25.0"`,
+			wantMin:     "v1.25.0",
+		},
+		{
+			name:        "no k8s version annotations",
+			annotations: "",
+			wantMin:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			templateContent := `apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sversionedpolicy
+  annotations:
+    description: "A versioned test policy"
+    metadata.gatekeeper.sh/version: "1.0.0"
+` + tt.annotations + `
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sVersionedPolicy
+`
+			templatePath := filepath.Join(policyDir, "template.yaml")
+			if err := os.WriteFile(templatePath, []byte(templateContent), 0o600); err != nil {
+				t.Fatalf("Failed to write template: %v", err)
+			}
+
+			policy, err := parsePolicyFromTemplate(templatePath, tempDir)
+			if err != nil {
+				t.Fatalf("parsePolicyFromTemplate failed: %v", err)
+			}
+
+			if policy.MinKubernetesVersion != tt.wantMin {
+				t.Errorf("MinKubernetesVersion: got %q, want %q", policy.MinKubernetesVersion, tt.wantMin)
+			}
+		})
+	}
+}
+
+func TestValidateCatalogSchema_K8sVersions(t *testing.T) {
+	baseCatalog := func(minVer string) *PolicyCatalog {
+		return &PolicyCatalog{
+			APIVersion: "gator.gatekeeper.sh/v1alpha1",
+			Kind:       "PolicyCatalog",
+			Metadata: CatalogMetadata{
+				Name:    "test",
+				Version: "v1.0.0",
+			},
+			Policies: []Policy{
+				{
+					Name:                 "test-policy",
+					Version:              "v1.0.0",
+					TemplatePath:         "library/general/test/template.yaml",
+					MinKubernetesVersion: minVer,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name        string
+		minVer      string
+		expectError bool
+	}{
+		{"valid min", "v1.21.0", false},
+		{"no min", "", false},
+		{"two-component min accepted", "1.21", false},
+		{"invalid min", "notaversion", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateCatalogSchema(baseCatalog(tt.minVer))
+			if tt.expectError && err == nil {
+				t.Error("Expected error, got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestConvertPathsToURLs(t *testing.T) {
 	catalog := &PolicyCatalog{
 		Policies: []Policy{
@@ -722,10 +831,18 @@ func TestIsValidVersion(t *testing.T) {
 		{"v1.2.3-alpha", true},
 		{"v1.2.3+build", true},
 		{"v1.2.3-alpha+build", true},
+		// Policy versions are strict semver: exactly three components are
+		// required. Looser forms accepted by minKubernetesVersion
+		// (version.ParseGeneric) are rejected here.
+		{"v1.0", false},
+		{"1.30", false},
+		{"v1", false},
 		{"", false},
 		{"latest", false},
-		{"v1", false},
-		{"v1.0", false},
+		// Four or more numeric components are not valid semver.
+		{"1.2.3.4", false},
+		{"v1.2.3.4.5", false},
+		{"1.2.3.4-alpha", false},
 	}
 
 	for _, tt := range tests {
@@ -735,6 +852,73 @@ func TestIsValidVersion(t *testing.T) {
 				t.Errorf("isValidVersion(%q) = %v, want %v", tt.version, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestK8sVersionMeetsMinimum(t *testing.T) {
+	tests := []struct {
+		name            string
+		serverVersion   string
+		minVer          string
+		want            bool
+		wantErr         bool
+		wantErrContains string
+	}{
+		{"no minimum always compatible", "v1.10.0", "", true, false, ""},
+		{"above min", "v1.25.0", "v1.21.0", true, false, ""},
+		{"equal to min", "v1.21.0", "v1.21.0", true, false, ""},
+		{"below min", "v1.20.9", "v1.21.0", false, false, ""},
+		{"two-component min", "v1.25.0", "1.21", true, false, ""},
+		{"two-component min below", "v1.20.0", "1.21", false, false, ""},
+		// Distro suffixes must not affect the comparison: 1.28.3-eks.x is treated
+		// as 1.28.3 and compared numerically against the minimum.
+		{"distro suffix above min", "v1.28.3-eks.5", "v1.21.0", true, false, ""},
+		// A distro build of exactly the min must still count as >= min: the
+		// suffix is uninterpreted extra data, not a semver pre-release that would
+		// rank below the release.
+		{"distro suffix equal to min", "v1.21.0-gke.100", "v1.21.0", true, false, ""},
+		{"distro suffix below min", "v1.20.9-gke.100", "v1.21.0", false, false, ""},
+		// An unparseable server version is only inspected when there is a minimum
+		// to compare against; with no minimum the version is never parsed.
+		{"invalid server version ignored when no minimum", "notaversion", "", true, false, ""},
+		{"invalid server version", "notaversion", "v1.21.0", false, true, "parsing server version"},
+		{"invalid min", "v1.25.0", "bogus", false, true, "parsing minKubernetesVersion"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := K8sVersionMeetsMinimum(tt.serverVersion, tt.minVer)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.wantErrContains) {
+					t.Errorf("K8sVersionMeetsMinimum(%q, %q) error = %q, want substring %q", tt.serverVersion, tt.minVer, err.Error(), tt.wantErrContains)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("K8sVersionMeetsMinimum(%q, %q) = %v, want %v", tt.serverVersion, tt.minVer, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatMinK8sVersion(t *testing.T) {
+	tests := []struct {
+		minVer string
+		want   string
+	}{
+		{"v1.21.0", ">=v1.21.0"},
+		{"", "-"},
+	}
+	for _, tt := range tests {
+		if got := FormatMinK8sVersion(tt.minVer); got != tt.want {
+			t.Errorf("FormatMinK8sVersion(%q) = %q, want %q", tt.minVer, got, tt.want)
+		}
 	}
 }
 

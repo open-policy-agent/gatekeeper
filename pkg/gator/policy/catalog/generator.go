@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/version"
 	"sigs.k8s.io/yaml"
 )
 
@@ -153,11 +154,7 @@ func parsePolicyFromTemplate(templatePath, libraryRoot string) (*Policy, error) 
 	// The gatekeeper-library uses metadata.gatekeeper.sh/version annotation
 	version := "v1.0.0"
 	if v, ok := template.Metadata.Annotations["metadata.gatekeeper.sh/version"]; ok {
-		// Normalize version to have v prefix
-		if !strings.HasPrefix(v, "v") {
-			v = "v" + v
-		}
-		version = v
+		version = normalizeVersion(v)
 	}
 
 	// Get description from annotations
@@ -187,6 +184,11 @@ func parsePolicyFromTemplate(templatePath, libraryRoot string) (*Policy, error) 
 		}
 	}
 
+	// Get the minimum Kubernetes version from the annotation. A policy is bounded
+	// only when it carries this annotation; its absence leaves the bound empty
+	// (compatible with every cluster).
+	minK8sVersion := normalizeVersion(template.Metadata.Annotations["metadata.gatekeeper.sh/minKubernetesVersion"])
+
 	// Build BundleConstraints by discovering per-bundle constraint files.
 	// The library convention is that sample directories with names containing
 	// a bundle keyword (e.g., "baseline", "restricted") provide bundle-specific
@@ -195,14 +197,15 @@ func parsePolicyFromTemplate(templatePath, libraryRoot string) (*Policy, error) 
 	bundleConstraints := findBundleConstraints(templateDir, libraryRoot, bundles)
 
 	policy := &Policy{
-		Name:              template.Metadata.Name,
-		Version:           version,
-		Description:       description,
-		Category:          category,
-		TemplatePath:      relPath,
-		BundleConstraints: bundleConstraints,
-		DocumentationURL:  docURL,
-		Bundles:           bundles,
+		Name:                 template.Metadata.Name,
+		Version:              version,
+		Description:          description,
+		Category:             category,
+		TemplatePath:         relPath,
+		BundleConstraints:    bundleConstraints,
+		DocumentationURL:     docURL,
+		Bundles:              bundles,
+		MinKubernetesVersion: minK8sVersion,
 	}
 
 	return policy, nil
@@ -257,13 +260,9 @@ func findBundleConstraints(templateDir, libraryRoot string, bundles []string) ma
 			continue
 		}
 		dirPath := filepath.Join(samplesDir, entry.Name())
-		constraintFile := filepath.Join(dirPath, "constraint.yaml")
-		if _, statErr := os.Stat(constraintFile); statErr != nil {
-			// Try .yml extension
-			constraintFile = filepath.Join(dirPath, "constraint.yml")
-			if _, statErr = os.Stat(constraintFile); statErr != nil {
-				continue
-			}
+		constraintFile := findConstraintFile(dirPath)
+		if constraintFile == "" {
+			continue
 		}
 
 		data, readErr := os.ReadFile(constraintFile)
@@ -315,6 +314,20 @@ func findBundleConstraints(templateDir, libraryRoot string, bundles []string) ma
 	}
 
 	return result
+}
+
+// findConstraintFile returns the path to the constraint file in dir, or "" if
+// none exists.
+func findConstraintFile(dir string) string {
+	// constraintFilenames are the file names a sample constraint may use.
+	constraintFilenames := []string{"constraint.yaml", "constraint.yml"}
+	for _, name := range constraintFilenames {
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
 }
 
 // isConstraintFile checks if the YAML content is a Constraint.
@@ -426,6 +439,9 @@ func ValidateCatalogSchema(catalog *PolicyCatalog) error {
 		if !isValidVersion(policy.Version) {
 			return fmt.Errorf("policy %s has invalid version: %s", policy.Name, policy.Version)
 		}
+		if err := ValidatePolicyVersionBounds(policy); err != nil {
+			return err
+		}
 	}
 
 	// Validate bundles reference existing policies
@@ -443,15 +459,78 @@ func ValidateCatalogSchema(catalog *PolicyCatalog) error {
 	return nil
 }
 
+func normalizeVersion(v string) string {
+	if v != "" && !strings.HasPrefix(v, "v") {
+		return "v" + v
+	}
+	return v
+}
+
 // semverPattern is a compiled regex for validating semantic version strings.
 var semverPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$`)
 
-// isValidVersion checks if a version string is valid semver format.
-func isValidVersion(version string) bool {
-	if version == "" {
+// isValidVersion checks if a version string is valid semver format. Policy
+// versions are semantic versions (see Policy.Version), a stricter contract than
+// the minKubernetesVersion bound, which uses version.ParseGeneric and accepts
+// looser two- and four-component forms.
+func isValidVersion(v string) bool {
+	if v == "" {
 		return false
 	}
-	return semverPattern.MatchString(version)
+	return semverPattern.MatchString(v)
+}
+
+// ValidateK8sVersion reports an error if v is not a parseable Kubernetes
+// version. It lets a caller validate a cluster version once, up front, instead
+// of surfacing the same parse failure separately for every policy.
+func ValidateK8sVersion(v string) error {
+	if _, err := version.ParseGeneric(v); err != nil {
+		return fmt.Errorf("parsing cluster Kubernetes version %q: %w", v, err)
+	}
+	return nil
+}
+
+// ValidatePolicyVersionBounds validates a policy's minKubernetesVersion: that
+// it parses as a Kubernetes version (if set). An unparseable bound is invalid
+// policy metadata regardless of the cluster's actual version, so callers
+// (including the install/upgrade compatibility gate) must run it
+// unconditionally, never gated behind --force.
+func ValidatePolicyVersionBounds(policy *Policy) error {
+	if policy.MinKubernetesVersion != "" {
+		if _, err := version.ParseGeneric(policy.MinKubernetesVersion); err != nil {
+			return fmt.Errorf("policy %s has invalid minKubernetesVersion: %s", policy.Name, policy.MinKubernetesVersion)
+		}
+	}
+	return nil
+}
+
+// K8sVersionMeetsMinimum reports whether serverVersion is at or above minVersion.
+// An empty minVersion means the policy has no floor and is compatible with every
+// cluster. Distro suffixes on the server version are ignored. An unparseable
+// bound is returned as an error so callers can fail the affected policy rather
+// than silently treat it as compatible.
+func K8sVersionMeetsMinimum(serverVersion, minVersion string) (bool, error) {
+	if minVersion == "" {
+		return true, nil
+	}
+	sv, err := version.ParseGeneric(serverVersion)
+	if err != nil {
+		return false, fmt.Errorf("parsing server version %q: %w", serverVersion, err)
+	}
+	mv, err := version.ParseGeneric(minVersion)
+	if err != nil {
+		return false, fmt.Errorf("parsing minKubernetesVersion %q: %w", minVersion, err)
+	}
+	return !sv.LessThan(mv), nil
+}
+
+// FormatMinK8sVersion renders a minKubernetesVersion bound as a human-readable
+// supported-range string (">=min"), returning "-" when no minimum is set.
+func FormatMinK8sVersion(minVersion string) string {
+	if minVersion != "" {
+		return ">=" + minVersion
+	}
+	return "-"
 }
 
 // generatePSSBundles auto-generates bundles from policy annotations.
