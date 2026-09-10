@@ -603,6 +603,107 @@ func TestSystem_resolvePlaceholders_providerResponseCachePartialHitProviderError
 	}
 }
 
+func TestSystem_resolvePlaceholders_preservesProviderAndItemErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		response *externaldata.ProviderResponse
+		sendErr  error
+		wantErr  string
+	}{
+		{
+			name:    "send error",
+			sendErr: errors.New("provider unavailable"),
+			wantErr: fmt.Sprintf("failed to send external data request to provider %s: provider unavailable", fakes.ExternalDataProviderName),
+		},
+		{
+			name: "system error",
+			response: &externaldata.ProviderResponse{Response: externaldata.Response{
+				Idempotent:  true,
+				SystemError: "provider unavailable",
+			}},
+			wantErr: fmt.Sprintf("failed to validate external data response from provider %s: non-empty system error: provider unavailable", fakes.ExternalDataProviderName),
+		},
+		{
+			name:     "non-idempotent response",
+			response: &externaldata.ProviderResponse{Response: externaldata.Response{Idempotent: false}},
+			wantErr:  fmt.Sprintf("failed to validate external data response from provider %s: non-idempotent response", fakes.ExternalDataProviderName),
+		},
+		{
+			name: "item error",
+			response: &externaldata.ProviderResponse{Response: externaldata.Response{
+				Idempotent: true,
+				Items:      []externaldata.Item{{Key: "bar", Error: "item unavailable"}},
+			}},
+			wantErr: fmt.Sprintf("failed to retrieve external data item from provider %s: item unavailable", fakes.ExternalDataProviderName),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewSystem(SystemOpts{
+				ProviderCache:     fakes.ExternalDataProviderCache,
+				ClientCertWatcher: newTestClientCertWatcher(t),
+				SendRequestToExternalDataProvider: func(context.Context, *externaldataUnversioned.Provider, []string, *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+					return tt.response, http.StatusOK, tt.sendErr
+				},
+			})
+
+			err := s.resolvePlaceholders(context.Background(), externalDataPlaceholderObject("bar"))
+			if err == nil {
+				t.Fatal("resolvePlaceholders() error = nil, want error")
+			}
+			if got := err.Error(); got != tt.wantErr {
+				t.Fatalf("resolvePlaceholders() error = %q, want %q", got, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSystem_sendRequests_isolatesErrorsByProviderAndKey(t *testing.T) {
+	const (
+		availableProvider = "available-provider"
+		missingProvider   = "missing-provider"
+	)
+
+	providerCache := externaldata.NewCache()
+	if err := providerCache.Upsert(&externaldataUnversioned.Provider{
+		ObjectMeta: metav1.ObjectMeta{Name: availableProvider},
+		Spec: externaldataUnversioned.ProviderSpec{
+			URL:      "https://localhost:8080/validate",
+			Timeout:  1,
+			CABundle: util.ValidCABundle,
+		},
+	}); err != nil {
+		t.Fatalf("failed to upsert provider: %v", err)
+	}
+
+	s := NewSystem(SystemOpts{
+		ProviderCache: providerCache,
+		SendRequestToExternalDataProvider: func(context.Context, *externaldataUnversioned.Provider, []string, *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			return nil, http.StatusInternalServerError, errors.New("provider unavailable")
+		},
+	})
+
+	responses, requestErrors := s.sendRequests(context.Background(), map[string]sets.Set[string]{
+		availableProvider: sets.New("first", "second"),
+		missingProvider:   sets.New("third"),
+	}, nil)
+
+	if len(responses) != 0 {
+		t.Fatalf("sendRequests() responses = %v, want none", responses)
+	}
+	for _, key := range []string{"first", "second"} {
+		want := "failed to send external data request to provider available-provider: provider unavailable"
+		if got := requestErrors[availableProvider][key]; got == nil || got.Error() != want {
+			t.Fatalf("sendRequests() error for %s/%s = %v, want %q", availableProvider, key, got, want)
+		}
+	}
+	want := "failed to get external data provider missing-provider: key is not found in provider cache"
+	if got := requestErrors[missingProvider]["third"]; got == nil || got.Error() != want {
+		t.Fatalf("sendRequests() error for %s/third = %v, want %q", missingProvider, got, want)
+	}
+}
+
 func TestSystem_resolvePlaceholders_providerResponseCacheStaleOrNonIdempotentEntryMisses(t *testing.T) {
 	for _, tc := range []struct {
 		name       string

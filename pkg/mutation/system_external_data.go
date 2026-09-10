@@ -132,7 +132,7 @@ func mergeExternalData(cached, fresh map[string]map[string]*externaldata.Item) m
 const defaultExternalDataRequestTimeout = 5 * time.Second
 
 // sendRequests sends requests to all providers in parallel.
-func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.Set[string], clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]error) {
+func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.Set[string], clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]map[string]error) {
 	var (
 		wg    sync.WaitGroup
 		mutex sync.RWMutex
@@ -140,8 +140,8 @@ func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.
 
 		// the provider name is the first key and the outbound data is the second key
 		responses = make(map[string]map[string]*externaldata.Item)
-		// errors that might have occurred per provider
-		errors = make(map[string]error)
+		// errors that might have occurred per provider and key
+		errors = make(map[string]map[string]error)
 	)
 
 	if fn == nil {
@@ -152,7 +152,9 @@ func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.
 		provider, err := s.providerCache.Get(name)
 		if err != nil {
 			log.Error(err, "failed to get external data provider", "provider", name)
-			errors[name] = fmt.Errorf("failed to get external data provider %s: %w", name, err)
+			mutex.Lock()
+			setProviderKeyErrors(errors, name, keys.UnsortedList(), fmt.Errorf("failed to get external data provider %s: %w", name, err))
+			mutex.Unlock()
 			continue
 		}
 
@@ -176,11 +178,11 @@ func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.
 			defer mutex.Unlock()
 
 			if err != nil {
-				setProviderKeyErrors(responses, provider.Name, keys, fmt.Errorf("failed to send external data request to provider %s: %w", provider.Name, err))
+				setProviderKeyErrors(errors, provider.Name, keys, fmt.Errorf("failed to send external data request to provider %s: %w", provider.Name, err))
 				return
 			}
 			if err := validateExternalDataResponse(resp); err != nil {
-				setProviderKeyErrors(responses, provider.Name, keys, fmt.Errorf("failed to validate external data response from provider %s: %w", provider.Name, err))
+				setProviderKeyErrors(errors, provider.Name, keys, fmt.Errorf("failed to validate external data response from provider %s: %w", provider.Name, err))
 				return
 			}
 
@@ -212,18 +214,18 @@ func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.
 	return responses, errors
 }
 
-func setProviderKeyErrors(responses map[string]map[string]*externaldata.Item, providerName string, keys []string, err error) {
-	if _, ok := responses[providerName]; !ok {
-		responses[providerName] = make(map[string]*externaldata.Item, len(keys))
+func setProviderKeyErrors(errors map[string]map[string]error, providerName string, keys []string, err error) {
+	if _, ok := errors[providerName]; !ok {
+		errors[providerName] = make(map[string]error, len(keys))
 	}
 	for _, key := range keys {
-		responses[providerName][key] = &externaldata.Item{Key: key, Error: err.Error()}
+		errors[providerName][key] = err
 	}
 }
 
 // mutateWithExternalData recursively traverses the given object and replaces
 // all external data placeholders with the corresponding external data items.
-func (s *System) mutateWithExternalData(object *unstructured.Unstructured, externalData map[string]map[string]*externaldata.Item, errors map[string]error) error {
+func (s *System) mutateWithExternalData(object *unstructured.Unstructured, externalData map[string]map[string]*externaldata.Item, errors map[string]map[string]error) error {
 	var mutate func(interface{}) []error
 	mutate = func(current interface{}) []error {
 		var allErrors []error
@@ -241,7 +243,10 @@ func (s *System) mutateWithExternalData(object *unstructured.Unstructured, exter
 				var data *externaldata.Item
 				var providerResponse map[string]*externaldata.Item
 
-				err := errors[placeholder.Ref.Provider]
+				var err error
+				if providerErrors := errors[placeholder.Ref.Provider]; providerErrors != nil {
+					err = providerErrors[placeholder.ValueAtLocation]
+				}
 				if err == nil {
 					providerResponse, ok = externalData[placeholder.Ref.Provider]
 					if !ok {
