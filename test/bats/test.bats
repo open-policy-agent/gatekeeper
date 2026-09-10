@@ -457,10 +457,15 @@ __namespace_exclusion_test() {
   local exclusion_config="$1"
   local excluded_namespace="$2"
 
+  # Ensure each exclusion case is self-contained. Previous tests may clean up
+  # namespaced fixtures or the ConstraintTemplate CRD while retrying.
+  kubectl create ns "${excluded_namespace}" --dry-run=client -o yaml | kubectl apply -f -
+  kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
+
   # applying default sync config
   kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/sync.yaml
 
-  kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"
 
   run kubectl create configmap should-fail -n "${excluded_namespace}"

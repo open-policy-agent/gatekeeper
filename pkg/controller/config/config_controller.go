@@ -35,6 +35,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -42,6 +43,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -371,17 +373,25 @@ func (r *ReconcileConfig) updateOrCreatePodStatus(ctx context.Context, cfg *conf
 	}
 	shouldCreate := true
 	status := &statusv1beta1.ConfigPodStatus{}
+	var oldStatus *statusv1beta1.ConfigPodStatus
 
 	err = r.reader.Get(ctx, types.NamespacedName{Namespace: sNS, Name: sName}, status)
 	switch {
 	case err == nil:
 		shouldCreate = false
+		oldStatus = status.DeepCopy()
 	case apierrors.IsNotFound(err):
 		if status, err = r.newConfigStatus(pod, cfg); err != nil {
 			return fmt.Errorf("creating new config status: %w", err)
 		}
 	default:
 		return fmt.Errorf("getting config status in name %s, namespace %s: %w", cfg.GetName(), cfg.GetNamespace(), err)
+	}
+
+	if !shouldCreate {
+		if err := r.repairConfigStatusMetadata(status, pod, cfg); err != nil {
+			return fmt.Errorf("repairing config status metadata: %w", err)
+		}
 	}
 
 	setStatusError(status, upsertErr)
@@ -391,7 +401,32 @@ func (r *ReconcileConfig) updateOrCreatePodStatus(ctx context.Context, cfg *conf
 	if shouldCreate {
 		return r.writer.Create(ctx, status)
 	}
+	if apiequality.Semantic.DeepEqual(status, oldStatus) {
+		return nil
+	}
 	return r.writer.Update(ctx, status)
+}
+
+func (r *ReconcileConfig) repairConfigStatusMetadata(status *statusv1beta1.ConfigPodStatus, pod *corev1.Pod, cfg *configv1alpha1.Config) error {
+	mergeLabels(status, map[string]string{
+		statusv1beta1.ConfigNameLabel: cfg.GetName(),
+		statusv1beta1.PodLabel:        pod.Name,
+	})
+	if r.scheme == nil {
+		return nil
+	}
+	return controllerutil.SetOwnerReference(pod, status, r.scheme)
+}
+
+func mergeLabels(obj client.Object, labels map[string]string) {
+	merged := obj.GetLabels()
+	if merged == nil {
+		merged = make(map[string]string, len(labels))
+	}
+	for key, value := range labels {
+		merged[key] = value
+	}
+	obj.SetLabels(merged)
 }
 
 func (r *ReconcileConfig) newConfigStatus(pod *corev1.Pod, cfg *configv1alpha1.Config) (*statusv1beta1.ConfigPodStatus, error) {

@@ -32,12 +32,14 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiTypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -191,35 +193,35 @@ func (r *Reconciler) reconcileUpsert(ctx context.Context, id types.ID, obj clien
 		setEnforced(true), setErrors(nil))
 }
 
-func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.ID) (*statusv1beta1.MutatorPodStatus, error) {
+func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.ID) (*statusv1beta1.MutatorPodStatus, *corev1.Pod, error) {
 	pod, err := r.getPod(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	statusObj := &statusv1beta1.MutatorPodStatus{}
 	sName, err := statusv1beta1.KeyForMutatorID(pod.Name, mutatorID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	key := apiTypes.NamespacedName{Name: sName, Namespace: pod.Namespace}
 	if err := r.Get(ctx, key, statusObj); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return nil, err
+			return nil, nil, err
 		}
 	} else {
-		return statusObj, nil
+		return statusObj, pod, nil
 	}
 
 	statusObj, err = statusv1beta1.NewMutatorStatusForPod(pod, mutatorID, r.scheme)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := r.Create(ctx, statusObj); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return statusObj, nil
+	return statusObj, pod, nil
 }
 
 func (r *Reconciler) defaultGetPod(_ context.Context) (*corev1.Pod, error) {
@@ -316,14 +318,23 @@ func (r *Reconciler) queueConflicts(ids mutationschema.IDSet) {
 // updateStatus updates the PodStatus corresponding to the passed Mutator with whether the Mutator is enforced, and
 // whether there is an error instantiating the Mutator within the controller.
 func (r *Reconciler) updateStatus(ctx context.Context, id types.ID, updates ...statusUpdate) error {
-	status, err := r.getOrCreatePodStatus(ctx, id)
+	status, pod, err := r.getOrCreatePodStatus(ctx, id)
 	if err != nil {
 		r.log.Info("could not get/create pod status object", "error", err)
 		return err
 	}
+	oldStatus := status.DeepCopy()
+
+	if err := r.repairMutatorStatusMetadata(status, pod, id); err != nil {
+		return fmt.Errorf("repairing mutator status metadata: %w", err)
+	}
 
 	for _, update := range updates {
 		update(status)
+	}
+
+	if apiequality.Semantic.DeepEqual(status, oldStatus) {
+		return nil
 	}
 
 	err = r.Update(ctx, status)
@@ -342,6 +353,29 @@ func (r *Reconciler) updateStatusWithError(ctx context.Context, obj client.Objec
 	return r.updateStatus(ctx, id,
 		setID(obj.GetUID()), setGeneration(obj.GetGeneration()),
 		setEnforced(false), setErrors(err))
+}
+
+func (r *Reconciler) repairMutatorStatusMetadata(status *statusv1beta1.MutatorPodStatus, pod *corev1.Pod, mutatorID types.ID) error {
+	mergeLabels(status, map[string]string{
+		statusv1beta1.MutatorNameLabel: mutatorID.Name,
+		statusv1beta1.MutatorKindLabel: mutatorID.Kind,
+		statusv1beta1.PodLabel:         pod.Name,
+	})
+	if r.scheme == nil {
+		return nil
+	}
+	return controllerutil.SetOwnerReference(pod, status, r.scheme)
+}
+
+func mergeLabels(obj client.Object, labels map[string]string) {
+	merged := obj.GetLabels()
+	if merged == nil {
+		merged = make(map[string]string, len(labels))
+	}
+	for key, value := range labels {
+		merged[key] = value
+	}
+	obj.SetLabels(merged)
 }
 
 func symmetricDifference(left, right mutationschema.IDSet) mutationschema.IDSet {

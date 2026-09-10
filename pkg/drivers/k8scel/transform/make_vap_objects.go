@@ -166,6 +166,7 @@ func buildDefaultMatchConstraints() *admissionregistrationv1beta1.MatchResources
 						APIGroups:   []string{"*"},
 						APIVersions: []string{"*"},
 						Resources:   []string{"*"},
+						Scope:       ptr.To(admissionregistrationv1beta1.AllScopes),
 					},
 				},
 			},

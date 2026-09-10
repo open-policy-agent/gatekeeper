@@ -289,33 +289,68 @@ func (wm *Manager) replaceWatches(ctx context.Context, r *Registrar) error {
 
 // OnAdd implements cache.ResourceEventHandler. Called by informers.
 func (wm *Manager) OnAdd(obj interface{}, _ bool) {
-	// Send event to eventLoop() for processing
-	select {
-	case wm.events <- obj:
-	case <-wm.stopped:
-	}
+	wm.enqueueEvent(obj)
 }
 
 // OnUpdate implements cache.ResourceEventHandler. Called by informers.
 func (wm *Manager) OnUpdate(oldObj, newObj interface{}) {
-	// Send event to eventLoop() for processing
-	select {
-	case wm.events <- oldObj:
-	case <-wm.stopped:
+	if sameObjectIdentity(oldObj, newObj) {
+		wm.enqueueEvent(newObj)
+		return
 	}
-	select {
-	case wm.events <- newObj:
-	case <-wm.stopped:
-	}
+	wm.enqueueEvent(oldObj)
+	wm.enqueueEvent(newObj)
 }
 
 // OnDelete implements cache.ResourceEventHandler. Called by informers.
 func (wm *Manager) OnDelete(obj interface{}) {
+	wm.enqueueEvent(obj)
+}
+
+func (wm *Manager) enqueueEvent(obj interface{}) {
 	// Send event to eventLoop() for processing
 	select {
 	case wm.events <- obj:
 	case <-wm.stopped:
 	}
+}
+
+type objectIdentity struct {
+	gvk       schema.GroupVersionKind
+	namespace string
+	name      string
+	uid       string
+}
+
+func sameObjectIdentity(oldObj, newObj interface{}) bool {
+	oldIdentity, ok := objectIdentityFor(oldObj)
+	if !ok {
+		return false
+	}
+	newIdentity, ok := objectIdentityFor(newObj)
+	if !ok {
+		return false
+	}
+	return oldIdentity == newIdentity
+}
+
+func objectIdentityFor(obj interface{}) (objectIdentity, bool) {
+	clientObj, ok := obj.(client.Object)
+	if !ok || clientObj == nil {
+		return objectIdentity{}, false
+	}
+
+	gvk := clientObj.GetObjectKind().GroupVersionKind()
+	if gvk == (schema.GroupVersionKind{}) || clientObj.GetName() == "" || clientObj.GetUID() == "" {
+		return objectIdentity{}, false
+	}
+
+	return objectIdentity{
+		gvk:       gvk,
+		namespace: clientObj.GetNamespace(),
+		name:      clientObj.GetName(),
+		uid:       string(clientObj.GetUID()),
+	}, true
 }
 
 // eventLoop receives events from informer callbacks and distributes them to registrars.

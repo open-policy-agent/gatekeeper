@@ -17,7 +17,6 @@ package constraintstatus
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -116,6 +116,12 @@ func PodStatusToConstraintMapper(selfOnly bool, packerMap handler.MapFunc) handl
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.GenericEvent) error {
+	if err := indexStatusLabel(context.Background(), mgr, &v1beta1.ConstraintPodStatus{}, v1beta1.ConstraintNameLabel); err != nil {
+		return err
+	}
+	if err := indexStatusLabel(context.Background(), mgr, &v1beta1.ConstraintPodStatus{}, v1beta1.ConstraintKindLabel); err != nil {
+		return err
+	}
 	// Create a new controller
 	c, err := controller.New("constraint-status-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -132,6 +138,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	// Watch for changes to the provided constraint
 	return c.Watch(
 		source.Channel(events, handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc())))
+}
+
+func indexStatusLabel(ctx context.Context, mgr manager.Manager, obj client.Object, field string) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, obj, field, func(obj client.Object) []string {
+		value := obj.GetLabels()[field]
+		if value == "" {
+			return nil
+		}
+		return []string{value}
+	})
 }
 
 var _ reconcile.Reconciler = &ReconcileConstraintStatus{}
@@ -194,7 +210,7 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 	if err := r.reader.List(
 		ctx,
 		sObjs,
-		client.MatchingLabels{
+		client.MatchingFields{
 			v1beta1.ConstraintNameLabel: instance.GetName(),
 			v1beta1.ConstraintKindLabel: instance.GetKind(),
 		},
@@ -214,15 +230,15 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 		if statusObjs[i].Status.ConstraintUID != instance.GetUID() {
 			continue
 		}
-		j, err := json.Marshal(statusObjs[i].Status)
+		o, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&statusObjs[i].Status)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		var o map[string]interface{}
-		if err := json.Unmarshal(j, &o); err != nil {
-			return reconcile.Result{}, err
-		}
 		s = append(s, o)
+	}
+
+	if byPodStatusMatches(instance.Object, s) {
+		return reconcile.Result{}, nil
 	}
 
 	if err := unstructured.SetNestedSlice(instance.Object, s, "status", "byPod"); err != nil {
@@ -234,6 +250,15 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func byPodStatusMatches(obj map[string]interface{}, desired []interface{}) bool {
+	current, found, err := unstructured.NestedFieldNoCopy(obj, "status", "byPod")
+	if !found || err != nil {
+		return false
+	}
+
+	return apiequality.Semantic.DeepEqual(current, desired)
 }
 
 type sortableStatuses []v1beta1.ConstraintPodStatus

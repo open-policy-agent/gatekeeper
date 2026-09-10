@@ -29,10 +29,20 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	kcache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+)
+
+const (
+	watchTestVersionV1 = "v1"
+	watchTestKindPod   = "Pod"
+	watchTestDefaultNS = "default"
+	watchTestPodName   = "pod"
+	watchTestUID       = "uid-1"
+	watchTestOtherUID  = "uid-2"
 )
 
 type fakeCacheInformer struct {
@@ -132,6 +142,138 @@ func (f *fakeRemovableCache) removeCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.removeCounter
+}
+
+func TestManagerOnUpdateDeduplicatesSameObjectIdentity(t *testing.T) {
+	gvk := schema.GroupVersionKind{Version: watchTestVersionV1, Kind: watchTestKindPod}
+	oldObj := newWatchTestObject(gvk, watchTestDefaultNS, watchTestPodName, watchTestUID)
+	newObj := oldObj.DeepCopy()
+	newObj.SetResourceVersion("2")
+	wm := newEventOnlyManager(2)
+
+	wm.OnUpdate(oldObj, newObj)
+
+	events := expectQueuedEvents(t, wm, 1)
+	if events[0] != newObj {
+		t.Fatalf("got queued object %p, want new object %p", events[0], newObj)
+	}
+}
+
+func TestManagerOnUpdatePreservesBothEventsForDistinctOrInvalidIdentities(t *testing.T) {
+	gvk := schema.GroupVersionKind{Version: watchTestVersionV1, Kind: watchTestKindPod}
+
+	tests := []struct {
+		name   string
+		oldObj interface{}
+		newObj interface{}
+	}{
+		{
+			name:   "different UID",
+			oldObj: newWatchTestObject(gvk, watchTestDefaultNS, watchTestPodName, watchTestUID),
+			newObj: newWatchTestObject(gvk, watchTestDefaultNS, watchTestPodName, watchTestOtherUID),
+		},
+		{
+			name:   "different name",
+			oldObj: newWatchTestObject(gvk, watchTestDefaultNS, "pod-old", watchTestUID),
+			newObj: newWatchTestObject(gvk, watchTestDefaultNS, "pod-new", watchTestUID),
+		},
+		{
+			name:   "missing UID",
+			oldObj: newWatchTestObject(gvk, watchTestDefaultNS, watchTestPodName, ""),
+			newObj: newWatchTestObject(gvk, watchTestDefaultNS, watchTestPodName, ""),
+		},
+		{
+			name:   "old object invalid",
+			oldObj: "not a Kubernetes object",
+			newObj: newWatchTestObject(gvk, watchTestDefaultNS, watchTestPodName, watchTestUID),
+		},
+		{
+			name:   "new object invalid",
+			oldObj: newWatchTestObject(gvk, watchTestDefaultNS, watchTestPodName, watchTestUID),
+			newObj: "not a Kubernetes object",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			wm := newEventOnlyManager(2)
+
+			wm.OnUpdate(tc.oldObj, tc.newObj)
+
+			events := expectQueuedEvents(t, wm, 2)
+			if events[0] != tc.oldObj {
+				t.Fatalf("old event = %#v, want %#v", events[0], tc.oldObj)
+			}
+			if events[1] != tc.newObj {
+				t.Fatalf("new event = %#v, want %#v", events[1], tc.newObj)
+			}
+		})
+	}
+}
+
+func BenchmarkManagerOnUpdate(b *testing.B) {
+	gvk := schema.GroupVersionKind{Version: watchTestVersionV1, Kind: watchTestKindPod}
+	oldObj := newWatchTestObject(gvk, watchTestDefaultNS, watchTestPodName, watchTestUID)
+	newObj := oldObj.DeepCopy()
+	newObj.SetResourceVersion("2")
+	differentUIDObj := newWatchTestObject(gvk, watchTestDefaultNS, watchTestPodName, watchTestOtherUID)
+
+	b.Run("same identity", func(b *testing.B) {
+		wm := newEventOnlyManager(1)
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			wm.OnUpdate(oldObj, newObj)
+			<-wm.events
+		}
+	})
+
+	b.Run("different identity", func(b *testing.B) {
+		wm := newEventOnlyManager(2)
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			wm.OnUpdate(oldObj, differentUIDObj)
+			<-wm.events
+			<-wm.events
+		}
+	})
+}
+
+func newEventOnlyManager(buffer int) *Manager {
+	return &Manager{
+		events:  make(chan interface{}, buffer),
+		stopped: make(chan struct{}),
+	}
+}
+
+func newWatchTestObject(gvk schema.GroupVersionKind, namespace, name, uid string) *unstructured.Unstructured {
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(gvk)
+	u.SetNamespace(namespace)
+	u.SetName(name)
+	u.SetUID(types.UID(uid))
+	return u
+}
+
+func expectQueuedEvents(t *testing.T, wm *Manager, count int) []interface{} {
+	t.Helper()
+	events := make([]interface{}, 0, count)
+	for i := 0; i < count; i++ {
+		select {
+		case obj := <-wm.events:
+			events = append(events, obj)
+		default:
+			t.Fatalf("queued events = %d, want %d", len(events), count)
+		}
+	}
+
+	select {
+	case obj := <-wm.events:
+		t.Fatalf("unexpected extra queued event: %#v", obj)
+	default:
+	}
+	return events
 }
 
 type funcCache struct {
@@ -642,7 +784,7 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pod := schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
+	pod := schema.GroupVersionKind{Version: watchTestVersionV1, Kind: watchTestKindPod}
 	volume := schema.GroupVersionKind{Version: "v1", Kind: "Volume"}
 	deploy := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 	configMap := schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}

@@ -2292,6 +2292,43 @@ func TestManageVAP_VAPAPIDisabledPreservesRetry(t *testing.T) {
 	}
 }
 
+func TestV1beta1ToV1PreservesResourceRuleScope(t *testing.T) {
+	scope := admissionregistrationv1beta1.AllScopes
+	failurePolicy := admissionregistrationv1beta1.Fail
+	v1beta1VAP := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{
+		Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicySpec{
+			ParamKind: &admissionregistrationv1beta1.ParamKind{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestConstraint",
+			},
+			MatchConstraints: &admissionregistrationv1beta1.MatchResources{
+				ResourceRules: []admissionregistrationv1beta1.NamedRuleWithOperations{
+					{
+						RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
+							Operations: []admissionregistrationv1beta1.OperationType{
+								admissionregistrationv1beta1.Create,
+							},
+							Rule: admissionregistrationv1beta1.Rule{
+								APIGroups:   []string{"*"},
+								APIVersions: []string{"*"},
+								Resources:   []string{"*"},
+								Scope:       &scope,
+							},
+						},
+					},
+				},
+			},
+			FailurePolicy: &failurePolicy,
+		},
+	}
+
+	v1VAP, err := v1beta1ToV1(v1beta1VAP)
+	require.NoError(t, err)
+	require.NotNil(t, v1VAP.Spec.MatchConstraints)
+	require.Len(t, v1VAP.Spec.MatchConstraints.ResourceRules, 1)
+	require.Equal(t, &scope, v1VAP.Spec.MatchConstraints.ResourceRules[0].Scope)
+}
+
 func TestReconcile_VAPV1Beta1RecreatedWhenDeleted(t *testing.T) {
 	ctx, c := setupVersionPinnedReconcileTest(t, &admissionregistrationv1beta1.SchemeGroupVersion)
 	suffix := "VapV1Beta1ShouldBeRecreated"
