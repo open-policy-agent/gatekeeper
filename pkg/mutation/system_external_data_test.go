@@ -687,7 +687,7 @@ func TestSystem_sendRequests_isolatesErrorsByProviderAndKey(t *testing.T) {
 	responses, requestErrors := s.sendRequests(context.Background(), map[string]sets.Set[string]{
 		availableProvider: sets.New("first", "second"),
 		missingProvider:   sets.New("third"),
-	}, nil)
+	}, nil, nil)
 
 	if len(responses) != 0 {
 		t.Fatalf("sendRequests() responses = %v, want none", responses)
@@ -701,6 +701,65 @@ func TestSystem_sendRequests_isolatesErrorsByProviderAndKey(t *testing.T) {
 	want := "failed to get external data provider missing-provider: key is not found in provider cache"
 	if got := requestErrors[missingProvider]["third"]; got == nil || got.Error() != want {
 		t.Fatalf("sendRequests() error for %s/third = %v, want %q", missingProvider, got, want)
+	}
+}
+
+func TestSystem_providerResponseCachePartialHitUsesOneProviderSnapshot(t *testing.T) {
+	providerV1 := externaldataUnversioned.Provider{
+		ObjectMeta: metav1.ObjectMeta{Name: fakes.ExternalDataProviderName, UID: "provider-uid", Generation: 1},
+		Spec: externaldataUnversioned.ProviderSpec{
+			URL:      "https://v1.example.com/validate",
+			Timeout:  1,
+			CABundle: util.ValidCABundle,
+		},
+	}
+	providerV2 := *providerV1.DeepCopy()
+	providerV2.Generation = 2
+	providerV2.Spec.URL = "https://v2.example.com/validate"
+
+	providerCache := externaldata.NewCache()
+	if err := providerCache.Upsert(&providerV1); err != nil {
+		t.Fatalf("failed to upsert provider v1: %v", err)
+	}
+	responseCache := newTestProviderResponseCache(t, time.Hour)
+	responseCache.Upsert(
+		mutationProviderResponseCacheKey(&providerV1, "cached"),
+		externaldata.CacheValue{Received: time.Now().Unix(), Value: "cached-v1", Idempotent: true},
+	)
+
+	s := NewSystem(SystemOpts{
+		ProviderCache:         providerCache,
+		ProviderResponseCache: responseCache,
+		SendRequestToExternalDataProvider: func(_ context.Context, provider *externaldataUnversioned.Provider, keys []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			if provider.Generation != providerV1.Generation || provider.Spec.URL != providerV1.Spec.URL {
+				t.Fatalf("request provider = generation %d URL %q, want generation %d URL %q", provider.Generation, provider.Spec.URL, providerV1.Generation, providerV1.Spec.URL)
+			}
+			if !sets.New(keys...).Equal(sets.New("miss")) {
+				t.Fatalf("provider keys = %v, want [miss]", keys)
+			}
+			return &externaldata.ProviderResponse{Response: externaldata.Response{
+				Idempotent: true,
+				Items:      []externaldata.Item{{Key: "miss", Value: "fresh-v1"}},
+			}}, http.StatusOK, nil
+		},
+	})
+
+	providerKeys := map[string]sets.Set[string]{fakes.ExternalDataProviderName: sets.New("cached", "miss")}
+	cached, misses, snapshots := s.cachedProviderResponses(providerKeys)
+	if err := providerCache.Upsert(&providerV2); err != nil {
+		t.Fatalf("failed to upsert provider v2: %v", err)
+	}
+	fresh, requestErrors := s.sendRequests(context.Background(), misses, nil, snapshots)
+	if len(requestErrors) != 0 {
+		t.Fatalf("sendRequests() errors = %v, want none", requestErrors)
+	}
+
+	merged := mergeExternalData(cached, fresh)
+	if got := merged[fakes.ExternalDataProviderName]["cached"].Value; got != "cached-v1" {
+		t.Fatalf("cached value = %v, want cached-v1", got)
+	}
+	if got := merged[fakes.ExternalDataProviderName]["miss"].Value; got != "fresh-v1" {
+		t.Fatalf("fresh value = %v, want fresh-v1", got)
 	}
 }
 
@@ -1083,7 +1142,7 @@ func TestSystem_sendRequests_contextTimeout(t *testing.T) {
 			providerKeys := map[string]sets.Set[string]{
 				providerName: sets.New("key1"),
 			}
-			s.sendRequests(parentCtx, providerKeys, nil)
+			s.sendRequests(parentCtx, providerKeys, nil, nil)
 
 			if capturedCtx == nil {
 				t.Fatal("sendRequestToExternalDataProvider was not called")
@@ -1138,7 +1197,7 @@ func TestSystem_sendRequests_parentContextCancellation(t *testing.T) {
 	providerKeys := map[string]sets.Set[string]{
 		providerName: sets.New[string]("key1"),
 	}
-	s.sendRequests(parentCtx, providerKeys, nil)
+	s.sendRequests(parentCtx, providerKeys, nil, nil)
 
 	if capturedCtx == nil {
 		t.Fatal("sendRequestToExternalDataProvider was not called")

@@ -49,7 +49,7 @@ func (s *System) resolvePlaceholders(ctx context.Context, obj *unstructured.Unst
 		return nil
 	}
 
-	cachedExternalData, providerKeys := s.cachedProviderResponses(providerKeys)
+	cachedExternalData, providerKeys, providerSnapshots := s.cachedProviderResponses(providerKeys)
 	if len(providerKeys) == 0 {
 		return s.mutateWithExternalData(obj, cachedExternalData, nil)
 	}
@@ -59,24 +59,26 @@ func (s *System) resolvePlaceholders(ctx context.Context, obj *unstructured.Unst
 		return fmt.Errorf("failed to get client TLS certificate: %w", err)
 	}
 
-	externalData, errors := s.sendRequests(ctx, providerKeys, clientCert)
+	externalData, errors := s.sendRequests(ctx, providerKeys, clientCert, providerSnapshots)
 	externalData = mergeExternalData(cachedExternalData, externalData)
 	return s.mutateWithExternalData(obj, externalData, errors)
 }
 
-func (s *System) cachedProviderResponses(providerKeys map[string]sets.Set[string]) (map[string]map[string]*externaldata.Item, map[string]sets.Set[string]) {
+func (s *System) cachedProviderResponses(providerKeys map[string]sets.Set[string]) (map[string]map[string]*externaldata.Item, map[string]sets.Set[string], map[string]externaldataUnversioned.Provider) {
 	if s.providerCache == nil || s.providerResponseCache == nil || s.providerResponseCache.TTL <= 0 {
-		return nil, providerKeys
+		return nil, providerKeys, nil
 	}
 
 	cached := make(map[string]map[string]*externaldata.Item)
 	misses := make(map[string]sets.Set[string])
+	providerSnapshots := make(map[string]externaldataUnversioned.Provider, len(providerKeys))
 	for providerName, keys := range providerKeys {
 		provider, err := s.providerCache.Get(providerName)
 		if err != nil {
 			misses[providerName] = keys
 			continue
 		}
+		providerSnapshots[providerName] = provider
 		for key := range keys {
 			cacheValue, err := s.providerResponseCache.Get(mutationProviderResponseCacheKey(&provider, key))
 			if err != nil || cacheValue == nil || !cacheValue.Idempotent || time.Since(time.Unix(cacheValue.Received, 0)) > s.providerResponseCache.TTL {
@@ -99,7 +101,7 @@ func (s *System) cachedProviderResponses(providerKeys map[string]sets.Set[string
 		}
 	}
 
-	return cached, misses
+	return cached, misses, providerSnapshots
 }
 
 func mutationProviderResponseCacheKey(provider *externaldataUnversioned.Provider, key string) externaldata.CacheKey {
@@ -132,7 +134,7 @@ func mergeExternalData(cached, fresh map[string]map[string]*externaldata.Item) m
 const defaultExternalDataRequestTimeout = 5 * time.Second
 
 // sendRequests sends requests to all providers in parallel.
-func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.Set[string], clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]map[string]error) {
+func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.Set[string], clientCert *tls.Certificate, providerSnapshots map[string]externaldataUnversioned.Provider) (map[string]map[string]*externaldata.Item, map[string]map[string]error) {
 	var (
 		wg    sync.WaitGroup
 		mutex sync.RWMutex
@@ -149,13 +151,17 @@ func (s *System) sendRequests(ctx context.Context, providerKeys map[string]sets.
 	}
 
 	for name, keys := range providerKeys {
-		provider, err := s.providerCache.Get(name)
-		if err != nil {
-			log.Error(err, "failed to get external data provider", "provider", name)
-			mutex.Lock()
-			setProviderKeyErrors(errors, name, keys.UnsortedList(), fmt.Errorf("failed to get external data provider %s: %w", name, err))
-			mutex.Unlock()
-			continue
+		provider, ok := providerSnapshots[name]
+		if !ok {
+			var err error
+			provider, err = s.providerCache.Get(name)
+			if err != nil {
+				log.Error(err, "failed to get external data provider", "provider", name)
+				mutex.Lock()
+				setProviderKeyErrors(errors, name, keys.UnsortedList(), fmt.Errorf("failed to get external data provider %s: %w", name, err))
+				mutex.Unlock()
+				continue
+			}
 		}
 
 		providerCopy := provider
