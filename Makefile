@@ -31,7 +31,9 @@ VERSION := v3.24.0-beta.0
 KIND_VERSION ?= 0.32.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.33.0
+KUBERNETES_VERSION ?= 1.36.1
+# v1beta1 VAP tests require a Kubernetes version that still serves that API.
+ENVTEST_KUBERNETES_VERSION ?= 1.33.0
 KUSTOMIZE_VERSION ?= 5.8.1
 BATS_VERSION ?= 1.14.0
 ORAS_VERSION ?= 1.3.3
@@ -194,21 +196,21 @@ all: lint test manager
 # Run tests with coverage
 .PHONY: native-test
 native-test: envtest
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
 	go test ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
 
 # Run tests with race detector
 .PHONY: native-race-test
 native-race-test: envtest
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
 	go test ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
 
 # Run benchmarks only (no unit tests)
 .PHONY: native-bench-test
 native-bench-test: envtest
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
 	go test ./pkg/... ./apis/... ./cmd/gator/... -bench . -run "^$$"
 
