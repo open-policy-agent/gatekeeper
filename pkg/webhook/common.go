@@ -155,6 +155,10 @@ func (h *webhookHandler) tracingLevel(ctx context.Context, req *admission.Reques
 }
 
 func (h *webhookHandler) skipExcludedNamespace(req *admissionv1.AdmissionRequest, excludedProcess process.Process) (bool, error) {
+	if !h.processExcluder.HasExclusions(excludedProcess) {
+		return false, nil
+	}
+
 	var data []byte
 	if req.Operation == admissionv1.Delete {
 		// oldObject is the existing object.

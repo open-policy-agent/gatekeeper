@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-policy-agent/gatekeeper/v3/apis"
+	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
@@ -15,14 +17,18 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var cfg *rest.Config
@@ -146,6 +152,101 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+type countingClient struct {
+	client.Client
+	creates int
+	updates int
+}
+
+func (c *countingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	c.creates++
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+func (c *countingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	c.updates++
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+func TestUpdateOrCreatePodStatusSkipsUnchangedExistingStatus(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	if err := apis.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("status-pod"), fakes.WithUID("status-pod-uid"))
+	et := &unversioned.ExpansionTemplate{}
+	et.SetName("expansion-template")
+	et.SetUID("expansion-template-uid")
+	et.SetGeneration(1)
+
+	status, err := statusv1beta1.NewExpansionTemplateStatusForPod(pod, et.GetName(), scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status.Status.TemplateUID = et.GetUID()
+	status.Status.ObservedGeneration = et.GetGeneration()
+
+	k8sClient := &countingClient{Client: crfake.NewClientBuilder().WithScheme(scheme).WithObjects(status).Build()}
+	reconciler := &Reconciler{
+		Client: k8sClient,
+		scheme: scheme,
+		getPod: func(context.Context) (*corev1.Pod, error) { return pod, nil },
+	}
+
+	if err := reconciler.updateOrCreatePodStatus(ctx, et, nil); err != nil {
+		t.Fatalf("updateOrCreatePodStatus() error = %v, want nil", err)
+	}
+	if k8sClient.updates != 0 {
+		t.Fatalf("updates = %d, want 0 for unchanged existing status", k8sClient.updates)
+	}
+}
+
+func BenchmarkUpdateOrCreatePodStatusNoop(b *testing.B) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	if err := apis.AddToScheme(scheme); err != nil {
+		b.Fatal(err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		b.Fatal(err)
+	}
+
+	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("status-pod"), fakes.WithUID("status-pod-uid"))
+	et := &unversioned.ExpansionTemplate{}
+	et.SetName("expansion-template")
+	et.SetUID("expansion-template-uid")
+	et.SetGeneration(1)
+
+	status, err := statusv1beta1.NewExpansionTemplateStatusForPod(pod, et.GetName(), scheme)
+	if err != nil {
+		b.Fatal(err)
+	}
+	status.Status.TemplateUID = et.GetUID()
+	status.Status.ObservedGeneration = et.GetGeneration()
+
+	k8sClient := &countingClient{Client: crfake.NewClientBuilder().WithScheme(scheme).WithObjects(status).Build()}
+	reconciler := &Reconciler{
+		Client: k8sClient,
+		scheme: scheme,
+		getPod: func(context.Context) (*corev1.Pod, error) { return pod, nil },
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := reconciler.updateOrCreatePodStatus(ctx, et, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	b.ReportMetric(float64(k8sClient.updates)/float64(b.N), "updates/op")
 }
 
 func TestAddStatusError(t *testing.T) {
