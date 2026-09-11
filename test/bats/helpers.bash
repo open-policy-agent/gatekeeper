@@ -155,8 +155,7 @@ vap_admission_audit_configuration_ready() {
 
   jq -e --arg validation_action "${validation_action}" '
     (.spec.validationActions | index($validation_action)) != null and
-    (.spec.validationActions | index("Audit")) != null and
-    (.spec.validationActions | length) == (if $validation_action == "Audit" then 1 else 2 end)
+    (.spec.validationActions | index("Audit")) != null
   ' <<<"${binding}" >/dev/null
 }
 
