@@ -156,7 +156,10 @@ func (e *ChannelFullError) Temporary() bool {
 type Adder struct {
 	Tracker      *readiness.Tracker
 	CacheManager *cm.CacheManager
-	CtEvents     chan<- event.GenericEvent
+	// ProcessExcluder holds the namespace exclusions the admission, audit and
+	// sync paths read. It is required even when validation data sync is off.
+	ProcessExcluder *process.Excluder
+	CtEvents        chan<- event.GenericEvent
 	// GetPod returns an instance of the currently running Gatekeeper pod
 	GetPod func(context.Context) (*corev1.Pod, error)
 }
@@ -164,7 +167,11 @@ type Adder struct {
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.CacheManager, a.Tracker, a.GetPod, a.CtEvents)
+	if !operations.NeedsConfigReconciliation() {
+		return nil
+	}
+
+	r, err := newReconciler(mgr, a.CacheManager, a.ProcessExcluder, a.Tracker, a.GetPod, a.CtEvents)
 	if err != nil {
 		return err
 	}
@@ -180,6 +187,10 @@ func (a *Adder) InjectCacheManager(cm *cm.CacheManager) {
 	a.CacheManager = cm
 }
 
+func (a *Adder) InjectProcessExcluder(processExcluder *process.Excluder) {
+	a.ProcessExcluder = processExcluder
+}
+
 func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, error)) {
 	a.GetPod = getPod
 }
@@ -188,21 +199,26 @@ func (a *Adder) InjectConstraintTemplateEvent(ctEvents chan event.GenericEvent) 
 	a.CtEvents = ctEvents
 }
 
-// newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, cm *cm.CacheManager, tracker *readiness.Tracker, getPod func(context.Context) (*corev1.Pod, error), ctEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
-	if cm == nil {
-		return nil, fmt.Errorf("cacheManager must be non-nil")
+// newReconciler returns a new reconcile.Reconciler. cm is only required when
+// the pod syncs validation data; processExcluder is always required.
+func newReconciler(mgr manager.Manager, cm *cm.CacheManager, processExcluder *process.Excluder, tracker *readiness.Tracker, getPod func(context.Context) (*corev1.Pod, error), ctEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
+	if processExcluder == nil {
+		return nil, fmt.Errorf("processExcluder must be non-nil")
+	}
+	if cm == nil && operations.NeedsValidationDataSync() {
+		return nil, fmt.Errorf("cacheManager must be non-nil when validation data sync is required")
 	}
 
 	return &ReconcileConfig{
-		reader:       mgr.GetCache(),
-		writer:       mgr.GetClient(),
-		statusClient: mgr.GetClient(),
-		scheme:       mgr.GetScheme(),
-		cacheManager: cm,
-		tracker:      tracker,
-		getPod:       getPod,
-		ctEvents:     ctEvents,
+		reader:          mgr.GetCache(),
+		writer:          mgr.GetClient(),
+		statusClient:    mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		cacheManager:    cm,
+		processExcluder: processExcluder,
+		tracker:         tracker,
+		getPod:          getPod,
+		ctEvents:        ctEvents,
 	}, nil
 }
 
@@ -237,8 +253,10 @@ type ReconcileConfig struct {
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	scheme       *runtime.Scheme
-	cacheManager *cm.CacheManager
+	scheme *runtime.Scheme
+	// cacheManager is nil when the pod does not sync validation data.
+	cacheManager    *cm.CacheManager
+	processExcluder *process.Excluder
 
 	tracker *readiness.Tracker
 
@@ -248,6 +266,31 @@ type ReconcileConfig struct {
 
 	dirtyMu        sync.Mutex
 	dirtyTemplates map[string]*v1beta1.ConstraintTemplate
+}
+
+// excludeProcesses installs the exclusions parsed from the Config resource.
+// While validation data is being synced the cache manager owns the excluder:
+// swapping it there also schedules the re-list the new exclusions require.
+func (r *ReconcileConfig) excludeProcesses(newExcluder *process.Excluder) {
+	if r.cacheManager != nil {
+		r.cacheManager.ExcludeProcesses(newExcluder)
+		return
+	}
+
+	if r.processExcluder.Equals(newExcluder) {
+		return
+	}
+	r.processExcluder.Replace(newExcluder)
+}
+
+// excluderChangedForProcess reports whether the exclusions for the given
+// process differ from the ones currently installed.
+func (r *ReconcileConfig) excluderChangedForProcess(p process.Process, newExcluder *process.Excluder) bool {
+	if r.cacheManager != nil {
+		return r.cacheManager.ExcluderChangedForProcess(p, newExcluder)
+	}
+
+	return !r.processExcluder.EqualsForProcess(p, newExcluder)
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -304,14 +347,16 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		r.tracker.DisableStats()
 	}
 
+	notifyGenerate := operations.NeedsGenerateConfigNotifications() && *transform.SyncVAPScope && r.ctEvents != nil
+
 	var configChanged bool
-	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.ctEvents != nil {
-		configChanged = r.cacheManager.ExcluderChangedForProcess(process.Webhook, newExcluder)
+	if notifyGenerate {
+		configChanged = r.excluderChangedForProcess(process.Webhook, newExcluder)
 	}
 
-	r.cacheManager.ExcludeProcesses(newExcluder)
+	r.excludeProcesses(newExcluder)
 	var ctTriggerError error
-	if operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.ctEvents != nil {
+	if notifyGenerate {
 		if configChanged {
 			ctTriggerError = r.triggerConstraintTemplateReconciliation(ctx)
 			if ctTriggerError != nil {
@@ -325,12 +370,16 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		}
 	}
 
-	// Directly accessing the NamespaceName.String(), as NamespaceName is embedded within reconcile.Request.
-	configSourceKey := aggregator.Key{Source: "config", ID: request.String()}
-	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
-		r.tracker.For(configGVK).TryCancelExpect(instance)
+	// Without a cache manager this pod does not sync referential data, so the
+	// syncOnly entries are not ours to act on.
+	if r.cacheManager != nil {
+		// Directly accessing the NamespaceName.String(), as NamespaceName is embedded within reconcile.Request.
+		configSourceKey := aggregator.Key{Source: "config", ID: request.String()}
+		if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
+			r.tracker.For(configGVK).TryCancelExpect(instance)
 
-		return reconcile.Result{Requeue: true}, r.updateOrCreatePodStatus(ctx, instance, err)
+			return reconcile.Result{Requeue: true}, r.updateOrCreatePodStatus(ctx, instance, err)
+		}
 	}
 
 	r.tracker.For(configGVK).Observe(instance)
