@@ -416,6 +416,18 @@ blockingLoop:
 	return 0
 }
 
+// newMutationSystem returns a *mutation.System built from opts, or nil when no
+// mutation operation (mutation-webhook, mutation-controller, mutation-status) is
+// assigned to this pod. expansion.NewSystem already treats a nil mutation system
+// as "skip mutation" (see pkg/expansion/system.go), so callers can pass the result
+// straight through without an additional nil check.
+func newMutationSystem(opts mutation.SystemOpts) *mutation.System {
+	if !mutation.Enabled() {
+		return nil
+	}
+	return mutation.NewSystem(opts)
+}
+
 func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.Tracker, setupFinished chan struct{}) error {
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
@@ -511,7 +523,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		}
 	}
 
-	mutationSystem := mutation.NewSystem(mutationOpts)
+	mutationSystem := newMutationSystem(mutationOpts)
 	expansionSystem := expansion.NewSystem(mutationSystem)
 	exportSystem := export.NewSystem()
 

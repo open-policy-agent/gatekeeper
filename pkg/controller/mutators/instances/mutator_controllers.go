@@ -62,6 +62,10 @@ func routeConflictEvents(ctx context.Context, events <-chan event.GenericEvent, 
 
 // Add creates all mutation controllers and adds them to the manager.
 func (a *Adder) Add(mgr manager.Manager) error {
+	if !mutation.Enabled() {
+		return nil
+	}
+
 	// events is shared across all mutators that can affect the implied schema
 	// of kinds to be mutated, since these mutators can set each other into conflict
 	events := make(chan event.GenericEvent, eventQueueSize)
