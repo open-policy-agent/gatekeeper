@@ -24,8 +24,9 @@ func IsWipeData(o interface{}) bool {
 // its admission operation (when sourced from an admission review), and its
 // source type.
 type AugmentedUnstructured struct {
-	Object    unstructured.Unstructured
-	Namespace *corev1.Namespace
-	Operation admissionv1.Operation
-	Source    types.SourceType
+	Object           unstructured.Unstructured
+	Namespace        *corev1.Namespace
+	Operation        admissionv1.Operation
+	Source           types.SourceType
+	EnforcementPoint string
 }
