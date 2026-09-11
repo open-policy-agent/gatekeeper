@@ -1,0 +1,43 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabelsVap
+metadata:
+  name: admission-audit-annotations-vap-multiple-first
+  labels:
+    gatekeeper.sh/tests: "yes"
+spec:
+  enforcementAction: scoped
+  scopedEnforcementActions:
+    - action: warn
+      enforcementPoints:
+        - name: vap.k8s.io
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    message: All namespaces must have an owner label
+    labels:
+      - key: owner
+        allowedRegex: ^[a-zA-Z]+[.]agilebank[.]demo$
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabelsVap
+metadata:
+  name: admission-audit-annotations-vap-multiple-second
+  labels:
+    gatekeeper.sh/tests: "yes"
+spec:
+  enforcementAction: scoped
+  scopedEnforcementActions:
+    - action: warn
+      enforcementPoints:
+        - name: vap.k8s.io
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    message: All namespaces must have a team label
+    labels:
+      - key: team
+        allowedRegex: ^[a-zA-Z]+$

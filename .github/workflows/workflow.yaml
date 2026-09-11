@@ -53,7 +53,9 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/bin
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
+          make e2e-bootstrap \
+            KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} \
+            KIND_CLUSTER_FILE=test/bats/tests/kindcluster-audit.yml
 
       - name: Run e2e
         run: |
@@ -70,15 +72,20 @@ jobs:
             USE_LOCAL_IMG=true \
             GENERATE_VAP=true \
             SYNC_VAP_ENFORCEMENT_SCOPE=true \
-            GENERATE_VAPBINDING=true
+            GENERATE_VAPBINDING=true \
+            EMIT_ADMISSION_AUDIT_ANNOTATIONS=true
 
-          make test-e2e KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} ENABLE_VAP_TESTS=1
+          make test-e2e \
+            KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} \
+            ENABLE_VAP_TESTS=1 \
+            ENABLE_ADMISSION_AUDIT_ANNOTATION_TESTS=1
 
       - name: Save logs
         if: ${{ always() }}
         run: |
           kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-controller.json
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit.json
+          docker exec kind-control-plane cat /var/log/kubernetes/kube-apiserver-audit.log > logs-kube-apiserver-audit.json || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -110,7 +117,7 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/bin
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap
+          make e2e-bootstrap KIND_CLUSTER_FILE=test/bats/tests/kindcluster-audit.yml
 
       - name: Run e2e
         run: |
@@ -139,11 +146,13 @@ jobs:
             GENERATE_VAP=true \
             GENERATE_VAPBINDING=true \
             SYNC_VAP_ENFORCEMENT_SCOPE=true \
+            EMIT_ADMISSION_AUDIT_ANNOTATIONS=true \
             LOG_LEVEL=DEBUG
 
           make test-e2e \
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
-            ENABLE_VAP_TESTS=1
+            ENABLE_VAP_TESTS=1 \
+            ENABLE_ADMISSION_AUDIT_ANNOTATION_TESTS=1
 
       - name: Save logs
         if: ${{ always() }}
@@ -151,6 +160,7 @@ jobs:
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-controller.json
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=audit-controller --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-audit.json
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l run=dummy-provider --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-dummy-provider.json
+          docker exec kind-control-plane cat /var/log/kubernetes/kube-apiserver-audit.log > logs-kube-apiserver-audit.json || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

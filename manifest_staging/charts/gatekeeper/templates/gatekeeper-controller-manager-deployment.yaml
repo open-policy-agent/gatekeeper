@@ -67,6 +67,7 @@ spec:
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
         {{ if hasKey .Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}
+        {{ if hasKey .Values "emitAdmissionAuditAnnotations" }}- --emit-admission-audit-annotations={{ .Values.emitAdmissionAuditAnnotations }}{{- end }}
         {{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}
         - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace
           }}

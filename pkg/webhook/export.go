@@ -280,7 +280,7 @@ func consumeAdmissionExportJSONValue(budget *int64, value interface{}, depth int
 	case string:
 		return consumeAdmissionExportJSONString(budget, typed), true
 	case json.Number:
-		return false, false
+		return consumeAdmissionExportBudget(budget, int64(len(typed))), true
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 		return consumeAdmissionExportBudget(budget, 1), true
 	case json.RawMessage:
