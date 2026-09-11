@@ -56,8 +56,7 @@ func ReadUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
 	var result []*unstructured.Unstructured
 
 	for _, split := range splits {
-		split = clean(split)
-		if len(split) == 0 {
+		if len(clean(split)) == 0 {
 			continue
 		}
 
