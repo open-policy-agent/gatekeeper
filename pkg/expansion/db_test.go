@@ -704,6 +704,7 @@ func TestTemplatesForGVK(t *testing.T) {
 			sortTemplates(got)
 			sortTemplates(tc.want)
 
+			require.Equal(t, len(tc.want) > 0, d.hasTemplatesForGVK(tc.gvk))
 			require.Len(t, got, len(tc.want))
 			for i := 0; i < len(got); i++ {
 				if diff := cmp.Diff(got[i], tc.want[i]); diff != "" {

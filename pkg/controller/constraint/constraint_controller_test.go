@@ -869,6 +869,59 @@ func (f *fakeReporter) DeleteVAPBStatus(name types.NamespacedName) {
 	delete(f.vapbStatuses, name)
 }
 
+func TestPersistConstraintPodStatusSkipsNoopAndWritesChanges(t *testing.T) {
+	ctx := context.Background()
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
+			ConstraintUID:      "constraint-uid",
+			ObservedGeneration: 1,
+			Enforced:           true,
+		},
+	}
+	writer := &trackingWriter{}
+	reconciler := &ReconcileConstraint{writer: writer}
+
+	oldStatus := status.Status.DeepCopy()
+	if err := reconciler.persistPodStatus(ctx, status, oldStatus); err != nil {
+		t.Fatalf("persistPodStatus() error = %v, want nil", err)
+	}
+	if len(writer.updatedObjects) != 0 {
+		t.Fatalf("updates = %d, want 0 for unchanged status", len(writer.updatedObjects))
+	}
+
+	status.Status.ObservedGeneration++
+	if err := reconciler.persistPodStatus(ctx, status, oldStatus); err != nil {
+		t.Fatalf("persistPodStatus() after status change error = %v, want nil", err)
+	}
+	if len(writer.updatedObjects) != 1 {
+		t.Fatalf("updates = %d, want 1 for changed status", len(writer.updatedObjects))
+	}
+}
+
+func BenchmarkPersistConstraintPodStatusNoop(b *testing.B) {
+	ctx := context.Background()
+	status := &constraintstatusv1beta1.ConstraintPodStatus{
+		Status: constraintstatusv1beta1.ConstraintPodStatusStatus{
+			ConstraintUID:      "constraint-uid",
+			ObservedGeneration: 1,
+			Enforced:           true,
+		},
+	}
+	writer := &trackingWriter{}
+	reconciler := &ReconcileConstraint{writer: writer}
+	oldStatus := status.Status.DeepCopy()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := reconciler.persistPodStatus(ctx, status, oldStatus); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	b.ReportMetric(float64(len(writer.updatedObjects))/float64(b.N), "updates/op")
+}
+
 func newConstraintUnitReconciler(t *testing.T, ct *templates.ConstraintTemplate, instance *unstructured.Unstructured) (*ReconcileConstraint, *fakeReader, *trackingWriter, reconcile.Request) {
 	t.Helper()
 	t.Setenv("POD_NAME", "test-pod")
@@ -1232,6 +1285,9 @@ func TestManageVAPB_CleansUpStaleVAPB(t *testing.T) {
 	if deletedVAPB.Name != "gatekeeper-testkind-test-constraint" {
 		t.Errorf("expected deleted VAPB name 'gatekeeper-testkind-test-constraint', got %q", deletedVAPB.Name)
 	}
+	if len(writer.updatedObjects) != 0 {
+		t.Fatalf("expected no status updates when stale VAPB cleanup leaves status unchanged, got %d", len(writer.updatedObjects))
+	}
 }
 
 func TestManageVAPB_RegoOnlyTemplateSkipsVAPAPIDisabledError(t *testing.T) {
@@ -1506,10 +1562,66 @@ func TestManageVAPB_NoStaleVAPB_NoDelete(t *testing.T) {
 	if len(writer.deletedObjects) != 0 {
 		t.Fatalf("expected no VAPB deletions when no stale VAPB exists, got %d", len(writer.deletedObjects))
 	}
+	if len(writer.updatedObjects) != 0 {
+		t.Fatalf("expected no status updates when VAPB status is unchanged, got %d", len(writer.updatedObjects))
+	}
 
 	if _, exists := reporter.vapbStatuses[types.NamespacedName{Name: "gatekeeper-testkind-test-constraint"}]; exists {
 		t.Fatal("expected VAPB metric to be deleted when constraint no longer intends to use VAP")
 	}
+}
+
+func BenchmarkManageVAPBNoopStatus(b *testing.B) {
+	gv := schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1"}
+	transform.SetVapAPIEnabled(ptr.To(true))
+	transform.SetGroupVersion(&gv)
+	b.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	origDefault := GetDefaultGenerateVAPB()
+	SetDefaultGenerateVAPB(true)
+	b.Cleanup(func() { SetDefaultGenerateVAPB(origDefault) })
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "TestKind",
+			"metadata": map[string]interface{}{
+				"name": "test-constraint",
+				"uid":  "12345",
+			},
+			"spec": map[string]interface{}{
+				"enforcementAction": "scoped",
+				"scopedEnforcementActions": []interface{}{
+					map[string]interface{}{
+						"action": "deny",
+						"enforcementPoints": []interface{}{
+							map[string]interface{}{"name": util.WebhookEnforcementPoint},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ct := &templatesv1beta1.ConstraintTemplate{ObjectMeta: metav1.ObjectMeta{Name: "testkind"}}
+	reader := &fakeReader{objects: map[types.NamespacedName]client.Object{{Name: "testkind"}: ct}}
+	writer := &trackingWriter{}
+	reporter := &fakeReporter{vapbStatuses: map[types.NamespacedName]metrics.VAPStatus{{Name: "gatekeeper-testkind-test-constraint"}: metrics.VAPStatusError}}
+	status := &constraintstatusv1beta1.ConstraintPodStatus{Status: constraintstatusv1beta1.ConstraintPodStatusStatus{}}
+	r := &ReconcileConstraint{reader: reader, writer: writer, log: logf.Log.WithName("test"), reporter: reporter, scheme: runtime.NewScheme()}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := r.manageVAPB(context.Background(), util.Scoped, instance, status); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	b.ReportMetric(float64(len(writer.updatedObjects))/float64(b.N), "updates/op")
 }
 
 func TestManageVAPB_SkipsDeleteIfNotOwner(t *testing.T) {
@@ -1593,6 +1705,9 @@ func TestManageVAPB_SkipsDeleteIfNotOwner(t *testing.T) {
 	if len(writer.deletedObjects) != 0 {
 		t.Fatalf("expected no VAPB deletions when VAPB is owned by a different constraint, got %d", len(writer.deletedObjects))
 	}
+	if len(writer.updatedObjects) != 0 {
+		t.Fatalf("expected no status updates when VAPB is skipped and status is unchanged, got %d", len(writer.updatedObjects))
+	}
 }
 
 func TestDeleteVAPBIfOwned_FallsBackToOwnerCoordinatesWhenUIDMissing(t *testing.T) {
@@ -1641,20 +1756,25 @@ func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
 		useVAPEnforcement bool
 		regoOnlyTemplate  bool
 		initialEPState    string
+		initialEPMessage  string
 		expectEPCleaned   bool
 		expectEPState     string
+		expectEPMessage   string
+		expectUpdateCount int
 	}{
 		{
 			name:              "stale generated status cleaned when no VAPB exists",
 			useVAPEnforcement: false,
 			initialEPState:    GeneratedVAPBState,
 			expectEPCleaned:   true,
+			expectUpdateCount: 1,
 		},
 		{
 			name:              "stale error status cleaned when vap.k8s.io removed",
 			useVAPEnforcement: false,
 			initialEPState:    ErrGenerateVAPBState,
 			expectEPCleaned:   true,
+			expectUpdateCount: 1,
 		},
 		{
 			name:              "error status preserved for rego-only template with vap.k8s.io",
@@ -1663,6 +1783,30 @@ func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
 			initialEPState:    "",
 			expectEPCleaned:   false,
 			expectEPState:     ErrGenerateVAPBState,
+			expectEPMessage:   celSchema.ErrCELEngineMissing.Error(),
+			expectUpdateCount: 1,
+		},
+		{
+			name:              "stale error status updated in place for rego-only template with vap.k8s.io",
+			useVAPEnforcement: true,
+			regoOnlyTemplate:  true,
+			initialEPState:    ErrGenerateVAPBState,
+			initialEPMessage:  "stale error",
+			expectEPCleaned:   false,
+			expectEPState:     ErrGenerateVAPBState,
+			expectEPMessage:   celSchema.ErrCELEngineMissing.Error(),
+			expectUpdateCount: 1,
+		},
+		{
+			name:              "matching error status skips final update for rego-only template with vap.k8s.io",
+			useVAPEnforcement: true,
+			regoOnlyTemplate:  true,
+			initialEPState:    ErrGenerateVAPBState,
+			initialEPMessage:  celSchema.ErrCELEngineMissing.Error(),
+			expectEPCleaned:   false,
+			expectEPState:     ErrGenerateVAPBState,
+			expectEPMessage:   celSchema.ErrCELEngineMissing.Error(),
+			expectUpdateCount: 0,
 		},
 	}
 
@@ -1683,8 +1827,9 @@ func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
 					"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 					"kind":       "TestKind",
 					"metadata": map[string]interface{}{
-						"name": "test-constraint",
-						"uid":  "12345",
+						"generation": int64(1),
+						"name":       "test-constraint",
+						"uid":        "12345",
 					},
 					"spec": map[string]interface{}{
 						"enforcementAction": "scoped",
@@ -1734,22 +1879,28 @@ func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
 					{
 						EnforcementPoint:   util.VAPEnforcementPoint,
 						State:              tt.initialEPState,
+						Message:            tt.initialEPMessage,
 						ObservedGeneration: 1,
 					},
 				}
 			}
 
+			writer := &trackingWriter{}
 			r := &ReconcileConstraint{
 				reader:   reader,
-				writer:   &trackingWriter{},
+				writer:   writer,
 				log:      logf.Log.WithName("test"),
 				reporter: &fakeReporter{},
 				scheme:   s,
 			}
 
+			oldStatus := status.Status.DeepCopy()
 			_, err := r.manageVAPB(context.Background(), util.Scoped, instance, status)
 			if err != nil {
 				t.Fatalf("manageVAPB returned unexpected error: %v", err)
+			}
+			if err := r.persistPodStatus(context.Background(), status, oldStatus); err != nil {
+				t.Fatalf("persistPodStatus returned unexpected error: %v", err)
 			}
 
 			var foundEP *constraintstatusv1beta1.EnforcementPointStatus
@@ -1771,6 +1922,12 @@ func TestManageVAPB_EnforcementPointStatusCleanup(t *testing.T) {
 				if foundEP.State != tt.expectEPState {
 					t.Fatalf("expected EP state %q, got %q", tt.expectEPState, foundEP.State)
 				}
+				if tt.expectEPMessage != "" && foundEP.Message != tt.expectEPMessage {
+					t.Fatalf("expected EP message %q, got %q", tt.expectEPMessage, foundEP.Message)
+				}
+			}
+			if len(writer.updatedObjects) != tt.expectUpdateCount {
+				t.Fatalf("expected %d status updates, got %d", tt.expectUpdateCount, len(writer.updatedObjects))
 			}
 		})
 	}

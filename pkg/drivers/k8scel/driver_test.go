@@ -3,6 +3,7 @@ package k8scel
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
@@ -227,6 +228,96 @@ func TestDriverQueryWithNamespace(t *testing.T) {
 	}
 }
 
+func BenchmarkDriverQueryNamespaceConversion(b *testing.B) {
+	ctx := context.Background()
+
+	driver, err := New()
+	if err != nil {
+		b.Fatalf("Failed to create driver: %v", err)
+	}
+	if err := driver.AddTemplate(ctx, makeSimpleTemplate()); err != nil {
+		b.Fatalf("Failed to add template: %v", err)
+	}
+
+	req := makeSimplePodReview(b)
+	namespace := map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "Namespace",
+		"metadata": map[string]interface{}{
+			"name": "test-namespace",
+			"labels": map[string]interface{}{
+				"environment": "production",
+			},
+		},
+	}
+
+	for _, constraintCount := range []int{1, 10, 100, 1000} {
+		constraints := make([]*unstructured.Unstructured, constraintCount)
+		for i := 0; i < constraintCount; i++ {
+			constraints[i] = makeSimpleConstraint("test-constraint-" + strconv.Itoa(i))
+		}
+
+		b.Run("namespace-present/constraints-"+strconv.Itoa(constraintCount), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, err := driver.Query(ctx, "SimpleCheck", constraints, req, reviews.Namespace(namespace)); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+
+		b.Run("namespace-absent/constraints-"+strconv.Itoa(constraintCount), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, err := driver.Query(ctx, "SimpleCheck", constraints, req); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func makeSimplePodReview(tb testing.TB) *testReview {
+	tb.Helper()
+	pod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "test-namespace",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "test", Image: "test:latest"}},
+		},
+	}
+
+	podRaw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
+	if err != nil {
+		tb.Fatalf("Failed to convert pod: %v", err)
+	}
+
+	return &testReview{
+		request: &admissionv1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			},
+			Resource: metav1.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "pods",
+			},
+			Name:      "test-pod",
+			Namespace: "test-namespace",
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: mustMarshal(tb, podRaw)},
+		},
+	}
+}
+
 // makeSimpleTemplate creates a simple CEL constraint template for testing.
 func makeSimpleTemplate() *templates.ConstraintTemplate {
 	ct := &templates.ConstraintTemplate{}
@@ -271,7 +362,7 @@ func makeSimpleConstraint(name string) *unstructured.Unstructured {
 	}
 }
 
-func mustMarshal(t *testing.T, obj interface{}) []byte {
+func mustMarshal(t testing.TB, obj interface{}) []byte {
 	t.Helper()
 	jsonData, err := json.Marshal(obj)
 	if err != nil {
