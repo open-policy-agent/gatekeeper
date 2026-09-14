@@ -120,7 +120,9 @@ const (
 				// cluster-scoped objects (non-namespace) always match
 				!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
 					![%s].exists(nsMatcher,
-						(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+						(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$")) &&
+						has(namespaceObject.metadata.labels) &&
+						("admission.gatekeeper.sh/ignore" in namespaceObject.metadata.labels)
 					)
 				)
 			)
