@@ -16,10 +16,60 @@ limitations under the License.
 package main
 
 import (
+	"context"
+	"flag"
 	"testing"
 
 	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
+	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
+
+var testConfig *rest.Config
+
+func TestMain(m *testing.M) {
+	testutils.StartControlPlane(m, &testConfig, 0)
+}
+
+func TestSetupControllersStatusOnly(t *testing.T) {
+	if err := flag.Set("operation", "status"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := flag.Set("operation", "audit,generate,mutation-controller,mutation-status,mutation-webhook,status,webhook"); err != nil {
+			t.Error(err)
+		}
+	})
+	originalExternalDataEnabled := *externaldata.ExternalDataEnabled
+	*externaldata.ExternalDataEnabled = false
+	t.Cleanup(func() { *externaldata.ExternalDataEnabled = originalExternalDataEnabled })
+
+	mgr, err := ctrl.NewManager(testConfig, ctrl.Options{
+		Scheme:                 scheme,
+		Metrics:                metricsserver.Options{BindAddress: "0"},
+		HealthProbeBindAddress: "0",
+		MapperProvider:         apiutil.NewDynamicRESTMapper,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tracker, err := readiness.SetupTrackerNoReadyz(mgr, false, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	setupFinished := make(chan struct{})
+	close(setupFinished)
+	if err := setupControllers(context.Background(), mgr, tracker, setupFinished); err != nil {
+		t.Fatalf("setupControllers() = %v, want nil", err)
+	}
+}
 
 func TestNewExportSystem(t *testing.T) {
 	origExport := *exportutil.ExportEnabled

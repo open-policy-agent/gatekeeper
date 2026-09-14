@@ -58,6 +58,9 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return nil
 	}
 	r := newReconciler(mgr)
+	if a.Events == nil {
+		r.reader = mgr.GetClient()
+	}
 	if a.IfWatching != nil {
 		r.ifWatching = a.IfWatching
 	}
@@ -135,9 +138,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 		return err
 	}
 
+	if events == nil {
+		return nil
+	}
+
 	// Watch for changes to the provided constraint
-	return c.Watch(
-		source.Channel(events, handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc())))
+	return c.Watch(source.Channel(events, handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc())))
 }
 
 func indexStatusLabel(ctx context.Context, mgr manager.Manager, obj client.Object, field string) error {
