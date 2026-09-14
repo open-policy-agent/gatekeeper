@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -278,6 +279,123 @@ func TestAdmissionExportMessagePreflightAllowsExactEncodedLimit(t *testing.T) {
 	encoded, err := json.Marshal(message)
 	require.NoError(t, err)
 	require.True(t, admissionExportMessageFitsBudget(message, int64(len(encoded))))
+}
+
+func TestConsumeAdmissionExportJSONValueEncodedSize(tester *testing.T) {
+	testCases := []struct {
+		name  string
+		value interface{}
+	}{
+		{name: "null", value: nil},
+		{name: "true", value: true},
+		{name: "false", value: false},
+		{name: "empty string", value: ""},
+		{name: "escaped string", value: "\x00\n\t\"\\<>&"},
+		{name: "invalid UTF-8", value: "\xff"},
+		{name: "Unicode separators", value: "\u2028\u2029"},
+		{name: "empty JSON number", value: json.Number("")},
+		{name: "JSON number", value: json.Number("-123.45e+6")},
+		{name: "zero integer", value: 0},
+		{name: "minimum int", value: int(math.MinInt)},
+		{name: "maximum int", value: int(math.MaxInt)},
+		{name: "minimum int8", value: int8(math.MinInt8)},
+		{name: "maximum int8", value: int8(math.MaxInt8)},
+		{name: "minimum int16", value: int16(math.MinInt16)},
+		{name: "maximum int16", value: int16(math.MaxInt16)},
+		{name: "minimum int32", value: int32(math.MinInt32)},
+		{name: "maximum int32", value: int32(math.MaxInt32)},
+		{name: "minimum int64", value: int64(math.MinInt64)},
+		{name: "maximum int64", value: int64(math.MaxInt64)},
+		{name: "maximum uint", value: uint(math.MaxUint)},
+		{name: "maximum uint8", value: uint8(math.MaxUint8)},
+		{name: "maximum uint16", value: uint16(math.MaxUint16)},
+		{name: "maximum uint32", value: uint32(math.MaxUint32)},
+		{name: "maximum uint64", value: uint64(math.MaxUint64)},
+		{name: "zero float32", value: float32(0)},
+		{name: "negative zero float32", value: float32(math.Copysign(0, -1))},
+		{name: "maximum float32", value: float32(math.MaxFloat32)},
+		{name: "negative maximum float32", value: float32(-math.MaxFloat32)},
+		{name: "smallest float32", value: float32(math.SmallestNonzeroFloat32)},
+		{name: "small fixed float32", value: float32(1e-6)},
+		{name: "small exponent float32", value: float32(1e-7)},
+		{name: "large fixed float32", value: float32(1e20)},
+		{name: "large exponent float32", value: float32(1e21)},
+		{name: "zero float64", value: float64(0)},
+		{name: "negative zero float64", value: math.Copysign(0, -1)},
+		{name: "maximum float64", value: math.MaxFloat64},
+		{name: "negative maximum float64", value: -math.MaxFloat64},
+		{name: "smallest float64", value: math.SmallestNonzeroFloat64},
+		{name: "small fixed float64", value: 1e-6},
+		{name: "small exponent float64", value: 1e-7},
+		{name: "small exponent boundary", value: math.Nextafter(1e-6, 0)},
+		{name: "large fixed float64", value: 1e20},
+		{name: "large exponent float64", value: 1e21},
+		{name: "large fixed boundary", value: math.Nextafter(1e21, 0)},
+		{name: "nil bytes", value: []byte(nil)},
+		{name: "empty bytes", value: []byte{}},
+		{name: "one byte", value: []byte{0}},
+		{name: "two bytes", value: []byte{0, 1}},
+		{name: "three bytes", value: []byte{0, 1, 2}},
+		{name: "nil strings", value: []string(nil)},
+		{name: "empty strings", value: []string{}},
+		{name: "strings", value: []string{"owner", "team"}},
+		{name: "nil values", value: []interface{}(nil)},
+		{name: "empty values", value: []interface{}{}},
+		{name: "values", value: []interface{}{false, json.Number(""), []string{}}},
+		{name: "nil string map", value: map[string]string(nil)},
+		{name: "empty string map", value: map[string]string{}},
+		{name: "string map", value: map[string]string{"<key>": "\n"}},
+		{name: "nil value map", value: map[string]interface{}(nil)},
+		{name: "empty value map", value: map[string]interface{}{}},
+		{name: "value map", value: map[string]interface{}{"empty": []interface{}{}, "null": []byte(nil), "count": int64(math.MaxInt64)}},
+	}
+
+	for _, testCase := range testCases {
+		tester.Run(testCase.name, func(tester *testing.T) {
+			encoded, err := json.Marshal(testCase.value)
+			require.NoError(tester, err)
+
+			budget := int64(len(encoded))
+			nodes := 4096
+			withinBudget, known := consumeAdmissionExportJSONValue(&budget, testCase.value, 0, &nodes)
+			require.True(tester, known)
+			require.True(tester, withinBudget)
+			require.Zero(tester, budget)
+
+			budget = int64(len(encoded) - 1)
+			nodes = 4096
+			withinBudget, known = consumeAdmissionExportJSONValue(&budget, testCase.value, 0, &nodes)
+			require.True(tester, known)
+			require.False(tester, withinBudget)
+
+			message := &exportutil.ExportMsg{Details: testCase.value}
+			encodedMessage, err := json.Marshal(message)
+			require.NoError(tester, err)
+			require.True(tester, admissionExportMessageFitsBudget(message, int64(len(encodedMessage))))
+		})
+	}
+}
+
+func TestAdmissionExportPreflightPreservesNonFiniteNumberErrors(tester *testing.T) {
+	for _, value := range []interface{}{
+		float32(math.NaN()), float32(math.Inf(1)), float32(math.Inf(-1)),
+		math.NaN(), math.Inf(1), math.Inf(-1),
+	} {
+		tester.Run(fmt.Sprintf("%T/%v", value, value), func(tester *testing.T) {
+			budget := int64(maxAdmissionAuditDetailsBytes)
+			nodes := 4096
+			withinBudget, known := consumeAdmissionExportJSONValue(&budget, value, 0, &nodes)
+			require.False(tester, known)
+			require.False(tester, withinBudget)
+
+			metrics := &fakeAdmissionExportMetrics{}
+			exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), metrics, nil)
+			exporter.Export(&exportutil.ExportMsg{Details: value})
+			require.Equal(tester, 1, metrics.dropped[admissionExportDropReasonMarshalError])
+			require.Zero(tester, metrics.dropped[admissionExportDropReasonMessageTooLarge])
+			require.Empty(tester, exporter.queue)
+		})
+	}
 }
 
 func TestQueuedAdmissionViolationExporterDropsUnencodableMessage(t *testing.T) {

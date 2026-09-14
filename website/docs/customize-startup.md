@@ -46,6 +46,16 @@ There are four types of events that are emitted by Gatekeeper when the emit even
 > ```
 > Gatekeeper might burst 25 events about an object, but limit the refill rate to 1 new event every 5 minutes. This will help control the long-tail of events for resources that are always violating the constraint.
 
+## [Alpha] Emit API server audit annotations for admission evaluations
+
+The `--emit-admission-audit-annotations` flag adds audit annotations to validation requests that reach Gatekeeper policy evaluation. It is disabled by default. Requests skipped before policy evaluation, such as excluded namespaces, are not annotated.
+
+The validation webhook returns one `evaluation` entry in `AdmissionResponse.auditAnnotations`. The API server prefixes that key with the webhook name, producing `validation.gatekeeper.sh/evaluation` in the API audit event. Its versioned JSON value records whether Gatekeeper allowed the request, the resource identity, and bounded summaries of deny, warn, and dryrun violations. The value is limited to 10 KiB. Long messages, policy-provided `details`, or additional violations may be omitted, and the payload reports truncation. Resource labels and Constraint annotations are intentionally excluded.
+
+When the flag is enabled on a process performing the `generate` operation, Gatekeeper-generated ValidatingAdmissionPolicies add an `evaluation` audit annotation with the value `true` when at least one binding evaluates the request. Kubernetes deduplicates this constant across matching bindings, so the annotation value remains bounded. Generated ValidatingAdmissionPolicyBindings also add the Kubernetes `Audit` action alongside `Deny` or `Warn`; `dryrun` already maps to `Audit`. Failed native validations therefore produce Kubernetes' standard `validation.policy.admission.k8s.io/validation_failure` annotation with policy and binding details. If the webhook and native VAP enforcement points both evaluate a request, both audit entries are expected.
+
+For split deployments, enable the flag on both the validation webhook process and the process performing the `generate` operation. API server audit logging must be enabled at `Metadata` or a higher level. Audit annotations do not create Kubernetes Event resources, do not annotate admitted objects, and do not change admission decisions. Policy messages and `details` may contain user-controlled or sensitive data, so protect access to the audit backend.
+
 ## [Beta] Enable mutation logging and annotations
 
 The `--log-mutations` flag enables logging of mutation events and errors.
