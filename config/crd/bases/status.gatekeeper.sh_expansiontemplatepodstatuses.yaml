@@ -38,36 +38,48 @@ spec:
           metadata:
             type: object
           status:
-            description: ExpansionTemplatePodStatusStatus defines the observed state
-              of ExpansionTemplatePodStatus.
+            description: status is the observed state of the ExpansionTemplate for
+              this pod.
             properties:
               errors:
+                description: errors lists any errors encountered while processing
+                  the ExpansionTemplate.
                 items:
                   properties:
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                     type:
+                      description: |-
+                        type indicates a specific class of error for use by controller code. If not
+                        present, the error should be treated as not matching any known type.
                       type: string
                   required:
                   - message
                   type: object
                 type: array
               id:
-                description: 'Important: Run "make" to regenerate code after modifying
-                  this file'
+                description: id is the name of the pod that generated this status.
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the ExpansionTemplate that was last
+                  processed by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
               templateUID:
                 description: |-
-                  UID is a type that holds unique ID values, including UUIDs.  Because we
-                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                  intent and helps make sure that UIDs and names do not get conflated.
+                  templateUID is the UID of the ExpansionTemplate this status reports on, used
+                  to detect drift, such as when the ExpansionTemplate has been recreated after
+                  its CRD was deleted out from under it, interrupting the watch.
                 type: string
             type: object
         type: object

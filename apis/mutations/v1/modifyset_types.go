@@ -30,29 +30,29 @@ type ModifySetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+	// applyTo lists the specific groups, versions and kinds a mutation will be applied to.
 	// This is necessary because every mutation implies part of an object schema and object
 	// schemas are associated with specific GVKs.
 	ApplyTo []match.MutationApplyTo `json:"applyTo,omitempty"`
 
-	// Match allows the user to limit which resources get mutated.
+	// match allows the user to limit which resources get mutated.
 	// Individual match criteria are AND-ed together. An undefined
 	// match criteria matches everything.
 	Match match.Match `json:"match,omitempty"`
 
-	// Location describes the path to be mutated, for example: `spec.containers[name: main].args`.
+	// location describes the path to be mutated, for example: `spec.containers[name: main].args`.
 	Location string `json:"location,omitempty"`
 
-	// Parameters define the behavior of the mutator.
+	// parameters define the behavior of the mutator.
 	Parameters ModifySetParameters `json:"parameters,omitempty"`
 }
 
 type ModifySetParameters struct {
-	// PathTests are a series of existence tests that can be checked
+	// pathTests are a series of existence tests that can be checked
 	// before a mutation is applied
 	PathTests []PathTest `json:"pathTests,omitempty"`
 
-	// Operation describes whether values should be merged in ("merge"), or pruned ("prune"). Default value is "merge"
+	// operation describes whether values should be merged in ("merge"), or pruned ("prune"). Default value is "merge"
 	// +kubebuilder:validation:Enum=merge;prune
 	// +kubebuilder:default=merge
 	Operation Operation `json:"operation,omitempty"`
@@ -77,6 +77,7 @@ const (
 // Values describes the values provided to the operation.
 // +kubebuilder:object:generate=false
 type Values struct {
+	// fromList is the list of values provided to the operation.
 	FromList []interface{} `json:"fromList,omitempty"`
 }
 
@@ -115,6 +116,7 @@ type ModifySetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// byPod lists the observed status of this ModifySet for each pod.
 	ByPod []v1beta1.MutatorPodStatusStatus `json:"byPod,omitempty"`
 }
 
@@ -127,10 +129,13 @@ type ModifySetStatus struct {
 // ModifySet allows the user to modify non-keyed lists, such as
 // the list of arguments to a container.
 type ModifySet struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ModifySetSpec   `json:"spec,omitempty"`
+	// spec defines the desired state of ModifySet.
+	Spec ModifySetSpec `json:"spec,omitempty"`
+	// status is the observed state of ModifySet.
 	Status ModifySetStatus `json:"status,omitempty"`
 }
 
