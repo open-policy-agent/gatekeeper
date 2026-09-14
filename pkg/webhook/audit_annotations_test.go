@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -143,6 +144,41 @@ func TestBoundedAdmissionAuditDetailsRejectsBeforeMarshal(t *testing.T) {
 	})
 }
 
+func TestAdmissionAuditDetailsPreflightRejectsOversizedValues(tester *testing.T) {
+	testCases := []struct {
+		name  string
+		value interface{}
+		count int
+	}{
+		{name: "large int64 values", value: int64(math.MaxInt64), count: 110},
+		{name: "false values", value: false, count: 342},
+		{name: "nil containers", value: []interface{}(nil), count: 410},
+		{name: "empty containers", value: map[string]interface{}{}, count: 683},
+	}
+
+	for _, testCase := range testCases {
+		tester.Run(testCase.name, func(tester *testing.T) {
+			values := make([]interface{}, testCase.count)
+			for index := range values {
+				values[index] = testCase.value
+			}
+			encoded, err := json.Marshal(values)
+			require.NoError(tester, err)
+			require.Greater(tester, len(encoded), maxAdmissionAuditDetailsBytes)
+
+			budget := int64(maxAdmissionAuditDetailsBytes)
+			nodes := 4096
+			withinBudget, known := consumeAdmissionExportJSONValue(&budget, values, 0, &nodes)
+			require.True(tester, known)
+			require.False(tester, withinBudget)
+
+			details, omitted := boundedAdmissionAuditDetails(map[string]interface{}{"details": values})
+			require.Nil(tester, details)
+			require.True(tester, omitted)
+		})
+	}
+}
+
 func BenchmarkBoundedAdmissionAuditDetailsOversized(b *testing.B) {
 	metadata := map[string]interface{}{
 		"details": strings.Repeat("x", 16*1024*1024),
@@ -151,6 +187,19 @@ func BenchmarkBoundedAdmissionAuditDetailsOversized(b *testing.B) {
 	b.SetBytes(16 * 1024 * 1024)
 
 	for b.Loop() {
+		boundedAdmissionAuditDetails(metadata)
+	}
+}
+
+func BenchmarkBoundedAdmissionAuditDetailsOversizedNumbers(benchmark *testing.B) {
+	values := make([]interface{}, 110)
+	for index := range values {
+		values[index] = int64(math.MaxInt64)
+	}
+	metadata := map[string]interface{}{"details": values}
+	benchmark.ReportAllocs()
+
+	for benchmark.Loop() {
 		boundedAdmissionAuditDetails(metadata)
 	}
 }
