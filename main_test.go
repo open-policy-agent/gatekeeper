@@ -20,6 +20,7 @@ import (
 	"flag"
 	"testing"
 
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
@@ -67,5 +68,38 @@ func TestSetupControllersStatusOnly(t *testing.T) {
 	close(setupFinished)
 	if err := setupControllers(context.Background(), mgr, tracker, setupFinished); err != nil {
 		t.Fatalf("setupControllers() = %v, want nil", err)
+	}
+}
+
+func TestNewExportSystem(t *testing.T) {
+	origExport := *exportutil.ExportEnabled
+	origAdmission := *exportutil.AdmissionExportEnabled
+	defer func() {
+		*exportutil.ExportEnabled = origExport
+		*exportutil.AdmissionExportEnabled = origAdmission
+	}()
+
+	tests := []struct {
+		name             string
+		exportEnabled    bool
+		admissionEnabled bool
+		wantNil          bool
+	}{
+		{"both disabled", false, false, true},
+		{"audit export enabled", true, false, false},
+		{"admission export enabled", false, true, false},
+		{"both enabled", true, true, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			*exportutil.ExportEnabled = tc.exportEnabled
+			*exportutil.AdmissionExportEnabled = tc.admissionEnabled
+
+			got := newExportSystem()
+			if gotNil := got == nil; gotNil != tc.wantNil {
+				t.Errorf("newExportSystem() = %v, want nil: %v", got, tc.wantNil)
+			}
+		})
 	}
 }

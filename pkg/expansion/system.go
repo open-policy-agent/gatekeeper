@@ -131,6 +131,15 @@ func genGVKToSchemaGVK(gvk expansionunversioned.GeneratedGVK) schema.GroupVersio
 	}
 }
 
+// HasTemplatesForGVK returns true when at least one non-conflicting
+// ExpansionTemplate can expand the supplied generator GVK.
+func (s *System) HasTemplatesForGVK(gvk schema.GroupVersionKind) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.db.hasTemplatesForGVK(gvk)
+}
+
 // Expand expands `base` into resultant resources, and applies any applicable
 // mutators. If no ExpansionTemplates match `base`, an empty slice
 // will be returned. If `s.mutationSystem` is nil, no mutations will be applied.
