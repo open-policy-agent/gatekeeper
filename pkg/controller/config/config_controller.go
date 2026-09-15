@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
@@ -54,6 +55,11 @@ import (
 
 const (
 	ctrlName = "config-controller"
+
+	// requeueDelayOnTransientError is used in place of the deprecated Result.Requeue, which
+	// deferred to the workqueue's rate limiter; a fixed short delay is used instead to retry
+	// a transient cache-sync failure without hammering the API server.
+	requeueDelayOnTransientError = time.Second
 )
 
 var (
@@ -330,7 +336,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
 		r.tracker.For(configGVK).TryCancelExpect(instance)
 
-		return reconcile.Result{Requeue: true}, r.updateOrCreatePodStatus(ctx, instance, err)
+		return reconcile.Result{RequeueAfter: requeueDelayOnTransientError}, r.updateOrCreatePodStatus(ctx, instance, err)
 	}
 
 	r.tracker.For(configGVK).Observe(instance)
