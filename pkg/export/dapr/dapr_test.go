@@ -2,10 +2,12 @@ package dapr
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/driver"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -103,6 +105,52 @@ func TestDapr_Publish(t *testing.T) {
 				connectionName: "test",
 			},
 			wantErr: true,
+		},
+		{
+			name: "admission violation is rejected",
+			args: args{
+				ctx: ctx,
+				data: util.ExportMsg{
+					EventType: util.AdmissionViolationEventType,
+				},
+				topic:          "test",
+				connectionName: "test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "admission violation pointer is rejected",
+			args: args{
+				ctx: ctx,
+				data: &util.ExportMsg{
+					EventType: util.AdmissionViolationEventType,
+				},
+				topic:          "test",
+				connectionName: "test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "admission violation raw message is rejected",
+			args: args{
+				ctx:            ctx,
+				data:           json.RawMessage(`{"eventType":"` + util.AdmissionViolationEventType + `"}`),
+				topic:          "test",
+				connectionName: "test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "audit violation is published",
+			args: args{
+				ctx: ctx,
+				data: util.ExportMsg{
+					EventType: "violation_audited",
+				},
+				topic:          "test",
+				connectionName: "test",
+			},
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
