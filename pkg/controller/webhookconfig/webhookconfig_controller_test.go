@@ -26,7 +26,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
@@ -54,14 +53,11 @@ func TestReconcile(t *testing.T) {
 	}
 
 	originalVwhName := getVwhName()
-	originalSyncVAPScope := transform.SyncVAPScope
 	defer func() {
 		setVwhName(originalVwhName)
-		transform.SyncVAPScope = originalSyncVAPScope
 	}()
 
 	setVwhName(testVwhName)
-	transform.SyncVAPScope = ptr.To(true)
 
 	mgr, _ := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
