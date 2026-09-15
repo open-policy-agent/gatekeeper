@@ -125,9 +125,16 @@ func AssignedStringList() []string {
 	return operations.assignedStringList
 }
 
-// HasValidationOperations returns `true` if there
-// are any operations that would require a constraint or template controller
-// or a sync controller.
+// HasValidationOperations returns true if there are any validation operations
+// that require a constraint client or enforcement points (audit or webhook).
+// Status aggregation does NOT require validation and should not trigger
+// constraint client initialization.
 func HasValidationOperations() bool {
 	return IsAssigned(Audit) || IsAssigned(Webhook)
+}
+
+// HasStatusOperations returns true if the status aggregation operation is assigned.
+// Status aggregation requires its own controllers but not the constraint client.
+func HasStatusOperations() bool {
+	return IsAssigned(Status)
 }
