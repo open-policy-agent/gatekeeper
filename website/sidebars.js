@@ -38,7 +38,8 @@ module.exports = {
         'export',
         'validating-admission-policy',
         'enforcement-points',
-        'runtime-flags'
+        'runtime-flags',
+        'api'
       ],
     },
     {
