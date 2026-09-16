@@ -423,9 +423,10 @@ When a bundle specifies `inherits: <parent-bundle>`, the following rules apply:
 
 **"Fail fast" vs "Partial success" clarification**:
 
-- **Default behavior (MVP)**: Fail fast. On the first error, stop processing and return the appropriate exit code.
-- **Exit code 4 (partial success)** occurs only with `--continue-on-error` flag (if implemented) or in specific batch operations where some resources succeed before a failure.
-- For MVP, most operations use fail-fast. Exit code 4 is reserved for future batch modes.
+- **`install` (MVP)**: Fail fast. On the first error, stop processing and return the appropriate exit code.
+- **`upgrade`**: Record the per-policy error and continue with the remaining candidates. One policy with a missing artifact or bad `metadata.name` must not block the rest of the batch from moving to their latest versions. A **cluster-scoped** failure (Gatekeeper not reconciling, API server unreachable, credentials rejected) still aborts immediately: it would hit every remaining candidate the same way, and each retry can block for the full reconcile timeout.
+- **Exit code 4 (partial success)** occurs in batch operations where some resources succeed before a failure.
+- An ownership conflict keeps its own exit code 3 even in a batch that continued past it.
 
 | Exit Code | Condition |
 |-----------|-----------|

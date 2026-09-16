@@ -141,9 +141,10 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 			fmt.Fprintln(os.Stderr, err.Error())
 			return gatorpolicy.NewClusterError(err.Error())
 		}
-		// Upgrade can return a partial result alongside an error when the
-		// cluster Kubernetes version could not be resolved for bounded
-		// candidates: unbounded candidates still upgrade.
+		// Upgrade can return a partial result alongside an error: the cluster
+		// Kubernetes version could not be resolved for bounded candidates
+		// (unbounded ones still upgrade), or a cluster-scoped failure aborted
+		// the batch after some candidates had already been upgraded.
 		if result == nil {
 			return err
 		}
@@ -180,19 +181,31 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return printErr
 	}
 
-	// Return appropriate error for non-success cases
-	//
-	// A cluster-version resolution failure (e.g. /version unreachable or
-	// forbidden) leaves every bounded candidate in result.Failed, but it is a
-	// cluster-connectivity problem, not a batch that partly succeeded. Per the
-	// documented CLI contract, unreachable/permission-denied clusters map to
-	// exit code 2, and exit code 4 is reserved for batches where some
-	// candidate actually upgraded.
+	return upgradeExitError(result, upgradeErr)
+}
+
+// upgradeExitError maps a completed upgrade result to the command's exit error
+// (nil on full success), following the documented gator exit-code contract.
+// Mirrors installExitError.
+func upgradeExitError(result *client.UpgradeResult, upgradeErr error) error {
+	// A cluster-scoped failure - an unresolvable cluster version, an
+	// unreachable API server, a Gatekeeper controller that never reconciles -
+	// leaves candidates in result.Failed, but it is a cluster problem, not a
+	// batch that partly succeeded. Per the documented CLI contract,
+	// unreachable/permission-denied clusters map to exit code 2, and exit code 4
+	// is reserved for batches where some candidate actually upgraded.
 	if upgradeErr != nil && len(result.Upgraded) == 0 {
 		return gatorpolicy.NewClusterError(upgradeErr.Error())
 	}
 
 	if len(result.Failed) > 0 {
+		// An ownership conflict has its own exit code. The batch continues past
+		// a conflict, so check it here rather than folding it into generic
+		// partial success (mirrors install).
+		if result.ConflictErr != nil {
+			return gatorpolicy.NewConflictError(fmt.Sprintf("upgrade incomplete: %s", result.ConflictErr.Error()))
+		}
+
 		msg := "upgrade incomplete: some policies failed to upgrade"
 		// When incompatible policies are also present, the Incompatible branch
 		// below is unreachable, so fold its guidance into this message rather than

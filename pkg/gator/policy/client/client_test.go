@@ -300,6 +300,11 @@ type FakeClient struct {
 	serverVersion       string
 	serverVersionErr    error
 	serverVersionCalls  int
+	// waitTemplateReadyErr is returned by WaitForTemplateReady, letting a test
+	// simulate a Gatekeeper controller that never reconciles. The call count
+	// shows how many policies a batch attempted before giving up.
+	waitTemplateReadyErr   error
+	waitTemplateReadyCalls int
 }
 
 func NewFakeClient() *FakeClient {
@@ -375,7 +380,8 @@ func (c *FakeClient) DeleteConstraint(_ context.Context, _ schema.GroupVersionRe
 }
 
 func (c *FakeClient) WaitForTemplateReady(_ context.Context, _ string, _ time.Duration) error {
-	return nil
+	c.waitTemplateReadyCalls++
+	return c.waitTemplateReadyErr
 }
 
 func (c *FakeClient) WaitForConstraintCRD(_ context.Context, _ string, _ time.Duration) error {
@@ -797,6 +803,72 @@ metadata:
 		assert.Equal(t, "versioned-policy", result.Unknown[0].Name)
 	})
 
+	t.Run("dry-run with unknown compatibility still rejects a nonexistent template artifact", func(t *testing.T) {
+		fakeClient := NewFakeClient()
+		// Unresolved cluster compatibility must not exempt the policy from
+		// artifact validation: a bounded policy whose template can't be fetched
+		// must surface as a failure, not be silently previewed as "would install"
+		// under cover of "Unknown".
+		emptyFetcher := &FakeFetcher{content: map[string][]byte{}}
+
+		result, err := Install(context.Background(), fakeClient, emptyFetcher, versionedCatalog("v1.21.0"), &InstallOptions{
+			Policies: []string{"versioned-policy"},
+			DryRun:   true,
+		})
+		require.NoError(t, err)
+		assert.Zero(t, fakeClient.serverVersionCalls, "ServerVersion must not be queried during an offline dry-run")
+		assert.Empty(t, result.Unknown)
+		assert.Empty(t, result.Installed)
+		require.Len(t, result.Failed, 1)
+		assert.Equal(t, "versioned-policy", result.Failed[0])
+		assert.Contains(t, result.Errors["versioned-policy"], "fetching template")
+	})
+
+	t.Run("dry-run with unknown compatibility still rejects a malformed template artifact", func(t *testing.T) {
+		fakeClient := NewFakeClient()
+		malformedFetcher := &FakeFetcher{
+			content: map[string][]byte{
+				// A name mismatch is caught the same way a YAML parse error would
+				// be: the artifact is fetched and validated regardless of the
+				// unresolved compatibility outcome.
+				"templates/test.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: some-other-name
+`),
+			},
+		}
+
+		result, err := Install(context.Background(), fakeClient, malformedFetcher, versionedCatalog("v1.21.0"), &InstallOptions{
+			Policies: []string{"versioned-policy"},
+			DryRun:   true,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, result.Unknown)
+		assert.Empty(t, result.Installed)
+		require.Len(t, result.Failed, 1)
+		assert.Equal(t, "versioned-policy", result.Failed[0])
+		assert.Contains(t, result.Errors["versioned-policy"], "metadata.name")
+	})
+
+	t.Run("dry-run with unknown compatibility retains the note for a valid artifact", func(t *testing.T) {
+		fakeClient := NewFakeClient()
+		// With a valid, matching artifact, the unknown-compatibility outcome
+		// (and its explanatory note) is preserved rather than being reported as
+		// installed or dropped.
+		result, err := Install(context.Background(), fakeClient, newFetcher(), versionedCatalog("v1.21.0"), &InstallOptions{
+			Policies: []string{"versioned-policy"},
+			DryRun:   true,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, result.Failed)
+		assert.Empty(t, result.Installed)
+		require.Len(t, result.Unknown, 1)
+		assert.Equal(t, "versioned-policy", result.Unknown[0].Name)
+		assert.Contains(t, result.Unknown[0].Reason, "not verified in this offline dry-run preview")
+	})
+
 	t.Run("dry-run honors a pre-resolved version so the gate still fires", func(t *testing.T) {
 		fakeClient := NewFakeClient()
 		// A caller (e.g. Upgrade) already resolved the cluster version and passes
@@ -907,6 +979,70 @@ metadata:
 		require.Len(t, result.Failed, 1)
 		assert.Equal(t, "bounded", result.Failed[0])
 		assert.Contains(t, result.Errors["bounded"], "--force")
+	})
+
+	t.Run("a not-found policy folds its own error into a pending cluster-version error", func(t *testing.T) {
+		// "bounded" fails cluster-version resolution, then "typo" is not in the
+		// catalog and trips the fail-fast branch. Both causes must reach the
+		// caller: the version error drives the exit code (the cluster is
+		// unreachable) and the not-found detail rides along in the message
+		// rather than being dropped.
+		fakeClient := NewFakeClient()
+		fakeClient.serverVersionErr = errors.New("discovery unavailable")
+
+		cat := &catalog.PolicyCatalog{
+			Policies: []catalog.Policy{
+				{Name: "bounded", Version: "v1.0.0", TemplatePath: "templates/bounded.yaml", MinKubernetesVersion: "v1.21.0"},
+			},
+		}
+		fetcher := &FakeFetcher{
+			content: map[string][]byte{
+				"templates/bounded.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: bounded
+`),
+			},
+		}
+
+		result, err := Install(context.Background(), fakeClient, fetcher, cat, &InstallOptions{
+			Policies: []string{"bounded", "typo"},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "--force", "the cluster-version cause must stay first so the exit code is a cluster error")
+		assert.Contains(t, err.Error(), "policy not found: typo", "the not-found cause must not be dropped")
+		require.NotNil(t, result)
+		assert.Equal(t, []string{"bounded", "typo"}, result.Failed)
+		assert.Contains(t, result.Errors["typo"], "policy not found: typo")
+	})
+
+	t.Run("a not-found policy alone is reported through the result, not a top-level error", func(t *testing.T) {
+		// With no pending cluster-version error, fail-fast returns a nil error so
+		// the caller classifies the failure from result.Failed (exit 4), rather
+		// than a cluster error.
+		fakeClient := NewFakeClient()
+		cat := &catalog.PolicyCatalog{
+			Policies: []catalog.Policy{{Name: "known", Version: "v1.0.0", TemplatePath: "templates/known.yaml"}},
+		}
+		fetcher := &FakeFetcher{
+			content: map[string][]byte{
+				"templates/known.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: known
+`),
+			},
+		}
+
+		result, err := Install(context.Background(), fakeClient, fetcher, cat, &InstallOptions{
+			Policies: []string{"known", "typo"},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"known"}, result.Installed)
+		assert.Equal(t, []string{"typo"}, result.Failed)
+		assert.Contains(t, result.Errors["typo"], "policy not found: typo")
 	})
 }
 
@@ -1185,11 +1321,10 @@ metadata:
 		assert.Equal(t, 1, fakeClient.serverVersionCalls)
 	})
 
-	t.Run("upgrade fails fast on a genuine error instead of continuing the batch", func(t *testing.T) {
+	t.Run("upgrade records a genuine per-policy error without aborting the batch", func(t *testing.T) {
 		// "broken" has no fetchable template so its upgrade errors; "healthy"
-		// comes after it in the explicit policy order. Unlike an
-		// incompatible-version skip, a real error stops the batch per the MVP
-		// fail-fast contract, matching install.
+		// comes after it in the explicit policy order. A failure scoped to one
+		// policy must not prevent the remaining candidates from being attempted.
 		mixedCat := &catalog.PolicyCatalog{
 			Policies: []catalog.Policy{
 				{Name: "broken", Version: "v2.0.0", TemplatePath: "templates/missing.yaml"},
@@ -1207,7 +1342,7 @@ metadata:
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
-  name: t
+  name: healthy
 `),
 			},
 		}
@@ -1217,8 +1352,110 @@ metadata:
 		require.NoError(t, err)
 		require.Len(t, result.Failed, 1)
 		assert.Equal(t, "broken", result.Failed[0])
-		// The batch stopped at "broken": "healthy" was never attempted.
+		// "healthy" was still attempted and upgraded despite "broken" failing.
+		require.Len(t, result.Upgraded, 1)
+		assert.Equal(t, "healthy", result.Upgraded[0].Name)
+	})
+
+	// bundledCat holds two policies that both carry a bundle constraint, so
+	// upgrading either one goes through installConstraint (and therefore the
+	// reconcile waits).
+	bundledCat := &catalog.PolicyCatalog{
+		Policies: []catalog.Policy{
+			{Name: "first", Version: "v2.0.0", TemplatePath: "templates/first.yaml", BundleConstraints: map[string]string{"b": "constraints/first.yaml"}},
+			{Name: "second", Version: "v2.0.0", TemplatePath: "templates/second.yaml", BundleConstraints: map[string]string{"b": "constraints/second.yaml"}},
+		},
+		Bundles: []catalog.Bundle{{Name: "b", Policies: []string{"first", "second"}}},
+	}
+
+	// bundledFetcher serves a template and a constraint for each bundledCat policy.
+	bundledFetcher := &FakeFetcher{
+		content: map[string][]byte{
+			"templates/first.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: first
+`),
+			"constraints/first.yaml": []byte(`
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: First
+metadata:
+  name: first-constraint
+`),
+			"templates/second.yaml": []byte(`
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: second
+`),
+			"constraints/second.yaml": []byte(`
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: Second
+metadata:
+  name: second-constraint
+`),
+		},
+	}
+
+	// bundledTemplateAt builds a gator-managed ConstraintTemplate that records
+	// the bundle it was installed from, so Upgrade re-applies its constraint.
+	bundledTemplateAt := func(name, version string) *unstructured.Unstructured {
+		tmpl := managedTemplateAt(name, version)
+		tmplLabels := tmpl.GetLabels()
+		tmplLabels[labels.LabelBundle] = "b"
+		tmpl.SetLabels(tmplLabels)
+		return tmpl
+	}
+
+	t.Run("upgrade aborts the batch on a cluster-scoped failure instead of retrying every policy", func(t *testing.T) {
+		// A Gatekeeper controller that never marks the template ready is a
+		// property of the cluster, not of any one policy: every remaining
+		// candidate would wait out DefaultReconcileTimeout for the same reason.
+		fakeClient := NewFakeClient()
+		fakeClient.templates["first"] = bundledTemplateAt("first", "v1.0.0")
+		fakeClient.templates["second"] = bundledTemplateAt("second", "v1.0.0")
+		fakeClient.waitTemplateReadyErr = &ReconcileTimeoutError{Resource: `template "first" to be ready`}
+
+		opts := UpgradeOptions{Policies: []string{"first", "second"}}
+		result, err := Upgrade(context.Background(), fakeClient, bundledFetcher, bundledCat, opts)
+
+		require.Error(t, err, "a cluster-scoped failure must surface as a top-level error")
+		var timeoutErr *ReconcileTimeoutError
+		assert.ErrorAs(t, err, &timeoutErr, "the typed cause must survive the trip through install")
 		assert.Empty(t, result.Upgraded)
+		// Only the first candidate was attempted; the batch did not wait out the
+		// same timeout again for "second".
+		assert.Len(t, result.Failed, 1)
+		assert.Equal(t, 1, fakeClient.waitTemplateReadyCalls)
+	})
+
+	t.Run("upgrade records a conflict, continues the batch, and keeps it classifiable", func(t *testing.T) {
+		// "first"'s constraint already exists and is not gator-managed. That is
+		// an ownership conflict scoped to one policy, so "second" still upgrades,
+		// but the conflict must stay distinguishable from a generic failure.
+		fakeClient := NewFakeClient()
+		fakeClient.templates["first"] = bundledTemplateAt("first", "v1.0.0")
+		fakeClient.templates["second"] = bundledTemplateAt("second", "v1.0.0")
+		unmanaged := &unstructured.Unstructured{}
+		unmanaged.SetName("first-constraint")
+		unmanaged.SetKind("First")
+		fakeClient.constraints["first-constraint"] = unmanaged
+
+		opts := UpgradeOptions{Policies: []string{"first", "second"}}
+		result, err := Upgrade(context.Background(), fakeClient, bundledFetcher, bundledCat, opts)
+
+		// A conflict is per-policy, so it is not a top-level error.
+		require.NoError(t, err)
+		require.Len(t, result.Failed, 1)
+		assert.Equal(t, "first", result.Failed[0])
+		require.NotNil(t, result.ConflictErr, "the conflict must be reported so the CLI can exit 3")
+		assert.Equal(t, "First", result.ConflictErr.ResourceKind)
+		assert.Equal(t, "first-constraint", result.ConflictErr.ResourceName)
+		assert.Contains(t, result.Errors["first"], "not managed by gator")
+		// "second" was still attempted and upgraded.
+		require.Len(t, result.Upgraded, 1)
+		assert.Equal(t, "second", result.Upgraded[0].Name)
 	})
 
 	t.Run("dry-run applies the compatibility gate so the preview matches a real run", func(t *testing.T) {

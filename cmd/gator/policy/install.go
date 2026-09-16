@@ -194,7 +194,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 	// Map the completed result to the command's exit error, printing any stderr
 	// guidance the mapping asks for.
-	exitErr, stderrHint := installExitError(result, installDryRun, installErr)
+	stderrHint, exitErr := installExitError(result, installDryRun, installErr)
 	if stderrHint != "" {
 		fmt.Fprintln(os.Stderr, stderrHint)
 	}
@@ -210,7 +210,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 // reported as unknown. That is the expected outcome of a preview, not a partial
 // failure, so it must not change the exit code (scripts gate on dry-run
 // success). A real run resolves the cluster version and never lands in Unknown.
-func installExitError(result *client.InstallResult, installDryRun bool, installErr error) (err error, stderrHint string) {
+func installExitError(result *client.InstallResult, installDryRun bool, installErr error) (stderrHint string, err error) {
 	// A cluster-version resolution failure (e.g. /version unreachable or
 	// forbidden) leaves every bounded policy in result.Failed, but it is a
 	// cluster-connectivity problem, not a batch that partly succeeded. Per the
@@ -220,12 +220,12 @@ func installExitError(result *client.InstallResult, installDryRun bool, installE
 	// did install (e.g. unbounded or no-op policies alongside failed bounded
 	// ones).
 	if installErr != nil && len(result.Installed) == 0 {
-		return gatorpolicy.NewClusterError(installErr.Error()), ""
+		return "", gatorpolicy.NewClusterError(installErr.Error())
 	}
 
 	if len(result.Failed) > 0 {
 		if result.ConflictErr != nil {
-			return gatorpolicy.NewConflictError(fmt.Sprintf("installation incomplete: %s", result.ConflictErr.Error())), ""
+			return "", gatorpolicy.NewConflictError(fmt.Sprintf("installation incomplete: %s", result.ConflictErr.Error()))
 		}
 
 		msg := fmt.Sprintf("installation incomplete: %d of %d policies installed",
@@ -239,7 +239,7 @@ func installExitError(result *client.InstallResult, installDryRun bool, installE
 		if len(result.Unknown) > 0 {
 			msg += unknownSkipSuffix(len(result.Unknown))
 		}
-		return gatorpolicy.NewPartialSuccessError(msg), "\nRe-run command to continue (already installed will be skipped)."
+		return "\nRe-run command to continue (already installed will be skipped).", gatorpolicy.NewPartialSuccessError(msg)
 	}
 
 	// Policies skipped as incompatible - or whose compatibility could not be
@@ -258,10 +258,10 @@ func installExitError(result *client.InstallResult, installDryRun bool, installE
 		if len(result.Unknown) > 0 {
 			msg += unknownSkipSuffix(len(result.Unknown))
 		}
-		return gatorpolicy.NewPartialSuccessError(msg), ""
+		return "", gatorpolicy.NewPartialSuccessError(msg)
 	}
 
-	return nil, ""
+	return "", nil
 }
 
 // dryRunClient is a no-op client for dry-run mode. A dry-run is an offline

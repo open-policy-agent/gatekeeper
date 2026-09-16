@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
@@ -37,6 +38,10 @@ type UpgradeResult struct {
 	Failed []string
 	// Errors contains error messages for failed policies.
 	Errors map[string]string
+	// ConflictErr is set if a conflict error occurred (resource not managed by
+	// gator). The batch continues past a conflict, so this records the first
+	// one seen for the caller to map to the conflict exit code.
+	ConflictErr *ConflictError
 }
 
 // VersionChange represents a version change for a policy.
@@ -146,13 +151,33 @@ func Upgrade(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 			continue
 		}
 
-		// Upgrade the policy
+		// Upgrade the policy. A failure scoped to this one policy (the sub-catalog
+		// upgradePolicy builds contains only it) is recorded and the batch
+		// continues rather than aborting the remaining candidates.
 		incompatible, upgraded, err := upgradePolicy(ctx, k8sClient, fetcher, policy, installed.Bundle, opts, serverVersion)
 		if err != nil {
 			result.Failed = append(result.Failed, policyName)
 			result.Errors[policyName] = err.Error()
-			// Fail fast per MVP design, matching install
-			return result, nil
+
+			// An ownership conflict is per-policy, so the batch continues, but
+			// record the first one so the caller can report the conflict exit
+			// code instead of a generic partial failure.
+			var conflictErr *ConflictError
+			if errors.As(err, &conflictErr) && result.ConflictErr == nil {
+				result.ConflictErr = conflictErr
+			}
+
+			// A cluster-scoped failure will hit every remaining candidate the
+			// same way, and a stalled Gatekeeper controller costs
+			// DefaultReconcileTimeout per attempt. Abort instead of waiting out
+			// that timeout once per policy.
+			if isClusterScoped(err) {
+				if gateErr != nil {
+					return result, fmt.Errorf("%w (also failed to upgrade %s: %w)", gateErr, policyName, err)
+				}
+				return result, err
+			}
+			continue
 		}
 		if incompatible != nil {
 			// A policy incompatible with the cluster version is skipped, not a
@@ -227,10 +252,16 @@ func upgradePolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	}
 
 	// Install also records a per-policy failure (e.g. an unparseable version
-	// bound) in Failed/Errors with a nil top-level error. Surface it as a
-	// genuine error so the upgrade is not falsely reported as successful.
+	// bound, or an ownership conflict) in Failed/Errors with a nil top-level
+	// error. Surface it as a genuine error so the upgrade is not falsely
+	// reported as successful. Wrap the recorded cause rather than its string so
+	// Upgrade can still classify it - a *ConflictError stays a *ConflictError,
+	// and a cluster-scoped failure stays detectable.
 	if len(installResult.Failed) > 0 {
 		name := installResult.Failed[0]
+		if cause := installResult.FailureCauses[name]; cause != nil {
+			return nil, false, fmt.Errorf("installing %s: %w", name, cause)
+		}
 		return nil, false, fmt.Errorf("installing %s: %s", name, installResult.Errors[name])
 	}
 

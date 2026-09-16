@@ -174,7 +174,7 @@ func TestInstallExitError(t *testing.T) {
 			Unknown:        []client.IncompatibleEntry{unknownEntry},
 			TotalRequested: 1,
 		}
-		err, hint := installExitError(result, true /* dryRun */, nil)
+		hint, err := installExitError(result, true /* dryRun */, nil)
 		assert.NoError(t, err)
 		assert.Empty(t, hint)
 	})
@@ -186,7 +186,7 @@ func TestInstallExitError(t *testing.T) {
 			Unknown:        []client.IncompatibleEntry{unknownEntry},
 			TotalRequested: 1,
 		}
-		err, _ := installExitError(result, false /* dryRun */, nil)
+		_, err := installExitError(result, false /* dryRun */, nil)
 		var exitErr *gatorpolicy.ExitError
 		require.ErrorAs(t, err, &exitErr)
 		assert.Equal(t, gatorpolicy.ExitPartialSuccess, exitErr.Code)
@@ -199,7 +199,7 @@ func TestInstallExitError(t *testing.T) {
 			Incompatible:   []client.IncompatibleEntry{{Name: "p1", Reason: "out of range"}},
 			TotalRequested: 1,
 		}
-		err, _ := installExitError(result, true /* dryRun */, nil)
+		_, err := installExitError(result, true /* dryRun */, nil)
 		var exitErr *gatorpolicy.ExitError
 		require.ErrorAs(t, err, &exitErr)
 		assert.Equal(t, gatorpolicy.ExitPartialSuccess, exitErr.Code)
@@ -212,7 +212,7 @@ func TestInstallExitError(t *testing.T) {
 			Errors:         map[string]string{"bad": "boom"},
 			TotalRequested: 2,
 		}
-		err, hint := installExitError(result, false, nil)
+		hint, err := installExitError(result, false, nil)
 		var exitErr *gatorpolicy.ExitError
 		require.ErrorAs(t, err, &exitErr)
 		assert.Equal(t, gatorpolicy.ExitPartialSuccess, exitErr.Code)
@@ -225,7 +225,7 @@ func TestInstallExitError(t *testing.T) {
 			Errors:         map[string]string{"bad": "unreachable"},
 			TotalRequested: 1,
 		}
-		err, _ := installExitError(result, false, errors.New("determining cluster Kubernetes version"))
+		_, err := installExitError(result, false, errors.New("determining cluster Kubernetes version"))
 		var exitErr *gatorpolicy.ExitError
 		require.ErrorAs(t, err, &exitErr)
 		assert.Equal(t, gatorpolicy.ExitClusterError, exitErr.Code)
@@ -236,9 +236,63 @@ func TestInstallExitError(t *testing.T) {
 			Installed:      []string{"good"},
 			TotalRequested: 1,
 		}
-		err, hint := installExitError(result, false, nil)
+		hint, err := installExitError(result, false, nil)
 		assert.NoError(t, err)
 		assert.Empty(t, hint)
+	})
+}
+
+func TestUpgradeExitError(t *testing.T) {
+	t.Run("conflict exits 3 even though the batch continued past it", func(t *testing.T) {
+		// Upgrade records an ownership conflict and keeps going, so the conflict
+		// arrives alongside a successful upgrade. It must still map to the
+		// conflict exit code rather than generic partial success.
+		result := &client.UpgradeResult{
+			Upgraded: []client.VersionChange{{Name: "conflict-batch-ok", FromVersion: "v1.0.0", ToVersion: "v2.0.0"}},
+			Failed:   []string{"owned"},
+			Errors:   map[string]string{"owned": "not managed by gator"},
+			ConflictErr: &client.ConflictError{
+				ResourceKind: "K8sRequiredLabels",
+				ResourceName: "owned-constraint",
+			},
+		}
+		err := upgradeExitError(result, nil)
+		var exitErr *gatorpolicy.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, gatorpolicy.ExitConflictError, exitErr.Code)
+		assert.Contains(t, err.Error(), "owned-constraint")
+	})
+
+	t.Run("failed policies without a conflict signal partial success", func(t *testing.T) {
+		result := &client.UpgradeResult{
+			Upgraded: []client.VersionChange{{Name: "partial-batch-ok"}},
+			Failed:   []string{"failed-policy"},
+			Errors:   map[string]string{"failed-policy": "boom"},
+		}
+		err := upgradeExitError(result, nil)
+		var exitErr *gatorpolicy.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, gatorpolicy.ExitPartialSuccess, exitErr.Code)
+	})
+
+	t.Run("cluster-scoped failure with nothing upgraded is a cluster error", func(t *testing.T) {
+		// Upgrade aborts the batch on a cluster-scoped failure and returns it as
+		// a top-level error, so nothing upgraded.
+		result := &client.UpgradeResult{
+			Failed: []string{"first"},
+			Errors: map[string]string{"first": "timeout waiting for template first to be ready"},
+		}
+		err := upgradeExitError(result, errors.New("timeout waiting for template first to be ready"))
+		var exitErr *gatorpolicy.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, gatorpolicy.ExitClusterError, exitErr.Code)
+	})
+
+	t.Run("full success exits 0", func(t *testing.T) {
+		result := &client.UpgradeResult{
+			Upgraded: []client.VersionChange{{Name: "all-ok"}},
+		}
+		assert.NoError(t, upgradeExitError(result, nil))
 	})
 }
 

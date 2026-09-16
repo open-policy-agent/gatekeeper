@@ -294,7 +294,7 @@ func (c *K8sClient) WaitForTemplateReady(ctx context.Context, templateName strin
 			// Continue polling
 		}
 	}
-	return fmt.Errorf("timeout waiting for template %s to be ready", templateName)
+	return &ReconcileTimeoutError{Resource: fmt.Sprintf("template %s to be ready", templateName)}
 }
 
 // WaitForConstraintCRD waits for the Constraint CRD to be available.
@@ -321,7 +321,7 @@ func (c *K8sClient) WaitForConstraintCRD(ctx context.Context, kind string, timeo
 			// Continue polling
 		}
 	}
-	return fmt.Errorf("timeout waiting for constraint CRD %s to be available", kind)
+	return &ReconcileTimeoutError{Resource: fmt.Sprintf("constraint CRD %s to be available", kind)}
 }
 
 func getConstraintResource(kind string) string {

@@ -521,7 +521,7 @@ func K8sVersionMeetsMinimum(serverVersion, minVersion string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("parsing minKubernetesVersion %q: %w", minVersion, err)
 	}
-	return !sv.LessThan(mv), nil
+	return sv.AtLeast(mv), nil
 }
 
 // FormatMinK8sVersion renders a minKubernetesVersion bound as a human-readable

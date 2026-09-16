@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -61,6 +62,11 @@ type InstallResult struct {
 	Failed []string
 	// Errors contains error messages for failed policies.
 	Errors map[string]string
+	// FailureCauses holds the underlying error for each policy in Failed, keyed
+	// the same as Errors. Errors carries the display strings the CLI prints;
+	// FailureCauses keeps the error values so a batch caller (e.g. Upgrade) can
+	// classify a failure with errors.As/errors.Is instead of matching on text.
+	FailureCauses map[string]error
 	// ConflictErr is set if a conflict error occurred (resource not managed by gator).
 	ConflictErr *ConflictError
 	// ConstraintsInstalled is the number of constraints installed.
@@ -69,6 +75,39 @@ type InstallResult struct {
 	TemplatesInstalled int
 	// TotalRequested is the total number of policies requested for installation.
 	TotalRequested int
+}
+
+// policyOutcomeKind classifies the result of attempting to install one
+// policy. install()'s loop dispatches on Kind alone, so a new outcome only
+// needs to be added and handled in one place instead of being threaded
+// through an ad hoc chain of sentinel error types.
+type policyOutcomeKind int
+
+const (
+	// outcomeUnspecified is the zero value and is never a valid outcome: it
+	// means a policyOutcome was built without setting kind. install()'s default
+	// case records it as a failure so it cannot be silently counted as a
+	// successful install.
+	outcomeUnspecified policyOutcomeKind = iota
+	outcomeInstalled
+	outcomeSkipped
+	outcomeIncompatible
+	outcomeUnknown
+	outcomeBoundsInvalid
+	outcomeVersionUnresolved
+	outcomeConflict
+	outcomeFailed
+)
+
+// policyOutcome is the single typed result of installPolicy.
+type policyOutcome struct {
+	kind policyOutcomeKind
+	// entry is set for outcomeIncompatible and outcomeUnknown.
+	entry *IncompatibleEntry
+	// conflict is set for outcomeConflict.
+	conflict *ConflictError
+	// err is set for outcomeBoundsInvalid, outcomeVersionUnresolved, and outcomeFailed.
+	err error
 }
 
 // Install installs policies from the catalog.
@@ -82,7 +121,8 @@ func Install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 // itself always resolves the version internally, passing "".
 func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat *catalog.PolicyCatalog, opts *InstallOptions, preResolvedServerVersion string) (*InstallResult, error) {
 	result := &InstallResult{
-		Errors: make(map[string]string),
+		Errors:        make(map[string]string),
+		FailureCauses: make(map[string]error),
 	}
 
 	// Determine which policies to install
@@ -140,15 +180,7 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 	// (allowQuery is !opts.DryRun). It still applies the gate when a caller injects
 	// a pre-resolved version
 	resolveVersion := sync.OnceValues(func() (string, error) {
-		v, err := resolveGateServerVersion(ctx, k8sClient, opts.Force, true, !opts.DryRun, preResolvedServerVersion)
-		if err != nil {
-			// Tag the error so the install loop can tell "the cluster version
-			// could not be resolved" apart from a genuine per-policy failure.
-			// The loop records each affected bounded policy as failed and keeps
-			// going; unbounded and no-op policies still install.
-			return "", &versionResolutionError{err: err}
-		}
-		return v, nil
+		return resolveGateServerVersion(ctx, k8sClient, opts.Force, true, !opts.DryRun, preResolvedServerVersion)
 	})
 
 	// versionErr records a failure to resolve the cluster version for the
@@ -162,9 +194,17 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 	for _, policyName := range policyNames {
 		policy := cat.GetPolicy(policyName)
 		if policy == nil {
+			notFoundErr := fmt.Errorf("policy not found: %s", policyName)
 			result.Failed = append(result.Failed, policyName)
-			result.Errors[policyName] = fmt.Sprintf("policy not found: %s", policyName)
-			// Fail fast per MVP design
+			result.Errors[policyName] = notFoundErr.Error()
+			result.FailureCauses[policyName] = notFoundErr
+			// Fail fast per MVP design, matching the fail-fast branch below. A
+			// pending versionErr from an earlier bounded policy takes priority
+			// (cluster connectivity is broken), but this policy's own error is
+			// folded into the message rather than being dropped from it.
+			if versionErr != nil {
+				return result, fmt.Errorf("%w (also failed to install %s: %s)", versionErr, policyName, notFoundErr.Error())
+			}
 			return result, nil
 		}
 
@@ -174,56 +214,61 @@ func install(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, cat
 
 		// The Kubernetes-version compatibility gate is applied inside installPolicy,
 		// after it determines whether a write would actually occur
-		skipped, incompatible, err := installPolicy(ctx, k8sClient, fetcher, policy, installBundle, opts, result, resolveVersion)
-		if err != nil {
+		outcome := installPolicy(ctx, k8sClient, fetcher, policy, installBundle, opts, result, resolveVersion)
+		switch outcome.kind {
+		case outcomeUnknown:
 			// An offline dry-run preview with no cluster version available cannot
 			// determine compatibility; record it as unknown rather than a failure.
-			var uErr *unknownCompatibilityError
-			if errors.As(err, &uErr) {
-				result.Unknown = append(result.Unknown, uErr.entry)
-				continue
-			}
+			result.Unknown = append(result.Unknown, *outcome.entry)
+		case outcomeVersionUnresolved:
 			// A failure to resolve the cluster version only prevents gating this
-			// bounded policy;
-			var vErr *versionResolutionError
-			if errors.As(err, &vErr) {
-				result.Failed = append(result.Failed, policyName)
-				result.Errors[policyName] = vErr.err.Error()
-				versionErr = vErr.err
-				continue
-			}
+			// bounded policy.
+			result.Failed = append(result.Failed, policyName)
+			result.Errors[policyName] = outcome.err.Error()
+			result.FailureCauses[policyName] = outcome.err
+			versionErr = outcome.err
+		case outcomeBoundsInvalid:
 			// Invalid policy metadata (an unparseable minKubernetesVersion) fails
 			// only this policy; the batch continues so a single bad policy does
 			// not block the others, even under --force.
-			var bErr *policyBoundsError
-			if errors.As(err, &bErr) {
-				result.Failed = append(result.Failed, policyName)
-				result.Errors[policyName] = bErr.err.Error()
-				continue
-			}
 			result.Failed = append(result.Failed, policyName)
-			result.Errors[policyName] = err.Error()
-			// Preserve typed error for conflict detection
-			var conflictErr *ConflictError
-			if errors.As(err, &conflictErr) {
-				result.ConflictErr = conflictErr
-			}
-			// Fail fast - stop on first error. Return any pending versionErr
-			// (nil on the happy path) rather than discarding it: a bounded
-			// policy earlier in the batch may have failed cluster-version
-			// resolution, and dropping that here would mis-map the exit code
-			// (ExitClusterError) to partial success.
-			return result, versionErr
-		}
-		if incompatible != nil {
-			result.Incompatible = append(result.Incompatible, *incompatible)
-			continue
-		}
-		if skipped {
+			result.Errors[policyName] = outcome.err.Error()
+			result.FailureCauses[policyName] = outcome.err
+		case outcomeIncompatible:
+			result.Incompatible = append(result.Incompatible, *outcome.entry)
+		case outcomeSkipped:
 			result.Skipped = append(result.Skipped, policyName)
-		} else {
+		case outcomeInstalled:
 			result.Installed = append(result.Installed, policyName)
 			result.TemplatesInstalled++
+		case outcomeConflict, outcomeFailed:
+			result.Failed = append(result.Failed, policyName)
+			outcomeErr := outcome.err
+			if outcome.kind == outcomeConflict {
+				outcomeErr = outcome.conflict
+				result.ConflictErr = outcome.conflict
+			}
+			result.Errors[policyName] = outcomeErr.Error()
+			result.FailureCauses[policyName] = outcomeErr
+			// Fail fast - stop on first error. On the happy path (no pending
+			// versionErr) return nil so the caller classifies the failure from
+			// result.Failed/ConflictErr instead of a generic top-level error.
+			// When a versionErr from an earlier policy is already pending, it
+			// takes priority (cluster connectivity is broken), but this
+			// policy's own error is folded in rather than silently dropped.
+			if versionErr != nil {
+				return result, fmt.Errorf("%w (also failed to install %s: %s)", versionErr, policyName, outcomeErr.Error())
+			}
+			return result, nil
+		default:
+			// An unset (outcomeUnspecified) or newly added but unhandled kind.
+			// Surface it loudly: the alternative is a policy that is silently
+			// counted as installed or dropped from every result bucket.
+			internalErr := fmt.Errorf("internal error: unhandled install outcome %d for policy %s", outcome.kind, policyName)
+			result.Failed = append(result.Failed, policyName)
+			result.Errors[policyName] = internalErr.Error()
+			result.FailureCauses[policyName] = internalErr
+			return result, internalErr
 		}
 	}
 
@@ -268,7 +313,7 @@ func resolveGateServerVersion(ctx context.Context, k8sClient Client, force, hasB
 	return serverVersion, nil
 }
 
-func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts *InstallOptions, result *InstallResult, resolveVersion func() (string, error)) (skipped bool, incompatible *IncompatibleEntry, err error) {
+func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, bundleName string, opts *InstallOptions, result *InstallResult, resolveVersion func() (string, error)) policyOutcome {
 	// Check for an existing template using only the catalog policy's name and
 	// version - before ever fetching the remote artifact. An out-of-range policy
 	// with a missing or malformed artifact is recorded as Incompatible and
@@ -292,7 +337,7 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 				}
 			}
 		} else if !apierrors.IsNotFound(err) {
-			return false, nil, fmt.Errorf("checking existing template: %w", err)
+			return policyOutcome{kind: outcomeFailed, err: fmt.Errorf("checking existing template: %w", err)}
 		}
 	}
 
@@ -331,41 +376,49 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	// never queries it. resolveVersion returns "" for a dry-run with no
 	// pre-resolved cluster version (an offline preview never queries the cluster
 	// itself): compatibility genuinely cannot be determined, so the policy is
-	// reported via unknownCompatibilityError rather than previewed as
-	// installable — a real install may still reject it as incompatible.
+	// reported as outcomeUnknown rather than previewed as installable — a
+	// real install may still reject it as incompatible.
+	//
+	// An unknown compatibility result does not exempt the policy from artifact
+	// validation below: unknownEntry is recorded here but the return is deferred
+	// until after the template (and any bundle constraint) has been fetched and
+	// parsed, so a nonexistent or malformed artifact still surfaces as an error
+	// instead of being masked by the "would install" preview.
+	var unknownEntry *IncompatibleEntry
 	if wouldWrite && policyHasVersionBounds(policy) {
 		if err := catalog.ValidatePolicyVersionBounds(policy); err != nil {
 			// Invalid policy metadata (an unparseable bound) fails this policy,
 			// but it is a per-policy defect, not a reason to abort the batch:
 			// later policies must still be attempted.
-			return false, nil, &policyBoundsError{err: err}
+			return policyOutcome{kind: outcomeBoundsInvalid, err: err}
 		}
 
 		if !opts.Force {
 			serverVersion, verr := resolveVersion()
 			if verr != nil {
-				return false, nil, verr
+				return policyOutcome{kind: outcomeVersionUnresolved, err: verr}
 			}
 			if serverVersion == "" {
-				return false, nil, &unknownCompatibilityError{entry: IncompatibleEntry{
+				// Surfaced as a note under the previewed "would install" line in
+				// dry-run table output, and standalone in JSON, so it reads well
+				// on its own.
+				unknownEntry = &IncompatibleEntry{
 					Name: policy.Name,
-					// Surfaced as a note under the previewed "would install" line in
-					// dry-run table output, and standalone in JSON, so it reads well
-					// on its own.
 					Reason: fmt.Sprintf("minimum Kubernetes version %s not verified in this offline dry-run preview; compatibility is re-checked on a real install",
 						policy.MinKubernetesVersion),
-				}}
-			}
-			meetsMin, verr := catalog.K8sVersionMeetsMinimum(serverVersion, policy.MinKubernetesVersion)
-			if verr != nil {
-				return false, nil, fmt.Errorf("evaluating Kubernetes version compatibility: %w", verr)
-			}
-			if !meetsMin {
-				return false, &IncompatibleEntry{
-					Name: policy.Name,
-					Reason: fmt.Sprintf("cluster Kubernetes version %s is below the policy's minimum %s",
-						serverVersion, policy.MinKubernetesVersion),
-				}, nil
+				}
+			} else {
+				meetsMin, verr := catalog.K8sVersionMeetsMinimum(serverVersion, policy.MinKubernetesVersion)
+				if verr != nil {
+					return policyOutcome{kind: outcomeFailed, err: fmt.Errorf("evaluating Kubernetes version compatibility: %w", verr)}
+				}
+				if !meetsMin {
+					return policyOutcome{kind: outcomeIncompatible, entry: &IncompatibleEntry{
+						Name: policy.Name,
+						Reason: fmt.Sprintf("cluster Kubernetes version %s is below the policy's minimum %s",
+							serverVersion, policy.MinKubernetesVersion),
+					}}
+				}
 			}
 		}
 	}
@@ -373,30 +426,30 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	// The policy passed the compatibility gate (or is unbounded/forced): only
 	// now surface an ownership conflict recorded above.
 	if conflictErr != nil {
-		return false, nil, conflictErr
+		return policyOutcome{kind: outcomeConflict, conflict: conflictErr}
 	}
 
 	// A pure no-op writes nothing, so the remote artifact is never needed.
 	if isNoOp {
-		return true, nil, nil
+		return policyOutcome{kind: outcomeSkipped}
 	}
 
 	// The policy is compatible (or forced, or unbounded) and would actually
 	// write something: only now fetch and parse the template artifact.
 	templateData, err := fetcher.FetchContent(ctx, policy.TemplatePath)
 	if err != nil {
-		return false, nil, fmt.Errorf("fetching template: %w", err)
+		return policyOutcome{kind: outcomeFailed, err: fmt.Errorf("fetching template: %w", err)}
 	}
 
 	template := &unstructured.Unstructured{}
 	if err := yaml.Unmarshal(templateData, &template.Object); err != nil {
-		return false, nil, fmt.Errorf("parsing template YAML: %w", err)
+		return policyOutcome{kind: outcomeFailed, err: fmt.Errorf("parsing template YAML: %w", err)}
 	}
 
 	// The preflight conflict check, the templateAlreadyInstalled determination,
 	// and the no-op/compatibility gate above all keyed off policy.Name.
 	if actualName := template.GetName(); actualName != policy.Name {
-		return false, nil, fmt.Errorf("template artifact for policy %q declares metadata.name %q; catalog policy name and ConstraintTemplate name must match", policy.Name, actualName)
+		return policyOutcome{kind: outcomeFailed, err: fmt.Errorf("template artifact for policy %q declares metadata.name %q; catalog policy name and ConstraintTemplate name must match", policy.Name, actualName)}
 	}
 
 	// Add labels and annotations
@@ -405,18 +458,32 @@ func installPolicy(ctx context.Context, k8sClient Client, fetcher catalog.Fetche
 	// Install or update template if not already at same version
 	if !opts.DryRun && !templateAlreadyInstalled {
 		if err := k8sClient.InstallTemplate(ctx, template); err != nil {
-			return false, nil, fmt.Errorf("installing template: %w", err)
+			return policyOutcome{kind: outcomeFailed, err: fmt.Errorf("installing template: %w", err)}
 		}
 	}
 
 	// Install constraint if bundle has a constraint path defined
 	if hasConstraint {
 		if err := installConstraint(ctx, k8sClient, fetcher, policy, constraintPath, bundleName, opts, result, template); err != nil {
-			return false, nil, err
+			// A constraint that already exists and is not managed by gator is
+			// the same ownership-conflict outcome as the template check above.
+			var constraintConflictErr *ConflictError
+			if errors.As(err, &constraintConflictErr) {
+				return policyOutcome{kind: outcomeConflict, conflict: constraintConflictErr}
+			}
+			return policyOutcome{kind: outcomeFailed, err: err}
 		}
 	}
 
-	return false, nil, nil
+	// The template (and any bundle constraint) fetched and parsed cleanly, so
+	// only now report the deferred unknown-compatibility outcome: unresolved
+	// cluster compatibility does not exempt the policy from artifact
+	// validation, it only means the batch cannot report it as installed.
+	if unknownEntry != nil {
+		return policyOutcome{kind: outcomeUnknown, entry: unknownEntry}
+	}
+
+	return policyOutcome{kind: outcomeInstalled}
 }
 
 func installConstraint(ctx context.Context, k8sClient Client, fetcher catalog.Fetcher, policy *catalog.Policy, constraintPath string, bundleName string, opts *InstallOptions, result *InstallResult, template *unstructured.Unstructured) error {
@@ -503,39 +570,6 @@ func constraintGVR(kind string) schema.GroupVersionResource {
 	}
 }
 
-// versionResolutionError wraps a failure to resolve the cluster Kubernetes
-// version for the compatibility gate.
-type versionResolutionError struct {
-	err error
-}
-
-func (e *versionResolutionError) Error() string { return e.err.Error() }
-
-func (e *versionResolutionError) Unwrap() error { return e.err }
-
-// unknownCompatibilityError signals that a bounded policy's Kubernetes-version
-// compatibility could not be determined — an offline dry-run preview with no
-// cluster version available. install()'s loop records it in
-// InstallResult.Unknown instead of treating it as a hard failure.
-type unknownCompatibilityError struct {
-	entry IncompatibleEntry
-}
-
-func (e *unknownCompatibilityError) Error() string { return e.entry.Reason }
-
-// policyBoundsError signals that a policy declares invalid version-bound
-// metadata (an unparseable minKubernetesVersion). It is satisfiable by no
-// cluster, so it fails the policy regardless of --force; install()'s loop
-// records it in InstallResult.Failed but keeps going so a single defective
-// policy does not abort the whole batch.
-type policyBoundsError struct {
-	err error
-}
-
-func (e *policyBoundsError) Error() string { return e.err.Error() }
-
-func (e *policyBoundsError) Unwrap() error { return e.err }
-
 // GatekeeperNotInstalledError is returned when Gatekeeper CRDs are not found.
 type GatekeeperNotInstalledError struct{}
 
@@ -554,4 +588,61 @@ type ConflictError struct {
 func (e *ConflictError) Error() string {
 	return fmt.Sprintf("%s '%s' already exists but is not managed by gator (expected label 'gatekeeper.sh/managed-by: gator' and annotation 'gatekeeper.sh/policy-source')",
 		e.ResourceKind, e.ResourceName)
+}
+
+// ReconcileTimeoutError is returned when Gatekeeper does not reconcile a
+// resource within DefaultReconcileTimeout. It means the Gatekeeper controller
+// is absent or wedged, which is a property of the cluster rather than of the
+// policy being applied, so a batch caller should stop instead of waiting out
+// the same timeout for every remaining policy.
+type ReconcileTimeoutError struct {
+	// Resource describes what was being waited on, e.g. `template "foo" to be ready`.
+	Resource string
+}
+
+func (e *ReconcileTimeoutError) Error() string {
+	return fmt.Sprintf("timeout waiting for %s", e.Resource)
+}
+
+// isClusterScoped reports whether err describes a condition that affects the
+// whole cluster rather than one policy. A batch operation uses this to decide
+// between recording a per-policy failure and aborting: retrying a policy
+// against an unreachable API server, a rejected credential or a stalled
+// Gatekeeper controller cannot succeed, and each retry can block for
+// DefaultReconcileTimeout.
+func isClusterScoped(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var reconcileTimeoutErr *ReconcileTimeoutError
+	var notInstalledErr *GatekeeperNotInstalledError
+	if errors.As(err, &reconcileTimeoutErr) || errors.As(err, &notInstalledErr) {
+		return true
+	}
+
+	// The caller's context is shared by every policy in the batch, so once it
+	// is done no further policy can be applied.
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+
+	// Transport-level failures: connection refused, DNS failure, TLS error.
+	// *net.OpError and *url.Error both satisfy net.Error.
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+
+	// API server responses that are about the connection or the caller's
+	// credentials rather than the requested object. Deliberately excludes
+	// IsNotFound, IsConflict, IsInvalid and IsAlreadyExists, which are
+	// per-resource outcomes.
+	return apierrors.IsUnauthorized(err) ||
+		apierrors.IsForbidden(err) ||
+		apierrors.IsServiceUnavailable(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsServerTimeout(err) ||
+		apierrors.IsTooManyRequests(err) ||
+		apierrors.IsInternalError(err)
 }
