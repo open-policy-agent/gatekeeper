@@ -393,6 +393,11 @@ var replacements = map[string]string{
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}`,
 
+	"        - HELMSUBST_DEPLOYMENT_VAP_GENERATION_MODE": "\n" +
+		"        {{- if hasKey .Values \"vapGenerationMode\"}}\n" +
+		"        - --vap-generation-mode={{ .Values.vapGenerationMode }}\n" +
+		"        {{- end }}",
+
 	"        - HELMSUBST_DEPLOYMENT_DEFAULT_K8S_NATIVE_VALIDATION_FAILURE_POLICY": "\n" +
 		"        {{- if hasKey .Values \"defaultK8sNativeValidationFailurePolicy\"}}\n" +
 		"        - --default-k8s-native-validation-failure-policy={{ .Values.defaultK8sNativeValidationFailurePolicy }}\n" +

@@ -48,6 +48,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
@@ -218,6 +219,10 @@ func innerMain() int {
 
 	if err := celSchema.ValidateDefaultFailurePolicyForK8sNativeValidation(); err != nil {
 		setupLog.Error(err, "Invalid default K8sNativeValidation failure policy")
+		return 1
+	}
+	if err := constraint.ValidateVAPGenerationMode(); err != nil {
+		setupLog.Error(err, "Invalid VAP generation mode")
 		return 1
 	}
 

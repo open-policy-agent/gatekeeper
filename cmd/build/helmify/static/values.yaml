@@ -88,6 +88,7 @@ auditEventsInvolvedNamespace: false
 resourceQuota: true
 externaldataProviderResponseCacheTTL: 3m
 enableK8sNativeValidation: true
+vapGenerationMode: template
 commonAnnotations: {}
 extraVolumeMounts: []
 extraVolumes: []

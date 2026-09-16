@@ -32,6 +32,7 @@ import (
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraintstatus"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -132,13 +133,14 @@ var (
 )
 
 type Adder struct {
-	CFClient         *constraintclient.Client
-	ConstraintsCache *ConstraintsCache
-	WatchManager     *watch.Manager
-	Events           <-chan event.GenericEvent
-	Tracker          *readiness.Tracker
-	GetPod           func(context.Context) (*corev1.Pod, error)
-	ProcessExcluder  *process.Excluder
+	CFClient           *constraintclient.Client
+	ConstraintsCache   *ConstraintsCache
+	WatchManager       *watch.Manager
+	Events             <-chan event.GenericEvent
+	Tracker            *readiness.Tracker
+	GetPod             func(context.Context) (*corev1.Pod, error)
+	ProcessExcluder    *process.Excluder
+	WebhookConfigCache *webhookconfigcache.WebhookConfigCache
 	// IfWatching allows the reconciler to only execute functions if a constraint
 	// template is currently being watched. It is designed to be atomic to avoid
 	// race conditions between the constraint controller and the constraint template
@@ -171,6 +173,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	}
 
 	r := newReconciler(mgr, a.CFClient, reporter, a.ConstraintsCache, a.Tracker)
+	r.processExcluder = a.ProcessExcluder
+	r.webhookConfigCache = a.WebhookConfigCache
 	if a.GetPod != nil {
 		r.getPod = a.GetPod
 	}
@@ -203,6 +207,7 @@ func newReconciler(
 		writer:       mgr.GetClient(),
 		statusClient: mgr.GetClient(),
 		reader:       mgr.GetCache(),
+		apiReader:    mgr.GetAPIReader(),
 
 		scheme:           mgr.GetScheme(),
 		cfClient:         cfClient,
@@ -251,6 +256,17 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 		}))); err != nil {
 			return err
 		}
+		if GetVAPGenerationMode() == VAPGenerationModeConstraint {
+			obj, err := vapForVersion(groupVersion)
+			if err != nil {
+				return err
+			}
+			if err = c.Watch(source.Kind(mgr.GetCache(), obj, handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return eventPackerMapFuncFromOwnerRefs()(ctx, obj)
+			}))); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -276,16 +292,19 @@ func (e *combinedStatusError) Unwrap() []error { return e.errs }
 // ReconcileConstraint reconciles an arbitrary constraint object described by Kind.
 type ReconcileConstraint struct {
 	reader       client.Reader
+	apiReader    client.Reader
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	scheme           *runtime.Scheme
-	cfClient         *constraintclient.Client
-	log              logr.Logger
-	reporter         StatsReporter
-	constraintsCache *ConstraintsCache
-	tracker          *readiness.Tracker
-	getPod           func(context.Context) (*corev1.Pod, error)
+	scheme             *runtime.Scheme
+	cfClient           *constraintclient.Client
+	log                logr.Logger
+	reporter           StatsReporter
+	constraintsCache   *ConstraintsCache
+	tracker            *readiness.Tracker
+	processExcluder    *process.Excluder
+	webhookConfigCache *webhookconfigcache.WebhookConfigCache
+	getPod             func(context.Context) (*corev1.Pod, error)
 	// ifWatching allows us to short-circuit get requests
 	// that would otherwise trigger a watch. The bool returns whether
 	// the function was executed, which can be used to determine
@@ -319,10 +338,20 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 	executed, err := r.ifWatching(gvk, func() error {
 		return r.reader.Get(ctx, unpackedRequest.NamespacedName, instance)
 	})
+	if !executed {
+		if r.apiReader == nil {
+			return reconcile.Result{}, errors.New("API reader is not configured")
+		}
+		template := &v1beta1.ConstraintTemplate{}
+		templateErr := r.apiReader.Get(ctx, types.NamespacedName{Name: strings.ToLower(gvk.Kind)}, template)
+		if templateErr != nil && !apierrors.IsNotFound(templateErr) {
+			return reconcile.Result{}, templateErr
+		}
+		if templateErr == nil && template.GetDeletionTimestamp().IsZero() {
+			return reconcile.Result{RequeueAfter: time.Second}, nil
+		}
+	}
 
-	// if we executed a get, we can infer deletion status from the object,
-	// otherwise we must assume the object has been deleted, since we are no longer
-	// watching the object (which only happens if the constraint template has been deleted)
 	if (executed && err != nil) || !executed {
 		if err != nil && !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 			return reconcile.Result{}, err
@@ -432,6 +461,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 	} else {
 		r.log.Info("handling constraint delete", "instance", instance)
+		r.reporter.DeleteVAPStatus(types.NamespacedName{Name: transform.GetConstraintVAPName(instance.GetKind(), instance.GetName())})
 		r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())})
 		r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: transform.LegacyVAPBindingName(instance.GetName())})
 		if _, err := r.cfClient.RemoveConstraint(ctx, instance); err != nil {
@@ -462,6 +492,9 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 		isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
 		if isAPIEnabled {
+			if err := r.deleteConstraintVAPIfOwned(ctx, instance, groupVersion); err != nil {
+				return reconcile.Result{}, err
+			}
 			shouldGenerateVAPB, _, err := shouldGenerateVAPB(GetDefaultGenerateVAPB(), enforcementAction, instance)
 			if err != nil {
 				return reconcile.Result{}, err
@@ -634,9 +667,11 @@ func (r *ReconcileConstraint) persistPodStatus(ctx context.Context, status *cons
 func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction util.EnforcementAction, instance *unstructured.Unstructured, status *constraintstatusv1beta1.ConstraintPodStatus) (time.Duration, error) {
 	noDelay := time.Duration(0)
 	vapBindingKey := types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}
+	vapKey := types.NamespacedName{Name: transform.GetConstraintVAPName(instance.GetKind(), instance.GetName())}
 	if !operations.IsAssigned(operations.Generate) {
 		log.Info("generate operation is not assigned, ValidatingAdmissionPolicyBinding resource will not be generated", "constraintName", instance.GetName(), "constraintKind", instance.GetKind())
 		r.reporter.DeleteVAPBStatus(vapBindingKey)
+		r.reporter.DeleteVAPStatus(vapKey)
 		return noDelay, nil
 	}
 	ct := &v1beta1.ConstraintTemplate{}
@@ -651,10 +686,12 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 		return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not determine if ValidatingAdmissionPolicyBinding should be generated")
 	}
 	intendsVAPB := shouldGenerateVAPB
+	vapGenerationMode := GetVAPGenerationMode()
 
 	generationPathSetStatus := false
+	var unversionedCT *templates.ConstraintTemplate
 	if shouldGenerateVAPB {
-		unversionedCT := &templates.ConstraintTemplate{}
+		unversionedCT = &templates.ConstraintTemplate{}
 		if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
 			r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
 			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not convert ConstraintTemplate to unversioned")
@@ -684,12 +721,12 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 	// The API version is also needed to remove a stale VAPB when generation is no longer eligible.
 	isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
 	if shouldGenerateVAPB {
-		if !isAPIEnabled {
+		if !isAPIEnabled || groupVersion == nil {
 			log.Error(ErrValidatingAdmissionPolicyAPIDisabled, "Cannot generate ValidatingAdmissionPolicyBinding", "constraint", instance.GetName())
 			r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
 			status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: fmt.Sprintf("cannot generate ValidatingAdmissionPolicyBinding: %s", ErrValidatingAdmissionPolicyAPIDisabled)})
 			shouldGenerateVAPB = false
-		} else {
+		} else if vapGenerationMode == VAPGenerationModeTemplate {
 			// reconcile for vapb generation if annotation is not set
 			if ct.Annotations == nil || (ct.Annotations[BlockVAPBGenerationUntilAnnotation] == "" && ct.Annotations[VAPBGenerationAnnotation] != "unblocked") {
 				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, errors.New("annotation to wait for ValidatingAdmissionPolicyBinding generation not found"), "could not find annotation to wait for ValidatingAdmissionPolicyBinding generation")
@@ -709,12 +746,39 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 					return wait, nil
 				}
 			}
+
+			sharedVAP, err := vapForVersion(groupVersion)
+			if err != nil {
+				r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get ValidatingAdmissionPolicy API version")
+			}
+			sharedVAPName := transform.GetTemplateVAPName(instance.GetKind())
+			if err := r.reader.Get(ctx, types.NamespacedName{Name: sharedVAPName}, sharedVAP); err != nil {
+				if !apierrors.IsNotFound(err) {
+					r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not get template ValidatingAdmissionPolicy")
+				}
+				wait := time.Second
+				updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, fmt.Sprintf("waiting for template ValidatingAdmissionPolicy %s", sharedVAPName), instance.GetGeneration())
+				return wait, nil
+			}
 		}
 	}
 
 	r.log.Info("constraint controller", "generateVAPB", shouldGenerateVAPB, "constraintName", instance.GetName(), "constraintKind", instance.GetKind())
 	// generate vapbinding resources
 	if shouldGenerateVAPB && groupVersion != nil {
+		generationWarning := ""
+		if vapGenerationMode == VAPGenerationModeConstraint {
+			var err error
+			generationWarning, err = r.reconcileConstraintVAP(ctx, unversionedCT, instance, groupVersion)
+			if err != nil {
+				r.reporter.ReportVAPStatus(vapKey, metrics.VAPStatusError)
+				r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not reconcile per-Constraint ValidatingAdmissionPolicy")
+			}
+			r.reporter.ReportVAPStatus(vapKey, metrics.VAPStatusActive)
+		}
 		currentVapBinding, err := vapBindingForVersion(*groupVersion)
 		if err != nil {
 			r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
@@ -729,7 +793,12 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			}
 			currentVapBinding = nil
 		}
-		transformedVapBinding, err := transform.ConstraintToBinding(instance, VAPEnforcementActions)
+		var transformedVapBinding *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding
+		if vapGenerationMode == VAPGenerationModeConstraint {
+			transformedVapBinding, err = transform.ConstraintToInlinedBinding(instance, VAPEnforcementActions)
+		} else {
+			transformedVapBinding, err = transform.ConstraintToBinding(instance, VAPEnforcementActions)
+		}
 		if err != nil {
 			r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
 			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not transform constraint to ValidatingAdmissionPolicyBinding")
@@ -759,8 +828,15 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not update ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 		}
-		updateEnforcementPointStatus(status, util.VAPEnforcementPoint, GeneratedVAPBState, "", instance.GetGeneration())
+		updateEnforcementPointStatus(status, util.VAPEnforcementPoint, GeneratedVAPBState, generationWarning, instance.GetGeneration())
 		r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusActive)
+		if vapGenerationMode == VAPGenerationModeTemplate {
+			if err := r.deleteConstraintVAPIfOwned(ctx, instance, groupVersion); err != nil {
+				r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not clean up stale per-Constraint ValidatingAdmissionPolicy")
+			}
+			r.reporter.DeleteVAPStatus(vapKey)
+		}
 
 		// Migration cleanup is best-effort during normal reconcile. Failures here
 		// should not block VAPB create or update.
@@ -789,6 +865,11 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete ValidatingAdmissionPolicyBinding: %s", vapBindingName))
 			}
 		}
+		if err := r.deleteConstraintVAPIfOwned(ctx, instance, groupVersion); err != nil {
+			r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+			return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, fmt.Sprintf("could not delete per-Constraint ValidatingAdmissionPolicy: %s", vapBindingName))
+		}
+		r.reporter.DeleteVAPStatus(vapKey)
 
 		// Clean stale enforcement point status unless it was set
 		// by the generation path in this reconcile.
@@ -938,9 +1019,9 @@ func vapBindingControlledByConstraint(binding metav1.Object, instance *unstructu
 
 func vapBindingForVersion(gvk schema.GroupVersion) (client.Object, error) {
 	switch gvk.Version {
-	case "v1":
+	case vapAPIVersionV1:
 		return &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, nil
-	case "v1beta1":
+	case vapAPIVersionV1Beta1:
 		return &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}, nil
 	default:
 		return nil, errors.New("unrecognized version")
@@ -949,12 +1030,12 @@ func vapBindingForVersion(gvk schema.GroupVersion) (client.Object, error) {
 
 func getRunTimeVAPBinding(gvk *schema.GroupVersion, transformedVapBinding *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, currentVapBinding client.Object) (client.Object, error) {
 	if currentVapBinding == nil {
-		if gvk.Version == "v1" {
+		if gvk.Version == vapAPIVersionV1 {
 			return v1beta1ToV1(transformedVapBinding)
 		}
 		return transformedVapBinding.DeepCopy(), nil
 	}
-	if gvk.Version == "v1" {
+	if gvk.Version == vapAPIVersionV1 {
 		v1CurrentVAPBinding, ok := currentVapBinding.(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
 		if !ok {
 			return nil, errors.New("unable to convert to v1 VAP")
@@ -971,8 +1052,9 @@ func getRunTimeVAPBinding(gvk *schema.GroupVersion, transformedVapBinding *admis
 	if !ok {
 		return nil, errors.New("unable to convert to v1beta1 VAP")
 	}
+	v1beta1VAPBinding = v1beta1VAPBinding.DeepCopy()
 	v1beta1VAPBinding.Spec = transformedVapBinding.Spec
-	return v1beta1VAPBinding.DeepCopy(), nil
+	return v1beta1VAPBinding, nil
 }
 
 func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding) (*admissionregistrationv1.ValidatingAdmissionPolicyBinding, error) {
@@ -980,9 +1062,11 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 	obj := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 	obj.SetName(v1beta1Obj.GetName())
 	obj.Spec.PolicyName = v1beta1Obj.Spec.PolicyName
-	obj.Spec.ParamRef = &admissionregistrationv1.ParamRef{
-		Name:                    v1beta1Obj.Spec.ParamRef.Name,
-		ParameterNotFoundAction: ptr.To[admissionregistrationv1.ParameterNotFoundActionType](admissionregistrationv1.AllowAction),
+	if v1beta1Obj.Spec.ParamRef != nil {
+		obj.Spec.ParamRef = &admissionregistrationv1.ParamRef{
+			Name:                    v1beta1Obj.Spec.ParamRef.Name,
+			ParameterNotFoundAction: ptr.To[admissionregistrationv1.ParameterNotFoundActionType](admissionregistrationv1.AllowAction),
+		}
 	}
 	actions := []admissionregistrationv1.ValidationAction{}
 
