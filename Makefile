@@ -35,7 +35,7 @@ KIND_CLUSTER_FILE ?= ""
 KUBERNETES_VERSION ?= 1.33.0
 KUSTOMIZE_VERSION ?= 5.8.1
 BATS_VERSION ?= 1.14.0
-ORAS_VERSION ?= 1.3.3
+ORAS_VERSION ?= 1.3.4
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 4.2.3
 NODE_VERSION ?= 24-bullseye-slim
@@ -200,14 +200,14 @@ all: lint test manager
 native-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
+	go test . ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
 
 # Run tests with race detector
 .PHONY: native-race-test
 native-race-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
+	go test . ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
 
 # Run benchmarks only (no unit tests)
 .PHONY: native-bench-test
