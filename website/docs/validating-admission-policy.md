@@ -132,6 +132,8 @@ When the Kubernetes API server cannot resolve the Constraint resource referenced
 
 Set `--vap-generation-mode=constraint` or Helm value `vapGenerationMode: constraint` to generate one VAP and VAPBinding for each Constraint. Gatekeeper embeds `spec.parameters` in the generated VAP, omits the VAP `spec.paramKind`, and omits the VAPBinding `spec.paramRef`. This removes the kube-apiserver startup dependency on Constraint CRD discovery and parameter informer readiness. The default `template` mode preserves the existing shared VAP topology.
 
+The Helm chart leaves `vapGenerationMode` unset by default and does not add `--vap-generation-mode` during installs or upgrades when the value is omitted. Gatekeeper uses its binary default of `template`. Explicit `template` or `constraint` values emit the flag; values retained from an existing Helm release also apply when reused during an upgrade.
+
 In `constraint` mode, the ConstraintTemplate does not create a shared VAP. When migrating from `template` mode, Gatekeeper retains the existing shared VAP only while a VAPBinding still references it, then deletes it after all bindings have moved to their per-Constraint VAPs. When returning to `template` mode, Gatekeeper recreates the shared VAP before repointing any bindings.
 
 Per-Constraint mode is opt-in because it creates and compiles one VAP per Constraint. Constraint parameter updates rewrite the corresponding VAP, and ConstraintTemplate updates rewrite every derived VAP. A large number of Constraints therefore increases API server storage, memory, and compilation work. While Gatekeeper is unavailable, generated VAPs continue to enforce their last reconciled parameter values.
