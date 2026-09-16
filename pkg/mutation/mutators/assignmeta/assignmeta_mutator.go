@@ -48,7 +48,8 @@ type Mutator struct {
 
 	path parser.Path
 
-	tester *tester.Tester
+	tester  *tester.Tester
+	matcher *match.CompiledMatch
 }
 
 // Mutator implements mutator.
@@ -60,7 +61,7 @@ func (m *Mutator) Matches(mutable *types.Mutable) (bool, error) {
 		Namespace: mutable.Namespace,
 		Source:    mutable.Source,
 	}
-	matches, err := match.Matches(&m.assignMetadata.Spec.Match, target)
+	matches, err := m.matcher.Matches(target)
 	if err != nil {
 		log.Error(err, "Matches failed for assign metadata", "assignMeta", m.assignMetadata.Name)
 	}
@@ -114,6 +115,7 @@ func (m *Mutator) DeepCopy() types.Mutator {
 		assignMetadata: m.assignMetadata.DeepCopy(),
 		path:           m.path.DeepCopy(),
 		tester:         m.tester.DeepCopy(),
+		matcher:        m.matcher,
 	}
 	return res
 }
@@ -159,12 +161,17 @@ func MutatorForAssignMetadata(assignMeta *mutationsunversioned.AssignMetadata) (
 	if err != nil {
 		return nil, err
 	}
+	compiledMatcher, err := match.Compile(&assignMeta.Spec.Match)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Mutator{
 		id:             types.MakeID(assignMeta),
 		assignMetadata: assignMeta.DeepCopy(),
 		path:           path,
 		tester:         t,
+		matcher:        compiledMatcher,
 	}, nil
 }
 

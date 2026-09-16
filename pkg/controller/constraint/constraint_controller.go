@@ -392,7 +392,6 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				reconcileErr = reportedErr.err
 			}
 		}()
-
 		status.Status.ConstraintUID = instance.GetUID()
 		status.Status.ObservedGeneration = instance.GetGeneration()
 		status.Status.Errors = nil

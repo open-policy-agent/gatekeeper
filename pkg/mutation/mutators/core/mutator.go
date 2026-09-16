@@ -154,6 +154,14 @@ func CheckKeyNotChanged(p parser.Path) error {
 }
 
 func MatchWithApplyTo(mut *types.Mutable, applies []match.MutationApplyTo, mat *match.Match) (bool, error) {
+	compiled, err := match.Compile(mat)
+	if err != nil {
+		return false, err
+	}
+	return MatchWithApplyToMatcher(mut, applies, compiled)
+}
+
+func MatchWithApplyToMatcher(mut *types.Mutable, applies []match.MutationApplyTo, matcher *match.CompiledMatch) (bool, error) {
 	gvk := mut.Object.GetObjectKind().GroupVersionKind()
 
 	// Check that at least one applyTo entry matches BOTH GVK and operation.
@@ -169,7 +177,7 @@ func MatchWithApplyTo(mut *types.Mutable, applies []match.MutationApplyTo, mat *
 		Namespace: mut.Namespace,
 		Source:    mut.Source,
 	}
-	matches, err := match.Matches(mat, target)
+	matches, err := matcher.Matches(target)
 	if err != nil {
 		return false, err
 	}
