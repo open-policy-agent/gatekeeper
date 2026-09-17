@@ -431,10 +431,9 @@ lint:
 generate: __conversion-gen __controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 	$(CONVERSION_GEN) \
-		--output-base=/gatekeeper \
-		--input-dirs=./apis/mutations/v1,./apis/mutations/v1beta1,./apis/mutations/v1alpha1,./apis/expansion/v1alpha1,./apis/syncset/v1alpha1,./apis/gvkmanifest/v1alpha1 \
 		--go-header-file=./hack/boilerplate.go.txt \
-		--output-file-base=zz_generated.conversion
+		--output-file=zz_generated.conversion.go \
+		./apis/mutations/v1 ./apis/mutations/v1beta1 ./apis/mutations/v1alpha1 ./apis/expansion/v1alpha1 ./apis/syncset/v1alpha1 ./apis/gvkmanifest/v1alpha1
 
 # Prepare crds to be added to gatekeeper-crds image
 clean-crds:

@@ -722,7 +722,7 @@ func Convert_unversioned_PathTest_To_v1_PathTest(in *unversioned.PathTest, out *
 }
 
 func autoConvert_v1_Values_To_unversioned_Values(in *Values, out *unversioned.Values, s conversion.Scope) error {
-	out.FromList = *(*[]interface{})(unsafe.Pointer(&in.FromList))
+	out.FromList = *(*[]any)(unsafe.Pointer(&in.FromList))
 	return nil
 }
 
@@ -732,7 +732,7 @@ func Convert_v1_Values_To_unversioned_Values(in *Values, out *unversioned.Values
 }
 
 func autoConvert_unversioned_Values_To_v1_Values(in *unversioned.Values, out *Values, s conversion.Scope) error {
-	out.FromList = *(*[]interface{})(unsafe.Pointer(&in.FromList))
+	out.FromList = *(*[]any)(unsafe.Pointer(&in.FromList))
 	return nil
 }
 

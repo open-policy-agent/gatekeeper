@@ -5,5 +5,5 @@ resources:
 configurations:
 - kustomizeconfig.yaml
 
-patchesStrategicMerge:
-  - webhook_patch.yaml
+patches:
+  - path: webhook_patch.yaml

@@ -1,0 +1,18 @@
+# The Helm namespace, labels and strategic merge patches are applied in this
+# base so that the patches in the parent kustomization run after them. Within a
+# single kustomization `patches` are applied before the namespace and label
+# transformers, but the parent patches have to overwrite values those
+# transformers set, so they must run last.
+namespace: "{{ .Release.Namespace }}"
+labels:
+- pairs:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  includeSelectors: true
+resources:
+  - "../../../../config/default"
+patches:
+  - path: kustomize-for-helm.yaml
+  - path: delete-ports.yaml
