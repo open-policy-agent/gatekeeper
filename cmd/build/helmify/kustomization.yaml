@@ -1,15 +1,6 @@
-namespace: "{{ .Release.Namespace }}"
-commonLabels:
-  app: '{{ template "gatekeeper.name" . }}'
-  chart: '{{ template "gatekeeper.name" . }}'
-  release: "{{ .Release.Name }}"
-  heritage: "{{ .Release.Service }}"
 resources:
-  - "../../../config/default"
-patchesStrategicMerge:
-  - kustomize-for-helm.yaml
-  - delete-ports.yaml
-patchesJson6902:
+  - base
+patches:
   - target:
       group: apiextensions.k8s.io
       version: v1

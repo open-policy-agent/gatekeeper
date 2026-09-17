@@ -4,5 +4,5 @@ namespace: gatekeeper-system
 resources:
   - ../../default
 
-patchesStrategicMerge:
-- manager_image_patch.yaml
+patches:
+- path: manager_image_patch.yaml

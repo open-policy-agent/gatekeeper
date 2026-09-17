@@ -11,7 +11,7 @@ resources:
 # - auth_proxy_role.yaml
 # - auth_proxy_role_binding.yaml
 
-patchesJson6902:
+patches:
 - target:
     group: rbac.authorization.k8s.io
     version: v1
