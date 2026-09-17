@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
 
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -45,11 +44,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "expansion_template_status_controller")
-
-// requeueDelayOnTransientError is used in place of the deprecated Result.Requeue, which
-// deferred to the workqueue's rate limiter; a fixed short delay is used instead to retry
-// a transient status update failure without hammering the API server.
-const requeueDelayOnTransientError = time.Second
 
 type Adder struct {
 	CFClient     *constraintclient.Client
@@ -207,7 +201,7 @@ func (r *ReconcileExpansionStatus) Reconcile(ctx context.Context, request reconc
 	et.Status.ByPod = s
 
 	if err := r.statusClient.Status().Update(ctx, et); err != nil {
-		return reconcile.Result{RequeueAfter: requeueDelayOnTransientError}, nil
+		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
 }
