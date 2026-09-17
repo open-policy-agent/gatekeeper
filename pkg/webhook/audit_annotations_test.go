@@ -9,12 +9,8 @@ import (
 
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/stretchr/testify/require"
-	admissionv1 "k8s.io/api/admission/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 type admissionAuditJSONMarshaler struct {
@@ -27,28 +23,15 @@ func (m admissionAuditJSONMarshaler) MarshalJSON() ([]byte, error) {
 }
 
 func TestBuildAdmissionAuditAnnotations(t *testing.T) {
-	req := &admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
-		UID:       types.UID("request-1"),
-		Kind:      metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
-		Namespace: "default",
-		Name:      "example",
-	}}
-
-	annotations, err := buildAdmissionAuditAnnotations(req, true, admissionAuditResults{})
+	annotations, err := buildAdmissionAuditAnnotations(true, admissionAuditResults{})
 	require.NoError(t, err)
 	require.Len(t, annotations, 1)
+	require.JSONEq(t, `{"schemaVersion":"v1","allowed":true,"violations":[],"totalViolations":0,"includedViolations":0,"truncated":false}`, annotations[admissionAuditAnnotationKey])
 
 	var got admissionAuditAnnotation
 	require.NoError(t, json.Unmarshal([]byte(annotations[admissionAuditAnnotationKey]), &got))
 	require.Equal(t, admissionAuditAnnotationSchemaVersion, got.SchemaVersion)
-	require.Equal(t, "request-1", got.ID)
-	require.Equal(t, admissionAuditEventType, got.EventType)
 	require.True(t, got.Allowed)
-	require.Equal(t, "apps", got.ResourceGroup)
-	require.Equal(t, "v1", got.ResourceAPIVersion)
-	require.Equal(t, "Deployment", got.ResourceKind)
-	require.Equal(t, "default", got.ResourceNamespace)
-	require.Equal(t, "example", got.ResourceName)
 	require.Empty(t, got.Violations)
 	require.Zero(t, got.TotalViolations)
 	require.Zero(t, got.IncludedViolations)
@@ -56,9 +39,6 @@ func TestBuildAdmissionAuditAnnotations(t *testing.T) {
 }
 
 func TestBuildAdmissionAuditAnnotationsTruncatesAtValueLimit(t *testing.T) {
-	req := &admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
-		Kind: metav1.GroupVersionKind{Version: "v1", Kind: "Pod"},
-	}}
 	violations := make([]admissionAuditViolation, 20)
 	for i := range violations {
 		violations[i] = admissionAuditViolation{
@@ -69,7 +49,7 @@ func TestBuildAdmissionAuditAnnotationsTruncatesAtValueLimit(t *testing.T) {
 		}
 	}
 
-	annotations, err := buildAdmissionAuditAnnotations(req, false, admissionAuditResults{
+	annotations, err := buildAdmissionAuditAnnotations(false, admissionAuditResults{
 		violations:      violations,
 		totalViolations: len(violations),
 	})
@@ -241,7 +221,7 @@ func TestAdmissionAuditResultsBoundsCollectedViolations(t *testing.T) {
 	require.Equal(t, maxAdmissionAuditCollectedViolations+10, results.totalViolations)
 	require.Len(t, results.violations, maxAdmissionAuditCollectedViolations)
 
-	annotations, err := buildAdmissionAuditAnnotations(&admission.Request{}, false, results)
+	annotations, err := buildAdmissionAuditAnnotations(false, results)
 	require.NoError(t, err)
 	var annotation admissionAuditAnnotation
 	require.NoError(t, json.Unmarshal([]byte(annotations[admissionAuditAnnotationKey]), &annotation))

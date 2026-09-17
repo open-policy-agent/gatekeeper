@@ -1312,14 +1312,96 @@ func TestHandleAddsAuditAnnotationForEvaluationWithoutViolations(t *testing.T) {
 	var annotation admissionAuditAnnotation
 	require.NoError(t, json.Unmarshal([]byte(resp.AuditAnnotations[admissionAuditAnnotationKey]), &annotation))
 	require.True(t, annotation.Allowed)
-	require.Equal(t, "clean-request", annotation.ID)
+	require.JSONEq(t, `{"schemaVersion":"v1","allowed":true,"violations":[],"totalViolations":0,"includedViolations":0,"truncated":false}`, resp.AuditAnnotations[admissionAuditAnnotationKey])
 	require.Empty(t, annotation.Violations)
 	require.Zero(t, annotation.TotalViolations)
+
+	handler.admissionAuditAnnotationsViolationsOnly = true
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
 
 	handler.emitAdmissionAuditAnnotations = false
 	resp = handler.Handle(context.Background(), review)
 	require.True(t, resp.Allowed)
 	require.Empty(t, resp.AuditAnnotations)
+
+	handler.admissionAuditAnnotationsViolationsOnly = false
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
+}
+
+func TestHandleAuditAnnotationModesPreserveViolations(tester *testing.T) {
+	for _, action := range []string{string(util.Deny), string(util.Warn), string(util.Dryrun)} {
+		for _, mode := range []struct {
+			name           string
+			enabled        bool
+			violationsOnly bool
+		}{
+			{name: "disabled"},
+			{name: "all evaluations", enabled: true},
+			{name: "violations only", enabled: true, violationsOnly: true},
+			{name: "violations only without enablement", violationsOnly: true},
+		} {
+			tester.Run(action+"/"+mode.name, func(tester *testing.T) {
+				ctx := context.Background()
+				opa, err := makeOpaClient()
+				require.NoError(tester, err)
+				_, err = opa.AddTemplate(ctx, validRegoTemplate())
+				require.NoError(tester, err)
+				constraint := validRegoTemplateConstraint()
+				require.NoError(tester, unstructured.SetNestedField(constraint.Object, action, "spec", "enforcementAction"))
+				_, err = opa.AddConstraint(ctx, constraint)
+				require.NoError(tester, err)
+
+				handler := validationHandler{
+					opa:                                     opa,
+					expansionSystem:                         expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+					emitAdmissionAuditAnnotations:           mode.enabled,
+					admissionAuditAnnotationsViolationsOnly: mode.violationsOnly,
+					webhookHandler: webhookHandler{
+						injectedConfig:  &v1alpha1.Config{},
+						client:          &nsGetter{},
+						reader:          &nsGetter{},
+						processExcluder: process.New(),
+					},
+					log: log,
+				}
+				review := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+					Kind:      metav1.GroupVersionKind{Version: "v1", Kind: "Pod"},
+					Resource:  metav1.GroupVersionResource{Version: "v1", Resource: "pods"},
+					Namespace: "ns1",
+					Name:      "acbd",
+					Operation: admissionv1.Create,
+					Object: runtime.RawExtension{
+						Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"acbd","namespace":"ns1"}}`),
+					},
+				}}
+
+				response := handler.Handle(ctx, review)
+				require.Equal(tester, action != string(util.Deny), response.Allowed)
+				if action == string(util.Warn) {
+					require.Len(tester, response.Warnings, 1)
+				} else {
+					require.Empty(tester, response.Warnings)
+				}
+				if !mode.enabled {
+					require.Empty(tester, response.AuditAnnotations)
+					return
+				}
+
+				var annotation admissionAuditAnnotation
+				require.NoError(tester, json.Unmarshal([]byte(response.AuditAnnotations[admissionAuditAnnotationKey]), &annotation))
+				require.Equal(tester, response.Allowed, annotation.Allowed)
+				require.Equal(tester, 1, annotation.TotalViolations)
+				require.Equal(tester, 1, annotation.IncludedViolations)
+				require.Len(tester, annotation.Violations, 1)
+				require.Equal(tester, action, annotation.Violations[0].EnforcementAction)
+				require.Equal(tester, "constraint", annotation.Violations[0].ConstraintName)
+			})
+		}
+	}
 }
 
 func TestHandleExportsDryrunAdmissionViolation(t *testing.T) {
@@ -1341,10 +1423,11 @@ func TestHandleExportsDryrunAdmissionViolation(t *testing.T) {
 	exporter := &fakeAdmissionViolationExporter{}
 	processExcluder := process.New()
 	handler := validationHandler{
-		opa:                           opa,
-		expansionSystem:               expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
-		admissionExporter:             exporter,
-		emitAdmissionAuditAnnotations: true,
+		opa:                                     opa,
+		expansionSystem:                         expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+		admissionExporter:                       exporter,
+		emitAdmissionAuditAnnotations:           true,
+		admissionAuditAnnotationsViolationsOnly: true,
 		webhookHandler: webhookHandler{
 			injectedConfig:  &v1alpha1.Config{},
 			client:          &nsGetter{},

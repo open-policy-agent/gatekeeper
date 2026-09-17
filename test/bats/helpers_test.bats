@@ -11,10 +11,10 @@ kube_apiserver_audit_log() {
 }
 
 setup() {
+  ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY=false
   MATCHING_EVENTS="$(jq -cn '
     {
       schemaVersion: "v1",
-      eventType: "validation_admission",
       allowed: true,
       totalViolations: 0,
       includedViolations: 0,
@@ -36,11 +36,18 @@ setup() {
         {"validation.gatekeeper.sh/evaluation": ($denied | tojson)},
         {
           "gatekeeper-policy/evaluation": "true",
-          "validation.policy.admission.k8s.io/validation_failure": ([{
-            policy: "gatekeeper-policy",
-            binding: "gatekeeper-policy-audit-constraint",
-            validationActions: ["Deny", "Audit"]
-          }] | tojson)
+          "validation.policy.admission.k8s.io/validation_failure": ([
+            {
+              policy: "gatekeeper-policy",
+              binding: "gatekeeper-policy-audit-constraint",
+              validationActions: ["Deny", "Audit"]
+            },
+            {
+              policy: "gatekeeper-policy",
+              binding: "gatekeeper-policy-warn-constraint",
+              validationActions: ["Warn", "Audit"]
+            }
+          ] | tojson)
         }
       )
     | {
@@ -95,4 +102,51 @@ assert_audit_matchers_status() {
   AUDIT_LOG=""
 
   assert_audit_matchers_status 1
+}
+
+@test "violations-only VAP matchers require native failures without the marker" {
+  ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY=true
+  AUDIT_LOG="$(jq -c 'del(.annotations["gatekeeper-policy/evaluation"])' <<<"${MATCHING_EVENTS}")"
+  assert_audit_matchers_status 0
+
+  AUDIT_LOG="$(jq -c 'del(.annotations["validation.policy.admission.k8s.io/validation_failure"])' <<<"${AUDIT_LOG}")"
+  run vap_admission_audit_annotations_match audit-resource gatekeeper-policy audit-constraint
+  assert_failure
+  run vap_multiple_binding_audit_annotation_matches audit-resource gatekeeper-policy
+  assert_failure
+}
+
+@test "annotation absence requires an observed successful request" {
+  AUDIT_LOG='{"stage":"ResponseComplete","verb":"create","objectRef":{"name":"audit-resource","resource":"configmaps"},"responseStatus":{"code":201}}'
+  run admission_audit_annotation_absent audit-resource configmaps validation.gatekeeper.sh/evaluation
+  assert_success
+
+  run admission_audit_annotation_absent other-resource configmaps validation.gatekeeper.sh/evaluation
+  assert_failure
+
+  AUDIT_LOG="$(jq -c '.annotations["validation.gatekeeper.sh/evaluation"] = "{}"' <<<"${AUDIT_LOG}")"
+  run admission_audit_annotation_absent audit-resource configmaps validation.gatekeeper.sh/evaluation
+  assert_failure
+
+  AUDIT_LOG=""
+  run admission_audit_annotation_absent audit-resource configmaps validation.gatekeeper.sh/evaluation
+  assert_failure
+}
+
+@test "successful VAP evaluation follows the selected mode" {
+  AUDIT_LOG='{"stage":"ResponseComplete","verb":"create","objectRef":{"name":"audit-resource","resource":"namespaces"},"responseStatus":{"code":201},"annotations":{"gatekeeper-policy/evaluation":"true"}}'
+  run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy
+  assert_success
+
+  ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY=true
+  run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy
+  assert_failure
+
+  AUDIT_LOG="$(jq -c 'del(.annotations)' <<<"${AUDIT_LOG}")"
+  run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy
+  assert_success
+
+  AUDIT_LOG=""
+  run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy
+  assert_failure
 }

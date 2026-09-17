@@ -20,6 +20,7 @@ ENABLE_GENERATOR_EXPANSION ?= false
 ENABLE_EXPORT ?= false
 ENABLE_ADMISSION_EXPORT ?= false
 EMIT_ADMISSION_AUDIT_ANNOTATIONS ?= false
+ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
@@ -74,6 +75,7 @@ HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
 	--set postInstall.probeWebhook.enabled=true \
 	--set emitAdmissionEvents=true \
 	--set emitAdmissionAuditAnnotations=${EMIT_ADMISSION_AUDIT_ANNOTATIONS} \
+	--set admissionAuditAnnotationsViolationsOnly=${ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY} \
 	--set emitAuditEvents=true \
 	--set admissionEventsInvolvedNamespace=true \
 	--set auditEventsInvolvedNamespace=true \
@@ -123,6 +125,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --logtostderr\
 \n        - --emit-admission-events\
 \n        - --emit-admission-audit-annotations=${EMIT_ADMISSION_AUDIT_ANNOTATIONS}\
+\n        - --admission-audit-annotations-violations-only=${ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY}\
 \n        - --admission-events-involved-namespace\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
@@ -146,6 +149,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        args:\
 \n        - --emit-audit-events\
 \n        - --emit-admission-audit-annotations=${EMIT_ADMISSION_AUDIT_ANNOTATIONS}\
+\n        - --admission-audit-annotations-violations-only=${ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY}\
 \n        - --audit-events-involved-namespace\
 \n        - --operation=audit\
 \n        - --operation=status\

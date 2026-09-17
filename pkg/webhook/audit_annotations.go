@@ -6,13 +6,11 @@ import (
 	"unicode/utf8"
 
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 const (
 	admissionAuditAnnotationKey           = "evaluation"
 	admissionAuditAnnotationSchemaVersion = "v1"
-	admissionAuditEventType               = "validation_admission"
 	maxAdmissionAuditAnnotationValueBytes = 10 * 1024
 	maxAdmissionAuditDetailsBytes         = 2 * 1024
 	maxAdmissionAuditMessageBytes         = 1024
@@ -24,14 +22,7 @@ const (
 // identity, operation, user information, and response status.
 type admissionAuditAnnotation struct {
 	SchemaVersion      string                    `json:"schemaVersion"`
-	ID                 string                    `json:"id,omitempty"`
-	EventType          string                    `json:"eventType"`
 	Allowed            bool                      `json:"allowed"`
-	ResourceGroup      string                    `json:"resourceGroup,omitempty"`
-	ResourceAPIVersion string                    `json:"resourceAPIVersion,omitempty"`
-	ResourceKind       string                    `json:"resourceKind,omitempty"`
-	ResourceNamespace  string                    `json:"resourceNamespace,omitempty"`
-	ResourceName       string                    `json:"resourceName,omitempty"`
 	Violations         []admissionAuditViolation `json:"violations"`
 	TotalViolations    int                       `json:"totalViolations"`
 	IncludedViolations int                       `json:"includedViolations"`
@@ -112,19 +103,12 @@ func boundedAdmissionAuditDetails(metadata map[string]interface{}) (json.RawMess
 	return encoded, false
 }
 
-func buildAdmissionAuditAnnotations(req *admission.Request, allowed bool, results admissionAuditResults) (map[string]string, error) {
+func buildAdmissionAuditAnnotations(allowed bool, results admissionAuditResults) (map[string]string, error) {
 	annotation := admissionAuditAnnotation{
-		SchemaVersion:      admissionAuditAnnotationSchemaVersion,
-		ID:                 string(req.UID),
-		EventType:          admissionAuditEventType,
-		Allowed:            allowed,
-		ResourceGroup:      req.Kind.Group,
-		ResourceAPIVersion: req.Kind.Version,
-		ResourceKind:       req.Kind.Kind,
-		ResourceNamespace:  req.Namespace,
-		ResourceName:       req.Name,
-		Violations:         make([]admissionAuditViolation, 0, len(results.violations)),
-		TotalViolations:    results.totalViolations,
+		SchemaVersion:   admissionAuditAnnotationSchemaVersion,
+		Allowed:         allowed,
+		Violations:      make([]admissionAuditViolation, 0, len(results.violations)),
+		TotalViolations: results.totalViolations,
 	}
 
 	for i := range results.violations {

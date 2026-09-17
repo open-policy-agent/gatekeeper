@@ -127,11 +127,12 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 		admissionExporter = queuedExporter
 	}
 	handler := &validationHandler{
-		opa:                           deps.OpaClient,
-		mutationSystem:                deps.MutationSystem,
-		expansionSystem:               deps.ExpansionSystem,
-		admissionExporter:             admissionExporter,
-		emitAdmissionAuditAnnotations: util.GetEmitAdmissionAuditAnnotations(),
+		opa:                                     deps.OpaClient,
+		mutationSystem:                          deps.MutationSystem,
+		expansionSystem:                         deps.ExpansionSystem,
+		admissionExporter:                       admissionExporter,
+		emitAdmissionAuditAnnotations:           util.GetEmitAdmissionAuditAnnotations(),
+		admissionAuditAnnotationsViolationsOnly: util.GetAdmissionAuditAnnotationsViolationsOnly(),
 		webhookHandler: webhookHandler{
 			client:          mgr.GetClient(),
 			reader:          mgr.GetAPIReader(),
@@ -156,13 +157,14 @@ var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
 	webhookHandler
-	opa                           *constraintclient.Client
-	mutationSystem                *mutation.System
-	expansionSystem               *expansion.System
-	admissionExporter             admissionViolationExporter
-	emitAdmissionAuditAnnotations bool
-	semaphore                     chan struct{}
-	log                           logr.Logger
+	opa                                     *constraintclient.Client
+	mutationSystem                          *mutation.System
+	expansionSystem                         *expansion.System
+	admissionExporter                       admissionViolationExporter
+	emitAdmissionAuditAnnotations           bool
+	admissionAuditAnnotationsViolationsOnly bool
+	semaphore                               chan struct{}
+	log                                     logr.Logger
 }
 
 // Handle the validation request
@@ -235,8 +237,8 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	res := resp.Results()
 	denyMsgs, warnMsgs, auditResults := h.processValidationResults(res, &req)
 	var auditAnnotations map[string]string
-	if h.emitAdmissionAuditAnnotations {
-		auditAnnotations, err = buildAdmissionAuditAnnotations(&req, len(denyMsgs) == 0, auditResults)
+	if h.emitAdmissionAuditAnnotations && (!h.admissionAuditAnnotationsViolationsOnly || auditResults.totalViolations > 0) {
+		auditAnnotations, err = buildAdmissionAuditAnnotations(len(denyMsgs) == 0, auditResults)
 		if err != nil {
 			h.log.Error(err, "failed to build admission audit annotation")
 		}

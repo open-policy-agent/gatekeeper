@@ -104,6 +104,11 @@ jobs:
       matrix:
         HELM_VERSION: ["4.2.3"]
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
+        include:
+          - GATEKEEPER_NAMESPACE: gatekeeper-system
+            ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY: false
+          - GATEKEEPER_NAMESPACE: custom-namespace
+            ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY: true
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -147,10 +152,12 @@ jobs:
             GENERATE_VAPBINDING=true \
             SYNC_VAP_ENFORCEMENT_SCOPE=true \
             EMIT_ADMISSION_AUDIT_ANNOTATIONS=true \
+            ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY=${{ matrix.ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY }} \
             LOG_LEVEL=DEBUG
 
           make test-e2e \
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
+            ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY=${{ matrix.ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY }} \
             ENABLE_VAP_TESTS=1 \
             ENABLE_ADMISSION_AUDIT_ANNOTATION_TESTS=1
 
