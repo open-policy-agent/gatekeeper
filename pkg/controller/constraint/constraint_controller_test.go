@@ -18,17 +18,20 @@ import (
 	regodriver "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -785,6 +788,18 @@ func (f *fakeReader) Get(_ context.Context, key types.NamespacedName, obj client
 			return fmt.Errorf("type mismatch: expected *templatesv1beta1.ConstraintTemplate, got %T", stored)
 		}
 		*dst = *src
+	case *configv1alpha1.Config:
+		src, ok := stored.(*configv1alpha1.Config)
+		if !ok {
+			return fmt.Errorf("type mismatch: expected Config, got %T", stored)
+		}
+		*dst = *src.DeepCopy()
+	case *admissionregistrationv1.ValidatingWebhookConfiguration:
+		src, ok := stored.(*admissionregistrationv1.ValidatingWebhookConfiguration)
+		if !ok {
+			return fmt.Errorf("type mismatch: expected ValidatingWebhookConfiguration, got %T", stored)
+		}
+		*dst = *src.DeepCopy()
 	case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
 		src, ok := stored.(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
 		if !ok {
@@ -1249,6 +1264,162 @@ func TestManageVAPB_PerConstraintModeParameterUpdateOnlyUpdatesVAP(t *testing.T)
 	}
 }
 
+func TestManageVAPB_RollbackWaitsForCurrentSharedPolicy(t *testing.T) {
+	for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
+		t.Run(version, func(t *testing.T) {
+			configureVAP(t, vapTestConfig{
+				apiEnabled: ptr.To(true), defaultGenerateVAP: ptr.To(true),
+				defaultGenerateVAPB: ptr.To(true), generationMode: ptr.To(VAPGenerationModeConstraint),
+			})
+			groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
+			transform.SetGroupVersion(&groupVersion)
+			template := makeUnitCELTemplate()
+			template.SetUID("template-uid")
+			template.SetGeneration(2)
+			template.SetAnnotations(map[string]string{VAPBGenerationAnnotation: VAPBGenerationUnblocked})
+			instance := makeUnitConstraint()
+			reconciler, reader, writer, _ := newConstraintUnitReconciler(t, template, instance)
+			status := &constraintstatusv1beta1.ConstraintPodStatus{}
+			if _, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil {
+				t.Fatal(err)
+			}
+			shared, err := transform.TemplateToPolicyDefinition(template)
+			if err != nil {
+				t.Fatal(err)
+			}
+			shared.SetOwnerReferences([]metav1.OwnerReference{{
+				APIVersion: templatesv1beta1.SchemeGroupVersion.String(), Kind: "ConstraintTemplate",
+				Name: template.GetName(), UID: template.GetUID(), Controller: ptr.To(true),
+			}})
+			stale := shared.DeepCopy()
+			stale.Spec.Validations[0].Expression = "false"
+			stalePolicy, err := getRunTimeVAP(&groupVersion, stale, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader.objects[types.NamespacedName{Name: shared.GetName()}] = stalePolicy
+			bindingKey := types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}
+			beforeBinding := reader.objects[bindingKey].DeepCopyObject()
+			writer.updatedObjects, writer.deletedObjects = nil, nil
+			if err := SetVAPGenerationMode(VAPGenerationModeTemplate); err != nil {
+				t.Fatal(err)
+			}
+			delay, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status)
+			if err != nil || delay != time.Second {
+				t.Fatalf("stale policy rollback: delay=%s, err=%v; want retry", delay, err)
+			}
+			if len(writer.updatedObjects) != 0 || len(writer.deletedObjects) != 0 || !reflect.DeepEqual(beforeBinding, reader.objects[bindingKey]) {
+				t.Fatal("stale shared policy must not change the binding or delete the specialized policy")
+			}
+			currentPolicy, err := getRunTimeVAP(&groupVersion, shared, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader.objects[types.NamespacedName{Name: shared.GetName()}] = currentPolicy
+			if delay, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil || delay != 0 {
+				t.Fatalf("current policy rollback: delay=%s, err=%v", delay, err)
+			}
+			if len(writer.updatedObjects) != 1 || len(writer.deletedObjects) != 1 {
+				t.Fatalf("current policy rollback: updates=%d, deletes=%d", len(writer.updatedObjects), len(writer.deletedObjects))
+			}
+		})
+	}
+}
+
+func TestSharedVAPIsCurrent(t *testing.T) {
+	configureVAP(t, vapTestConfig{defaultGenerateVAP: ptr.To(true)})
+	originalSync := *transform.SyncVAPScope
+	*transform.SyncVAPScope = true
+	t.Cleanup(func() { *transform.SyncVAPScope = originalSync })
+	for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
+		for _, scenario := range []string{"current", "defaulted", "old owner", "stale scope", "cache ahead", "API error", "Config cache cold", "webhook cache cold", "Config unavailable", "webhook unavailable", "generation disabled"} {
+			t.Run(version+"/"+scenario, func(t *testing.T) {
+				template := makeUnitCELTemplate()
+				template.SetUID("current-template")
+				instance := makeUnitConstraint()
+				reconciler, reader, _, _ := newConstraintUnitReconciler(t, template, instance)
+				groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
+				shared, err := transform.TemplateToPolicyDefinition(template)
+				if err != nil {
+					t.Fatal(err)
+				}
+				shared.SetOwnerReferences([]metav1.OwnerReference{{
+					APIVersion: templatesv1beta1.SchemeGroupVersion.String(), Kind: "ConstraintTemplate",
+					Name: template.GetName(), UID: template.GetUID(), Controller: ptr.To(true),
+				}})
+				want := scenario == "current" || scenario == "defaulted"
+				switch scenario {
+				case "defaulted":
+					shared.Spec.MatchConstraints.MatchPolicy = ptr.To(admissionregistrationv1beta1.Equivalent)
+					shared.Spec.MatchConstraints.NamespaceSelector = &metav1.LabelSelector{}
+					shared.Spec.MatchConstraints.ObjectSelector = &metav1.LabelSelector{}
+				case "old owner":
+					shared.OwnerReferences[0].UID = "old-template"
+				case "stale scope":
+					shared.Spec.MatchConstraints.ObjectSelector = &metav1.LabelSelector{MatchLabels: map[string]string{"old": "scope"}}
+				case "cache ahead":
+					authoritative := &fakeReader{objects: map[types.NamespacedName]client.Object{
+						{Name: template.GetName()}: reader.objects[types.NamespacedName{Name: template.GetName()}],
+					}}
+					reconciler.apiReader = authoritative
+					stale := shared.DeepCopy()
+					stale.Spec.Validations[0].Expression = "false"
+					stalePolicy, err := getRunTimeVAP(&groupVersion, stale, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					authoritative.objects[types.NamespacedName{Name: shared.GetName()}] = stalePolicy
+				case "API error":
+					reconciler.apiReader = &fakeReader{getErr: errors.New("API unavailable")}
+				case "Config cache cold":
+					reader.objects[keys.Config] = &configv1alpha1.Config{
+						ObjectMeta: metav1.ObjectMeta{Name: keys.Config.Name, Namespace: keys.Config.Namespace},
+						Spec:       configv1alpha1.ConfigSpec{Match: []configv1alpha1.MatchEntry{{Processes: []string{"webhook"}, ExcludedNamespaces: []wildcard.Wildcard{"new-*"}}}},
+					}
+				case "webhook cache cold":
+					reader.objects[types.NamespacedName{Name: *webhook.VwhName}] = &admissionregistrationv1.ValidatingWebhookConfiguration{
+						ObjectMeta: metav1.ObjectMeta{Name: *webhook.VwhName},
+						Webhooks: []admissionregistrationv1.ValidatingWebhook{{
+							Name: webhook.ValidatingWebhookName,
+							Rules: []admissionregistrationv1.RuleWithOperations{{
+								Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+								Rule:       admissionregistrationv1.Rule{APIGroups: []string{""}, APIVersions: []string{"v1"}, Resources: []string{"configmaps"}},
+							}},
+						}},
+					}
+				case "Config unavailable":
+					reader.getErrs[keys.Config] = errors.New("Config read failed")
+				case "webhook unavailable":
+					reader.getErrs[types.NamespacedName{Name: *webhook.VwhName}] = errors.New("webhook read failed")
+				case "generation disabled":
+					disabled := template.DeepCopy()
+					source, err := celSchema.GetSourceFromTemplate(disabled)
+					if err != nil {
+						t.Fatal(err)
+					}
+					source.GenerateVAP = ptr.To(false)
+					disabled.Spec.Targets[0].Code[0].Source = &templates.Anything{Value: source.MustToUnstructured()}
+					versioned := &templatesv1beta1.ConstraintTemplate{}
+					if err := reconciler.scheme.Convert(disabled, versioned, nil); err != nil {
+						t.Fatal(err)
+					}
+					reader.objects[types.NamespacedName{Name: template.GetName()}] = versioned
+				}
+				policy, err := getRunTimeVAP(&groupVersion, shared, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				reader.objects[types.NamespacedName{Name: shared.GetName()}] = policy
+				got, err := reconciler.sharedVAPIsCurrent(context.Background(), template.GetName(), &groupVersion)
+				wantErr := scenario == "API error" || strings.HasSuffix(scenario, "unavailable")
+				if (err != nil) != wantErr || got != want {
+					t.Fatalf("current=%v err=%v, want current=%v", got, err, want)
+				}
+			})
+		}
+	}
+}
+
 func TestManageVAPB_RollbackUpdatesBindingBeforeDeletingVAP(t *testing.T) {
 	configureVAP(t, vapTestConfig{
 		apiEnabled:          ptr.To(true),
@@ -1279,9 +1450,7 @@ func TestManageVAPB_RollbackUpdatesBindingBeforeDeletingVAP(t *testing.T) {
 	if len(writer.updatedObjects) != 0 || len(writer.deletedObjects) != 0 {
 		t.Fatalf("updated/deleted objects = %d/%d while shared VAP is missing", len(writer.updatedObjects), len(writer.deletedObjects))
 	}
-	reader.objects[types.NamespacedName{Name: transform.GetTemplateVAPName(instance.GetKind())}] = &admissionregistrationv1.ValidatingAdmissionPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: transform.GetTemplateVAPName(instance.GetKind())},
-	}
+	reader.objects[types.NamespacedName{Name: transform.GetTemplateVAPName(instance.GetKind())}] = makeUnitTemplateVAP(t, ct, &admissionregistrationv1.SchemeGroupVersion)
 	if _, err := r.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil {
 		t.Fatal(err)
 	}
@@ -1348,11 +1517,7 @@ func TestManageVAPB_ModeMigration(t *testing.T) {
 				sharedName := transform.GetTemplateVAPName(instance.GetKind())
 				inlineName := transform.GetConstraintVAPName(instance.GetKind(), instance.GetName())
 				bindingKey := types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}
-				sharedPolicy, err := vapForVersion(&groupVersion)
-				if err != nil {
-					t.Fatal(err)
-				}
-				sharedPolicy.SetName(sharedName)
+				sharedPolicy := makeUnitTemplateVAP(t, template, &groupVersion)
 				reader.objects[types.NamespacedName{Name: sharedName}] = sharedPolicy
 				if delay, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, &constraintstatusv1beta1.ConstraintPodStatus{}); err != nil || delay != 0 {
 					t.Fatalf("initial generation: delay=%s, err=%v", delay, err)
@@ -1413,6 +1578,23 @@ func TestManageVAPB_ModeMigration(t *testing.T) {
 			})
 		}
 	}
+}
+
+func makeUnitTemplateVAP(t *testing.T, template *templates.ConstraintTemplate, groupVersion *schema.GroupVersion) client.Object {
+	t.Helper()
+	policy, err := transform.TemplateToPolicyDefinition(template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy.SetOwnerReferences([]metav1.OwnerReference{{
+		APIVersion: templatesv1beta1.SchemeGroupVersion.String(), Kind: "ConstraintTemplate",
+		Name: template.GetName(), UID: template.GetUID(), Controller: ptr.To(true),
+	}})
+	result, err := getRunTimeVAP(groupVersion, policy, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
 }
 
 func TestGetRunTimeVAPBindingPreservesCurrent(t *testing.T) {

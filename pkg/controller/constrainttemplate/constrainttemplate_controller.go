@@ -68,9 +68,11 @@ import (
 )
 
 const (
-	ctrlName             = "constrainttemplate-controller"
-	vapAPIVersionV1      = "v1"
-	vapAPIVersionV1Beta1 = "v1beta1"
+	ctrlName                  = "constrainttemplate-controller"
+	vapAPIVersionV1           = "v1"
+	vapAPIVersionV1Beta1      = "v1beta1"
+	vapBindingPolicyNameField = "spec.policyName"
+	vapBindingListPageSize    = 500
 )
 
 var (
@@ -283,6 +285,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 		if constraint.GetVAPGenerationMode() == constraint.VAPGenerationModeConstraint {
 			obj, err := vapBindingForVersion(groupVersion)
 			if err != nil {
+				return err
+			}
+			if err := mgr.GetFieldIndexer().IndexField(context.Background(), obj, vapBindingPolicyNameField, vapBindingPolicyNames); err != nil {
 				return err
 			}
 			err = c.Watch(
@@ -837,8 +842,9 @@ func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrati
 	if !ok {
 		return nil, errors.New("unable to convert to v1 VAP")
 	}
+	v1beta1VAP = v1beta1VAP.DeepCopy()
 	v1beta1VAP.Spec = transformedVap.Spec
-	return v1beta1VAP.DeepCopy(), nil
+	return v1beta1VAP, nil
 }
 
 func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPolicy) (*admissionregistrationv1.ValidatingAdmissionPolicy, error) {
@@ -1156,32 +1162,72 @@ func (r *ReconcileConstraintTemplate) deleteUnreferencedTemplateVAP(ctx context.
 	return nil
 }
 
+func vapBindingPolicyNames(binding client.Object) []string {
+	switch typed := binding.(type) {
+	case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+		return []string{typed.Spec.PolicyName}
+	case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding:
+		return []string{typed.Spec.PolicyName}
+	default:
+		return nil
+	}
+}
+
 func (r *ReconcileConstraintTemplate) vapReferencedByBinding(ctx context.Context, groupVersion *schema.GroupVersion, vapName string) (bool, error) {
+	if r.apiReader == nil {
+		return false, errors.New("API reader is not configured")
+	}
+	matching := client.MatchingFields{vapBindingPolicyNameField: vapName}
 	switch groupVersion.Version {
 	case vapAPIVersionV1:
 		bindings := &admissionregistrationv1.ValidatingAdmissionPolicyBindingList{}
-		if err := r.apiReader.List(ctx, bindings); err != nil {
+		if err := r.List(ctx, bindings, matching); err != nil {
 			return false, err
 		}
-		for i := range bindings.Items {
-			if bindings.Items[i].Spec.PolicyName == vapName {
-				return true, nil
+		if len(bindings.Items) > 0 {
+			return true, nil
+		}
+		continuation := ""
+		for {
+			if err := r.apiReader.List(ctx, bindings, client.Limit(vapBindingListPageSize), client.Continue(continuation)); err != nil {
+				return false, err
+			}
+			for index := range bindings.Items {
+				if bindings.Items[index].Spec.PolicyName == vapName {
+					return true, nil
+				}
+			}
+			continuation = bindings.GetContinue()
+			if continuation == "" {
+				return false, nil
 			}
 		}
 	case vapAPIVersionV1Beta1:
 		bindings := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingList{}
-		if err := r.apiReader.List(ctx, bindings); err != nil {
+		if err := r.List(ctx, bindings, matching); err != nil {
 			return false, err
 		}
-		for i := range bindings.Items {
-			if bindings.Items[i].Spec.PolicyName == vapName {
-				return true, nil
+		if len(bindings.Items) > 0 {
+			return true, nil
+		}
+		continuation := ""
+		for {
+			if err := r.apiReader.List(ctx, bindings, client.Limit(vapBindingListPageSize), client.Continue(continuation)); err != nil {
+				return false, err
+			}
+			for index := range bindings.Items {
+				if bindings.Items[index].Spec.PolicyName == vapName {
+					return true, nil
+				}
+			}
+			continuation = bindings.GetContinue()
+			if continuation == "" {
+				return false, nil
 			}
 		}
 	default:
 		return false, errors.New("unrecognized version")
 	}
-	return false, nil
 }
 
 // updateTemplateWithBlockVAPBGenerationAnnotations updates the ConstraintTemplate with an annotation to block VAPB generation until specific time

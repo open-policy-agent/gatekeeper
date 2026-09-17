@@ -793,6 +793,17 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			}
 			currentVapBinding = nil
 		}
+		if vapGenerationMode == VAPGenerationModeTemplate && bindingReferencesPolicy(currentVapBinding, vapKey.Name) {
+			current, err := r.sharedVAPIsCurrent(ctx, ct.GetName(), groupVersion)
+			if err != nil {
+				r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not verify template ValidatingAdmissionPolicy for rollback")
+			}
+			if !current {
+				updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, "waiting for current template ValidatingAdmissionPolicy before rollback", instance.GetGeneration())
+				return time.Second, nil
+			}
+		}
 		var transformedVapBinding *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding
 		if vapGenerationMode == VAPGenerationModeConstraint {
 			transformedVapBinding, err = transform.ConstraintToInlinedBinding(instance, VAPEnforcementActions)

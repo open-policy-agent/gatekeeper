@@ -6,14 +6,18 @@ import (
 	"fmt"
 	"reflect"
 
+	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/webhook"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -130,8 +134,13 @@ func v1beta1VAPToV1(source *admissionregistrationv1beta1.ValidatingAdmissionPoli
 }
 
 func (r *ReconcileConstraint) transformConstraintToVAP(template *templates.ConstraintTemplate, constraint *unstructured.Unstructured) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+	webhookConfig, excludedNamespaces, exemptedNamespaces := r.vapMatchingConfig()
+	return transform.ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, webhookConfig, excludedNamespaces, exemptedNamespaces)
+}
+
+func (r *ReconcileConstraint) vapMatchingConfig() (*webhookconfigcache.WebhookMatchingConfig, []string, []string) {
 	if !*transform.SyncVAPScope {
-		return transform.ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, nil, nil, nil)
+		return nil, nil, nil
 	}
 	var excludedNamespaces []string
 	if r.processExcluder != nil {
@@ -144,7 +153,144 @@ func (r *ReconcileConstraint) transformConstraintToVAP(template *templates.Const
 			webhookConfig = &config
 		}
 	}
-	return transform.ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, webhookConfig, excludedNamespaces, exemptedNamespaces)
+	return webhookConfig, excludedNamespaces, exemptedNamespaces
+}
+
+func (r *ReconcileConstraint) sharedVAPIsCurrent(ctx context.Context, templateName string, groupVersion *schema.GroupVersion) (bool, error) {
+	if r.apiReader == nil {
+		return false, errors.New("API reader is not configured")
+	}
+	template := &templatesv1beta1.ConstraintTemplate{}
+	if err := r.apiReader.Get(ctx, types.NamespacedName{Name: templateName}, template); err != nil {
+		return false, err
+	}
+	current, err := vapForVersion(groupVersion)
+	if err != nil {
+		return false, err
+	}
+	if err := r.apiReader.Get(ctx, types.NamespacedName{Name: transform.GetTemplateVAPName(templateName)}, current); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !template.GetDeletionTimestamp().IsZero() || !current.GetDeletionTimestamp().IsZero() || !metav1.IsControlledBy(current, template) {
+		return false, nil
+	}
+	unversioned := &templates.ConstraintTemplate{}
+	if err := r.scheme.Convert(template, unversioned, nil); err != nil {
+		return false, err
+	}
+	eligible, err := ShouldGenerateVAP(unversioned)
+	if err != nil || !eligible {
+		return false, err
+	}
+	webhookConfig, excludedNamespaces, exemptedNamespaces, err := r.authoritativeVAPMatchingConfig(ctx)
+	if err != nil {
+		return false, err
+	}
+	desired, transformErr := transform.TemplateToPolicyDefinitionWithWebhookConfig(unversioned, webhookConfig, excludedNamespaces, exemptedNamespaces)
+	if transformErr != nil && (desired == nil || !errors.Is(transformErr, transform.ErrOperationMismatch)) {
+		return false, transformErr
+	}
+	proposed, err := getRunTimeVAP(groupVersion, desired, current)
+	if err != nil {
+		return false, err
+	}
+	normalizeVAPMatchDefaults(current)
+	normalizeVAPMatchDefaults(proposed)
+	return apiequality.Semantic.DeepEqual(current, proposed), nil
+}
+
+func (r *ReconcileConstraint) authoritativeVAPMatchingConfig(ctx context.Context) (*webhookconfigcache.WebhookMatchingConfig, []string, []string, error) {
+	if !*transform.SyncVAPScope {
+		return nil, nil, nil, nil
+	}
+	config := &configv1alpha1.Config{}
+	excluder := process.New()
+	if err := r.apiReader.Get(ctx, keys.Config, config); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, nil, nil, err
+		}
+	} else if config.GetDeletionTimestamp().IsZero() {
+		excluder.Add(config.Spec.Match)
+	}
+	configuration := &admissionregistrationv1.ValidatingWebhookConfiguration{}
+	var matching *webhookconfigcache.WebhookMatchingConfig
+	if err := r.apiReader.Get(ctx, types.NamespacedName{Name: *webhook.VwhName}, configuration); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, nil, nil, err
+		}
+	} else {
+		for index := range configuration.Webhooks {
+			candidate := &configuration.Webhooks[index]
+			if candidate.Name == webhook.ValidatingWebhookName {
+				matching = &webhookconfigcache.WebhookMatchingConfig{
+					NamespaceSelector: candidate.NamespaceSelector,
+					ObjectSelector:    candidate.ObjectSelector,
+					Rules:             candidate.Rules,
+					MatchPolicy:       candidate.MatchPolicy,
+					MatchConditions:   candidate.MatchConditions,
+				}
+				break
+			}
+		}
+	}
+	return matching, excluder.GetExcludedNamespaces(process.Webhook), webhook.GetAllExemptedNamespacesWithWildcard(), nil
+}
+
+func normalizeVAPMatchDefaults(policy client.Object) {
+	normalizeSelector := func(selector **metav1.LabelSelector) {
+		if *selector != nil && len((*selector).MatchLabels) == 0 && len((*selector).MatchExpressions) == 0 {
+			*selector = nil
+		}
+	}
+	normalizeRule := func(rule *admissionregistrationv1.Rule) {
+		if rule.Scope != nil && *rule.Scope == admissionregistrationv1.AllScopes {
+			rule.Scope = nil
+		}
+	}
+	switch typed := policy.(type) {
+	case *admissionregistrationv1.ValidatingAdmissionPolicy:
+		if match := typed.Spec.MatchConstraints; match != nil {
+			normalizeSelector(&match.NamespaceSelector)
+			normalizeSelector(&match.ObjectSelector)
+			if match.MatchPolicy != nil && *match.MatchPolicy == admissionregistrationv1.Equivalent {
+				match.MatchPolicy = nil
+			}
+			for index := range match.ResourceRules {
+				normalizeRule(&match.ResourceRules[index].Rule)
+			}
+			for index := range match.ExcludeResourceRules {
+				normalizeRule(&match.ExcludeResourceRules[index].Rule)
+			}
+		}
+	case *admissionregistrationv1beta1.ValidatingAdmissionPolicy:
+		if match := typed.Spec.MatchConstraints; match != nil {
+			normalizeSelector(&match.NamespaceSelector)
+			normalizeSelector(&match.ObjectSelector)
+			if match.MatchPolicy != nil && *match.MatchPolicy == admissionregistrationv1beta1.Equivalent {
+				match.MatchPolicy = nil
+			}
+			for index := range match.ResourceRules {
+				normalizeRule(&match.ResourceRules[index].Rule)
+			}
+			for index := range match.ExcludeResourceRules {
+				normalizeRule(&match.ExcludeResourceRules[index].Rule)
+			}
+		}
+	}
+}
+
+func bindingReferencesPolicy(binding client.Object, policyName string) bool {
+	switch typed := binding.(type) {
+	case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+		return typed.Spec.PolicyName == policyName
+	case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding:
+		return typed.Spec.PolicyName == policyName
+	default:
+		return false
+	}
 }
 
 func (r *ReconcileConstraint) reconcileConstraintVAP(ctx context.Context, template *templates.ConstraintTemplate, constraint *unstructured.Unstructured, groupVersion *schema.GroupVersion) (string, error) {
