@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -998,6 +999,8 @@ func newConstraintUnitReconciler(t *testing.T, ct *templates.ConstraintTemplate,
 		tracker:          tracker,
 		getPod:           func(context.Context) (*corev1.Pod, error) { return pod, nil },
 		ifWatching:       func(_ schema.GroupVersionKind, fn func() error) (bool, error) { return true, fn() },
+
+		baseStatusPersistBackoff: workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Second, time.Minute),
 	}
 	requests := util.EventPackerMapFunc()(context.Background(), instance)
 	if len(requests) != 1 {
@@ -1140,7 +1143,7 @@ func TestReconcileBaseStatusUpdateErrorPreservesRequeueBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected status update failure to preserve nil error, got %v", err)
 	}
-	if result != (reconcile.Result{RequeueAfter: requeueDelayOnTransientError}) {
+	if result != (reconcile.Result{RequeueAfter: time.Second}) {
 		t.Fatalf("expected explicit requeue for base status update failure, got %v", result)
 	}
 	if writer.createAttempts != 1 || writer.updateAttempts != 1 {

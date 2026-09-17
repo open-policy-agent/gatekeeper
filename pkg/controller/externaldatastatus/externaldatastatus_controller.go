@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
 
 	"github.com/go-logr/logr"
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
@@ -43,11 +42,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "externaldata_status_controller")
-
-// requeueDelayOnTransientError is used in place of the deprecated Result.Requeue, which
-// deferred to the workqueue's rate limiter; a fixed short delay is used instead to retry
-// a transient status update failure without hammering the API server.
-const requeueDelayOnTransientError = time.Second
 
 type Adder struct {
 	WatchManager *watch.Manager
@@ -204,8 +198,7 @@ func (r *ReconcileProviderStatus) Reconcile(ctx context.Context, request reconci
 
 	// Update the status of the Provider resource
 	if err := r.statusClient.Status().Update(ctx, providerObj); err != nil {
-		log.Error(err, "failed to update provider status")
-		return reconcile.Result{RequeueAfter: requeueDelayOnTransientError}, nil
+		return reconcile.Result{}, fmt.Errorf("failed to update provider status: %w", err)
 	}
 	return reconcile.Result{}, nil
 }

@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
 
 	"github.com/go-logr/logr"
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1"
@@ -45,11 +44,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "mutator_status_controller")
-
-// requeueDelayOnTransientError is used in place of the deprecated Result.Requeue, which
-// deferred to the workqueue's rate limiter; a fixed short delay is used instead to retry
-// a transient status update failure without hammering the API server.
-const requeueDelayOnTransientError = time.Second
 
 type Adder struct {
 	WatchManager *watch.Manager
@@ -310,7 +304,7 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if err = r.statusClient.Status().Update(ctx, instance); err != nil {
-		return reconcile.Result{RequeueAfter: requeueDelayOnTransientError}, nil
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
