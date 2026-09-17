@@ -55,11 +55,7 @@ spec:
         {{- toYaml .Values.controllerManager.affinity | nindent 8 }}
       automountServiceAccountToken: {{ .Values.controllerManager.serviceAccount.automountServiceAccountToken }}
       containers:
-      - {{- if .Values.image.release }}
-        image: {{ .Values.image.repository }}:{{ .Values.image.release }}
-        {{- else }}
-        image: {{ .Values.image.repository }}
-        {{- end }}
+      - image: {{ include "gatekeeper.image" (dict "registry" .Values.image.registry "repository" .Values.image.repository "tag" .Values.image.release) }}
         args:
         - --port={{ .Values.controllerManager.port }}
         - --health-addr=:{{ .Values.controllerManager.healthPort }}
