@@ -5,15 +5,15 @@ name: copa-patch
 # It scans published release images for fixable Go-library CVEs, rebuilds/patches them with
 # Copa, re-scans to confirm the fix, re-wraps them with BuildKit SBOM + SLSA provenance
 # attestations, and publishes immutable `vX.Y.Z-R` + floating `vX.Y.Z-patched` multi-arch
-# tags. Canonical release tags are never touched.
+# tags. Release tags are never touched.
 #
-# Modes (input `target`; the weekly schedule always runs `canonical`):
-#   - dry-run   (default for manual runs): scan/patch only, write a local OCI layout, push nothing.
-#   - staging  : push patched (unattested) images to the owner's copa-staging namespace.
-#   - canonical: re-wrap WITH attestations and publish to ghcr.io/open-policy-agent/* (GHCR).
+# Modes (input `target`; the weekly schedule always runs `production`):
+#   - dry-run    (default for manual runs): scan/patch only, write a local OCI layout, push nothing.
+#   - staging    : push patched (unattested) images to the owner's copa-staging namespace.
+#   - production : re-wrap WITH attestations and publish to ghcr.io/open-policy-agent/* (GHCR).
 
 on:
-  # Weekly canonical run — gated OFF for the initial merge.
+  # Weekly production run — gated OFF for the initial merge.
   # schedule:
   #   - cron: "17 8 * * 1"
   workflow_dispatch:
@@ -26,7 +26,7 @@ on:
         description: "Where to send patched images."
         required: false
         type: choice
-        options: [dry-run, staging, canonical]
+        options: [dry-run, staging, production]
         default: dry-run
 
 permissions: read-all
@@ -39,7 +39,7 @@ concurrency:
 
 env:
   TRIVY_VERSION: "0.69.3"
-  COPA_VERSION: "0.14.2"
+  COPA_VERSION: "0.15.0"
   CRANE_VERSION: "0.21.7"
   # GHCR is the source registry for the release images to patch and the publish destination.
   SOURCE_REGISTRY: "ghcr.io/open-policy-agent"
@@ -134,19 +134,19 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          mode="${INPUT_TARGET:-canonical}"
-          case "${mode}" in dry-run|staging|canonical) ;; *) echo "::error::invalid target '${mode}'"; exit 1;; esac
+          mode="${INPUT_TARGET:-production}"
+          case "${mode}" in dry-run|staging|production) ;; *) echo "::error::invalid target '${mode}'"; exit 1;; esac
           # Safety: `dry-run` pushes nothing; `staging` pushes only to the owner's own
-          # ghcr.io/<owner>/copa-staging/* namespace; `canonical` (the only mode that writes to the
+          # ghcr.io/<owner>/copa-staging/* namespace; `production` (the only mode that writes to the
           # official repos) is locked to the upstream repo below.
-          if [[ "${mode}" == "canonical" && "${REPO}" != "open-policy-agent/gatekeeper" ]]; then
-            echo "::error::target=canonical is only allowed on open-policy-agent/gatekeeper (here: ${REPO})"; exit 1
+          if [[ "${mode}" == "production" && "${REPO}" != "open-policy-agent/gatekeeper" ]]; then
+            echo "::error::target=production is only allowed on open-policy-agent/gatekeeper (here: ${REPO})"; exit 1
           fi
           # Staging/intermediate writes are pinned to the owner's dedicated copa-staging namespace.
           staging="ghcr.io/${{ github.repository_owner }}/copa-staging"
           intermediate_repo="${staging}/${IMAGE}"
           source_ref="${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}"
-          if [[ "${mode}" == "canonical" ]]; then primary_repo="${SOURCE_REGISTRY}/${IMAGE}"; else primary_repo="${intermediate_repo}"; fi
+          if [[ "${mode}" == "production" ]]; then primary_repo="${SOURCE_REGISTRY}/${IMAGE}"; else primary_repo="${intermediate_repo}"; fi
           {
             echo "mode=${mode}"
             echo "source_ref=${source_ref}"
@@ -172,17 +172,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Trivy
-        run: |
-          set -euo pipefail
-          dir="$(mktemp -d)"
-          pushd "${dir}"
-          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
-          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
-          wget -q "${base}/${tarball}" "${base}/trivy_${TRIVY_VERSION}_checksums.txt"
-          grep " ${tarball}\$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum -c -
-          tar zxf "${tarball}"
-          echo "${dir}" >> "$GITHUB_PATH"
-          popd
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v${{ env.TRIVY_VERSION }}
 
       - name: Install Copa
         run: |
@@ -215,18 +207,18 @@ jobs:
           trivy image --download-db-only \
             --db-repository=ghcr.io/aquasecurity/trivy-db,public.ecr.aws/aquasecurity/trivy-db,docker.io/aquasec/trivy-db
 
-      # Record the canonical release tag digest up front, to confirm afterwards that the run
-      # never mutated a canonical `vX.Y.Z` tag (only `-R`/`-patched` are added).
-      - name: Capture canonical base digest
+      # Record the release tag digest up front, to confirm afterwards that the run
+      # never mutated a release `vX.Y.Z` tag (only `-R`/`-patched` are added).
+      - name: Capture base release digest
         id: base
-        if: steps.cfg.outputs.mode == 'canonical'
+        if: steps.cfg.outputs.mode == 'production'
         run: |
           set -euo pipefail
           ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}")
           echo "ghcr=${ghcr}" >> "$GITHUB_OUTPUT"
-          echo "Canonical base digest — ghcr:${ghcr}"
+          echo "Base release digest — ghcr:${ghcr}"
 
-      # Scan the canonical source per arch. The reports Copa consumes live in copa-reports/
+      # Scan the release source per arch. The reports Copa consumes live in copa-reports/
       # (one per platform => Copa patches exactly those arches).
       - name: Scan source for fixable library CVEs
         id: scan
@@ -264,7 +256,7 @@ jobs:
           patch_input="${SOURCE_REF}"
           report_dir="copa-reports"
           # Classify the lookup: present = scan it; explicit not-found = first patch;
-          # operational error = fail closed in canonical so we never skip/patch on an unknown state.
+          # operational error = fail closed in production so we never skip/patch on an unknown state.
           existing=0
           patched_state="absent"
           if [[ "${MODE}" != "dry-run" ]]; then
@@ -272,7 +264,7 @@ jobs:
               patched_state="present"
             elif grep -qiE 'MANIFEST_UNKNOWN|manifest unknown|not found|404' <<<"${digest_out}"; then
               patched_state="absent"
-            elif [[ "${MODE}" == "canonical" ]]; then
+            elif [[ "${MODE}" == "production" ]]; then
               echo "::error::could not determine whether ${PRIMARY_REPO}:${RELEASE}-patched exists (registry error): ${digest_out}"; exit 1
             else
               patched_state="absent"
@@ -311,7 +303,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # Immutable revision = next integer after the highest existing vX.Y.Z-N in the primary repo
-      # (the staging repo for `staging`, the canonical GHCR repo for `canonical`).
+      # (the staging repo for `staging`, the official GHCR repo for `production`).
       - name: Compute revision
         id: rev
         if: steps.gate.outputs.has_fixes == 'true'
@@ -321,7 +313,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${MODE}" != "dry-run" ]]; then
-            if [[ "${MODE}" == "canonical" ]]; then
+            if [[ "${MODE}" == "production" ]]; then
               tags=$(crane ls "${PRIMARY_REPO}")
             else
               tags=$(crane ls "${PRIMARY_REPO}" 2>/dev/null || true)
@@ -329,7 +321,7 @@ jobs:
             # empty result here means only "no vX.Y.Z-N tags yet", not a failed lookup.
             last=$(printf '%s\n' "${tags}" | { grep -E "^${RELEASE}-[0-9]+$" || true; } | sed "s/^${RELEASE}-//" | sort -n | tail -1)
             rev=$(( ${last:-0} + 1 ))
-            if [[ "${MODE}" == "canonical" ]]; then
+            if [[ "${MODE}" == "production" ]]; then
               if digest_err=$(crane digest "${PRIMARY_REPO}:${RELEASE}-${rev}" 2>&1 >/dev/null); then
                 echo "::error::${PRIMARY_REPO}:${RELEASE}-${rev} already exists; refusing to overwrite an immutable revision"; exit 1
               elif grep -qiE 'MANIFEST_UNKNOWN|manifest unknown|not found|404' <<<"${digest_err}"; then
@@ -523,7 +515,7 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # Smoke-test the verified intermediate before publishing canonical tags or moving -patched,
+      # Smoke-test the verified intermediate before publishing the `-R` tag or moving `-patched`,
       # so a broken binary can never reach a published vX.Y.Z-R / -patched.
       - name: Smoke test patched image
         if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run' && steps.verify.outputs.publish == 'true'
@@ -544,11 +536,11 @@ jobs:
             echo "Smoke: ${PATCHED_REF} (${p}) --help exited 0."
           done
 
-      # Re-wrap the patched image with attestations and push it to a staging RC tag and NOT the canonical
+      # Re-wrap the patched image with attestations and push it to a staging RC tag and NOT the final
       # -R. Every guard runs against the RC so the immutable -R is only published once they all pass.
       - name: Re-wrap with attestations to staging RC
         id: rewrap
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical' && steps.verify.outputs.publish == 'true'
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'production' && steps.verify.outputs.publish == 'true'
         env:
           INTERMEDIATE_REF: ${{ steps.patch.outputs.patched_ref }}
           REV: ${{ steps.rev.outputs.rev }}
@@ -574,7 +566,7 @@ jobs:
           echo "rc_ref=${rc_ref}" >> "$GITHUB_OUTPUT"
 
       - name: Verify attestations present
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical' && steps.verify.outputs.publish == 'true'
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'production' && steps.verify.outputs.publish == 'true'
         env:
           RC_REF: ${{ steps.rewrap.outputs.rc_ref }}
         run: |
@@ -596,21 +588,21 @@ jobs:
           done
           echo "All ${#imgs[@]} candidate platform(s) carry SBOM + provenance attestations."
 
-      # prove the run never mutated a canonical release tag.
-      - name: Verify canonical release tag untouched
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical' && steps.verify.outputs.publish == 'true'
+      # prove the run never mutated a release tag.
+      - name: Verify release tag untouched
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'production' && steps.verify.outputs.publish == 'true'
         env:
           BASE_GHCR: ${{ steps.base.outputs.ghcr }}
         run: |
           set -euo pipefail
           now_ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}")
           if [[ "${now_ghcr}" != "${BASE_GHCR}" ]]; then
-            echo "::error::canonical release tag digest changed (ghcr ${BASE_GHCR}->${now_ghcr})"; exit 1
+            echo "::error::release tag digest changed (ghcr ${BASE_GHCR}->${now_ghcr})"; exit 1
           fi
-          echo "Canonical release tag unchanged (ghcr ${now_ghcr})."
+          echo "Release tag unchanged (ghcr ${now_ghcr})."
 
-      - name: Promote validated image to canonical
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'canonical' && steps.verify.outputs.publish == 'true'
+      - name: Promote validated image to production
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'production' && steps.verify.outputs.publish == 'true'
         env:
           RC_REF: ${{ steps.rewrap.outputs.rc_ref }}
           REV: ${{ steps.rev.outputs.rev }}
@@ -628,7 +620,7 @@ jobs:
           rc_digest=$(crane digest "${RC_REF}")
           got_digest=$(crane digest "${rtag}")
           if [[ "${got_digest}" != "${rc_digest}" ]]; then
-            echo "::error::canonical ${rtag} digest ${got_digest} != validated RC ${rc_digest}"; exit 1
+            echo "::error::${rtag} digest ${got_digest} != validated RC ${rc_digest}"; exit 1
           fi
           echo "Published attested ${rtag} (digest ${got_digest}) from validated RC." | tee -a "$GITHUB_STEP_SUMMARY"
 

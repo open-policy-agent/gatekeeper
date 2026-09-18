@@ -24,7 +24,7 @@
 
   labels: ["dependencies"],
 
-  reviewers: ["team:gatekeeper-maintainers"],
+  reviewers: ["team:gatekeeper-maintainers", "abhisheksheth28"],
 
   // Default branch + maintained release lines. The workflow narrows the release branches actually
   // processed to n/n-1 at runtime via RENOVATE_BASE_BRANCH_PATTERNS, so this stays a generic regex.
