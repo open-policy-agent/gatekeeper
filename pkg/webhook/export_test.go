@@ -292,6 +292,11 @@ func TestConsumeAdmissionExportJSONValueEncodedSize(tester *testing.T) {
 		{name: "empty string", value: ""},
 		{name: "escaped string", value: "\x00\n\t\"\\<>&"},
 		{name: "invalid UTF-8", value: "\xff"},
+		{name: "invalid UTF-8 after escaped prefix", value: "\n<&\"prefix-\xff"},
+		{name: "invalid UTF-8 before escaped suffix", value: "\xff<>&\u2028\u2029"},
+		{name: "repeated invalid UTF-8", value: strings.Repeat("\xff", 64)},
+		{name: "truncated UTF-8", value: "\xe2\x82"},
+		{name: "valid replacement character", value: "\ufffd"},
 		{name: "Unicode separators", value: "\u2028\u2029"},
 		{name: "empty JSON number", value: json.Number("")},
 		{name: "JSON number", value: json.Number("-123.45e+6")},
@@ -339,15 +344,18 @@ func TestConsumeAdmissionExportJSONValueEncodedSize(tester *testing.T) {
 		{name: "nil strings", value: []string(nil)},
 		{name: "empty strings", value: []string{}},
 		{name: "strings", value: []string{"owner", "team"}},
+		{name: "invalid UTF-8 strings", value: []string{"owner", "\xff"}},
 		{name: "nil values", value: []interface{}(nil)},
 		{name: "empty values", value: []interface{}{}},
 		{name: "values", value: []interface{}{false, json.Number(""), []string{}}},
 		{name: "nil string map", value: map[string]string(nil)},
 		{name: "empty string map", value: map[string]string{}},
 		{name: "string map", value: map[string]string{"<key>": "\n"}},
+		{name: "invalid UTF-8 string map", value: map[string]string{"\xff": "value-\xfe"}},
 		{name: "nil value map", value: map[string]interface{}(nil)},
 		{name: "empty value map", value: map[string]interface{}{}},
 		{name: "value map", value: map[string]interface{}{"empty": []interface{}{}, "null": []byte(nil), "count": int64(math.MaxInt64)}},
+		{name: "invalid UTF-8 value map", value: map[string]interface{}{"\xff": []interface{}{"value-\xfe"}}},
 	}
 
 	for _, testCase := range testCases {
@@ -374,6 +382,29 @@ func TestConsumeAdmissionExportJSONValueEncodedSize(tester *testing.T) {
 			require.True(tester, admissionExportMessageFitsBudget(message, int64(len(encodedMessage))))
 		})
 	}
+}
+
+func TestQueuedAdmissionViolationExporterInvalidUTF8Limit(tester *testing.T) {
+	message := &exportutil.ExportMsg{
+		Message: strings.Repeat("\xff", 64),
+		Details: map[string]interface{}{"value": strings.Repeat("\xfe", 64)},
+	}
+	encoded, err := json.Marshal(message)
+	require.NoError(tester, err)
+	metrics := &fakeAdmissionExportMetrics{}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), metrics, nil)
+	exporter.maxMessageBytes = int64(len(encoded))
+
+	exporter.Export(message)
+	require.Equal(tester, 1, metrics.queued)
+	require.Empty(tester, metrics.dropped)
+	require.Len(tester, exporter.queue, 1)
+
+	exporter.maxMessageBytes--
+	exporter.Export(message)
+	require.Equal(tester, 1, metrics.queued)
+	require.Equal(tester, 1, metrics.dropped[admissionExportDropReasonMessageTooLarge])
+	require.Len(tester, exporter.queue, 1)
 }
 
 func TestAdmissionExportPreflightPreservesNonFiniteNumberErrors(tester *testing.T) {

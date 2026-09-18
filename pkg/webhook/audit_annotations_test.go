@@ -124,6 +124,45 @@ func TestBoundedAdmissionAuditDetailsRejectsBeforeMarshal(t *testing.T) {
 	})
 }
 
+func TestBoundedAdmissionAuditDetailsInvalidUTF8Limit(tester *testing.T) {
+	invalid := strings.Repeat("\xff", 64)
+	encodedInvalid, err := json.Marshal(invalid)
+	require.NoError(tester, err)
+	padding := strings.Repeat("x", maxAdmissionAuditDetailsBytes-len(encodedInvalid))
+	for _, testCase := range []struct {
+		name    string
+		value   string
+		omitted bool
+	}{
+		{name: "invalid prefix at limit", value: invalid + padding},
+		{name: "invalid suffix at limit", value: padding + invalid},
+		{name: "invalid prefix over limit", value: invalid + padding + "x", omitted: true},
+		{name: "invalid suffix over limit", value: padding + invalid + "x", omitted: true},
+		{name: "raw input over limit", value: "\xff" + strings.Repeat("x", maxAdmissionAuditDetailsBytes), omitted: true},
+	} {
+		tester.Run(testCase.name, func(tester *testing.T) {
+			encoded, err := json.Marshal(testCase.value)
+			require.NoError(tester, err)
+			require.Equal(tester, testCase.omitted, len(encoded) > maxAdmissionAuditDetailsBytes)
+
+			budget := int64(maxAdmissionAuditDetailsBytes)
+			nodes := 4096
+			withinBudget, known := consumeAdmissionExportJSONValue(&budget, testCase.value, 0, &nodes)
+			require.True(tester, known)
+			require.Equal(tester, !testCase.omitted, withinBudget)
+
+			details, omitted := boundedAdmissionAuditDetails(map[string]interface{}{"details": testCase.value})
+			require.Equal(tester, testCase.omitted, omitted)
+			if omitted {
+				require.Nil(tester, details)
+			} else {
+				require.Equal(tester, json.RawMessage(encoded), details)
+				require.Len(tester, details, maxAdmissionAuditDetailsBytes)
+			}
+		})
+	}
+}
+
 func TestAdmissionAuditDetailsPreflightRejectsOversizedValues(tester *testing.T) {
 	testCases := []struct {
 		name  string
@@ -167,6 +206,15 @@ func BenchmarkBoundedAdmissionAuditDetailsOversized(b *testing.B) {
 	b.SetBytes(16 * 1024 * 1024)
 
 	for b.Loop() {
+		boundedAdmissionAuditDetails(metadata)
+	}
+}
+
+func BenchmarkBoundedAdmissionAuditDetailsOversizedInvalidUTF8(benchmark *testing.B) {
+	metadata := map[string]interface{}{"details": strings.Repeat("\xff", 16*1024*1024)}
+	benchmark.ReportAllocs()
+
+	for benchmark.Loop() {
 		boundedAdmissionAuditDetails(metadata)
 	}
 }

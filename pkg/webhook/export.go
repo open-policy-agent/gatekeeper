@@ -433,8 +433,18 @@ func consumeAdmissionExportJSONString(budget *int64, value string) bool {
 			continue
 		}
 		runeValue, size := utf8.DecodeRuneInString(value[index:])
+		if runeValue == utf8.RuneError && size == 1 {
+			if int64(len(value)-index) > *budget {
+				return false
+			}
+			encoded, err := json.Marshal(value[index:])
+			if err != nil {
+				return false
+			}
+			return consumeAdmissionExportBudget(budget, int64(len(encoded)-2))
+		}
 		encodedSize := int64(size)
-		if runeValue == utf8.RuneError && size == 1 || runeValue == '\u2028' || runeValue == '\u2029' {
+		if runeValue == '\u2028' || runeValue == '\u2029' {
 			encodedSize = 6
 		}
 		if !consumeAdmissionExportBudget(budget, encodedSize) {
