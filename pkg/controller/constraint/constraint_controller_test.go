@@ -43,6 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -1167,6 +1168,95 @@ func TestManageVAPB_PerConstraintModeCreatesVAPBeforeBinding(t *testing.T) {
 	}
 }
 
+func TestManageVAPB_PerConstraintModeRejectsUnownedVAP(t *testing.T) {
+	for _, groupVersion := range []schema.GroupVersion{admissionregistrationv1.SchemeGroupVersion, admissionregistrationv1beta1.SchemeGroupVersion} {
+		t.Run(groupVersion.Version, func(t *testing.T) {
+			configureVAP(t, vapTestConfig{
+				apiEnabled:          ptr.To(true),
+				defaultGenerateVAP:  ptr.To(true),
+				defaultGenerateVAPB: ptr.To(true),
+				generationMode:      ptr.To(VAPGenerationModeConstraint),
+			})
+			transform.SetGroupVersion(&groupVersion)
+			for _, scenario := range []struct {
+				name      string
+				ownerName string
+				ownerUID  types.UID
+			}{
+				{name: "ownerless"},
+				{name: "other constraint", ownerName: "other-constraint", ownerUID: "other-uid"},
+				{name: "recreated constraint", ownerName: "test-constraint", ownerUID: "old-constraint-uid"},
+			} {
+				for _, existingBinding := range []bool{false, true} {
+					t.Run(fmt.Sprintf("%s/existing-binding=%t", scenario.name, existingBinding), func(t *testing.T) {
+						template := makeUnitCELTemplate()
+						instance := makeUnitConstraint()
+						reconciler, reader, writer, _ := newConstraintUnitReconciler(t, template, instance)
+						policy, err := vapForVersion(&groupVersion)
+						if err != nil {
+							t.Fatal(err)
+						}
+						policy.SetName(transform.GetConstraintVAPName(instance.GetKind(), instance.GetName()))
+						policy.SetUID("policy-uid")
+						policy.SetResourceVersion("1")
+						if scenario.ownerUID != "" {
+							policy.SetOwnerReferences([]metav1.OwnerReference{{
+								APIVersion: instance.GetAPIVersion(),
+								Kind:       instance.GetKind(),
+								Name:       scenario.ownerName,
+								UID:        scenario.ownerUID,
+								Controller: ptr.To(true),
+							}})
+						}
+						policyKey := client.ObjectKeyFromObject(policy)
+						reader.objects[policyKey] = policy
+						policyBefore := policy.DeepCopyObject()
+						bindingKey := types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}
+						var bindingBefore runtime.Object
+						if existingBinding {
+							transformedBinding, err := transform.ConstraintToInlinedBinding(instance, []string{string(util.Dryrun)})
+							if err != nil {
+								t.Fatal(err)
+							}
+							binding, err := getRunTimeVAPBinding(&groupVersion, transformedBinding, nil)
+							if err != nil {
+								t.Fatal(err)
+							}
+							binding.SetUID("binding-uid")
+							reader.objects[bindingKey] = binding
+							bindingBefore = binding.DeepCopyObject()
+						}
+						status := &constraintstatusv1beta1.ConstraintPodStatus{}
+						reporter := &fakeReporter{}
+						reconciler.reporter = reporter
+						_, err = reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status)
+						wantError := fmt.Sprintf("validatingadmissionpolicy %q exists but is not controlled by constraint %q", policy.GetName(), instance.GetName())
+						if err == nil || err.Error() != wantError {
+							t.Fatalf("manageVAPB() error = %v, want %q", err, wantError)
+						}
+						if writer.createAttempts != 0 || writer.updateAttempts != 0 || len(writer.deletedObjects) != 0 {
+							t.Fatalf("ownership conflict: creates=%d, updates=%d, deletes=%d; want 0/0/0", writer.createAttempts, writer.updateAttempts, len(writer.deletedObjects))
+						}
+						if !reflect.DeepEqual(policyBefore, reader.objects[policyKey]) {
+							t.Fatal("ownership conflict modified the existing policy")
+						}
+						binding, found := reader.objects[bindingKey]
+						if found != existingBinding || (found && !reflect.DeepEqual(bindingBefore, binding)) {
+							t.Fatal("ownership conflict created or modified a binding")
+						}
+						if len(status.Status.Errors) != 1 || !strings.Contains(status.Status.Errors[0].Message, wantError) {
+							t.Fatalf("constraint status errors = %v, want ownership conflict", status.Status.Errors)
+						}
+						if reporter.vapStatuses[policyKey] != metrics.VAPStatusError || reporter.vapbStatuses[bindingKey] != metrics.VAPStatusError {
+							t.Fatalf("VAP/VAPBinding status = %v/%v, want error/error", reporter.vapStatuses[policyKey], reporter.vapbStatuses[bindingKey])
+						}
+					})
+				}
+			}
+		})
+	}
+}
+
 func TestManageVAPB_OperationMismatchWarning(t *testing.T) {
 	configureVAP(t, vapTestConfig{
 		apiEnabled: ptr.To(true), defaultGenerateVAP: ptr.To(true),
@@ -1261,6 +1351,81 @@ func TestManageVAPB_PerConstraintModeParameterUpdateOnlyUpdatesVAP(t *testing.T)
 	}
 	if !strings.Contains(policy.Spec.Variables[1].Expression, "second") {
 		t.Fatalf("params expression = %q, want updated value", policy.Spec.Variables[1].Expression)
+	}
+}
+
+func TestReconcileConstraintVAP_DefaultedPolicy(t *testing.T) {
+	originalSync := *transform.SyncVAPScope
+	*transform.SyncVAPScope = false
+	t.Cleanup(func() { *transform.SyncVAPScope = originalSync })
+	for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
+		t.Run(version, func(t *testing.T) {
+			template := makeUnitCELTemplate()
+			instance := makeUnitConstraint()
+			reconciler, reader, writer, _ := newConstraintUnitReconciler(t, template, instance)
+			if err := unstructured.SetNestedField(instance.Object, map[string]interface{}{"message": "first"}, "spec", "parameters"); err != nil {
+				t.Fatal(err)
+			}
+			groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
+			ctx := context.Background()
+			if _, err := reconciler.reconcileConstraintVAP(ctx, template, instance, &groupVersion); err != nil {
+				t.Fatal(err)
+			}
+			key := types.NamespacedName{Name: transform.GetConstraintVAPName(instance.GetKind(), instance.GetName())}
+			transformed, err := reconciler.transformConstraintToVAP(template, instance)
+			if err != nil {
+				t.Fatal(err)
+			}
+			transformed.Spec.MatchConstraints.MatchPolicy = ptr.To(admissionregistrationv1beta1.Equivalent)
+			transformed.Spec.MatchConstraints.NamespaceSelector = &metav1.LabelSelector{}
+			transformed.Spec.MatchConstraints.ObjectSelector = &metav1.LabelSelector{}
+			for index := range transformed.Spec.MatchConstraints.ResourceRules {
+				transformed.Spec.MatchConstraints.ResourceRules[index].Scope = ptr.To(admissionregistrationv1.AllScopes)
+			}
+			defaulted, err := getRunTimeVAP(&groupVersion, transformed, reader.objects[key])
+			if err != nil {
+				t.Fatal(err)
+			}
+			defaulted.SetUID("policy-uid")
+			defaulted.SetResourceVersion("1")
+			reader.objects[key] = defaulted
+			before := defaulted.DeepCopyObject()
+			for attempt := 0; attempt < 3; attempt++ {
+				if _, err := reconciler.reconcileConstraintVAP(ctx, template, instance, &groupVersion); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if writer.createAttempts != 1 || writer.updateAttempts != 0 || len(writer.deletedObjects) != 0 {
+				t.Fatalf("unchanged defaulted policy: creates=%d, updates=%d, deletes=%d; want 1/0/0", writer.createAttempts, writer.updateAttempts, len(writer.deletedObjects))
+			}
+			if !reflect.DeepEqual(before, reader.objects[key]) {
+				t.Fatal("comparison mutated the existing policy")
+			}
+
+			if err := unstructured.SetNestedField(instance.Object, map[string]interface{}{"message": "second"}, "spec", "parameters"); err != nil {
+				t.Fatal(err)
+			}
+			transformed, err = reconciler.transformConstraintToVAP(template, instance)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := getRunTimeVAP(&groupVersion, transformed, reader.objects[key])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := reconciler.reconcileConstraintVAP(ctx, template, instance, &groupVersion); err != nil {
+				t.Fatal(err)
+			}
+			if writer.updateAttempts != 1 || len(writer.updatedObjects) != 1 {
+				t.Fatalf("changed parameters: updates=%d, want 1", writer.updateAttempts)
+			}
+			if !reflect.DeepEqual(want, writer.updatedObjects[0]) {
+				t.Fatal("update must preserve the desired policy rather than its normalized comparison copy")
+			}
+			if !reflect.DeepEqual(before, defaulted) {
+				t.Fatal("comparison mutated the previous policy")
+			}
+		})
 	}
 }
 
@@ -1669,6 +1834,177 @@ func TestDeleteConstraintVAPIfOwnedSkipsUnrelatedPolicy(t *testing.T) {
 	}
 }
 
+type recordingDeleteWriter struct {
+	client.Writer
+	options []client.DeleteOptions
+}
+
+func (writer *recordingDeleteWriter) Delete(ctx context.Context, object client.Object, options ...client.DeleteOption) error {
+	deleteOptions := client.DeleteOptions{}
+	deleteOptions.ApplyOptions(options)
+	writer.options = append(writer.options, deleteOptions)
+	return writer.Writer.Delete(ctx, object, options...)
+}
+
+func TestDeleteConstraintResourcesPreservesReplacement(t *testing.T) {
+	const (
+		vapResource = "VAP"
+		unchanged   = "unchanged"
+	)
+	for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
+		for _, resource := range []string{vapResource, "VAPB", "legacy VAPB"} {
+			for _, changed := range []string{"replacement", "ownership", unchanged} {
+				t.Run(fmt.Sprintf("%s/%s/%s", version, resource, changed), func(t *testing.T) {
+					instance := makeUnitConstraint()
+					reconciler, reader, _, _ := newConstraintUnitReconciler(t, makeUnitCELTemplate(), instance)
+					groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
+					var cached client.Object
+					var err error
+					if resource == vapResource {
+						cached, err = vapForVersion(&groupVersion)
+					} else {
+						cached, err = vapBindingForVersion(groupVersion)
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					switch resource {
+					case vapResource:
+						cached.SetName(transform.GetConstraintVAPName(instance.GetKind(), instance.GetName()))
+					case "VAPB":
+						cached.SetName(transform.GetVAPBindingName(instance.GetKind(), instance.GetName()))
+					case "legacy VAPB":
+						cached.SetName(transform.LegacyVAPBindingName(instance.GetName()))
+					}
+					cached.SetUID("original-resource")
+					cached.SetResourceVersion("1")
+					cached.SetOwnerReferences([]metav1.OwnerReference{{
+						APIVersion: instance.GetAPIVersion(), Kind: instance.GetKind(), Name: instance.GetName(),
+						UID: instance.GetUID(), Controller: ptr.To(true),
+					}})
+					reader.objects[client.ObjectKeyFromObject(cached)] = cached
+					live, ok := cached.DeepCopyObject().(client.Object)
+					if !ok {
+						t.Fatalf("copy of %T does not implement client.Object", cached)
+					}
+					if changed != unchanged {
+						live.SetResourceVersion("2")
+						owners := live.GetOwnerReferences()
+						owners[0].UID = "new-constraint"
+						live.SetOwnerReferences(owners)
+					}
+					if changed == "replacement" {
+						live.SetUID("replacement-resource")
+					}
+					liveClient := crfake.NewClientBuilder().WithScheme(reconciler.scheme).WithObjects(live).Build()
+					writer := &recordingDeleteWriter{Writer: liveClient}
+					reconciler.writer = writer
+					deleteResource := func() error {
+						switch resource {
+						case vapResource:
+							return reconciler.deleteConstraintVAPIfOwned(context.Background(), instance, &groupVersion)
+						case "VAPB":
+							return reconciler.deleteVAPBIfOwned(context.Background(), reader.objects[client.ObjectKeyFromObject(cached)], instance, cached.GetName())
+						default:
+							return reconciler.cleanupLegacyVAPB(context.Background(), instance, &groupVersion)
+						}
+					}
+					err = deleteResource()
+					if changed != unchanged && !apierrors.IsConflict(err) {
+						t.Fatalf("delete error = %v, want precondition conflict", err)
+					}
+					if changed == unchanged && err != nil {
+						t.Fatal(err)
+					}
+					if len(writer.options) != 1 {
+						t.Fatalf("delete attempts = %d, want 1", len(writer.options))
+					}
+					preconditions := writer.options[0].Preconditions
+					if preconditions == nil || preconditions.UID == nil || *preconditions.UID != cached.GetUID() || preconditions.ResourceVersion == nil || *preconditions.ResourceVersion != cached.GetResourceVersion() {
+						t.Fatalf("delete preconditions = %#v, want observed UID and resource version", preconditions)
+					}
+					stored, ok := live.DeepCopyObject().(client.Object)
+					if !ok {
+						t.Fatalf("copy of %T does not implement client.Object", live)
+					}
+					getErr := liveClient.Get(context.Background(), client.ObjectKeyFromObject(live), stored)
+					if changed == unchanged {
+						if !apierrors.IsNotFound(getErr) {
+							t.Fatalf("owned resource remains after delete: %v", getErr)
+						}
+						return
+					}
+					if getErr != nil {
+						t.Fatalf("replacement was deleted: %v", getErr)
+					}
+					reader.objects[client.ObjectKeyFromObject(live)] = stored
+					if err := deleteResource(); err != nil || len(writer.options) != 1 {
+						t.Fatalf("retry did not skip the new owner: error=%v, deletes=%d", err, len(writer.options))
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestReconcileDeletedConstraintCleansChildrenWithoutTemplateEligibility(t *testing.T) {
+	for _, mode := range []VAPGenerationMode{VAPGenerationModeTemplate, VAPGenerationModeConstraint} {
+		for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
+			for _, state := range []string{"template absent", "generation disabled"} {
+				t.Run(fmt.Sprintf("%s/%s/%s", mode, version, state), func(t *testing.T) {
+					configureVAP(t, vapTestConfig{
+						apiEnabled: ptr.To(true), defaultGenerateVAP: ptr.To(true), defaultGenerateVAPB: ptr.To(true),
+						generationMode: &mode,
+					})
+					groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
+					transform.SetGroupVersion(&groupVersion)
+					template := makeUnitCELTemplate()
+					template.SetAnnotations(map[string]string{VAPBGenerationAnnotation: VAPBGenerationUnblocked})
+					instance := makeUnitConstraint()
+					reconciler, reader, tracking, request := newConstraintUnitReconciler(t, template, instance)
+					sharedKey := types.NamespacedName{Name: transform.GetTemplateVAPName(instance.GetKind())}
+					reader.objects[sharedKey] = makeUnitTemplateVAP(t, template, &groupVersion)
+					if _, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, &constraintstatusv1beta1.ConstraintPodStatus{}); err != nil {
+						t.Fatal(err)
+					}
+					bindingKey := types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}
+					legacy, ok := reader.objects[bindingKey].DeepCopyObject().(client.Object)
+					if !ok {
+						t.Fatalf("copy of %T does not implement client.Object", reader.objects[bindingKey])
+					}
+					legacy.SetName(transform.LegacyVAPBindingName(instance.GetName()))
+					reader.objects[client.ObjectKeyFromObject(legacy)] = legacy
+					delete(reader.objects, client.ObjectKeyFromObject(instance))
+					if state == "template absent" {
+						delete(reader.objects, types.NamespacedName{Name: template.GetName()})
+						if _, err := reconciler.cfClient.RemoveTemplate(context.Background(), template); err != nil {
+							t.Fatal(err)
+						}
+						reconciler.ifWatching = func(schema.GroupVersionKind, func() error) (bool, error) { return false, nil }
+					} else {
+						SetDefaultGenerateVAP(false)
+						SetDefaultGenerateVAPB(false)
+					}
+					reconciler.writer = &migrationWriter{trackingWriter: tracking}
+					for attempt := 0; attempt < 2; attempt++ {
+						if _, err := reconciler.Reconcile(context.Background(), request); err != nil {
+							t.Fatal(err)
+						}
+						for _, name := range []string{bindingKey.Name, legacy.GetName(), transform.GetConstraintVAPName(instance.GetKind(), instance.GetName())} {
+							if _, found := reader.objects[types.NamespacedName{Name: name}]; found {
+								t.Fatalf("generated resource %s remains after deletion", name)
+							}
+						}
+						if _, found := reader.objects[sharedKey]; !found {
+							t.Fatal("constraint cleanup deleted the shared template policy")
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
 func makeUnitCELTemplate() *templates.ConstraintTemplate {
 	ct := makeTemplateWithCELEngine(nil)
 	ct.Spec.CRD.Spec.Names.Kind = "TestKind"
@@ -1716,6 +2052,137 @@ func TestReconcileStableVAPAPIErrorSkipsStatusUpdate(t *testing.T) {
 	}
 }
 
+type recreatedConstraintReader struct {
+	client.Reader
+	key    types.NamespacedName
+	missed bool
+}
+
+func (reader *recreatedConstraintReader) Get(ctx context.Context, key types.NamespacedName, object client.Object, options ...client.GetOption) error {
+	if key == reader.key && !reader.missed {
+		reader.missed = true
+		return apierrors.NewNotFound(schema.GroupResource{}, key.Name)
+	}
+	return reader.Reader.Get(ctx, key, object, options...)
+}
+
+func TestReconcileConstraintRecreatedAfterAbsenceCheck(t *testing.T) {
+	for _, mode := range []VAPGenerationMode{VAPGenerationModeTemplate, VAPGenerationModeConstraint} {
+		for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
+			t.Run(fmt.Sprintf("%s/%s", mode, version), func(t *testing.T) {
+				configureVAP(t, vapTestConfig{
+					apiEnabled: ptr.To(true), defaultGenerateVAP: ptr.To(true), defaultGenerateVAPB: ptr.To(true),
+					generationMode: &mode,
+				})
+				groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
+				transform.SetGroupVersion(&groupVersion)
+				template := makeUnitCELTemplate()
+				template.SetAnnotations(map[string]string{VAPBGenerationAnnotation: VAPBGenerationUnblocked})
+				instance := makeUnitConstraint()
+				reconciler, reader, writer, request := newConstraintUnitReconciler(t, template, instance)
+				reader.objects[types.NamespacedName{Name: transform.GetTemplateVAPName(instance.GetKind())}] = makeUnitTemplateVAP(t, template, &groupVersion)
+				if _, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, &constraintstatusv1beta1.ConstraintPodStatus{}); err != nil {
+					t.Fatal(err)
+				}
+				bindingKey := types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}
+				legacy, ok := reader.objects[bindingKey].DeepCopyObject().(client.Object)
+				if !ok {
+					t.Fatalf("copy of %T does not implement client.Object", reader.objects[bindingKey])
+				}
+				legacy.SetName(transform.LegacyVAPBindingName(instance.GetName()))
+				reader.objects[client.ObjectKeyFromObject(legacy)] = legacy
+				key := client.ObjectKeyFromObject(instance)
+				reader.getErrs[key] = apierrors.NewNotFound(schema.GroupResource{}, instance.GetName())
+				reconciler.apiReader = &recreatedConstraintReader{Reader: &fakeReader{objects: reader.objects}, key: key}
+				if _, err := reconciler.Reconcile(context.Background(), request); err != nil {
+					t.Fatal(err)
+				}
+				for _, deleted := range writer.deletedObjects {
+					if _, status := deleted.(*constraintstatusv1beta1.ConstraintPodStatus); !status {
+						t.Fatalf("deleted resource %s after its owner was recreated", deleted.GetName())
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestReconcileCachedMissUsesAPIReaderBeforeDeletingChildren(t *testing.T) {
+	const (
+		liveState        = "live"
+		deletingState    = "deleting"
+		absentState      = "absent"
+		lookupErrorState = "lookup error"
+		noAPIReaderState = "no API reader"
+	)
+	for _, mode := range []VAPGenerationMode{VAPGenerationModeTemplate, VAPGenerationModeConstraint} {
+		for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
+			t.Run(fmt.Sprintf("%s/%s", mode, version), func(t *testing.T) {
+				configureVAP(t, vapTestConfig{
+					apiEnabled: ptr.To(true), defaultGenerateVAP: ptr.To(true), defaultGenerateVAPB: ptr.To(true),
+					generationMode: &mode,
+				})
+				groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
+				transform.SetGroupVersion(&groupVersion)
+				for _, state := range []string{liveState, deletingState, absentState, lookupErrorState, noAPIReaderState} {
+					t.Run(state, func(t *testing.T) {
+						template := makeUnitCELTemplate()
+						template.SetAnnotations(map[string]string{VAPBGenerationAnnotation: VAPBGenerationUnblocked})
+						instance := makeUnitConstraint()
+						reconciler, reader, writer, request := newConstraintUnitReconciler(t, template, instance)
+						reader.objects[types.NamespacedName{Name: transform.GetTemplateVAPName(instance.GetKind())}] = makeUnitTemplateVAP(t, template, &groupVersion)
+						if _, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, &constraintstatusv1beta1.ConstraintPodStatus{}); err != nil {
+							t.Fatal(err)
+						}
+						key := client.ObjectKeyFromObject(instance)
+						reader.getErrs[key] = apierrors.NewNotFound(schema.GroupResource{}, instance.GetName())
+						apiReader := &fakeReader{objects: map[types.NamespacedName]client.Object{key: instance.DeepCopy()}}
+						reconciler.apiReader = apiReader
+						lookupErr := errors.New("constraint lookup failed")
+						switch state {
+						case deletingState:
+							now := metav1.Now()
+							apiReader.objects[key].SetDeletionTimestamp(&now)
+						case absentState:
+							delete(apiReader.objects, key)
+						case lookupErrorState:
+							apiReader.getErr = lookupErr
+						case noAPIReaderState:
+							reconciler.apiReader = nil
+						}
+						writer.createdObjects, writer.updatedObjects, writer.deletedObjects = nil, nil, nil
+						result, err := reconciler.Reconcile(context.Background(), request)
+						switch state {
+						case lookupErrorState:
+							if !errors.Is(err, lookupErr) {
+								t.Fatalf("error = %v, want %v", err, lookupErr)
+							}
+						case noAPIReaderState:
+							if err == nil {
+								t.Fatal("expected missing API reader error")
+							}
+						default:
+							if err != nil {
+								t.Fatal(err)
+							}
+						}
+						if state == liveState && result.RequeueAfter == 0 {
+							t.Fatal("live constraint must requeue until its cache catches up")
+						}
+						wantDelete := state == absentState || state == deletingState
+						if (len(writer.deletedObjects) > 0) != wantDelete {
+							t.Fatalf("deletes = %d, want deletion = %v", len(writer.deletedObjects), wantDelete)
+						}
+						if len(writer.createdObjects) != 0 || len(writer.updatedObjects) != 0 {
+							t.Fatal("cached miss must not create or update resources")
+						}
+					})
+				}
+			})
+		}
+	}
+}
+
 func TestReconcileNotWatchingUsesAPIReaderBeforeDeletingChildren(t *testing.T) {
 	configureVAP(t, vapTestConfig{
 		apiEnabled:          ptr.To(true),
@@ -1740,9 +2207,11 @@ func TestReconcileNotWatchingUsesAPIReaderBeforeDeletingChildren(t *testing.T) {
 			switch state {
 			case "absent":
 				delete(reader.objects, templateKey)
+				delete(reader.objects, client.ObjectKeyFromObject(instance))
 			case "deleting":
 				now := metav1.Now()
 				reader.objects[templateKey].SetDeletionTimestamp(&now)
+				reader.objects[client.ObjectKeyFromObject(instance)].SetDeletionTimestamp(&now)
 			case "lookup error":
 				reader.getErrs[templateKey] = lookupError
 			}
@@ -2412,9 +2881,10 @@ func TestDeleteVAPBIfOwned_FallsBackToOwnerCoordinatesWhenUIDMissing(t *testing.
 
 	writer := &trackingWriter{}
 	r := &ReconcileConstraint{
-		writer:   writer,
-		log:      logf.Log.WithName("test"),
-		reporter: &fakeReporter{},
+		apiReader: &fakeReader{},
+		writer:    writer,
+		log:       logf.Log.WithName("test"),
+		reporter:  &fakeReporter{},
 	}
 
 	if err := r.deleteVAPBIfOwned(context.Background(), vapBinding, instance, vapBinding.GetName()); err != nil {
@@ -3048,11 +3518,12 @@ func TestCleanupLegacyVAPB_FallsBackToOwnerCoordinatesWhenUIDMissing(t *testing.
 
 	writer := &trackingWriter{}
 	r := &ReconcileConstraint{
-		reader:   reader,
-		writer:   writer,
-		log:      logf.Log.WithName("test"),
-		reporter: &fakeReporter{},
-		scheme:   runtime.NewScheme(),
+		reader:    reader,
+		apiReader: reader,
+		writer:    writer,
+		log:       logf.Log.WithName("test"),
+		reporter:  &fakeReporter{},
+		scheme:    runtime.NewScheme(),
 	}
 
 	if err := r.cleanupLegacyVAPB(context.Background(), instance, &gv); err != nil {

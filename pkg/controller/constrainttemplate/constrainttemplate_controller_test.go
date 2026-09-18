@@ -2582,6 +2582,71 @@ func TestManageVAP_PerConstraintModeDeletesUnreferencedTemplateVAP(t *testing.T)
 	require.True(t, apierrors.IsNotFound(err))
 }
 
+type recordingDeleteClient struct {
+	client.Client
+	options []client.DeleteOptions
+}
+
+func (recorder *recordingDeleteClient) Delete(ctx context.Context, object client.Object, options ...client.DeleteOption) error {
+	deleteOptions := client.DeleteOptions{}
+	deleteOptions.ApplyOptions(options)
+	recorder.options = append(recorder.options, deleteOptions)
+	return recorder.Client.Delete(ctx, object, options...)
+}
+
+func TestDeleteTemplateVAPPreservesReplacement(t *testing.T) {
+	const unchanged = "unchanged"
+	for _, groupVersion := range []schema.GroupVersion{admissionregistrationv1.SchemeGroupVersion, admissionregistrationv1beta1.SchemeGroupVersion} {
+		for _, changed := range []string{"replacement", "ownership", unchanged} {
+			t.Run(fmt.Sprintf("%s/%s", groupVersion.Version, changed), func(t *testing.T) {
+				template, _, policy, scheme := makeTemplateVAPObjects(t)
+				require.NoError(t, admissionregistrationv1beta1.AddToScheme(scheme))
+				cached, err := vapForVersion(&groupVersion)
+				require.NoError(t, err)
+				cached.SetName(policy.GetName())
+				cached.SetUID("original-policy")
+				cached.SetResourceVersion("1")
+				cached.SetOwnerReferences(policy.GetOwnerReferences())
+				live, ok := cached.DeepCopyObject().(client.Object)
+				require.True(t, ok)
+				if changed != unchanged {
+					live.SetResourceVersion("2")
+					owners := live.GetOwnerReferences()
+					owners[0].UID = "new-template"
+					live.SetOwnerReferences(owners)
+				}
+				if changed == "replacement" {
+					live.SetUID("replacement-policy")
+				}
+				baseClient := crfake.NewClientBuilder().WithScheme(scheme).WithObjects(live).Build()
+				recorder := &recordingDeleteClient{Client: baseClient}
+				reconciler := &ReconcileConstraintTemplate{Client: recorder}
+				err = reconciler.deleteVAPIfOwned(context.Background(), cached, template)
+				if changed == unchanged {
+					require.NoError(t, err)
+				} else {
+					require.True(t, apierrors.IsConflict(err), "expected delete precondition conflict: %v", err)
+				}
+				require.Len(t, recorder.options, 1)
+				preconditions := recorder.options[0].Preconditions
+				require.NotNil(t, preconditions)
+				require.Equal(t, ptr.To(cached.GetUID()), preconditions.UID)
+				require.Equal(t, ptr.To(cached.GetResourceVersion()), preconditions.ResourceVersion)
+				stored, ok := live.DeepCopyObject().(client.Object)
+				require.True(t, ok)
+				getErr := baseClient.Get(context.Background(), client.ObjectKeyFromObject(live), stored)
+				if changed == unchanged {
+					require.True(t, apierrors.IsNotFound(getErr))
+					return
+				}
+				require.NoError(t, getErr)
+				require.NoError(t, reconciler.deleteVAPIfOwned(context.Background(), stored, template))
+				require.Len(t, recorder.options, 1, "retry must skip a new owner's policy")
+			})
+		}
+	}
+}
+
 func TestVAPReferencedByBinding(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, admissionregistrationv1.AddToScheme(scheme))

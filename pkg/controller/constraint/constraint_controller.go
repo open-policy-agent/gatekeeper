@@ -356,11 +356,23 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil && !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 			return reconcile.Result{}, err
 		}
-		deleted = true
+		if r.apiReader == nil {
+			return reconcile.Result{}, errors.New("API reader is not configured")
+		}
 		instance = &unstructured.Unstructured{}
 		instance.SetGroupVersionKind(gvk)
-		instance.SetNamespace(unpackedRequest.Namespace)
-		instance.SetName(unpackedRequest.Name)
+		if err := r.apiReader.Get(ctx, unpackedRequest.NamespacedName, instance); err != nil {
+			if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+				return reconcile.Result{}, err
+			}
+			instance = &unstructured.Unstructured{}
+			instance.SetGroupVersionKind(gvk)
+			instance.SetNamespace(unpackedRequest.Namespace)
+			instance.SetName(unpackedRequest.Name)
+		} else if instance.GetDeletionTimestamp().IsZero() {
+			return reconcile.Result{RequeueAfter: time.Second}, nil
+		}
+		deleted = true
 	}
 
 	deleted = deleted || !instance.GetDeletionTimestamp().IsZero()
@@ -492,55 +504,23 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 		isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
 		if isAPIEnabled {
-			if err := r.deleteConstraintVAPIfOwned(ctx, instance, groupVersion); err != nil {
-				return reconcile.Result{}, err
-			}
-			shouldGenerateVAPB, _, err := shouldGenerateVAPB(GetDefaultGenerateVAPB(), enforcementAction, instance)
+			vapBindingName := transform.GetVAPBindingName(instance.GetKind(), instance.GetName())
+			vapBinding, err := vapBindingForVersion(*groupVersion)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
-			if shouldGenerateVAPB {
-				ct := &v1beta1.ConstraintTemplate{}
-				err = r.reader.Get(ctx, types.NamespacedName{Name: strings.ToLower(instance.GetKind())}, ct)
-				if err != nil {
-					if apierrors.IsNotFound(err) {
-						return reconcile.Result{}, nil
-					}
+			if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, vapBinding); err != nil {
+				if !apierrors.IsNotFound(err) {
 					return reconcile.Result{}, err
 				}
-				unversionedCT := &templates.ConstraintTemplate{}
-				if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
-					return reconcile.Result{}, err
-				}
-				hasVAP, err := ShouldGenerateVAP(unversionedCT)
-				if err != nil {
-					if errors.Is(err, celSchema.ErrCELEngineMissing) {
-						return reconcile.Result{}, nil
-					}
-					return reconcile.Result{}, err
-				}
-				if hasVAP {
-					// Delete new-format VAPB (gatekeeper-<kind>-<name>).
-					vapBindingName := transform.GetVAPBindingName(instance.GetKind(), instance.GetName())
-					newVapBinding, err := vapBindingForVersion(*groupVersion)
-					if err != nil {
-						return reconcile.Result{}, err
-					}
-					newVapBinding.SetName(vapBindingName)
-					if err := r.reader.Get(ctx, types.NamespacedName{Name: vapBindingName}, newVapBinding); err != nil {
-						if !apierrors.IsNotFound(err) {
-							return reconcile.Result{}, err
-						}
-					} else {
-						if err := r.deleteVAPBIfOwned(ctx, newVapBinding, instance, vapBindingName); err != nil {
-							return reconcile.Result{}, err
-						}
-					}
-					// Migration: also delete legacy VAPB (gatekeeper-<name>).
-					if err := r.cleanupLegacyVAPB(ctx, instance, groupVersion); err != nil {
-						return reconcile.Result{}, err
-					}
-				}
+			} else if err := r.deleteVAPBIfOwned(ctx, vapBinding, instance, vapBindingName); err != nil {
+				return reconcile.Result{}, err
+			}
+			if err := r.cleanupLegacyVAPB(ctx, instance, groupVersion); err != nil {
+				return reconcile.Result{}, err
+			}
+			if err := r.deleteConstraintVAPIfOwned(ctx, instance, groupVersion); err != nil {
+				return reconcile.Result{}, err
 			}
 		}
 	}
@@ -747,6 +727,8 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 				}
 			}
 
+			// On rollback, the CRD wait may still be unblocked while the shared VAP is absent.
+			// Wait for it before switching the binding and deleting the per-constraint VAP.
 			sharedVAP, err := vapForVersion(groupVersion)
 			if err != nil {
 				r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
@@ -900,13 +882,17 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 }
 
 func (r *ReconcileConstraint) deleteVAPBIfOwned(ctx context.Context, vapBinding client.Object, instance *unstructured.Unstructured, vapBindingName string) error {
-	if !vapBindingControlledByConstraint(vapBinding, instance) {
+	owned, err := r.canDeleteConstraintResource(ctx, vapBinding, instance)
+	if err != nil {
+		return err
+	}
+	if !owned {
 		log.Info("vapbinding exists but is not owned by this constraint, skipping delete", "vapBindingName", vapBindingName, "constraintName", instance.GetName(), "constraintKind", instance.GetKind())
 		return nil
 	}
 
 	log.Info("deleting vapbinding", "vapBindingName", vapBindingName)
-	if err := r.writer.Delete(ctx, vapBinding); err != nil {
+	if err := r.writer.Delete(ctx, vapBinding, client.Preconditions{UID: ptr.To(vapBinding.GetUID()), ResourceVersion: ptr.To(vapBinding.GetResourceVersion())}); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("vapbinding already deleted", "vapBindingName", vapBindingName)
 			return nil
@@ -985,17 +971,42 @@ func (r *ReconcileConstraint) cleanupLegacyVAPB(ctx context.Context, instance *u
 		}
 		return nil
 	}
-	if !vapBindingControlledByConstraint(legacyBinding, instance) {
+	owned, err := r.canDeleteConstraintResource(ctx, legacyBinding, instance)
+	if err != nil {
+		return err
+	}
+	if !owned {
 		log.Info("legacy vapbinding exists but is not owned by this constraint, skipping cleanup", "legacyVAPBName", oldName, "constraintName", instance.GetName(), "constraintKind", instance.GetKind())
 		return nil
 	}
 	log.Info("cleaning up legacy vapbinding", "legacyVAPBName", oldName, "newVAPBName", newName)
-	if err := r.writer.Delete(ctx, legacyBinding); err != nil && !apierrors.IsNotFound(err) {
+	if err := r.writer.Delete(ctx, legacyBinding, client.Preconditions{UID: ptr.To(legacyBinding.GetUID()), ResourceVersion: ptr.To(legacyBinding.GetResourceVersion())}); err != nil && !apierrors.IsNotFound(err) {
 		log.Error(err, "failed to delete legacy vapbinding", "legacyVAPBName", oldName)
 		return err
 	}
 	r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: oldName})
 	return nil
+}
+
+func (r *ReconcileConstraint) canDeleteConstraintResource(ctx context.Context, resource metav1.Object, instance *unstructured.Unstructured) (bool, error) {
+	if !vapBindingControlledByConstraint(resource, instance) {
+		return false, nil
+	}
+	if instance.GetUID() != "" {
+		return true, nil
+	}
+	if r.apiReader == nil {
+		return false, errors.New("API reader is not configured")
+	}
+	current := &unstructured.Unstructured{}
+	current.SetGroupVersionKind(instance.GroupVersionKind())
+	if err := r.apiReader.Get(ctx, client.ObjectKeyFromObject(instance), current); err != nil {
+		if apierrors.IsNotFound(err) || meta.IsNoMatchError(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	return !current.GetDeletionTimestamp().IsZero() && metav1.IsControlledBy(resource, current), nil
 }
 
 func vapBindingControlledByConstraint(binding metav1.Object, instance *unstructured.Unstructured) bool {

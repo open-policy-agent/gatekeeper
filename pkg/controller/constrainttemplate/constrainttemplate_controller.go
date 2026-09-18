@@ -55,6 +55,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -377,6 +378,21 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 			logAction(ctRef, deletedAction)
 			r.metrics.registry.remove(request.NamespacedName)
 		} else {
+			isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&logger)
+			if isAPIEnabled {
+				currentVap, err := vapForVersion(groupVersion)
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+				vapName := getVAPName(ctUnversioned.GetName())
+				if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
+					if !apierrors.IsNotFound(err) {
+						return reconcile.Result{}, err
+					}
+				} else if err := r.deleteVAPIfOwned(ctx, currentVap, ctUnversioned); err != nil {
+					return reconcile.Result{}, err
+				}
+			}
 			result, err = r.handleDelete(ctx, ctUnversioned)
 			if err != nil {
 				logger.Error(err, "deletion error")
@@ -387,20 +403,6 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 			if result.RequeueAfter == 0 {
 				logAction(ct, deletedAction)
 				r.metrics.registry.remove(request.NamespacedName)
-			}
-			isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&logger)
-			if isAPIEnabled {
-				currentVap, err := vapForVersion(groupVersion)
-				if err != nil {
-					return reconcile.Result{}, err
-				}
-				vapName := getVAPName(ctUnversioned.GetName())
-				currentVap.SetName(vapName)
-				if err := r.Delete(ctx, currentVap); err != nil {
-					if !apierrors.IsNotFound(err) {
-						return reconcile.Result{}, err
-					}
-				}
 			}
 		}
 		err = r.deleteAllStatus(ctx, request.Name)
@@ -1109,7 +1111,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		}
 		if currentVap != nil {
 			logger.Info("deleting VAP")
-			if err := r.Delete(ctx, currentVap); err != nil {
+			if err := r.deleteVAPIfOwned(ctx, currentVap, ct); err != nil {
 				r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete VAP object", status, err)
 				return err
@@ -1123,6 +1125,17 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 	}
 	if !generateVap {
 		r.metrics.DeleteVAPStatus(types.NamespacedName{Name: ct.GetName()})
+	}
+	return nil
+}
+
+func (r *ReconcileConstraintTemplate) deleteVAPIfOwned(ctx context.Context, policy client.Object, owner metav1.Object) error {
+	if !metav1.IsControlledBy(policy, owner) {
+		logger.Info("template VAP is not owned by this ConstraintTemplate, skipping delete", "vapName", policy.GetName())
+		return nil
+	}
+	if err := r.Delete(ctx, policy, client.Preconditions{UID: ptr.To(policy.GetUID()), ResourceVersion: ptr.To(policy.GetResourceVersion())}); err != nil && !apierrors.IsNotFound(err) {
+		return err
 	}
 	return nil
 }
@@ -1155,7 +1168,7 @@ func (r *ReconcileConstraintTemplate) deleteUnreferencedTemplateVAP(ctx context.
 		logger.Info("retaining template VAP while bindings still reference it", "vapName", vapName)
 		return nil
 	}
-	if err := r.Delete(ctx, currentVAP); err != nil && !apierrors.IsNotFound(err) {
+	if err := r.deleteVAPIfOwned(ctx, currentVAP, ct); err != nil {
 		r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 		return r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete VAP object", status, err)
 	}

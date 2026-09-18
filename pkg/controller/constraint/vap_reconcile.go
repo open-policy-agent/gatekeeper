@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 
 	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -21,8 +20,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -197,9 +198,7 @@ func (r *ReconcileConstraint) sharedVAPIsCurrent(ctx context.Context, templateNa
 	if err != nil {
 		return false, err
 	}
-	normalizeVAPMatchDefaults(current)
-	normalizeVAPMatchDefaults(proposed)
-	return apiequality.Semantic.DeepEqual(current, proposed), nil
+	return vapEqual(current, proposed), nil
 }
 
 func (r *ReconcileConstraint) authoritativeVAPMatchingConfig(ctx context.Context) (*webhookconfigcache.WebhookMatchingConfig, []string, []string, error) {
@@ -239,7 +238,15 @@ func (r *ReconcileConstraint) authoritativeVAPMatchingConfig(ctx context.Context
 	return matching, excluder.GetExcludedNamespaces(process.Webhook), webhook.GetAllExemptedNamespacesWithWildcard(), nil
 }
 
-func normalizeVAPMatchDefaults(policy client.Object) {
+func vapEqual(current, proposed runtime.Object) bool {
+	currentCopy := current.DeepCopyObject()
+	proposedCopy := proposed.DeepCopyObject()
+	normalizeVAPMatchDefaults(currentCopy)
+	normalizeVAPMatchDefaults(proposedCopy)
+	return apiequality.Semantic.DeepEqual(currentCopy, proposedCopy)
+}
+
+func normalizeVAPMatchDefaults(policy runtime.Object) {
 	normalizeSelector := func(selector **metav1.LabelSelector) {
 		if *selector != nil && len((*selector).MatchLabels) == 0 && len((*selector).MatchExpressions) == 0 {
 			*selector = nil
@@ -305,6 +312,9 @@ func (r *ReconcileConstraint) reconcileConstraintVAP(ctx context.Context, templa
 		}
 		current = nil
 	}
+	if current != nil && !metav1.IsControlledBy(current, constraint) {
+		return "", fmt.Errorf("validatingadmissionpolicy %q exists but is not controlled by constraint %q", name, constraint.GetName())
+	}
 	transformed, transformErr := r.transformConstraintToVAP(template, constraint)
 	if transformErr != nil && (transformed == nil || !errors.Is(transformErr, transform.ErrOperationMismatch)) {
 		return "", transformErr
@@ -318,7 +328,7 @@ func (r *ReconcileConstraint) reconcileConstraintVAP(ctx context.Context, templa
 	}
 	if current == nil {
 		err = r.writer.Create(ctx, proposed)
-	} else if !reflect.DeepEqual(current, proposed) {
+	} else if !vapEqual(current, proposed) {
 		err = r.writer.Update(ctx, proposed)
 	}
 	if err != nil {
@@ -347,16 +357,16 @@ func (r *ReconcileConstraint) deleteConstraintVAPIfOwned(ctx context.Context, co
 		}
 		return err
 	}
-	if !vapControlledByConstraint(current, constraint) {
+	owned, err := r.canDeleteConstraintResource(ctx, current, constraint)
+	if err != nil {
+		return err
+	}
+	if !owned {
 		log.Info("VAP exists but is not owned by this constraint, skipping delete", "vapName", name, "constraintName", constraint.GetName(), "constraintKind", constraint.GetKind())
 		return nil
 	}
-	if err := r.writer.Delete(ctx, current); err != nil && !apierrors.IsNotFound(err) {
+	if err := r.writer.Delete(ctx, current, client.Preconditions{UID: ptr.To(current.GetUID()), ResourceVersion: ptr.To(current.GetResourceVersion())}); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	return nil
-}
-
-func vapControlledByConstraint(policy metav1.Object, constraint *unstructured.Unstructured) bool {
-	return vapBindingControlledByConstraint(policy, constraint)
 }
