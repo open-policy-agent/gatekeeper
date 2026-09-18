@@ -11,7 +11,7 @@ kube_apiserver_audit_log() {
 }
 
 setup() {
-  ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY=false
+  ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS=true
   MATCHING_EVENTS="$(jq -cn '
     {
       schemaVersion: "v1",
@@ -105,7 +105,7 @@ assert_audit_matchers_status() {
 }
 
 @test "violations-only VAP matchers require native failures without the marker" {
-  ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY=true
+  ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS=false
   AUDIT_LOG="$(jq -c 'del(.annotations["gatekeeper-policy/evaluation"])' <<<"${MATCHING_EVENTS}")"
   assert_audit_matchers_status 0
 
@@ -138,13 +138,21 @@ assert_audit_matchers_status() {
   run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy
   assert_success
 
-  ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY=true
+  ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS=false
   run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy
   assert_failure
 
   AUDIT_LOG="$(jq -c 'del(.annotations)' <<<"${AUDIT_LOG}")"
   run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy
   assert_success
+
+  unset ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS
+  run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy
+  assert_success
+
+  AUDIT_LOG="$(jq -c '.annotations["gatekeeper-policy/evaluation"] = "true"' <<<"${AUDIT_LOG}")"
+  run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy
+  assert_failure
 
   AUDIT_LOG=""
   run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy

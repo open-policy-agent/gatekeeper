@@ -81,10 +81,10 @@ teardown_file() {
 
   run bash -c "kubectl create configmap ${allowed_resource_name} --namespace ${namespace} --dry-run=client -o json | jq '.metadata.labels.gatekeeper = \"yes\"' | kubectl create -f -"
   assert_success
-  if [[ "${ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY:-false}" == "true" ]]; then
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "admission_audit_annotation_absent ${allowed_resource_name} configmaps validation.gatekeeper.sh/evaluation"
-  else
+  if [[ "${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS:-false}" == "true" ]]; then
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "webhook_admission_audit_annotation_without_violations_matches ${allowed_resource_name}"
+  else
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "admission_audit_annotation_absent ${allowed_resource_name} configmaps validation.gatekeeper.sh/evaluation"
   fi
 
   run kubectl create configmap "${resource_name}" --namespace "${namespace}"

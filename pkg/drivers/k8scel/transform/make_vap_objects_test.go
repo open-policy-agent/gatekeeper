@@ -1504,9 +1504,9 @@ func TestConstraintToBinding(t *testing.T) {
 func TestVAPAuditAnnotations(t *testing.T) {
 	for _, mode := range []struct {
 		enabled        bool
-		violationsOnly bool
-	}{{false, false}, {false, true}, {true, true}} {
-		if got := vapAuditAnnotations(mode.enabled, mode.violationsOnly); got != nil {
+		includeSuccess bool
+	}{{false, false}, {false, true}, {true, false}} {
+		if got := vapAuditAnnotations(mode.enabled, mode.includeSuccess); got != nil {
 			t.Fatalf("expected no VAP evaluation marker for mode %+v, got %#v", mode, got)
 		}
 	}
@@ -1517,7 +1517,7 @@ func TestVAPAuditAnnotations(t *testing.T) {
 			ValueExpression: vapEvaluationAuditAnnotationValueExpression,
 		},
 	}
-	if got := vapAuditAnnotations(true, false); !reflect.DeepEqual(got, want) {
+	if got := vapAuditAnnotations(true, true); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %#v, want %#v", got, want)
 	}
 }

@@ -1307,6 +1307,11 @@ func TestHandleAddsAuditAnnotationForEvaluationWithoutViolations(t *testing.T) {
 
 	resp := handler.Handle(context.Background(), review)
 	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
+
+	handler.admissionAuditAnnotationsIncludeSuccess = true
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
 	require.Contains(t, resp.AuditAnnotations, admissionAuditAnnotationKey)
 
 	var annotation admissionAuditAnnotation
@@ -1316,7 +1321,7 @@ func TestHandleAddsAuditAnnotationForEvaluationWithoutViolations(t *testing.T) {
 	require.Empty(t, annotation.Violations)
 	require.Zero(t, annotation.TotalViolations)
 
-	handler.admissionAuditAnnotationsViolationsOnly = true
+	handler.admissionAuditAnnotationsIncludeSuccess = false
 	resp = handler.Handle(context.Background(), review)
 	require.True(t, resp.Allowed)
 	require.Empty(t, resp.AuditAnnotations)
@@ -1326,7 +1331,7 @@ func TestHandleAddsAuditAnnotationForEvaluationWithoutViolations(t *testing.T) {
 	require.True(t, resp.Allowed)
 	require.Empty(t, resp.AuditAnnotations)
 
-	handler.admissionAuditAnnotationsViolationsOnly = false
+	handler.admissionAuditAnnotationsIncludeSuccess = true
 	resp = handler.Handle(context.Background(), review)
 	require.True(t, resp.Allowed)
 	require.Empty(t, resp.AuditAnnotations)
@@ -1337,12 +1342,12 @@ func TestHandleAuditAnnotationModesPreserveViolations(tester *testing.T) {
 		for _, mode := range []struct {
 			name           string
 			enabled        bool
-			violationsOnly bool
+			includeSuccess bool
 		}{
 			{name: "disabled"},
-			{name: "all evaluations", enabled: true},
-			{name: "violations only", enabled: true, violationsOnly: true},
-			{name: "violations only without enablement", violationsOnly: true},
+			{name: "all evaluations", enabled: true, includeSuccess: true},
+			{name: "violations only by default", enabled: true},
+			{name: "include success without enablement", includeSuccess: true},
 		} {
 			tester.Run(action+"/"+mode.name, func(tester *testing.T) {
 				ctx := context.Background()
@@ -1359,7 +1364,7 @@ func TestHandleAuditAnnotationModesPreserveViolations(tester *testing.T) {
 					opa:                                     opa,
 					expansionSystem:                         expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 					emitAdmissionAuditAnnotations:           mode.enabled,
-					admissionAuditAnnotationsViolationsOnly: mode.violationsOnly,
+					admissionAuditAnnotationsIncludeSuccess: mode.includeSuccess,
 					webhookHandler: webhookHandler{
 						injectedConfig:  &v1alpha1.Config{},
 						client:          &nsGetter{},
@@ -1423,11 +1428,10 @@ func TestHandleExportsDryrunAdmissionViolation(t *testing.T) {
 	exporter := &fakeAdmissionViolationExporter{}
 	processExcluder := process.New()
 	handler := validationHandler{
-		opa:                                     opa,
-		expansionSystem:                         expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
-		admissionExporter:                       exporter,
-		emitAdmissionAuditAnnotations:           true,
-		admissionAuditAnnotationsViolationsOnly: true,
+		opa:                           opa,
+		expansionSystem:               expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+		admissionExporter:             exporter,
+		emitAdmissionAuditAnnotations: true,
 		webhookHandler: webhookHandler{
 			injectedConfig:  &v1alpha1.Config{},
 			client:          &nsGetter{},

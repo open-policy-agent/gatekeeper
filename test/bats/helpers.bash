@@ -164,14 +164,14 @@ vap_admission_audit_configuration_ready() {
   policy="$(kubectl get validatingadmissionpolicy "${policy_name}" -o json)" || return 1
   binding="$(kubectl get validatingadmissionpolicybinding "${binding_name}" -o json)" || return 1
 
-  jq -e --arg value_expression "${value_expression}" --argjson violations_only "${ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY:-false}" '
-    if $violations_only then
-      all(.spec.auditAnnotations[]?; .key != "evaluation")
-    else
+  jq -e --arg value_expression "${value_expression}" --argjson include_success "${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS:-false}" '
+    if $include_success then
       any(.spec.auditAnnotations[]?;
         .key == "evaluation" and
         .valueExpression == $value_expression
       )
+    else
+      all(.spec.auditAnnotations[]?; .key != "evaluation")
     end
   ' <<<"${policy}" >/dev/null || return 1
 
@@ -209,12 +209,12 @@ vap_admission_audit_annotations_match() {
     --arg evaluation_key "${evaluation_key}" \
     --arg constraint_name "${constraint_name}" \
     --arg policy_name "${policy_name}" \
-    --argjson violations_only "${ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY:-false}" \
+    --argjson include_success "${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS:-false}" \
     --arg validation_action "${validation_action}" \
     --arg binding_name "${binding_name}" '
       any(inputs;
         select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
-        | select(.annotations[$evaluation_key] == (if $violations_only then null else "true" end))
+        | select(.annotations[$evaluation_key] == (if $include_success then "true" else null end))
         | (.annotations["validation.policy.admission.k8s.io/validation_failure"]? | fromjson?) as $failures
         | select(any($failures[]?;
             .policy == $policy_name and
@@ -233,12 +233,12 @@ vap_admission_audit_annotation_without_violations_matches() {
   audit_log="$(kube_apiserver_audit_log)" || return 1
 
   jq -n -e --arg resource_name "${resource_name}" --arg evaluation_key "${evaluation_key}" \
-    --argjson violations_only "${ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY:-false}" '
+    --argjson include_success "${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS:-false}" '
       any(inputs;
         .stage == "ResponseComplete" and .verb == "create" and
         .objectRef.name == $resource_name and .objectRef.resource == "namespaces" and
         .responseStatus.code == 201 and
-        .annotations[$evaluation_key] == (if $violations_only then null else "true" end) and
+        .annotations[$evaluation_key] == (if $include_success then "true" else null end) and
         ((.annotations // {}) | has("validation.policy.admission.k8s.io/validation_failure") | not)
       )
     ' <<<"${audit_log}" >/dev/null
@@ -268,10 +268,10 @@ vap_multiple_binding_audit_annotation_matches() {
     --arg resource_name "${resource_name}" \
     --arg evaluation_key "${evaluation_key}" \
     --arg policy_name "${policy_name}" \
-    --argjson violations_only "${ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY:-false}" '
+    --argjson include_success "${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS:-false}" '
       any(inputs;
         select(.stage == "ResponseComplete" and .objectRef.name == $resource_name)
-        | select(.annotations[$evaluation_key] == (if $violations_only then null else "true" end))
+        | select(.annotations[$evaluation_key] == (if $include_success then "true" else null end))
         | (.annotations["validation.policy.admission.k8s.io/validation_failure"]? | fromjson?) as $failures
         | select(any($failures[]?;
             .policy == $policy_name and

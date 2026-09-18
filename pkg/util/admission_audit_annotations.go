@@ -5,19 +5,19 @@ import "flag"
 const (
 	// EmitAdmissionAuditAnnotationsFlag is the CLI flag that enables admission audit annotations.
 	EmitAdmissionAuditAnnotationsFlag           = "emit-admission-audit-annotations"
-	AdmissionAuditAnnotationsViolationsOnlyFlag = "admission-audit-annotations-violations-only"
+	AdmissionAuditAnnotationsIncludeSuccessFlag = "admission-audit-annotations-include-success"
 )
 
 var (
 	emitAdmissionAuditAnnotations = flag.Bool(
 		EmitAdmissionAuditAnnotationsFlag,
 		false,
-		"(alpha) emit API server audit annotations for evaluated validation requests and Gatekeeper-generated ValidatingAdmissionPolicy evaluations",
+		"(alpha) emit API server audit annotations for validation webhook violations and Gatekeeper-generated ValidatingAdmissionPolicy failures",
 	)
-	admissionAuditAnnotationsViolationsOnly = flag.Bool(
-		AdmissionAuditAnnotationsViolationsOnlyFlag,
+	admissionAuditAnnotationsIncludeSuccess = flag.Bool(
+		AdmissionAuditAnnotationsIncludeSuccessFlag,
 		false,
-		"(alpha) when admission audit annotations are enabled, omit webhook annotations for requests without violations and use only native validation-failure annotations for generated ValidatingAdmissionPolicies",
+		"(alpha) when admission audit annotations are enabled, also annotate webhook requests with no violations and add evaluation markers to generated ValidatingAdmissionPolicies",
 	)
 )
 
@@ -26,6 +26,6 @@ func GetEmitAdmissionAuditAnnotations() bool {
 	return *emitAdmissionAuditAnnotations
 }
 
-func GetAdmissionAuditAnnotationsViolationsOnly() bool {
-	return *admissionAuditAnnotationsViolationsOnly
+func GetAdmissionAuditAnnotationsIncludeSuccess() bool {
+	return *admissionAuditAnnotationsIncludeSuccess
 }

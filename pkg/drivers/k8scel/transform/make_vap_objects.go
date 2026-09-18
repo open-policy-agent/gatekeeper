@@ -31,8 +31,8 @@ const (
 	vapEvaluationAuditAnnotationValueExpression = "params == null ? '' : 'true'"
 )
 
-func vapAuditAnnotations(enabled, violationsOnly bool) []admissionregistrationv1beta1.AuditAnnotation {
-	if !enabled || violationsOnly {
+func vapAuditAnnotations(enabled, includeSuccess bool) []admissionregistrationv1beta1.AuditAnnotation {
+	if !enabled || !includeSuccess {
 		return nil
 	}
 	return []admissionregistrationv1beta1.AuditAnnotation{
@@ -276,7 +276,7 @@ func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintT
 			MatchConditions:  matchConditions,
 			Validations:      validations,
 			FailurePolicy:    failurePolicy,
-			AuditAnnotations: vapAuditAnnotations(util.GetEmitAdmissionAuditAnnotations(), util.GetAdmissionAuditAnnotationsViolationsOnly()),
+			AuditAnnotations: vapAuditAnnotations(util.GetEmitAdmissionAuditAnnotations(), util.GetAdmissionAuditAnnotationsIncludeSuccess()),
 			Variables:        variables,
 		},
 	}

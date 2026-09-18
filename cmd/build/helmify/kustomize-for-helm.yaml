@@ -86,7 +86,7 @@ spec:
             - --log-denies={{ .Values.logDenies }}
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS
             - HELMSUBST_EMIT_ADMISSION_AUDIT_ANNOTATIONS
-            - HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY
+            - HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION
             - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
@@ -208,7 +208,7 @@ spec:
             - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
             - HELMSUBST_DEPLOYMENT_AUDIT_EMIT_EVENTS
             - HELMSUBST_EMIT_ADMISSION_AUDIT_ANNOTATIONS
-            - HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY
+            - HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS
             - HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION
             - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - HELMSUBST_AUDIT_OPERATIONS

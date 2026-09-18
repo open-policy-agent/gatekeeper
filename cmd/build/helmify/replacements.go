@@ -23,7 +23,7 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_EMIT_ADMISSION_AUDIT_ANNOTATIONS": `{{ if hasKey .Values "emitAdmissionAuditAnnotations" }}- --emit-admission-audit-annotations={{ .Values.emitAdmissionAuditAnnotations }}{{- end }}`,
 
-	"- HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_VIOLATIONS_ONLY": `{{ if hasKey .Values "admissionAuditAnnotationsViolationsOnly" }}- --admission-audit-annotations-violations-only={{ .Values.admissionAuditAnnotationsViolationsOnly }}{{- end }}`,
+	"- HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS": `{{ if hasKey .Values "admissionAuditAnnotationsIncludeSuccess" }}- --admission-audit-annotations-include-success={{ .Values.admissionAuditAnnotationsIncludeSuccess }}{{- end }}`,
 
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION": `{{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}`,
 
