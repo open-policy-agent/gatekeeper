@@ -9,6 +9,7 @@ import (
 
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/admissionregistration/v1"
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -291,6 +292,7 @@ func TestMatchKinds(t *testing.T) {
 			if err := shouldMatch(test.shouldMatch, test.shouldErr, matcher.Match(context.Background(), versionedAttributes, constraint, nil)); err != nil {
 				t.Error(err)
 			}
+			checkSpecializedMatch(t, MatchKindsV1Beta1(), constraint, request, test.shouldMatch, test.shouldErr)
 		})
 	}
 }
@@ -481,6 +483,7 @@ func TestMatchNameGlob(t *testing.T) {
 				if err := shouldMatch(test.shouldMatch, test.shouldErr, matcher.Match(context.Background(), versionedAttributes, constraint, nil)); err != nil {
 					t.Error(err)
 				}
+				checkSpecializedMatch(t, MatchNameGlobV1Beta1(), constraint, subTest.request, test.shouldMatch, test.shouldErr)
 			})
 		}
 	}
@@ -655,6 +658,7 @@ func TestMatchNamespacesGlob(t *testing.T) {
 				if err := shouldMatch(test.shouldMatch, test.shouldErr, matcher.Match(context.Background(), versionedAttributes, constraint, nil)); err != nil {
 					t.Error(err)
 				}
+				checkSpecializedMatch(t, MatchNamespacesGlobV1Beta1(), constraint, subTest.request, test.shouldMatch, test.shouldErr)
 			})
 		}
 	}
@@ -829,8 +833,37 @@ func TestMatchExcludedNamespacesGlob(t *testing.T) {
 				if err := shouldMatch(test.shouldMatch, test.shouldErr, matcher.Match(context.Background(), versionedAttributes, constraint, nil)); err != nil {
 					t.Error(err)
 				}
+				checkSpecializedMatch(t, MatchExcludedNamespacesGlobV1Beta1(), constraint, subTest.request, test.shouldMatch, test.shouldErr)
 			})
 		}
+	}
+}
+
+func checkSpecializedMatch(t *testing.T, condition admissionregistrationv1beta1.MatchCondition, constraint *unstructured.Unstructured, request *admissionv1.AdmissionRequest, wantMatch, wantError bool) {
+	t.Helper()
+	conditions, err := specializeMatchConditions([]admissionregistrationv1beta1.MatchCondition{condition}, constraint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expressions := make([]cel.ExpressionAccessor, 0, len(conditions))
+	for _, specialized := range conditions {
+		expressions = append(expressions, &matchconditions.MatchCondition{Name: specialized.Name, Expression: specialized.Expression})
+	}
+	evaluator := compiler.CompileCondition(expressions, cel.OptionalVariableDeclarations{HasParams: false}, environment.StoredExpressions)
+	if errs := evaluator.CompilationErrors(); len(errs) != 0 {
+		t.Fatalf("specialized matcher does not compile: %v", errs)
+	}
+	matcher := matchconditions.NewMatcher(evaluator, ptr.To(v1.Fail), "matchTest", "specialized", condition.Name)
+	attributes, err := RequestToVersionedAttributes(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := shouldMatch(wantMatch, wantError, matcher.Match(context.Background(), attributes, nil, nil)); err != nil {
+		t.Errorf("specialized: %v", err)
 	}
 }
 

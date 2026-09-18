@@ -138,6 +138,10 @@ spec:
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}
+
+        {{- if hasKey .Values "vapGenerationMode"}}
+        - --vap-generation-mode={{ .Values.vapGenerationMode }}
+        {{- end }}
         
         {{- range .Values.controllerManager.exemptNamespaces}}
         - --exempt-namespace={{ . }}
