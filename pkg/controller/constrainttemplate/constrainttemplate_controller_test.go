@@ -67,6 +67,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -172,6 +173,8 @@ func newUnitReconciler(t *testing.T, objects ...client.Object) (*ReconcileConstr
 		metrics:  newStatsReporter(),
 		tracker:  tracker,
 		getPod:   func(context.Context) (*corev1.Pod, error) { return pod, nil },
+
+		statusPersistBackoff: workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Second, time.Minute),
 	}, trackingClient
 }
 
@@ -2383,7 +2386,7 @@ func TestReconcileStatusUpdateErrorPreservesRequeueBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected status update failure to preserve nil error, got %v", err)
 	}
-	if result != (reconcile.Result{Requeue: true}) {
+	if result != (reconcile.Result{RequeueAfter: time.Second}) {
 		t.Fatalf("expected explicit requeue for status update failure, got %v", result)
 	}
 	if trackingClient.statusCreates != 1 || trackingClient.statusUpdates != 1 {

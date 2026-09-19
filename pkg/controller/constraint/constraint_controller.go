@@ -52,6 +52,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -210,6 +211,8 @@ func newReconciler(
 		reporter:         reporter,
 		constraintsCache: constraintsCache,
 		tracker:          tracker,
+
+		baseStatusPersistBackoff: workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Second, time.Minute),
 	}
 	r.getPod = r.defaultGetPod
 	// default
@@ -291,6 +294,13 @@ type ReconcileConstraint struct {
 	// the function was executed, which can be used to determine
 	// whether the reconciler should infer the object has been deleted
 	ifWatching func(schema.GroupVersionKind, func() error) (bool, error)
+
+	// baseStatusPersistBackoff is used in place of the deprecated Result.Requeue, which
+	// deferred to the workqueue's rate limiter, for the baseStatusChanged retry path below.
+	// Result.RequeueAfter with a fixed delay would forget failure history on every attempt
+	// (the workqueue calls Forget before requeueing), so an explicit bounded exponential
+	// backoff is computed here instead, and reset via Forget once persistence succeeds.
+	baseStatusPersistBackoff workqueue.TypedRateLimiter[reconcile.Request]
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -375,7 +385,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				baseStatusChanged := statusBeforeVAPB != nil && !apiequality.Semantic.DeepEqual(*statusBeforeVAPB, *oldStatus)
 				switch {
 				case baseStatusChanged:
-					result = reconcile.Result{Requeue: true}
+					result = reconcile.Result{RequeueAfter: r.baseStatusPersistBackoff.When(request)}
 					reconcileErr = nil
 				case reported:
 					log.Error(persistErr, reportedErr.message, "error", "could not update constraint status")
@@ -388,6 +398,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 				}
 				return
 			}
+			r.baseStatusPersistBackoff.Forget(request)
 			if reported {
 				reconcileErr = reportedErr.err
 			}
