@@ -38,29 +38,44 @@ spec:
           metadata:
             type: object
           status:
-            description: ConstraintPodStatusStatus defines the observed state of ConstraintPodStatus.
+            description: status is the observed state of the Constraint for this pod.
             properties:
               constraintUID:
                 description: |-
-                  Storing the constraint UID allows us to detect drift, such as
+                  constraintUID is the UID of the Constraint this status reports on. Storing
+                  the constraint UID allows us to detect drift, such as
                   when a constraint has been recreated after its CRD was deleted
                   out from under it, interrupting the watch
                 type: string
               enforced:
+                description: enforced indicates whether the Constraint is currently
+                  enforced on this pod.
                 type: boolean
               enforcementPointsStatus:
+                description: |-
+                  enforcementPointsStatus reports the enforcement status of the Constraint for
+                  each configured enforcement point.
                 items:
                   description: EnforcementPointStatus represents the status of a single
                     enforcement point.
                   properties:
                     enforcementPoint:
+                      description: enforcementPoint identifies the enforcement point
+                        this status applies to.
                       type: string
                     message:
+                      description: message provides additional detail about the enforcement
+                        point state.
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the Constraint that was last processed
+                        for this enforcement point.
                       format: int64
                       type: integer
                     state:
+                      description: state is the current enforcement state for this
+                        enforcement point.
                       type: string
                   required:
                   - enforcementPoint
@@ -68,15 +83,22 @@ spec:
                   type: object
                 type: array
               errors:
+                description: errors lists any errors encountered while adding the
+                  Constraint on this pod.
                 items:
                   description: Error represents a single error caught while adding
                     a constraint to engine.
                   properties:
                     code:
+                      description: code is a short identifier for the class of error.
                       type: string
                     location:
+                      description: location is the resource or component associated
+                        with the error.
                       type: string
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                   required:
                   - code
@@ -84,11 +106,18 @@ spec:
                   type: object
                 type: array
               id:
+                description: id is the name of the pod that generated this status.
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the Constraint that was last processed
+                  by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
