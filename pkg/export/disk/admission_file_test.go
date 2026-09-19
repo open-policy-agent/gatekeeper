@@ -1126,3 +1126,103 @@ func TestIndependentWritersUseUniqueAdmissionFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestRecoverAdmissionOpenFileDoesNotClobberExistingRecovered(t *testing.T) {
+	dir := t.TempDir()
+	openPath := filepath.Join(dir, admissionFilePrefix+"crash"+admissionOpenExtension)
+	if err := os.WriteFile(openPath, []byte(completeAdmissionRecord+"{\"partial\":"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	existing := strings.TrimSuffix(openPath, admissionOpenExtension) + ".recovered" + admissionReadyExtension
+	priorContent := "{\"prior\":true}\n"
+	if err := os.WriteFile(existing, []byte(priorContent), 0o600); err != nil {
+		t.Fatalf("WriteFile(existing) error = %v", err)
+	}
+
+	if err := recoverAdmissionOpenFile(openPath, 4096); err != nil {
+		t.Fatalf("recoverAdmissionOpenFile() error = %v", err)
+	}
+
+	// The pre-existing recovered segment must survive untouched.
+	content, err := os.ReadFile(existing)
+	if err != nil {
+		t.Fatalf("ReadFile(existing) error = %v", err)
+	}
+	if string(content) != priorContent {
+		t.Fatalf("existing recovered file was clobbered: %q", content)
+	}
+
+	// The newly recovered complete record must land in a distinct file.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	var recoveredNew string
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasSuffix(name, admissionReadyExtension) && filepath.Join(dir, name) != existing {
+			recoveredNew = filepath.Join(dir, name)
+		}
+	}
+	if recoveredNew == "" {
+		t.Fatal("expected a new recovered file distinct from the existing one")
+	}
+	newContent, err := os.ReadFile(recoveredNew)
+	if err != nil {
+		t.Fatalf("ReadFile(new) error = %v", err)
+	}
+	if string(newContent) != completeAdmissionRecord {
+		t.Fatalf("unexpected new recovered content %q", newContent)
+	}
+	if _, err := os.Stat(openPath); !os.IsNotExist(err) {
+		t.Fatalf("expected open file to be consumed, stat err = %v", err)
+	}
+}
+
+func TestRecoverAdmissionOpenFileNonPositiveMaxBytesKeepsCompleteRecords(t *testing.T) {
+	dir := t.TempDir()
+	openPath := filepath.Join(dir, admissionFilePrefix+"nolimit"+admissionOpenExtension)
+	if err := os.WriteFile(openPath, []byte(completeAdmissionRecord+"{\"partial\":"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// A zero bound must not collapse the recovery window and delete the file.
+	if err := recoverAdmissionOpenFile(openPath, 0); err != nil {
+		t.Fatalf("recoverAdmissionOpenFile() error = %v", err)
+	}
+
+	recovered := strings.TrimSuffix(openPath, admissionOpenExtension) + ".recovered" + admissionReadyExtension
+	content, err := os.ReadFile(recovered)
+	if err != nil {
+		t.Fatalf("ReadFile(recovered) error = %v", err)
+	}
+	if string(content) != completeAdmissionRecord {
+		t.Fatalf("unexpected recovered content %q", content)
+	}
+}
+
+func TestFindLastNewlineAcrossBufferBoundary(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "records")
+	// One complete record spanning several buffer windows followed by a partial
+	// record with no trailing newline. The boundary is the final newline.
+	firstRecord := strings.Repeat("a", 10000) + "\n"
+	payload := firstRecord + strings.Repeat("b", 5000)
+	if err := os.WriteFile(filePath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	file, err := os.Open(filePath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer file.Close()
+
+	got, err := findLastNewline(file, int64(len(payload)))
+	if err != nil {
+		t.Fatalf("findLastNewline() error = %v", err)
+	}
+	want := int64(len(firstRecord) - 1)
+	if got != want {
+		t.Fatalf("findLastNewline() = %d, want %d", got, want)
+	}
+}
