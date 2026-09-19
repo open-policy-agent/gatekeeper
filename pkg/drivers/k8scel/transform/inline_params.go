@@ -475,7 +475,7 @@ func specializeNamespaceMatch(value interface{}, excluded bool) (string, bool) {
 }
 
 func specializedGlobPattern(glob string) (string, bool) {
-	pattern := "^" + strings.ReplaceAll(glob, "*", ".*") + "$"
+	pattern := "^" + strings.ReplaceAll(regexp.QuoteMeta(glob), `\*`, ".*") + "$"
 	if _, err := regexp.Compile(pattern); err != nil {
 		return "", false
 	}

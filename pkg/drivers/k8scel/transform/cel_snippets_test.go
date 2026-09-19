@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"testing"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -320,6 +322,61 @@ func TestMatchNameGlob(t *testing.T) {
 			matcher:     ptr.To[string]("somename"),
 			objName:     ptr.To[string]("somename"),
 			shouldMatch: true,
+		},
+		{
+			name:        "Literal dot matches",
+			matcher:     ptr.To("foo.bar"),
+			objName:     ptr.To("foo.bar"),
+			shouldMatch: true,
+		},
+		{
+			name:    "Literal dot is not a wildcard",
+			matcher: ptr.To("foo.bar"),
+			objName: ptr.To("foo-bar"),
+		},
+		{
+			name:        "Dotted prefix matches",
+			matcher:     ptr.To("foo.*"),
+			objName:     ptr.To("foo.bar"),
+			shouldMatch: true,
+		},
+		{
+			name:    "Dotted prefix keeps literal dot",
+			matcher: ptr.To("foo.*"),
+			objName: ptr.To("foo-bar"),
+		},
+		{
+			name:        "Dotted suffix matches",
+			matcher:     ptr.To("*.bar"),
+			objName:     ptr.To("foo.bar"),
+			shouldMatch: true,
+		},
+		{
+			name:    "Dotted suffix keeps literal dot",
+			matcher: ptr.To("*.bar"),
+			objName: ptr.To("foo-bar"),
+		},
+		{
+			name:        "Dotted midfix matches",
+			matcher:     ptr.To("*foo.bar*"),
+			objName:     ptr.To("prefix-foo.bar-suffix"),
+			shouldMatch: true,
+		},
+		{
+			name:    "Dotted midfix keeps literal dot",
+			matcher: ptr.To("*foo.bar*"),
+			objName: ptr.To("prefix-foo-bar-suffix"),
+		},
+		{
+			name:         "Dotted generateName matches",
+			matcher:      ptr.To("foo.*"),
+			generateName: ptr.To("foo.bar-"),
+			shouldMatch:  true,
+		},
+		{
+			name:         "Dotted generateName keeps literal dot",
+			matcher:      ptr.To("foo.*"),
+			generateName: ptr.To("foo-bar-"),
 		},
 		{
 			name:        "No midfix without glob",
@@ -835,6 +892,90 @@ func TestMatchExcludedNamespacesGlob(t *testing.T) {
 				}
 				checkSpecializedMatch(t, MatchExcludedNamespacesGlobV1Beta1(), constraint, subTest.request, test.shouldMatch, test.shouldErr)
 			})
+		}
+	}
+}
+
+func TestGlobRegexLiterals(t *testing.T) {
+	const (
+		nameField       = "name"
+		namespacesField = "namespaces"
+	)
+	matchers := []struct {
+		field     string
+		condition func(string) admissionregistrationv1beta1.MatchCondition
+		excluded  bool
+	}{
+		{field: nameField, condition: func(string) admissionregistrationv1beta1.MatchCondition { return MatchNameGlobV1Beta1() }},
+		{field: namespacesField, condition: func(string) admissionregistrationv1beta1.MatchCondition { return MatchNamespacesGlobV1Beta1() }},
+		{field: matchExcludedNamespacesField, condition: func(string) admissionregistrationv1beta1.MatchCondition { return MatchExcludedNamespacesGlobV1Beta1() }, excluded: true},
+		{field: "global exclusions", condition: MatchGlobalExcludedNamespacesGlobV1Beta1, excluded: true},
+		{field: "global exemptions", condition: MatchGlobalExemptedNamespacesGlobV1Beta1, excluded: true},
+	}
+	for _, match := range matchers {
+		for _, literal := range []string{"foo.bar", `foo.+?()|[]{}^$bar`, `foo\bar`, `foo\Ebar`, `foo\\Ebar`, `foo\Qbar`} {
+			for _, glob := range []string{literal, literal + "*", "*" + literal, "*" + literal + "*"} {
+				t.Run(fmt.Sprintf("%s/%q", match.field, glob), func(t *testing.T) {
+					condition := match.condition(strconv.Quote(glob))
+					compiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
+					if err != nil {
+						t.Fatal(err)
+					}
+					evaluator := compiler.CompileCondition([]cel.ExpressionAccessor{&matchconditions.MatchCondition{
+						Name: condition.Name, Expression: condition.Expression,
+					}}, cel.OptionalVariableDeclarations{HasParams: true}, environment.StoredExpressions)
+					if errs := evaluator.CompilationErrors(); len(errs) != 0 {
+						t.Fatalf("shared matcher does not compile: %v", errs)
+					}
+					matcher := matchconditions.NewMatcher(evaluator, ptr.To(v1.Fail), "matchTest", "literal", condition.Name)
+					constraint := &unstructured.Unstructured{Object: map[string]interface{}{}}
+					switch match.field {
+					case nameField:
+						if err := unstructured.SetNestedField(constraint.Object, glob, "spec", "match", match.field); err != nil {
+							t.Fatal(err)
+						}
+					case namespacesField, matchExcludedNamespacesField:
+						if err := unstructured.SetNestedStringSlice(constraint.Object, []string{glob}, "spec", "match", match.field); err != nil {
+							t.Fatal(err)
+						}
+					}
+					for _, kind := range []string{"ConfigMap", "Namespace"} {
+						for _, candidate := range []string{literal, literal + "-suffix", "prefix-" + literal, "prefix-" + literal + "-suffix", "foo-bar", "unrelated"} {
+							t.Run(fmt.Sprintf("%s/%q", kind, candidate), func(t *testing.T) {
+								object := &unstructured.Unstructured{}
+								object.SetGroupVersionKind(rSchema.GroupVersionKind{Version: "v1", Kind: kind})
+								object.SetName(candidate)
+								object.SetLabels(map[string]string{"admission.gatekeeper.sh/ignore": ""})
+								if kind != "Namespace" {
+									object.SetNamespace(candidate)
+								}
+								encoded, err := json.Marshal(object.Object)
+								if err != nil {
+									t.Fatal(err)
+								}
+								request := &admissionv1.AdmissionRequest{
+									Kind: metav1.GroupVersionKind{Version: "v1", Kind: kind}, Object: runtime.RawExtension{Raw: encoded},
+								}
+								attributes, err := RequestToVersionedAttributes(request)
+								if err != nil {
+									t.Fatal(err)
+								}
+								want := wildcard.Wildcard(glob).Matches(candidate)
+								if match.excluded {
+									want = !want
+								}
+								if kind == "Namespace" && (match.field == namespacesField || match.field == matchExcludedNamespacesField) {
+									want = true
+								}
+								if err := shouldMatch(want, false, matcher.Match(context.Background(), attributes, constraint, nil)); err != nil {
+									t.Error(err)
+								}
+								checkSpecializedMatch(t, condition, constraint, request, want, false)
+							})
+						}
+					}
+				})
+			}
 		}
 	}
 }
