@@ -429,11 +429,26 @@ manifests: __controller-gen
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.
 # Source: https://golangci-lint.run/usage/install/#docker
-lint:
+#
+# The container runs as the invoking user: it writes into the working tree, both
+# the cache under .tmp/ and the files --fix rewrites, and anything it leaves
+# behind as root cannot be removed or read by later targets without sudo. The
+# cache directory is created here rather than by Docker, which would create a
+# missing bind-mount source as root and reintroduce the same problem, and the
+# caches are pointed at that directory because the image's default locations
+# live under a home directory this user does not own.
+lint: $(GOLANGCI_LINT_CACHE)
 	docker run -t --rm -v $(shell pwd):/app \
-		-v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
+		-v ${GOLANGCI_LINT_CACHE}:/cache \
+		-e GOLANGCI_LINT_CACHE=/cache/lint \
+		-e GOCACHE=/cache/go-build \
+		-e HOME=/cache \
+		--user $(shell id -u):$(shell id -g) \
 		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} \
 		golangci-lint run -v --fix --concurrency 2
+
+$(GOLANGCI_LINT_CACHE):
+	mkdir -p $(GOLANGCI_LINT_CACHE)
 
 # Generate code
 generate: __conversion-gen __controller-gen
