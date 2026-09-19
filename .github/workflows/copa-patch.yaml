@@ -101,7 +101,7 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: read
-      packages: write # push to GHCR only when target != dry-run
+      packages: write # GHCR login is gated off for dry-run
     strategy:
       fail-fast: false
       matrix:
@@ -132,6 +132,7 @@ jobs:
         env:
           INPUT_TARGET: ${{ inputs.target }}
           REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
         run: |
           set -euo pipefail
           mode="${INPUT_TARGET:-production}"
@@ -141,6 +142,9 @@ jobs:
           # official repos) is locked to the upstream repo below.
           if [[ "${mode}" == "production" && "${REPO}" != "open-policy-agent/gatekeeper" ]]; then
             echo "::error::target=production is only allowed on open-policy-agent/gatekeeper (here: ${REPO})"; exit 1
+          fi
+          if [[ "${mode}" == "production" && "${REF}" != "refs/heads/master" ]]; then
+            echo "::error::target=production is only allowed from the default branch (refs/heads/master), not ${REF}"; exit 1
           fi
           # Staging/intermediate writes are pinned to the owner's dedicated copa-staging namespace.
           staging="ghcr.io/${{ github.repository_owner }}/copa-staging"
@@ -164,7 +168,9 @@ jobs:
       - name: Set up Buildx
         run: docker buildx create --use --bootstrap
 
+      # Dry-run only reads public upstream images, so it never authenticates.
       - name: Log in to GHCR
+        if: steps.cfg.outputs.mode != 'dry-run'
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ghcr.io
@@ -321,16 +327,12 @@ jobs:
             # empty result here means only "no vX.Y.Z-N tags yet", not a failed lookup.
             last=$(printf '%s\n' "${tags}" | { grep -E "^${RELEASE}-[0-9]+$" || true; } | sed "s/^${RELEASE}-//" | sort -n | tail -1)
             rev=$(( ${last:-0} + 1 ))
-            if [[ "${MODE}" == "production" ]]; then
-              if digest_err=$(crane digest "${PRIMARY_REPO}:${RELEASE}-${rev}" 2>&1 >/dev/null); then
-                echo "::error::${PRIMARY_REPO}:${RELEASE}-${rev} already exists; refusing to overwrite an immutable revision"; exit 1
-              elif grep -qiE 'MANIFEST_UNKNOWN|manifest unknown|not found|404' <<<"${digest_err}"; then
-                :
-              else
-                echo "::error::could not confirm ${PRIMARY_REPO}:${RELEASE}-${rev} is absent (registry error): ${digest_err}"; exit 1
-              fi
-            elif crane digest "${PRIMARY_REPO}:${RELEASE}-${rev}" >/dev/null 2>&1; then
+            if digest_err=$(crane digest "${PRIMARY_REPO}:${RELEASE}-${rev}" 2>&1 >/dev/null); then
               echo "::error::${PRIMARY_REPO}:${RELEASE}-${rev} already exists; refusing to overwrite an immutable revision"; exit 1
+            elif grep -qiE 'MANIFEST_UNKNOWN|manifest unknown|NAME_UNKNOWN|name unknown|not found|404' <<<"${digest_err}"; then
+              :
+            else
+              echo "::error::could not confirm ${PRIMARY_REPO}:${RELEASE}-${rev} is absent (registry error): ${digest_err}"; exit 1
             fi
           else
             rev="dryrun"
@@ -407,7 +409,7 @@ jobs:
           set -euo pipefail
           before_total=0; before_stdlib=0
           after_total=0; after_stdlib=0; after_library=0
-          existing_present=0; improved_vs_existing=0
+          existing_present=0; improved_vs_existing=0; improved_vs_source=0
           residual_md=""; unimproved=""; regressed=""; regressed_vs_existing=""
           # CVE identity set for a normalized report: sorted unique "id|pkg" lines.
           cve_keys() { jq -r '.[] | .id + "|" + .pkg' "$1" | sort -u; }
@@ -449,6 +451,7 @@ jobs:
             # Decide by CVE identity.
             introduced=$(comm -13 "src-${a}.keys" "aft-${a}.keys")
             removed=$(comm -23 "src-${a}.keys" "aft-${a}.keys")
+            if [[ -n "${removed}" ]]; then improved_vs_source=1; fi
             if [[ -n "${introduced}" ]]; then
               regressed+=" ${p}($(cut -d'|' -f1 <<<"${introduced}" | sort -u | paste -sd, -))"
             elif [[ "${a_before}" -gt 0 && -z "${removed}" ]]; then
@@ -503,14 +506,17 @@ jobs:
           if [[ "${after_stdlib}" -gt 0 ]]; then
             echo "::warning::${after_stdlib} Go stdlib CVE(s) remain after toolchain patch (may require a newer Go minor)"
           fi
-          # Publish only when the candidate regresses on no arch vs the existing -patched and improves on
-          # at least one — per arch.
+          # Publish only on a real improvement: vs the existing -patched (no regression on any arch and
+          # a gain on at least one) or, on first publish, a reduction vs the source.
           if [[ "${existing_present}" -eq 1 && -n "${regressed_vs_existing}" ]]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "Candidate regresses vs existing ${RELEASE}-patched on:${regressed_vs_existing} — skipping publish." | tee -a "$GITHUB_STEP_SUMMARY"
           elif [[ "${existing_present}" -eq 1 && "${improved_vs_existing}" -ne 1 ]]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "Candidate does not improve on existing ${RELEASE}-patched — skipping publish." | tee -a "$GITHUB_STEP_SUMMARY"
+          elif [[ "${existing_present}" -eq 0 && "${improved_vs_source}" -ne 1 ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "First patch does not reduce any fixable CVE vs the source — skipping publish." | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
