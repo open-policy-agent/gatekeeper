@@ -42,16 +42,19 @@ type ProviderPodStatusStatus struct {
 	// operations lists the Gatekeeper operations assigned to the pod that generated
 	// this status.
 	Operations []string `json:"operations,omitempty"`
-	// active indicates whether the provider is currently active on this pod.
+	// active indicates whether the provider is currently active on this pod, that
+	// is, it was processed without errors.
 	Active bool `json:"active,omitempty"`
 	// errors lists any errors encountered while managing the provider on this pod.
 	Errors []*ProviderError `json:"errors,omitempty"`
 	// observedGeneration is the generation of the provider that was last processed
 	// by this pod.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// lastTransitionTime is the last time the provider's active state changed.
+	// lastTransitionTime is the last time the errors reported for the provider on
+	// this pod changed.
 	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
-	// lastCacheUpdateTime is the last time the provider's cache was updated.
+	// lastCacheUpdateTime is the last time this pod successfully updated its cache
+	// with the provider.
 	LastCacheUpdateTime *metav1.Time `json:"lastCacheUpdateTime,omitempty"`
 }
 

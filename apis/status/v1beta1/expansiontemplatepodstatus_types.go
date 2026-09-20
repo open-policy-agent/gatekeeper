@@ -16,9 +16,9 @@ type ExpansionTemplatePodStatusStatus struct {
 
 	// id is the name of the pod that generated this status.
 	ID string `json:"id,omitempty"`
-	// templateUID is the UID of the ExpansionTemplate this status reports on, used
-	// to detect drift, such as when the ExpansionTemplate has been recreated after
-	// its CRD was deleted out from under it, interrupting the watch.
+	// templateUID is the UID of the ExpansionTemplate this status reports on. It is
+	// used to ignore statuses that belong to a previous ExpansionTemplate with the
+	// same name, for example after it was deleted and recreated.
 	TemplateUID types.UID `json:"templateUID,omitempty"`
 	// operations lists the Gatekeeper operations assigned to the pod that generated
 	// this status.

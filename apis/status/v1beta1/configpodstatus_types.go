@@ -17,9 +17,9 @@ import (
 type ConfigPodStatusStatus struct {
 	// id is the name of the pod that generated this status.
 	ID string `json:"id,omitempty"`
-	// configUID is the UID of the Config resource this status reports on, used to
-	// detect drift, such as when the Config has been recreated after its CRD was
-	// deleted out from under it, interrupting the watch.
+	// configUID is the UID of the Config this status reports on. It is used to
+	// ignore statuses that belong to a previous Config with the same name, for
+	// example after the Config was deleted and recreated.
 	ConfigUID types.UID `json:"configUID,omitempty"`
 	// operations lists the Gatekeeper operations assigned to the pod that generated
 	// this status.

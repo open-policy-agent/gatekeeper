@@ -33,9 +33,9 @@ import (
 type ConnectionPodStatusStatus struct {
 	// id is the unique identifier for the pod that wrote the status
 	ID string `json:"id,omitempty"`
-	// connectionUID is the UID of the Connection this status reports on, used to
-	// detect drift, such as when the Connection has been recreated after its CRD
-	// was deleted out from under it, interrupting the watch.
+	// connectionUID is the UID of the Connection this status reports on. It is
+	// used to ignore statuses that belong to a previous Connection with the same
+	// name, for example after the Connection was deleted and recreated.
 	ConnectionUID types.UID `json:"connectionUID,omitempty"`
 	// operations lists the Gatekeeper operations assigned to the pod that generated
 	// this status.

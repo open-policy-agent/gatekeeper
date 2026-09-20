@@ -2738,9 +2738,9 @@ spec:
             properties:
               configUID:
                 description: |-
-                  configUID is the UID of the Config resource this status reports on, used to
-                  detect drift, such as when the Config has been recreated after its CRD was
-                  deleted out from under it, interrupting the watch.
+                  configUID is the UID of the Config this status reports on. It is used to
+                  ignore statuses that belong to a previous Config with the same name, for
+                  example after the Config was deleted and recreated.
                 type: string
               errors:
                 description: errors lists any errors encountered while processing
@@ -2920,9 +2920,9 @@ spec:
                   properties:
                     configUID:
                       description: |-
-                        configUID is the UID of the Config resource this status reports on, used to
-                        detect drift, such as when the Config has been recreated after its CRD was
-                        deleted out from under it, interrupting the watch.
+                        configUID is the UID of the Config this status reports on. It is used to
+                        ignore statuses that belong to a previous Config with the same name, for
+                        example after the Config was deleted and recreated.
                       type: string
                     errors:
                       description: errors lists any errors encountered while processing
@@ -3032,9 +3032,9 @@ spec:
                 type: array
               connectionUID:
                 description: |-
-                  connectionUID is the UID of the Connection this status reports on, used to
-                  detect drift, such as when the Connection has been recreated after its CRD
-                  was deleted out from under it, interrupting the watch.
+                  connectionUID is the UID of the Connection this status reports on. It is
+                  used to ignore statuses that belong to a previous Connection with the same
+                  name, for example after the Connection was deleted and recreated.
                 type: string
               id:
                 description: id is the unique identifier for the pod that wrote the
@@ -3200,9 +3200,9 @@ spec:
                       type: array
                     connectionUID:
                       description: |-
-                        connectionUID is the UID of the Connection this status reports on, used to
-                        detect drift, such as when the Connection has been recreated after its CRD
-                        was deleted out from under it, interrupting the watch.
+                        connectionUID is the UID of the Connection this status reports on. It is
+                        used to ignore statuses that belong to a previous Connection with the same
+                        name, for example after the Connection was deleted and recreated.
                       type: string
                     id:
                       description: id is the unique identifier for the pod that wrote
@@ -3497,9 +3497,9 @@ spec:
                 type: array
               templateUID:
                 description: |-
-                  templateUID is the UID of the ConstraintTemplate this status reports on, used
-                  to detect drift, such as when the ConstraintTemplate has been recreated after
-                  its CRD was deleted out from under it, interrupting the watch.
+                  templateUID is the UID of the ConstraintTemplate this status reports on. It
+                  is used to ignore statuses that belong to a previous ConstraintTemplate with
+                  the same name, for example after it was deleted and recreated.
                 type: string
               vapGenerationStatus:
                 description: |-
@@ -4144,9 +4144,9 @@ spec:
                       type: array
                     templateUID:
                       description: |-
-                        templateUID is the UID of the ExpansionTemplate this status reports on, used
-                        to detect drift, such as when the ExpansionTemplate has been recreated after
-                        its CRD was deleted out from under it, interrupting the watch.
+                        templateUID is the UID of the ExpansionTemplate this status reports on. It is
+                        used to ignore statuses that belong to a previous ExpansionTemplate with the
+                        same name, for example after it was deleted and recreated.
                       type: string
                   type: object
                 type: array
@@ -4278,9 +4278,9 @@ spec:
                       type: array
                     templateUID:
                       description: |-
-                        templateUID is the UID of the ExpansionTemplate this status reports on, used
-                        to detect drift, such as when the ExpansionTemplate has been recreated after
-                        its CRD was deleted out from under it, interrupting the watch.
+                        templateUID is the UID of the ExpansionTemplate this status reports on. It is
+                        used to ignore statuses that belong to a previous ExpansionTemplate with the
+                        same name, for example after it was deleted and recreated.
                       type: string
                   type: object
                 type: array
@@ -4371,9 +4371,9 @@ spec:
                 type: array
               templateUID:
                 description: |-
-                  templateUID is the UID of the ExpansionTemplate this status reports on, used
-                  to detect drift, such as when the ExpansionTemplate has been recreated after
-                  its CRD was deleted out from under it, interrupting the watch.
+                  templateUID is the UID of the ExpansionTemplate this status reports on. It is
+                  used to ignore statuses that belong to a previous ExpansionTemplate with the
+                  same name, for example after it was deleted and recreated.
                 type: string
             type: object
         type: object
@@ -5646,8 +5646,9 @@ spec:
             description: status is the observed state of the provider for this pod.
             properties:
               active:
-                description: active indicates whether the provider is currently active
-                  on this pod.
+                description: |-
+                  active indicates whether the provider is currently active on this pod, that
+                  is, it was processed without errors.
                 type: boolean
               errors:
                 description: errors lists any errors encountered while managing the
@@ -5685,13 +5686,15 @@ spec:
                 description: id is the name of the pod that generated this status.
                 type: string
               lastCacheUpdateTime:
-                description: lastCacheUpdateTime is the last time the provider's cache
-                  was updated.
+                description: |-
+                  lastCacheUpdateTime is the last time this pod successfully updated its cache
+                  with the provider.
                 format: date-time
                 type: string
               lastTransitionTime:
-                description: lastTransitionTime is the last time the provider's active
-                  state changed.
+                description: |-
+                  lastTransitionTime is the last time the errors reported for the provider on
+                  this pod changed.
                 format: date-time
                 type: string
               observedGeneration:

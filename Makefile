@@ -440,7 +440,9 @@ lint:
 # against the API type definitions in ./apis, checking them against
 # Kubernetes API conventions. Requires a local Go toolchain; unlike `lint`
 # this isn't dockerized because the module plugin build needs `go` and `git`
-# on the host.
+# on the host. The golangci-lint version comes from GOLANGCI_LINT_VERSION (it
+# is deliberately not set in .custom-gcl.yml, so pass --version if you run
+# `golangci-lint custom` by hand).
 .PHONY: lint-kube-api
 lint-kube-api:
 	GOBIN=$(shell pwd)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
