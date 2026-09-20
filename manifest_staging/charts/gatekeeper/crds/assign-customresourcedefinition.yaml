@@ -348,8 +348,9 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: condition is the existence test to apply to
-                            `subPath`.
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
@@ -755,8 +756,9 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: condition is the existence test to apply to
-                            `subPath`.
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
@@ -1162,8 +1164,9 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: condition is the existence test to apply to
-                            `subPath`.
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist

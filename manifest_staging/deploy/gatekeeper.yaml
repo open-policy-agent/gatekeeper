@@ -379,8 +379,9 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: condition is the existence test to apply to
-                            `subPath`.
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
@@ -786,8 +787,9 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: condition is the existence test to apply to
-                            `subPath`.
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
@@ -1193,8 +1195,9 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: condition is the existence test to apply to
-                            `subPath`.
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
@@ -1556,13 +1559,12 @@ spec:
                       slash should not be included.
                     type: string
                   assignPath:
-                    description: assignPath sets the domain component on an image
-                      string.
+                    description: assignPath sets the path component on an image string.
                     type: string
                   assignTag:
                     description: |-
-                      assignTag sets the image component on an image string. It must start
-                      with a `:` or `@`.
+                      assignTag sets the tag or digest component on an image string. It must
+                      start with a `:` or `@`.
                     type: string
                   pathTests:
                     description: |-
@@ -1582,8 +1584,9 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: condition is the existence test to apply to
-                            `subPath`.
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
@@ -2878,7 +2881,7 @@ spec:
                 properties:
                   traces:
                     description: traces is the list of requests to trace. Both "user"
-                      and "kinds" must be specified
+                      and "kind" must be specified
                     items:
                       properties:
                         dump:
@@ -4682,8 +4685,9 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: condition is the existence test to apply to
-                            `subPath`.
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
@@ -5050,8 +5054,9 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: condition is the existence test to apply to
-                            `subPath`.
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
@@ -5418,8 +5423,9 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: condition is the existence test to apply to
-                            `subPath`.
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist

@@ -99,7 +99,7 @@ spec:
                 properties:
                   traces:
                     description: traces is the list of requests to trace. Both "user"
-                      and "kinds" must be specified
+                      and "kind" must be specified
                     items:
                       properties:
                         dump:

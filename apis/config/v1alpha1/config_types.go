@@ -40,7 +40,7 @@ type ConfigSpec struct {
 }
 
 type Validation struct {
-	// traces is the list of requests to trace. Both "user" and "kinds" must be specified
+	// traces is the list of requests to trace. Both "user" and "kind" must be specified
 	Traces []Trace `json:"traces,omitempty"`
 }
 

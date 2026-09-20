@@ -444,7 +444,7 @@ lint:
 .PHONY: lint-kube-api
 lint-kube-api:
 	GOBIN=$(shell pwd)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
-	./bin/golangci-lint custom
+	./bin/golangci-lint custom --version ${GOLANGCI_LINT_VERSION}
 	./bin/golangci-lint-kube-api-linter run -c .golangci-kube-api-linter.yaml --fix ./apis/...
 
 # Generate code
