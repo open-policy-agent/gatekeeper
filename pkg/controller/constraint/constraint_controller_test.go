@@ -1791,6 +1791,9 @@ func TestV1beta1VAPToV1WithoutParamKind(t *testing.T) {
 	converted, err := v1beta1VAPToV1(&admissionregistrationv1beta1.ValidatingAdmissionPolicy{
 		Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicySpec{
 			FailurePolicy: ptr.To(admissionregistrationv1beta1.Fail),
+			AuditAnnotations: []admissionregistrationv1beta1.AuditAnnotation{{
+				Key: "evaluation", ValueExpression: "'true'",
+			}},
 		},
 	})
 	if err != nil {
@@ -1798,6 +1801,9 @@ func TestV1beta1VAPToV1WithoutParamKind(t *testing.T) {
 	}
 	if converted.Spec.ParamKind != nil {
 		t.Fatalf("ParamKind = %#v, want nil", converted.Spec.ParamKind)
+	}
+	if !reflect.DeepEqual(converted.Spec.AuditAnnotations, []admissionregistrationv1.AuditAnnotation{{Key: "evaluation", ValueExpression: "'true'"}}) {
+		t.Fatalf("AuditAnnotations = %#v, want preserved evaluation marker", converted.Spec.AuditAnnotations)
 	}
 }
 

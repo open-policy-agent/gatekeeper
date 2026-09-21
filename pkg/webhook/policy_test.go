@@ -1277,6 +1277,138 @@ func (exporter *fakeAdmissionViolationExporter) TryExport(build func() *exportut
 	exporter.messages = append(exporter.messages, *message)
 }
 
+func TestHandleAddsAuditAnnotationForEvaluationWithoutViolations(t *testing.T) {
+	opa, err := makeOpaClient()
+	require.NoError(t, err)
+
+	handler := validationHandler{
+		opa:                           opa,
+		expansionSystem:               expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+		emitAdmissionAuditAnnotations: true,
+		webhookHandler: webhookHandler{
+			injectedConfig:  &v1alpha1.Config{},
+			client:          &nsGetter{},
+			reader:          &nsGetter{},
+			processExcluder: process.New(),
+		},
+		log: log,
+	}
+	review := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+		UID:       types.UID("clean-request"),
+		Kind:      metav1.GroupVersionKind{Version: "v1", Kind: "Pod"},
+		Resource:  metav1.GroupVersionResource{Version: "v1", Resource: "pods"},
+		Namespace: "default",
+		Name:      "allowed-pod",
+		Operation: admissionv1.Create,
+		Object: runtime.RawExtension{
+			Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"allowed-pod","namespace":"default"}}`),
+		},
+	}}
+
+	resp := handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
+
+	handler.admissionAuditAnnotationsIncludeSuccess = true
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Contains(t, resp.AuditAnnotations, admissionAuditAnnotationKey)
+
+	var annotation admissionAuditAnnotation
+	require.NoError(t, json.Unmarshal([]byte(resp.AuditAnnotations[admissionAuditAnnotationKey]), &annotation))
+	require.True(t, annotation.Allowed)
+	require.JSONEq(t, `{"schemaVersion":"v1","allowed":true,"violations":[],"totalViolations":0,"includedViolations":0,"truncated":false}`, resp.AuditAnnotations[admissionAuditAnnotationKey])
+	require.Empty(t, annotation.Violations)
+	require.Zero(t, annotation.TotalViolations)
+
+	handler.admissionAuditAnnotationsIncludeSuccess = false
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
+
+	handler.emitAdmissionAuditAnnotations = false
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
+
+	handler.admissionAuditAnnotationsIncludeSuccess = true
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
+}
+
+func TestHandleAuditAnnotationModesPreserveViolations(tester *testing.T) {
+	for _, action := range []string{string(util.Deny), string(util.Warn), string(util.Dryrun)} {
+		for _, mode := range []struct {
+			name           string
+			enabled        bool
+			includeSuccess bool
+		}{
+			{name: "disabled"},
+			{name: "all evaluations", enabled: true, includeSuccess: true},
+			{name: "violations only by default", enabled: true},
+			{name: "include success without enablement", includeSuccess: true},
+		} {
+			tester.Run(action+"/"+mode.name, func(tester *testing.T) {
+				ctx := context.Background()
+				opa, err := makeOpaClient()
+				require.NoError(tester, err)
+				_, err = opa.AddTemplate(ctx, validRegoTemplate())
+				require.NoError(tester, err)
+				constraint := validRegoTemplateConstraint()
+				require.NoError(tester, unstructured.SetNestedField(constraint.Object, action, "spec", "enforcementAction"))
+				_, err = opa.AddConstraint(ctx, constraint)
+				require.NoError(tester, err)
+
+				handler := validationHandler{
+					opa:                                     opa,
+					expansionSystem:                         expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+					emitAdmissionAuditAnnotations:           mode.enabled,
+					admissionAuditAnnotationsIncludeSuccess: mode.includeSuccess,
+					webhookHandler: webhookHandler{
+						injectedConfig:  &v1alpha1.Config{},
+						client:          &nsGetter{},
+						reader:          &nsGetter{},
+						processExcluder: process.New(),
+					},
+					log: log,
+				}
+				review := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+					Kind:      metav1.GroupVersionKind{Version: "v1", Kind: "Pod"},
+					Resource:  metav1.GroupVersionResource{Version: "v1", Resource: "pods"},
+					Namespace: "ns1",
+					Name:      "acbd",
+					Operation: admissionv1.Create,
+					Object: runtime.RawExtension{
+						Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"acbd","namespace":"ns1"}}`),
+					},
+				}}
+
+				response := handler.Handle(ctx, review)
+				require.Equal(tester, action != string(util.Deny), response.Allowed)
+				if action == string(util.Warn) {
+					require.Len(tester, response.Warnings, 1)
+				} else {
+					require.Empty(tester, response.Warnings)
+				}
+				if !mode.enabled {
+					require.Empty(tester, response.AuditAnnotations)
+					return
+				}
+
+				var annotation admissionAuditAnnotation
+				require.NoError(tester, json.Unmarshal([]byte(response.AuditAnnotations[admissionAuditAnnotationKey]), &annotation))
+				require.Equal(tester, response.Allowed, annotation.Allowed)
+				require.Equal(tester, 1, annotation.TotalViolations)
+				require.Equal(tester, 1, annotation.IncludedViolations)
+				require.Len(tester, annotation.Violations, 1)
+				require.Equal(tester, action, annotation.Violations[0].EnforcementAction)
+				require.Equal(tester, "constraint", annotation.Violations[0].ConstraintName)
+			})
+		}
+	}
+}
+
 func TestHandleExportsDryrunAdmissionViolation(t *testing.T) {
 	ctx := context.Background()
 	opa, err := makeOpaClient()
@@ -1296,9 +1428,10 @@ func TestHandleExportsDryrunAdmissionViolation(t *testing.T) {
 	exporter := &fakeAdmissionViolationExporter{}
 	processExcluder := process.New()
 	handler := validationHandler{
-		opa:               opa,
-		expansionSystem:   expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
-		admissionExporter: exporter,
+		opa:                           opa,
+		expansionSystem:               expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+		admissionExporter:             exporter,
+		emitAdmissionAuditAnnotations: true,
 		webhookHandler: webhookHandler{
 			injectedConfig:  &v1alpha1.Config{},
 			client:          &nsGetter{},
@@ -1337,6 +1470,16 @@ func TestHandleExportsDryrunAdmissionViolation(t *testing.T) {
 	resp := handler.Handle(ctx, review)
 	require.True(t, resp.Allowed)
 	require.Empty(t, resp.Warnings)
+	require.Contains(t, resp.AuditAnnotations, admissionAuditAnnotationKey)
+	var annotation admissionAuditAnnotation
+	require.NoError(t, json.Unmarshal([]byte(resp.AuditAnnotations[admissionAuditAnnotationKey]), &annotation))
+	require.True(t, annotation.Allowed)
+	require.Equal(t, 1, annotation.TotalViolations)
+	require.Equal(t, 1, annotation.IncludedViolations)
+	require.Len(t, annotation.Violations, 1)
+	require.Equal(t, "K8sGoodRego", annotation.Violations[0].ConstraintKind)
+	require.Equal(t, "constraint", annotation.Violations[0].ConstraintName)
+	require.Equal(t, string(util.Dryrun), annotation.Violations[0].EnforcementAction)
 	require.Len(t, exporter.messages, 1)
 
 	message := exporter.messages[0]
@@ -1368,8 +1511,9 @@ func TestHandleExportsDryrunAdmissionViolation(t *testing.T) {
 func TestProcessValidationResultsExportsAdmissionViolations(t *testing.T) {
 	exporter := &fakeAdmissionViolationExporter{}
 	handler := validationHandler{
-		admissionExporter: exporter,
-		log:               log,
+		admissionExporter:             exporter,
+		emitAdmissionAuditAnnotations: true,
+		log:                           log,
 	}
 	dryRun := true
 	review := &admission.Request{
@@ -1427,10 +1571,12 @@ func TestProcessValidationResultsExportsAdmissionViolations(t *testing.T) {
 		},
 	}
 
-	denyMsgs, warnMsgs := handler.processValidationResults(results, review)
+	denyMsgs, warnMsgs, auditResults := handler.processValidationResults(results, review)
 
 	require.Len(t, denyMsgs, 2)
 	require.Len(t, warnMsgs, 2)
+	require.Equal(t, 4, auditResults.totalViolations)
+	require.Len(t, auditResults.violations, 4)
 	require.Len(t, exporter.messages, 4)
 	timestamp := exporter.messages[0].Timestamp
 	_, err := time.Parse(time.RFC3339Nano, timestamp)
@@ -1622,7 +1768,7 @@ func TestProcessValidationResults(t *testing.T) {
 					},
 				},
 			}
-			denyMsgs, warnMsgs := handler.processValidationResults(tt.Result, review)
+			denyMsgs, warnMsgs, _ := handler.processValidationResults(tt.Result, review)
 			if len(denyMsgs) != tt.ExpectedDenyMsgCount {
 				t.Errorf("denyMsgs: expected count = %d; actual count = %d", tt.ExpectedDenyMsgCount, len(denyMsgs))
 			}

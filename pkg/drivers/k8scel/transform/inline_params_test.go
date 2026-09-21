@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"math"
 	"reflect"
@@ -14,6 +15,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -297,6 +299,60 @@ func TestConstraintToPolicyDefinitionNativeParity(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestConstraintToPolicyDefinitionAuditAnnotations(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		for _, includeSuccess := range []bool{false, true} {
+			t.Run(fmt.Sprintf("enabled=%t/success=%t", enabled, includeSuccess), func(t *testing.T) {
+				for name, value := range map[string]bool{
+					util.EmitAdmissionAuditAnnotationsFlag:           enabled,
+					util.AdmissionAuditAnnotationsIncludeSuccessFlag: includeSuccess,
+				} {
+					previous := flag.Lookup(name).Value.String()
+					if err := flag.Set(name, fmt.Sprint(value)); err != nil {
+						t.Fatal(err)
+					}
+					t.Cleanup(func() {
+						if err := flag.Set(name, previous); err != nil {
+							t.Error(err)
+						}
+					})
+				}
+				template := newInlineTestTemplate(&schema.Source{FailurePolicy: ptr.To("Fail"), Validations: []schema.Validation{{Expression: "true"}}})
+				constraint := newTestConstraint(string(util.Deny), nil, nil, &unstructured.Unstructured{})
+				policy, err := ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, nil, nil, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if policy.Spec.ParamKind != nil {
+					t.Fatal("inlined policy must not depend on a parameter kind")
+				}
+				if enabled && includeSuccess {
+					if len(policy.Spec.AuditAnnotations) != 1 || policy.Spec.AuditAnnotations[0].Key != vapEvaluationAuditAnnotationKey {
+						t.Fatalf("audit annotations = %#v, want evaluation marker", policy.Spec.AuditAnnotations)
+					}
+					expression := "(" + policy.Spec.AuditAnnotations[0].ValueExpression + ") == 'true'"
+					if !evaluateInlinePolicyExpression(t, policy, expression, constraint) {
+						t.Fatal("inlined evaluation marker must evaluate without top-level params")
+					}
+				} else if len(policy.Spec.AuditAnnotations) != 0 {
+					t.Fatalf("unexpected audit annotations: %#v", policy.Spec.AuditAnnotations)
+				}
+				binding, err := ConstraintToInlinedBinding(constraint, []string{string(util.Deny)})
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantActions := []admissionregistrationv1beta1.ValidationAction{admissionregistrationv1beta1.Deny}
+				if enabled {
+					wantActions = append(wantActions, admissionregistrationv1beta1.Audit)
+				}
+				if binding.Spec.ParamRef != nil || !reflect.DeepEqual(binding.Spec.ValidationActions, wantActions) {
+					t.Fatalf("inlined binding = %#v, want no ParamRef and actions %v", binding.Spec, wantActions)
+				}
+			})
+		}
 	}
 }
 

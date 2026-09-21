@@ -131,6 +131,12 @@ func v1beta1VAPToV1(source *admissionregistrationv1beta1.ValidatingAdmissionPoli
 			Expression: variable.Expression,
 		})
 	}
+	for _, annotation := range source.Spec.AuditAnnotations {
+		result.Spec.AuditAnnotations = append(result.Spec.AuditAnnotations, admissionregistrationv1.AuditAnnotation{
+			Key:             annotation.Key,
+			ValueExpression: annotation.ValueExpression,
+		})
+	}
 	return result, nil
 }
 

@@ -237,6 +237,10 @@ Below is the mapping of Gatekeeper's `enforcementActions` to `validatingAdmissio
 | `warn` | `Warn` |
 | `dryrun` | `Audit` |
 
+When `--emit-admission-audit-annotations=true`, Gatekeeper appends `Audit` to generated bindings that otherwise use `Deny` or `Warn`; bindings generated from `dryrun` continue to contain one `Audit` action. By default, generated policies omit the custom `evaluation` marker and retain only native failure auditing. Failed validations use Kubernetes' standard `validation.policy.admission.k8s.io/validation_failure` annotation, whose contents and aggregation are controlled by the API server rather than Gatekeeper.
+
+Set `--admission-audit-annotations-include-success=true` to also publish a custom `evaluation` marker with the value `true` when at least one binding evaluates the request. Kubernetes deduplicates the constant value across matching bindings, keeping the annotation bounded without listing matching Constraint names. This option defaults to `false` and only applies when admission audit annotations are enabled. It does not change the binding's enforcement actions or evaluate validation expressions again. The webhook follows the same setting: zero-violation annotations are omitted by default and included only when this option is enabled; deny, warn, and dryrun violations remain annotated even on allowed requests. Configure both flags on the process performing the `generate` operation and, for split deployments, on the validation webhook process as well. With Helm, use `emitAdmissionAuditAnnotations=true` for violations-only auditing and additionally set `admissionAuditAnnotationsIncludeSuccess=true` to include successful evaluations. If both enforcement points are selected, both may add entries to the same request's audit event.
+
 ## Configuring VAP Operations
 
 When Gatekeeper generates a ValidatingAdmissionPolicy (VAP) from a ConstraintTemplate, the VAP's `operations` are determined by the **intersection** of:
