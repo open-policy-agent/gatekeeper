@@ -197,7 +197,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		err := r.system.CloseConnection(request.Name)
 		if err != nil {
 			log.Error(err, "failed to close connection", "name", request.Name)
-			return reconcile.Result{Requeue: true}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
+			if statusErr := deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod); statusErr != nil {
+				log.Error(statusErr, "failed to delete connection status", "name", request.Name)
+			}
+			return reconcile.Result{}, err
 		}
 		log.Info("removed connection", "name", request.Name)
 		return reconcile.Result{}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
@@ -211,7 +214,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	err = r.system.UpsertConnection(ctx, connObj.Spec.Config.Value, request.Name, connObj.Spec.Driver)
 	if err != nil {
 		log.Error(err, "failed to upsert connection", "name", request.Name)
-		return reconcile.Result{Requeue: true}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}, nil, r.getPod)
+		connectionErrors := []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}
+		if statusErr := updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, connectionErrors, nil, r.getPod); statusErr != nil {
+			log.Error(statusErr, "failed to update connection status", "name", request.Name)
+		}
+		return reconcile.Result{}, err
 	}
 
 	log.Info("Connection upsert successful", "name", request.Name, "driver", connObj.Spec.Driver)
