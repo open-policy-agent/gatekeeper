@@ -87,3 +87,19 @@ func TestHasValidationOperations(t *testing.T) {
 		})
 	}
 }
+
+func TestSetForTest(t *testing.T) {
+	original := operations
+	restore, err := SetForTest(Status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := AssignedStringList(); len(got) != 1 || got[0] != string(Status) {
+		t.Fatalf("AssignedStringList() = %v, want [%s]", got, Status)
+	}
+
+	restore()
+	if operations != original {
+		t.Fatal("SetForTest restore did not restore the original operations")
+	}
+}
