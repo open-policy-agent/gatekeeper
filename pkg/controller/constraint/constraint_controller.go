@@ -442,6 +442,10 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{RequeueAfter: requeueAfter}, nil
 		}
 	} else {
+		// The persist-backoff limiter is keyed by request (kind/namespace/name), so a
+		// deleted object's accumulated backoff must be cleared here. Otherwise a new
+		// object recreated under the same name would inherit the stale delay.
+		r.baseStatusPersistBackoff.Forget(request)
 		r.log.Info("handling constraint delete", "instance", instance)
 		r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())})
 		r.reporter.DeleteVAPBStatus(types.NamespacedName{Name: transform.LegacyVAPBindingName(instance.GetName())})

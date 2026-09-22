@@ -711,7 +711,7 @@ func TestReconcile_Client_Failures(t *testing.T) {
 
 		// Call Reconcile directly to assert the behavior on failures without having controller go through requeues
 		result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeConnectionNamespacedName})
-		g.Expect(result.Requeue).Should(gomega.Equal(false), "Reconcile should not requeue after the GET error") // nolint:staticcheck
+		g.Expect(result).Should(gomega.Equal(reconcile.Result{}), "Reconcile should not requeue after the GET error")
 		g.Expect(err).Should(gomega.Equal(mockErr), "Reconcile should return an error")
 
 		// Cleanup the Connection object if it exists at the end
