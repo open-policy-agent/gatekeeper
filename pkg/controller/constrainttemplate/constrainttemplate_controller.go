@@ -351,6 +351,10 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	deleted = deleted || !ct.GetDeletionTimestamp().IsZero()
 
 	if deleted {
+		// The persist-backoff limiter is keyed by request (name), so a deleted object's
+		// accumulated backoff must be cleared here. Otherwise a new object recreated
+		// under the same name would inherit the stale delay.
+		r.statusPersistBackoff.Forget(request)
 		r.metrics.DeleteVAPStatus(request.NamespacedName)
 		r.metrics.DeleteCelCT(request.NamespacedName)
 		ctRef := &templates.ConstraintTemplate{}

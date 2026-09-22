@@ -1151,6 +1151,54 @@ func TestReconcileBaseStatusUpdateErrorPreservesRequeueBehavior(t *testing.T) {
 	}
 }
 
+// TestReconcileDeleteResetsBaseStatusPersistBackoff guards against a deleted-then-recreated
+// object inheriting stale backoff state from a prior failure streak, since the
+// baseStatusPersistBackoff limiter is keyed only by request (kind/namespace/name).
+func TestReconcileDeleteResetsBaseStatusPersistBackoff(t *testing.T) {
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(false),
+		defaultGenerateVAP:  ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
+	})
+	ct := makeUnitCELTemplate()
+	instance := makeUnitConstraint()
+	r, reader, writer, request := newConstraintUnitReconciler(t, ct, instance)
+	updateErr := apierrors.NewConflict(schema.GroupResource{Group: constraintstatusv1beta1.GroupVersion.Group, Resource: "constraintpodstatuses"}, instance.GetName(), errors.New("conflict"))
+	writer.updateErr = updateErr
+
+	// Fail twice while the object exists, to accumulate backoff beyond the base delay.
+	result, err := r.Reconcile(context.Background(), request)
+	if err != nil || result != (reconcile.Result{RequeueAfter: time.Second}) {
+		t.Fatalf("expected first failure to use the base delay, got result=%v err=%v", result, err)
+	}
+	result, err = r.Reconcile(context.Background(), request)
+	if err != nil {
+		t.Fatalf("expected second failure to preserve nil error, got %v", err)
+	}
+	if result.RequeueAfter <= time.Second {
+		t.Fatalf("expected accumulated backoff beyond the base delay, got %v", result.RequeueAfter)
+	}
+
+	// Delete the object.
+	delete(reader.objects, client.ObjectKeyFromObject(instance))
+	writer.updateErr = nil
+	if _, err := r.Reconcile(context.Background(), request); err != nil {
+		t.Fatalf("expected delete reconcile to succeed, got %v", err)
+	}
+
+	// Recreate under the same name and fail again: the backoff must be back at the base
+	// delay, not continuing the pre-deletion streak.
+	reader.objects[client.ObjectKeyFromObject(instance)] = instance.DeepCopy()
+	writer.updateErr = updateErr
+	result, err = r.Reconcile(context.Background(), request)
+	if err != nil {
+		t.Fatalf("expected recreated-object failure to preserve nil error, got %v", err)
+	}
+	if result != (reconcile.Result{RequeueAfter: time.Second}) {
+		t.Fatalf("expected backoff to reset to the base delay after deletion, got %v", result)
+	}
+}
+
 func TestReconcilePreservesBothVAPBAndStatusErrors(t *testing.T) {
 	configureVAP(t, vapTestConfig{
 		apiEnabled:          ptr.To(true),
