@@ -48,3 +48,58 @@ func Test_Flags(t *testing.T) {
 		})
 	}
 }
+
+func TestHasValidationOperations(t *testing.T) {
+	original := operations
+	t.Cleanup(func() {
+		operationsMtx.Lock()
+		defer operationsMtx.Unlock()
+		operations = original
+	})
+
+	tests := map[string]struct {
+		assigned []Operation
+		want     bool
+	}{
+		"status only":         {assigned: []Operation{Status}},
+		"generate only":       {assigned: []Operation{Generate}},
+		"audit":               {assigned: []Operation{Audit}, want: true},
+		"webhook":             {assigned: []Operation{Webhook}, want: true},
+		"status with audit":   {assigned: []Operation{Status, Audit}, want: true},
+		"status with webhook": {assigned: []Operation{Status, Webhook}, want: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assigned := newOperationSet()
+			assigned.assignedOperations = make(map[Operation]bool)
+			for _, op := range tc.assigned {
+				assigned.assignedOperations[op] = true
+			}
+
+			operationsMtx.Lock()
+			operations = assigned
+			operationsMtx.Unlock()
+
+			if got := HasValidationOperations(); got != tc.want {
+				t.Errorf("HasValidationOperations() = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSetForTest(t *testing.T) {
+	original := operations
+	restore, err := SetForTest(Status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := AssignedStringList(); len(got) != 1 || got[0] != string(Status) {
+		t.Fatalf("AssignedStringList() = %v, want [%s]", got, Status)
+	}
+
+	restore()
+	if operations != original {
+		t.Fatal("SetForTest restore did not restore the original operations")
+	}
+}
