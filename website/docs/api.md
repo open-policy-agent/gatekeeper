@@ -210,7 +210,7 @@ Registers an external data provider HTTP service. Typical fields:
 | Field | Description |
 | ----- | ----------- |
 | `spec.url` | Provider endpoint URL (must use the `https://` prefix) |
-| `spec.timeout` | Request timeout when querying the provider |
+| `spec.timeout` (integer seconds) | Request timeout when querying the provider |
 | `spec.caBundle` | Optional base64-encoded TLS CA bundle in PEM format |
 
 See [External Data](externaldata.md) for the full provider API and examples.
