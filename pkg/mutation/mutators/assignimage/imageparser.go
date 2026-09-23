@@ -88,7 +88,7 @@ func (img image) fullRef() string {
 
 func splitDomain(name string) (domain, remainder string) {
 	i := strings.IndexRune(name, '/')
-	if i == -1 || (!strings.ContainsAny(name[:i], ".:") && name[:i] != "localhost") {
+	if i == -1 || (!strings.ContainsAny(name[:i], ".:") && !strings.EqualFold(name[:i], "localhost")) {
 		return "", name
 	}
 	return name[:i], name[i+1:]
