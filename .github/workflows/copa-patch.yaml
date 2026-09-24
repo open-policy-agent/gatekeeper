@@ -53,6 +53,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       releases: ${{ steps.resolve.outputs.matrix }}
+      mode: ${{ steps.resolve.outputs.mode }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -68,8 +69,16 @@ jobs:
         id: resolve
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_TARGET: ${{ inputs.target }}
         run: |
           set -euo pipefail
+          case "${GITHUB_EVENT_NAME}" in
+            schedule) mode=production ;;
+            workflow_dispatch) mode="${INPUT_TARGET:-dry-run}" ;;
+            *) echo "::error::unsupported trigger '${GITHUB_EVENT_NAME}'"; exit 1;;
+          esac
+          case "${mode}" in dry-run|staging|production) ;; *) echo "::error::invalid target '${mode}'"; exit 1;; esac
+          echo "mode=${mode}" >> "$GITHUB_OUTPUT"
           if [[ -n "${RELEASE_TAG}" ]]; then
             if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "::error::release_tag must be a stable vMAJOR.MINOR.PATCH tag, got '${RELEASE_TAG}'"; exit 1
@@ -94,21 +103,21 @@ jobs:
           echo "Resolved releases: ${matrix}"
           echo "### Resolved releases: \`${matrix}\`" >> "$GITHUB_STEP_SUMMARY"
 
-  patch:
+  patch-dry-run:
     name: Patch ${{ matrix.image }}:${{ matrix.release }}
     needs: resolve-releases
+    if: needs.resolve-releases.outputs.mode == 'dry-run'
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     permissions:
       contents: read
-      packages: write # GHCR login is gated off for dry-run
-    strategy:
+    strategy: &patch-strategy
       fail-fast: false
       matrix:
         image: [gatekeeper, gator]
         release: ${{ fromJson(needs.resolve-releases.outputs.releases) }}
     # Matrix values reused across steps.
-    env:
+    env: &patch-env
       IMAGE: ${{ matrix.image }}
       RELEASE: ${{ matrix.release }}
       # Normalize a raw Trivy report into a deduped finding set (keyed by VulnerabilityID and PkgName).
@@ -119,7 +128,7 @@ jobs:
         | group_by(.id + "\u0000" + .pkg)
         | map( .[0] + { installed: ([ .[].installed ] | unique),
                         fixed: ([ .[].fixed ] | map(select(. != "")) | unique) } )
-    steps:
+    steps: &patch-steps
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
@@ -130,12 +139,12 @@ jobs:
       - name: Resolve mode, source + target refs
         id: cfg
         env:
-          INPUT_TARGET: ${{ inputs.target }}
+          INPUT_TARGET: ${{ needs.resolve-releases.outputs.mode }}
           REPO: ${{ github.repository }}
           REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          mode="${INPUT_TARGET:-production}"
+          mode="${INPUT_TARGET}"
           case "${mode}" in dry-run|staging|production) ;; *) echo "::error::invalid target '${mode}'"; exit 1;; esac
           # Safety: `dry-run` pushes nothing; `staging` pushes only to the owner's own
           # ghcr.io/<owner>/copa-staging/* namespace; `production` (the only mode that writes to the
@@ -655,3 +664,16 @@ jobs:
           echo "Dry-run: OCI layout written locally; nothing pushed. Platforms present:"
           jq -r '.manifests[] | select(.platform != null) | "\(.platform.os)/\(.platform.architecture)"' \
             ./patched-oci/index.json || true
+
+  patch-publish:
+    name: Patch ${{ matrix.image }}:${{ matrix.release }}
+    needs: resolve-releases
+    if: needs.resolve-releases.outputs.mode == 'staging' || needs.resolve-releases.outputs.mode == 'production'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write
+    strategy: *patch-strategy
+    env: *patch-env
+    steps: *patch-steps
