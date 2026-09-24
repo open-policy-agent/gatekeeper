@@ -38,7 +38,7 @@ Related feature docs: [How to use Gatekeeper](howto.md), [Constraint Templates](
 
 ## ConstraintTemplate (`templates.gatekeeper.sh`)
 
-Preferred version: `v1` (also served: `v1beta1`).
+Preferred version: `v1` (also served: `v1beta1`, `v1alpha1`).
 
 | Field | Type | Description |
 | ----- | ---- | ----------- |
@@ -72,6 +72,7 @@ Each installed `ConstraintTemplate` registers a cluster-scoped constraint CRD wh
 | `spec.match.labelSelector` | object | Standard label selector (`matchLabels` / `matchExpressions`) on the object |
 | `spec.match.namespaceSelector` | object | Label selector on the object's namespace (or the object itself if it is a Namespace) |
 | `spec.match.name` | string | Object name or prefix glob |
+| `spec.match.source` | string | Target resource origin: `All`, `Generated`, or `Original` (default `All`, used with expansion) |
 | `spec.parameters` | object | Template-specific inputs; validated against the template OpenAPI schema |
 | `spec.enforcementAction` | string | How violations are handled (see below) |
 | `spec.scopedEnforcementActions` | []object | Per-enforcement-point actions when `enforcementAction` is `scoped` |
@@ -100,7 +101,7 @@ See [Handling Constraint Violations](violations.md) and [Enforcement Points](enf
 
 | Field | Description |
 | ----- | ----------- |
-| `status.enforced` | Whether Gatekeeper is enforcing the constraint |
+| `status.byPod[].enforced` | Enforcement status reported by each Gatekeeper controller pod |
 | `status.auditTimestamp` | Last audit pass that reported violations |
 | `status.violations[]` | Sample of recent violations (`enforcementAction`, `kind`, `name`, `namespace`, `message`, …) |
 | `status.totalViolations` | Total violation count when reported by audit |
@@ -144,7 +145,7 @@ Common mutation fields:
 | `spec.match` | object | Same style of matchers as constraints (limit which objects are mutated) |
 | `spec.location` | string | Object path to mutate, for example `spec.containers[name: main].image` |
 | `spec.parameters` | object | Mutator-specific options |
-| `spec.parameters.pathTests[]` | []object | Optional `subPath` + `condition` (`MustExist` / `MustNotExist`) checks before mutating |
+| `spec.parameters.pathTests[]` | []object | Optional `subPath` + `condition` (`MustExist` / `MustNotExist`) checks before mutating. Supported on `Assign`, `AssignImage`, and `ModifySet` (not supported on `AssignMetadata`). |
 
 ### Assign (`v1`)
 
@@ -205,13 +206,15 @@ See [Export](export.md).
 
 ## Provider (`externaldata.gatekeeper.sh`)
 
+Preferred version: `v1beta1` (also served: `v1alpha1`, deprecated).
+
 Registers an external data provider HTTP service. Typical fields:
 
-| Field | Description |
-| ----- | ----------- |
-| `spec.url` | Provider endpoint URL (must use the `https://` prefix) |
-| `spec.timeout` (integer seconds) | Request timeout when querying the provider |
-| `spec.caBundle` | Optional base64-encoded TLS CA bundle in PEM format |
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `spec.url` | string | Provider endpoint URL (must use the `https://` prefix) |
+| `spec.timeout` | integer | Request timeout in seconds when querying the provider |
+| `spec.caBundle` | string | Optional base64-encoded TLS CA bundle in PEM format |
 
 See [External Data](externaldata.md) for the full provider API and examples.
 
