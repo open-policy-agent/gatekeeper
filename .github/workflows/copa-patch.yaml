@@ -551,11 +551,11 @@ jobs:
             echo "Smoke: ${PATCHED_REF} (${p}) --help exited 0."
           done
 
-      # Re-wrap the patched image with attestations and push it to a staging RC tag and NOT the final
-      # -R. Every guard runs against the RC so the immutable -R is only published once they all pass.
+      # Re-wrap to a staging RC and verify attestations in staging and production.
+      # Only production promotes the validated RC to the immutable -R tag.
       - name: Re-wrap with attestations to staging RC
         id: rewrap
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'production' && steps.verify.outputs.publish == 'true'
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run' && steps.verify.outputs.publish == 'true'
         env:
           INTERMEDIATE_REF: ${{ steps.patch.outputs.patched_ref }}
           REV: ${{ steps.rev.outputs.rev }}
@@ -581,7 +581,7 @@ jobs:
           echo "rc_ref=${rc_ref}" >> "$GITHUB_OUTPUT"
 
       - name: Verify attestations present
-        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode == 'production' && steps.verify.outputs.publish == 'true'
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run' && steps.verify.outputs.publish == 'true'
         env:
           RC_REF: ${{ steps.rewrap.outputs.rc_ref }}
         run: |
