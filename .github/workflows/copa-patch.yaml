@@ -120,6 +120,7 @@ jobs:
     env: &patch-env
       IMAGE: ${{ matrix.image }}
       RELEASE: ${{ matrix.release }}
+      MANIFEST_ABSENT_RE: '^Error: (GET|HEAD) https?://[^[:space:]]+/manifests/[^[:space:]]+: ((MANIFEST_UNKNOWN|NAME_UNKNOWN):|unexpected status code 404( |$))'
       # Normalize a raw Trivy report into a deduped finding set (keyed by VulnerabilityID and PkgName).
       NORMALIZE_JQ: |
         [ .Results[]?.Vulnerabilities[]?
@@ -211,8 +212,8 @@ jobs:
           pushd "${dir}"
           base="https://github.com/google/go-containerregistry/releases/download/v${CRANE_VERSION}"
           tarball="go-containerregistry_Linux_x86_64.tar.gz"
-          wget -q "${base}/${tarball}" "${base}/checksums.txt"
-          grep " ${tarball}\$" checksums.txt | sha256sum -c -
+          wget -q "${base}/${tarball}"
+          echo "1a57bc98207fa1c0d04bf760699099e26f8383499bfd55b99c1b919a928a7230  ${tarball}" | sha256sum -c -
           tar zxf "${tarball}" crane
           echo "${dir}" >> "$GITHUB_PATH"
           popd
@@ -226,11 +227,14 @@ jobs:
       # never mutated a release `vX.Y.Z` tag (only `-R`/`-patched` are added).
       - name: Capture base release digest
         id: base
-        if: steps.cfg.outputs.mode == 'production'
+        env:
+          SOURCE_TAG: ${{ steps.cfg.outputs.source_ref }}
         run: |
           set -euo pipefail
-          ghcr=$(crane digest "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}")
+          ghcr=$(crane digest "${SOURCE_TAG}")
+          [[ "${ghcr}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::invalid source index digest: ${ghcr}"; exit 1; }
           echo "ghcr=${ghcr}" >> "$GITHUB_OUTPUT"
+          echo "source_ref=${SOURCE_TAG}@${ghcr}" >> "$GITHUB_OUTPUT"
           echo "Base release digest — ghcr:${ghcr}"
 
       # Scan the release source per arch. The reports Copa consumes live in copa-reports/
@@ -238,7 +242,7 @@ jobs:
       - name: Scan source for fixable library CVEs
         id: scan
         env:
-          SOURCE_REF: ${{ steps.cfg.outputs.source_ref }}
+          SOURCE_REF: ${{ steps.base.outputs.source_ref }}
         run: |
           set -euo pipefail
           mkdir -p copa-reports
@@ -246,7 +250,7 @@ jobs:
           stdlib_total=0
           for p in $PATCH_ARCHES; do
             a="${p#linux/}"; a="${a//\//-}" # arm/v7 -> arm-v7 so the report is a flat file
-            trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
+            trivy image --quiet --skip-db-update --platform "$p" --pkg-types library --ignore-unfixed \
               -f json -o "copa-reports/${a}.json" "${SOURCE_REF}"
             arch_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "copa-reports/${a}.json")
             arch_stdlib=$(jq '[.Results[]?.Vulnerabilities[]? | select(.PkgName == "stdlib")] | length' "copa-reports/${a}.json")
@@ -263,7 +267,7 @@ jobs:
         id: gate
         env:
           PRIMARY_REPO: ${{ steps.cfg.outputs.primary_repo }}
-          SOURCE_REF: ${{ steps.cfg.outputs.source_ref }}
+          SOURCE_REF: ${{ steps.base.outputs.source_ref }}
           MODE: ${{ steps.cfg.outputs.mode }}
           BEFORE: ${{ steps.scan.outputs.before }}
         run: |
@@ -271,25 +275,29 @@ jobs:
           patch_input="${SOURCE_REF}"
           report_dir="copa-reports"
           # Classify the lookup: present = scan it; explicit not-found = first patch;
-          # operational error = fail closed in production so we never skip/patch on an unknown state.
+          # operational error = fail closed so we never skip/patch on an unknown state.
           existing=0
+          existing_digest=""
+          existing_ref=""
           patched_state="absent"
           if [[ "${MODE}" != "dry-run" ]]; then
-            if digest_out=$(crane digest "${PRIMARY_REPO}:${RELEASE}-patched" 2>&1 >/dev/null); then
+            digest_error="$(mktemp)"
+            trap 'rm -f "${digest_error}"' EXIT
+            if existing_digest=$(crane digest "${PRIMARY_REPO}:${RELEASE}-patched" 2>"${digest_error}"); then
+              [[ "${existing_digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::invalid existing index digest: ${existing_digest}"; exit 1; }
               patched_state="present"
-            elif grep -qiE 'MANIFEST_UNKNOWN|manifest unknown|not found|404' <<<"${digest_out}"; then
-              patched_state="absent"
-            elif [[ "${MODE}" == "production" ]]; then
-              echo "::error::could not determine whether ${PRIMARY_REPO}:${RELEASE}-patched exists (registry error): ${digest_out}"; exit 1
+            elif sed -n '/^Error: /p' "${digest_error}" | tail -n 1 | grep -qE "${MANIFEST_ABSENT_RE}"; then
+              existing_digest=""
             else
-              patched_state="absent"
+              echo "::error::could not determine whether ${PRIMARY_REPO}:${RELEASE}-patched exists (registry error): $(cat "${digest_error}")"; exit 1
             fi
             if [[ "${patched_state}" == "present" ]]; then
+              existing_ref="${PRIMARY_REPO}:${RELEASE}-patched@${existing_digest}"
               mkdir -p copa-reports-patched
               for p in $PATCH_ARCHES; do
                 a="${p#linux/}"; a="${a//\//-}"
-                trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
-                  -f json -o "copa-reports-patched/${a}.json" "${PRIMARY_REPO}:${RELEASE}-patched"
+                trivy image --quiet --skip-db-update --platform "$p" --pkg-types library --ignore-unfixed \
+                  -f json -o "copa-reports-patched/${a}.json" "${existing_ref}"
                 existing=$(( existing + $(jq '[.Results[]?.Vulnerabilities[]?] | length' "copa-reports-patched/${a}.json") ))
               done
             fi
@@ -307,7 +315,7 @@ jobs:
             exit 0
           fi
           if [[ "${BEFORE}" -eq 0 && "${existing}" -gt 0 ]]; then
-            patch_input="${PRIMARY_REPO}:${RELEASE}-patched"
+            patch_input="${existing_ref}"
             report_dir="copa-reports-patched"
             echo "Source clean; re-patching existing ${RELEASE}-patched (${existing} fixable CVE(s))." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
@@ -315,6 +323,7 @@ jobs:
             echo "has_fixes=true"
             echo "patch_input=${patch_input}"
             echo "report_dir=${report_dir}"
+            echo "baseline_digest=${existing_digest}"
           } >> "$GITHUB_OUTPUT"
 
       # Immutable revision = next integer after the highest existing vX.Y.Z-N in the primary repo
@@ -334,11 +343,12 @@ jobs:
               tags=$(crane ls "${PRIMARY_REPO}" 2>/dev/null || true)
             fi
             # empty result here means only "no vX.Y.Z-N tags yet", not a failed lookup.
-            last=$(printf '%s\n' "${tags}" | { grep -E "^${RELEASE}-[0-9]+$" || true; } | sed "s/^${RELEASE}-//" | sort -n | tail -1)
-            rev=$(( ${last:-0} + 1 ))
+            release_pattern="${RELEASE//./\\.}"
+            last=$(printf '%s\n' "${tags}" | { grep -E "^${release_pattern}-[0-9]+$" || true; } | sed "s/^${release_pattern}-//" | sort -n | tail -1)
+            rev=$(( 10#${last:-0} + 1 ))
             if digest_err=$(crane digest "${PRIMARY_REPO}:${RELEASE}-${rev}" 2>&1 >/dev/null); then
               echo "::error::${PRIMARY_REPO}:${RELEASE}-${rev} already exists; refusing to overwrite an immutable revision"; exit 1
-            elif grep -qiE 'MANIFEST_UNKNOWN|manifest unknown|NAME_UNKNOWN|name unknown|not found|404' <<<"${digest_err}"; then
+            elif sed -n '/^Error: /p' <<<"${digest_err}" | tail -n 1 | grep -qE "${MANIFEST_ABSENT_RE}"; then
               :
             else
               echo "::error::could not confirm ${PRIMARY_REPO}:${RELEASE}-${rev} is absent (registry error): ${digest_err}"; exit 1
@@ -367,6 +377,7 @@ jobs:
           if [[ "${MODE}" == "dry-run" ]]; then
             out=(--oci-dir ./patched-oci)
             echo "patched_ref=./patched-oci" >> "$GITHUB_OUTPUT"
+            echo "verification_ref=./patched-oci" >> "$GITHUB_OUTPUT"
           else
             out=(--push)
             echo "patched_ref=${INTERMEDIATE_REPO}:${tag}" >> "$GITHUB_OUTPUT"
@@ -381,6 +392,11 @@ jobs:
             --timeout 120m \
             "${out[@]}" \
             -t "${INTERMEDIATE_REPO}:${tag}"
+          if [[ "${MODE}" != "dry-run" ]]; then
+            digest=$(crane digest "${INTERMEDIATE_REPO}:${tag}")
+            [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::invalid patched index digest: ${digest}"; exit 1; }
+            echo "verification_ref=${INTERMEDIATE_REPO}@${digest}" >> "$GITHUB_OUTPUT"
+          fi
 
       # Guard: every target arch must be present in the pushed index. Copa silently *ignores* an
       # arch it can't emulate instead of failing, so without this a drop would ship a -patched
@@ -388,14 +404,14 @@ jobs:
       - name: Verify all target arches present
         if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run'
         env:
-          PATCHED_REF: ${{ steps.patch.outputs.patched_ref }}
+          PATCHED_REF: ${{ steps.patch.outputs.verification_ref }}
         run: |
           set -euo pipefail
           present=$(docker buildx imagetools inspect "${PATCHED_REF}" --raw \
             | jq -r '.manifests[]? | select(.platform.os == "linux" and .platform.architecture != "unknown")
                      | .platform | .os + "/" + .architecture + (if .variant then "/" + .variant else "" end)')
           echo "Arches in ${PATCHED_REF}:"; echo "${present}"
-          spaced=" $(echo ${present}) "   # collapse to a single space-delimited line for matching
+          spaced=" ${present//$'\n'/ } "   # collapse to a single space-delimited line for matching
           missing=""
           for p in $PATCH_ARCHES; do
             case "${spaced}" in *" ${p} "*) : ;; *) missing="${missing} ${p}" ;; esac
@@ -410,7 +426,7 @@ jobs:
         id: verify
         if: steps.gate.outputs.has_fixes == 'true'
         env:
-          PATCHED_REF: ${{ steps.patch.outputs.patched_ref }}
+          PATCHED_REF: ${{ steps.patch.outputs.verification_ref }}
           MODE: ${{ steps.cfg.outputs.mode }}
           REV: ${{ steps.rev.outputs.rev }}
           REPORT_DIR: ${{ steps.gate.outputs.report_dir }}
@@ -440,13 +456,13 @@ jobs:
               dig=$(jq -r --arg ar "${want}" '.manifests[] | select(.platform.os=="linux" and .platform.architecture==$ar) | .digest' "${PATCHED_REF}/index.json.orig")
               [[ -n "${dig}" ]] || { echo "::error::no ${p} manifest in ${PATCHED_REF}"; exit 1; }
               jq --arg d "${dig}" '{schemaVersion:2, mediaType:"application/vnd.oci.image.index.v1+json", manifests:[.manifests[]|select(.digest==$d)]}' "${PATCHED_REF}/index.json.orig" > "${PATCHED_REF}/index.json"
-              trivy image --quiet --input "${PATCHED_REF}" --pkg-types library --ignore-unfixed \
+              trivy image --quiet --skip-db-update --input "${PATCHED_REF}" --pkg-types library --ignore-unfixed \
                 -f json -o "scan-after-${a}.json"
               want_cfg=$(jq -r '.config.digest' "${PATCHED_REF}/blobs/sha256/${dig#sha256:}")
               got_cfg=$(jq -r '.Metadata.ImageID // ""' "scan-after-${a}.json")
               [[ "${got_cfg}" == "${want_cfg}" ]] || { echo "::error::dry-run ${p}: scanned config '${got_cfg}', expected ${dig}'s config '${want_cfg}'"; exit 1; }
             else
-              trivy image --quiet --platform "$p" --pkg-types library --ignore-unfixed \
+              trivy image --quiet --skip-db-update --platform "$p" --pkg-types library --ignore-unfixed \
                 -f json -o "scan-after-${a}.json" "${PATCHED_REF}"
             fi
             jq "$NORMALIZE_JQ" "${REPORT_DIR}/${a}.json" > "norm-source-${a}.json"
@@ -535,7 +551,7 @@ jobs:
       - name: Smoke test patched image
         if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run' && steps.verify.outputs.publish == 'true'
         env:
-          PATCHED_REF: ${{ steps.patch.outputs.patched_ref }}
+          PATCHED_REF: ${{ steps.patch.outputs.verification_ref }}
         run: |
           set -euo pipefail
           for p in $PATCH_ARCHES; do
@@ -558,11 +574,11 @@ jobs:
         if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run' && steps.verify.outputs.publish == 'true'
         env:
           INTERMEDIATE_REF: ${{ steps.patch.outputs.patched_ref }}
-          REV: ${{ steps.rev.outputs.rev }}
+          VERIFIED_REF: ${{ steps.patch.outputs.verification_ref }}
         run: |
           set -euo pipefail
-          rc_ref="${INTERMEDIATE_REF}-rc"
-          platforms=$(docker buildx imagetools inspect "${INTERMEDIATE_REF}" --raw \
+          rc_tag="${INTERMEDIATE_REF}-rc"
+          platforms=$(docker buildx imagetools inspect "${VERIFIED_REF}" --raw \
             | jq -r '[ .manifests[]
                        | select(.platform != null and .platform.os != null and .platform.architecture != "unknown")
                        | .platform | (.os + "/" + .architecture + (if .variant then "/" + .variant else "" end)) ]
@@ -570,15 +586,19 @@ jobs:
           if [[ -z "${platforms}" ]]; then echo "::error::could not determine platforms to re-wrap"; exit 1; fi
           echo "Re-wrapping platforms: ${platforms}"
           workdir="$(mktemp -d)"
-          printf 'FROM %s\n' "${INTERMEDIATE_REF}" > "${workdir}/Dockerfile"
+          printf 'FROM %s\n' "${VERIFIED_REF}" > "${workdir}/Dockerfile"
           docker buildx build \
             --platform "${platforms}" \
             --attest type=sbom \
             --attest type=provenance,mode=max \
-            -t "${rc_ref}" \
+            --metadata-file "${workdir}/metadata.json" \
+            -t "${rc_tag}" \
             --push \
             "${workdir}"
-          echo "rc_ref=${rc_ref}" >> "$GITHUB_OUTPUT"
+          rc_digest=$(jq -er '."containerimage.digest"' "${workdir}/metadata.json")
+          [[ "${rc_digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::invalid RC index digest: ${rc_digest}"; exit 1; }
+          echo "rc_ref=${VERIFIED_REF%@*}@${rc_digest}" >> "$GITHUB_OUTPUT"
+          echo "rc_tag=${rc_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Verify attestations present
         if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run' && steps.verify.outputs.publish == 'true'
@@ -586,13 +606,24 @@ jobs:
           RC_REF: ${{ steps.rewrap.outputs.rc_ref }}
         run: |
           set -euo pipefail
-          repo="${RC_REF%:*}"
+          repo="${RC_REF%@*}"
           idx=$(crane manifest "${RC_REF}")
+          if ! jq -e --arg arches "${PATCH_ARCHES}" '
+            def normalize:
+              if . == "linux/arm64/v8" then "linux/arm64" else . end;
+            ($arches | [splits("\\s+") | select(length > 0) | normalize] | sort) as $expected
+            | [ .manifests[]
+                | select(.annotations["vnd.docker.reference.type"] != "attestation-manifest")
+                | .platform
+                | (.os + "/" + .architecture + (if (.variant // "") == "" then "" else "/" + .variant end))
+                | normalize
+              ] | sort == $expected
+          ' <<<"${idx}" >/dev/null; then
+            echo "::error::${RC_REF}: expected exactly one image manifest for each platform in ${PATCH_ARCHES}"; exit 1
+          fi
           # Every platform manifest must have its own attestation manifest carrying BOTH an SBOM and a
           # SLSA provenance predicate.
-          mapfile -t imgs < <(jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture != "unknown") | .digest' <<<"${idx}")
-          want=$(echo ${PATCH_ARCHES} | wc -w | tr -d ' ')
-          [[ "${#imgs[@]}" -eq "${want}" ]] || { echo "::error::${RC_REF}: expected ${want} platform manifests, found ${#imgs[@]}"; exit 1; }
+          mapfile -t imgs < <(jq -r '.manifests[] | select(.annotations["vnd.docker.reference.type"] != "attestation-manifest") | .digest' <<<"${idx}")
           for imgd in "${imgs[@]}"; do
             attd=$(jq -r --arg d "${imgd}" '.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest" and .annotations["vnd.docker.reference.digest"] == $d) | .digest' <<<"${idx}")
             [[ -n "${attd}" ]] || { echo "::error::${RC_REF}: platform ${imgd} has no attestation manifest"; exit 1; }
@@ -602,6 +633,40 @@ jobs:
             echo "  ${imgd}: SBOM + provenance present."
           done
           echo "All ${#imgs[@]} candidate platform(s) carry SBOM + provenance attestations."
+
+      - name: Verify candidate and baseline tags unchanged
+        if: steps.gate.outputs.has_fixes == 'true' && steps.cfg.outputs.mode != 'dry-run' && steps.verify.outputs.publish == 'true'
+        env:
+          INTERMEDIATE_REF: ${{ steps.patch.outputs.patched_ref }}
+          VERIFIED_REF: ${{ steps.patch.outputs.verification_ref }}
+          RC_TAG: ${{ steps.rewrap.outputs.rc_tag }}
+          RC_REF: ${{ steps.rewrap.outputs.rc_ref }}
+          PRIMARY_REPO: ${{ steps.cfg.outputs.primary_repo }}
+          BASELINE_DIGEST: ${{ steps.gate.outputs.baseline_digest }}
+        run: |
+          set -euo pipefail
+          expected_digest="${VERIFIED_REF##*@}"
+          current_digest=$(crane digest "${INTERMEDIATE_REF}")
+          if [[ "${current_digest}" != "${expected_digest}" ]]; then
+            echo "::error::${INTERMEDIATE_REF} changed after patching (${expected_digest}->${current_digest}); refusing to promote"; exit 1
+          fi
+          rc_digest="${RC_REF##*@}"
+          current_rc_digest=$(crane digest "${RC_TAG}")
+          if [[ "${current_rc_digest}" != "${rc_digest}" ]]; then
+            echo "::error::${RC_TAG} changed after re-wrap (${rc_digest}->${current_rc_digest}); refusing to promote"; exit 1
+          fi
+          baseline_tag="${PRIMARY_REPO}:${RELEASE}-patched"
+          baseline_error="$(mktemp)"
+          trap 'rm -f "${baseline_error}"' EXIT
+          if current_baseline=$(crane digest "${baseline_tag}" 2>"${baseline_error}"); then
+            if [[ -z "${BASELINE_DIGEST}" || "${current_baseline}" != "${BASELINE_DIGEST}" ]]; then
+              echo "::error::${baseline_tag} changed since the baseline scan; refusing to promote"; exit 1
+            fi
+          elif [[ -z "${BASELINE_DIGEST}" ]] && sed -n '/^Error: /p' "${baseline_error}" | tail -n 1 | grep -qE "${MANIFEST_ABSENT_RE}"; then
+            :
+          else
+            echo "::error::could not confirm ${baseline_tag} is unchanged (registry error): $(cat "${baseline_error}")"; exit 1
+          fi
 
       # prove the run never mutated a release tag.
       - name: Verify release tag untouched
@@ -626,13 +691,13 @@ jobs:
           rtag="${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV}"
           if digest_err=$(crane digest "${rtag}" 2>&1 >/dev/null); then
             echo "::error::${rtag} already exists; refusing to overwrite an immutable revision"; exit 1
-          elif grep -qiE 'MANIFEST_UNKNOWN|manifest unknown|not found|404' <<<"${digest_err}"; then
+          elif sed -n '/^Error: /p' <<<"${digest_err}" | tail -n 1 | grep -qE "${MANIFEST_ABSENT_RE}"; then
             :
           else
             echo "::error::could not confirm ${rtag} is absent (registry error): ${digest_err}"; exit 1
           fi
           crane copy "${RC_REF}" "${rtag}"
-          rc_digest=$(crane digest "${RC_REF}")
+          rc_digest="${RC_REF##*@}"
           got_digest=$(crane digest "${rtag}")
           if [[ "${got_digest}" != "${rc_digest}" ]]; then
             echo "::error::${rtag} digest ${got_digest} != validated RC ${rc_digest}"; exit 1
@@ -645,14 +710,16 @@ jobs:
         env:
           MODE: ${{ steps.cfg.outputs.mode }}
           INTERMEDIATE_REPO: ${{ steps.cfg.outputs.intermediate_repo }}
+          VERIFIED_REF: ${{ steps.patch.outputs.verification_ref }}
+          RC_REF: ${{ steps.rewrap.outputs.rc_ref }}
           REV: ${{ steps.rev.outputs.rev }}
         run: |
           set -euo pipefail
           if [[ "${MODE}" == "staging" ]]; then
-            crane tag "${INTERMEDIATE_REPO}:${RELEASE}-${REV}" "${RELEASE}-patched"
+            crane tag "${VERIFIED_REF}" "${RELEASE}-patched"
             echo "Published ${INTERMEDIATE_REPO}:${RELEASE}-${REV} and moved ${RELEASE}-patched onto it." | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            crane tag "${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV}" "${RELEASE}-patched"
+            crane tag "${SOURCE_REGISTRY}/${IMAGE}@${RC_REF##*@}" "${RELEASE}-patched"
             echo "Published attested ${SOURCE_REGISTRY}/${IMAGE}:${RELEASE}-${REV} and moved ${RELEASE}-patched onto it." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
