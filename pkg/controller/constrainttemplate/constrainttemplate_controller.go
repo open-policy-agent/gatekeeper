@@ -218,8 +218,9 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 	if getPod == nil {
 		reconciler.getPod = reconciler.defaultGetPod
 	}
-	if enabled, groupVersion := transform.IsVapAPIEnabled(&logger); enabled && groupVersion != nil && operations.IsAssigned(operations.Generate) && constraint.GetVAPGenerationMode() == constraint.VAPGenerationModeConstraint {
-		reconciler.vapCleanup = newTemplateVAPCleanup(reconciler, *groupVersion)
+	if operations.IsAssigned(operations.Generate) && constraint.GetVAPGenerationMode() == constraint.VAPGenerationModeConstraint {
+		reconciler.vapCleanup = newTemplateVAPCleanup(reconciler, schema.GroupVersion{})
+		reconciler.vapCleanup.cache = mgr.GetCache()
 		if err := mgr.Add(reconciler.vapCleanup); err != nil {
 			reconciler.vapCleanup.queue.ShutDown()
 			return nil, err
@@ -271,6 +272,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 		return err
 	}
 
+	if constraint.GetVAPGenerationMode() == constraint.VAPGenerationModeConstraint {
+		return nil
+	}
 	isVapAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&logger)
 	if isVapAPIEnabled && operations.IsAssigned(operations.Generate) {
 		obj, err := vapForVersion(groupVersion)
@@ -290,21 +294,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 				})))
 		if err != nil {
 			return err
-		}
-		if constraint.GetVAPGenerationMode() == constraint.VAPGenerationModeConstraint {
-			obj, err := vapBindingForVersion(groupVersion)
-			if err != nil {
-				return err
-			}
-			if err := mgr.GetFieldIndexer().IndexField(context.Background(), obj, vapBindingPolicyNameField, vapBindingPolicyNames); err != nil {
-				return err
-			}
-			err = c.Watch(
-				source.Kind(mgr.GetCache(), obj,
-					handler.TypedEnqueueRequestsFromMapFunc(constraintTemplateForVAPBinding)))
-			if err != nil {
-				return err
-			}
 		}
 	}
 

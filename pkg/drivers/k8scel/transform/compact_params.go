@@ -21,7 +21,10 @@ func compactParametersExpression(value interface{}) (string, error) {
 		return "", err
 	}
 	if literal.removedDyn <= 1 {
-		return jsonValueToCEL(value)
+		literal.expression, err = jsonValueToCEL(value)
+		if err != nil {
+			return "", err
+		}
 	}
 	return "dyn(" + literal.expression + ")", nil
 }

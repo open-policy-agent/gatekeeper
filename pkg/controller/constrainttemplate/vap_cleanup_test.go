@@ -4,12 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/require"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -18,9 +26,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func newCleanupTestWorker(t *testing.T, groupVersion schema.GroupVersion, count int) (*templateVAPCleanup, *vapBindingListClient, []client.Object) {
@@ -79,6 +93,107 @@ type cleanupWriteClient struct {
 
 func (writer *cleanupWriteClient) Delete(ctx context.Context, object client.Object, options ...client.DeleteOption) error {
 	return writer.writer.Delete(ctx, object, options...)
+}
+
+func TestTemplateVAPCleanupRegisteredWithoutDiscovery(t *testing.T) {
+	setConstraintVAPGenerationMode(t)
+	setVAPTestGlobals(t, &admissionregistrationv1.SchemeGroupVersion)
+	transform.SetVapAPIEnabled(ptr.To(false))
+	manager, watchManager := testutils.SetupManager(t, cfg)
+	events := make(chan event.GenericEvent, 1024)
+	reconciler, err := newReconciler(manager, nil, watchManager, nil, events, events, nil, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, reconciler.vapCleanup, "cleanup must be registered independently of startup discovery")
+	t.Cleanup(reconciler.vapCleanup.queue.ShutDown)
+}
+
+type observedCleanupQueue struct {
+	workqueue.TypedRateLimitingInterface[string]
+	events atomic.Int64
+}
+
+func (queue *observedCleanupQueue) Add(name string) {
+	queue.events.Add(1)
+	queue.TypedRateLimitingInterface.Add(name)
+}
+
+func TestTemplateVAPCleanupStartupAndBindingEvents(t *testing.T) {
+	for _, failDiscovery := range []bool{false, true} {
+		t.Run(fmt.Sprintf("discoveryFailure=%t", failDiscovery), func(t *testing.T) {
+			setConstraintVAPGenerationMode(t)
+			setVAPTestGlobals(t, &admissionregistrationv1.SchemeGroupVersion)
+			backend, err := url.Parse(cfg.Host)
+			require.NoError(t, err)
+			proxy := httputil.NewSingleHostReverseProxy(backend)
+			proxy.Transport, err = rest.TransportFor(cfg)
+			require.NoError(t, err)
+			var available atomic.Bool
+			var failures atomic.Int64
+			available.Store(!failDiscovery)
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if !available.Load() && (request.URL.Path == "/apis/admissionregistration.k8s.io/v1" || request.URL.Path == "/apis/admissionregistration.k8s.io/v1beta1") {
+					failures.Add(1)
+					http.Error(writer, "discovery temporarily unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				proxy.ServeHTTP(writer, request)
+			}))
+			t.Cleanup(server.Close)
+			kubeconfig := filepath.Join(t.TempDir(), "kubeconfig")
+			require.NoError(t, clientcmd.WriteToFile(clientcmdapi.Config{
+				Clusters:       map[string]*clientcmdapi.Cluster{"test": {Server: server.URL}},
+				Contexts:       map[string]*clientcmdapi.Context{"test": {Cluster: "test"}},
+				CurrentContext: "test",
+			}, kubeconfig))
+			testutils.Setenv(t, "KUBECONFIG", kubeconfig)
+			transform.SetVapAPIEnabled(nil)
+			transform.SetGroupVersion(nil)
+			manager, _ := testutils.SetupManager(t, cfg)
+			constraintEvents := make(chan event.GenericEvent, 1024)
+			reconciler := &ReconcileConstraintTemplate{Client: manager.GetClient(), apiReader: manager.GetAPIReader(), metrics: newStatsReporter(), cstrEvents: constraintEvents}
+			worker := newTemplateVAPCleanup(reconciler, admissionregistrationv1.SchemeGroupVersion)
+			worker.cache = manager.GetCache()
+			queue := &observedCleanupQueue{TypedRateLimitingInterface: worker.queue}
+			worker.queue = queue
+			require.NoError(t, manager.Add(worker))
+			var templateReconciles atomic.Int64
+			require.NoError(t, add(manager, reconcile.Func(func(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
+				if request.Name == "testkind" {
+					templateReconciles.Add(1)
+				}
+				return reconcile.Result{}, nil
+			}), nil))
+			ctx := context.Background()
+			testutils.StartManager(ctx, t, manager)
+			if failDiscovery {
+				require.Eventually(t, func() bool { return failures.Load() >= 4 }, 10*time.Second, 20*time.Millisecond)
+				available.Store(true)
+			}
+			for index := 0; index < 10; index++ {
+				name := fmt.Sprintf("cleanup-event-%t-%d", failDiscovery, index)
+				binding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+					TypeMeta: metav1.TypeMeta{APIVersion: admissionregistrationv1.SchemeGroupVersion.String(), Kind: "ValidatingAdmissionPolicyBinding"},
+					ObjectMeta: metav1.ObjectMeta{Name: name, OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "constraints.gatekeeper.sh/v1beta1", Kind: "TestKind", Name: name, UID: types.UID(name), Controller: ptr.To(true),
+					}}},
+					Spec: admissionregistrationv1.ValidatingAdmissionPolicyBindingSpec{
+						PolicyName: "gatekeeper-testkind", ValidationActions: []admissionregistrationv1.ValidationAction{admissionregistrationv1.Audit},
+					},
+				}
+				testutils.CreateThenCleanup(ctx, t, manager.GetClient(), binding)
+				require.Eventually(t, func() bool { return queue.events.Load() >= int64(index*2+1) }, 10*time.Second, 20*time.Millisecond)
+				require.NoError(t, manager.GetClient().Get(ctx, client.ObjectKeyFromObject(binding), binding))
+				binding.Spec.PolicyName = "gatekeeper-testkind-" + name + "-vap"
+				require.NoError(t, manager.GetClient().Update(ctx, binding))
+				require.Eventually(t, func() bool { return queue.events.Load() >= int64(index*2+2) }, 10*time.Second, 20*time.Millisecond)
+			}
+			require.Zero(t, templateReconciles.Load(), "binding events must not enter template reconciliation or trigger constraint-wide fanout")
+			require.Empty(t, constraintEvents)
+			bindings := &admissionregistrationv1.ValidatingAdmissionPolicyBindingList{}
+			require.NoError(t, manager.GetClient().List(ctx, bindings, client.MatchingFields{vapBindingPolicyNameField: "gatekeeper-testkind"}))
+			require.Empty(t, bindings.Items, "the live binding index must track migrations after discovery recovers")
+		})
+	}
 }
 
 func TestTemplateVAPCleanupBatchesAndRetainsReferences(t *testing.T) {
@@ -223,6 +338,61 @@ func TestTemplateVAPCleanupRevalidatesBeforeDelete(t *testing.T) {
 			}
 		})
 	}
+}
+
+type delayedCleanupReader struct {
+	client.Reader
+	delay time.Duration
+}
+
+func (reader *delayedCleanupReader) Get(ctx context.Context, key client.ObjectKey, object client.Object, options ...client.GetOption) error {
+	timer := time.NewTimer(reader.delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return reader.Reader.Get(ctx, key, object, options...)
+	}
+}
+
+func TestTemplateVAPCleanupProgressWithSlowReads(t *testing.T) {
+	worker, live, policies := newCleanupTestWorker(t, admissionregistrationv1.SchemeGroupVersion, 200)
+	worker.reconciler.Client = &cleanupWriteClient{Client: worker.reconciler.Client, writer: live}
+	worker.reconciler.apiReader = &delayedCleanupReader{Reader: live, delay: 10 * time.Millisecond}
+	for index := range policies {
+		worker.queue.Add(fmt.Sprintf("template-%03d", index))
+	}
+	remaining := len(policies)
+	for batch := 0; remaining > 0 && batch < 50; batch++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 600*time.Millisecond)
+		worker.processNextBatch(ctx)
+		cancel()
+		current := 0
+		for _, policy := range policies {
+			err := live.Get(context.Background(), client.ObjectKeyFromObject(policy), policy)
+			if !apierrors.IsNotFound(err) {
+				require.NoError(t, err)
+				current++
+			}
+		}
+		require.Less(t, current, remaining, "each batch must make progress under sustained read latency")
+		remaining = current
+	}
+	require.Zero(t, remaining)
+	require.Zero(t, worker.queue.Len())
+}
+
+func TestTemplateVAPCleanupSlowSingleCandidate(t *testing.T) {
+	worker, live, policies := newCleanupTestWorker(t, admissionregistrationv1.SchemeGroupVersion, 1)
+	worker.reconciler.Client = &cleanupWriteClient{Client: worker.reconciler.Client, writer: live}
+	worker.reconciler.apiReader = &delayedCleanupReader{Reader: live, delay: 60 * time.Millisecond}
+	worker.queue.Add("template-000")
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	worker.processNextBatch(ctx)
+	require.True(t, apierrors.IsNotFound(live.Get(context.Background(), client.ObjectKeyFromObject(policies[0]), policies[0])))
+	require.Zero(t, worker.queue.Len())
 }
 
 func TestTemplateVAPCleanupCancellation(t *testing.T) {

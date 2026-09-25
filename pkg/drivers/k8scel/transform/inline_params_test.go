@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	celgo "github.com/google/cel-go/cel"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -48,6 +49,96 @@ func TestConstraintParametersExpressionDynamicNull(t *testing.T) {
 		if issues.Err() != nil {
 			t.Fatal(issues.Err())
 		}
+	}
+}
+
+func TestConstraintParametersNullComparison(t *testing.T) {
+	for _, parameters := range []map[string]interface{}{
+		nil,
+		{},
+		{"one": "value"},
+		{"one": "value", "two": true},
+		{"one": "value", "two": "another"},
+	} {
+		template := newInlineTestTemplate(&schema.Source{Validations: []schema.Validation{{Expression: "variables.params != null"}}})
+		constraint := newTestConstraint("deny", nil, nil, &unstructured.Unstructured{Object: map[string]interface{}{
+			"spec": map[string]interface{}{},
+		}})
+		if parameters != nil {
+			if err := unstructured.SetNestedMap(constraint.Object, parameters, "spec", "parameters"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		shared, err := TemplateToPolicyDefinition(template)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inlined, err := ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, nil, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, policy := range []*admissionregistrationv1beta1.ValidatingAdmissionPolicy{shared, inlined} {
+			if got := evaluateInlinePolicyExpression(t, policy, "variables.params != null", constraint); got != (parameters != nil) {
+				t.Fatalf("policy %s null comparison = %v for parameters %v", policy.Name, got, parameters)
+			}
+		}
+	}
+}
+
+func TestConstraintParametersExpressionSize(t *testing.T) {
+	const limit = 100000
+	env := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()).StoredExpressionsEnv()
+	overhead := utf8.RuneCountInString(`dyn({"value": dyn("")})`)
+	for _, piece := range []string{"x", "\u00e9", "\"", "\n", "\u0000"} {
+		encoded, err := json.Marshal(piece)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expansion := utf8.RuneCount(encoded) - 2
+		for _, delta := range []int{-1, 0, 1} {
+			t.Run(fmt.Sprintf("%q/%d", piece, delta), func(t *testing.T) {
+				payloadSize := limit + delta - overhead
+				value := strings.Repeat(piece, payloadSize/expansion) + strings.Repeat("x", payloadSize%expansion)
+				constraint := &unstructured.Unstructured{Object: map[string]interface{}{
+					"spec": map[string]interface{}{"parameters": map[string]interface{}{"value": value}},
+				}}
+				expression, err := constraintParametersExpression(constraint)
+				if delta > 0 {
+					if err == nil || !strings.Contains(err.Error(), "spec.parameters") || !strings.Contains(err.Error(), "100000") || expression != "" {
+						t.Fatalf("oversized parameters must return an actionable error, got %v", err)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if size := utf8.RuneCountInString(expression); size != limit+delta {
+					t.Fatalf("generated expression has %d code points, want %d", size, limit+delta)
+				}
+				if _, issues := env.Compile(expression); issues.Err() != nil {
+					t.Fatal(issues.Err())
+				}
+			})
+		}
+	}
+}
+
+func TestConstraintToPolicyDefinitionOversizedParameters(t *testing.T) {
+	const expression = "variables.params.value.size() > 0"
+	template := newInlineTestTemplate(&schema.Source{Validations: []schema.Validation{{Expression: expression}}})
+	constraint := newTestConstraint("deny", nil, nil, &unstructured.Unstructured{Object: map[string]interface{}{
+		"spec": map[string]interface{}{"parameters": map[string]interface{}{"value": strings.Repeat("x", 100001)}},
+	}})
+	shared, err := TemplateToPolicyDefinition(template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !evaluateInlinePolicyExpression(t, shared, expression, constraint) {
+		t.Fatal("shared policies must continue to support large parameter values")
+	}
+	inlined, err := ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, nil, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "spec.parameters") || inlined != nil {
+		t.Fatalf("oversized parameters must not produce a policy: %v", err)
 	}
 }
 
@@ -90,14 +181,18 @@ func TestCompactParametersExpression(t *testing.T) {
 			if err != nil || result.Value() != true {
 				t.Fatalf("encoded values differ: %v (%v)", result, err)
 			}
-			if len(compact) > len(original) {
+			if len(compact) > len("dyn("+original+")") {
 				t.Fatal("compaction increased expression size")
 			}
-			if compact != original {
-				parsed, issues := env.Compile(compact)
-				if issues.Err() != nil || !parsed.OutputType().IsExactType(celgo.DynType) {
-					t.Fatalf("compacted root must preserve dynamic typing: %v", issues.Err())
-				}
+			parsed, issues = env.Compile(compact)
+			if issues.Err() != nil {
+				t.Fatal(issues.Err())
+			}
+			if !parsed.OutputType().IsExactType(celgo.DynType) {
+				t.Fatalf("compacted root must preserve dynamic typing, got %v", parsed.OutputType())
+			}
+			if _, issues := env.Compile("(" + compact + ") != null"); issues.Err() != nil {
+				t.Fatalf("parameter null comparison must compile: %v", issues.Err())
 			}
 		})
 	}

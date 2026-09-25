@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/antlr4-go/antlr/v4"
 	celgo "github.com/google/cel-go/cel"
@@ -26,6 +27,7 @@ var ErrDirectParameterReference = errors.New("direct params references are not s
 const (
 	celTrueLiteral               = "true"
 	matchExcludedNamespacesField = "excludedNamespaces"
+	maxParameterExpressionSize   = 100000
 )
 
 func constraintParametersExpression(constraint *unstructured.Unstructured) (string, error) {
@@ -36,7 +38,14 @@ func constraintParametersExpression(constraint *unstructured.Unstructured) (stri
 	if !found || parameters == nil {
 		return "dyn(null)", nil
 	}
-	return compactParametersExpression(parameters)
+	expression, err := compactParametersExpression(parameters)
+	if err != nil {
+		return "", err
+	}
+	if size := utf8.RuneCountInString(expression); size > maxParameterExpressionSize {
+		return "", fmt.Errorf("spec.parameters expands to %d Unicode code points in the generated CEL expression, exceeding the %d limit; reduce parameters or use --vap-generation-mode=template", size, maxParameterExpressionSize)
+	}
+	return expression, nil
 }
 
 func constraintMatchInputExpression(constraint *unstructured.Unstructured) (string, error) {
