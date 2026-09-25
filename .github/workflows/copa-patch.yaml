@@ -199,8 +199,8 @@ jobs:
           pushd "${dir}"
           base="https://github.com/project-copacetic/copacetic/releases/download/v${COPA_VERSION}"
           tarball="copa_${COPA_VERSION}_linux_amd64.tar.gz"
-          wget -q "${base}/${tarball}" "${base}/copacetic_checksums.txt"
-          grep " ${tarball}\$" copacetic_checksums.txt | sha256sum -c -
+          wget -q "${base}/${tarball}"
+          echo "cff3fe9320f3bd24bafcfd0ce877ef57e23acad0836da0ac6c253919f71c9cad  ${tarball}" | sha256sum -c -
           tar zxf "${tarball}"
           echo "${dir}" >> "$GITHUB_PATH"
           popd

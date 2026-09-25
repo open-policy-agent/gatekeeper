@@ -4,7 +4,7 @@
   // Routine dependency updates on the default branch; security-only fixes on the maintained
   // release branches.
 
-  // Confine routine PRs to Monday morning (UTC). Security fixes ignore `schedule` and always open.
+  // Confine routine PRs to Monday morning (UTC). Security fixes ignore `schedule`.
   schedule: ["* 6-11 * * 1"],
 
   enabledManagers: ["npm", "github-actions", "gomod", "dockerfile"],
@@ -18,8 +18,8 @@
   minimumReleaseAgeBehaviour: "timestamp-optional", // don't stall versions that lack a release timestamp
   postUpdateOptions: ["gomodTidy"],  // run `go mod tidy` after gomod changes
   dependencyDashboard: true,         // tracking issue for pending updates
-  // Observation mode while Dependabot still runs: Renovate lists updates on the dashboard but opens
-  // no PRs (no duplicates). Remove with dependabot.yml so Renovate starts opening PRs automatically.
+  // Observation mode while Dependabot still runs: Renovate lists new updates for dashboard approval.
+  // Remove both dependencyDashboardApproval settings with dependabot.yml at cutover.
   dependencyDashboardApproval: true,
 
   labels: ["dependencies"],
@@ -34,6 +34,7 @@
   osvVulnerabilityAlerts: true,
   vulnerabilityAlerts: {
     enabled: true,
+    dependencyDashboardApproval: true,
     vulnerabilityFixStrategy: "lowest", // take the earliest fixed version
     addLabels: ["security"],
   },
@@ -80,7 +81,7 @@
       enabled: true,
     },
     {
-      // Disable routine updates on release branches; security fixes still open via `force`.
+      // Disable routine updates on release branches; security fixes remain eligible via `force`.
       matchBaseBranches: ["/^release-3\\.\\d+$/"],
       matchUpdateTypes: [
         "major",
