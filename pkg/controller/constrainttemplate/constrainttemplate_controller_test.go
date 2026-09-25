@@ -67,10 +67,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -166,12 +169,13 @@ func newUnitReconciler(t *testing.T, objects ...client.Object) (*ReconcileConstr
 	cancelTracker()
 	require.NoError(t, tracker.Run(trackerCtx))
 	return &ReconcileConstraintTemplate{
-		Client:   trackingClient,
-		scheme:   scheme,
-		cfClient: cfClient,
-		metrics:  newStatsReporter(),
-		tracker:  tracker,
-		getPod:   func(context.Context) (*corev1.Pod, error) { return pod, nil },
+		Client:    trackingClient,
+		apiReader: trackingClient,
+		scheme:    scheme,
+		cfClient:  cfClient,
+		metrics:   newStatsReporter(),
+		tracker:   tracker,
+		getPod:    func(context.Context) (*corev1.Pod, error) { return pod, nil },
 	}, trackingClient
 }
 
@@ -2462,6 +2466,506 @@ func TestManageVAP_VAPAPIDisabledPreservesRetry(t *testing.T) {
 	if trackingClient.updates != 0 || trackingClient.creates != 0 {
 		t.Fatalf("expected manageVAP to leave persistence to Reconcile, got %d creates and %d updates", trackingClient.creates, trackingClient.updates)
 	}
+}
+
+func TestManageVAP_RefreshesExistingSharedPolicy(t *testing.T) {
+	for _, groupVersion := range []schema.GroupVersion{admissionregistrationv1.SchemeGroupVersion, admissionregistrationv1beta1.SchemeGroupVersion} {
+		t.Run(groupVersion.Version, func(t *testing.T) {
+			setVAPTestGlobals(t, &groupVersion)
+			originalMode := constraint.GetVAPGenerationMode()
+			require.NoError(t, constraint.SetVAPGenerationMode(constraint.VAPGenerationModeTemplate))
+			t.Cleanup(func() { require.NoError(t, constraint.SetVAPGenerationMode(originalMode)) })
+			ct := makeReconcileConstraintTemplateForVap("Refresh", ptr.To(true), nil)
+			ct.SetUID("current-template")
+			ct.SetGeneration(2)
+			scheme := runtime.NewScheme()
+			require.NoError(t, v1beta1.AddToScheme(scheme))
+			require.NoError(t, admissionregistrationv1.AddToScheme(scheme))
+			require.NoError(t, admissionregistrationv1beta1.AddToScheme(scheme))
+			unversioned := &templates.ConstraintTemplate{}
+			require.NoError(t, scheme.Convert(ct, unversioned, nil))
+			reconciler := &ReconcileConstraintTemplate{scheme: scheme, metrics: newStatsReporter()}
+			desired, err := reconciler.transformTemplateToVAP(unversioned, getVAPName(ct.GetName()), logger)
+			require.NoError(t, err)
+			stale := desired.DeepCopy()
+			stale.Spec.Validations[0].Expression = "false"
+			current, err := getRunTimeVAP(&groupVersion, stale, nil)
+			require.NoError(t, err)
+			current.SetUID("shared-policy")
+			current.SetResourceVersion("1")
+			require.NoError(t, controllerutil.SetControllerReference(ct, current, scheme))
+			baseClient := crfake.NewClientBuilder().WithScheme(scheme).WithObjects(current).Build()
+			reconciler.Client = baseClient
+			reconciler.apiReader = baseClient
+			status := &statusv1beta1.ConstraintTemplatePodStatus{}
+			require.NoError(t, reconciler.manageVAP(context.Background(), ct, unversioned, status, logger, true))
+			stored, err := vapForVersion(&groupVersion)
+			require.NoError(t, err)
+			require.NoError(t, baseClient.Get(context.Background(), client.ObjectKeyFromObject(current), stored))
+			switch policy := stored.(type) {
+			case *admissionregistrationv1.ValidatingAdmissionPolicy:
+				require.Equal(t, desired.Spec.Validations[0].Expression, policy.Spec.Validations[0].Expression)
+			case *admissionregistrationv1beta1.ValidatingAdmissionPolicy:
+				require.Equal(t, desired.Spec.Validations[0].Expression, policy.Spec.Validations[0].Expression)
+			default:
+				t.Fatalf("unexpected policy %T", stored)
+			}
+			require.Equal(t, current.GetUID(), stored.GetUID())
+			require.NotEqual(t, current.GetResourceVersion(), stored.GetResourceVersion())
+			require.True(t, metav1.IsControlledBy(stored, ct))
+			require.Equal(t, ct.GetGeneration(), status.Status.VAPGenerationStatus.ObservedGeneration)
+		})
+	}
+}
+
+func TestManageVAP_PerConstraintModeDoesNotCreateTemplateVAP(t *testing.T) {
+	setConstraintVAPGenerationMode(t)
+	setVAPTestGlobals(t, &admissionregistrationv1.SchemeGroupVersion)
+
+	ct := makeReconcileConstraintTemplateForVap("PerConstraint", ptr.To(true), nil)
+	ct.SetUID("template-uid")
+	unversionedCT := &templates.ConstraintTemplate{}
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1beta1.AddToScheme(scheme))
+	require.NoError(t, admissionregistrationv1.AddToScheme(scheme))
+	require.NoError(t, scheme.Convert(ct, unversionedCT, nil))
+
+	baseClient := crfake.NewClientBuilder().WithScheme(scheme).Build()
+	r := &ReconcileConstraintTemplate{
+		Client:    baseClient,
+		apiReader: baseClient,
+		scheme:    scheme,
+		metrics:   newStatsReporter(),
+	}
+	r.vapCleanup = newTemplateVAPCleanup(r, admissionregistrationv1.SchemeGroupVersion)
+	t.Cleanup(r.vapCleanup.queue.ShutDown)
+	status := &statusv1beta1.ConstraintTemplatePodStatus{
+		Status: statusv1beta1.ConstraintTemplatePodStatusStatus{
+			VAPGenerationStatus: &statusv1beta1.VAPGenerationStatus{State: GeneratedVAPState},
+		},
+	}
+	require.NoError(t, r.manageVAP(context.Background(), ct, unversionedCT, status, logger, true))
+
+	policy := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+	err := baseClient.Get(context.Background(), types.NamespacedName{Name: getVAPName(ct.GetName())}, policy)
+	require.True(t, apierrors.IsNotFound(err))
+	require.Nil(t, status.Status.VAPGenerationStatus)
+}
+
+func TestManageVAP_PerConstraintModeRetainsReferencedTemplateVAP(t *testing.T) {
+	setConstraintVAPGenerationMode(t)
+	setVAPTestGlobals(t, &admissionregistrationv1.SchemeGroupVersion)
+
+	ct, unversionedCT, policy, scheme := makeTemplateVAPObjects(t)
+	binding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "binding"},
+		Spec: admissionregistrationv1.ValidatingAdmissionPolicyBindingSpec{
+			PolicyName: policy.GetName(),
+		},
+	}
+	cachedClient := crfake.NewClientBuilder().WithScheme(scheme).WithObjects(policy.DeepCopy()).WithIndex(&admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, vapBindingPolicyNameField, vapBindingPolicyNames).Build()
+	apiReader := crfake.NewClientBuilder().WithScheme(scheme).WithObjects(ct, policy, binding).Build()
+	r := &ReconcileConstraintTemplate{Client: cachedClient, apiReader: apiReader, scheme: scheme, metrics: newStatsReporter()}
+	r.vapCleanup = newTemplateVAPCleanup(r, admissionregistrationv1.SchemeGroupVersion)
+	t.Cleanup(r.vapCleanup.queue.ShutDown)
+	require.NoError(t, r.manageVAP(context.Background(), ct, unversionedCT, &statusv1beta1.ConstraintTemplatePodStatus{}, logger, true))
+	r.vapCleanup.processNextBatch(context.Background())
+
+	require.NoError(t, cachedClient.Get(context.Background(), client.ObjectKeyFromObject(policy), &admissionregistrationv1.ValidatingAdmissionPolicy{}))
+}
+
+func TestManageVAP_PerConstraintModeDeletesUnreferencedTemplateVAP(t *testing.T) {
+	setConstraintVAPGenerationMode(t)
+	setVAPTestGlobals(t, &admissionregistrationv1.SchemeGroupVersion)
+
+	ct, unversionedCT, policy, scheme := makeTemplateVAPObjects(t)
+	baseClient := crfake.NewClientBuilder().WithScheme(scheme).WithObjects(ct, policy).WithIndex(&admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, vapBindingPolicyNameField, vapBindingPolicyNames).Build()
+	r := &ReconcileConstraintTemplate{Client: baseClient, apiReader: baseClient, scheme: scheme, metrics: newStatsReporter()}
+	r.vapCleanup = newTemplateVAPCleanup(r, admissionregistrationv1.SchemeGroupVersion)
+	t.Cleanup(r.vapCleanup.queue.ShutDown)
+	require.NoError(t, r.manageVAP(context.Background(), ct, unversionedCT, &statusv1beta1.ConstraintTemplatePodStatus{}, logger, true))
+	require.NoError(t, baseClient.Get(context.Background(), client.ObjectKeyFromObject(policy), &admissionregistrationv1.ValidatingAdmissionPolicy{}))
+	r.vapCleanup.processNextBatch(context.Background())
+
+	err := baseClient.Get(context.Background(), client.ObjectKeyFromObject(policy), &admissionregistrationv1.ValidatingAdmissionPolicy{})
+	require.True(t, apierrors.IsNotFound(err))
+}
+
+type recordingDeleteClient struct {
+	client.Client
+	options []client.DeleteOptions
+}
+
+func (recorder *recordingDeleteClient) Delete(ctx context.Context, object client.Object, options ...client.DeleteOption) error {
+	deleteOptions := client.DeleteOptions{}
+	deleteOptions.ApplyOptions(options)
+	recorder.options = append(recorder.options, deleteOptions)
+	return recorder.Client.Delete(ctx, object, options...)
+}
+
+func TestDeleteTemplateVAPPreservesReplacement(t *testing.T) {
+	const unchanged = "unchanged"
+	for _, groupVersion := range []schema.GroupVersion{admissionregistrationv1.SchemeGroupVersion, admissionregistrationv1beta1.SchemeGroupVersion} {
+		for _, changed := range []string{"replacement", "ownership", unchanged} {
+			t.Run(fmt.Sprintf("%s/%s", groupVersion.Version, changed), func(t *testing.T) {
+				template, _, policy, scheme := makeTemplateVAPObjects(t)
+				require.NoError(t, admissionregistrationv1beta1.AddToScheme(scheme))
+				cached, err := vapForVersion(&groupVersion)
+				require.NoError(t, err)
+				cached.SetName(policy.GetName())
+				cached.SetUID("original-policy")
+				cached.SetResourceVersion("1")
+				cached.SetOwnerReferences(policy.GetOwnerReferences())
+				live, ok := cached.DeepCopyObject().(client.Object)
+				require.True(t, ok)
+				if changed != unchanged {
+					live.SetResourceVersion("2")
+					owners := live.GetOwnerReferences()
+					owners[0].UID = "new-template"
+					live.SetOwnerReferences(owners)
+				}
+				if changed == "replacement" {
+					live.SetUID("replacement-policy")
+				}
+				baseClient := crfake.NewClientBuilder().WithScheme(scheme).WithObjects(live).Build()
+				recorder := &recordingDeleteClient{Client: baseClient}
+				reconciler := &ReconcileConstraintTemplate{Client: recorder}
+				err = reconciler.deleteVAPIfOwned(context.Background(), cached, template)
+				if changed == unchanged {
+					require.NoError(t, err)
+				} else {
+					require.True(t, apierrors.IsConflict(err), "expected delete precondition conflict: %v", err)
+				}
+				require.Len(t, recorder.options, 1)
+				preconditions := recorder.options[0].Preconditions
+				require.NotNil(t, preconditions)
+				require.Equal(t, ptr.To(cached.GetUID()), preconditions.UID)
+				require.Equal(t, ptr.To(cached.GetResourceVersion()), preconditions.ResourceVersion)
+				stored, ok := live.DeepCopyObject().(client.Object)
+				require.True(t, ok)
+				getErr := baseClient.Get(context.Background(), client.ObjectKeyFromObject(live), stored)
+				if changed == unchanged {
+					require.True(t, apierrors.IsNotFound(getErr))
+					return
+				}
+				require.NoError(t, getErr)
+				require.NoError(t, reconciler.deleteVAPIfOwned(context.Background(), stored, template))
+				require.Len(t, recorder.options, 1, "retry must skip a new owner's policy")
+			})
+		}
+	}
+}
+
+func TestVAPReferencedByBinding(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, admissionregistrationv1.AddToScheme(scheme))
+	require.NoError(t, admissionregistrationv1beta1.AddToScheme(scheme))
+	objects := []client.Object{
+		&admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: "v1-binding"},
+			Spec: admissionregistrationv1.ValidatingAdmissionPolicyBindingSpec{
+				PolicyName: "v1-policy",
+			},
+		},
+		&admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: "v1beta1-binding"},
+			Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+				PolicyName: "v1beta1-policy",
+			},
+		},
+	}
+	baseClient := crfake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).
+		WithIndex(&admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, vapBindingPolicyNameField, vapBindingPolicyNames).
+		WithIndex(&admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}, vapBindingPolicyNameField, vapBindingPolicyNames).Build()
+	r := &ReconcileConstraintTemplate{Client: baseClient, apiReader: baseClient}
+
+	tests := []struct {
+		name         string
+		groupVersion *schema.GroupVersion
+		policyName   string
+		want         bool
+	}{
+		{name: "v1 referenced", groupVersion: &admissionregistrationv1.SchemeGroupVersion, policyName: "v1-policy", want: true},
+		{name: "v1 unreferenced", groupVersion: &admissionregistrationv1.SchemeGroupVersion, policyName: "other", want: false},
+		{name: "v1beta1 referenced", groupVersion: &admissionregistrationv1beta1.SchemeGroupVersion, policyName: "v1beta1-policy", want: true},
+		{name: "v1beta1 unreferenced", groupVersion: &admissionregistrationv1beta1.SchemeGroupVersion, policyName: "other", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := r.vapsReferencedByBindings(context.Background(), tt.groupVersion, []string{tt.policyName})
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got.Has(tt.policyName))
+		})
+	}
+}
+
+type vapBindingListClient struct {
+	client.Client
+	listCalls   int
+	listErr     error
+	listOptions client.ListOptions
+	listPage    func(client.ObjectList, client.ListOptions) error
+}
+
+func (reader *vapBindingListClient) List(ctx context.Context, list client.ObjectList, options ...client.ListOption) error {
+	reader.listCalls++
+	reader.listOptions = *(&client.ListOptions{}).ApplyOptions(options)
+	if reader.listErr != nil {
+		return reader.listErr
+	}
+	if reader.listPage != nil {
+		return reader.listPage(list, reader.listOptions)
+	}
+	return reader.Client.List(ctx, list, options...)
+}
+
+func TestVAPReferencedByBindingCacheSafety(t *testing.T) {
+	for _, groupVersion := range []schema.GroupVersion{admissionregistrationv1.SchemeGroupVersion, admissionregistrationv1beta1.SchemeGroupVersion} {
+		for _, scenario := range []struct {
+			name            string
+			cachedReference bool
+			liveReference   bool
+			cacheError      bool
+			apiError        bool
+			want            bool
+			wantAPILists    int
+		}{
+			{name: "cached reference", cachedReference: true, liveReference: true, want: true},
+			{name: "cache missing reference", liveReference: true, want: true, wantAPILists: 1},
+			{name: "stale cached reference", cachedReference: true, want: true},
+			{name: "unreferenced", wantAPILists: 1},
+			{name: "cache error", cacheError: true},
+			{name: "API error", apiError: true, wantAPILists: 1},
+		} {
+			t.Run(groupVersion.Version+"/"+scenario.name, func(t *testing.T) {
+				scheme := runtime.NewScheme()
+				require.NoError(t, admissionregistrationv1.AddToScheme(scheme))
+				require.NoError(t, admissionregistrationv1beta1.AddToScheme(scheme))
+				prototype, err := vapBindingForVersion(&groupVersion)
+				require.NoError(t, err)
+				newBinding := func(policyName string) client.Object {
+					binding, ok := prototype.DeepCopyObject().(client.Object)
+					require.True(t, ok)
+					binding.SetName(policyName + "-binding")
+					switch typed := binding.(type) {
+					case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+						typed.Spec.PolicyName = policyName
+					case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding:
+						typed.Spec.PolicyName = policyName
+					}
+					return binding
+				}
+				cachedObjects := []client.Object{newBinding("unrelated")}
+				liveObjects := []client.Object{newBinding("unrelated")}
+				if scenario.cachedReference {
+					cachedObjects = append(cachedObjects, newBinding("wanted"))
+				}
+				if scenario.liveReference {
+					liveObjects = append(liveObjects, newBinding("wanted"))
+				}
+				cached := &vapBindingListClient{Client: crfake.NewClientBuilder().WithScheme(scheme).WithObjects(cachedObjects...).WithIndex(prototype, vapBindingPolicyNameField, vapBindingPolicyNames).Build()}
+				live := &vapBindingListClient{Client: crfake.NewClientBuilder().WithScheme(scheme).WithObjects(liveObjects...).Build()}
+				if scenario.cacheError {
+					cached.listErr = errors.New("cache read failed")
+				}
+				if scenario.apiError {
+					live.listErr = errors.New("API read failed")
+				}
+				reconciler := &ReconcileConstraintTemplate{Client: cached, apiReader: live}
+				got, err := reconciler.vapsReferencedByBindings(context.Background(), &groupVersion, []string{"wanted"})
+				require.Equal(t, scenario.cacheError || scenario.apiError, err != nil)
+				require.Equal(t, scenario.want, got.Has("wanted"))
+				require.Equal(t, 1, cached.listCalls)
+				require.Equal(t, scenario.wantAPILists, live.listCalls)
+				require.NotNil(t, cached.listOptions.FieldSelector)
+				require.Equal(t, "spec.policyName=wanted", cached.listOptions.FieldSelector.String())
+				require.Nil(t, live.listOptions.FieldSelector)
+			})
+		}
+	}
+}
+
+func TestVAPReferencedByBindingPagination(t *testing.T) {
+	for _, groupVersion := range []schema.GroupVersion{admissionregistrationv1.SchemeGroupVersion, admissionregistrationv1beta1.SchemeGroupVersion} {
+		for _, scenario := range []string{"later reference", "unreferenced", "page error"} {
+			t.Run(groupVersion.Version+"/"+scenario, func(t *testing.T) {
+				scheme := runtime.NewScheme()
+				require.NoError(t, admissionregistrationv1.AddToScheme(scheme))
+				require.NoError(t, admissionregistrationv1beta1.AddToScheme(scheme))
+				prototype, err := vapBindingForVersion(&groupVersion)
+				require.NoError(t, err)
+				cached := crfake.NewClientBuilder().WithScheme(scheme).WithIndex(prototype, vapBindingPolicyNameField, vapBindingPolicyNames).Build()
+				live := &vapBindingListClient{}
+				live.listPage = func(list client.ObjectList, options client.ListOptions) error {
+					require.Nil(t, options.FieldSelector)
+					require.EqualValues(t, vapBindingListPageSize, options.Limit)
+					policyName, next := "unrelated", "next-page"
+					if live.listCalls == 1 {
+						require.Empty(t, options.Continue)
+					} else {
+						require.Equal(t, 2, live.listCalls)
+						require.Equal(t, "next-page", options.Continue)
+						if scenario == "page error" {
+							return errors.New("page read failed")
+						}
+						next = ""
+						if scenario == "later reference" {
+							policyName = "wanted"
+						}
+					}
+					switch typed := list.(type) {
+					case *admissionregistrationv1.ValidatingAdmissionPolicyBindingList:
+						typed.Items = []admissionregistrationv1.ValidatingAdmissionPolicyBinding{{Spec: admissionregistrationv1.ValidatingAdmissionPolicyBindingSpec{PolicyName: policyName}}}
+						typed.SetContinue(next)
+					case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingList:
+						typed.Items = []admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{{Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{PolicyName: policyName}}}
+						typed.SetContinue(next)
+					default:
+						t.Fatalf("unexpected binding list %T", list)
+					}
+					return nil
+				}
+				reconciler := &ReconcileConstraintTemplate{Client: cached, apiReader: live}
+				got, err := reconciler.vapsReferencedByBindings(context.Background(), &groupVersion, []string{"wanted"})
+				require.Equal(t, scenario == "page error", err != nil)
+				require.Equal(t, scenario == "later reference", got.Has("wanted"))
+				require.Equal(t, 2, live.listCalls)
+			})
+		}
+	}
+}
+
+func TestVAPReferencesShareOneScan(t *testing.T) {
+	for _, groupVersion := range []schema.GroupVersion{admissionregistrationv1.SchemeGroupVersion, admissionregistrationv1beta1.SchemeGroupVersion} {
+		t.Run(groupVersion.Version, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			require.NoError(t, admissionregistrationv1.AddToScheme(scheme))
+			require.NoError(t, admissionregistrationv1beta1.AddToScheme(scheme))
+			prototype, err := vapBindingForVersion(&groupVersion)
+			require.NoError(t, err)
+			cached := crfake.NewClientBuilder().WithScheme(scheme).WithIndex(prototype, vapBindingPolicyNameField, vapBindingPolicyNames).Build()
+			live := &vapBindingListClient{}
+			live.listPage = func(list client.ObjectList, options client.ListOptions) error {
+				require.Nil(t, options.FieldSelector)
+				require.EqualValues(t, vapBindingListPageSize, options.Limit)
+				policyName, next := "first", "second-page"
+				if live.listCalls == 2 {
+					require.Equal(t, "second-page", options.Continue)
+					policyName, next = "last", ""
+				}
+				switch typed := list.(type) {
+				case *admissionregistrationv1.ValidatingAdmissionPolicyBindingList:
+					typed.Items = []admissionregistrationv1.ValidatingAdmissionPolicyBinding{{Spec: admissionregistrationv1.ValidatingAdmissionPolicyBindingSpec{PolicyName: policyName}}}
+				case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingList:
+					typed.Items = []admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{{Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{PolicyName: policyName}}}
+				}
+				list.SetContinue(next)
+				return nil
+			}
+			reconciler := &ReconcileConstraintTemplate{Client: cached, apiReader: live}
+			policies := []string{"first", "last"}
+			for index := 0; index < 50; index++ {
+				policies = append(policies, fmt.Sprintf("unreferenced-%d", index))
+			}
+			references, err := reconciler.vapsReferencedByBindings(context.Background(), &groupVersion, policies)
+			require.NoError(t, err)
+			require.Equal(t, sets.New("first", "last"), references)
+			require.Equal(t, 2, live.listCalls, "one paginated scan must serve the whole batch")
+		})
+	}
+}
+
+func TestConstraintTemplateForVAPBinding(t *testing.T) {
+	controller := true
+	binding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{
+		Name: "binding",
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: statusv1beta1.ConstraintsGroup + "/v1beta1",
+			Kind:       "K8sRequiredLabels",
+			Name:       "constraint",
+			Controller: &controller,
+		}},
+	}}
+
+	binding.Spec.PolicyName = transform.GetTemplateVAPName("K8sRequiredLabels")
+	requests := constraintTemplateForVAPBinding(context.Background(), binding)
+	require.Equal(t, []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "k8srequiredlabels"}}}, requests)
+
+	for index := range 100 {
+		binding.Spec.PolicyName = transform.GetConstraintVAPName("K8sRequiredLabels", fmt.Sprintf("constraint-%d", index))
+		require.Empty(t, constraintTemplateForVAPBinding(context.Background(), binding))
+	}
+	betaBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: *binding.ObjectMeta.DeepCopy(),
+		Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+			PolicyName: transform.GetTemplateVAPName("K8sRequiredLabels"),
+		},
+	}
+	require.Equal(t, requests, constraintTemplateForVAPBinding(context.Background(), betaBinding))
+	betaBinding.Spec.PolicyName = transform.GetConstraintVAPName("K8sRequiredLabels", "constraint")
+	require.Empty(t, constraintTemplateForVAPBinding(context.Background(), betaBinding))
+
+	binding.Spec.PolicyName = transform.GetTemplateVAPName("K8sRequiredLabels")
+	binding.OwnerReferences[0].APIVersion = "apps/v1"
+	require.Empty(t, constraintTemplateForVAPBinding(context.Background(), binding))
+}
+
+func TestConstraintTemplateForVAPBindingUpdate(t *testing.T) {
+	for _, groupVersion := range []*schema.GroupVersion{&admissionregistrationv1.SchemeGroupVersion, &admissionregistrationv1beta1.SchemeGroupVersion} {
+		t.Run(groupVersion.Version, func(t *testing.T) {
+			for _, transition := range []struct {
+				name       string
+				oldPolicy  string
+				newPolicy  string
+				wantEvents int
+			}{
+				{name: "forward", oldPolicy: "gatekeeper-testkind", newPolicy: "gatekeeper-testkind-constraint-vap", wantEvents: 1},
+				{name: "rollback", oldPolicy: "gatekeeper-testkind-constraint-vap", newPolicy: "gatekeeper-testkind", wantEvents: 1},
+				{name: "specialized update", oldPolicy: "gatekeeper-testkind-constraint-vap", newPolicy: "gatekeeper-testkind-constraint-vap", wantEvents: 0},
+			} {
+				t.Run(transition.name, func(t *testing.T) {
+					makeBinding := func(policy string) client.Object {
+						binding, err := vapBindingForVersion(groupVersion)
+						require.NoError(t, err)
+						binding.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: statusv1beta1.ConstraintsGroup + "/v1beta1", Kind: "TestKind", Name: "constraint", Controller: ptr.To(true)}})
+						switch binding := binding.(type) {
+						case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+							binding.Spec.PolicyName = policy
+						case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding:
+							binding.Spec.PolicyName = policy
+						}
+						return binding
+					}
+					queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+					t.Cleanup(queue.ShutDown)
+					mapper := handler.EnqueueRequestsFromMapFunc(constraintTemplateForVAPBinding)
+					mapper.Update(context.Background(), event.UpdateEvent{ObjectOld: makeBinding(transition.oldPolicy), ObjectNew: makeBinding(transition.newPolicy)}, queue)
+					require.Equal(t, transition.wantEvents, queue.Len())
+				})
+			}
+		})
+	}
+}
+
+func setConstraintVAPGenerationMode(t *testing.T) {
+	t.Helper()
+	original := constraint.GetVAPGenerationMode()
+	require.NoError(t, constraint.SetVAPGenerationMode(constraint.VAPGenerationModeConstraint))
+	t.Cleanup(func() { require.NoError(t, constraint.SetVAPGenerationMode(original)) })
+}
+
+func makeTemplateVAPObjects(t *testing.T) (*v1beta1.ConstraintTemplate, *templates.ConstraintTemplate, *admissionregistrationv1.ValidatingAdmissionPolicy, *runtime.Scheme) {
+	t.Helper()
+	ct := makeReconcileConstraintTemplateForVap("PerConstraint", ptr.To(true), nil)
+	ct.SetUID("template-uid")
+	unversionedCT := &templates.ConstraintTemplate{}
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1beta1.AddToScheme(scheme))
+	require.NoError(t, admissionregistrationv1.AddToScheme(scheme))
+	require.NoError(t, scheme.Convert(ct, unversionedCT, nil))
+	policy := &admissionregistrationv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: getVAPName(ct.GetName())}}
+	require.NoError(t, controllerutil.SetControllerReference(ct, policy, scheme))
+	return ct, unversionedCT, policy, scheme
 }
 
 func TestV1beta1ToV1PreservesResourceRuleScope(t *testing.T) {
