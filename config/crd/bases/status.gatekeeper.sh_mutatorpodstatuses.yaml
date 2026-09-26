@@ -37,20 +37,26 @@ spec:
           metadata:
             type: object
           status:
-            description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+            description: status is the observed state of the mutator for this pod.
             properties:
               enforced:
+                description: enforced indicates whether the mutator is currently enforced
+                  on this pod.
                 type: boolean
               errors:
+                description: errors lists any errors encountered while adding the
+                  mutator on this pod.
                 items:
                   description: MutatorError represents a single error caught while
                     adding a mutator to a system.
                   properties:
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                     type:
                       description: |-
-                        Type indicates a specific class of error for use by controller code.
+                        type indicates a specific class of error for use by controller code.
                         If not present, the error should be treated as not matching any known type.
                       type: string
                   required:
@@ -58,17 +64,25 @@ spec:
                   type: object
                 type: array
               id:
+                description: id is the name of the pod that generated this status.
                 type: string
               mutatorUID:
                 description: |-
-                  Storing the mutator UID allows us to detect drift, such as
+                  mutatorUID is the UID of the mutator this status reports on. Storing the
+                  mutator UID allows us to detect drift, such as
                   when a mutator has been recreated after its CRD was deleted
                   out from under it, interrupting the watch
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the mutator that was last processed
+                  by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
