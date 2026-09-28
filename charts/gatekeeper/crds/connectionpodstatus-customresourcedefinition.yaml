@@ -19,7 +19,8 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ConnectionPodStatus is the Schema for the connectionpodstatuses API.
+        description: ConnectionPodStatus is the Schema for the connectionpodstatuses
+          API.
         properties:
           apiVersion:
             description: |-
@@ -42,7 +43,8 @@ spec:
             description: No spec field is defined here, as this is a status-only resource.
             properties:
               active:
-                description: Indicator for alive connection with at least one successful publish
+                description: Indicator for alive connection with at least one successful
+                  publish
                 type: boolean
               connectionUID:
                 description: |-
@@ -63,7 +65,8 @@ spec:
                   type: object
                 type: array
               id:
-                description: ID is the unique identifier for the pod that wrote the status
+                description: ID is the unique identifier for the pod that wrote the
+                  status
                 type: string
               observedGeneration:
                 format: int64

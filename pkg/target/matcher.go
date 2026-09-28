@@ -14,12 +14,13 @@ var _ constraints.Matcher = &Matcher{}
 
 // Matcher implements constraint.Matcher.
 type Matcher struct {
-	match *match.Match
-	cache *nsCache
+	match         *match.Match
+	compiledMatch *match.CompiledMatch
+	cache         *nsCache
 }
 
 func (m *Matcher) Match(review interface{}) (bool, error) {
-	if m.match == nil {
+	if m.match == nil && m.compiledMatch == nil {
 		// No-op if Match unspecified.
 		return true, nil
 	}
@@ -34,8 +35,8 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 		return false, err
 	}
 
-	if (ns == nil) && (gkReq.Namespace != "") {
-		ns = m.cache.GetNamespace(gkReq.Namespace)
+	if ns == nil {
+		ns = gkReq.getNamespace(m.cache)
 	}
 
 	return matchAny(m, ns, gkReq.source, obj, oldObj)
@@ -54,7 +55,15 @@ func matchAny(m *Matcher, ns *corev1.Namespace, source types.SourceType, objs ..
 			Namespace: ns,
 			Source:    source,
 		}
-		matched, err := match.Matches(m.match, t)
+		compiledMatch := m.compiledMatch
+		if compiledMatch == nil {
+			var err error
+			compiledMatch, err = match.Compile(m.match)
+			if err != nil {
+				return false, fmt.Errorf("%w: %v :%w", ErrMatching, obj.GetName(), err)
+			}
+		}
+		matched, err := compiledMatch.Matches(t)
 		if err != nil {
 			return false, fmt.Errorf("%w: %v :%w", ErrMatching, obj.GetName(), err)
 		}
@@ -71,23 +80,40 @@ func matchAny(m *Matcher, ns *corev1.Namespace, source types.SourceType, objs ..
 }
 
 func gkReviewToObject(req *gkReview) (*unstructured.Unstructured, *unstructured.Unstructured, *corev1.Namespace, error) {
-	var obj *unstructured.Unstructured
-	if req.Object.Raw != nil {
-		obj = &unstructured.Unstructured{}
-		err := obj.UnmarshalJSON(req.Object.Raw)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("%w: failed to unmarshal gkReview object %s", ErrRequestObject, string(req.Object.Raw))
+	req.parsedObjectsOnce.Do(func() {
+		req.parsedObjects.object, req.parsedObjects.err = unmarshalReviewObject("object", req.Object.Raw)
+		if req.parsedObjects.err != nil {
+			return
 		}
+
+		req.parsedObjects.oldObject, req.parsedObjects.err = unmarshalReviewObject("oldObject", req.OldObject.Raw)
+	})
+
+	return req.parsedObjects.object, req.parsedObjects.oldObject, req.namespace, req.parsedObjects.err
+}
+
+func unmarshalReviewObject(name string, raw []byte) (*unstructured.Unstructured, error) {
+	if raw == nil {
+		return nil, nil
 	}
 
-	var oldObj *unstructured.Unstructured
-	if req.OldObject.Raw != nil {
-		oldObj = &unstructured.Unstructured{}
-		err := oldObj.UnmarshalJSON(req.OldObject.Raw)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("%w: failed to unmarshal gkReview oldObject %s", ErrRequestObject, string(req.OldObject.Raw))
-		}
+	obj := &unstructured.Unstructured{}
+	if err := obj.UnmarshalJSON(raw); err != nil {
+		return nil, fmt.Errorf("%w: failed to unmarshal gkReview %s %s", ErrRequestObject, name, string(raw))
 	}
 
-	return obj, oldObj, req.namespace, nil
+	return obj, nil
+}
+
+func (g *gkReview) getNamespace(cache *nsCache) *corev1.Namespace {
+	if g.namespace != nil || g.Namespace == "" {
+		return g.namespace
+	}
+
+	g.cachedNamespaceOnce.Do(func() {
+		if cache != nil {
+			g.cachedNamespace = cache.GetNamespace(g.Namespace)
+		}
+	})
+	return g.cachedNamespace
 }

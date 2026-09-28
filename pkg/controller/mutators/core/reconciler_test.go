@@ -19,6 +19,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 	mutationschema "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/schema"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -82,6 +83,8 @@ type fakeClient struct {
 	client.Client
 
 	objects map[types.NamespacedName]*objectOrErr
+	creates int
+	updates int
 }
 
 func newFakeClient() *fakeClient {
@@ -124,6 +127,7 @@ func (c *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Obj
 }
 
 func (c *fakeClient) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
+	c.creates++
 	original, originalExists := c.objects[toKey(obj)]
 	if originalExists {
 		err := original.error()
@@ -141,6 +145,7 @@ func (c *fakeClient) Create(_ context.Context, obj client.Object, _ ...client.Cr
 }
 
 func (c *fakeClient) Update(_ context.Context, obj client.Object, _ ...client.UpdateOption) error {
+	c.updates++
 	original, originalExists := c.objects[toKey(obj)]
 	if originalExists {
 		err := original.error()
@@ -231,8 +236,14 @@ func (m *fakeMutator) DeepCopy() mutationtypes.Mutator {
 	}
 }
 
-func (m *fakeMutator) SchemaBindings() []schema.GroupVersionKind {
-	return []schema.GroupVersionKind{rbacv1.SchemeGroupVersion.WithKind("Role")}
+func (m *fakeMutator) SchemaBindings() []mutationschema.Binding {
+	roleGVK := rbacv1.SchemeGroupVersion.WithKind("Role")
+	return []mutationschema.Binding{
+		{GVK: roleGVK, Operation: admissionv1.Create},
+		{GVK: roleGVK, Operation: admissionv1.Update},
+		{GVK: roleGVK, Operation: admissionv1.Delete},
+		{GVK: roleGVK, Operation: admissionv1.Connect},
+	}
 }
 
 func (m *fakeMutator) TerminalType() parser.NodeType {
@@ -367,6 +378,90 @@ func (e *fakeEvents) Get() mutationschema.IDSet {
 func now() *metav1.Time {
 	t := metav1.NewTime(time.Now())
 	return &t
+}
+
+func TestReconcilerUpdateStatusSkipsStableSecondUpdate(t *testing.T) {
+	const mutatorName = "bar"
+
+	c := newFakeClient()
+	r := newFakeReconciler(t, c, nil)
+	ctx := context.Background()
+	id := mutationtypes.ID{Group: statusv1beta1.MutationsGroup, Kind: r.gvk.Kind, Name: mutatorName}
+
+	if err := r.updateStatus(ctx, id,
+		setID("mutator-uid"), setGeneration(1), setEnforced(true), setErrors(nil)); err != nil {
+		t.Fatal(err)
+	}
+	if c.creates != 1 {
+		t.Fatalf("got creates = %d, want 1", c.creates)
+	}
+	if c.updates != 1 {
+		t.Fatalf("got updates = %d, want 1", c.updates)
+	}
+
+	c.creates = 0
+	c.updates = 0
+	if err := r.updateStatus(ctx, id,
+		setID("mutator-uid"), setGeneration(1), setEnforced(true), setErrors(nil)); err != nil {
+		t.Fatal(err)
+	}
+	if c.creates != 0 {
+		t.Fatalf("got creates = %d, want 0", c.creates)
+	}
+	if c.updates != 0 {
+		t.Fatalf("got updates = %d, want 0", c.updates)
+	}
+}
+
+func TestReconcilerUpdateStatusRepairsMetadata(t *testing.T) {
+	const mutatorName = "bar"
+
+	c := newFakeClient()
+	r := newFakeReconciler(t, c, nil)
+	ctx := context.Background()
+	id := mutationtypes.ID{Group: statusv1beta1.MutationsGroup, Kind: r.gvk.Kind, Name: mutatorName}
+	pod, err := r.getPod(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := statusv1beta1.NewMutatorStatusForPod(pod, id, r.scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status.SetLabels(nil)
+	status.SetOwnerReferences(nil)
+	status.Status.MutatorUID = "mutator-uid"
+	status.Status.Enforced = true
+	status.Status.ObservedGeneration = 1
+	c.objects[toKey(status)] = orObject(status)
+
+	if err := r.updateStatus(ctx, id,
+		setID("mutator-uid"), setGeneration(1), setEnforced(true), setErrors(nil)); err != nil {
+		t.Fatal(err)
+	}
+	if c.creates != 0 {
+		t.Fatalf("got creates = %d, want 0", c.creates)
+	}
+	if c.updates != 1 {
+		t.Fatalf("got updates = %d, want 1", c.updates)
+	}
+
+	got, ok := c.objects[toKey(status)].object.(*statusv1beta1.MutatorPodStatus)
+	if !ok {
+		t.Fatalf("got object type %T, want *MutatorPodStatus", c.objects[toKey(status)].object)
+	}
+	if got.Labels[statusv1beta1.MutatorNameLabel] != id.Name {
+		t.Fatalf("got mutator name label = %q, want %q", got.Labels[statusv1beta1.MutatorNameLabel], id.Name)
+	}
+	if got.Labels[statusv1beta1.MutatorKindLabel] != id.Kind {
+		t.Fatalf("got mutator kind label = %q, want %q", got.Labels[statusv1beta1.MutatorKindLabel], id.Kind)
+	}
+	if got.Labels[statusv1beta1.PodLabel] != pod.Name {
+		t.Fatalf("got pod label = %q, want %q", got.Labels[statusv1beta1.PodLabel], pod.Name)
+	}
+	if len(got.OwnerReferences) != 1 {
+		t.Fatalf("got owner references = %d, want 1", len(got.OwnerReferences))
+	}
 }
 
 func TestReconciler_Reconcile(t *testing.T) {

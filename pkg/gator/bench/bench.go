@@ -54,7 +54,7 @@ func Run(opts *Opts) ([]Results, error) {
 	}
 
 	// Read all resources from files/images
-	objs, err := reader.ReadSources(opts.Filenames, opts.Images, opts.TempDir)
+	objs, err := reader.ReadSources(opts.Filenames, opts.Images, opts.TempDir, opts.AllowPlainHTTP)
 	if err != nil {
 		return nil, fmt.Errorf("reading sources: %w", err)
 	}

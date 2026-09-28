@@ -19,10 +19,12 @@ const (
 func modifyset(value interface{}, location string) *unversioned.ModifySet {
 	return &unversioned.ModifySet{
 		Spec: unversioned.ModifySetSpec{
-			ApplyTo: []match.ApplyTo{{
-				Groups:   []string{"*"},
-				Versions: []string{"*"},
-				Kinds:    []string{"*"},
+			ApplyTo: []match.MutationApplyTo{{
+				ApplyTo: match.ApplyTo{
+					Groups:   []string{"*"},
+					Versions: []string{"*"},
+					Kinds:    []string{"*"},
+				},
 			}},
 			Location: location,
 			Parameters: unversioned.ModifySetParameters{
@@ -87,6 +89,53 @@ func benchmarkNoModifySetMutator(b *testing.B, n int) {
 	for i := 0; i < b.N; i++ {
 		_, _ = mutator.Mutate(&types.Mutable{Object: obj})
 	}
+}
+
+func BenchmarkModifySetSetterSetValueScale(b *testing.B) {
+	for _, listSize := range []int{100, 1000, 10000} {
+		b.Run(fmt.Sprintf("merge-existing/list-%d", listSize), func(b *testing.B) {
+			obj := map[string]interface{}{"field": benchmarkModifySetList(listSize)}
+			s := setter{values: []interface{}{"value-0"}, op: unversioned.MergeOp}
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if err := s.SetValue(obj, "field"); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+
+		b.Run(fmt.Sprintf("merge-missing/list-%d", listSize), func(b *testing.B) {
+			s := setter{values: []interface{}{"missing-value"}, op: unversioned.MergeOp}
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				obj := map[string]interface{}{"field": benchmarkModifySetList(listSize)}
+				b.StartTimer()
+				if err := s.SetValue(obj, "field"); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+
+		b.Run(fmt.Sprintf("prune-missing/list-%d", listSize), func(b *testing.B) {
+			obj := map[string]interface{}{"field": benchmarkModifySetList(listSize)}
+			s := setter{values: []interface{}{"missing-value"}, op: unversioned.PruneOp}
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if err := s.SetValue(obj, "field"); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func benchmarkModifySetList(size int) []interface{} {
+	values := make([]interface{}, size)
+	for i := 0; i < size; i++ {
+		values[i] = "value-" + fmt.Sprint(i)
+	}
+	return values
 }
 
 func BenchmarkModifySetMutator_Mutate(b *testing.B) {

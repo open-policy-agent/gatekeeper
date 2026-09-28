@@ -2,6 +2,7 @@ package process
 
 import (
 	"reflect"
+	"sort"
 	"sync"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
@@ -92,6 +93,14 @@ func (s *Excluder) EqualsForProcess(process Process, new *Excluder) bool { // no
 	return reflect.DeepEqual(s.excludedNamespaces[process], new.excludedNamespaces[process])
 }
 
+// HasExclusions returns true if namespace exclusions are configured for the given process.
+func (s *Excluder) HasExclusions(process Process) bool {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+
+	return len(s.excludedNamespaces[process]) > 0
+}
+
 func (s *Excluder) IsNamespaceExcluded(process Process, obj client.Object) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
@@ -112,6 +121,8 @@ func (s *Excluder) GetExcludedNamespaces(process Process) []string {
 	for ns := range s.excludedNamespaces[process] {
 		excludedNamespaces = append(excludedNamespaces, string(ns))
 	}
+	// Sort for deterministic ordering; map iteration order is not stable.
+	sort.Strings(excludedNamespaces)
 
 	return excludedNamespaces
 }

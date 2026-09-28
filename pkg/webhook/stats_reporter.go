@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
@@ -15,12 +16,20 @@ const (
 	validationRequestCountMetricName    = "validation_request_count"
 	validationRequestDurationMetricName = "validation_request_duration_seconds"
 
-	mutationRequestCountMetricName    = "mutation_request_count"
-	mutationRequestDurationMetricName = "mutation_request_duration_seconds"
+	mutationRequestCountMetricName        = "mutation_request_count"
+	mutationRequestDurationMetricName     = "mutation_request_duration_seconds"
+	admissionExportQueuedMetricName       = "admission_export_queued_count"
+	admissionExportQueueFullMetricName    = "admission_export_queue_full_count"
+	admissionExportPublishedMetricName    = "admission_export_published_count"
+	admissionExportPublishErrorMetricName = "admission_export_publish_error_count"
+	admissionExportDroppedMetricName      = "admission_export_dropped_count"
+	admissionExportQueueDepthMetricName   = "admission_export_queue_depth"
+	admissionExportQueueBytesMetricName   = "admission_export_queue_bytes"
 
-	admissionStatusKey = "admission_status"
-	admissionDryRunKey = "admission_dryrun"
-	mutationStatusKey  = "mutation_status"
+	admissionStatusKey           = "admission_status"
+	admissionDryRunKey           = "admission_dryrun"
+	admissionExportDropReasonKey = "reason"
+	mutationStatusKey            = "mutation_status"
 )
 
 var (
@@ -28,6 +37,11 @@ var (
 	mutationResponseTimeInSecM   metric.Float64Histogram
 	mutationRequestCountM        metric.Int64Counter
 	validationRequestCountM      metric.Int64Counter
+	admissionExportQueuedM       metric.Int64Counter
+	admissionExportQueueFullM    metric.Int64Counter
+	admissionExportPublishedM    metric.Int64Counter
+	admissionExportPublishErrorM metric.Int64Counter
+	admissionExportDroppedM      metric.Int64Counter
 	r                            StatsReporter
 )
 
@@ -35,10 +49,19 @@ var (
 type StatsReporter interface {
 	ReportValidationRequest(ctx context.Context, response requestResponse, isDryRun string, d time.Duration) error
 	ReportMutationRequest(ctx context.Context, response requestResponse, d time.Duration) error
+	reportAdmissionExportQueued()
+	reportAdmissionExportQueueFull()
+	reportAdmissionExportPublished()
+	reportAdmissionExportPublishError()
+	reportAdmissionExportDropped(reason string)
+	setAdmissionExportQueue(depth, bytes int64)
 }
 
 // reporter implements StatsReporter interface.
-type reporter struct{}
+type reporter struct {
+	admissionExportQueueDepth atomic.Int64
+	admissionExportQueueBytes atomic.Int64
+}
 
 func init() {
 	view.Register(
@@ -65,7 +88,8 @@ func init() {
 func newStatsReporter() (StatsReporter, error) {
 	if r == nil {
 		var err error
-		r = &reporter{}
+		reporterInstance := &reporter{}
+		r = reporterInstance
 		meter := otel.GetMeterProvider().Meter("gatekeeper")
 
 		validationResponseTimeInSecM, err = meter.Float64Histogram(
@@ -95,6 +119,56 @@ func newStatsReporter() (StatsReporter, error) {
 		if err != nil {
 			return nil, err
 		}
+		admissionExportQueuedM, err = meter.Int64Counter(
+			admissionExportQueuedMetricName,
+			metric.WithDescription("Total admission violations queued for export"))
+		if err != nil {
+			return nil, err
+		}
+		admissionExportQueueFullM, err = meter.Int64Counter(
+			admissionExportQueueFullMetricName,
+			metric.WithDescription("Total admission violation exports dropped because the queue was full"))
+		if err != nil {
+			return nil, err
+		}
+		admissionExportPublishedM, err = meter.Int64Counter(
+			admissionExportPublishedMetricName,
+			metric.WithDescription("Total admission violations successfully exported"))
+		if err != nil {
+			return nil, err
+		}
+		admissionExportPublishErrorM, err = meter.Int64Counter(
+			admissionExportPublishErrorMetricName,
+			metric.WithDescription("Total admission violation export publish errors"))
+		if err != nil {
+			return nil, err
+		}
+		admissionExportDroppedM, err = meter.Int64Counter(
+			admissionExportDroppedMetricName,
+			metric.WithDescription("Total admission violation exports dropped before publishing"))
+		if err != nil {
+			return nil, err
+		}
+		_, err = meter.Int64ObservableGauge(
+			admissionExportQueueDepthMetricName,
+			metric.WithDescription("Current number of admission violations waiting for export"),
+			metric.WithInt64Callback(func(_ context.Context, observer metric.Int64Observer) error {
+				observer.Observe(reporterInstance.admissionExportQueueDepth.Load())
+				return nil
+			}))
+		if err != nil {
+			return nil, err
+		}
+		_, err = meter.Int64ObservableGauge(
+			admissionExportQueueBytesMetricName,
+			metric.WithDescription("Current encoded size in bytes of admission violations waiting for export"),
+			metric.WithInt64Callback(func(_ context.Context, observer metric.Int64Observer) error {
+				observer.Observe(reporterInstance.admissionExportQueueBytes.Load())
+				return nil
+			}))
+		if err != nil {
+			return nil, err
+		}
 	}
 	return r, nil
 }
@@ -109,4 +183,29 @@ func (r *reporter) ReportMutationRequest(ctx context.Context, response requestRe
 	mutationResponseTimeInSecM.Record(ctx, d.Seconds(), metric.WithAttributes(attribute.String(mutationStatusKey, string(response))))
 	mutationRequestCountM.Add(ctx, 1, metric.WithAttributes(attribute.String(mutationStatusKey, string(response))))
 	return nil
+}
+
+func (r *reporter) reportAdmissionExportQueued() {
+	admissionExportQueuedM.Add(context.Background(), 1)
+}
+
+func (r *reporter) reportAdmissionExportQueueFull() {
+	admissionExportQueueFullM.Add(context.Background(), 1)
+}
+
+func (r *reporter) reportAdmissionExportPublished() {
+	admissionExportPublishedM.Add(context.Background(), 1)
+}
+
+func (r *reporter) reportAdmissionExportPublishError() {
+	admissionExportPublishErrorM.Add(context.Background(), 1)
+}
+
+func (r *reporter) reportAdmissionExportDropped(reason string) {
+	admissionExportDroppedM.Add(context.Background(), 1, metric.WithAttributes(attribute.String(admissionExportDropReasonKey, reason)))
+}
+
+func (r *reporter) setAdmissionExportQueue(depth, bytes int64) {
+	r.admissionExportQueueDepth.Store(depth)
+	r.admissionExportQueueBytes.Store(bytes)
 }

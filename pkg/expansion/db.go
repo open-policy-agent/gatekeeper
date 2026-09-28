@@ -13,6 +13,7 @@ type templateDB interface {
 	upsert(*expansionunversioned.ExpansionTemplate) error
 	remove(*expansionunversioned.ExpansionTemplate)
 	templatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.ExpansionTemplate
+	hasTemplatesForGVK(gvk schema.GroupVersionKind) bool
 	getConflicts() IDSet
 }
 
@@ -255,6 +256,22 @@ func (d *db) remove(template *expansionunversioned.ExpansionTemplate) {
 	if old.hasConflicts {
 		d.updateCycles()
 	}
+}
+
+func (d *db) hasTemplatesForGVK(gvk schema.GroupVersionKind) bool {
+	for tID := range d.matchers[gvk] {
+		// Sanity check. In theory, this should never happen, but if it does, we
+		// can't recover.
+		if _, exists := d.store[tID]; !exists {
+			panic(fmt.Errorf("inconsistent db - key %s exists in matchers but not cache", tID))
+		}
+
+		if !d.store[tID].hasConflicts {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (d *db) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.ExpansionTemplate {

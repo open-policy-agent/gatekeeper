@@ -3,6 +3,7 @@ package externaldata
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"go.opentelemetry.io/otel"
@@ -20,14 +21,20 @@ const (
 	providerErrorDesc = "Incremental counter for all provider errors occurring over time"
 )
 
-var providerErrorCountM metric.Int64Counter
-
 func (r *reporter) observeProviderMetric(_ context.Context, o metric.Int64Observer) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for status, count := range r.statusReport {
 		o.Observe(count, metric.WithAttributes(attribute.String(statusKey, string(status))))
 	}
+	return nil
+}
+
+func (r *reporter) observeProviderErrorCount(_ context.Context, o metric.Int64Observer) error {
+	// Always observe so the metric is exported even when no errors have occurred yet.
+	// A plain Int64Counter is only exported after the first Add(), which made
+	// gatekeeper_provider_error_count appear missing on healthy clusters.
+	o.Observe(r.providerErrorTotal.Load())
 	return nil
 }
 
@@ -49,10 +56,12 @@ func newStatsReporter() *reporter {
 		panic(err)
 	}
 
-	// Register the gatekeeper_provider_error_count counter metric
-	providerErrorCountM, err = meter.Int64Counter(
+	// Register the gatekeeper_provider_error_count counter metric as an
+	// observable counter so it is always present on the metrics endpoint.
+	_, err = meter.Int64ObservableCounter(
 		providerErrorCountName,
 		metric.WithDescription(providerErrorDesc),
+		metric.WithInt64Callback(r.observeProviderErrorCount),
 	)
 	if err != nil {
 		panic(err)
@@ -61,16 +70,17 @@ func newStatsReporter() *reporter {
 	return r
 }
 
-// reportProviderError increments the provider error counter with the specific error type.
-func (r *reporter) reportProviderError(ctx context.Context) {
-	providerErrorCountM.Add(ctx, 1)
+// reportProviderError increments the provider error counter.
+func (r *reporter) reportProviderError(_ context.Context) {
+	r.providerErrorTotal.Add(1)
 }
 
 type reporter struct {
-	mu           sync.RWMutex
-	cache        map[types.NamespacedName]metrics.Status
-	dirty        bool
-	statusReport map[metrics.Status]int64
+	mu                 sync.RWMutex
+	cache              map[types.NamespacedName]metrics.Status
+	dirty              bool
+	statusReport       map[metrics.Status]int64
+	providerErrorTotal atomic.Int64
 }
 
 func (r *reporter) add(key types.NamespacedName, status metrics.Status) {

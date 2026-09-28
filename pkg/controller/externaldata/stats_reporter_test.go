@@ -7,6 +7,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -147,8 +148,7 @@ func initializeTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, r *
 	_, err = meter.Int64ObservableGauge(providerMetricName, metric.WithInt64Callback(r.observeProviderMetric))
 	assert.NoError(t, err)
 
-	// Also initialize the error counter metric that reportProviderError uses
-	providerErrorCountM, err = meter.Int64Counter(providerErrorCountName)
+	_, err = meter.Int64ObservableCounter(providerErrorCountName, metric.WithInt64Callback(r.observeProviderErrorCount))
 	assert.NoError(t, err)
 
 	return rdr, r
@@ -174,5 +174,39 @@ func TestReportProviderErrors(t *testing.T) {
 	rm := &metricdata.ResourceMetrics{}
 	assert.NoError(t, rdr.Collect(ctx, rm))
 
-	metricdatatest.AssertEqual(t, want, rm.ScopeMetrics[0].Metrics[0], metricdatatest.IgnoreTimestamp())
+	// Find the error counter among collected metrics (gauge may also be present).
+	var got metricdata.Metrics
+	found := false
+	for _, m := range rm.ScopeMetrics[0].Metrics {
+		if m.Name == providerErrorCountName {
+			got = m
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected %s to be present in collected metrics", providerErrorCountName)
+	metricdatatest.AssertEqual(t, want, got, metricdatatest.IgnoreTimestamp())
+}
+
+func TestProviderErrorCountAlwaysEmitted(t *testing.T) {
+	// Even with zero errors recorded, the observable counter should still be exported as 0.
+	ctx := context.Background()
+	rdr, r := initializeTestInstruments(t)
+	_ = r
+
+	rm := &metricdata.ResourceMetrics{}
+	assert.NoError(t, rdr.Collect(ctx, rm))
+
+	found := false
+	for _, m := range rm.ScopeMetrics[0].Metrics {
+		if m.Name == providerErrorCountName {
+			found = true
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "expected Sum data for counter")
+			require.NotEmpty(t, sum.DataPoints)
+			assert.Equal(t, int64(0), sum.DataPoints[0].Value)
+			break
+		}
+	}
+	assert.True(t, found, "gatekeeper_provider_error_count should be emitted even when no errors occurred")
 }

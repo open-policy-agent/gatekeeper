@@ -47,10 +47,6 @@ type ExpansionTemplatePodStatusList struct {
 	Items           []ExpansionTemplatePodStatus `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&ExpansionTemplatePodStatus{}, &ExpansionTemplatePodStatusList{})
-}
-
 // NewExpansionTemplateStatusForPod returns an expansion template status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the expansion template status controller.
@@ -69,11 +65,8 @@ func NewExpansionTemplateStatusForPod(pod *corev1.Pod, templateName string, sche
 		PodLabel:                   pod.Name,
 	})
 
-	// Skip OwnerReference in remote cluster mode
-	if !util.ShouldSkipPodOwnerRef() {
-		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-			return nil, err
-		}
+	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+		return nil, err
 	}
 
 	return obj, nil

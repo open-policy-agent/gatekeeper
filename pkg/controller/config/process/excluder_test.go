@@ -1,6 +1,7 @@
 package process
 
 import (
+	"slices"
 	"sort"
 	"testing"
 
@@ -60,6 +61,57 @@ func TestExactOrWildcardMatch(t *testing.T) {
 				} else {
 					t.Errorf("ns '%v' unexpectedly matched map: %v", tc.ns, tc.nsMap)
 				}
+			}
+		})
+	}
+}
+
+func TestHasExclusions(t *testing.T) {
+	tcs := []struct {
+		name         string
+		matchEntries []configv1alpha1.MatchEntry
+		process      Process
+		want         bool
+	}{
+		{
+			name:    "empty excluder has no exclusions",
+			process: Webhook,
+		},
+		{
+			name: "specific process has exclusions",
+			matchEntries: []configv1alpha1.MatchEntry{{
+				ExcludedNamespaces: []wildcard.Wildcard{"kube-system"},
+				Processes:          []string{"webhook"},
+			}},
+			process: Webhook,
+			want:    true,
+		},
+		{
+			name: "other process remains empty",
+			matchEntries: []configv1alpha1.MatchEntry{{
+				ExcludedNamespaces: []wildcard.Wildcard{"kube-system"},
+				Processes:          []string{"audit"},
+			}},
+			process: Webhook,
+		},
+		{
+			name: "wildcard process populates all processes",
+			matchEntries: []configv1alpha1.MatchEntry{{
+				ExcludedNamespaces: []wildcard.Wildcard{"kube-*"},
+				Processes:          []string{"*"},
+			}},
+			process: Mutation,
+			want:    true,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			excluder := New()
+			excluder.Add(tc.matchEntries)
+
+			if got := excluder.HasExclusions(tc.process); got != tc.want {
+				t.Fatalf("HasExclusions(%s) = %t, want %t", tc.process, got, tc.want)
 			}
 		})
 	}
@@ -166,5 +218,30 @@ func TestGetExcludedNamespaces(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestGetExcludedNamespacesSorted ensures the returned slice is deterministically sorted.
+func TestGetExcludedNamespacesSorted(t *testing.T) {
+	excluder := New()
+	excluder.Add([]configv1alpha1.MatchEntry{
+		{
+			ExcludedNamespaces: []wildcard.Wildcard{"zeta", "alpha", "monitoring", "kube-system", "app-*"},
+			Processes:          []string{"webhook"},
+		},
+	})
+
+	want := []string{"alpha", "app-*", "kube-system", "monitoring", "zeta"}
+
+	// Call repeatedly: map iteration order varies between calls, so a single
+	// pass could pass by luck even without the sort.
+	for i := 0; i < 20; i++ {
+		got := excluder.GetExcludedNamespaces(Webhook)
+		if !sort.StringsAreSorted(got) {
+			t.Fatalf("GetExcludedNamespaces returned unsorted slice: %v", got)
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("GetExcludedNamespaces = %v, want %v", got, want)
+		}
 	}
 }

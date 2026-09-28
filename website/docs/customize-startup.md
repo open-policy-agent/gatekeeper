@@ -46,6 +46,24 @@ There are four types of events that are emitted by Gatekeeper when the emit even
 > ```
 > Gatekeeper might burst 25 events about an object, but limit the refill rate to 1 new event every 5 minutes. This will help control the long-tail of events for resources that are always violating the constraint.
 
+## [Alpha] Emit API server audit annotations for admission evaluations
+
+The `--emit-admission-audit-annotations` flag adds audit annotations to validation requests that reach Gatekeeper policy evaluation. It is disabled by default. When enabled, it annotates violations only unless `--admission-audit-annotations-include-success=true` is also set. Requests skipped before policy evaluation, such as excluded namespaces, are not annotated.
+
+The validation webhook returns one `evaluation` entry in `AdmissionResponse.auditAnnotations`. The API server prefixes that key with the webhook name, producing `validation.gatekeeper.sh/evaluation` in the API audit event. Its versioned JSON value contains Gatekeeper's `allowed` decision, bounded summaries of deny, warn, and dryrun violations, the total and included violation counts, and a truncation indicator. The decision is specific to Gatekeeper; another admission plugin or a later API server error can still reject the request. Request identity belongs to the enclosing audit event and is not repeated in this payload. The AdmissionReview UID, event type, evaluated resource kind/version, resource labels, and Constraint annotations are also intentionally omitted. The value is limited to 10 KiB. Long messages, policy-provided `details`, or additional violations may be omitted, and the payload reports truncation.
+
+With `--admission-audit-annotations-include-success=true`, an evaluation with no violations produces this custom annotation value; otherwise it produces no custom annotation:
+
+```json
+{"schemaVersion":"v1","allowed":true,"violations":[],"totalViolations":0,"includedViolations":0,"truncated":false}
+```
+
+When admission audit annotations are enabled on a process performing the `generate` operation, generated ValidatingAdmissionPolicyBindings add the Kubernetes `Audit` action alongside `Deny` or `Warn`; `dryrun` already maps to `Audit`. Failed native validations therefore produce Kubernetes' standard `validation.policy.admission.k8s.io/validation_failure` annotation. Kubernetes controls that annotation's content and aggregation; it is not an exhaustive list of all matching bindings. By default, generated ValidatingAdmissionPolicies omit the custom `evaluation` marker and rely on this native failure annotation.
+
+To also annotate successful evaluations, set `--admission-audit-annotations-include-success=true`. It defaults to `false` and has no effect unless `--emit-admission-audit-annotations` is enabled. Success here means zero violations, not simply an allowed request: deny, warn, and dryrun violations remain annotated regardless of this setting. When both flags are enabled, generated VAPs add an `evaluation` audit annotation with the value `true` when at least one binding evaluates the request. Kubernetes deduplicates this constant across matching bindings, keeping the value bounded without listing matching Constraint names. This option does not re-evaluate CEL expressions or change admission decisions. For Helm, set `emitAdmissionAuditAnnotations=true` for violations-only auditing, and also set `admissionAuditAnnotationsIncludeSuccess=true` to include successful evaluations. If the webhook and native VAP enforcement points both evaluate a request, both may add audit entries.
+
+For split deployments, configure both flags consistently on the validation webhook process and the process performing the `generate` operation. Restart the affected processes when changing these startup settings; generated VAPs are reconciled to the selected mode. API server audit logging must be enabled at `Metadata` or a higher level. Audit annotations do not create Kubernetes Event resources, do not annotate admitted objects, and do not change admission decisions. The violation-export payload is unaffected by these settings. Policy messages and `details` may contain user-controlled or sensitive data, so protect access to the audit backend.
+
 ## [Beta] Enable mutation logging and annotations
 
 The `--log-mutations` flag enables logging of mutation events and errors.
@@ -63,6 +81,8 @@ The `--mutation-annotations` flag adds the following two annotations to mutated 
 
 The `--enable-remote-cluster` flag enables Gatekeeper to run in a local (management) cluster while enforcing policies on a separate target cluster specified via `--kubeconfig`. This is designed for hosted control plane architectures where the target cluster's API server runs within the management cluster.
 
+> 📖 For a full end-to-end setup walkthrough, installing CRDs across both clusters, deploying Gatekeeper, wiring webhook certificates, and a smoke test see the [Remote Cluster Mode](remote-cluster.md) guide.
+
 ### When to Use
 
 Use remote cluster mode when:
@@ -76,9 +96,13 @@ Use remote cluster mode when:
 --kubeconfig=/path/to/target.yaml  # Kubeconfig for target cluster
 ```
 
+### How It Works
+
+Status resources live on the management cluster alongside the Gatekeeper pod, with OwnerReferences pointing to the pod. This enables automatic garbage collection — when a pod restarts, Kubernetes cleans up its old status resources automatically.
+
 ### RBAC Requirements
 
-Gatekeeper needs permissions to read Pods in the **local cluster** (to resolve its own pod identity):
+Gatekeeper needs permissions on the **management/local cluster** to resolve its pod identity and manage status resources:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -90,13 +114,21 @@ rules:
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["get"]
+- apiGroups: ["status.gatekeeper.sh"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ```
 
-### Orphan Resource Cleanup
+### Migration from Previous Versions
 
-In remote cluster mode, status resources don't have OwnerReferences (since the pod doesn't exist in the target cluster). When Gatekeeper pods restart, their old status resources become orphaned.
+If upgrading from a version where `--enable-remote-cluster` stored status resources on the target cluster, you may have orphaned status resources on the target cluster. Run the following to clean them up:
 
-To find orphaned status resources, compare the `gatekeeper.sh/pod` label against running pods. You should check all status resource types: `constrainttemplatepodstatuses`, `constraintpodstatuses`, `mutatorpodstatuses`, `expansiontemplatepodstatuses`, `configpodstatuses`, `providerpodstatuses`, and `connectionpodstatuses`.
+```bash
+kubectl delete constrainttemplatepodstatuses,constraintpodstatuses,mutatorpodstatuses,expansiontemplatepodstatuses,configpodstatuses,providerpodstatuses,connectionpodstatuses \
+  -n gatekeeper-system --all --context <target-cluster-context>
+```
+
+This is a one-time cleanup. After upgrading, status resources are automatically managed on the management cluster.
 
 ```bash
 # List all pod names referenced in status resources (repeat for each status type)

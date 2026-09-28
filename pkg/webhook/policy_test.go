@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
@@ -15,8 +17,12 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
+	expansionunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/unversioned"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	expansionfixtures "github.com/open-policy-agent/gatekeeper/v3/pkg/expansion/fixtures"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
@@ -27,11 +33,13 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/yaml"
@@ -199,6 +207,81 @@ func validRegoTemplateConstraint() *unstructured.Unstructured {
 	return u
 }
 
+func expectedOperationTemplate() *templates.ConstraintTemplate {
+	return &templates.ConstraintTemplate{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: templatesv1beta1.SchemeGroupVersion.String(),
+			Kind:       "ConstraintTemplate",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "k8sexpectedoperation",
+		},
+		Spec: templates.ConstraintTemplateSpec{
+			CRD: templates.CRD{
+				Spec: templates.CRDSpec{
+					Names: templates.Names{
+						Kind: "K8sExpectedOperation",
+					},
+					Validation: &templates.Validation{
+						OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
+							Type: "object",
+							Properties: map[string]apiextensions.JSONSchemaProps{
+								"operation": {
+									Type: "string",
+								},
+							},
+						},
+					},
+				},
+			},
+			Targets: []templates.Target{{
+				Target: target.Name,
+				Code: []templates.Code{{
+					Engine: "Rego",
+					Source: &templates.Anything{
+						Value: map[string]interface{}{"rego": `
+package expectedoperation
+
+violation[{"msg": msg}] {
+   input.review.operation == input.parameters.operation
+   msg := sprintf("expanded review preserved operation %v", [input.review.operation])
+}`},
+					},
+				}},
+			}},
+		},
+	}
+}
+
+func expectedOperationConstraint(operation admissionv1.Operation) *unstructured.Unstructured {
+	u := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"match": map[string]interface{}{
+					"kinds": []interface{}{
+						map[string]interface{}{
+							"apiGroups": []interface{}{""},
+							"kinds":     []interface{}{"Pod"},
+						},
+					},
+					"source": "Generated",
+				},
+				"parameters": map[string]interface{}{
+					"operation": string(operation),
+				},
+			},
+		},
+	}
+	u.SetGroupVersionKind(k8schema.GroupVersionKind{
+		Group:   constraints.Group,
+		Version: "v1beta1",
+		Kind:    "K8sExpectedOperation",
+	})
+	u.SetName("expected-operation-" + strings.ToLower(string(operation)))
+
+	return u
+}
+
 func makeOpaClient() (*constraintclient.Client, error) {
 	t := &target.K8sValidationTarget{}
 	driver, err := rego.New(rego.Tracing(false))
@@ -344,6 +427,179 @@ func TestReviewRequest(t *testing.T) {
 
 		maxThreads = 1
 		t.Run(tt.Name+withMaxThreads, testFn)
+	}
+}
+
+func TestReviewRequestExpandedResourcesPreserveOperation(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation admissionv1.Operation
+	}{
+		{
+			name:      "create",
+			operation: admissionv1.Create,
+		},
+		{
+			name:      "update",
+			operation: admissionv1.Update,
+		},
+		{
+			name:      "delete",
+			operation: admissionv1.Delete,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			opa, err := makeOpaClient()
+			require.NoError(t, err)
+
+			_, err = opa.AddTemplate(ctx, expectedOperationTemplate())
+			require.NoError(t, err)
+			_, err = opa.AddConstraint(ctx, expectedOperationConstraint(tt.operation))
+			require.NoError(t, err)
+
+			template := &expansionunversioned.ExpansionTemplate{}
+			err = yaml.Unmarshal([]byte(expansionfixtures.TempExpDeploymentExpandsPods), template)
+			require.NoError(t, err)
+			expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
+			require.NoError(t, expSystem.UpsertTemplate(template))
+
+			rawDeployment, err := yaml.YAMLToJSON([]byte(expansionfixtures.DeploymentNginx))
+			require.NoError(t, err)
+			req := &admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Kind: metav1.GroupVersionKind{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+					Name:      "nginx-deployment",
+					Namespace: "ns1",
+					Operation: tt.operation,
+					UserInfo: authenticationv1.UserInfo{
+						Username: "user@example.com",
+					},
+				},
+			}
+			if tt.operation == admissionv1.Delete {
+				req.OldObject = runtime.RawExtension{Raw: rawDeployment}
+			} else {
+				req.Object = runtime.RawExtension{Raw: rawDeployment}
+			}
+
+			handler := validationHandler{
+				opa:             opa,
+				expansionSystem: expSystem,
+				webhookHandler: webhookHandler{
+					injectedConfig: &v1alpha1.Config{},
+					client:         &nsGetter{},
+				},
+				log: log,
+			}
+
+			resp, err := handler.reviewRequest(ctx, req)
+			require.NoError(t, err)
+			require.NotEmpty(t, resp.Results())
+			for _, result := range resp.Results() {
+				require.Contains(t, result.Msg, string(tt.operation))
+			}
+		})
+	}
+}
+
+func TestSkipExcludedNamespaceSkipsDecodeWhenNoExclusions(t *testing.T) {
+	req := &admissionv1.AdmissionRequest{
+		Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
+		Name:      "malformed",
+		Namespace: "ns1",
+		Operation: admissionv1.Create,
+		Object:    runtime.RawExtension{Raw: []byte("{")},
+	}
+
+	handler := webhookHandler{processExcluder: process.New()}
+	excluded, err := handler.skipExcludedNamespace(req, process.Webhook)
+	require.NoError(t, err)
+	require.False(t, excluded)
+
+	excluder := process.New()
+	excluder.Add([]v1alpha1.MatchEntry{{
+		ExcludedNamespaces: []wildcard.Wildcard{"ns1"},
+		Processes:          []string{string(process.Webhook)},
+	}})
+	handler.processExcluder = excluder
+	_, err = handler.skipExcludedNamespace(req, process.Webhook)
+	require.Error(t, err)
+}
+
+func TestExpandRequestSkipsDecodeWhenNoTemplateCanMatch(t *testing.T) {
+	deploymentTemplate := &expansionunversioned.ExpansionTemplate{}
+	require.NoError(t, yaml.Unmarshal([]byte(expansionfixtures.TempExpDeploymentExpandsPods), deploymentTemplate))
+
+	tests := []struct {
+		name        string
+		templates   []*expansionunversioned.ExpansionTemplate
+		requestKind metav1.GroupVersionKind
+		operation   admissionv1.Operation
+		wantErr     bool
+	}{
+		{
+			name:        "no templates skips malformed object",
+			requestKind: metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
+			operation:   admissionv1.Create,
+		},
+		{
+			name:        "nonmatching template skips malformed object",
+			templates:   []*expansionunversioned.ExpansionTemplate{deploymentTemplate},
+			requestKind: metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
+			operation:   admissionv1.Create,
+		},
+		{
+			name:        "matching create template decodes malformed object",
+			templates:   []*expansionunversioned.ExpansionTemplate{deploymentTemplate},
+			requestKind: metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+			operation:   admissionv1.Create,
+			wantErr:     true,
+		},
+		{
+			name:        "matching delete template decodes malformed old object",
+			templates:   []*expansionunversioned.ExpansionTemplate{deploymentTemplate},
+			requestKind: metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+			operation:   admissionv1.Delete,
+			wantErr:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
+			for _, template := range tt.templates {
+				require.NoError(t, expSystem.UpsertTemplate(template))
+			}
+
+			handler := validationHandler{expansionSystem: expSystem}
+			req := &admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+				Kind:      tt.requestKind,
+				Name:      "malformed",
+				Namespace: "ns1",
+				Operation: tt.operation,
+				UserInfo:  authenticationv1.UserInfo{Username: "user@example.com"},
+			}}
+			if tt.operation == admissionv1.Delete {
+				req.OldObject = runtime.RawExtension{Raw: []byte("{")}
+			} else {
+				req.Object = runtime.RawExtension{Raw: []byte("{")}
+			}
+
+			resultants, err := handler.expandRequest(req, &target.AugmentedReview{})
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Empty(t, resultants)
+		})
 	}
 }
 
@@ -638,25 +894,200 @@ func TestConstraintValidation(t *testing.T) {
 	}
 }
 
-func Test_ConstrainTemplate_Name(t *testing.T) {
+func Test_NonStatusGatekeeperResource_Name(t *testing.T) {
 	h := &validationHandler{log: log}
-	te := validRegoTemplate()
-	te.Name = "abignameabignameabignameabignameabignameabignameabignameabigname"
 
-	b, err := convertToRawExtension(te)
-	require.NoError(t, err)
+	newReview := func(t *testing.T, obj runtime.Object) *admission.Request {
+		t.Helper()
 
-	review := &admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			Kind:   metav1.GroupVersionKind(templatesv1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate")),
-			Object: *b,
-			Name:   te.Name,
+		b, err := convertToRawExtension(obj)
+		require.NoError(t, err)
+
+		review := &admission.Request{
+			AdmissionRequest: admissionv1.AdmissionRequest{
+				Kind:   metav1.GroupVersionKind(obj.GetObjectKind().GroupVersionKind()),
+				Object: *b,
+				Name:   nameLargerThan63,
+			},
+		}
+
+		return review
+	}
+
+	tests := []struct {
+		name      string
+		newObject func() runtime.Object
+	}{
+		{
+			name: "constraint template",
+			newObject: func() runtime.Object {
+				te := validRegoTemplate()
+				te.Name = nameLargerThan63
+				return te
+			},
+		},
+		{
+			name: "constraint",
+			newObject: func() runtime.Object {
+				constraint := validRegoTemplateConstraint()
+				constraint.SetName(nameLargerThan63)
+				return constraint
+			},
+		},
+		{
+			name: "config",
+			newObject: func() runtime.Object {
+				return &v1alpha1.Config{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: v1alpha1.GroupVersion.String(),
+						Kind:       "Config",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nameLargerThan63,
+					},
+				}
+			},
+		},
+		{
+			name: "assign",
+			newObject: func() runtime.Object {
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(k8schema.GroupVersionKind{
+					Group:   mutationsGroup,
+					Version: "v1beta1",
+					Kind:    "Assign",
+				})
+				obj.SetName(nameLargerThan63)
+				return obj
+			},
+		},
+		{
+			name: "provider",
+			newObject: func() runtime.Object {
+				provider := validProvider()
+				provider.Name = nameLargerThan63
+				return provider
+			},
+		},
+		{
+			name: "expansion template",
+			newObject: func() runtime.Object {
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(k8schema.GroupVersionKind{
+					Group:   "expansion.gatekeeper.sh",
+					Version: "v1alpha1",
+					Kind:    "ExpansionTemplate",
+				})
+				obj.SetName(nameLargerThan63)
+				return obj
+			},
 		},
 	}
 
-	got, err := h.validateGatekeeperResources(context.Background(), review)
-	require.False(t, got)
-	require.ErrorContains(t, err, "resource cannot have metadata.name larger than 63 char")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := h.validateGatekeeperResources(context.Background(), newReview(t, tt.newObject()))
+			require.False(t, got)
+			require.ErrorContains(t, err, "resource cannot have metadata.name larger than 63 char")
+		})
+	}
+}
+
+func Test_StatusResource_Name(t *testing.T) {
+	h := &validationHandler{log: log}
+
+	newStatusReview := func(t *testing.T, operation admissionv1.Operation, kind string, obj runtime.Object) *admission.Request {
+		t.Helper()
+
+		b, err := convertToRawExtension(obj)
+		require.NoError(t, err)
+
+		review := &admission.Request{
+			AdmissionRequest: admissionv1.AdmissionRequest{
+				Kind:      metav1.GroupVersionKind(statusv1beta1.GroupVersion.WithKind(kind)),
+				Operation: operation,
+				Name:      nameLargerThan63,
+			},
+		}
+
+		if operation == admissionv1.Delete {
+			review.OldObject = *b
+		} else {
+			review.Object = *b
+		}
+
+		return review
+	}
+
+	statusResources := []struct {
+		name      string
+		kind      string
+		newObject func() runtime.Object
+	}{
+		{
+			name: "constraint template pod status",
+			kind: "ConstraintTemplatePodStatus",
+			newObject: func() runtime.Object {
+				return &statusv1beta1.ConstraintTemplatePodStatus{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: statusv1beta1.GroupVersion.String(),
+						Kind:       "ConstraintTemplatePodStatus",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      nameLargerThan63,
+						Namespace: "gatekeeper-system",
+					},
+				}
+			},
+		},
+		{
+			name: "constraint pod status",
+			kind: "ConstraintPodStatus",
+			newObject: func() runtime.Object {
+				return &statusv1beta1.ConstraintPodStatus{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: statusv1beta1.GroupVersion.String(),
+						Kind:       "ConstraintPodStatus",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      nameLargerThan63,
+						Namespace: "gatekeeper-system",
+					},
+				}
+			},
+		},
+	}
+
+	operations := []struct {
+		name      string
+		operation admissionv1.Operation
+	}{
+		{
+			name:      "create",
+			operation: admissionv1.Create,
+		},
+		{
+			name:      "update",
+			operation: admissionv1.Update,
+		},
+		{
+			name:      "delete",
+			operation: admissionv1.Delete,
+		},
+	}
+
+	for _, statusResource := range statusResources {
+		for _, operation := range operations {
+			t.Run(statusResource.name+"/"+operation.name, func(t *testing.T) {
+				got, err := h.validateGatekeeperResources(
+					context.Background(),
+					newStatusReview(t, operation.operation, statusResource.kind, statusResource.newObject()),
+				)
+				require.False(t, got)
+				require.NoError(t, err)
+			})
+		}
+	}
 }
 
 func Test_NonGkResource_Name(t *testing.T) {
@@ -837,7 +1268,371 @@ func newConstraint(kind, name string, enforcementAction string, t *testing.T) *u
 	return c
 }
 
-func TestGetValidationMessages(t *testing.T) {
+type fakeAdmissionViolationExporter struct {
+	messages []exportutil.ExportMsg
+}
+
+func (exporter *fakeAdmissionViolationExporter) TryExport(build func() *exportutil.ExportMsg) {
+	message := build()
+	exporter.messages = append(exporter.messages, *message)
+}
+
+func TestHandleAddsAuditAnnotationForEvaluationWithoutViolations(t *testing.T) {
+	opa, err := makeOpaClient()
+	require.NoError(t, err)
+
+	handler := validationHandler{
+		opa:                           opa,
+		expansionSystem:               expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+		emitAdmissionAuditAnnotations: true,
+		webhookHandler: webhookHandler{
+			injectedConfig:  &v1alpha1.Config{},
+			client:          &nsGetter{},
+			reader:          &nsGetter{},
+			processExcluder: process.New(),
+		},
+		log: log,
+	}
+	review := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+		UID:       types.UID("clean-request"),
+		Kind:      metav1.GroupVersionKind{Version: "v1", Kind: "Pod"},
+		Resource:  metav1.GroupVersionResource{Version: "v1", Resource: "pods"},
+		Namespace: "default",
+		Name:      "allowed-pod",
+		Operation: admissionv1.Create,
+		Object: runtime.RawExtension{
+			Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"allowed-pod","namespace":"default"}}`),
+		},
+	}}
+
+	resp := handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
+
+	handler.admissionAuditAnnotationsIncludeSuccess = true
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Contains(t, resp.AuditAnnotations, admissionAuditAnnotationKey)
+
+	var annotation admissionAuditAnnotation
+	require.NoError(t, json.Unmarshal([]byte(resp.AuditAnnotations[admissionAuditAnnotationKey]), &annotation))
+	require.True(t, annotation.Allowed)
+	require.JSONEq(t, `{"schemaVersion":"v1","allowed":true,"violations":[],"totalViolations":0,"includedViolations":0,"truncated":false}`, resp.AuditAnnotations[admissionAuditAnnotationKey])
+	require.Empty(t, annotation.Violations)
+	require.Zero(t, annotation.TotalViolations)
+
+	handler.admissionAuditAnnotationsIncludeSuccess = false
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
+
+	handler.emitAdmissionAuditAnnotations = false
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
+
+	handler.admissionAuditAnnotationsIncludeSuccess = true
+	resp = handler.Handle(context.Background(), review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.AuditAnnotations)
+}
+
+func TestHandleAuditAnnotationModesPreserveViolations(tester *testing.T) {
+	for _, action := range []string{string(util.Deny), string(util.Warn), string(util.Dryrun)} {
+		for _, mode := range []struct {
+			name           string
+			enabled        bool
+			includeSuccess bool
+		}{
+			{name: "disabled"},
+			{name: "all evaluations", enabled: true, includeSuccess: true},
+			{name: "violations only by default", enabled: true},
+			{name: "include success without enablement", includeSuccess: true},
+		} {
+			tester.Run(action+"/"+mode.name, func(tester *testing.T) {
+				ctx := context.Background()
+				opa, err := makeOpaClient()
+				require.NoError(tester, err)
+				_, err = opa.AddTemplate(ctx, validRegoTemplate())
+				require.NoError(tester, err)
+				constraint := validRegoTemplateConstraint()
+				require.NoError(tester, unstructured.SetNestedField(constraint.Object, action, "spec", "enforcementAction"))
+				_, err = opa.AddConstraint(ctx, constraint)
+				require.NoError(tester, err)
+
+				handler := validationHandler{
+					opa:                                     opa,
+					expansionSystem:                         expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+					emitAdmissionAuditAnnotations:           mode.enabled,
+					admissionAuditAnnotationsIncludeSuccess: mode.includeSuccess,
+					webhookHandler: webhookHandler{
+						injectedConfig:  &v1alpha1.Config{},
+						client:          &nsGetter{},
+						reader:          &nsGetter{},
+						processExcluder: process.New(),
+					},
+					log: log,
+				}
+				review := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+					Kind:      metav1.GroupVersionKind{Version: "v1", Kind: "Pod"},
+					Resource:  metav1.GroupVersionResource{Version: "v1", Resource: "pods"},
+					Namespace: "ns1",
+					Name:      "acbd",
+					Operation: admissionv1.Create,
+					Object: runtime.RawExtension{
+						Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"acbd","namespace":"ns1"}}`),
+					},
+				}}
+
+				response := handler.Handle(ctx, review)
+				require.Equal(tester, action != string(util.Deny), response.Allowed)
+				if action == string(util.Warn) {
+					require.Len(tester, response.Warnings, 1)
+				} else {
+					require.Empty(tester, response.Warnings)
+				}
+				if !mode.enabled {
+					require.Empty(tester, response.AuditAnnotations)
+					return
+				}
+
+				var annotation admissionAuditAnnotation
+				require.NoError(tester, json.Unmarshal([]byte(response.AuditAnnotations[admissionAuditAnnotationKey]), &annotation))
+				require.Equal(tester, response.Allowed, annotation.Allowed)
+				require.Equal(tester, 1, annotation.TotalViolations)
+				require.Equal(tester, 1, annotation.IncludedViolations)
+				require.Len(tester, annotation.Violations, 1)
+				require.Equal(tester, action, annotation.Violations[0].EnforcementAction)
+				require.Equal(tester, "constraint", annotation.Violations[0].ConstraintName)
+			})
+		}
+	}
+}
+
+func TestHandleExportsDryrunAdmissionViolation(t *testing.T) {
+	ctx := context.Background()
+	opa, err := makeOpaClient()
+	require.NoError(t, err)
+
+	_, err = opa.AddTemplate(ctx, validRegoTemplate())
+	require.NoError(t, err)
+	constraint := validRegoTemplateConstraint()
+	constraint.SetAnnotations(map[string]string{
+		"owner":                        "platform",
+		lastAppliedConfigurationAnnKey: "ignored",
+	})
+	require.NoError(t, unstructured.SetNestedField(constraint.Object, string(util.Dryrun), "spec", "enforcementAction"))
+	_, err = opa.AddConstraint(ctx, constraint)
+	require.NoError(t, err)
+
+	exporter := &fakeAdmissionViolationExporter{}
+	processExcluder := process.New()
+	handler := validationHandler{
+		opa:                           opa,
+		expansionSystem:               expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+		admissionExporter:             exporter,
+		emitAdmissionAuditAnnotations: true,
+		webhookHandler: webhookHandler{
+			injectedConfig:  &v1alpha1.Config{},
+			client:          &nsGetter{},
+			reader:          &nsGetter{},
+			processExcluder: processExcluder,
+		},
+		log: log,
+	}
+	dryRun := false
+	review := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			UID: types.UID("request-1"),
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			},
+			Resource: metav1.GroupVersionResource{
+				Version:  "v1",
+				Resource: "pods",
+			},
+			Object: runtime.RawExtension{
+				Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"acbd","namespace":"ns1","labels":{"app":"demo"}}}`),
+			},
+			Namespace: "ns1",
+			Operation: admissionv1.Create,
+			UserInfo: authenticationv1.UserInfo{
+				Username: "alice@example.com",
+				UID:      "user-1",
+				Groups:   []string{"developers", "system:authenticated"},
+			},
+			DryRun: &dryRun,
+		},
+	}
+
+	resp := handler.Handle(ctx, review)
+	require.True(t, resp.Allowed)
+	require.Empty(t, resp.Warnings)
+	require.Contains(t, resp.AuditAnnotations, admissionAuditAnnotationKey)
+	var annotation admissionAuditAnnotation
+	require.NoError(t, json.Unmarshal([]byte(resp.AuditAnnotations[admissionAuditAnnotationKey]), &annotation))
+	require.True(t, annotation.Allowed)
+	require.Equal(t, 1, annotation.TotalViolations)
+	require.Equal(t, 1, annotation.IncludedViolations)
+	require.Len(t, annotation.Violations, 1)
+	require.Equal(t, "K8sGoodRego", annotation.Violations[0].ConstraintKind)
+	require.Equal(t, "constraint", annotation.Violations[0].ConstraintName)
+	require.Equal(t, string(util.Dryrun), annotation.Violations[0].EnforcementAction)
+	require.Len(t, exporter.messages, 1)
+
+	message := exporter.messages[0]
+	require.Equal(t, "request-1", message.ID)
+	require.Equal(t, exportutil.AdmissionViolationEventType, message.EventType)
+	require.Equal(t, "Maybe this will work?", message.Message)
+	require.Equal(t, string(util.Dryrun), message.EnforcementAction)
+	require.Equal(t, "K8sGoodRego", message.Kind)
+	require.Equal(t, "constraint", message.Name)
+	require.Equal(t, map[string]string{"owner": "platform"}, message.ConstraintAnnotations)
+	require.Equal(t, "", message.ResourceGroup)
+	require.Equal(t, "v1", message.ResourceAPIVersion)
+	require.Equal(t, "Pod", message.ResourceKind)
+	require.Equal(t, "ns1", message.ResourceNamespace)
+	require.Equal(t, "acbd", message.ResourceName)
+	require.Equal(t, map[string]string{"app": "demo"}, message.ResourceLabels)
+	_, err = time.Parse(time.RFC3339Nano, message.Timestamp)
+	require.NoError(t, err)
+	require.Equal(t, string(admissionv1.Create), message.Operation)
+	require.Equal(t, "pods", message.RequestResource)
+	require.Empty(t, message.RequestSubresource)
+	require.Equal(t, "alice@example.com", message.RequestUsername)
+	require.Equal(t, "user-1", message.RequestUserUID)
+	require.Equal(t, []string{"developers", "system:authenticated"}, message.RequestUserGroups)
+	require.NotNil(t, message.DryRun)
+	require.False(t, *message.DryRun)
+}
+
+func TestProcessValidationResultsExportsAdmissionViolations(t *testing.T) {
+	exporter := &fakeAdmissionViolationExporter{}
+	handler := validationHandler{
+		admissionExporter:             exporter,
+		emitAdmissionAuditAnnotations: true,
+		log:                           log,
+	}
+	dryRun := true
+	review := &admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			UID: types.UID("delete-request"),
+			Kind: metav1.GroupVersionKind{
+				Version: "v1",
+				Kind:    "Pod",
+			},
+			OldObject: runtime.RawExtension{
+				Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"deleted-pod","namespace":"ns1","labels":{"app":"demo"}}}`),
+			},
+			Operation:          admissionv1.Delete,
+			RequestResource:    &metav1.GroupVersionResource{Version: "v1", Resource: "pods"},
+			RequestSubResource: "status",
+			UserInfo: authenticationv1.UserInfo{
+				Username: "system:serviceaccount:ns1:controller",
+				UID:      "service-account-1",
+				Groups:   []string{"system:serviceaccounts", "system:authenticated"},
+			},
+			DryRun: &dryRun,
+		},
+	}
+	results := []*rtypes.Result{
+		nil,
+		{
+			Msg:               "missing constraint",
+			EnforcementAction: string(util.Deny),
+		},
+		{
+			Msg:               "deny",
+			Constraint:        newConstraint("Foo", "deny", string(util.Deny), t),
+			EnforcementAction: string(util.Deny),
+		},
+		{
+			Msg:               "warn",
+			Constraint:        newConstraint("Foo", "warn", string(util.Warn), t),
+			EnforcementAction: string(util.Warn),
+		},
+		{
+			Msg:               "dryrun",
+			Constraint:        newConstraint("Foo", "dryrun", string(util.Dryrun), t),
+			EnforcementAction: string(util.Dryrun),
+		},
+		{
+			Msg:                      "scoped",
+			Constraint:               newConstraint("Foo", "scoped", string(util.Scoped), t),
+			EnforcementAction:        string(util.Scoped),
+			ScopedEnforcementActions: []string{string(util.Deny), string(util.Warn)},
+		},
+		{
+			Msg:               "invalid",
+			Constraint:        newConstraint("Foo", "invalid", "invalid", t),
+			EnforcementAction: "invalid",
+		},
+	}
+
+	denyMsgs, warnMsgs, auditResults := handler.processValidationResults(results, review)
+
+	require.Len(t, denyMsgs, 2)
+	require.Len(t, warnMsgs, 2)
+	require.Equal(t, 4, auditResults.totalViolations)
+	require.Len(t, auditResults.violations, 4)
+	require.Len(t, exporter.messages, 4)
+	timestamp := exporter.messages[0].Timestamp
+	_, err := time.Parse(time.RFC3339Nano, timestamp)
+	require.NoError(t, err)
+	for _, message := range exporter.messages {
+		require.Equal(t, "delete-request", message.ID)
+		require.Equal(t, "ns1", message.ResourceNamespace)
+		require.Equal(t, "deleted-pod", message.ResourceName)
+		require.Equal(t, map[string]string{"app": "demo"}, message.ResourceLabels)
+		require.Equal(t, timestamp, message.Timestamp)
+		require.Equal(t, string(admissionv1.Delete), message.Operation)
+		require.Equal(t, "pods", message.RequestResource)
+		require.Equal(t, "status", message.RequestSubresource)
+		require.Equal(t, "system:serviceaccount:ns1:controller", message.RequestUsername)
+		require.Equal(t, "service-account-1", message.RequestUserUID)
+		require.Equal(t, []string{"system:serviceaccounts", "system:authenticated"}, message.RequestUserGroups)
+		require.NotNil(t, message.DryRun)
+		require.True(t, *message.DryRun)
+	}
+	require.Equal(t, string(util.Deny), exporter.messages[0].EnforcementAction)
+	require.Equal(t, string(util.Warn), exporter.messages[1].EnforcementAction)
+	require.Equal(t, string(util.Dryrun), exporter.messages[2].EnforcementAction)
+	require.Equal(t, string(util.Scoped), exporter.messages[3].EnforcementAction)
+	require.Equal(t, []string{string(util.Deny), string(util.Warn)}, exporter.messages[3].EnforcementActions)
+}
+
+func TestNewAdmissionViolationExportMessageConnect(t *testing.T) {
+	review := &admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			UID: types.UID("connect-request"),
+			Kind: metav1.GroupVersionKind{
+				Version: "v1",
+				Kind:    "PodExecOptions",
+			},
+			Resource: metav1.GroupVersionResource{
+				Version:  "v1",
+				Resource: "pods",
+			},
+			SubResource: "exec",
+			Name:        "example",
+			Namespace:   "default",
+			Operation:   admissionv1.Connect,
+		},
+	}
+
+	message := newAdmissionViolationExportMessage(review, &unstructured.Unstructured{})
+
+	require.Equal(t, "connect-request", message.ID)
+	require.Equal(t, string(admissionv1.Connect), message.Operation)
+	require.Equal(t, "pods", message.RequestResource)
+	require.Equal(t, "exec", message.RequestSubresource)
+	require.Equal(t, "default", message.ResourceNamespace)
+	require.Equal(t, "example", message.ResourceName)
+}
+
+func TestProcessValidationResults(t *testing.T) {
 	resDryRun := &rtypes.Result{
 		Msg:               "test",
 		Constraint:        newConstraint("Foo", "ph", "dryrun", t),
@@ -973,7 +1768,7 @@ func TestGetValidationMessages(t *testing.T) {
 					},
 				},
 			}
-			denyMsgs, warnMsgs := handler.getValidationMessages(tt.Result, review)
+			denyMsgs, warnMsgs, _ := handler.processValidationResults(tt.Result, review)
 			if len(denyMsgs) != tt.ExpectedDenyMsgCount {
 				t.Errorf("denyMsgs: expected count = %d; actual count = %d", tt.ExpectedDenyMsgCount, len(denyMsgs))
 			}

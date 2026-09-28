@@ -27,6 +27,7 @@ func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructur
 
 	if len(iterations) > 0 {
 		logDetails := []interface{}{
+			logging.Semantic, true,
 			"Mutation Id", mutationUUID,
 			logging.EventType, logging.MutationApplied,
 			logging.ResourceGroup, obj.GroupVersionKind().Group,

@@ -63,6 +63,114 @@ teardown_file() {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration"
 }
 
+@test "validation webhook emits admission audit annotations" {
+  if [[ -z "${ENABLE_ADMISSION_AUDIT_ANNOTATION_TESTS:-}" ]]; then
+    skip "skipping admission audit annotation tests"
+  fi
+
+  local namespace="admission-audit-annotations-webhook"
+  local resource_name="admission-audit-annotations-webhook"
+  local allowed_resource_name="${resource_name}-allowed"
+  local constraint_name="admission-audit-annotations-webhook"
+  CLEAN_CMD="kubectl delete k8srequiredlabels.constraints.gatekeeper.sh ${constraint_name} --ignore-not-found; kubectl delete constrainttemplate k8srequiredlabels --ignore-not-found; kubectl delete namespace ${namespace} --ignore-not-found; ${CLEAN_CMD}"
+
+  kubectl create namespace "${namespace}"
+  kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/admission_audit_annotations_webhook.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels ${constraint_name}"
+
+  run bash -c "kubectl create configmap ${allowed_resource_name} --namespace ${namespace} --dry-run=client -o json | jq '.metadata.labels.gatekeeper = \"yes\"' | kubectl create -f -"
+  assert_success
+  if [[ "${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS:-false}" == "true" ]]; then
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "webhook_admission_audit_annotation_without_violations_matches ${allowed_resource_name}"
+  else
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "admission_audit_annotation_absent ${allowed_resource_name} configmaps validation.gatekeeper.sh/evaluation"
+  fi
+
+  run kubectl create configmap "${resource_name}" --namespace "${namespace}"
+  assert_match 'denied' "${output}"
+  assert_failure
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "webhook_admission_audit_annotation_matches ${resource_name} ${constraint_name}"
+
+  local action
+  for action in warn dryrun; do
+    kubectl patch k8srequiredlabels.constraints.gatekeeper.sh "${constraint_name}" --type=merge -p "{\"spec\":{\"enforcementAction\":\"${action}\"}}"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels ${constraint_name}"
+
+    run kubectl create configmap "${resource_name}-${action}" --namespace "${namespace}"
+    assert_success
+    if [[ "${action}" == "warn" ]]; then
+      assert_match 'Warning' "${output}"
+    else
+      assert_not_match 'Warning' "${output}"
+    fi
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "webhook_admission_audit_annotation_matches ${resource_name}-${action} ${constraint_name} ${action}"
+  done
+}
+
+@test "generated VAP emits admission audit annotations" {
+  if [[ -z "${ENABLE_ADMISSION_AUDIT_ANNOTATION_TESTS:-}" || -z "${ENABLE_VAP_TESTS:-}" ]]; then
+    skip "skipping VAP admission audit annotation tests"
+  fi
+  if ! kubectl api-resources --api-group=admissionregistration.k8s.io -o name | grep -qx 'validatingadmissionpolicies.admissionregistration.k8s.io'; then
+    skip "VAP is not enabled for the cluster"
+  fi
+
+  local resource_name="admission-audit-annotations-vap"
+  local allowed_resource_name="${resource_name}-allowed"
+  local dryrun_resource_name="${resource_name}-dryrun"
+  local constraint_name="admission-audit-annotations-vap"
+  local policy_name="gatekeeper-k8srequiredlabelsvap"
+  local binding_name="gatekeeper-k8srequiredlabelsvap-${constraint_name}"
+  local multiple_resource_name="admission-audit-annotations-vap-multiple"
+  local first_constraint_name="admission-audit-annotations-vap-multiple-first"
+  local second_constraint_name="admission-audit-annotations-vap-multiple-second"
+  local first_binding_name="gatekeeper-k8srequiredlabelsvap-${first_constraint_name}"
+  local second_binding_name="gatekeeper-k8srequiredlabelsvap-${second_constraint_name}"
+  CLEAN_CMD="kubectl delete k8srequiredlabelsvap.constraints.gatekeeper.sh ${constraint_name} ${first_constraint_name} ${second_constraint_name} --ignore-not-found; kubectl delete constrainttemplate k8srequiredlabelsvap --ignore-not-found; kubectl delete namespace ${resource_name} ${allowed_resource_name} ${dryrun_resource_name} ${multiple_resource_name} --ignore-not-found; ${CLEAN_CMD}"
+
+  kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get validatingadmissionpolicy ${policy_name}"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/admission_audit_annotations_vap.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_admission_audit_configuration_ready ${policy_name} ${binding_name}"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_admission_enforced ${resource_name}-probe ${policy_name} ${binding_name}"
+
+  run kubectl create namespace "${resource_name}"
+  assert_match 'denied' "${output}"
+  assert_failure
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_admission_audit_annotations_match ${resource_name} ${policy_name} ${constraint_name}"
+
+  run bash -c "kubectl create namespace ${allowed_resource_name} --dry-run=client -o json | jq '.metadata.labels.owner = \"test.agilebank.demo\"' | kubectl create -f -"
+  assert_success
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_admission_audit_annotation_without_violations_matches ${allowed_resource_name} ${policy_name}"
+
+  kubectl patch k8srequiredlabelsvap.constraints.gatekeeper.sh "${constraint_name}" --type=json -p '[{"op":"replace","path":"/spec/scopedEnforcementActions/0/action","value":"dryrun"}]'
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_admission_audit_configuration_ready ${policy_name} ${binding_name} Audit"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl create namespace ${dryrun_resource_name}-probe --dry-run=server && vap_admission_audit_annotations_match ${dryrun_resource_name}-probe ${policy_name} ${constraint_name} Audit"
+
+  run kubectl create namespace "${dryrun_resource_name}"
+  assert_success
+  assert_not_match 'Warning' "${output}"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_admission_audit_annotations_match ${dryrun_resource_name} ${policy_name} ${constraint_name} Audit"
+
+  kubectl delete k8srequiredlabelsvap.constraints.gatekeeper.sh "${constraint_name}"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "! kubectl get validatingadmissionpolicybinding ${binding_name}"
+
+  kubectl apply -f ${BATS_TESTS_DIR}/constraints/admission_audit_annotations_vap_multiple.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_admission_audit_configuration_ready ${policy_name} ${first_binding_name} Warn"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_admission_audit_configuration_ready ${policy_name} ${second_binding_name} Warn"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_admission_warns_for_bindings ${multiple_resource_name}-probe ${policy_name} ${first_binding_name} ${second_binding_name}"
+
+  run kubectl create namespace "${multiple_resource_name}"
+  assert_match "${first_binding_name}" "${output}"
+  assert_match "${second_binding_name}" "${output}"
+  assert_success
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_multiple_binding_audit_annotation_matches ${multiple_resource_name} ${policy_name}"
+}
+
 @test "vap test" {
   if [ -z $ENABLE_VAP_TESTS ]; then
     skip "skipping vap tests"
@@ -114,9 +222,9 @@ teardown_file() {
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml"
     
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label"
 
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label-scoped"
 
     # Verify VAPB metrics with status=active shows at least 2 (we created 2 bindings)
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vapb_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep -E '^gatekeeper_validating_admission_policy_bindings\{status=\"active\"\}' | awk '{print \$2}' | tr -d '\r'); [ -n \"\$vapb_count\" ] && [ \"\$vapb_count\" -gt 1 ]"
@@ -127,13 +235,13 @@ teardown_file() {
     assert_failure
     kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
 
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label"
 
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label"
 
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label-scoped"
 
-    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-all-must-have-label-scoped"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get ValidatingAdmissionPolicyBinding gatekeeper-k8srequiredlabelsvap-all-must-have-label-scoped"
 
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/good/good_ns.yaml
     kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
@@ -457,10 +565,15 @@ __namespace_exclusion_test() {
   local exclusion_config="$1"
   local excluded_namespace="$2"
 
+  # Ensure each exclusion case is self-contained. Previous tests may clean up
+  # namespaced fixtures or the ConstraintTemplate CRD while retrying.
+  kubectl create ns "${excluded_namespace}" --dry-run=client -o yaml | kubectl apply -f -
+  kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
+
   # applying default sync config
   kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/sync.yaml
 
-  kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"
 
   run kubectl create configmap should-fail -n "${excluded_namespace}"
@@ -748,6 +861,16 @@ __expansion_audit_test() {
   run kubectl apply -f test/export/pod_must_have_test.yaml
 
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels pod-must-have-test"
+
+  if [ -n "$ENABLE_ADMISSION_EXPORT_TESTS" ]; then
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "admission_export_connection_ready"
+    admission_violation_count_before="$(admission_violation_count)"
+    run kubectl apply -f test/export/denied_pod.yaml
+    assert_match 'denied' "${output}"
+    assert_failure
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "admission_violation_count_greater_than ${admission_violation_count_before}"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "admission_export_connection_active"
+  fi
 
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "total_violations ${EXPORT_BACKEND}"
 

@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"bufio"
 	"container/heap"
 	"context"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -56,6 +58,7 @@ const (
 	defaultConstraintViolationsLimit = 20
 	defaultListLimit                 = 500
 	defaultAPICacheDir               = "/tmp/audit"
+	auditObjectsFile                 = "objects.json"
 )
 
 var (
@@ -225,6 +228,9 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 
 // New creates a new manager for audit.
 func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
+	if *exportutil.ExportEnabled && deps.ExportSystem == nil {
+		return nil, errors.New("audit violation export requires an export system")
+	}
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -265,11 +271,10 @@ func (am *Manager) audit(ctx context.Context) error {
 		Errors:       make(map[string]error),
 	}
 	if *exportutil.ExportEnabled {
-		if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp}); err != nil {
+		err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditStartedMsg, ID: timestamp})
+		auditExportPublishingState.recordPublishResult(err)
+		if err != nil {
 			am.log.Error(err, "failed to export audit start message")
-			auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
-		} else {
-			auditExportPublishingState.SuccessCount++
 		}
 	}
 	// record audit latency
@@ -284,14 +289,13 @@ func (am *Manager) audit(ctx context.Context) error {
 			am.log.Error(err, "failed to report run end time")
 		}
 		if *exportutil.ExportEnabled {
-			if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp}); err != nil {
+			err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp})
+			auditExportPublishingState.recordPublishResult(err)
+			if err != nil {
 				am.log.Error(err, "failed to export audit end message")
-				auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
-			} else {
-				auditExportPublishingState.SuccessCount++
 			}
 			// At the end of the Audit update the Connection status with any errors collected during publishing
-			reportExportConnectionErrors(ctx, auditExportPublishingState, am.log, am.mgr.GetClient(), am.mgr.GetScheme(), am.getPod)
+			reportExportConnectionErrors(ctx, auditExportPublishingState, am.log, am.mgr.GetAPIReader(), am.mgr.GetClient(), am.mgr.GetScheme(), am.getPod)
 		}
 	}()
 
@@ -327,19 +331,26 @@ func (am *Manager) audit(ctx context.Context) error {
 		totalViolationsPerEnforcementAction[action] = 0
 	}
 
+	hasConstraints, err := am.hasConstraintInstances(ctx, constraintsGVKs)
+	if err != nil {
+		am.log.Error(err, "unable to determine whether constraints exist; continuing audit")
+	} else if !hasConstraints {
+		return am.handleNoConstraints(totalViolationsPerEnforcementAction)
+	}
+
 	if *auditFromCache {
 		var res []Result
-		am.log.Info("Auditing from cache")
+		am.log.WithValues(logging.Semantic, true).Info("Auditing from cache")
 		res, errs := am.auditFromCache(ctx)
-		am.log.Info("Audit from cache results", "violations", len(res))
+		am.log.WithValues(logging.Semantic, true).Info("Audit from cache results", "violations", len(res))
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
 		}
 
-		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, &auditExportPublishingState)
 	} else {
-		am.log.Info("Auditing via discovery client")
-		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+		am.log.WithValues(logging.Semantic, true).Info("Auditing via discovery client")
+		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, &auditExportPublishingState)
 		if err != nil {
 			return err
 		}
@@ -373,7 +384,7 @@ func (am *Manager) auditResources(
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	auditExportPublishingState auditExportPublishingState,
+	auditExportPublishingState *auditExportPublishingState,
 ) error {
 	// delete all from cache dir before starting audit
 	err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
@@ -485,6 +496,9 @@ func (am *Manager) auditResources(
 	for gv, gvKinds := range clusterAPIResources {
 	kindsLoop:
 		for kind := range gvKinds {
+			if !shouldAuditKind(matchedKinds, kind) {
+				continue
+			}
 			am.log.V(logging.DebugLevel).Info("Listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 			// delete all existing folders from cache dir before starting next kind
 			err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize)
@@ -494,10 +508,6 @@ func (am *Manager) auditResources(
 			}
 			// tracking number of folders created for this kind
 			folderCount := 0
-			_, matchAll := matchedKinds["*"]
-			if _, found := matchedKinds[kind]; !found && !matchAll {
-				continue
-			}
 
 			objList := &unstructured.UnstructuredList{}
 			opts := &client.ListOptions{
@@ -527,6 +537,7 @@ func (am *Manager) auditResources(
 					continue kindsLoop
 				}
 				folderCount++
+				itemsToReview := objList.Items[:0]
 				for index := range objList.Items {
 					isExcludedNamespace, err := am.skipExcludedNamespace(&objList.Items[index])
 					if err != nil {
@@ -536,23 +547,23 @@ func (am *Manager) auditResources(
 					if isExcludedNamespace {
 						continue
 					}
-
-					fileName := fmt.Sprintf("%d", index)
-					destFile := path.Join(*apiCacheDir, subPath, fileName)
-					item := objList.Items[index]
-					jsonBytes, err := item.MarshalJSON()
-					if err != nil {
-						log.Error(err, "error while marshaling unstructured object to JSON")
-						continue
-					}
-					if err := os.WriteFile(destFile, jsonBytes, 0o600); err != nil {
-						log.Error(err, "error writing data to file")
-						continue
-					}
+					itemsToReview = append(itemsToReview, objList.Items[index])
 				}
 
-				resourceVersion = objList.GetResourceVersion()
-				opts.Continue = objList.GetContinue()
+				nextResourceVersion := objList.GetResourceVersion()
+				nextContinue := objList.GetContinue()
+				writeErr := am.writeUnstructuredListBestEffort(parentDir, itemsToReview)
+				resourceVersion = nextResourceVersion
+				opts.Continue = nextContinue
+				if writeErr != nil {
+					log.Error(writeErr, "error writing data to file")
+					if opts.Continue == "" {
+						break
+					}
+					am.log.V(logging.DebugLevel).Info("Requesting next chunk of objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
+					continue
+				}
+
 				if opts.Continue == "" {
 					am.log.V(logging.DebugLevel).Info("Finished listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 					break
@@ -574,6 +585,13 @@ func (am *Manager) auditResources(
 		return mergeErrors(errs)
 	}
 	return nil
+}
+
+func shouldAuditKind(matchedKinds map[string]bool, kind string) bool {
+	if matchedKinds["*"] {
+		return true
+	}
+	return matchedKinds[kind]
 }
 
 func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
@@ -628,7 +646,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		if *logStatsAudit {
 			logging.LogStatsEntries(
 				am.opa,
-				am.log.WithValues(logging.EventType, "audit_cache_stats"),
+				am.log.WithValues(logging.EventType, "audit_cache_stats", logging.Semantic, true),
 				resp.StatsEntries,
 				"audit from cache review request stats",
 			)
@@ -670,7 +688,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	auditExportPublishingState auditExportPublishingState,
+	auditExportPublishingState *auditExportPublishingState,
 ) error {
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
@@ -684,92 +702,89 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			continue
 		}
 		for _, fileName := range files {
-			contents, err := os.ReadFile(path.Join(pDir, fileName)) // #nosec G304
-			if err != nil {
-				am.log.Error(err, "Unable to get content from file", "fileName", fileName)
-				continue
-			}
-			objFile, err := am.readUnstructured(contents)
-			if err != nil {
-				am.log.Error(err, "Unable to get unstructured data from content in file", "fileName", fileName)
-				continue
-			}
-			objNs := objFile.GetNamespace()
-			var ns *corev1.Namespace
-			if objNs != "" {
-				nsRef, err := nsCache.Get(ctx, am.client, objNs)
-				if err != nil {
-					am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
-					continue
+			filePath := path.Join(pDir, fileName)
+			err := am.forEachUnstructuredInFile(filePath, func(objFile *unstructured.Unstructured) {
+				objNs := objFile.GetNamespace()
+				var ns *corev1.Namespace
+				if objNs != "" {
+					nsRef, err := nsCache.Get(ctx, am.client, objNs)
+					if err != nil {
+						am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
+						return
+					}
+					ns = &nsRef
 				}
-				ns = &nsRef
-			}
-			augmentedObj := target.AugmentedUnstructured{
-				Object:    *objFile,
-				Namespace: ns,
-				Source:    mutationtypes.SourceTypeOriginal,
-			}
-
-			opts := []reviews.ReviewOpt{
-				reviews.EnforcementPoint(util.AuditEnforcementPoint),
-				reviews.Stats(*logStatsAudit),
-			}
-			if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
-				opts = append(opts, opt)
-			}
-			resp, err := am.opa.Review(ctx, augmentedObj, opts...)
-			if err != nil {
-				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
-				continue
-			}
-
-			// Expand object and review any resultant resources
-			base := &mutationtypes.Mutable{
-				Object:    objFile,
-				Namespace: ns,
-				Username:  "",
-				Source:    mutationtypes.SourceTypeOriginal,
-			}
-			resultants, err := am.expansionSystem.Expand(base)
-			if err != nil {
-				am.log.Error(err, "unable to expand object", "objName", objFile.GetName())
-				continue
-			}
-			for _, resultant := range resultants {
-				au := target.AugmentedUnstructured{
-					Object:    *resultant.Obj,
+				augmentedObj := target.AugmentedUnstructured{
+					Object:    *objFile,
 					Namespace: ns,
-					Source:    mutationtypes.SourceTypeGenerated,
+					Source:    mutationtypes.SourceTypeOriginal,
 				}
-				resultantOpts := []reviews.ReviewOpt{
+
+				opts := []reviews.ReviewOpt{
 					reviews.EnforcementPoint(util.AuditEnforcementPoint),
 					reviews.Stats(*logStatsAudit),
 				}
 				if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
-					resultantOpts = append(resultantOpts, opt)
+					opts = append(opts, opt)
 				}
-				resultantResp, err := am.opa.Review(ctx, au, resultantOpts...)
+				resp, err := am.opa.Review(ctx, augmentedObj, opts...)
 				if err != nil {
-					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
-					continue
+					am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
+					return
 				}
-				expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
-				expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
-				expansion.AggregateStats(resultant.TemplateName, resp, resultantResp)
-			}
 
-			if *logStatsAudit {
-				logging.LogStatsEntries(
-					am.opa,
-					am.log.WithValues(logging.EventType, "audit_stats"),
-					resp.StatsEntries,
-					"audit review request stats",
-				)
-			}
+				// Expand object and review any resultant resources
+				base := &mutationtypes.Mutable{
+					Object:    objFile,
+					Namespace: ns,
+					Username:  "",
+					Source:    mutationtypes.SourceTypeOriginal,
+				}
+				resultants, err := am.expansionSystem.Expand(base)
+				if err != nil {
+					am.log.Error(err, "unable to expand object", "objName", objFile.GetName())
+					return
+				}
+				for _, resultant := range resultants {
+					au := target.AugmentedUnstructured{
+						Object:    *resultant.Obj,
+						Namespace: ns,
+						Source:    mutationtypes.SourceTypeGenerated,
+					}
+					resultantOpts := []reviews.ReviewOpt{
+						reviews.EnforcementPoint(util.AuditEnforcementPoint),
+						reviews.Stats(*logStatsAudit),
+					}
+					if opt := util.NamespaceReviewOpt(ns, am.log); opt != nil {
+						resultantOpts = append(resultantOpts, opt)
+					}
+					resultantResp, err := am.opa.Review(ctx, au, resultantOpts...)
+					if err != nil {
+						am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
+						continue
+					}
+					expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
+					expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
+					expansion.AggregateStats(resultant.TemplateName, resp, resultantResp)
+				}
 
-			if len(resp.Results()) > 0 {
-				results := ToResults(&augmentedObj.Object, resp)
-				am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+				if *logStatsAudit {
+					logging.LogStatsEntries(
+						am.opa,
+						am.log.WithValues(logging.EventType, "audit_stats", logging.Semantic, true),
+						resp.StatsEntries,
+						"audit review request stats",
+					)
+				}
+
+				if len(resp.Results()) > 0 {
+					results := ToResults(&augmentedObj.Object, resp)
+					am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+				}
+			})
+			if err != nil {
+				am.log.Error(err, "Unable to get unstructured data from content in file", "fileName", fileName)
+				continue
 			}
 		}
 	}
@@ -817,6 +832,112 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 	return nil
 }
 
+func (am *Manager) writeUnstructuredList(directory string, objects []unstructured.Unstructured) error {
+	return am.writeUnstructuredListFunc(directory, objects, nil)
+}
+
+func (am *Manager) writeUnstructuredListBestEffort(directory string, objects []unstructured.Unstructured) error {
+	return am.writeUnstructuredListFunc(directory, objects, func(err error) {
+		log.Error(err, "error while marshaling unstructured object to JSON")
+	})
+}
+
+func (am *Manager) writeUnstructuredListFunc(directory string, objects []unstructured.Unstructured, handleMarshalError func(error)) error {
+	if len(objects) == 0 {
+		return nil
+	}
+
+	file, err := os.OpenFile(path.Join(directory, auditObjectsFile), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	if _, err := writer.WriteString("["); err != nil {
+		return err
+	}
+	wroteObject := false
+	for index := range objects {
+		jsonBytes, err := objects[index].MarshalJSON()
+		if err != nil {
+			if handleMarshalError == nil {
+				return err
+			}
+			handleMarshalError(err)
+			continue
+		}
+		if wroteObject {
+			if _, err := writer.WriteString(","); err != nil {
+				return err
+			}
+		}
+		if _, err := writer.Write(jsonBytes); err != nil {
+			return err
+		}
+		wroteObject = true
+	}
+	if _, err := writer.WriteString("]"); err != nil {
+		return err
+	}
+	return writer.Flush()
+}
+
+func (am *Manager) forEachUnstructuredInFile(filePath string, handleObject func(*unstructured.Unstructured)) error {
+	file, err := os.Open(filePath) // #nosec G304
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	reader := bufio.NewReader(file)
+	firstByte, err := firstNonSpaceByte(reader)
+	if err != nil {
+		return err
+	}
+	if err := reader.UnreadByte(); err != nil {
+		return err
+	}
+
+	decoder := json.NewDecoder(reader)
+	if firstByte != '[' {
+		obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
+		if err := decoder.Decode(obj); err != nil {
+			return err
+		}
+		handleObject(obj)
+		return nil
+	}
+
+	if _, err := decoder.Token(); err != nil {
+		return err
+	}
+	for decoder.More() {
+		obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
+		if err := decoder.Decode(obj); err != nil {
+			return err
+		}
+		handleObject(obj)
+	}
+	_, err = decoder.Token()
+	return err
+}
+
+func firstNonSpaceByte(reader *bufio.Reader) (byte, error) {
+	for {
+		b, err := reader.ReadByte()
+		if err != nil {
+			return 0, err
+		}
+		switch b {
+		case ' ', '\n', '\r', '\t':
+			continue
+		default:
+			return b, nil
+		}
+	}
+}
+
 func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructured, error) {
 	u := &unstructured.Unstructured{
 		Object: make(map[string]interface{}),
@@ -826,6 +947,19 @@ func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructure
 		return nil, err
 	}
 	return u, nil
+}
+
+func (am *Manager) readUnstructuredList(jsonBytes []byte) ([]unstructured.Unstructured, error) {
+	var objects []unstructured.Unstructured
+	if err := json.Unmarshal(jsonBytes, &objects); err == nil {
+		return objects, nil
+	}
+
+	object, err := am.readUnstructured(jsonBytes)
+	if err != nil {
+		return nil, err
+	}
+	return []unstructured.Unstructured{*object}, nil
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
@@ -883,13 +1017,44 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 	return ret, nil
 }
 
+func (am *Manager) hasConstraintInstances(ctx context.Context, constraintsGVKs []schema.GroupVersionKind) (bool, error) {
+	for _, constraintGVK := range constraintsGVKs {
+		constraintList := &unstructured.UnstructuredList{}
+		constraintList.SetGroupVersionKind(constraintGVK)
+		if err := am.client.List(ctx, constraintList, client.Limit(1)); err != nil {
+			return true, err
+		}
+		if len(constraintList.Items) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (am *Manager) handleNoConstraints(totalViolationsPerEnforcementAction map[util.EnforcementAction]int64) error {
+	am.log.Info("Audit exits, no constraint instances found")
+	am.stopAuditResultsUpdateLoop()
+	var cleanupErr error
+	if !*auditFromCache {
+		if err := am.removeAllFromDir(*apiCacheDir, *auditChunkSize); err != nil && !errors.Is(err, os.ErrNotExist) {
+			cleanupErr = fmt.Errorf("cleaning audit cache directory: %w", err)
+		}
+	}
+	for action, total := range totalViolationsPerEnforcementAction {
+		if err := am.reporter.reportTotalViolations(action, total); err != nil {
+			am.log.Error(err, "failed to report total violations")
+		}
+	}
+	return cleanupErr
+}
+
 func (am *Manager) addAuditResponsesToUpdateLists(
 	updateLists map[util.KindVersionName]*LimitQueue,
 	res []Result,
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
-	auditExportPublishingState auditExportPublishingState,
+	auditExportPublishingState *auditExportPublishingState,
 ) {
 	for _, r := range res {
 		constraint := r.Constraint
@@ -929,11 +1094,8 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		labels := r.obj.GetLabels()
 		logViolation(am.log, constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels)
 		if *exportutil.ExportEnabled {
-			if err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp)); err != nil {
-				auditExportPublishingState.Errors[strings.Split(err.Error(), ":")[0]] = err
-			} else {
-				auditExportPublishingState.SuccessCount++
-			}
+			err := am.exportSystem.Publish(context.Background(), *exportutil.AuditConnection, *exportutil.AuditChannel, violationMsg(constraint, ea, r.ScopedEnforcementActions, gvk, namespace, name, msg, details, labels, timestamp))
+			auditExportPublishingState.recordPublishResult(err)
 		}
 		if *emitAuditEvents {
 			log.Info("Warning: Alpha flag emit-audit-events is set to true. This flag may change in the future.")
@@ -944,20 +1106,26 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	}
 }
 
-func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]*LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) {
+func (am *Manager) stopAuditResultsUpdateLoop() {
 	// if there is a previous reporting thread, close it before starting a new one
-	if am.ucloop != nil {
-		// this is closing the previous audit reporting thread
-		am.log.Info("closing the previous audit reporting thread")
-		close(am.ucloop.stop)
-		select {
-		case <-am.ucloop.stopped:
-		case <-time.After(time.Duration(*auditInterval) * time.Second):
-			// avoid deadlocking in cases where ucloop never stops
-			// this creates potential leak of threads but avoids potential of deadlocking
-			am.log.Info("timeout waiting for previous audit reporting thread to finish")
-		}
+	if am.ucloop == nil {
+		return
 	}
+	// this is closing the previous audit reporting thread
+	am.log.Info("closing the previous audit reporting thread")
+	close(am.ucloop.stop)
+	select {
+	case <-am.ucloop.stopped:
+	case <-time.After(time.Duration(*auditInterval) * time.Second):
+		// avoid deadlocking in cases where ucloop never stops
+		// this creates potential leak of threads but avoids potential of deadlocking
+		am.log.Info("timeout waiting for previous audit reporting thread to finish")
+	}
+	am.ucloop = nil
+}
+
+func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]*LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) {
+	am.stopAuditResultsUpdateLoop()
 
 	am.ucloop = &updateConstraintLoop{
 		client:  am.client,
@@ -1160,6 +1328,7 @@ func logStart(l logr.Logger) {
 	l.Info(
 		"auditing constraints and violations",
 		logging.EventType, "audit_started",
+		logging.Semantic, true,
 	)
 }
 
@@ -1167,6 +1336,7 @@ func logFinish(l logr.Logger, t time.Duration) {
 	l.Info(
 		"auditing is complete",
 		logging.EventType, "audit_finished",
+		logging.Semantic, true,
 		"duration", t.String(),
 	)
 }
@@ -1175,6 +1345,7 @@ func logConstraint(l logr.Logger, gvknn *util.KindVersionName, enforcementAction
 	l.Info(
 		"audit results for constraint",
 		logging.EventType, "constraint_audited",
+		logging.Semantic, true,
 		logging.ConstraintGroup, gvknn.Group,
 		logging.ConstraintAPIVersion, gvknn.Version,
 		logging.ConstraintKind, gvknn.Kind,
@@ -1223,6 +1394,7 @@ func logViolation(l logr.Logger,
 		message,
 		logging.Details, details,
 		logging.EventType, "violation_audited",
+		logging.Semantic, true,
 		logging.ConstraintGroup, constraint.GroupVersionKind().Group,
 		logging.ConstraintAPIVersion, constraint.GroupVersionKind().Version,
 		logging.ConstraintKind, constraint.GetKind(),
@@ -1305,8 +1477,21 @@ func mergeErrors(errs []error) error {
 }
 
 type auditExportPublishingState struct {
-	SuccessCount int
-	Errors       map[string]error
+	SuccessCount    int
+	Errors          map[string]error
+	LastAttemptTime time.Time
+	LastSuccessTime time.Time
+}
+
+func (state *auditExportPublishingState) recordPublishResult(err error) {
+	now := time.Now().UTC()
+	state.LastAttemptTime = now
+	if err != nil {
+		state.Errors = exportutil.AddPublishError(state.Errors, err)
+		return
+	}
+	state.SuccessCount++
+	state.LastSuccessTime = now
 }
 
 // Write the export errors to the ConnectionPodStatus.
@@ -1314,12 +1499,19 @@ func reportExportConnectionErrors(
 	ctx context.Context,
 	auditExportPublishingState auditExportPublishingState,
 	logger logr.Logger,
-	client client.Client,
+	reader client.Reader,
+	writer client.Writer,
 	scheme *runtime.Scheme,
 	getPod func(context.Context) (*corev1.Pod, error),
 ) {
 	exportErrors := []*statusv1alpha1.ConnectionError{}
-	for staticErrMsg, v := range auditExportPublishingState.Errors {
+	errorKeys := make([]string, 0, len(auditExportPublishingState.Errors))
+	for staticErrMsg := range auditExportPublishingState.Errors {
+		errorKeys = append(errorKeys, staticErrMsg)
+	}
+	sort.Strings(errorKeys)
+	for _, staticErrMsg := range errorKeys {
+		v := auditExportPublishingState.Errors[staticErrMsg]
 		logger.Error(v, "failed to export audit violation")
 		exportErrors = append(exportErrors, &statusv1alpha1.ConnectionError{
 			Type:    statusv1alpha1.PublishError,
@@ -1329,8 +1521,21 @@ func reportExportConnectionErrors(
 
 	// Connection is considered active if there were any successful publishes
 	activeConnection := auditExportPublishingState.SuccessCount > 0
+	publishStatus := statusv1alpha1.ConnectionPublishStatus{
+		Source: statusv1alpha1.AuditPublishSource,
+		Active: activeConnection,
+		Errors: exportErrors,
+	}
+	if !auditExportPublishingState.LastAttemptTime.IsZero() {
+		lastAttemptTime := metav1.NewTime(auditExportPublishingState.LastAttemptTime)
+		publishStatus.LastAttemptTime = &lastAttemptTime
+	}
+	if !auditExportPublishingState.LastSuccessTime.IsZero() {
+		lastSuccessTime := metav1.NewTime(auditExportPublishingState.LastSuccessTime)
+		publishStatus.LastSuccessTime = &lastSuccessTime
+	}
 
-	if err := exportController.UpdateOrCreateConnectionPodStatus(ctx, client, client, scheme, *exportutil.AuditConnection, exportErrors, &activeConnection, getPod); err != nil {
+	if err := exportController.UpdateConnectionPodPublishStatus(ctx, reader, writer, scheme, *exportutil.AuditConnection, publishStatus, getPod); err != nil {
 		logger.Error(err, "failed to write export errors to the connection pod status")
 	}
 }

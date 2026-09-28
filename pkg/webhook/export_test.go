@@ -1,0 +1,633 @@
+package webhook
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/go-logr/logr"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
+	"github.com/stretchr/testify/require"
+)
+
+type fakeAdmissionExportSystem struct {
+	publishErr error
+	published  chan interface{}
+	publish    func(context.Context, interface{}) error
+}
+
+func (f *fakeAdmissionExportSystem) Publish(ctx context.Context, _, _ string, message interface{}) error {
+	if f.publish != nil {
+		return f.publish(ctx, message)
+	}
+	if f.published != nil {
+		f.published <- message
+	}
+	return f.publishErr
+}
+
+func (f *fakeAdmissionExportSystem) UpsertConnection(context.Context, interface{}, string, string) error {
+	return nil
+}
+
+func (f *fakeAdmissionExportSystem) CloseConnection(string) error {
+	return nil
+}
+
+type fakeAdmissionExportMetrics struct {
+	mu            sync.Mutex
+	queued        int
+	queueFull     int
+	published     int
+	publishErrors int
+	dropped       map[string]int
+	queueDepth    int64
+	queueBytes    int64
+}
+
+func (f *fakeAdmissionExportMetrics) reportAdmissionExportQueued() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queued++
+}
+
+func (f *fakeAdmissionExportMetrics) reportAdmissionExportQueueFull() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queueFull++
+}
+
+func (f *fakeAdmissionExportMetrics) reportAdmissionExportPublished() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.published++
+}
+
+func (f *fakeAdmissionExportMetrics) reportAdmissionExportPublishError() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.publishErrors++
+}
+
+func (f *fakeAdmissionExportMetrics) reportAdmissionExportDropped(reason string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.dropped == nil {
+		f.dropped = make(map[string]int)
+	}
+	f.dropped[reason]++
+}
+
+func (f *fakeAdmissionExportMetrics) setAdmissionExportQueue(depth, bytes int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queueDepth = depth
+	f.queueBytes = bytes
+}
+
+type admissionExportStatusReport struct {
+	connectionName string
+	status         statusv1alpha1.ConnectionPublishStatus
+}
+
+type fakeAdmissionExportStatusReporter struct {
+	reports chan admissionExportStatusReport
+	report  func(context.Context, string, statusv1alpha1.ConnectionPublishStatus) error
+}
+
+func (f *fakeAdmissionExportStatusReporter) Report(ctx context.Context, connectionName string, status statusv1alpha1.ConnectionPublishStatus) error {
+	if f.report != nil {
+		return f.report(ctx, connectionName, status)
+	}
+	f.reports <- admissionExportStatusReport{
+		connectionName: connectionName,
+		status:         status,
+	}
+	return nil
+}
+
+func TestQueuedAdmissionViolationExporterStatusDoesNotBlockPublishing(t *testing.T) {
+	statusStarted := make(chan struct{})
+	releaseStatus := make(chan struct{})
+	var started sync.Once
+	statusReporter := &fakeAdmissionExportStatusReporter{
+		report: func(context.Context, string, statusv1alpha1.ConnectionPublishStatus) error {
+			started.Do(func() { close(statusStarted) })
+			<-releaseStatus
+			return nil
+		},
+	}
+	system := &fakeAdmissionExportSystem{published: make(chan interface{}, 2)}
+	exporter := newQueuedAdmissionViolationExporter(system, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, statusReporter)
+	exporter.statusInterval = time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- exporter.Start(ctx) }()
+	exporter.Export(&exportutil.ExportMsg{Message: "first"})
+	select {
+	case <-system.published:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first publish")
+	}
+	select {
+	case <-statusStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for status report")
+	}
+
+	exporter.Export(&exportutil.ExportMsg{Message: "second"})
+	select {
+	case <-system.published:
+	case <-time.After(time.Second):
+		t.Fatal("status report blocked the publisher")
+	}
+
+	close(releaseStatus)
+	cancel()
+	require.NoError(t, <-done)
+}
+
+func TestQueuedAdmissionViolationExporterRetainsFailedStatusSnapshot(t *testing.T) {
+	reportErr := errors.New("status unavailable")
+	reports := 0
+	statusReporter := &fakeAdmissionExportStatusReporter{
+		report: func(context.Context, string, statusv1alpha1.ConnectionPublishStatus) error {
+			reports++
+			if reports == 1 {
+				return reportErr
+			}
+			return nil
+		},
+	}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, statusReporter)
+	exporter.recordPublishResult(nil)
+
+	exporter.reportPendingPublishStatus(context.Background(), true)
+	exporter.stateMu.Lock()
+	require.True(t, exporter.state.attempted)
+	exporter.stateMu.Unlock()
+
+	exporter.reportPendingPublishStatus(context.Background(), true)
+	exporter.stateMu.Lock()
+	require.False(t, exporter.state.attempted)
+	exporter.stateMu.Unlock()
+	require.Equal(t, 2, reports)
+}
+
+func TestQueuedAdmissionViolationExporterCoalescesHealthyStatus(t *testing.T) {
+	now := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
+	reports := 0
+	statusReporter := &fakeAdmissionExportStatusReporter{
+		report: func(context.Context, string, statusv1alpha1.ConnectionPublishStatus) error {
+			reports++
+			return nil
+		},
+	}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, statusReporter)
+	exporter.now = func() time.Time { return now }
+
+	exporter.recordPublishResult(nil)
+	exporter.reportPendingPublishStatus(context.Background(), false)
+	require.Equal(t, 1, reports)
+
+	now = now.Add(10 * time.Second)
+	exporter.recordPublishResult(nil)
+	exporter.reportPendingPublishStatus(context.Background(), false)
+	require.Equal(t, 1, reports)
+
+	now = now.Add(exporter.healthyInterval)
+	exporter.reportPendingPublishStatus(context.Background(), false)
+	require.Equal(t, 2, reports)
+}
+
+func TestQueuedAdmissionViolationExporterReportsRecoveryWithoutWaitingForHeartbeat(t *testing.T) {
+	reports := 0
+	statusReporter := &fakeAdmissionExportStatusReporter{
+		report: func(context.Context, string, statusv1alpha1.ConnectionPublishStatus) error {
+			reports++
+			return nil
+		},
+	}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, statusReporter)
+
+	exporter.recordPublishResult(errors.New("backend unavailable"))
+	exporter.reportPendingPublishStatus(context.Background(), false)
+	exporter.recordPublishResult(nil)
+	exporter.reportPendingPublishStatus(context.Background(), false)
+
+	require.Equal(t, 2, reports)
+}
+
+func TestQueuedAdmissionViolationExporterDropsWhenQueueIsFull(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), metrics, nil)
+	exporter.queue = make(chan queuedAdmissionViolation, 1)
+
+	exporter.Export(&exportutil.ExportMsg{Message: "first"})
+	built := false
+	exporter.TryExport(func() *exportutil.ExportMsg {
+		built = true
+		return &exportutil.ExportMsg{Message: "second"}
+	})
+
+	require.False(t, built)
+	require.Equal(t, 1, metrics.queued)
+	require.Equal(t, 1, metrics.queueFull)
+	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonQueueFull])
+	require.Len(t, exporter.queue, 1)
+}
+
+func TestQueuedAdmissionViolationExporterDropsOversizedMessage(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), metrics, nil)
+	exporter.maxMessageBytes = 1
+
+	exporter.Export(&exportutil.ExportMsg{Message: "too large"})
+
+	require.Zero(t, metrics.queued)
+	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonMessageTooLarge])
+	require.Empty(t, exporter.queue)
+}
+
+func TestQueuedAdmissionViolationExporterReleasesMessageReservationAfterOversizedDrop(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), metrics, nil)
+	exporter.queue = make(chan queuedAdmissionViolation, 1)
+	exporter.maxMessageBytes = 2048
+
+	exporter.Export(&exportutil.ExportMsg{Details: map[string]interface{}{"value": strings.Repeat("x", 4096)}})
+	exporter.Export(&exportutil.ExportMsg{Message: "fits"})
+
+	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonMessageTooLarge])
+	require.Equal(t, 1, metrics.queued)
+	require.Len(t, exporter.queue, 1)
+}
+
+func TestAdmissionExportMessagePreflightAllowsExactEncodedLimit(t *testing.T) {
+	message := &exportutil.ExportMsg{
+		Message: strings.Repeat("<&", 64),
+		Details: map[string]interface{}{"missing": []interface{}{"team", true, float64(1)}},
+	}
+	encoded, err := json.Marshal(message)
+	require.NoError(t, err)
+	require.True(t, admissionExportMessageFitsBudget(message, int64(len(encoded))))
+}
+
+func TestConsumeAdmissionExportJSONValueEncodedSize(tester *testing.T) {
+	testCases := []struct {
+		name  string
+		value interface{}
+	}{
+		{name: "null", value: nil},
+		{name: "true", value: true},
+		{name: "false", value: false},
+		{name: "empty string", value: ""},
+		{name: "escaped string", value: "\x00\n\t\"\\<>&"},
+		{name: "invalid UTF-8", value: "\xff"},
+		{name: "invalid UTF-8 after escaped prefix", value: "\n<&\"prefix-\xff"},
+		{name: "invalid UTF-8 before escaped suffix", value: "\xff<>&\u2028\u2029"},
+		{name: "repeated invalid UTF-8", value: strings.Repeat("\xff", 64)},
+		{name: "truncated UTF-8", value: "\xe2\x82"},
+		{name: "valid replacement character", value: "\ufffd"},
+		{name: "Unicode separators", value: "\u2028\u2029"},
+		{name: "empty JSON number", value: json.Number("")},
+		{name: "JSON number", value: json.Number("-123.45e+6")},
+		{name: "zero integer", value: 0},
+		{name: "minimum int", value: int(math.MinInt)},
+		{name: "maximum int", value: int(math.MaxInt)},
+		{name: "minimum int8", value: int8(math.MinInt8)},
+		{name: "maximum int8", value: int8(math.MaxInt8)},
+		{name: "minimum int16", value: int16(math.MinInt16)},
+		{name: "maximum int16", value: int16(math.MaxInt16)},
+		{name: "minimum int32", value: int32(math.MinInt32)},
+		{name: "maximum int32", value: int32(math.MaxInt32)},
+		{name: "minimum int64", value: int64(math.MinInt64)},
+		{name: "maximum int64", value: int64(math.MaxInt64)},
+		{name: "maximum uint", value: uint(math.MaxUint)},
+		{name: "maximum uint8", value: uint8(math.MaxUint8)},
+		{name: "maximum uint16", value: uint16(math.MaxUint16)},
+		{name: "maximum uint32", value: uint32(math.MaxUint32)},
+		{name: "maximum uint64", value: uint64(math.MaxUint64)},
+		{name: "zero float32", value: float32(0)},
+		{name: "negative zero float32", value: float32(math.Copysign(0, -1))},
+		{name: "maximum float32", value: float32(math.MaxFloat32)},
+		{name: "negative maximum float32", value: float32(-math.MaxFloat32)},
+		{name: "smallest float32", value: float32(math.SmallestNonzeroFloat32)},
+		{name: "small fixed float32", value: float32(1e-6)},
+		{name: "small exponent float32", value: float32(1e-7)},
+		{name: "large fixed float32", value: float32(1e20)},
+		{name: "large exponent float32", value: float32(1e21)},
+		{name: "zero float64", value: float64(0)},
+		{name: "negative zero float64", value: math.Copysign(0, -1)},
+		{name: "maximum float64", value: math.MaxFloat64},
+		{name: "negative maximum float64", value: -math.MaxFloat64},
+		{name: "smallest float64", value: math.SmallestNonzeroFloat64},
+		{name: "small fixed float64", value: 1e-6},
+		{name: "small exponent float64", value: 1e-7},
+		{name: "small exponent boundary", value: math.Nextafter(1e-6, 0)},
+		{name: "large fixed float64", value: 1e20},
+		{name: "large exponent float64", value: 1e21},
+		{name: "large fixed boundary", value: math.Nextafter(1e21, 0)},
+		{name: "nil bytes", value: []byte(nil)},
+		{name: "empty bytes", value: []byte{}},
+		{name: "one byte", value: []byte{0}},
+		{name: "two bytes", value: []byte{0, 1}},
+		{name: "three bytes", value: []byte{0, 1, 2}},
+		{name: "nil strings", value: []string(nil)},
+		{name: "empty strings", value: []string{}},
+		{name: "strings", value: []string{"owner", "team"}},
+		{name: "invalid UTF-8 strings", value: []string{"owner", "\xff"}},
+		{name: "nil values", value: []interface{}(nil)},
+		{name: "empty values", value: []interface{}{}},
+		{name: "values", value: []interface{}{false, json.Number(""), []string{}}},
+		{name: "nil string map", value: map[string]string(nil)},
+		{name: "empty string map", value: map[string]string{}},
+		{name: "string map", value: map[string]string{"<key>": "\n"}},
+		{name: "invalid UTF-8 string map", value: map[string]string{"\xff": "value-\xfe"}},
+		{name: "nil value map", value: map[string]interface{}(nil)},
+		{name: "empty value map", value: map[string]interface{}{}},
+		{name: "value map", value: map[string]interface{}{"empty": []interface{}{}, "null": []byte(nil), "count": int64(math.MaxInt64)}},
+		{name: "invalid UTF-8 value map", value: map[string]interface{}{"\xff": []interface{}{"value-\xfe"}}},
+	}
+
+	for _, testCase := range testCases {
+		tester.Run(testCase.name, func(tester *testing.T) {
+			encoded, err := json.Marshal(testCase.value)
+			require.NoError(tester, err)
+
+			budget := int64(len(encoded))
+			nodes := 4096
+			withinBudget, known := consumeAdmissionExportJSONValue(&budget, testCase.value, 0, &nodes)
+			require.True(tester, known)
+			require.True(tester, withinBudget)
+			require.Zero(tester, budget)
+
+			budget = int64(len(encoded) - 1)
+			nodes = 4096
+			withinBudget, known = consumeAdmissionExportJSONValue(&budget, testCase.value, 0, &nodes)
+			require.True(tester, known)
+			require.False(tester, withinBudget)
+
+			message := &exportutil.ExportMsg{Details: testCase.value}
+			encodedMessage, err := json.Marshal(message)
+			require.NoError(tester, err)
+			require.True(tester, admissionExportMessageFitsBudget(message, int64(len(encodedMessage))))
+		})
+	}
+}
+
+func TestQueuedAdmissionViolationExporterInvalidUTF8Limit(tester *testing.T) {
+	message := &exportutil.ExportMsg{
+		Message: strings.Repeat("\xff", 64),
+		Details: map[string]interface{}{"value": strings.Repeat("\xfe", 64)},
+	}
+	encoded, err := json.Marshal(message)
+	require.NoError(tester, err)
+	metrics := &fakeAdmissionExportMetrics{}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), metrics, nil)
+	exporter.maxMessageBytes = int64(len(encoded))
+
+	exporter.Export(message)
+	require.Equal(tester, 1, metrics.queued)
+	require.Empty(tester, metrics.dropped)
+	require.Len(tester, exporter.queue, 1)
+
+	exporter.maxMessageBytes--
+	exporter.Export(message)
+	require.Equal(tester, 1, metrics.queued)
+	require.Equal(tester, 1, metrics.dropped[admissionExportDropReasonMessageTooLarge])
+	require.Len(tester, exporter.queue, 1)
+}
+
+func TestAdmissionExportPreflightPreservesNonFiniteNumberErrors(tester *testing.T) {
+	for _, value := range []interface{}{
+		float32(math.NaN()), float32(math.Inf(1)), float32(math.Inf(-1)),
+		math.NaN(), math.Inf(1), math.Inf(-1),
+	} {
+		tester.Run(fmt.Sprintf("%T/%v", value, value), func(tester *testing.T) {
+			budget := int64(maxAdmissionAuditDetailsBytes)
+			nodes := 4096
+			withinBudget, known := consumeAdmissionExportJSONValue(&budget, value, 0, &nodes)
+			require.False(tester, known)
+			require.False(tester, withinBudget)
+
+			metrics := &fakeAdmissionExportMetrics{}
+			exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), metrics, nil)
+			exporter.Export(&exportutil.ExportMsg{Details: value})
+			require.Equal(tester, 1, metrics.dropped[admissionExportDropReasonMarshalError])
+			require.Zero(tester, metrics.dropped[admissionExportDropReasonMessageTooLarge])
+			require.Empty(tester, exporter.queue)
+		})
+	}
+}
+
+func TestQueuedAdmissionViolationExporterDropsUnencodableMessage(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), metrics, nil)
+
+	exporter.Export(&exportutil.ExportMsg{Details: func() {}})
+
+	require.Zero(t, metrics.queued)
+	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonMarshalError])
+	require.Empty(t, exporter.queue)
+}
+
+func TestQueuedAdmissionViolationExporterDropsWhenByteLimitIsReached(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), metrics, nil)
+	exporter.maxQueueBytes = 1
+
+	exporter.Export(&exportutil.ExportMsg{Message: "too large for queue"})
+
+	require.Zero(t, metrics.queued)
+	require.Equal(t, 1, metrics.queueFull)
+	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonQueueBytesFull])
+	require.Empty(t, exporter.queue)
+}
+
+func TestQueuedAdmissionViolationExporterReportsPublishFailure(t *testing.T) {
+	publishErr := errors.New("backend unavailable")
+	metrics := &fakeAdmissionExportMetrics{}
+	statusReporter := &fakeAdmissionExportStatusReporter{reports: make(chan admissionExportStatusReport, 1)}
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{publishErr: publishErr}, "audit-connection", "admission-channel", logr.Discard(), metrics, statusReporter)
+	exporter.statusInterval = time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- exporter.Start(ctx)
+	}()
+	exporter.Export(&exportutil.ExportMsg{Message: "violation"})
+
+	select {
+	case report := <-statusReporter.reports:
+		require.Equal(t, "audit-connection", report.connectionName)
+		require.Equal(t, statusv1alpha1.WebhookPublishSource, report.status.Source)
+		require.False(t, report.status.Active)
+		require.Equal(t, []*statusv1alpha1.ConnectionError{
+			{Type: statusv1alpha1.PublishError, Message: "backend unavailable"},
+		}, report.status.Errors)
+		require.NotNil(t, report.status.LastAttemptTime)
+		require.Nil(t, report.status.LastSuccessTime)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for status report")
+	}
+	require.Equal(t, 1, metrics.publishErrors)
+
+	cancel()
+	require.NoError(t, <-done)
+}
+
+func TestAdmissionExportPublishStateBoundsErrors(t *testing.T) {
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, nil)
+	for i := 0; i < exportutil.MaxConnectionStatusErrors+100; i++ {
+		exporter.recordPublishResult(fmt.Errorf("class-%03d: backend unavailable", i))
+	}
+
+	exporter.stateMu.Lock()
+	defer exporter.stateMu.Unlock()
+	require.Len(t, exporter.state.errors, exportutil.MaxConnectionStatusErrors)
+	require.Contains(t, exporter.state.errors, exportutil.AdditionalPublishErrorsOmittedMessage)
+}
+
+func TestQueuedAdmissionViolationExporterReportsPublishSuccess(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	statusReporter := &fakeAdmissionExportStatusReporter{reports: make(chan admissionExportStatusReport, 1)}
+	system := &fakeAdmissionExportSystem{published: make(chan interface{}, 1)}
+	exporter := newQueuedAdmissionViolationExporter(system, "audit-connection", "admission-channel", logr.Discard(), metrics, statusReporter)
+	exporter.statusInterval = time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- exporter.Start(ctx)
+	}()
+	exporter.Export(&exportutil.ExportMsg{Message: "violation"})
+
+	select {
+	case report := <-statusReporter.reports:
+		require.Equal(t, statusv1alpha1.WebhookPublishSource, report.status.Source)
+		require.True(t, report.status.Active)
+		require.Empty(t, report.status.Errors)
+		require.NotNil(t, report.status.LastAttemptTime)
+		require.NotNil(t, report.status.LastSuccessTime)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for status report")
+	}
+	require.Equal(t, 1, metrics.published)
+	require.Zero(t, metrics.queueDepth)
+	require.Zero(t, metrics.queueBytes)
+	published, ok := (<-system.published).(json.RawMessage)
+	require.True(t, ok)
+	require.JSONEq(t, `{"message":"violation"}`, string(published))
+
+	cancel()
+	require.NoError(t, <-done)
+}
+
+func TestQueuedAdmissionViolationExporterDrainsQueueOnShutdown(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	system := &fakeAdmissionExportSystem{published: make(chan interface{}, 2)}
+	exporter := newQueuedAdmissionViolationExporter(system, "audit-connection", "admission-channel", logr.Discard(), metrics, nil)
+	exporter.Export(&exportutil.ExportMsg{Message: "first"})
+	exporter.Export(&exportutil.ExportMsg{Message: "second"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.NoError(t, exporter.Start(ctx))
+
+	require.Equal(t, 2, metrics.published)
+	require.Zero(t, metrics.dropped[admissionExportDropReasonShutdown])
+	require.Zero(t, metrics.queueDepth)
+	require.Zero(t, metrics.queueBytes)
+	require.Len(t, system.published, 2)
+
+	exporter.Export(&exportutil.ExportMsg{Message: "after shutdown"})
+	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonShutdown])
+}
+
+func TestQueuedAdmissionViolationExporterCountsShutdownDrainTimeout(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	system := &fakeAdmissionExportSystem{
+		publish: func(ctx context.Context, _ interface{}) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+	exporter := newQueuedAdmissionViolationExporter(system, "audit-connection", "admission-channel", logr.Discard(), metrics, nil)
+	exporter.shutdownTimeout = time.Millisecond
+	exporter.Export(&exportutil.ExportMsg{Message: "first"})
+	exporter.Export(&exportutil.ExportMsg{Message: "second"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.NoError(t, exporter.Start(ctx))
+
+	require.Equal(t, 1, metrics.publishErrors)
+	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonShutdown])
+	require.Zero(t, metrics.queueDepth)
+	require.Zero(t, metrics.queueBytes)
+}
+
+func TestQueuedAdmissionViolationExporterBoundsShutdownWhenBackendIgnoresContext(t *testing.T) {
+	metrics := &fakeAdmissionExportMetrics{}
+	publishStarted := make(chan struct{})
+	releasePublish := make(chan struct{})
+	publishDone := make(chan struct{})
+	system := &fakeAdmissionExportSystem{
+		publish: func(context.Context, interface{}) error {
+			close(publishStarted)
+			defer close(publishDone)
+			<-releasePublish
+			return nil
+		},
+	}
+	exporter := newQueuedAdmissionViolationExporter(system, "audit-connection", "admission-channel", logr.Discard(), metrics, nil)
+	exporter.shutdownTimeout = 10 * time.Millisecond
+	exporter.Export(&exportutil.ExportMsg{Message: "first"})
+	exporter.Export(&exportutil.ExportMsg{Message: "second"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- exporter.Start(ctx)
+	}()
+
+	select {
+	case <-publishStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for publish to start")
+	}
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		close(releasePublish)
+		<-publishDone
+		t.Fatal("shutdown exceeded its drain timeout")
+	}
+
+	close(releasePublish)
+	<-publishDone
+	require.Zero(t, metrics.published)
+	require.Equal(t, 1, metrics.publishErrors)
+	require.Equal(t, 1, metrics.dropped[admissionExportDropReasonShutdown])
+	require.Zero(t, metrics.queueDepth)
+	require.Zero(t, metrics.queueBytes)
+}
+
+func TestQueuedAdmissionViolationExporterRateLimitsLogs(t *testing.T) {
+	exporter := newQueuedAdmissionViolationExporter(&fakeAdmissionExportSystem{}, "connection", "channel", logr.Discard(), &fakeAdmissionExportMetrics{}, nil)
+
+	require.True(t, exporter.shouldLog(&exporter.lastDropLog))
+	require.False(t, exporter.shouldLog(&exporter.lastDropLog))
+}

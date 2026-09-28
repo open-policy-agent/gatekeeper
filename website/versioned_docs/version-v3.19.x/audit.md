@@ -143,6 +143,13 @@ Limitations/drawbacks of exporting violations:
 - Additional dependency on the backend system provided. For example, using pubsub tools to export violations.
 
 ## Running Audit
+
+### Why Audit Runs as a Singleton
+
+Gatekeeper audit is designed to run as a singleton because it writes audit results to Constraint status. Multiple audit instances can contend on the same Constraint status fields. In Gatekeeper v3.18 and later, the audit deployment may also run the `generate` operation, which creates or updates Constraint CRDs and, when VAP/VAPB generation is enabled, ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding resources. The `generate` operation should also run as a singleton.
+
+If your setup only consumes audit results from logs or exports, setting `--constraint-violations-limit=0` avoids storing individual violations in Constraint `.status.violations`. This does not disable all Constraint status writes: audit still updates fields such as `.status.auditTimestamp` and `.status.totalViolations`, so running multiple audit replicas can still cause status update contention. If you scale the audit deployment beyond one replica, ensure that only one instance runs the `generate` operation, or disable it for the audit deployment, for example with Helm's `audit.disableGenerateOperation=true`. If VAP/VAPB generation is enabled, ensure it is handled by a singleton generator or disable it with `defaultCreateVAPForTemplates=false` and `defaultCreateVAPBindingForConstraints=false` (or the equivalent runtime flags).
+
 For more details on how to deploy audit and 
 number of instances to run, please refer to [operations audit](operations.md#audit). 
 

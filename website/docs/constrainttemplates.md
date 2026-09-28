@@ -3,9 +3,13 @@ id: constrainttemplates
 title: Constraint Templates
 ---
 
-ConstraintTemplates define a way to validate some set of Kubernetes objects in Gatekeeper's Kubernetes [admission controller](https://kubernetes.io/blog/2019/03/21/a-guide-to-kubernetes-admission-controllers/).  They are made of two main elements:
+ConstraintTemplates define a way to validate some set of Kubernetes objects in Gatekeeper's Kubernetes [admission controller](https://kubernetes.io/blog/2019/03/21/a-guide-to-kubernetes-admission-controllers/).
 
-1. [Rego](https://www.openpolicyagent.org/docs/latest/#rego) code that defines a policy violation
+They are part of Gatekeeper's validation policy model. Mutation policies use separate [mutator resources](mutation.md).
+
+ConstraintTemplates are made of two main elements:
+
+1. Rego or CEL policy code in either `spec.targets[].rego` or `spec.targets[].code[]` that defines policy violation logic; see [field precedence](#field-precedence-in-constrainttemplate)
 2. The schema of the accompanying `Constraint` object, which represents an instantiation of a `ConstraintTemplate`
 
 
@@ -256,3 +260,38 @@ ConstraintTemplates support multiple ways to define policy code with the followi
 
 For more information on CEL integration and engine precedence, see the [Integration with Kubernetes Validating Admission Policy](validating-admission-policy.md) documentation.
 
+## Managing Rego at Scale with Helm
+
+When managing many policies or writing complex policies, it is often desirable to keep the Rego logic in separate `.rego` files. This allows you to leverage tools like `opa fmt` and `opa test` for unit testing, and maintain better code readability.
+
+Instead of manually copying and pasting your Rego code into the `ConstraintTemplate` YAML, you can use Helm to compile the template. 
+
+By utilizing the `Files.Get` function in Helm, you can inject the contents of an external Rego file directly into your `ConstraintTemplate` at deployment time.
+
+For example, your Helm template (`templates/constrainttemplate.yaml`) might look like this:
+
+```yaml
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        {{ .Files.Get "policies/requiredlabels.rego" | indent 8 }}
+```
+
+With this approach, you can maintain `policies/requiredlabels.rego` alongside your unit tests in the same repository, and Helm will seamlessly inline it when you install or upgrade the chart.

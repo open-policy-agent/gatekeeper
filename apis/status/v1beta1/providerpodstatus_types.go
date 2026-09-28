@@ -100,11 +100,8 @@ func NewProviderStatusForPod(pod *corev1.Pod, providerName string, scheme *runti
 		PodLabel:          pod.Name,
 	})
 
-	// Skip OwnerReference in remote cluster mode
-	if !util.ShouldSkipPodOwnerRef() {
-		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-			return nil, err
-		}
+	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+		return nil, err
 	}
 
 	return obj, nil
@@ -113,8 +110,4 @@ func NewProviderStatusForPod(pod *corev1.Pod, providerName string, scheme *runti
 // KeyForProvider returns a unique status object name given the Pod ID and a provider object.
 func KeyForProvider(id string, providerName string) (string, error) {
 	return DashPacker(id, providerName)
-}
-
-func init() {
-	SchemeBuilder.Register(&ProviderPodStatus{}, &ProviderPodStatusList{})
 }

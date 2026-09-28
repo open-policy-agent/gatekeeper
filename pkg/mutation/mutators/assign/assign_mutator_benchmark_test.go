@@ -19,10 +19,12 @@ const (
 func assign(value interface{}, location string) *unversioned.Assign {
 	result := &unversioned.Assign{
 		Spec: unversioned.AssignSpec{
-			ApplyTo: []match.ApplyTo{{
-				Groups:   []string{"*"},
-				Versions: []string{"*"},
-				Kinds:    []string{"*"},
+			ApplyTo: []match.MutationApplyTo{{
+				ApplyTo: match.ApplyTo{
+					Groups:   []string{"*"},
+					Versions: []string{"*"},
+					Kinds:    []string{"*"},
+				},
 			}},
 			Location: location,
 			Parameters: unversioned.Parameters{

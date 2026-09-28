@@ -8,18 +8,19 @@ env:
   IMAGE_REPO: openpolicyagent/gatekeeper
   CRD_IMAGE_REPO: openpolicyagent/gatekeeper-crds
   GATOR_IMAGE_REPO: openpolicyagent/gator
+  CHANGELOG_FILE: CHANGES.md
 
 permissions: read-all
 
 jobs:
   tagged-release:
     name: "Tagged Release"
-    runs-on: oracle-vm-8cpu-32gb-x86-64
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
       packages: write
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Cleanup disk
         run: |
@@ -31,17 +32,19 @@ jobs:
             sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
       - name: Harden Runner
-        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d # v2.16.1
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0 # needed so git-cliff can see previous tags
 
       - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.25"
+          go-version-file: go.mod
           check-latest: true
 
       - name: Get tag
@@ -50,7 +53,7 @@ jobs:
           echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -155,13 +158,34 @@ jobs:
         env:
           PLATFORMS: "linux-amd64 linux-arm64 darwin-amd64 darwin-arm64"
 
-      - name: Create GitHub release
-        uses: marvinpinto/action-automatic-releases@919008cf3f741b179569b7a6fb4d8860689ab7f0 # v1.2.1
+      - name: Generate release notes with git-cliff
+        uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          prerelease: false
-          files: |
-            _dist/sha256sums.txt
+          config: cliff.toml
+          args: --latest --strip header --no-exec
+        env:
+          OUTPUT: ${{ env.CHANGELOG_FILE }}
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eo pipefail
+
+          PRERELEASE_FLAG=""
+          if [[ "${TAG}" == *"-beta."* || "${TAG}" == *"-rc."* ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          # create release
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes-file "${CHANGELOG_FILE}" \
+            --verify-tag \
+            ${PRERELEASE_FLAG} \
+            _dist/sha256sums.txt \
             _dist/*.tar.gz
 
       - name: Publish Helm chart

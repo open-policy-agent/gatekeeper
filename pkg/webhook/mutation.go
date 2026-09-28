@@ -24,10 +24,10 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -50,7 +50,11 @@ func init() {
 	}
 }
 
-// +kubebuilder:webhook:verbs=create;update,path=/v1/mutate,mutating=true,failurePolicy=ignore,groups=*,resources=*,versions=*,name=mutation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
+// Explicitly list known subresources except "status" and "namespaces/finalize".
+// Status updates increase load, and intercepting namespace finalization can prevent namespace deletion.
+// Keep the existing "services/status" exception consistent with validation.
+// You can find the current list of subresources in the Kubernetes API discovery data.
+// +kubebuilder:webhook:verbs=create;update,path=/v1/mutate,mutating=true,failurePolicy=ignore,groups=*,resources=*;pods/ephemeralcontainers;pods/exec;pods/log;pods/eviction;pods/portforward;pods/proxy;pods/attach;pods/binding;pods/resize;deployments/scale;replicasets/scale;statefulsets/scale;replicationcontrollers/scale;serviceaccounts/token;services/proxy;nodes/proxy;certificatesigningrequests/approval;services/status,versions=*,name=mutation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
 // +kubebuilder:rbac:resourceNames=gatekeeper-mutating-webhook-configuration,groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations,verbs=get;list;watch;update;patch
 
 // AddMutatingWebhook registers the mutating webhook server with the manager.
@@ -110,8 +114,7 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 		return admission.Allowed("Gatekeeper does not self-manage")
 	}
 
-	if req.Operation != admissionv1.Create &&
-		req.Operation != admissionv1.Update {
+	if !match.IsSupportedMutationOperation(req.Operation) {
 		return admission.Allowed("Mutating only on create or update")
 	}
 
@@ -194,6 +197,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		Namespace: ns,
 		Username:  req.UserInfo.Username,
 		Source:    mutationtypes.SourceTypeOriginal,
+		Operation: req.Operation,
 	}
 	mutated, err := h.mutationSystem.Mutate(ctx, mutable)
 	if err != nil {

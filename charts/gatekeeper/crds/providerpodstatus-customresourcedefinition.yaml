@@ -45,7 +45,8 @@ spec:
                 type: boolean
               errors:
                 items:
-                  description: ProviderError represents a single error caught while managing providers.
+                  description: ProviderError represents a single error caught while
+                    managing providers.
                   properties:
                     errorTimestamp:
                       format: date-time

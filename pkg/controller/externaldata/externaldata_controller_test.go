@@ -400,20 +400,22 @@ func TestSetStatus(t *testing.T) {
 	status := &statusv1beta1.ProviderPodStatus{}
 
 	// Test with no errors
-	setStatus(status, nil)
+	setStatus(status, nil, true)
 	assert.Nil(t, status.Status.Errors)
 	assert.NotNil(t, status.Status.LastCacheUpdateTime)
+	initialUpdate := status.Status.LastCacheUpdateTime
 
 	// Test with errors
 	providerErrors := []*statusv1beta1.ProviderError{{
 		Message: "test error",
 		Type:    statusv1beta1.UpsertCacheError,
 	}}
-	setStatus(status, providerErrors)
+	setStatus(status, providerErrors, true)
 	assert.Equal(t, providerErrors, status.Status.Errors)
 	assert.Equal(t, false, status.Status.Active)
 
-	setStatus(status, nil)
+	setStatus(status, nil, false)
 	assert.Nil(t, status.Status.Errors)
 	assert.Equal(t, true, status.Status.Active)
+	assert.True(t, status.Status.LastCacheUpdateTime.Equal(initialUpdate))
 }

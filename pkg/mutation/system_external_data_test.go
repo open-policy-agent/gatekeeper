@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -79,6 +81,77 @@ LhIhYpJ8UsCVt5snWo2N+M+6ANh5tpWdQnEK6zILh4tRbuzaiHgb
 -----END RSA PRIVATE KEY-----
 `
 )
+
+const freshExternalDataValue = "fresh"
+
+func newTestClientCertWatcher(t testing.TB) *certwatcher.CertWatcher {
+	t.Helper()
+
+	clientCertFile, err := os.CreateTemp("", "client-cert")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(clientCertFile.Name()) })
+
+	_, err = clientCertFile.WriteString(clientCert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientCertFile.Close()
+
+	clientKeyFile, err := os.CreateTemp("", "client-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(clientKeyFile.Name()) })
+
+	_, err = clientKeyFile.WriteString(clientKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientKeyFile.Close()
+
+	watcher, err := certwatcher.New(clientCertFile.Name(), clientKeyFile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = watcher.Start(ctx) }()
+	return watcher
+}
+
+func newTestProviderResponseCache(t testing.TB, ttl time.Duration) *externaldata.ProviderResponseCache {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	return externaldata.NewProviderResponseCache(ctx, ttl)
+}
+
+func externalDataPlaceholderObject(keys ...string) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
+	for i, key := range keys {
+		obj.Object[fmt.Sprintf("field%d", i)] = &unversioned.ExternalDataPlaceholder{
+			Ref: &unversioned.ExternalData{
+				Provider:      fakes.ExternalDataProviderName,
+				FailurePolicy: types.FailurePolicyFail,
+			},
+			ValueAtLocation: key,
+		}
+	}
+	return obj
+}
+
+func cacheExternalDataItem(cache *externaldata.ProviderResponseCache, key string, value interface{}, errString string, received time.Time, idempotent bool) {
+	provider, err := fakes.ExternalDataProviderCache.Get(fakes.ExternalDataProviderName)
+	if err != nil {
+		panic(err)
+	}
+	cache.Upsert(
+		mutationProviderResponseCacheKey(&provider, key),
+		externaldata.CacheValue{Received: received.Unix(), Value: value, Error: errString, Idempotent: idempotent},
+	)
+}
 
 func TestSystem_resolvePlaceholders(t *testing.T) {
 	type fields struct {
@@ -392,6 +465,515 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 	}
 }
 
+func TestSystem_resolvePlaceholders_providerResponseCacheHitSkipsProvider(t *testing.T) {
+	cache := newTestProviderResponseCache(t, time.Hour)
+	cacheExternalDataItem(cache, "bar", "cached", "", time.Now(), true)
+
+	var calls atomic.Int64
+	s := NewSystem(SystemOpts{
+		ProviderCache:         fakes.ExternalDataProviderCache,
+		ProviderResponseCache: cache,
+		SendRequestToExternalDataProvider: func(context.Context, *externaldataUnversioned.Provider, []string, *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			calls.Add(1)
+			return nil, http.StatusInternalServerError, errors.New("provider should not be called")
+		},
+	})
+
+	obj := externalDataPlaceholderObject("bar")
+	if err := s.resolvePlaceholders(context.Background(), obj); err != nil {
+		t.Fatalf("resolvePlaceholders() error = %v, want nil", err)
+	}
+	if got := obj.Object["field0"]; got != "cached" {
+		t.Fatalf("resolved value = %v, want %q", got, "cached")
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("provider calls = %d, want 0", got)
+	}
+}
+
+func TestSystem_resolvePlaceholders_providerResponseCacheMissStoresResponse(t *testing.T) {
+	cache := newTestProviderResponseCache(t, time.Hour)
+	var calls atomic.Int64
+	s := NewSystem(SystemOpts{
+		ProviderCache:         fakes.ExternalDataProviderCache,
+		ProviderResponseCache: cache,
+		ClientCertWatcher:     newTestClientCertWatcher(t),
+		SendRequestToExternalDataProvider: func(_ context.Context, _ *externaldataUnversioned.Provider, keys []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			calls.Add(1)
+			if !sets.New(keys...).Equal(sets.New("bar")) {
+				t.Fatalf("provider keys = %v, want [bar]", keys)
+			}
+			return &externaldata.ProviderResponse{Response: externaldata.Response{Idempotent: true, Items: []externaldata.Item{{Key: "bar", Value: freshExternalDataValue}}}}, http.StatusOK, nil
+		},
+	})
+
+	obj := externalDataPlaceholderObject("bar")
+	if err := s.resolvePlaceholders(context.Background(), obj); err != nil {
+		t.Fatalf("first resolvePlaceholders() error = %v, want nil", err)
+	}
+	if got := obj.Object["field0"]; got != freshExternalDataValue {
+		t.Fatalf("first resolved value = %v, want %q", got, freshExternalDataValue)
+	}
+
+	obj = externalDataPlaceholderObject("bar")
+	if err := s.resolvePlaceholders(context.Background(), obj); err != nil {
+		t.Fatalf("second resolvePlaceholders() error = %v, want nil", err)
+	}
+	if got := obj.Object["field0"]; got != freshExternalDataValue {
+		t.Fatalf("second resolved value = %v, want %q", got, freshExternalDataValue)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("provider calls = %d, want 1", got)
+	}
+}
+
+func TestSystem_resolvePlaceholders_providerResponseCachePartialHit(t *testing.T) {
+	cache := newTestProviderResponseCache(t, time.Hour)
+	cacheExternalDataItem(cache, "cached", "from-cache", "", time.Now(), true)
+
+	var calls atomic.Int64
+	s := NewSystem(SystemOpts{
+		ProviderCache:         fakes.ExternalDataProviderCache,
+		ProviderResponseCache: cache,
+		ClientCertWatcher:     newTestClientCertWatcher(t),
+		SendRequestToExternalDataProvider: func(_ context.Context, _ *externaldataUnversioned.Provider, keys []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			calls.Add(1)
+			if !sets.New(keys...).Equal(sets.New("miss")) {
+				t.Fatalf("provider keys = %v, want [miss]", keys)
+			}
+			return &externaldata.ProviderResponse{Response: externaldata.Response{Idempotent: true, Items: []externaldata.Item{{Key: "miss", Value: "from-provider"}}}}, http.StatusOK, nil
+		},
+	})
+
+	obj := externalDataPlaceholderObject("cached", "miss")
+	if err := s.resolvePlaceholders(context.Background(), obj); err != nil {
+		t.Fatalf("resolvePlaceholders() error = %v, want nil", err)
+	}
+	if got := obj.Object["field0"]; got != "from-cache" {
+		t.Fatalf("cached resolved value = %v, want %q", got, "from-cache")
+	}
+	if got := obj.Object["field1"]; got != "from-provider" {
+		t.Fatalf("miss resolved value = %v, want %q", got, "from-provider")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("provider calls = %d, want 1", got)
+	}
+}
+
+func TestSystem_resolvePlaceholders_providerResponseCachePartialHitProviderErrorUsesCachedItem(t *testing.T) {
+	cache := newTestProviderResponseCache(t, time.Hour)
+	cacheExternalDataItem(cache, "cached", "from-cache", "", time.Now(), true)
+
+	var calls atomic.Int64
+	s := NewSystem(SystemOpts{
+		ProviderCache:         fakes.ExternalDataProviderCache,
+		ProviderResponseCache: cache,
+		ClientCertWatcher:     newTestClientCertWatcher(t),
+		SendRequestToExternalDataProvider: func(_ context.Context, _ *externaldataUnversioned.Provider, keys []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			calls.Add(1)
+			if !sets.New(keys...).Equal(sets.New("miss")) {
+				t.Fatalf("provider keys = %v, want [miss]", keys)
+			}
+			return nil, http.StatusInternalServerError, errors.New("provider unavailable")
+		},
+	})
+
+	obj := &unstructured.Unstructured{Object: map[string]interface{}{
+		"field0": &unversioned.ExternalDataPlaceholder{
+			Ref:             &unversioned.ExternalData{Provider: fakes.ExternalDataProviderName, FailurePolicy: types.FailurePolicyFail},
+			ValueAtLocation: "cached",
+		},
+		"field1": &unversioned.ExternalDataPlaceholder{
+			Ref:             &unversioned.ExternalData{Provider: fakes.ExternalDataProviderName, FailurePolicy: types.FailurePolicyIgnore},
+			ValueAtLocation: "miss",
+		},
+	}}
+
+	if err := s.resolvePlaceholders(context.Background(), obj); err != nil {
+		t.Fatalf("resolvePlaceholders() error = %v, want nil", err)
+	}
+	if got := obj.Object["field0"]; got != "from-cache" {
+		t.Fatalf("cached resolved value = %v, want %q", got, "from-cache")
+	}
+	if got := obj.Object["field1"]; got != "miss" {
+		t.Fatalf("miss fallback value = %v, want %q", got, "miss")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("provider calls = %d, want 1", got)
+	}
+}
+
+func TestSystem_resolvePlaceholders_preservesProviderAndItemErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		response *externaldata.ProviderResponse
+		sendErr  error
+		wantErr  string
+	}{
+		{
+			name:    "send error",
+			sendErr: errors.New("provider unavailable"),
+			wantErr: fmt.Sprintf("failed to send external data request to provider %s: provider unavailable", fakes.ExternalDataProviderName),
+		},
+		{
+			name: "system error",
+			response: &externaldata.ProviderResponse{Response: externaldata.Response{
+				Idempotent:  true,
+				SystemError: "provider unavailable",
+			}},
+			wantErr: fmt.Sprintf("failed to validate external data response from provider %s: non-empty system error: provider unavailable", fakes.ExternalDataProviderName),
+		},
+		{
+			name:     "non-idempotent response",
+			response: &externaldata.ProviderResponse{Response: externaldata.Response{Idempotent: false}},
+			wantErr:  fmt.Sprintf("failed to validate external data response from provider %s: non-idempotent response", fakes.ExternalDataProviderName),
+		},
+		{
+			name: "item error",
+			response: &externaldata.ProviderResponse{Response: externaldata.Response{
+				Idempotent: true,
+				Items:      []externaldata.Item{{Key: "bar", Error: "item unavailable"}},
+			}},
+			wantErr: fmt.Sprintf("failed to retrieve external data item from provider %s: item unavailable", fakes.ExternalDataProviderName),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewSystem(SystemOpts{
+				ProviderCache:     fakes.ExternalDataProviderCache,
+				ClientCertWatcher: newTestClientCertWatcher(t),
+				SendRequestToExternalDataProvider: func(context.Context, *externaldataUnversioned.Provider, []string, *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+					return tt.response, http.StatusOK, tt.sendErr
+				},
+			})
+
+			err := s.resolvePlaceholders(context.Background(), externalDataPlaceholderObject("bar"))
+			if err == nil {
+				t.Fatal("resolvePlaceholders() error = nil, want error")
+			}
+			if got := err.Error(); got != tt.wantErr {
+				t.Fatalf("resolvePlaceholders() error = %q, want %q", got, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSystem_sendRequests_isolatesErrorsByProviderAndKey(t *testing.T) {
+	const (
+		availableProvider = "available-provider"
+		missingProvider   = "missing-provider"
+	)
+
+	providerCache := externaldata.NewCache()
+	if err := providerCache.Upsert(&externaldataUnversioned.Provider{
+		ObjectMeta: metav1.ObjectMeta{Name: availableProvider},
+		Spec: externaldataUnversioned.ProviderSpec{
+			URL:      "https://localhost:8080/validate",
+			Timeout:  1,
+			CABundle: util.ValidCABundle,
+		},
+	}); err != nil {
+		t.Fatalf("failed to upsert provider: %v", err)
+	}
+
+	s := NewSystem(SystemOpts{
+		ProviderCache: providerCache,
+		SendRequestToExternalDataProvider: func(context.Context, *externaldataUnversioned.Provider, []string, *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			return nil, http.StatusInternalServerError, errors.New("provider unavailable")
+		},
+	})
+
+	responses, requestErrors := s.sendRequests(context.Background(), map[string]sets.Set[string]{
+		availableProvider: sets.New("first", "second"),
+		missingProvider:   sets.New("third"),
+	}, nil, nil)
+
+	if len(responses) != 0 {
+		t.Fatalf("sendRequests() responses = %v, want none", responses)
+	}
+	for _, key := range []string{"first", "second"} {
+		want := "failed to send external data request to provider available-provider: provider unavailable"
+		if got := requestErrors[availableProvider][key]; got == nil || got.Error() != want {
+			t.Fatalf("sendRequests() error for %s/%s = %v, want %q", availableProvider, key, got, want)
+		}
+	}
+	want := "failed to get external data provider missing-provider: key is not found in provider cache"
+	if got := requestErrors[missingProvider]["third"]; got == nil || got.Error() != want {
+		t.Fatalf("sendRequests() error for %s/third = %v, want %q", missingProvider, got, want)
+	}
+}
+
+func TestSystem_providerResponseCachePartialHitUsesOneProviderSnapshot(t *testing.T) {
+	providerV1 := externaldataUnversioned.Provider{
+		ObjectMeta: metav1.ObjectMeta{Name: fakes.ExternalDataProviderName, UID: "provider-uid", Generation: 1},
+		Spec: externaldataUnversioned.ProviderSpec{
+			URL:      "https://v1.example.com/validate",
+			Timeout:  1,
+			CABundle: util.ValidCABundle,
+		},
+	}
+	providerV2 := *providerV1.DeepCopy()
+	providerV2.Generation = 2
+	providerV2.Spec.URL = "https://v2.example.com/validate"
+
+	providerCache := externaldata.NewCache()
+	if err := providerCache.Upsert(&providerV1); err != nil {
+		t.Fatalf("failed to upsert provider v1: %v", err)
+	}
+	responseCache := newTestProviderResponseCache(t, time.Hour)
+	responseCache.Upsert(
+		mutationProviderResponseCacheKey(&providerV1, "cached"),
+		externaldata.CacheValue{Received: time.Now().Unix(), Value: "cached-v1", Idempotent: true},
+	)
+
+	s := NewSystem(SystemOpts{
+		ProviderCache:         providerCache,
+		ProviderResponseCache: responseCache,
+		SendRequestToExternalDataProvider: func(_ context.Context, provider *externaldataUnversioned.Provider, keys []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			if provider.Generation != providerV1.Generation || provider.Spec.URL != providerV1.Spec.URL {
+				t.Fatalf("request provider = generation %d URL %q, want generation %d URL %q", provider.Generation, provider.Spec.URL, providerV1.Generation, providerV1.Spec.URL)
+			}
+			if !sets.New(keys...).Equal(sets.New("miss")) {
+				t.Fatalf("provider keys = %v, want [miss]", keys)
+			}
+			return &externaldata.ProviderResponse{Response: externaldata.Response{
+				Idempotent: true,
+				Items:      []externaldata.Item{{Key: "miss", Value: "fresh-v1"}},
+			}}, http.StatusOK, nil
+		},
+	})
+
+	providerKeys := map[string]sets.Set[string]{fakes.ExternalDataProviderName: sets.New("cached", "miss")}
+	cached, misses, snapshots := s.cachedProviderResponses(providerKeys)
+	if err := providerCache.Upsert(&providerV2); err != nil {
+		t.Fatalf("failed to upsert provider v2: %v", err)
+	}
+	fresh, requestErrors := s.sendRequests(context.Background(), misses, nil, snapshots)
+	if len(requestErrors) != 0 {
+		t.Fatalf("sendRequests() errors = %v, want none", requestErrors)
+	}
+
+	merged := mergeExternalData(cached, fresh)
+	if got := merged[fakes.ExternalDataProviderName]["cached"].Value; got != "cached-v1" {
+		t.Fatalf("cached value = %v, want cached-v1", got)
+	}
+	if got := merged[fakes.ExternalDataProviderName]["miss"].Value; got != "fresh-v1" {
+		t.Fatalf("fresh value = %v, want fresh-v1", got)
+	}
+}
+
+func TestSystem_resolvePlaceholders_providerResponseCacheStaleOrNonIdempotentEntryMisses(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		received   time.Time
+		idempotent bool
+	}{
+		{name: "stale", received: time.Now().Add(-2 * time.Hour), idempotent: true},
+		{name: "non-idempotent", received: time.Now(), idempotent: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cache := newTestProviderResponseCache(t, time.Hour)
+			cacheExternalDataItem(cache, "bar", "cached", "", tc.received, tc.idempotent)
+
+			var calls atomic.Int64
+			s := NewSystem(SystemOpts{
+				ProviderCache:         fakes.ExternalDataProviderCache,
+				ProviderResponseCache: cache,
+				ClientCertWatcher:     newTestClientCertWatcher(t),
+				SendRequestToExternalDataProvider: func(_ context.Context, _ *externaldataUnversioned.Provider, keys []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+					calls.Add(1)
+					if !sets.New(keys...).Equal(sets.New("bar")) {
+						t.Fatalf("provider keys = %v, want [bar]", keys)
+					}
+					return &externaldata.ProviderResponse{Response: externaldata.Response{Idempotent: true, Items: []externaldata.Item{{Key: "bar", Value: freshExternalDataValue}}}}, http.StatusOK, nil
+				},
+			})
+
+			obj := externalDataPlaceholderObject("bar")
+			if err := s.resolvePlaceholders(context.Background(), obj); err != nil {
+				t.Fatalf("resolvePlaceholders() error = %v, want nil", err)
+			}
+			if got := obj.Object["field0"]; got != freshExternalDataValue {
+				t.Fatalf("resolved value = %v, want %q", got, freshExternalDataValue)
+			}
+			if got := calls.Load(); got != 1 {
+				t.Fatalf("provider calls = %d, want 1", got)
+			}
+		})
+	}
+}
+
+func TestSystem_resolvePlaceholders_providerResponseCacheIgnoresUnrequestedResponseItems(t *testing.T) {
+	cache := newTestProviderResponseCache(t, time.Hour)
+	var calls atomic.Int64
+	s := NewSystem(SystemOpts{
+		ProviderCache:         fakes.ExternalDataProviderCache,
+		ProviderResponseCache: cache,
+		ClientCertWatcher:     newTestClientCertWatcher(t),
+		SendRequestToExternalDataProvider: func(_ context.Context, _ *externaldataUnversioned.Provider, keys []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			calls.Add(1)
+			keySet := sets.New(keys...)
+			switch {
+			case keySet.Equal(sets.New("bar")):
+				return &externaldata.ProviderResponse{Response: externaldata.Response{Idempotent: true, Items: []externaldata.Item{
+					{Key: "bar", Value: "bar-value"},
+					{Key: "extra", Value: "unrequested-poison"},
+				}}}, http.StatusOK, nil
+			case keySet.Equal(sets.New("extra")):
+				return &externaldata.ProviderResponse{Response: externaldata.Response{Idempotent: true, Items: []externaldata.Item{{Key: "extra", Value: "extra-value"}}}}, http.StatusOK, nil
+			default:
+				t.Fatalf("provider keys = %v, want [bar] or [extra]", keys)
+				return nil, http.StatusInternalServerError, errors.New("unexpected keys")
+			}
+		},
+	})
+
+	obj := externalDataPlaceholderObject("bar")
+	if err := s.resolvePlaceholders(context.Background(), obj); err != nil {
+		t.Fatalf("first resolvePlaceholders() error = %v, want nil", err)
+	}
+	if got := obj.Object["field0"]; got != "bar-value" {
+		t.Fatalf("first resolved value = %v, want %q", got, "bar-value")
+	}
+
+	obj = externalDataPlaceholderObject("extra")
+	if err := s.resolvePlaceholders(context.Background(), obj); err != nil {
+		t.Fatalf("second resolvePlaceholders() error = %v, want nil", err)
+	}
+	if got := obj.Object["field0"]; got != "extra-value" {
+		t.Fatalf("second resolved value = %v, want %q", got, "extra-value")
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("provider calls = %d, want 2", got)
+	}
+}
+
+func TestSystem_resolvePlaceholders_providerResponseCacheReplaysItemError(t *testing.T) {
+	cache := newTestProviderResponseCache(t, time.Hour)
+	var calls atomic.Int64
+	s := NewSystem(SystemOpts{
+		ProviderCache:         fakes.ExternalDataProviderCache,
+		ProviderResponseCache: cache,
+		ClientCertWatcher:     newTestClientCertWatcher(t),
+		SendRequestToExternalDataProvider: func(_ context.Context, _ *externaldataUnversioned.Provider, keys []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			calls.Add(1)
+			if !sets.New(keys...).Equal(sets.New("bar")) {
+				t.Fatalf("provider keys = %v, want [bar]", keys)
+			}
+			return &externaldata.ProviderResponse{Response: externaldata.Response{Idempotent: true, Items: []externaldata.Item{{Key: "bar", Error: "provider item error"}}}}, http.StatusOK, nil
+		},
+	})
+
+	obj := externalDataPlaceholderObject("bar")
+	if err := s.resolvePlaceholders(context.Background(), obj); err == nil {
+		t.Fatalf("first resolvePlaceholders() error = nil, want item error")
+	}
+
+	obj = externalDataPlaceholderObject("bar")
+	if err := s.resolvePlaceholders(context.Background(), obj); err == nil {
+		t.Fatalf("second resolvePlaceholders() error = nil, want cached item error")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("provider calls = %d, want 1", got)
+	}
+}
+
+func TestSystem_resolvePlaceholders_providerResponseCacheProviderGenerationChangeMisses(t *testing.T) {
+	providerV1 := externaldataUnversioned.Provider{
+		ObjectMeta: metav1.ObjectMeta{Name: fakes.ExternalDataProviderName, UID: "provider-uid", Generation: 1},
+		Spec:       externaldataUnversioned.ProviderSpec{URL: "https://localhost:8080/validate", Timeout: 1, CABundle: util.ValidCABundle},
+	}
+	providerV2 := providerV1.DeepCopy()
+	providerV2.Generation = 2
+
+	cache := newTestProviderResponseCache(t, time.Hour)
+	cache.Upsert(
+		mutationProviderResponseCacheKey(&providerV1, "bar"),
+		externaldata.CacheValue{Received: time.Now().Unix(), Value: "stale-generation", Idempotent: true},
+	)
+
+	providerCache := externaldata.NewCache()
+	if err := providerCache.Upsert(providerV2); err != nil {
+		t.Fatalf("failed to upsert provider: %v", err)
+	}
+
+	var calls atomic.Int64
+	s := NewSystem(SystemOpts{
+		ProviderCache:         providerCache,
+		ProviderResponseCache: cache,
+		ClientCertWatcher:     newTestClientCertWatcher(t),
+		SendRequestToExternalDataProvider: func(_ context.Context, _ *externaldataUnversioned.Provider, keys []string, _ *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+			calls.Add(1)
+			if !sets.New(keys...).Equal(sets.New("bar")) {
+				t.Fatalf("provider keys = %v, want [bar]", keys)
+			}
+			return &externaldata.ProviderResponse{Response: externaldata.Response{Idempotent: true, Items: []externaldata.Item{{Key: "bar", Value: "fresh-generation"}}}}, http.StatusOK, nil
+		},
+	})
+
+	obj := externalDataPlaceholderObject("bar")
+	if err := s.resolvePlaceholders(context.Background(), obj); err != nil {
+		t.Fatalf("resolvePlaceholders() error = %v, want nil", err)
+	}
+	if got := obj.Object["field0"]; got != "fresh-generation" {
+		t.Fatalf("resolved value = %v, want %q", got, "fresh-generation")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("provider calls = %d, want 1", got)
+	}
+}
+
+func BenchmarkSystem_ResolvePlaceholdersProviderResponseCache(b *testing.B) {
+	for _, tc := range []struct {
+		name      string
+		cache     bool
+		preload   bool
+		latency   time.Duration
+		wantCalls bool
+	}{
+		{name: "cache-disabled/provider-latency-1ms", latency: time.Millisecond, wantCalls: true},
+		{name: "cache-miss-then-hit/provider-latency-1ms", cache: true, latency: time.Millisecond},
+		{name: "cache-hit/provider-latency-1ms", cache: true, preload: true, latency: time.Millisecond},
+		{name: "cache-hit/provider-latency-0", cache: true, preload: true},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			var responseCache *externaldata.ProviderResponseCache
+			if tc.cache {
+				responseCache = newTestProviderResponseCache(b, time.Hour)
+				if tc.preload {
+					cacheExternalDataItem(responseCache, "bar", "cached", "", time.Now(), true)
+				}
+			}
+
+			var calls atomic.Int64
+			s := NewSystem(SystemOpts{
+				ProviderCache:         fakes.ExternalDataProviderCache,
+				ProviderResponseCache: responseCache,
+				ClientCertWatcher:     newTestClientCertWatcher(b),
+				SendRequestToExternalDataProvider: func(context.Context, *externaldataUnversioned.Provider, []string, *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+					calls.Add(1)
+					if tc.latency > 0 {
+						time.Sleep(tc.latency)
+					}
+					return &externaldata.ProviderResponse{Response: externaldata.Response{Idempotent: true, Items: []externaldata.Item{{Key: "bar", Value: freshExternalDataValue}}}}, http.StatusOK, nil
+				},
+			})
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				obj := externalDataPlaceholderObject("bar")
+				if err := s.resolvePlaceholders(context.Background(), obj); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.StopTimer()
+			b.ReportMetric(float64(calls.Load())/float64(b.N), "provider_calls/op")
+		})
+	}
+}
+
 func Test_validateExternalDataResponse(t *testing.T) {
 	type args struct {
 		r *externaldata.ProviderResponse
@@ -560,7 +1142,7 @@ func TestSystem_sendRequests_contextTimeout(t *testing.T) {
 			providerKeys := map[string]sets.Set[string]{
 				providerName: sets.New("key1"),
 			}
-			s.sendRequests(parentCtx, providerKeys, nil)
+			s.sendRequests(parentCtx, providerKeys, nil, nil)
 
 			if capturedCtx == nil {
 				t.Fatal("sendRequestToExternalDataProvider was not called")
@@ -615,7 +1197,7 @@ func TestSystem_sendRequests_parentContextCancellation(t *testing.T) {
 	providerKeys := map[string]sets.Set[string]{
 		providerName: sets.New[string]("key1"),
 	}
-	s.sendRequests(parentCtx, providerKeys, nil)
+	s.sendRequests(parentCtx, providerKeys, nil, nil)
 
 	if capturedCtx == nil {
 		t.Fatal("sendRequestToExternalDataProvider was not called")

@@ -21,6 +21,10 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS": `{{ if hasKey .Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}`,
 
+	"- HELMSUBST_EMIT_ADMISSION_AUDIT_ANNOTATIONS": `{{ if hasKey .Values "emitAdmissionAuditAnnotations" }}- --emit-admission-audit-annotations={{ .Values.emitAdmissionAuditAnnotations }}{{- end }}`,
+
+	"- HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS": `{{ if hasKey .Values "admissionAuditAnnotationsIncludeSuccess" }}- --admission-audit-annotations-include-success={{ .Values.admissionAuditAnnotationsIncludeSuccess }}{{- end }}`,
+
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION": `{{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK": `{{ .Values.audit.hostNetwork }}`,
@@ -110,7 +114,7 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION": `{{ if hasKey .Values "logStatsAudit" }}- --log-stats-audit={{ .Values.logStatsAudit }}{{- end }}`,
 
-	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
+	`HELMSUBST_SECRET_ANNOTATIONS: ""`: `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG": `{{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}`,
 
@@ -131,6 +135,11 @@ var replacements = map[string]string{
         {{- if not .Values.controllerManager.disableGenerateOperation }}
         - --operation=generate
         {{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_ADMISSION_VIOLATION_EXPORT_ARGS": `{{ if hasKey .Values "enableAdmissionViolationExport" }}{{ if and .Values.enableAdmissionViolationExport (ne (.Values.exportBackend | default "" | lower) "disk") }}{{ fail "enableAdmissionViolationExport requires exportBackend to be disk" }}{{ end }}- --enable-admission-violation-export={{ .Values.enableAdmissionViolationExport }}{{ if .Values.enableAdmissionViolationExport }}
+        - --audit-connection={{ .Values.audit.connection }}
+        - --audit-channel={{ .Values.audit.channel }}
+  {{- end }}{{- end }}`,
 
 	"- HELMSUBST_AUDIT_OPERATIONS": `
         {{- if not .Values.audit.disableGenerateOperation }}
@@ -159,7 +168,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_MUTATING_WEBHOOK_REINVOCATION_POLICY": `{{ .Values.mutatingWebhookReinvocationPolicy }}`,
 
-	"HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
+	`HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS: ""`: `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
     {{- /* 1. Get mandatory exemption from helper */ -}}
@@ -176,7 +185,7 @@ var replacements = map[string]string{
         {{- $list = append $value $.Release.Namespace | uniq -}}
       {{- end }}
       {{- range $list }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}`,
 
@@ -216,7 +225,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.validatingWebhookFailurePolicy }}`,
 
-	"HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
+	`HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS: ""`: `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_MATCHEXPRESSION_METADATANAME": `key: kubernetes.io/metadata.name
       operator: NotIn
@@ -238,7 +247,7 @@ var replacements = map[string]string{
         {{- $list = append $value $.Release.Namespace | uniq -}}
       {{- end }}
       {{- range $list }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
     {{- end }}`,
 
@@ -286,8 +295,10 @@ var replacements = map[string]string{
     {{- end }}
     resources:
     - '*'
-    # Explicitly list all known subresources except "status" (to avoid destabilizing the cluster and increasing load on gatekeeper).
-    # You can find a rough list of subresources by doing a case-sensitive search in the Kubernetes codebase for 'Subresource("'
+    # Explicitly list known subresources except "status" and "namespaces/finalize".
+    # Status updates increase load, and intercepting namespace finalization can prevent namespace deletion.
+    # Include "services/status" for constraints that mitigate CVE-2020-8554.
+    # You can find the current list of subresources in the Kubernetes API discovery data.
     {{- range .Values.validatingWebhookSubResources }}
     - {{ . }}
     {{- end }}
@@ -385,6 +396,11 @@ var replacements = map[string]string{
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}`,
+
+	"        - HELMSUBST_DEPLOYMENT_DEFAULT_K8S_NATIVE_VALIDATION_FAILURE_POLICY": "\n" +
+		"        {{- if hasKey .Values \"defaultK8sNativeValidationFailurePolicy\"}}\n" +
+		"        - --default-k8s-native-validation-failure-policy={{ .Values.defaultK8sNativeValidationFailurePolicy }}\n" +
+		"        {{- end }}",
 
 	"- HELMSUBST_DEPLOYMENT_DEFAULT_WAIT_VAPB_GENERATION": `
         {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}

@@ -67,7 +67,12 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 							{
 								RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
 									Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
-									Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
+									Rule: admissionregistrationv1beta1.Rule{
+										APIGroups:   []string{"*"},
+										APIVersions: []string{"*"},
+										Resources:   []string{"*"},
+										Scope:       ptr.To(admissionregistrationv1beta1.AllScopes),
+									},
 								},
 							},
 						},
@@ -238,6 +243,131 @@ func TestTemplateToPolicyDefinition(t *testing.T) {
 			}
 			if !reflect.DeepEqual(obj, test.expected) {
 				t.Errorf("got %+v\n\nwant %+v", *obj, *test.expected)
+			}
+		})
+	}
+}
+
+func TestTemplateToPolicyDefinitionFailurePolicy(t *testing.T) {
+	original := schema.GetDefaultFailurePolicyForK8sNativeValidation()
+	t.Cleanup(func() {
+		if err := schema.SetDefaultFailurePolicyForK8sNativeValidation(original); err != nil {
+			t.Errorf("restoring default K8sNativeValidation failure policy: %v", err)
+		}
+	})
+
+	tests := []struct {
+		name                 string
+		defaultFailurePolicy string
+		sourceFailurePolicy  *string
+		want                 admissionregistrationv1beta1.FailurePolicyType
+	}{
+		{
+			name:                 "omitted policy uses Fail default",
+			defaultFailurePolicy: string(admissionregistrationv1.Fail),
+			want:                 admissionregistrationv1beta1.Fail,
+		},
+		{
+			name:                 "omitted policy uses Ignore default",
+			defaultFailurePolicy: string(admissionregistrationv1.Ignore),
+			want:                 admissionregistrationv1beta1.Ignore,
+		},
+		{
+			name:                 "explicit Fail overrides Ignore default",
+			defaultFailurePolicy: string(admissionregistrationv1.Ignore),
+			sourceFailurePolicy:  ptr.To(string(admissionregistrationv1.Fail)),
+			want:                 admissionregistrationv1beta1.Fail,
+		},
+		{
+			name:                 "explicit Ignore overrides Fail default",
+			defaultFailurePolicy: string(admissionregistrationv1.Fail),
+			sourceFailurePolicy:  ptr.To(string(admissionregistrationv1.Ignore)),
+			want:                 admissionregistrationv1beta1.Ignore,
+		},
+	}
+
+	webhookConfig := &webhookconfigcache.WebhookMatchingConfig{
+		Rules: []admissionregistrationv1.RuleWithOperations{
+			{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+				Rule: admissionregistrationv1.Rule{
+					APIGroups:   []string{"*"},
+					APIVersions: []string{"*"},
+					Resources:   []string{"*"},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := schema.SetDefaultFailurePolicyForK8sNativeValidation(test.defaultFailurePolicy); err != nil {
+				t.Fatalf("setting default K8sNativeValidation failure policy: %v", err)
+			}
+
+			source := &schema.Source{
+				FailurePolicy: test.sourceFailurePolicy,
+				Validations: []schema.Validation{
+					{
+						Expression: "true",
+						Message:    "always passes",
+					},
+				},
+			}
+			rawSrc := source.MustToUnstructured()
+			template := &templates.ConstraintTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "somepolicy"},
+				Spec: templates.ConstraintTemplateSpec{
+					CRD: templates.CRD{
+						Spec: templates.CRDSpec{
+							Names: templates.Names{
+								Kind: "SomePolicy",
+							},
+						},
+					},
+					Targets: []templates.Target{
+						{
+							Code: []templates.Code{
+								{
+									Engine: schema.Name,
+									Source: &templates.Anything{
+										Value: rawSrc,
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			constructors := []struct {
+				name string
+				call func() (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error)
+			}{
+				{
+					name: "default match configuration",
+					call: func() (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+						return TemplateToPolicyDefinition(template)
+					},
+				},
+				{
+					name: "synced webhook configuration",
+					call: func() (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+						return TemplateToPolicyDefinitionWithWebhookConfig(template, webhookConfig, nil, nil)
+					},
+				},
+			}
+
+			for _, constructor := range constructors {
+				t.Run(constructor.name, func(t *testing.T) {
+					policy, err := constructor.call()
+					if err != nil {
+						t.Fatalf("constructing policy returned an unexpected error: %v", err)
+					}
+					if policy.Spec.FailurePolicy == nil || *policy.Spec.FailurePolicy != test.want {
+						t.Fatalf("FailurePolicy = %v, want %s", policy.Spec.FailurePolicy, test.want)
+					}
+				})
 			}
 		})
 	}
@@ -885,6 +1015,59 @@ func TestConvertWebhookRulesToResourceRules(t *testing.T) {
 	}
 }
 
+// TestConvertWebhookRulesToResourceRulesOperationOrder asserts operations are
+// emitted in canonical order (CREATE, UPDATE, DELETE, CONNECT).
+func TestConvertWebhookRulesToResourceRulesOperationOrder(t *testing.T) {
+	tests := []struct {
+		name     string
+		ruleOps  []admissionregistrationv1beta1.OperationType
+		ctOps    []admissionregistrationv1beta1.OperationType
+		expected []admissionregistrationv1beta1.OperationType
+	}{
+		{
+			name:     "intersection preserves canonical order",
+			ruleOps:  []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Delete, admissionregistrationv1beta1.Update, admissionregistrationv1beta1.Create},
+			ctOps:    []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Update, admissionregistrationv1beta1.Create},
+			expected: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+		},
+		{
+			name:     "wildcard rule intersected with all ops is canonical",
+			ruleOps:  []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+			ctOps:    []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
+			expected: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update, admissionregistrationv1beta1.Delete, admissionregistrationv1beta1.Connect},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			rules := []admissionregistrationv1beta1.RuleWithOperations{
+				{
+					Operations: test.ruleOps,
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+					},
+				},
+			}
+
+			// Repeat: set iteration order varies between calls.
+			for i := 0; i < 20; i++ {
+				result, err := convertWebhookRulesToResourceRules(rules, test.ctOps)
+				if err != nil && !errors.Is(err, ErrOperationMismatch) {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if len(result) != 1 {
+					t.Fatalf("expected 1 resource rule, got %d", len(result))
+				}
+				if !reflect.DeepEqual(result[0].Operations, test.expected) {
+					t.Fatalf("operations = %v, want %v", result[0].Operations, test.expected)
+				}
+			}
+		})
+	}
+}
+
 func TestExpandWildcardOperations(t *testing.T) {
 	allOps := []admissionregistrationv1beta1.OperationType{
 		admissionregistrationv1beta1.Create,
@@ -1090,11 +1273,12 @@ func newTestConstraint(enforcementAction string, namespaceSelector, labelSelecto
 
 func TestConstraintToBinding(t *testing.T) {
 	tests := []struct {
-		name               string
-		constraint         *unstructured.Unstructured
-		enforcementActions []string
-		expectedErr        error
-		expected           *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding
+		name                 string
+		constraint           *unstructured.Unstructured
+		enforcementActions   []string
+		emitAuditAnnotations bool
+		expectedErr          error
+		expected             *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding
 	}{
 		{
 			name:               "empty constraint",
@@ -1102,7 +1286,7 @@ func TestConstraintToBinding(t *testing.T) {
 			enforcementActions: []string{"deny"},
 			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "gatekeeper-foo-name",
+					Name: "gatekeeper-footemplate-foo-name",
 				},
 				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
 					PolicyName: "gatekeeper-footemplate",
@@ -1121,7 +1305,7 @@ func TestConstraintToBinding(t *testing.T) {
 			enforcementActions: []string{"deny"},
 			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "gatekeeper-foo-name",
+					Name: "gatekeeper-footemplate-foo-name",
 				},
 				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
 					PolicyName: "gatekeeper-footemplate",
@@ -1142,7 +1326,7 @@ func TestConstraintToBinding(t *testing.T) {
 			constraint:         newTestConstraint("", &metav1.LabelSelector{MatchLabels: map[string]string{"match": "yes"}}, nil, &unstructured.Unstructured{}),
 			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "gatekeeper-foo-name",
+					Name: "gatekeeper-footemplate-foo-name",
 				},
 				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
 					PolicyName: "gatekeeper-footemplate",
@@ -1163,7 +1347,7 @@ func TestConstraintToBinding(t *testing.T) {
 			constraint:         newTestConstraint("", &metav1.LabelSelector{MatchLabels: map[string]string{"matchNS": "yes"}}, &metav1.LabelSelector{MatchLabels: map[string]string{"match": "yes"}}, &unstructured.Unstructured{}),
 			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "gatekeeper-foo-name",
+					Name: "gatekeeper-footemplate-foo-name",
 				},
 				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
 					PolicyName: "gatekeeper-footemplate",
@@ -1185,7 +1369,7 @@ func TestConstraintToBinding(t *testing.T) {
 			constraint:         newTestConstraint("deny", nil, nil, &unstructured.Unstructured{}),
 			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "gatekeeper-foo-name",
+					Name: "gatekeeper-footemplate-foo-name",
 				},
 				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
 					PolicyName: "gatekeeper-footemplate",
@@ -1204,7 +1388,7 @@ func TestConstraintToBinding(t *testing.T) {
 			constraint:         newTestConstraint("warn", nil, nil, &unstructured.Unstructured{}),
 			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "gatekeeper-foo-name",
+					Name: "gatekeeper-footemplate-foo-name",
 				},
 				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
 					PolicyName: "gatekeeper-footemplate",
@@ -1223,7 +1407,67 @@ func TestConstraintToBinding(t *testing.T) {
 			constraint:         newTestConstraint("dryrun", nil, nil, &unstructured.Unstructured{}),
 			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "gatekeeper-foo-name",
+					Name: "gatekeeper-footemplate-foo-name",
+				},
+				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+					PolicyName: "gatekeeper-footemplate",
+					ParamRef: &admissionregistrationv1beta1.ParamRef{
+						Name:                    "foo-name",
+						ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
+					},
+					MatchResources:    &admissionregistrationv1beta1.MatchResources{},
+					ValidationActions: []admissionregistrationv1beta1.ValidationAction{admissionregistrationv1beta1.Audit},
+				},
+			},
+		},
+		{
+			name:                 "audit annotations add Audit to deny",
+			enforcementActions:   []string{"deny"},
+			emitAuditAnnotations: true,
+			constraint:           newTestConstraint("deny", nil, nil, &unstructured.Unstructured{}),
+			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "gatekeeper-footemplate-foo-name",
+				},
+				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+					PolicyName: "gatekeeper-footemplate",
+					ParamRef: &admissionregistrationv1beta1.ParamRef{
+						Name:                    "foo-name",
+						ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
+					},
+					MatchResources:    &admissionregistrationv1beta1.MatchResources{},
+					ValidationActions: []admissionregistrationv1beta1.ValidationAction{admissionregistrationv1beta1.Deny, admissionregistrationv1beta1.Audit},
+				},
+			},
+		},
+		{
+			name:                 "audit annotations add Audit to warn",
+			enforcementActions:   []string{"warn"},
+			emitAuditAnnotations: true,
+			constraint:           newTestConstraint("warn", nil, nil, &unstructured.Unstructured{}),
+			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "gatekeeper-footemplate-foo-name",
+				},
+				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+					PolicyName: "gatekeeper-footemplate",
+					ParamRef: &admissionregistrationv1beta1.ParamRef{
+						Name:                    "foo-name",
+						ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
+					},
+					MatchResources:    &admissionregistrationv1beta1.MatchResources{},
+					ValidationActions: []admissionregistrationv1beta1.ValidationAction{admissionregistrationv1beta1.Warn, admissionregistrationv1beta1.Audit},
+				},
+			},
+		},
+		{
+			name:                 "audit annotations do not duplicate dryrun Audit",
+			enforcementActions:   []string{"dryrun"},
+			emitAuditAnnotations: true,
+			constraint:           newTestConstraint("dryrun", nil, nil, &unstructured.Unstructured{}),
+			expected: &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "gatekeeper-footemplate-foo-name",
 				},
 				Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
 					PolicyName: "gatekeeper-footemplate",
@@ -1246,7 +1490,7 @@ func TestConstraintToBinding(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			binding, err := ConstraintToBinding(test.constraint, test.enforcementActions)
+			binding, err := constraintToBinding(test.constraint, test.enforcementActions, test.emitAuditAnnotations)
 			if !errors.Is(err, test.expectedErr) {
 				t.Errorf("unexpected error. got %v; wanted %v", err, test.expectedErr)
 			}
@@ -1254,6 +1498,27 @@ func TestConstraintToBinding(t *testing.T) {
 				t.Errorf("got %+v\n\nwant %+v", *binding, *test.expected)
 			}
 		})
+	}
+}
+
+func TestVAPAuditAnnotations(t *testing.T) {
+	for _, mode := range []struct {
+		enabled        bool
+		includeSuccess bool
+	}{{false, false}, {false, true}, {true, false}} {
+		if got := vapAuditAnnotations(mode.enabled, mode.includeSuccess); got != nil {
+			t.Fatalf("expected no VAP evaluation marker for mode %+v, got %#v", mode, got)
+		}
+	}
+
+	want := []admissionregistrationv1beta1.AuditAnnotation{
+		{
+			Key:             vapEvaluationAuditAnnotationKey,
+			ValueExpression: vapEvaluationAuditAnnotationValueExpression,
+		},
+	}
+	if got := vapAuditAnnotations(true, true); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
 	}
 }
 
@@ -1519,6 +1784,9 @@ func TestBuildDefaultMatchConstraints(t *testing.T) {
 	}
 	if len(rule.Resources) != 1 || rule.Resources[0] != "*" {
 		t.Errorf("expected wildcard Resources, got %v", rule.Resources)
+	}
+	if rule.Scope == nil || *rule.Scope != admissionregistrationv1beta1.AllScopes {
+		t.Errorf("expected all scopes, got %v", rule.Scope)
 	}
 }
 

@@ -23,6 +23,7 @@ module.exports = {
         'library',
         'customize-startup',
         'customize-admission',
+        'remote-cluster',
         'metrics',
         'debug',
         'emergency',

@@ -3,10 +3,18 @@ package audit
 import (
 	"container/heap"
 	"context"
+	"encoding/json"
 	"flag"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path"
 	"reflect"
+	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/gomega"
@@ -17,6 +25,7 @@ import (
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
 	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -32,8 +41,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	controllerruntimemanager "sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 func Test_SVQueue(t *testing.T) {
@@ -603,6 +614,130 @@ func Test_removeAllFromDir(t *testing.T) {
 	})
 }
 
+type auditResourcesTestManager struct {
+	controllerruntimemanager.Manager
+	config *rest.Config
+}
+
+func (m *auditResourcesTestManager) GetConfig() *rest.Config {
+	return m.config
+}
+
+type auditResourcesTestClient struct {
+	client.Client
+	cacheDir            string
+	constraintListCalls int
+	resourceListCalls   int
+}
+
+func (c *auditResourcesTestClient) List(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+	switch list.GetObjectKind().GroupVersionKind().Kind {
+	case "ConfigMapList":
+		c.resourceListCalls++
+		return nil
+	case "K8sRequiredLabelsList":
+		c.constraintListCalls++
+	default:
+		return fmt.Errorf("unexpected list GVK %s", list.GetObjectKind().GroupVersionKind())
+	}
+
+	constraintList, ok := list.(*unstructured.UnstructuredList)
+	if !ok {
+		return fmt.Errorf("unexpected list type %T", list)
+	}
+	constraintList.Items = []unstructured.Unstructured{{Object: map[string]interface{}{
+		"spec": map[string]interface{}{
+			"match": map[string]interface{}{
+				"kinds": []interface{}{
+					map[string]interface{}{"kinds": []interface{}{"Pod"}},
+				},
+			},
+		},
+	}}}
+
+	sentinelDir := path.Join(c.cacheDir, "sentinel")
+	if err := os.Mkdir(sentinelDir, 0o750); err != nil {
+		return err
+	}
+	return os.WriteFile(path.Join(sentinelDir, auditObjectsFile), []byte("[]"), 0o600)
+}
+
+func TestAuditResourcesSkipsUnmatchedKindBeforeCleanup(t *testing.T) {
+	oldAPICacheDir := *apiCacheDir
+	oldAuditMatchKindOnly := *auditMatchKindOnly
+	t.Cleanup(func() {
+		*apiCacheDir = oldAPICacheDir
+		*auditMatchKindOnly = oldAuditMatchKindOnly
+	})
+
+	cacheDir := t.TempDir()
+	*apiCacheDir = cacheDir
+	*auditMatchKindOnly = true
+
+	var coreResourcesDiscovered atomic.Bool
+	discoveryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var response interface{}
+		switch r.URL.Path {
+		case "/api":
+			response = metav1.APIVersions{
+				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "APIVersions"},
+				Versions: []string{"v1"},
+			}
+		case "/api/v1":
+			coreResourcesDiscovered.Store(true)
+			response = metav1.APIResourceList{
+				GroupVersion: "v1",
+				APIResources: []metav1.APIResource{{
+					Name:       "configmaps",
+					Namespaced: true,
+					Kind:       "ConfigMap",
+					Verbs:      metav1.Verbs{"list"},
+				}},
+			}
+		case "/apis":
+			response = metav1.APIGroupList{
+				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "APIGroupList"},
+			}
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Errorf("encoding discovery response: %v", err)
+		}
+	}))
+	t.Cleanup(discoveryServer.Close)
+
+	testClient := &auditResourcesTestClient{
+		Client:   fake.NewClientBuilder().Build(),
+		cacheDir: cacheDir,
+	}
+	am := &Manager{
+		client: testClient,
+		mgr: &auditResourcesTestManager{
+			config: &rest.Config{Host: discoveryServer.URL},
+		},
+		log: logr.Discard(),
+	}
+
+	err := am.auditResources(
+		context.Background(),
+		[]schema.GroupVersionKind{{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabelsList"}},
+		map[util.KindVersionName]*LimitQueue{},
+		map[util.KindVersionName]int64{},
+		map[util.EnforcementAction]int64{},
+		"test-timestamp",
+		&auditExportPublishingState{Errors: map[string]error{}},
+	)
+	require.NoError(t, err)
+	require.True(t, coreResourcesDiscovered.Load(), "core resources were not discovered")
+	require.Equal(t, 1, testClient.constraintListCalls)
+	require.Zero(t, testClient.resourceListCalls, "resource List called for unmatched ConfigMap")
+	_, err = os.Stat(path.Join(cacheDir, "sentinel", auditObjectsFile))
+	require.NoError(t, err, "cache cleanup ran for unmatched ConfigMap")
+}
+
 func Test_readUnstructured(t *testing.T) {
 	am := Manager{}
 
@@ -624,6 +759,162 @@ func Test_readUnstructured(t *testing.T) {
 			t.Errorf("Expected name to be 'my-namespace', got %s", u.GetName())
 		}
 	})
+}
+
+func Test_readUnstructuredList(t *testing.T) {
+	am := Manager{}
+
+	t.Run("batched objects", func(t *testing.T) {
+		jsonBytes := []byte(`[
+			{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"namespace-a"}},
+			{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"namespace-b"}}
+		]`)
+
+		items, err := am.readUnstructuredList(jsonBytes)
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+		require.Equal(t, "namespace-a", items[0].GetName())
+		require.Equal(t, "namespace-b", items[1].GetName())
+	})
+
+	t.Run("single object fallback", func(t *testing.T) {
+		jsonBytes := []byte(`{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"my-namespace"}}`)
+
+		items, err := am.readUnstructuredList(jsonBytes)
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		require.Equal(t, "my-namespace", items[0].GetName())
+	})
+}
+
+func Test_reviewObjectsBatchedSpoolMatchesPerObjectSpool(t *testing.T) {
+	objects := []unstructured.Unstructured{
+		auditTestPod("pod-a", "test-namespace"),
+		auditTestPod("pod-b", "test-namespace"),
+	}
+
+	perObject := runReviewObjectsSpool(t, objects, false)
+	batched := runReviewObjectsSpool(t, objects, true)
+
+	require.Equal(t, perObject, batched)
+}
+
+type reviewObjectsSummary struct {
+	Violations                          map[util.KindVersionName][]StatusViolation
+	TotalViolationsPerConstraint        map[util.KindVersionName]int64
+	TotalViolationsPerEnforcementAction map[util.EnforcementAction]int64
+}
+
+func runReviewObjectsSpool(t *testing.T, objects []unstructured.Unstructured, batched bool) reviewObjectsSummary {
+	t.Helper()
+
+	restoreAuditGlobals := setAuditGlobalsForReviewTest(t)
+	defer restoreAuditGlobals()
+
+	rootDir := t.TempDir()
+	*apiCacheDir = rootDir
+
+	const kind = "Pod"
+	spoolDir := path.Join(rootDir, kind+"_0")
+	require.NoError(t, os.Mkdir(spoolDir, 0o750))
+
+	am := newReviewObjectsTestManager(t, "test-namespace")
+	if batched {
+		require.NoError(t, am.writeUnstructuredList(spoolDir, objects))
+	} else {
+		for i := range objects {
+			jsonBytes, err := objects[i].MarshalJSON()
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(path.Join(spoolDir, strconv.Itoa(i)), jsonBytes, 0o600))
+		}
+	}
+
+	updateLists := map[util.KindVersionName]*LimitQueue{}
+	totalViolationsPerConstraint := map[util.KindVersionName]int64{}
+	totalViolationsPerEnforcementAction := map[util.EnforcementAction]int64{}
+	auditExportPublishingState := &auditExportPublishingState{Errors: map[string]error{}}
+
+	require.NoError(t, am.reviewObjects(context.Background(), kind, 1, newNSCache(), updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, "test-timestamp", auditExportPublishingState))
+
+	return summarizeReviewObjects(updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
+}
+
+func setAuditGlobalsForReviewTest(t *testing.T) func() {
+	t.Helper()
+
+	oldAPICacheDir := *apiCacheDir
+	oldExportEnabled := *exportutil.ExportEnabled
+	oldEmitAuditEvents := *emitAuditEvents
+	oldLogStatsAudit := *logStatsAudit
+
+	*exportutil.ExportEnabled = false
+	*emitAuditEvents = false
+	*logStatsAudit = false
+
+	return func() {
+		*apiCacheDir = oldAPICacheDir
+		*exportutil.ExportEnabled = oldExportEnabled
+		*emitAuditEvents = oldEmitAuditEvents
+		*logStatsAudit = oldLogStatsAudit
+	}
+}
+
+func newReviewObjectsTestManager(t *testing.T, namespace string) *Manager {
+	t.Helper()
+
+	driver, err := rego.New()
+	require.NoError(t, err)
+	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.EnforcementPoints([]string{util.AuditEnforcementPoint}...))
+	require.NoError(t, err)
+	_, err = opaClient.AddTemplate(context.Background(), fakes.DenyAllRegoTemplate())
+	require.NoError(t, err)
+	_, err = opaClient.AddConstraint(context.Background(), fakes.DenyAllConstraint())
+	require.NoError(t, err)
+
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(ns).Build()
+
+	return &Manager{
+		client:          k8sClient,
+		opa:             opaClient,
+		expansionSystem: expansion.NewSystem(nil),
+		log:             logr.Discard(),
+	}
+}
+
+func auditTestPod(name, namespace string) unstructured.Unstructured {
+	return unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "Pod",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": namespace,
+		},
+		"spec": map[string]interface{}{
+			"containers": []interface{}{
+				map[string]interface{}{
+					"name":  "container",
+					"image": "image",
+				},
+			},
+		},
+	}}
+}
+
+func summarizeReviewObjects(updateLists map[util.KindVersionName]*LimitQueue, totalViolationsPerConstraint map[util.KindVersionName]int64, totalViolationsPerEnforcementAction map[util.EnforcementAction]int64) reviewObjectsSummary {
+	violations := make(map[util.KindVersionName][]StatusViolation, len(updateLists))
+	for key, queue := range updateLists {
+		for queue.Len() > 0 {
+			violation := queue.Pop()
+			violations[key] = append(violations[key], *violation)
+		}
+	}
+
+	return reviewObjectsSummary{
+		Violations:                          violations,
+		TotalViolationsPerConstraint:        totalViolationsPerConstraint,
+		TotalViolationsPerEnforcementAction: totalViolationsPerEnforcementAction,
+	}
 }
 
 func Test_reportExportConnectionErrors(t *testing.T) {
@@ -680,9 +971,16 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 				g.Expect(err).ToNot(gomega.HaveOccurred(), "Failed to add scheme")
 			}
 
+			lastAttemptTime := time.Unix(1, 0).UTC()
+			lastSuccessTime := time.Time{}
+			if test.successCount > 0 {
+				lastSuccessTime = time.Unix(2, 0).UTC()
+			}
 			auditExportPublishingState := auditExportPublishingState{
-				SuccessCount: test.successCount,
-				Errors:       test.errorsMap,
+				SuccessCount:    test.successCount,
+				Errors:          test.errorsMap,
+				LastAttemptTime: lastAttemptTime,
+				LastSuccessTime: lastSuccessTime,
 			}
 
 			client := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
@@ -706,7 +1004,7 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 
 			// Validate the operation is idempotent by re-running
 			for i := 0; i < 2; i++ {
-				reportExportConnectionErrors(context.Background(), auditExportPublishingState, logr.Logger{}, client, scheme.Scheme, getPod)
+				reportExportConnectionErrors(context.Background(), auditExportPublishingState, logr.Logger{}, client, client, scheme.Scheme, getPod)
 
 				// Await the ConnectionPodStatus
 				connPodStatusName, _ := statusv1alpha1.KeyForConnection(pod.Name, connObj.Namespace, connObj.Name)
@@ -718,9 +1016,6 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 					}, &connPodStatus)).Should(gomega.Succeed(), "Status should exist after creation")
 				}).Should(gomega.Succeed())
 
-				// Assert the ConnectionPodStatus expected
-				g.Expect(connPodStatus.Status.Active).To(gomega.Equal(test.wantActiveConn), "Active status unexpected")
-				g.Expect(len(connPodStatus.Status.Errors)).To(gomega.Equal(len(test.errorsMap)), "Length of errors unexpected")
 				expected := make([]*statusv1alpha1.ConnectionError, 0, len(test.errorsMap))
 				for key := range test.errorsMap {
 					expected = append(expected, &statusv1alpha1.ConnectionError{
@@ -729,8 +1024,169 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 					})
 				}
 
-				g.Expect(connPodStatus.Status.Errors).To(gomega.ConsistOf(expected), "Error slice unexpected")
+				g.Expect(connPodStatus.Status.ConnectionErrors).To(gomega.BeEmpty())
+				g.Expect(connPodStatus.Status.PublishStatuses).To(gomega.HaveLen(1))
+				publishStatus := connPodStatus.Status.PublishStatuses[0]
+				g.Expect(publishStatus.Source).To(gomega.Equal(statusv1alpha1.AuditPublishSource))
+				g.Expect(publishStatus.Active).To(gomega.Equal(test.wantActiveConn))
+				g.Expect(publishStatus.Errors).To(gomega.ConsistOf(expected))
+				g.Expect(publishStatus.LastAttemptTime).ToNot(gomega.BeNil())
+				g.Expect(publishStatus.LastAttemptTime.Time.Equal(lastAttemptTime)).To(gomega.BeTrue())
+				if test.successCount > 0 {
+					g.Expect(publishStatus.LastSuccessTime).ToNot(gomega.BeNil())
+					g.Expect(publishStatus.LastSuccessTime.Time.Equal(lastSuccessTime)).To(gomega.BeTrue())
+				} else {
+					g.Expect(publishStatus.LastSuccessTime).To(gomega.BeNil())
+				}
 			}
 		})
 	}
+}
+
+func Test_hasConstraintInstances(t *testing.T) {
+	constraintGVK := schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabels"}
+
+	t.Run("no constraints", func(t *testing.T) {
+		am := &Manager{client: fake.NewClientBuilder().Build()}
+		hasConstraints, err := am.hasConstraintInstances(context.Background(), []schema.GroupVersionKind{constraintGVK})
+		require.NoError(t, err)
+		require.False(t, hasConstraints)
+	})
+
+	t.Run("has constraint", func(t *testing.T) {
+		constraint := &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+			"kind":       "K8sRequiredLabels",
+			"metadata": map[string]interface{}{
+				"name": "required-labels",
+			},
+		}}
+		constraint.SetGroupVersionKind(constraintGVK)
+		am := &Manager{client: fake.NewClientBuilder().WithObjects(constraint).Build()}
+		hasConstraints, err := am.hasConstraintInstances(context.Background(), []schema.GroupVersionKind{constraintGVK})
+		require.NoError(t, err)
+		require.True(t, hasConstraints)
+	})
+}
+
+func TestHandleNoConstraints(t *testing.T) {
+	originalAPICacheDir := *apiCacheDir
+	originalAuditFromCache := *auditFromCache
+	t.Cleanup(func() {
+		*apiCacheDir = originalAPICacheDir
+		*auditFromCache = originalAuditFromCache
+	})
+
+	newManager := func() *Manager {
+		return &Manager{log: logr.Discard(), reporter: &reporter{}}
+	}
+	totals := map[util.EnforcementAction]int64{util.Deny: 0}
+
+	t.Run("removes stale discovery spool", func(t *testing.T) {
+		cacheDir := t.TempDir()
+		spoolDir := path.Join(cacheDir, "Pod_0")
+		require.NoError(t, os.Mkdir(spoolDir, 0o750))
+		require.NoError(t, os.WriteFile(path.Join(spoolDir, auditObjectsFile), []byte(`[{"kind":"Secret"}]`), 0o600))
+		*apiCacheDir = cacheDir
+		*auditFromCache = false
+
+		require.NoError(t, newManager().handleNoConstraints(totals))
+		entries, err := os.ReadDir(cacheDir)
+		require.NoError(t, err)
+		require.Empty(t, entries)
+	})
+
+	t.Run("allows missing discovery spool", func(t *testing.T) {
+		*apiCacheDir = path.Join(t.TempDir(), "missing")
+		*auditFromCache = false
+
+		require.NoError(t, newManager().handleNoConstraints(totals))
+	})
+
+	t.Run("does not touch cache audit directory", func(t *testing.T) {
+		cacheDir := t.TempDir()
+		marker := path.Join(cacheDir, "keep")
+		require.NoError(t, os.WriteFile(marker, []byte("keep"), 0o600))
+		*apiCacheDir = cacheDir
+		*auditFromCache = true
+
+		require.NoError(t, newManager().handleNoConstraints(totals))
+		_, err := os.Stat(marker)
+		require.NoError(t, err)
+	})
+
+	t.Run("reports zero totals when discovery spool cleanup fails", func(t *testing.T) {
+		*apiCacheDir = "\x00"
+		*auditFromCache = false
+
+		am := newManager()
+		zeroTotals := make(map[util.EnforcementAction]int64, len(util.KnownEnforcementActions))
+		for _, action := range util.KnownEnforcementActions {
+			zeroTotals[action] = 0
+			require.NoError(t, am.reporter.reportTotalViolations(action, 1))
+		}
+
+		err := am.handleNoConstraints(zeroTotals)
+		require.ErrorContains(t, err, "cleaning audit cache directory")
+		require.Equal(t, zeroTotals, am.reporter.totalViolationsPerEnforcementAction)
+	})
+}
+
+func BenchmarkHasConstraintInstancesNoConstraints(b *testing.B) {
+	const constraintKinds = 100
+	constraintGVKs := make([]schema.GroupVersionKind, constraintKinds)
+	for i := range constraintGVKs {
+		constraintGVKs[i] = schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "ConstraintKind" + strconv.Itoa(i)}
+	}
+	am := &Manager{client: fake.NewClientBuilder().Build()}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		hasConstraints, err := am.hasConstraintInstances(context.Background(), constraintGVKs)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if hasConstraints {
+			b.Fatal("hasConstraintInstances() = true, want false")
+		}
+	}
+}
+
+func Test_stopAuditResultsUpdateLoop(t *testing.T) {
+	stop := make(chan struct{})
+	stopped := make(chan struct{})
+	am := &Manager{
+		log: logr.Discard(),
+		ucloop: &updateConstraintLoop{
+			stop:    stop,
+			stopped: stopped,
+		},
+	}
+	go func() {
+		<-stop
+		close(stopped)
+	}()
+
+	am.stopAuditResultsUpdateLoop()
+	require.Nil(t, am.ucloop)
+}
+
+func TestAuditExportPublishingStateBoundsErrors(t *testing.T) {
+	state := auditExportPublishingState{Errors: make(map[string]error)}
+	for i := 0; i < exportutil.MaxConnectionStatusErrors+100; i++ {
+		state.recordPublishResult(fmt.Errorf("class-%03d: backend unavailable", i))
+	}
+
+	require.Len(t, state.Errors, exportutil.MaxConnectionStatusErrors)
+	require.Contains(t, state.Errors, exportutil.AdditionalPublishErrorsOmittedMessage)
+}
+
+func TestNewRejectsMissingExportSystemWhenExportEnabled(t *testing.T) {
+	origExport := *exportutil.ExportEnabled
+	defer func() { *exportutil.ExportEnabled = origExport }()
+	*exportutil.ExportEnabled = true
+
+	_, err := New(nil, &Dependencies{ExportSystem: nil})
+	require.Error(t, err)
 }

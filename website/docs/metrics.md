@@ -214,6 +214,52 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Distribution`
 
+- Name: `gatekeeper_admission_export_queued_count`
+
+    Description: `Total admission violations queued for export`
+
+    Aggregation: `Count`
+
+- Name: `gatekeeper_admission_export_queue_full_count`
+
+    Description: `Total admission violation exports dropped because the message-count or byte queue limit was reached`
+
+    Aggregation: `Count`
+
+- Name: `gatekeeper_admission_export_published_count`
+
+    Description: `Total admission violations successfully exported`
+
+    Aggregation: `Count`
+
+- Name: `gatekeeper_admission_export_publish_error_count`
+
+    Description: `Total admission violation export publish errors`
+
+    Aggregation: `Count`
+
+- Name: `gatekeeper_admission_export_dropped_count`
+
+    Description: `Total admission violation exports dropped before publishing`
+
+    Tags:
+
+    - `reason`: [`marshal_error`, `message_too_large`, `queue_bytes_full`, `queue_full`, `shutdown`]
+
+    Aggregation: `Count`
+
+- Name: `gatekeeper_admission_export_queue_depth`
+
+    Description: `Current number of admission violations waiting for export`
+
+    Aggregation: `LastValue`
+
+- Name: `gatekeeper_admission_export_queue_bytes`
+
+    Description: `Current encoded size in bytes of admission violations waiting for export`
+
+    Aggregation: `LastValue`
+
 ### Audit
 
 - Name: `gatekeeper_violations`

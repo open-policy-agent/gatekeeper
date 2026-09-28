@@ -7,6 +7,7 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -14,13 +15,17 @@ var _ MutatorWithSchema = &fakeMutator{}
 
 type fakeMutator struct {
 	id               types.ID
-	bindings         []schema.GroupVersionKind
+	bindings         []Binding
 	pathStr          string
 	path             parser.Path
 	usesExternalData bool
 }
 
 func newFakeMutator(id types.ID, pathStr string, usesExternalData bool, bindings ...schema.GroupVersionKind) *fakeMutator {
+	return newFakeMutatorWithBindings(id, pathStr, usesExternalData, bindingsForGVKs(bindings)...)
+}
+
+func newFakeMutatorWithBindings(id types.ID, pathStr string, usesExternalData bool, bindings ...Binding) *fakeMutator {
 	path, err := parser.Parse(pathStr)
 	if err != nil {
 		panic(err)
@@ -32,6 +37,23 @@ func newFakeMutator(id types.ID, pathStr string, usesExternalData bool, bindings
 		path:             path,
 		usesExternalData: usesExternalData,
 	}
+}
+
+func bindingsForGVKs(gvks []schema.GroupVersionKind) []Binding {
+	var bindings []Binding
+	for _, gvk := range gvks {
+		bindings = append(bindings,
+			Binding{GVK: gvk, Operation: admissionv1.Create},
+			Binding{GVK: gvk, Operation: admissionv1.Update},
+			Binding{GVK: gvk, Operation: admissionv1.Delete},
+			Binding{GVK: gvk, Operation: admissionv1.Connect},
+		)
+	}
+	return bindings
+}
+
+func binding(gvk schema.GroupVersionKind, operation admissionv1.Operation) Binding {
+	return Binding{GVK: gvk, Operation: operation}
 }
 
 func (m *fakeMutator) Matches(*types.Mutable) (bool, error) {
@@ -80,14 +102,14 @@ func (m *fakeMutator) DeepCopy() types.Mutator {
 	result := &fakeMutator{
 		id:       m.id,
 		pathStr:  m.pathStr,
-		bindings: make([]schema.GroupVersionKind, len(m.bindings)),
+		bindings: make([]Binding, len(m.bindings)),
 		path:     m.path.DeepCopy(),
 	}
 	copy(result.bindings, m.bindings)
 	return result
 }
 
-func (m *fakeMutator) SchemaBindings() []schema.GroupVersionKind {
+func (m *fakeMutator) SchemaBindings() []Binding {
 	return m.bindings
 }
 
@@ -144,6 +166,26 @@ func TestDB_Upsert(t *testing.T) {
 			toAdd: newFakeMutator(id("bar"), "spec.containers[name: foo].image", false,
 				gvk("", "v2", "Pod")),
 			wantErr: nil,
+		},
+		{
+			name: "add conflicting mutator with disjoint operation",
+			before: []MutatorWithSchema{
+				newFakeMutatorWithBindings(id("foo"), "spec.containers.image", false,
+					binding(gvk("", "v1", "Pod"), admissionv1.Create)),
+			},
+			toAdd: newFakeMutatorWithBindings(id("bar"), "spec.containers[name: foo].image", false,
+				binding(gvk("", "v1", "Pod"), admissionv1.Update)),
+			wantErr: nil,
+		},
+		{
+			name: "add conflicting mutator with overlapping operation",
+			before: []MutatorWithSchema{
+				newFakeMutatorWithBindings(id("foo"), "spec.containers.image", false,
+					binding(gvk("", "v1", "Pod"), admissionv1.Create)),
+			},
+			toAdd: newFakeMutatorWithBindings(id("bar"), "spec.containers[name: foo].image", false,
+				binding(gvk("", "v1", "Pod"), admissionv1.Create)),
+			wantErr: NewErrConflictingSchema(IDSet{{Name: "bar"}: true, {Name: "foo"}: true}),
 		},
 		{
 			name: "overwrite mutator with conflicting one",

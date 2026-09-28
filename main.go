@@ -50,14 +50,17 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
+	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness/pruner"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/routing"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/upgrade"
@@ -71,9 +74,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -210,9 +216,20 @@ func innerMain() int {
 		klog.SetLogger(logger)
 	}
 
+	if err := celSchema.ValidateDefaultFailurePolicyForK8sNativeValidation(); err != nil {
+		setupLog.Error(err, "Invalid default K8sNativeValidation failure policy")
+		return 1
+	}
+
 	if *mutation.DeprecatedMutationEnabled {
 		setupLog.Error(errors.New("--enable-mutation flag is deprecated"), "use of deprecated flag")
 	}
+
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "sync-vap-enforcement-scope" {
+			setupLog.Error(errors.New("--sync-vap-enforcement-scope flag is deprecated and will be removed in Gatekeeper v3.24"), "use of deprecated flag")
+		}
+	})
 
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent("gatekeeper")
@@ -245,6 +262,17 @@ func innerMain() int {
 			},
 		}
 	}
+	// create local cluster config once if remote cluster mode is enabled, shared by RoutingCache (reads) and RoutingClient (writes)
+	var localClusterConfig *rest.Config
+	if controller.RemoteClusterEnabled() {
+		var err error
+		localClusterConfig, err = rest.InClusterConfig()
+		if err != nil {
+			setupLog.Error(err, "local cluster in-cluster config required for --enable-remote-cluster")
+			return 1
+		}
+	}
+
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -254,6 +282,8 @@ func innerMain() int {
 		WebhookServer:          crWebhook.NewServer(serverOpts),
 		HealthProbeBindAddress: *healthAddr,
 		MapperProvider:         apiutil.NewDynamicRESTMapper,
+		NewCache:               newCacheFunc(scheme, localClusterConfig),
+		NewClient:              newClientFunc(scheme, localClusterConfig),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -305,13 +335,21 @@ func innerMain() int {
 		return 1
 	}
 
-	// only setup healthcheck when flag is set and available webhook count > 0
-	if len(webhooks) > 0 && *enableTLSHealthcheck {
-		tlsChecker := webhook.NewTLSChecker(*certDir, *port)
-		setupLog.Info("setting up TLS healthcheck probe")
-		if err := mgr.AddHealthzCheck("tls-check", tlsChecker); err != nil {
-			setupLog.Error(err, "unable to create tls health check")
+	if len(webhooks) > 0 {
+		tlsChecker := webhook.NewTLSChecker(*certDir, *host, *port)
+		setupLog.Info("setting up TLS readiness probe")
+		if err := mgr.AddReadyzCheck("tls-check", tlsChecker); err != nil {
+			setupLog.Error(err, "unable to create tls readiness check")
 			return 1
+		}
+
+		// only setup healthcheck when flag is set
+		if *enableTLSHealthcheck {
+			setupLog.Info("setting up TLS healthcheck probe")
+			if err := mgr.AddHealthzCheck("tls-check", tlsChecker); err != nil {
+				setupLog.Error(err, "unable to create tls health check")
+				return 1
+			}
 		}
 	}
 
@@ -395,6 +433,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		case *externaldataProviderResponseCacheTTL > 0:
 			providerResponseCache := frameworksexternaldata.NewProviderResponseCache(ctx, *externaldataProviderResponseCacheTTL)
 			args = append(args, rego.AddExternalDataProviderResponseCache(providerResponseCache))
+			mutationOpts.ProviderResponseCache = providerResponseCache
 		case *externaldataProviderResponseCacheTTL == 0:
 			setupLog.Info("external data provider response cache is disabled")
 		default:
@@ -463,6 +502,8 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 
 		cfArgs = append(cfArgs, constraintclient.EnforcementPoints(eps...))
 
+		// Initialize OPA client only if validation operations are required.
+		// This avoids unnecessary dependency on the OPA client for purely mutation operations (Related to #3964).
 		var clientErr error
 		client, clientErr = constraintclient.NewClient(cfArgs...)
 		if clientErr != nil {
@@ -473,7 +514,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
 	expansionSystem := expansion.NewSystem(mutationSystem)
-	exportSystem := export.NewSystem()
+	exportSystem := newExportSystem()
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -572,6 +613,8 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 			ProcessExcluder: processExcluder,
 			MutationSystem:  mutationSystem,
 			ExpansionSystem: expansionSystem,
+			ExportSystem:    exportSystem,
+			GetPod:          opts.GetPod,
 		}
 		if err := webhook.AddToManager(mgr, webhookDeps); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
@@ -605,6 +648,17 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	return nil
 }
 
+// newExportSystem constructs an export.System only when audit or admission
+// violation export has been requested, since either flag requires a
+// constructed export.System. It returns nil when both are disabled so that
+// the default configuration carries no unused export dependency.
+func newExportSystem() *export.System {
+	if *exportutil.ExportEnabled || *exportutil.AdmissionExportEnabled {
+		return export.NewSystem()
+	}
+	return nil
+}
+
 func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
 	sink := zapcore.AddSync(os.Stderr)
 	if dest != nil {
@@ -626,4 +680,60 @@ func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
 	newlogger := zapr.NewLogger(zlog)
 	ctrl.SetLogger(newlogger)
 	klog.SetLogger(newlogger)
+}
+
+// returns a NewCacheFunc that wraps the default cache with a RoutingCache when remote cluster mode is enabled
+// In non-remote mode it returns nil, which tells the manager to use the default cache.
+func newCacheFunc(scheme *runtime.Scheme, localClusterConfig *rest.Config) cache.NewCacheFunc {
+	if localClusterConfig == nil {
+		return nil
+	}
+	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
+		// standard behavior
+		remoteClusterCache, err := cache.New(config, opts)
+		if err != nil {
+			return nil, fmt.Errorf("creating remote cluster cache: %w", err)
+		}
+
+		// local cluster cache
+		localClusterOpts := cache.Options{
+			Scheme:                      opts.Scheme,
+			SyncPeriod:                  opts.SyncPeriod,
+			ReaderFailOnMissingInformer: opts.ReaderFailOnMissingInformer,
+			DefaultWatchErrorHandler:    opts.DefaultWatchErrorHandler,
+			DefaultNamespaces: map[string]cache.Config{
+				util.GetNamespace(): {},
+			},
+		}
+		localClusterCache, err := cache.New(localClusterConfig, localClusterOpts)
+		if err != nil {
+			return nil, fmt.Errorf("creating local cluster cache: %w", err)
+		}
+		return routing.NewRoutingCache(remoteClusterCache, localClusterCache, scheme), nil
+	}
+}
+
+// returns a NewClientFunc that wraps the default client with a RoutingClient when remote cluster mode is enabled
+// In non-remote mode it returns nil, which tells the manager to use the default client.
+func newClientFunc(scheme *runtime.Scheme, localClusterConfig *rest.Config) client.NewClientFunc {
+	if localClusterConfig == nil {
+		return nil
+	}
+	return func(config *rest.Config, opts client.Options) (client.Client, error) {
+		remoteClusterClient, err := client.New(config, opts)
+		if err != nil {
+			return nil, fmt.Errorf("creating remote cluster client: %w", err)
+		}
+
+		// local cluster client
+		localClusterOpts := opts
+		localClusterOpts.Mapper = nil
+		localClusterOpts.HTTPClient = nil
+
+		localClusterClient, err := client.New(localClusterConfig, localClusterOpts)
+		if err != nil {
+			return nil, fmt.Errorf("creating local cluster client: %w", err)
+		}
+		return routing.NewRoutingClient(remoteClusterClient, localClusterClient, scheme), nil
+	}
 }

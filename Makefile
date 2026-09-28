@@ -18,6 +18,9 @@ DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
 ENABLE_EXPORT ?= false
+ENABLE_ADMISSION_EXPORT ?= false
+EMIT_ADMISSION_AUDIT_ANNOTATIONS ?= false
+ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
@@ -25,34 +28,42 @@ GENERATE_VAP ?= true
 GENERATE_VAPBINDING ?= true
 SYNC_VAP_ENFORCEMENT_SCOPE ?= true
 
-VERSION := v3.23.0-beta.0
+VERSION := v3.24.0-beta.0
 
-KIND_VERSION ?= 0.29.0
+KIND_VERSION ?= 0.33.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.33.0
-KUSTOMIZE_VERSION ?= 3.8.9
-BATS_VERSION ?= 1.13.0
-ORAS_VERSION ?= 1.3.1
+KUSTOMIZE_VERSION ?= 5.8.1
+BATS_VERSION ?= 1.14.0
+ORAS_VERSION ?= 1.3.4
 BATS_TESTS_FILE ?= test/bats/test.bats
-HELM_VERSION ?= 3.17.4
+HELM_VERSION ?= 4.2.3
 NODE_VERSION ?= 24-bullseye-slim
-YQ_VERSION ?= 4.52.4
+YQ_VERSION ?= 4.53.3
 
 HELM_ARGS ?=
+HELM_TIMEOUT ?= 5m
 HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
 	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
 	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
 
-HELM_DISK_EXPORT_ARGS := --set audit.exportVolumeMount.path=${EXPORT_DISK_MOUNT} \
+HELM_DISK_SHARED_EXPORT_ARGS = --set audit.exportVolumeMount.path=${EXPORT_DISK_MOUNT} \
 	--set audit.exportConnection.path=${EXPORT_DISK_PATH} \
 	--set audit.exportConnection.maxAuditResults=${MAX_AUDIT_RESULTS} \
+
+HELM_DISK_AUDIT_EXPORT_ARGS = \
 	--set audit.exportSidecar.image=${FAKE_READER_IMAGE} \
 	--set audit.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
+
+HELM_DISK_ADMISSION_EXPORT_ARGS = --set admission.disableExportSidecar=false \
+	--set admission.exportSidecar.image=${FAKE_READER_IMAGE} \
+	--set admission.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
 
 HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
 	--set audit.connection=${AUDIT_CONNECTION} \
 	--set audit.channel=${AUDIT_CHANNEL} \
+	--set enableAdmissionViolationExport=${ENABLE_ADMISSION_EXPORT} \
 	--set exportBackend=${EXPORT_BACKEND} \
 
 HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
@@ -63,6 +74,8 @@ HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
 	--set postInstall.labelNamespace.enabled=true \
 	--set postInstall.probeWebhook.enabled=true \
 	--set emitAdmissionEvents=true \
+	--set emitAdmissionAuditAnnotations=${EMIT_ADMISSION_AUDIT_ANNOTATIONS} \
+	--set admissionAuditAnnotationsIncludeSuccess=${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS} \
 	--set emitAuditEvents=true \
 	--set admissionEventsInvolvedNamespace=true \
 	--set auditEventsInvolvedNamespace=true \
@@ -78,7 +91,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v2.4.0
+GOLANGCI_LINT_VERSION := v2.9.0
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -111,6 +124,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --port=8443\
 \n        - --logtostderr\
 \n        - --emit-admission-events\
+\n        - --emit-admission-audit-annotations=${EMIT_ADMISSION_AUDIT_ANNOTATIONS}\
+\n        - --admission-audit-annotations-include-success=${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS}\
 \n        - --admission-events-involved-namespace\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
@@ -133,6 +148,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        name: manager\
 \n        args:\
 \n        - --emit-audit-events\
+\n        - --emit-admission-audit-annotations=${EMIT_ADMISSION_AUDIT_ANNOTATIONS}\
+\n        - --admission-audit-annotations-include-success=${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS}\
 \n        - --audit-events-involved-namespace\
 \n        - --operation=audit\
 \n        - --operation=status\
@@ -187,14 +204,14 @@ all: lint test manager
 native-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
+	go test . ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
 
 # Run tests with race detector
 .PHONY: native-race-test
 native-race-test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
-	go test ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
+	go test . ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
 
 # Run benchmarks only (no unit tests)
 .PHONY: native-bench-test
@@ -215,7 +232,7 @@ test: __test-image
 
 .PHONY: test-e2e
 test-e2e:
-	bats -t ${BATS_TESTS_FILE}
+	bats -t test/bats/helpers_test.bats ${BATS_TESTS_FILE}
 
 test-e2e-owner-ref:
 	@bash test/with-admission-plugin/test-e2e-owner-ref.sh
@@ -292,21 +309,23 @@ e2e-helm-install:
 	mkdir -p .staging/helm
 	curl https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz > .staging/helm/helmbin.tar.gz
 	cd .staging/helm && tar -xvf helmbin.tar.gz
-	./.staging/helm/linux-amd64/helm version --client
+	./.staging/helm/linux-amd64/helm version
 
 e2e-helm-deploy: e2e-helm-install $(LOCALBIN)
-ifeq ($(ENABLE_EXPORT),true)
+ifneq ($(filter true,$(ENABLE_EXPORT) $(ENABLE_ADMISSION_EXPORT)),)
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} \
-		--debug --wait \
+		--debug --wait --timeout ${HELM_TIMEOUT} \
 		$(HELM_EXPORT_ARGS) \
-		$(if $(filter disk,$(EXPORT_BACKEND)),$(HELM_DISK_EXPORT_ARGS)) \
-		$(if $(filter dapr,$(EXPORT_BACKEND)),$(HELM_DAPR_EXPORT_ARGS)) \
+		$(if $(and $(filter true,$(ENABLE_EXPORT) $(ENABLE_ADMISSION_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_SHARED_EXPORT_ARGS)) \
+		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_AUDIT_EXPORT_ARGS)) \
+		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter dapr,$(EXPORT_BACKEND))),$(HELM_DAPR_EXPORT_ARGS)) \
+		$(if $(and $(filter true,$(ENABLE_ADMISSION_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_ADMISSION_EXPORT_ARGS)) \
 		$(HELM_EXTRA_ARGS)
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
-		--debug --wait \
+		--debug --wait --timeout ${HELM_TIMEOUT} \
 		$(HELM_EXTRA_ARGS)
 endif
 
@@ -343,9 +362,14 @@ e2e-subscriber-deploy:
 	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: fake-subscriber/' | kubectl apply -f -
 	kubectl apply -f test/export/fake-subscriber/manifest/subscriber.yaml
 
-e2e-publisher-deploy:
+e2e-publisher-component-deploy:
 	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -
-	kubectl apply -f test/export/fake-subscriber/manifest/publish-components.yaml
+	yq 'select(.kind == "Component")' test/export/fake-subscriber/manifest/publish-components.yaml | kubectl apply -f -
+
+e2e-publisher-connection-deploy:
+	yq 'select(.kind == "Connection")' test/export/fake-subscriber/manifest/publish-components.yaml | kubectl apply -f -
+
+e2e-publisher-deploy: e2e-publisher-component-deploy e2e-publisher-connection-deploy
 
 e2e-reader-build-image:
 	docker buildx build --platform="$(PLATFORM)" -t ${FAKE_READER_IMAGE} --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
@@ -390,7 +414,7 @@ manifests: __controller-gen
 		output:crd:artifacts:config=config/crd/bases
 	@# Copy constraint template CRD from frameworks module
 	go mod download github.com/open-policy-agent/frameworks/constraint
-	cp $$(go list -m -f '{{.Dir}}' github.com/open-policy-agent/frameworks/constraint)/deploy/crds.yaml config/crd/bases/constrainttemplate-customresourcedefinition.yaml
+	cp $$(go list -mod=mod -m -f '{{.Dir}}' github.com/open-policy-agent/frameworks/constraint)/deploy/crds.yaml config/crd/bases/constrainttemplate-customresourcedefinition.yaml
 	./build/update-match-schema.sh
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
@@ -400,7 +424,7 @@ manifests: __controller-gen
 		/gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
 	docker run --rm -v $(shell pwd):/gatekeeper \
 		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-		--load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
+		--load-restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.

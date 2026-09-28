@@ -143,6 +143,13 @@ Limitations/drawbacks of getting violations using pubsub channel:
 - Additional dependency on pubsub broker. 
 
 ## Running Audit
+
+### Why Audit Runs as a Singleton
+
+Gatekeeper audit is designed to run as a singleton because it writes audit results to Constraint status. Multiple audit instances can contend on the same Constraint status fields.
+
+If your setup only consumes audit results from logs, setting `--constraint-violations-limit=0` avoids storing individual violations in Constraint `.status.violations`. This does not disable all Constraint status writes: audit still updates fields such as `.status.auditTimestamp` and `.status.totalViolations`, so running multiple audit replicas can still cause status update contention.
+
 For more details on how to deploy audit and 
 number of instances to run, please refer to [operations audit](operations.md#audit). 
 

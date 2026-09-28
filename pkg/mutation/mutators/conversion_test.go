@@ -8,11 +8,28 @@ import (
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
+	mutationschema "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
+	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+var schemaBindingOperations = []admissionv1.Operation{
+	admissionv1.Create,
+	admissionv1.Update,
+}
+
+func schemaBindingsForGVKs(gvks []schema.GroupVersionKind) []mutationschema.Binding {
+	bindings := make([]mutationschema.Binding, 0, len(gvks)*len(schemaBindingOperations))
+	for _, gvk := range gvks {
+		for _, operation := range schemaBindingOperations {
+			bindings = append(bindings, mutationschema.Binding{GVK: gvk, Operation: operation})
+		}
+	}
+	return bindings
+}
 
 func makeValue(v interface{}) mutationsunversioned.AssignField {
 	return mutationsunversioned.AssignField{Value: &types.Anything{Value: v}}
@@ -25,17 +42,17 @@ func TestAssignToMutator(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsunversioned.AssignSpec{
-			ApplyTo: []match.ApplyTo{
-				{
+			ApplyTo: []match.MutationApplyTo{
+				{ApplyTo: match.ApplyTo{
 					Groups:   []string{"group1", "group2"},
 					Kinds:    []string{"kind1", "kind2", "kind3"},
 					Versions: []string{"version1"},
-				},
-				{
+				}},
+				{ApplyTo: match.ApplyTo{
 					Groups:   []string{"group3", "group4"},
 					Kinds:    []string{"kind4", "kind2", "kind3"},
 					Versions: []string{"version1"},
-				},
+				}},
 			},
 			Match:    match.Match{},
 			Location: "spec.foo",
@@ -51,7 +68,7 @@ func TestAssignToMutator(t *testing.T) {
 	}
 
 	bindings := mutatorWithSchema.SchemaBindings()
-	expectedBindings := []schema.GroupVersionKind{
+	expectedGVKs := []schema.GroupVersionKind{
 		{Group: "group1", Version: "version1", Kind: "kind1"},
 		{Group: "group1", Version: "version1", Kind: "kind2"},
 		{Group: "group1", Version: "version1", Kind: "kind3"},
@@ -65,6 +82,7 @@ func TestAssignToMutator(t *testing.T) {
 		{Group: "group4", Version: "version1", Kind: "kind3"},
 		{Group: "group4", Version: "version1", Kind: "kind4"},
 	}
+	expectedBindings := schemaBindingsForGVKs(expectedGVKs)
 
 	if diff := cmp.Diff(expectedBindings, bindings); diff != "" {
 		t.Errorf("Bindings are not as expected: %s", diff)
@@ -103,17 +121,17 @@ func TestAssignHasDiff(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsunversioned.AssignSpec{
-			ApplyTo: []match.ApplyTo{
-				{
+			ApplyTo: []match.MutationApplyTo{
+				{ApplyTo: match.ApplyTo{
 					Groups:   []string{"group1", "group2"},
 					Kinds:    []string{"kind1", "kind2", "kind3"},
 					Versions: []string{"version1"},
-				},
-				{
+				}},
+				{ApplyTo: match.ApplyTo{
 					Groups:   []string{"group3", "group4"},
 					Kinds:    []string{"kind4", "kind2", "kind3"},
 					Versions: []string{"version1"},
-				},
+				}},
 			},
 			Match:    match.Match{},
 			Location: "spec.foo",
@@ -278,12 +296,12 @@ func TestParseShouldFail(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsunversioned.AssignSpec{
-			ApplyTo: []match.ApplyTo{
-				{
+			ApplyTo: []match.MutationApplyTo{
+				{ApplyTo: match.ApplyTo{
 					Groups:   []string{"group3", "group4"},
 					Kinds:    []string{"kind4", "kind2", "kind3"},
 					Versions: []string{"version1"},
-				},
+				}},
 			},
 			Match:    match.Match{},
 			Location: "aaa..bb",

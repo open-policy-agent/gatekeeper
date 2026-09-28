@@ -28,7 +28,7 @@ For either installation method, make sure you have cluster admin permissions:
 If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.22.0/deploy/gatekeeper.yaml
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.22.2/deploy/gatekeeper.yaml
 ```
 
 ### Deploying a Release using development image
@@ -85,6 +85,43 @@ Please note that this chart is compatible with Helm v3 starting with Gatekeeper 
 
 You can alter the variables in `charts/gatekeeper/values.yaml` to customize your deployment. To regenerate the base template, run `make manifests`.
 
+### Configuring Pod Annotations for Cluster Autoscaler
+
+If you are using the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler), you may want to allow downscaling of nodes running Gatekeeper pods. Since the Gatekeeper audit pod uses an `emptyDir` volume named `tmp-volume` for `/tmp/audit`, the Cluster Autoscaler will block node downscaling by default.
+
+To enable safe eviction for the audit pod, you can pass the `safe-to-evict` pod annotation via Helm:
+
+```sh
+helm upgrade --install gatekeeper gatekeeper/gatekeeper \
+    --namespace gatekeeper-system \
+    --create-namespace \
+    --set-string \
+    'auditPodAnnotations.cluster-autoscaler\.kubernetes\.io/safe-to-evict-local-volumes=tmp-volume'
+```
+
+:::warning
+When violation export is enabled with exportBackend=disk, the audit pod has
+another local volume, named `tmp-violations` by default. It contains audit
+results being handed from Gatekeeper to the export sidecar. Do not include
+this volume in safe-to-evict-local-volumes unless losing incomplete or
+unconsumed export files during pod eviction is acceptable.
+
+To explicitly allow eviction despite both local volumes:
+
+```sh
+helm upgrade --install gatekeeper gatekeeper/gatekeeper \
+    --namespace gatekeeper-system \
+    --create-namespace \
+    --set enableViolationExport=true \
+    --set exportBackend=disk \
+    --set-string \
+    'auditPodAnnotations.cluster-autoscaler\.kubernetes\.io/safe-to-evict-local-volumes=tmp-volume\,tmp-violations'
+```
+
+If `audit.exportVolume.name` is customized, use that volume name instead of
+`tmp-violations`.
+:::
+
 ## Uninstallation
 
 ### Using Prebuilt Image
@@ -92,7 +129,7 @@ You can alter the variables in `charts/gatekeeper/values.yaml` to customize your
 If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
 
   ```sh
-  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.22.0/deploy/gatekeeper.yaml
+  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.22.2/deploy/gatekeeper.yaml
   ```
 
 ### Using make

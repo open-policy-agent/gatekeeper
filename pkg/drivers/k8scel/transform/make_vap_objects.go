@@ -1,9 +1,11 @@
 package transform
 
 import (
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
+	"slices"
 	"strings"
 
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
@@ -18,10 +20,30 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
 )
 
-var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag will be removed in a future release.")
+var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag is deprecated and will be removed in Gatekeeper v3.24.")
+
+const (
+	vapEvaluationAuditAnnotationKey             = "evaluation"
+	vapEvaluationAuditAnnotationValueExpression = "params == null ? '' : 'true'"
+)
+
+func vapAuditAnnotations(enabled, includeSuccess bool) []admissionregistrationv1beta1.AuditAnnotation {
+	if !enabled || !includeSuccess {
+		return nil
+	}
+	return []admissionregistrationv1beta1.AuditAnnotation{
+		{
+			Key: vapEvaluationAuditAnnotationKey,
+			// Kubernetes joins distinct values from matching bindings without a total size limit.
+			// A constant value is deduplicated by the API server and remains bounded.
+			ValueExpression: vapEvaluationAuditAnnotationValueExpression,
+		},
+	}
+}
 
 func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, nil)
@@ -107,7 +129,12 @@ func convertWebhookRulesToResourceRules(rules []admissionregistrationv1beta1.Rul
 			if !intersection.Equal(ctOpsSet) {
 				errs = append(errs, ErrOperationMismatch)
 			}
-			operations = intersection.UnsortedList()
+			// Emit in canonical allOps order for deterministic output.
+			for _, op := range allOps {
+				if intersection.Has(op) {
+					operations = append(operations, op)
+				}
+			}
 		}
 
 		resourceRules = append(resourceRules, admissionregistrationv1beta1.NamedRuleWithOperations{
@@ -159,6 +186,7 @@ func buildDefaultMatchConstraints() *admissionregistrationv1beta1.MatchResources
 						APIGroups:   []string{"*"},
 						APIVersions: []string{"*"},
 						Resources:   []string{"*"},
+						Scope:       ptr.To(admissionregistrationv1beta1.AllScopes),
 					},
 				},
 			},
@@ -248,7 +276,7 @@ func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintT
 			MatchConditions:  matchConditions,
 			Validations:      validations,
 			FailurePolicy:    failurePolicy,
-			AuditAnnotations: nil,
+			AuditAnnotations: vapAuditAnnotations(util.GetEmitAdmissionAuditAnnotations(), util.GetAdmissionAuditAnnotationsIncludeSuccess()),
 			Variables:        variables,
 		},
 	}
@@ -267,6 +295,10 @@ func getTemplateOperations(template *templates.ConstraintTemplate) ([]admissionr
 // Accepts a list of enforcement actions to apply to the binding.
 // If the enforcement action is not recognized, returns an error.
 func ConstraintToBinding(constraint *unstructured.Unstructured, actions []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, error) {
+	return constraintToBinding(constraint, actions, util.GetEmitAdmissionAuditAnnotations())
+}
+
+func constraintToBinding(constraint *unstructured.Unstructured, actions []string, emitAdmissionAuditAnnotations bool) (*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, error) {
 	if len(actions) == 0 {
 		return nil, fmt.Errorf("%w: enforcement actions must be provided", ErrBadEnforcementAction)
 	}
@@ -284,10 +316,13 @@ func ConstraintToBinding(constraint *unstructured.Unstructured, actions []string
 			return nil, fmt.Errorf("%w: unrecognized enforcement action %s, must be `warn`, `deny` or `dryrun`", ErrBadEnforcementAction, action)
 		}
 	}
+	if emitAdmissionAuditAnnotations && !slices.Contains(enforcementActions, admissionregistrationv1beta1.Audit) {
+		enforcementActions = append(enforcementActions, admissionregistrationv1beta1.Audit)
+	}
 
 	binding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("gatekeeper-%s", constraint.GetName()),
+			Name: GetVAPBindingName(constraint.GetKind(), constraint.GetName()),
 		},
 		Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
 			PolicyName: fmt.Sprintf("gatekeeper-%s", strings.ToLower(constraint.GetKind())),
@@ -325,4 +360,24 @@ func ConstraintToBinding(constraint *unstructured.Unstructured, actions []string
 		binding.Spec.MatchResources.NamespaceSelector = namespaceSelector
 	}
 	return binding, nil
+}
+
+func GetVAPBindingName(kind, constraintName string) string {
+	name := fmt.Sprintf("gatekeeper-%s-%s", strings.ToLower(kind), constraintName)
+	if len(name) <= validation.DNS1123SubdomainMaxLength {
+		return name
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:8]
+	truncated := name[:validation.DNS1123SubdomainMaxLength-len(hash)-1]
+	truncated = strings.TrimRight(truncated, "-.")
+	return truncated + "-" + hash
+}
+
+// LegacyVAPBindingName returns the old-format VAPB name that did not include
+// the constraint Kind. Used during migration to clean up old VAPBs.
+//
+// TODO(v3.25.0): Remove this function once users have had two releases to
+// upgrade (introduced in v3.23.0).
+func LegacyVAPBindingName(constraintName string) string {
+	return fmt.Sprintf("gatekeeper-%s", constraintName)
 }

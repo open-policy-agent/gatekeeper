@@ -82,7 +82,3 @@ type ExpansionTemplateList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ExpansionTemplate `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&ExpansionTemplate{}, &ExpansionTemplateList{})
-}

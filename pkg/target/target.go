@@ -144,6 +144,13 @@ func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (*gkRevi
 	}
 
 	review.namespace = obj.Namespace
+	if obj.Operation != "" {
+		review.Operation = obj.Operation
+	}
+	if obj.Operation == admissionv1.Delete {
+		review.OldObject = review.Object
+		review.Object = runtime.RawExtension{}
+	}
 	review.source = obj.Source
 
 	return review, nil
@@ -247,7 +254,11 @@ func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constrain
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrCreatingMatcher, err)
 		}
-		return &Matcher{match: m, cache: &h.cache}, nil
+		compiledMatch, err := match.Compile(m)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrCreatingMatcher, err)
+		}
+		return &Matcher{match: m, compiledMatch: compiledMatch, cache: &h.cache}, nil
 	}
 
 	return &Matcher{}, nil

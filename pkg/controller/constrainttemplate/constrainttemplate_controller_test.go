@@ -19,8 +19,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -33,6 +33,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
@@ -42,6 +43,7 @@ import (
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -67,7 +69,9 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -78,6 +82,108 @@ const (
 // globalTestMu serializes access to all global variables (webhook.VwhName, transform.SyncVAPScope)
 // across all constraint template tests to prevent race conditions.
 var globalTestMu sync.Mutex
+
+type statusTrackingClient struct {
+	client.Client
+	creates  int
+	updates  int
+	writeErr error
+}
+
+type reconcileTrackingClient struct {
+	client.Client
+	crdGetErr       error
+	crdUpdateErr    error
+	statusCreateErr error
+	statusUpdateErr error
+	statusCreates   int
+	statusUpdates   int
+}
+
+func (c *reconcileTrackingClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*apiextensionsv1.CustomResourceDefinition); ok && c.crdGetErr != nil {
+		return c.crdGetErr
+	}
+	return c.Client.Get(ctx, key, obj, opts...)
+}
+
+func (c *reconcileTrackingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if _, ok := obj.(*statusv1beta1.ConstraintTemplatePodStatus); ok {
+		c.statusCreates++
+		if c.statusCreateErr != nil {
+			return c.statusCreateErr
+		}
+	}
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+func (c *reconcileTrackingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	switch obj.(type) {
+	case *statusv1beta1.ConstraintTemplatePodStatus:
+		c.statusUpdates++
+		if c.statusUpdateErr != nil {
+			return c.statusUpdateErr
+		}
+	case *apiextensionsv1.CustomResourceDefinition:
+		if c.crdUpdateErr != nil {
+			return c.crdUpdateErr
+		}
+	}
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+func newUnitReconciler(t *testing.T, objects ...client.Object) (*ReconcileConstraintTemplate, *reconcileTrackingClient) {
+	t.Helper()
+	testutils.Setenv(t, "POD_NAME", "test-pod")
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1beta1.AddToScheme(scheme))
+	require.NoError(t, statusv1beta1.AddToScheme(scheme))
+	require.NoError(t, apiextensionsv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	baseClient := crfake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+	trackingClient := &reconcileTrackingClient{Client: baseClient}
+
+	regoDriver, err := rego.New(rego.Tracing(true))
+	require.NoError(t, err)
+	celDriver, err := k8scel.New()
+	require.NoError(t, err)
+	cfClient, err := constraintclient.NewClient(
+		constraintclient.Targets(&target.K8sValidationTarget{}),
+		constraintclient.Driver(regoDriver),
+		constraintclient.Driver(celDriver),
+		constraintclient.EnforcementPoints(util.AuditEnforcementPoint),
+	)
+	require.NoError(t, err)
+
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("test-pod"),
+	)
+	tracker := readiness.NewTracker(trackingClient, false, false, false)
+	trackerCtx, cancelTracker := context.WithCancel(context.Background())
+	cancelTracker()
+	require.NoError(t, tracker.Run(trackerCtx))
+	return &ReconcileConstraintTemplate{
+		Client:   trackingClient,
+		scheme:   scheme,
+		cfClient: cfClient,
+		metrics:  newStatsReporter(),
+		tracker:  tracker,
+		getPod:   func(context.Context) (*corev1.Pod, error) { return pod, nil },
+	}, trackingClient
+}
+
+func (c *statusTrackingClient) Update(_ context.Context, _ client.Object, _ ...client.UpdateOption) error {
+	c.updates++
+	return c.writeErr
+}
+
+func (c *statusTrackingClient) Create(_ context.Context, _ client.Object, _ ...client.CreateOption) error {
+	c.creates++
+	return c.writeErr
+}
 
 func makeReconcileConstraintTemplate(suffix string) *v1beta1.ConstraintTemplate {
 	return &v1beta1.ConstraintTemplate{
@@ -232,6 +338,286 @@ func getMatchEntryConfig() []configv1alpha1.MatchEntry {
 	}
 }
 
+func cloneGroupVersionPtr(value *schema.GroupVersion) *schema.GroupVersion {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func setVAPTestGlobals(t *testing.T, groupVersion *schema.GroupVersion) {
+	t.Helper()
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	transform.SetVapAPIEnabled(ptr.To[bool](true))
+	transform.SetGroupVersion(cloneGroupVersionPtr(groupVersion))
+}
+
+func setupVersionPinnedReconcileTest(t *testing.T, groupVersion *schema.GroupVersion) (context.Context, client.Client) {
+	t.Helper()
+
+	setVAPTestGlobals(t, groupVersion)
+
+	mgr, wm := testutils.SetupManager(t, cfg)
+	c := testclient.NewRetryClient(mgr.GetClient())
+
+	err := testutils.CreateGatekeeperNamespace(mgr.GetConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	driver, err := rego.New(rego.Tracing(true))
+	if err != nil {
+		t.Fatalf("unable to set up Driver: %v", err)
+	}
+	k8sDriver, err := k8scel.New()
+	if err != nil {
+		t.Fatalf("unable to set up K8s native driver: %v", err)
+	}
+
+	cfClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver), constraintclient.Driver(k8sDriver), constraintclient.EnforcementPoints(util.AuditEnforcementPoint))
+	if err != nil {
+		t.Fatalf("unable to set up constraint framework client: %s", err)
+	}
+
+	testutils.Setenv(t, "POD_NAME", "no-pod")
+
+	tracker, err := readiness.SetupTracker(mgr, false, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
+
+	constraintEvents := make(chan event.GenericEvent, 1024)
+	constraintTemplateEvents := make(chan event.GenericEvent, 1024)
+	processExcluder := process.New()
+	processExcluder.Add(getMatchEntryConfig())
+
+	webhookCache := webhookconfigcache.NewWebhookConfigCache()
+	const testWebhookName = "gatekeeper-validating-webhook-configuration"
+	webhookName := testWebhookName
+	originalVwhName := webhook.VwhName
+	t.Cleanup(func() { webhook.VwhName = originalVwhName })
+	webhook.VwhName = &webhookName
+
+	exactMatch := admissionregistrationv1.Exact
+	webhookCache.UpsertConfig(testWebhookName, webhookconfigcache.WebhookMatchingConfig{
+		Rules: []admissionregistrationv1.RuleWithOperations{
+			{
+				Operations: []admissionregistrationv1.OperationType{
+					admissionregistrationv1.Create,
+					admissionregistrationv1.Update,
+					admissionregistrationv1.Delete,
+					admissionregistrationv1.Connect,
+				},
+				Rule: admissionregistrationv1.Rule{
+					APIGroups:   []string{""},
+					APIVersions: []string{"v1"},
+					Resources:   []string{"*"},
+				},
+			},
+		},
+		MatchPolicy: &exactMatch,
+	})
+
+	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, constraintEvents, func(context.Context) (*corev1.Pod, error) { return pod, nil }, webhookCache, processExcluder)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = add(mgr, rec, constraintTemplateEvents)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
+
+	origWait := constraint.GetDefaultWaitForVAPBGeneration()
+	constraint.SetDefaultWaitForVAPBGeneration(2)
+	t.Cleanup(func() { constraint.SetDefaultWaitForVAPBGeneration(origWait) })
+
+	return ctx, c
+}
+
+type ctCountingClient struct {
+	client.Client
+	updates int
+}
+
+func (c *ctCountingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if err := c.Client.Update(ctx, obj, opts...); err != nil {
+		return err
+	}
+	c.updates++
+	return nil
+}
+
+func TestPersistPodStatusSkipsNoopAndWritesChanges(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	require.NoError(t, apis.AddToScheme(scheme))
+
+	baseStatus := statusv1beta1.ConstraintTemplatePodStatusStatus{
+		TemplateUID:        "template-uid",
+		ObservedGeneration: 1,
+		VAPGenerationStatus: &statusv1beta1.VAPGenerationStatus{
+			State:              GeneratedVAPState,
+			ObservedGeneration: 1,
+		},
+	}
+
+	tests := []struct {
+		name       string
+		oldStatus  statusv1beta1.ConstraintTemplatePodStatusStatus
+		newStatus  statusv1beta1.ConstraintTemplatePodStatusStatus
+		wantWrites int
+	}{
+		{
+			name:      "unchanged generated VAP status skips write even with distinct pointer",
+			oldStatus: *baseStatus.DeepCopy(),
+			newStatus: *baseStatus.DeepCopy(),
+		},
+		{
+			name:      "observed generation change writes",
+			oldStatus: *baseStatus.DeepCopy(),
+			newStatus: func() statusv1beta1.ConstraintTemplatePodStatusStatus {
+				status := *baseStatus.DeepCopy()
+				status.ObservedGeneration++
+				return status
+			}(),
+			wantWrites: 1,
+		},
+		{
+			name:      "VAP warning change writes",
+			oldStatus: *baseStatus.DeepCopy(),
+			newStatus: func() statusv1beta1.ConstraintTemplatePodStatusStatus {
+				status := *baseStatus.DeepCopy()
+				status.VAPGenerationStatus.Warning = "changed"
+				return status
+			}(),
+			wantWrites: 1,
+		},
+		{
+			name: "stale errors cleared writes",
+			oldStatus: statusv1beta1.ConstraintTemplatePodStatusStatus{
+				TemplateUID:        "template-uid",
+				ObservedGeneration: 1,
+				Errors:             []*v1beta1.CreateCRDError{{Code: ErrCreateCode, Message: "stale"}},
+			},
+			newStatus:  statusv1beta1.ConstraintTemplatePodStatusStatus{TemplateUID: "template-uid", ObservedGeneration: 1},
+			wantWrites: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status := &statusv1beta1.ConstraintTemplatePodStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "status", Namespace: util.GetNamespace()},
+				Status:     tt.oldStatus,
+			}
+			k8sClient := &ctCountingClient{Client: crfake.NewClientBuilder().WithScheme(scheme).WithObjects(status.DeepCopy()).Build()}
+			reconciler := &ReconcileConstraintTemplate{Client: k8sClient}
+
+			toUpdate := &statusv1beta1.ConstraintTemplatePodStatus{}
+			require.NoError(t, k8sClient.Get(ctx, client.ObjectKeyFromObject(status), toUpdate))
+			toUpdate.Status = tt.newStatus
+			require.NoError(t, reconciler.persistPodStatus(ctx, toUpdate, status.Status.DeepCopy()))
+			require.Equal(t, tt.wantWrites, k8sClient.updates)
+		})
+	}
+}
+
+func BenchmarkPersistPodStatusNoop(b *testing.B) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	require.NoError(b, apis.AddToScheme(scheme))
+
+	status := &statusv1beta1.ConstraintTemplatePodStatus{
+		ObjectMeta: metav1.ObjectMeta{Name: "status", Namespace: util.GetNamespace()},
+		Status: statusv1beta1.ConstraintTemplatePodStatusStatus{
+			TemplateUID:        "template-uid",
+			ObservedGeneration: 1,
+			VAPGenerationStatus: &statusv1beta1.VAPGenerationStatus{
+				State:              GeneratedVAPState,
+				ObservedGeneration: 1,
+			},
+		},
+	}
+	k8sClient := &ctCountingClient{Client: crfake.NewClientBuilder().WithScheme(scheme).WithObjects(status.DeepCopy()).Build()}
+	reconciler := &ReconcileConstraintTemplate{Client: k8sClient}
+	oldStatus := status.Status.DeepCopy()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := reconciler.persistPodStatus(ctx, status, oldStatus); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	b.ReportMetric(float64(k8sClient.updates)/float64(b.N), "updates/op")
+}
+
+type constraintListClient struct {
+	client.Client
+	items []unstructured.Unstructured
+}
+
+func (c *constraintListClient) List(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+	unstructuredList, ok := list.(*unstructured.UnstructuredList)
+	if !ok {
+		return fmt.Errorf("expected *unstructured.UnstructuredList, got %T", list)
+	}
+	unstructuredList.Items = c.items
+	return nil
+}
+
+func BenchmarkTriggerConstraintEvents(b *testing.B) {
+	for _, itemCount := range []int{100, 1000, 10000} {
+		items := make([]unstructured.Unstructured, itemCount)
+		for i := 0; i < itemCount; i++ {
+			items[i] = unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+				"kind":       "TestKind",
+				"metadata": map[string]interface{}{
+					"name": "constraint-" + strconv.Itoa(i),
+				},
+			}}
+		}
+
+		b.Run("constraints-"+strconv.Itoa(itemCount), func(b *testing.B) {
+			events := make(chan event.GenericEvent, itemCount)
+			r := &ReconcileConstraintTemplate{
+				Client:     &constraintListClient{Client: crfake.NewClientBuilder().Build(), items: items},
+				cstrEvents: events,
+			}
+			ct := &v1beta1.ConstraintTemplate{}
+			ct.Spec.CRD.Spec.Names.Kind = "TestKind"
+			status := &statusv1beta1.ConstraintTemplatePodStatus{}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if err := r.triggerConstraintEvents(context.Background(), ct, status); err != nil {
+					b.Fatal(err)
+				}
+				for j := 0; j < itemCount; j++ {
+					<-events
+				}
+			}
+		})
+	}
+}
+
 func TestReconcile(t *testing.T) {
 	// Uncommenting the below enables logging of K8s internals like watch.
 	// fs := flag.NewFlagSet("", flag.PanicOnError)
@@ -317,6 +703,7 @@ func TestReconcile(t *testing.T) {
 
 	// Make webhook cache available to tests for configuration
 	sharedWebhookCache := webhookCache
+	setVAPTestGlobals(t, &admissionregistrationv1beta1.SchemeGroupVersion)
 
 	rec, err := newReconciler(mgr, cfClient, wm, tracker, constraintEvents, constraintEvents, func(context.Context) (*corev1.Pod, error) { return pod, nil }, webhookCache, processExcluder)
 	if err != nil {
@@ -331,15 +718,12 @@ func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	transform.SetVapAPIEnabled(ptr.To[bool](true))
-	transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
-
 	// Override the default VAPB generation wait time to speed up tests.
 	// The production default is 30s, but tests only need to verify the
 	// wait behavior works, not that it waits a specific duration.
-	origWait := *constraint.DefaultWaitForVAPBGeneration
-	*constraint.DefaultWaitForVAPBGeneration = 2
-	t.Cleanup(func() { *constraint.DefaultWaitForVAPBGeneration = origWait })
+	origWait := constraint.GetDefaultWaitForVAPBGeneration()
+	constraint.SetDefaultWaitForVAPBGeneration(2)
+	t.Cleanup(func() { constraint.SetDefaultWaitForVAPBGeneration(origWait) })
 
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		suffix := "CRDGetsCreated"
@@ -614,9 +998,10 @@ func TestReconcile(t *testing.T) {
 	t.Run("VapBinding should not be created", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreated"
 		logger.Info("Running test: VapBinding should not be created")
-		require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-binding-for-constraints", "false"}))
+		origDefault := constraint.GetDefaultGenerateVAPB()
+		constraint.SetDefaultGenerateVAPB(false)
 		t.Cleanup(func() {
-			require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-binding-for-constraints", "true"}))
+			constraint.SetDefaultGenerateVAPB(origDefault)
 		})
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false), nil)
 		cstr := newDenyAllCstr(suffix)
@@ -637,7 +1022,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -672,7 +1057,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -712,9 +1097,10 @@ func TestReconcile(t *testing.T) {
 	t.Run("Error should not be present on constraint when VAP generation if off and VAPB generation is on for templates without CEL", func(t *testing.T) {
 		suffix := "ErrorShouldNotBePresentOnConstraint"
 		logger.Info("Running test: Error should not be present on constraint when VAP generation is off and VAPB generation is on for templates wihout CEL")
-		require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-for-templates", "false"}))
+		origDefault := constraint.GetDefaultGenerateVAP()
+		constraint.SetDefaultGenerateVAP(false)
 		t.Cleanup(func() {
-			require.NoError(t, flag.CommandLine.Parse([]string{"--default-create-vap-for-templates", "true"}))
+			constraint.SetDefaultGenerateVAP(origDefault)
 		})
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstr(suffix)
@@ -738,7 +1124,9 @@ func TestReconcile(t *testing.T) {
 	t.Run("  be created without generateVap intent in CT", func(t *testing.T) {
 		suffix := "VapBindingShouldNotBeCreatedWithoutGenerateVapIntent"
 		logger.Info("Running test: VapBinding should not be created without generateVap intent in CT")
-		constraint.DefaultGenerateVAPB = ptr.To[bool](true)
+		origDefault := constraint.GetDefaultGenerateVAPB()
+		constraint.SetDefaultGenerateVAPB(true)
+		t.Cleanup(func() { constraint.SetDefaultGenerateVAPB(origDefault) })
 		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](false), nil)
 		cstr := newDenyAllCstr(suffix)
 		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
@@ -757,7 +1145,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -803,7 +1191,7 @@ func TestReconcile(t *testing.T) {
 			}
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				// Since tests retries 3000 times at 100 retries per second, adding sleep makes sure that this test gets covarage time > 30s to cover the default wait.
 				time.Sleep(10 * time.Millisecond)
 				return err
@@ -848,7 +1236,7 @@ func TestReconcile(t *testing.T) {
 		}, func() error {
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				if !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -1272,7 +1660,7 @@ func TestReconcile(t *testing.T) {
 			}
 			// check if vapbinding resource exists now
 			vapBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("gatekeeper-%s", cstr.GetName())}, vapBinding); err != nil {
+			if err := c.Get(ctx, types.NamespacedName{Name: transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())}, vapBinding); err != nil {
 				// Since tests retries 3000 times at 100 retries per second, adding sleep makes sure that this test gets covarage time > 30s to cover the default wait.
 				time.Sleep(10 * time.Millisecond)
 				return err
@@ -1353,264 +1741,6 @@ func TestReconcile(t *testing.T) {
 			}
 			return c.Delete(ctx, cstr)
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("VAP v1beta1 should be recreated when deleted", func(t *testing.T) {
-		suffix := "VapV1Beta1ShouldBeRecreated"
-
-		logger.Info("Running test: VAP v1beta1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-
-		vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-
-		// First, wait for VAP to be created
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Delete the VAP resource directly to simulate external deletion
-		vapToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
-		err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = c.Delete(ctx, vapToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Verify the VAP is recreated by the watch
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
-				return err
-			}
-			// Check that this is a new VAP instance (different UID)
-			if vap.UID == vapToDelete.UID {
-				return fmt.Errorf("VAP was not recreated, same UID found")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("VAP v1 should be recreated when deleted", func(t *testing.T) {
-		suffix := "VapV1ShouldBeRecreated"
-
-		logger.Info("Running test: VAP v1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-
-		vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
-
-		// First, wait for VAP to be created
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Delete the VAP resource directly to simulate external deletion
-		vapToDelete := &admissionregistrationv1.ValidatingAdmissionPolicy{}
-		err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = c.Delete(ctx, vapToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Verify the VAP is recreated by the watch
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
-				return err
-			}
-			// Check that this is a new VAP instance (different UID)
-			if vap.UID == vapToDelete.UID {
-				return fmt.Errorf("VAP was not recreated, same UID found")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("VAPB v1beta1 should be recreated when deleted", func(t *testing.T) {
-		suffix := "VapbV1Beta1ShouldBeRecreated"
-
-		logger.Info("Running test: VAPB v1beta1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
-		cstr := newDenyAllCstr(suffix)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.SetGroupVersion(&admissionregistrationv1beta1.SchemeGroupVersion)
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-
-		// Create the constraint first
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			return c.Create(ctx, cstr)
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		vapbName := fmt.Sprintf("gatekeeper-%s", cstr.GetName())
-
-		// First, wait for VAPB to be created
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Delete the VAPB resource directly to simulate external deletion
-		vapbToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-		err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = c.Delete(ctx, vapbToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Verify the VAPB is recreated by the watch
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
-				return err
-			}
-			// Check that this is a new VAPB instance (different UID)
-			if vapb.UID == vapbToDelete.UID {
-				return fmt.Errorf("VAPB was not recreated, same UID found")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Clean up the constraint
-		err = c.Delete(ctx, cstr)
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("VAPB v1 should be recreated when deleted", func(t *testing.T) {
-		suffix := "VapbV1ShouldBeRecreated"
-
-		logger.Info("Running test: VAPB v1 should be recreated when deleted")
-		constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
-		cstr := newDenyAllCstr(suffix)
-		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		transform.SetGroupVersion(&admissionregistrationv1.SchemeGroupVersion)
-		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
-
-		// Create the constraint first
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			return c.Create(ctx, cstr)
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		vapbName := fmt.Sprintf("gatekeeper-%s", cstr.GetName())
-
-		// First, wait for VAPB to be created
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Delete the VAPB resource directly to simulate external deletion
-		vapbToDelete := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-		err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = c.Delete(ctx, vapbToDelete)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Verify the VAPB is recreated by the watch
-		err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
-			return true
-		}, func() error {
-			vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
-			if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
-				return err
-			}
-			// Check that this is a new VAPB instance (different UID)
-			if vapb.UID == vapbToDelete.UID {
-				return fmt.Errorf("VAPB was not recreated, same UID found")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Clean up the constraint
-		err = c.Delete(ctx, cstr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2071,6 +2201,534 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+func TestPersistPodStatus(t *testing.T) {
+	tests := []struct {
+		name        string
+		change      bool
+		writeErr    error
+		wantUpdates int
+		wantErr     bool
+	}{
+		{name: "unchanged"},
+		{name: "changed", change: true, wantUpdates: 1},
+		{name: "update error", change: true, writeErr: errors.New("update error"), wantUpdates: 1, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status := &statusv1beta1.ConstraintTemplatePodStatus{
+				Status: statusv1beta1.ConstraintTemplatePodStatusStatus{ID: "test-pod"},
+			}
+			oldStatus := status.Status.DeepCopy()
+			if tt.change {
+				status.Status.ObservedGeneration = 1
+			}
+			trackingClient := &statusTrackingClient{writeErr: tt.writeErr}
+			r := &ReconcileConstraintTemplate{Client: trackingClient}
+
+			err := r.persistPodStatus(context.Background(), status, oldStatus)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("persistPodStatus() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if trackingClient.updates != tt.wantUpdates {
+				t.Fatalf("expected %d updates, got %d", tt.wantUpdates, trackingClient.updates)
+			}
+		})
+	}
+
+	t.Run("recomputed error", func(t *testing.T) {
+		testErr := errors.New("validatingAdmissionPolicy API is not enabled")
+		status := &statusv1beta1.ConstraintTemplatePodStatus{
+			Status: statusv1beta1.ConstraintTemplatePodStatusStatus{
+				Errors: []*v1beta1.CreateCRDError{{
+					Code:    ErrCreateCode,
+					Message: fmt.Sprintf("ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate: %s", testErr),
+				}},
+			},
+		}
+		oldStatus := status.Status.DeepCopy()
+		status.Status.Errors = nil
+		trackingClient := &statusTrackingClient{}
+		r := &ReconcileConstraintTemplate{Client: trackingClient}
+
+		if err := r.reportErrorOnCTStatus(context.Background(), ErrCreateCode, "ValidatingAdmissionPolicy resource cannot be generated for ConstraintTemplate", status, testErr); !errors.Is(err, testErr) {
+			t.Fatalf("expected original error %v, got %v", testErr, err)
+		}
+		if err := r.persistPodStatus(context.Background(), status, oldStatus); err != nil {
+			t.Fatalf("persistPodStatus() error = %v", err)
+		}
+		if trackingClient.updates != 0 {
+			t.Fatalf("expected recomputed status to skip update, got %d", trackingClient.updates)
+		}
+	})
+}
+
+func TestReconcileRawErrorPreservesPodStatus(t *testing.T) {
+	ct := makeReconcileConstraintTemplate("RawError")
+	ct.SetUID("template-uid")
+	ct.SetGeneration(2)
+	status := &statusv1beta1.ConstraintTemplatePodStatus{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-" + ct.GetName(),
+			Namespace: util.GetNamespace(),
+		},
+		Status: statusv1beta1.ConstraintTemplatePodStatusStatus{
+			ID:                 "test-pod",
+			TemplateUID:        ct.GetUID(),
+			ObservedGeneration: 1,
+			Errors: []*v1beta1.CreateCRDError{{
+				Code:    ErrCreateCode,
+				Message: "existing error",
+			}},
+		},
+	}
+	r, trackingClient := newUnitReconciler(t, ct, status)
+	getErr := errors.New("get CRD")
+	trackingClient.crdGetErr = getErr
+
+	_, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: ct.GetName()}})
+	if !errors.Is(err, getErr) {
+		t.Fatalf("expected CRD get error %v, got %v", getErr, err)
+	}
+	if trackingClient.statusUpdates != 0 {
+		t.Fatalf("expected raw error to skip status update, got %d", trackingClient.statusUpdates)
+	}
+
+	stored := &statusv1beta1.ConstraintTemplatePodStatus{}
+	require.NoError(t, trackingClient.Client.Get(context.Background(), client.ObjectKeyFromObject(status), stored))
+	if len(stored.Status.Errors) != 1 || stored.Status.Errors[0].Message != "existing error" {
+		t.Fatalf("expected existing status error to be preserved, got %v", stored.Status.Errors)
+	}
+}
+
+func TestReconcileStableReportedErrorSkipsStatusUpdate(t *testing.T) {
+	ct := makeReconcileConstraintTemplate("StableError")
+	ct.Spec.Targets[0].Rego = `
+package foo
+
+violation[{"msg": "denied"}] { 1 == 1 }
+invalid[}}
+`
+	r, trackingClient := newUnitReconciler(t, ct)
+	request := reconcile.Request{NamespacedName: types.NamespacedName{Name: ct.GetName()}}
+
+	firstResult, firstErr := r.Reconcile(context.Background(), request)
+	if firstErr == nil {
+		t.Fatal("expected invalid Rego reconcile error")
+	}
+	if firstResult != (reconcile.Result{}) {
+		t.Fatalf("expected empty result for invalid Rego, got %v", firstResult)
+	}
+	if trackingClient.statusCreates != 1 {
+		t.Fatalf("expected one immediate status create, got %d", trackingClient.statusCreates)
+	}
+	if trackingClient.statusUpdates != 1 {
+		t.Fatalf("expected first reconcile to persist one status update, got %d", trackingClient.statusUpdates)
+	}
+
+	trackingClient.statusUpdates = 0
+	secondResult, secondErr := r.Reconcile(context.Background(), request)
+	if firstResult != secondResult {
+		t.Fatalf("expected stable reconcile result %v, got %v", firstResult, secondResult)
+	}
+	if (firstErr == nil) != (secondErr == nil) {
+		t.Fatalf("expected stable reconcile error, got first=%v second=%v", firstErr, secondErr)
+	}
+	if firstErr.Error() != secondErr.Error() {
+		t.Fatalf("expected stable reconcile error %q, got %q", firstErr, secondErr)
+	}
+	if trackingClient.statusUpdates != 0 {
+		t.Fatalf("expected identical reported error to skip status update, got %d", trackingClient.statusUpdates)
+	}
+
+	statusName, err := statusv1beta1.KeyForConstraintTemplate("test-pod", ct.GetName())
+	require.NoError(t, err)
+	stored := &statusv1beta1.ConstraintTemplatePodStatus{}
+	require.NoError(t, trackingClient.Client.Get(context.Background(), types.NamespacedName{Name: statusName, Namespace: util.GetNamespace()}, stored))
+	if len(stored.Status.Errors) != 1 {
+		t.Fatalf("expected one persisted error, got %v", stored.Status.Errors)
+	}
+}
+
+func TestReconcileStatusCreateErrorIsReturned(t *testing.T) {
+	ct := makeReconcileConstraintTemplate("CreateError")
+	r, trackingClient := newUnitReconciler(t, ct)
+	statusName, err := statusv1beta1.KeyForConstraintTemplate("test-pod", ct.GetName())
+	require.NoError(t, err)
+	createErr := apierrors.NewAlreadyExists(schema.GroupResource{Group: statusv1beta1.GroupVersion.Group, Resource: "constrainttemplatepodstatuses"}, statusName)
+	trackingClient.statusCreateErr = createErr
+
+	result, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: ct.GetName()}})
+	if !apierrors.IsAlreadyExists(err) {
+		t.Fatalf("expected status create error %v, got %v", createErr, err)
+	}
+	if result != (reconcile.Result{}) {
+		t.Fatalf("expected empty result for status create error, got %v", result)
+	}
+	if trackingClient.statusCreates != 1 || trackingClient.statusUpdates != 0 {
+		t.Fatalf("expected one create and no updates, got %d creates and %d updates", trackingClient.statusCreates, trackingClient.statusUpdates)
+	}
+}
+
+func TestReconcileStatusUpdateErrorPreservesRequeueBehavior(t *testing.T) {
+	ct := makeReconcileConstraintTemplate("UpdateError")
+	ct.Spec.Targets[0].Target = "unknown.target"
+	r, trackingClient := newUnitReconciler(t, ct)
+	updateErr := apierrors.NewConflict(schema.GroupResource{Group: statusv1beta1.GroupVersion.Group, Resource: "constrainttemplatepodstatuses"}, ct.GetName(), errors.New("conflict"))
+	trackingClient.statusUpdateErr = updateErr
+
+	result, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: ct.GetName()}})
+	if err != nil {
+		t.Fatalf("expected status update failure to preserve nil error, got %v", err)
+	}
+	if result != (reconcile.Result{Requeue: true}) {
+		t.Fatalf("expected explicit requeue for status update failure, got %v", result)
+	}
+	if trackingClient.statusCreates != 1 || trackingClient.statusUpdates != 1 {
+		t.Fatalf("expected one create and one update attempt, got %d creates and %d updates", trackingClient.statusCreates, trackingClient.statusUpdates)
+	}
+}
+
+func TestReconcilePreservesBothReconcileAndStatusErrors(t *testing.T) {
+	ct := makeReconcileConstraintTemplate("CombinedError")
+	ct.SetUID("template-uid")
+	r, trackingClient := newUnitReconciler(t, ct)
+
+	unversionedCT := &templates.ConstraintTemplate{}
+	require.NoError(t, r.scheme.Convert(ct, unversionedCT, nil))
+	unversionedCRD, err := r.cfClient.CreateCRD(context.Background(), unversionedCT)
+	require.NoError(t, err)
+	currentCRD := &apiextensionsv1.CustomResourceDefinition{}
+	require.NoError(t, r.scheme.Convert(unversionedCRD, currentCRD, nil))
+	require.NoError(t, trackingClient.Client.Create(context.Background(), currentCRD))
+
+	reconcileErr := errors.New("update CRD")
+	persistErr := apierrors.NewConflict(schema.GroupResource{Group: statusv1beta1.GroupVersion.Group, Resource: "constrainttemplatepodstatuses"}, ct.GetName(), errors.New("conflict"))
+	trackingClient.crdUpdateErr = reconcileErr
+	trackingClient.statusUpdateErr = persistErr
+
+	result, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: ct.GetName()}})
+	if result != (reconcile.Result{}) {
+		t.Fatalf("expected empty result for combined error, got %v", result)
+	}
+	if !errors.Is(err, reconcileErr) {
+		t.Fatalf("expected combined error to preserve reconcile error %v, got %v", reconcileErr, err)
+	}
+	if !errors.Is(err, persistErr) {
+		t.Fatalf("expected combined error to preserve status error %v, got %v", persistErr, err)
+	}
+	wantMessage := fmt.Sprintf("Could not update status: %s: %s", persistErr, reconcileErr)
+	if err.Error() != wantMessage {
+		t.Fatalf("expected unchanged combined error message %q, got %q", wantMessage, err)
+	}
+	if trackingClient.statusCreates != 1 || trackingClient.statusUpdates != 1 {
+		t.Fatalf("expected one create and one update attempt, got %d creates and %d updates", trackingClient.statusCreates, trackingClient.statusUpdates)
+	}
+}
+
+func TestManageVAP_VAPAPIDisabledPreservesRetry(t *testing.T) {
+	transform.SetVapAPIEnabled(ptr.To(false))
+	transform.SetGroupVersion(nil)
+	t.Cleanup(func() {
+		transform.SetVapAPIEnabled(nil)
+		transform.SetGroupVersion(nil)
+	})
+
+	ct := makeReconcileConstraintTemplateForVap("VAPAPIDisabled", ptr.To(true), nil)
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1beta1.AddToScheme(scheme))
+	unversionedCT := &templates.ConstraintTemplate{}
+	require.NoError(t, scheme.Convert(ct, unversionedCT, nil))
+
+	status := &statusv1beta1.ConstraintTemplatePodStatus{}
+	trackingClient := &statusTrackingClient{}
+	r := &ReconcileConstraintTemplate{
+		Client:  trackingClient,
+		metrics: &reporter{vapRegistry: metrics.NewVAPStatusRegistry()},
+	}
+
+	err := r.manageVAP(context.Background(), ct, unversionedCT, status, logger, true)
+	if !errors.Is(err, constraint.ErrValidatingAdmissionPolicyAPIDisabled) {
+		t.Fatalf("expected unavailable API error, got %v", err)
+	}
+	if len(status.Status.Errors) != 1 {
+		t.Fatalf("expected one status error, got %d", len(status.Status.Errors))
+	}
+	if got := status.Status.Errors[0].Message; !strings.Contains(got, constraint.ErrValidatingAdmissionPolicyAPIDisabled.Error()) {
+		t.Fatalf("expected unavailable API status error, got %q", got)
+	}
+	if trackingClient.updates != 0 || trackingClient.creates != 0 {
+		t.Fatalf("expected manageVAP to leave persistence to Reconcile, got %d creates and %d updates", trackingClient.creates, trackingClient.updates)
+	}
+}
+
+func TestV1beta1ToV1PreservesResourceRuleScope(t *testing.T) {
+	scope := admissionregistrationv1beta1.AllScopes
+	failurePolicy := admissionregistrationv1beta1.Fail
+	v1beta1VAP := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{
+		Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicySpec{
+			ParamKind: &admissionregistrationv1beta1.ParamKind{
+				APIVersion: "constraints.gatekeeper.sh/v1beta1",
+				Kind:       "TestConstraint",
+			},
+			MatchConstraints: &admissionregistrationv1beta1.MatchResources{
+				ResourceRules: []admissionregistrationv1beta1.NamedRuleWithOperations{
+					{
+						RuleWithOperations: admissionregistrationv1beta1.RuleWithOperations{
+							Operations: []admissionregistrationv1beta1.OperationType{
+								admissionregistrationv1beta1.Create,
+							},
+							Rule: admissionregistrationv1beta1.Rule{
+								APIGroups:   []string{"*"},
+								APIVersions: []string{"*"},
+								Resources:   []string{"*"},
+								Scope:       &scope,
+							},
+						},
+					},
+				},
+			},
+			AuditAnnotations: []admissionregistrationv1beta1.AuditAnnotation{
+				{
+					Key:             "evaluation",
+					ValueExpression: "params == null ? '' : 'true'",
+				},
+			},
+			FailurePolicy: &failurePolicy,
+		},
+	}
+
+	v1VAP, err := v1beta1ToV1(v1beta1VAP)
+	require.NoError(t, err)
+	require.NotNil(t, v1VAP.Spec.MatchConstraints)
+	require.Len(t, v1VAP.Spec.MatchConstraints.ResourceRules, 1)
+	require.Equal(t, &scope, v1VAP.Spec.MatchConstraints.ResourceRules[0].Scope)
+	require.Equal(t, []admissionregistrationv1.AuditAnnotation{
+		{
+			Key:             "evaluation",
+			ValueExpression: "params == null ? '' : 'true'",
+		},
+	}, v1VAP.Spec.AuditAnnotations)
+}
+
+func TestReconcile_VAPV1Beta1RecreatedWhenDeleted(t *testing.T) {
+	ctx, c := setupVersionPinnedReconcileTest(t, &admissionregistrationv1beta1.SchemeGroupVersion)
+	suffix := "VapV1Beta1ShouldBeRecreated"
+
+	logger.Info("Running test: VAP v1beta1 should be recreated when deleted")
+	constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+	testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+	vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+
+	err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+		return c.Get(ctx, types.NamespacedName{Name: vapName}, vap)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vapToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+	err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.Delete(ctx, vapToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vap := &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}
+		if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+			return err
+		}
+		if vap.UID == vapToDelete.UID {
+			return fmt.Errorf("VAP was not recreated, same UID found")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReconcile_VAPV1RecreatedWhenDeleted(t *testing.T) {
+	ctx, c := setupVersionPinnedReconcileTest(t, &admissionregistrationv1.SchemeGroupVersion)
+	suffix := "VapV1ShouldBeRecreated"
+
+	logger.Info("Running test: VAP v1 should be recreated when deleted")
+	constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+	testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+	vapName := fmt.Sprintf("gatekeeper-%s", denyall+strings.ToLower(suffix))
+
+	err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+		return c.Get(ctx, types.NamespacedName{Name: vapName}, vap)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vapToDelete := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+	err = c.Get(ctx, types.NamespacedName{Name: vapName}, vapToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.Delete(ctx, vapToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vap := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+		if err := c.Get(ctx, types.NamespacedName{Name: vapName}, vap); err != nil {
+			return err
+		}
+		if vap.UID == vapToDelete.UID {
+			return fmt.Errorf("VAP was not recreated, same UID found")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReconcile_VAPBV1Beta1RecreatedWhenDeleted(t *testing.T) {
+	ctx, c := setupVersionPinnedReconcileTest(t, &admissionregistrationv1beta1.SchemeGroupVersion)
+	suffix := "VapbV1Beta1ShouldBeRecreated"
+
+	logger.Info("Running test: VAPB v1beta1 should be recreated when deleted")
+	constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
+	cstr := newDenyAllCstr(suffix)
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+	testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+	err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		return c.Create(ctx, cstr)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+
+	vapbName := transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+		return c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vapbToDelete := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+	err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.Delete(ctx, vapbToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vapb := &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}
+		if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
+			return err
+		}
+		if vapb.UID == vapbToDelete.UID {
+			return fmt.Errorf("VAPB was not recreated, same UID found")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReconcile_VAPBV1RecreatedWhenDeleted(t *testing.T) {
+	ctx, c := setupVersionPinnedReconcileTest(t, &admissionregistrationv1.SchemeGroupVersion)
+	suffix := "VapbV1ShouldBeRecreated"
+
+	logger.Info("Running test: VAPB v1 should be recreated when deleted")
+	constraintTemplate := makeReconcileConstraintTemplateForVap(suffix, ptr.To[bool](true), nil)
+	cstr := newDenyAllCstr(suffix)
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+	testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
+
+	err := retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		return c.Create(ctx, cstr)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+
+	vapbName := transform.GetVAPBindingName(cstr.GetKind(), cstr.GetName())
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+		return c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vapbToDelete := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+	err = c.Get(ctx, types.NamespacedName{Name: vapbName}, vapbToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.Delete(ctx, vapbToDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = retry.OnError(testutils.ConstantRetry, func(_ error) bool {
+		return true
+	}, func() error {
+		vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+		if err := c.Get(ctx, types.NamespacedName{Name: vapbName}, vapb); err != nil {
+			return err
+		}
+		if vapb.UID == vapbToDelete.UID {
+			return fmt.Errorf("VAPB was not recreated, same UID found")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Tests that expectations for constraints are canceled if the corresponding constraint is deleted.

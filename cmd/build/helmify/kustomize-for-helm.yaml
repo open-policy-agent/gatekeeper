@@ -85,6 +85,8 @@ spec:
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS
+            - HELMSUBST_EMIT_ADMISSION_AUDIT_ANNOTATIONS
+            - HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION
             - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
@@ -92,6 +94,7 @@ spec:
             - HELMSUBST_LOG_LEVEL_ENCODER
             - --exempt-namespace={{ .Release.Namespace }}
             - HELMSUBST_CONTROLLER_MANAGER_OPERATIONS
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_ADMISSION_VIOLATION_EXPORT_ARGS
             - --enable-external-data={{ .Values.enableExternalData }}
             - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - --log-mutations={{ .Values.logMutations }}
@@ -105,6 +108,7 @@ spec:
             - HELMSUBST_ADDITIONAL_MUTATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+            - HELMSUBST_DEPLOYMENT_DEFAULT_K8S_NATIVE_VALIDATION_FAILURE_POLICY
             - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_METRICS_ADDR
@@ -203,6 +207,8 @@ spec:
             - HELMSUBST_DEPLOYMENT_AUDIT_CHUNK_SIZE
             - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
             - HELMSUBST_DEPLOYMENT_AUDIT_EMIT_EVENTS
+            - HELMSUBST_EMIT_ADMISSION_AUDIT_ANNOTATIONS
+            - HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS
             - HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION
             - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - HELMSUBST_AUDIT_OPERATIONS
@@ -220,6 +226,7 @@ spec:
             - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
             - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL }}
             - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+            - HELMSUBST_DEPLOYMENT_DEFAULT_K8S_NATIVE_VALIDATION_FAILURE_POLICY
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES
@@ -276,7 +283,8 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
-  annotations: HELMSUBST_SECRET_ANNOTATIONS
+  annotations:
+    HELMSUBST_SECRET_ANNOTATIONS: ""
   name: gatekeeper-webhook-server-cert
   namespace: gatekeeper-system
 ---
@@ -286,7 +294,8 @@ metadata:
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-mutating-webhook-configuration
-  annotations: HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS
+  annotations:
+    HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS: ""
 webhooks:
 - clientConfig:
     service:
@@ -315,7 +324,8 @@ metadata:
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-validating-webhook-configuration
-  annotations: HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS
+  annotations:
+    HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS: ""
 webhooks:
 - clientConfig:
     service:

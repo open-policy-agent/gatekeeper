@@ -34,6 +34,9 @@ type MetricsCache struct {
 	mux        sync.RWMutex
 	KnownKinds map[string]bool
 	Cache      map[string]Tags
+	// totals mirrors Cache by (kind, status) so ReportSync is proportional to
+	// reported metric series rather than total cached objects.
+	totals map[Tags]int
 }
 
 type Tags struct {
@@ -45,6 +48,7 @@ func NewMetricsCache() *MetricsCache {
 	return &MetricsCache{
 		Cache:      make(map[string]Tags),
 		KnownKinds: make(map[string]bool),
+		totals:     make(map[Tags]int),
 	}
 }
 
@@ -58,6 +62,7 @@ func GetKeyForSyncMetrics(namespace string, name string) string {
 func (c *MetricsCache) AddKind(key string) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
+	c.initLocked()
 
 	c.KnownKinds[key] = true
 }
@@ -65,24 +70,37 @@ func (c *MetricsCache) AddKind(key string) {
 func (c *MetricsCache) ResetCache() {
 	c.mux.Lock()
 	defer c.mux.Unlock()
+	c.initLocked()
 
 	c.Cache = make(map[string]Tags)
+	c.totals = make(map[Tags]int)
 }
 
 func (c *MetricsCache) AddObject(key string, t Tags) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
+	c.initLocked()
 
-	c.Cache[key] = Tags{
+	if previousTags, ok := c.Cache[key]; ok {
+		c.decrementTotalLocked(previousTags)
+	}
+
+	newTags := Tags{
 		Kind:   t.Kind,
 		Status: t.Status,
 	}
+	c.Cache[key] = newTags
+	c.totals[newTags]++
 }
 
 func (c *MetricsCache) DeleteObject(key string) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
+	c.initLocked()
 
+	if previousTags, ok := c.Cache[key]; ok {
+		c.decrementTotalLocked(previousTags)
+	}
 	delete(c.Cache, key)
 }
 
@@ -109,19 +127,21 @@ func (c *MetricsCache) HasObject(key string) bool {
 }
 
 func (c *MetricsCache) ReportSync() {
-	c.mux.RLock()
-	defer c.mux.RUnlock()
-
 	reporter, err := NewStatsReporter()
 	if err != nil {
 		log.Error(err, "failed to initialize reporter")
 		return
 	}
 
-	totals := make(map[Tags]int)
-	for _, v := range c.Cache {
-		totals[v]++
+	c.mux.RLock()
+	if c.needsInitLocked() {
+		c.mux.RUnlock()
+		c.mux.Lock()
+		c.initLocked()
+		c.mux.Unlock()
+		c.mux.RLock()
 	}
+	defer c.mux.RUnlock()
 
 	for kind := range c.KnownKinds {
 		for _, status := range metrics.AllStatuses {
@@ -130,7 +150,7 @@ func (c *MetricsCache) ReportSync() {
 					Kind:   kind,
 					Status: status,
 				},
-				int64(totals[Tags{
+				int64(c.totals[Tags{
 					Kind:   kind,
 					Status: status,
 				}])); err != nil {
@@ -138,6 +158,35 @@ func (c *MetricsCache) ReportSync() {
 			}
 		}
 	}
+}
+
+func (c *MetricsCache) needsInitLocked() bool {
+	return c.Cache == nil || c.KnownKinds == nil || c.totals == nil
+}
+
+func (c *MetricsCache) initLocked() {
+	if c.Cache == nil {
+		c.Cache = make(map[string]Tags)
+	}
+	if c.KnownKinds == nil {
+		c.KnownKinds = make(map[string]bool)
+	}
+	if c.totals != nil {
+		return
+	}
+
+	c.totals = make(map[Tags]int, len(c.Cache))
+	for _, tags := range c.Cache {
+		c.totals[tags]++
+	}
+}
+
+func (c *MetricsCache) decrementTotalLocked(t Tags) {
+	if c.totals[t] <= 1 {
+		delete(c.totals, t)
+		return
+	}
+	c.totals[t]--
 }
 
 type Reporter struct {
