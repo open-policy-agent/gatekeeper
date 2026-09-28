@@ -554,17 +554,21 @@ jobs:
           PATCHED_REF: ${{ steps.patch.outputs.verification_ref }}
         run: |
           set -euo pipefail
+          repo="${PATCHED_REF%@*}"
           for p in $PATCH_ARCHES; do
+            platform_digest=$(crane digest --platform "$p" "${PATCHED_REF}")
+            [[ "${platform_digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::invalid manifest digest for ${p}: ${platform_digest}"; exit 1; }
+            platform_ref="${repo}@${platform_digest}"
             set +e
-            out=$(docker run --rm --pull always --platform "$p" "${PATCHED_REF}" --help 2>&1)
+            out=$(docker run --rm --pull always --platform "$p" "${platform_ref}" --help 2>&1)
             ec=$?
             set -e
             if [[ "${ec}" != "0" ]]; then
-              echo "::error::smoke test failed for ${PATCHED_REF} on ${p} (exit ${ec})"
-              printf '%s\n' "${out}" | head -20
+              echo "::error::smoke test failed for ${platform_ref} on ${p} (exit ${ec})"
+              printf '%s\n' "${out}"
               exit 1
             fi
-            echo "Smoke: ${PATCHED_REF} (${p}) --help exited 0."
+            echo "Smoke: ${platform_ref} (${p}) --help exited 0."
           done
 
       # Re-wrap to a staging RC and verify attestations in staging and production.
