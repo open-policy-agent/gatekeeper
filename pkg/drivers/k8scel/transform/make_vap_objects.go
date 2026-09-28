@@ -24,7 +24,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag is deprecated and will be removed in Gatekeeper v3.24.")
+var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration and Config resource. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag is deprecated and will be removed in Gatekeeper v3.24.")
 
 const (
 	vapEvaluationAuditAnnotationKey             = "evaluation"
@@ -59,7 +59,7 @@ func quoteNamespaces(namespaces []string) []string {
 }
 
 // buildMatchConditions constructs the complete list of match conditions for the VAP policy.
-func buildMatchConditions(source *schema.Source, excludedNamespaces, exemptedNamespaces []string) ([]admissionregistrationv1beta1.MatchCondition, error) {
+func buildMatchConditions(source *schema.Source, excludedNamespaces, _ []string) ([]admissionregistrationv1beta1.MatchCondition, error) {
 	// Start with template-defined match conditions
 	matchConditions, err := source.GetV1Beta1MatchConditions()
 	if err != nil {
@@ -74,13 +74,6 @@ func buildMatchConditions(source *schema.Source, excludedNamespaces, exemptedNam
 		quotedNamespaces := quoteNamespaces(excludedNamespaces)
 		matchConditions = append(matchConditions,
 			MatchGlobalExcludedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
-	}
-
-	// Add exempted namespaces condition if specified
-	if len(exemptedNamespaces) > 0 {
-		quotedNamespaces := quoteNamespaces(exemptedNamespaces)
-		matchConditions = append(matchConditions,
-			MatchGlobalExemptedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
 	}
 
 	return matchConditions, nil

@@ -1122,15 +1122,16 @@ func (r *ReconcileConstraintTemplate) transformTemplateToVAP(
 		excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
 	}
 
-	exemptedNamespaces := webhook.GetAllExemptedNamespacesWithWildcard()
-
 	webhookConfig := r.getWebhookConfigFromCache(logger)
+	if webhookConfig == nil {
+		return nil, fmt.Errorf("webhook configuration %q is not available for VAP scope synchronization", *webhook.VwhName)
+	}
 
 	return transform.TemplateToPolicyDefinitionWithWebhookConfig(
 		unversionedCT,
 		webhookConfig,
 		excludedNamespaces,
-		exemptedNamespaces,
+		nil,
 	)
 }
 
@@ -1138,13 +1139,13 @@ func (r *ReconcileConstraintTemplate) transformTemplateToVAP(
 // Returns nil if cache is unavailable or config not found.
 func (r *ReconcileConstraintTemplate) getWebhookConfigFromCache(logger logr.Logger) *webhookconfigcache.WebhookMatchingConfig {
 	if r.webhookCache == nil {
-		logger.Info("webhook cache is nil, VAP will be created with default match constraints")
+		logger.Info("webhook cache is nil, waiting to synchronize VAP scope")
 		return nil
 	}
 
 	config, exists := r.webhookCache.GetConfig(*webhook.VwhName)
 	if !exists {
-		logger.Info("webhook config not found in cache, VAP will be created with default match constraints", "lookupKey", *webhook.VwhName)
+		logger.Info("webhook config not found in cache, waiting to synchronize VAP scope", "lookupKey", *webhook.VwhName)
 		return nil
 	}
 

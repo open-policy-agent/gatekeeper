@@ -171,6 +171,68 @@ teardown_file() {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_multiple_binding_audit_annotation_matches ${multiple_resource_name} ${policy_name}"
 }
 
+@test "generated VAP namespace exemptions require the ignore label" {
+  if [[ -z "${ENABLE_VAP_TESTS:-}" ]]; then
+    skip "skipping VAP tests"
+  fi
+  if ! kubectl api-resources --api-group=admissionregistration.k8s.io -o name | grep -qx 'validatingadmissionpolicies.admissionregistration.k8s.io'; then
+    skip "VAP is not enabled for the cluster"
+  fi
+
+  local constraint_name="vap-namespace-exemptions"
+  local policy_name="gatekeeper-k8srequiredlabelsvap"
+  local binding_name="${policy_name}-${constraint_name}"
+  local namespaces=(vap-exempt-exact vap-exempt-prefix-test vap-exempt-test-suffix)
+  local control_namespace="vap-nonexempt-control"
+  local snapshot_dir
+  snapshot_dir="$(mktemp -d)"
+  CLEAN_CMD="rm -rf '${snapshot_dir}'; ${CLEAN_CMD}"
+
+  local deployment
+  for deployment in gatekeeper-controller-manager gatekeeper-audit; do
+    kubectl -n "${GATEKEEPER_NAMESPACE}" get deployment "${deployment}" -o json |
+      jq '{spec:{template:{spec:{containers:[.spec.template.spec.containers[] | select(.name == "manager") | {name,args}]}}}}' > "${snapshot_dir}/${deployment}.json"
+    CLEAN_CMD="kubectl -n '${GATEKEEPER_NAMESPACE}' patch deployment '${deployment}' --type=strategic --patch-file '${snapshot_dir}/${deployment}.json'; kubectl -n '${GATEKEEPER_NAMESPACE}' rollout status deployment '${deployment}' --timeout=180s; ${CLEAN_CMD}"
+    jq '.spec.template.spec.containers[0].args += ["--exempt-namespace=vap-exempt-exact", "--exempt-namespace-prefix=vap-exempt-prefix-", "--exempt-namespace-suffix=-suffix"]' "${snapshot_dir}/${deployment}.json" > "${snapshot_dir}/${deployment}-updated.json"
+    kubectl -n "${GATEKEEPER_NAMESPACE}" patch deployment "${deployment}" --type=strategic --patch-file "${snapshot_dir}/${deployment}-updated.json"
+    kubectl -n "${GATEKEEPER_NAMESPACE}" rollout status deployment "${deployment}" --timeout=180s
+  done
+
+  CLEAN_CMD="kubectl delete k8srequiredlabelsvap.constraints.gatekeeper.sh '${constraint_name}' --ignore-not-found; kubectl delete constrainttemplate k8srequiredlabelsvap --ignore-not-found; kubectl delete namespace ${namespaces[*]} '${control_namespace}' --ignore-not-found; ${CLEAN_CMD}"
+  local namespace
+  for namespace in "${namespaces[@]}" "${control_namespace}"; do
+    kubectl create namespace "${namespace}"
+  done
+
+  kubectl apply -f "${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
+  wait_for_process "${WAIT_TIME}" "${SLEEP_TIME}" "kubectl get validatingadmissionpolicy '${policy_name}'"
+  wait_for_process "${WAIT_TIME}" "${SLEEP_TIME}" "kubectl get crd k8srequiredlabelsvap.constraints.gatekeeper.sh"
+  kubectl create --dry-run=client -f "${BATS_TESTS_DIR}/constraints/admission_audit_annotations_vap.yaml" -o json |
+    jq --arg name "${constraint_name}" '.metadata.name = $name | .spec.match = {kinds:[{apiGroups:[""],kinds:["ConfigMap"]}],namespaces:["vap-exempt-exact","vap-exempt-prefix-test","vap-exempt-test-suffix","vap-nonexempt-control"]}' |
+    kubectl apply -f -
+  wait_for_process "${WAIT_TIME}" "${SLEEP_TIME}" "kubectl get validatingadmissionpolicybinding '${binding_name}'"
+  wait_for_process "${WAIT_TIME}" "${SLEEP_TIME}" "vap_configmap_admission_enforced '${control_namespace}' '${policy_name}' '${binding_name}'"
+
+  for namespace in "${namespaces[@]}"; do
+    run kubectl create configmap vap-exemption-probe --namespace "${namespace}" --dry-run=server
+    assert_failure
+    assert_match "ValidatingAdmissionPolicy '${policy_name}' with binding '${binding_name}' denied request" "${output}"
+    assert_match 'missing required label' "${output}"
+
+    kubectl label namespace "${namespace}" admission.gatekeeper.sh/ignore=exemption-test
+    wait_for_process "${WAIT_TIME}" "${SLEEP_TIME}" "kubectl create configmap vap-exemption-probe --namespace '${namespace}' --dry-run=server"
+    kubectl -n "${namespace}" create configmap existing-violation --from-literal=state=before
+
+    kubectl label namespace "${namespace}" admission.gatekeeper.sh/ignore-
+    wait_for_process "${WAIT_TIME}" "${SLEEP_TIME}" "vap_configmap_admission_enforced '${namespace}' '${policy_name}' '${binding_name}'"
+
+    run kubectl -n "${namespace}" patch configmap existing-violation --type=merge -p '{"data":{"state":"after"}}' --dry-run=server
+    assert_failure
+    assert_match "${policy_name}" "${output}"
+    assert_match 'missing required label' "${output}"
+  done
+}
+
 @test "vap test" {
   if [ -z $ENABLE_VAP_TESTS ]; then
     skip "skipping vap tests"

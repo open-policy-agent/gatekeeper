@@ -2464,6 +2464,74 @@ func TestManageVAP_VAPAPIDisabledPreservesRetry(t *testing.T) {
 	}
 }
 
+func TestManageVAP_PreservesPolicyUntilWebhookScopeIsAvailable(t *testing.T) {
+	for _, groupVersion := range []schema.GroupVersion{admissionregistrationv1.SchemeGroupVersion, admissionregistrationv1beta1.SchemeGroupVersion} {
+		t.Run(groupVersion.Version, func(t *testing.T) {
+			globalTestMu.Lock()
+			defer globalTestMu.Unlock()
+			originalSyncVAPScope := *transform.SyncVAPScope
+			t.Cleanup(func() { *transform.SyncVAPScope = originalSyncVAPScope })
+			*transform.SyncVAPScope = true
+			setVAPTestGlobals(t, &groupVersion)
+
+			ct := makeReconcileConstraintTemplateForVap("ScopeRecovery", ptr.To(true), nil)
+			ct.UID = types.UID("template-uid")
+			r, _ := newUnitReconciler(t, ct)
+			require.NoError(t, admissionregistrationv1.AddToScheme(r.scheme))
+			require.NoError(t, admissionregistrationv1beta1.AddToScheme(r.scheme))
+			r.webhookCache = webhookconfigcache.NewWebhookConfigCache()
+			unversionedCT := &templates.ConstraintTemplate{}
+			require.NoError(t, r.scheme.Convert(ct, unversionedCT, nil))
+			selector := &metav1.LabelSelector{
+				MatchLabels: map[string]string{"environment": "production"},
+				MatchExpressions: []metav1.LabelSelectorRequirement{{
+					Key: "admission.gatekeeper.sh/ignore", Operator: metav1.LabelSelectorOpDoesNotExist,
+				}},
+			}
+			existing, err := vapForVersion(&groupVersion)
+			require.NoError(t, err)
+			existing.SetName(getVAPName(ct.Name))
+			existing.SetUID(types.UID("policy-uid"))
+			switch policy := existing.(type) {
+			case *admissionregistrationv1.ValidatingAdmissionPolicy:
+				policy.Spec.MatchConstraints = &admissionregistrationv1.MatchResources{NamespaceSelector: selector}
+			case *admissionregistrationv1beta1.ValidatingAdmissionPolicy:
+				policy.Spec.MatchConstraints = &admissionregistrationv1beta1.MatchResources{NamespaceSelector: selector}
+			}
+			require.NoError(t, r.Create(context.Background(), existing))
+			before := existing.DeepCopyObject()
+			status := &statusv1beta1.ConstraintTemplatePodStatus{}
+
+			err = r.manageVAP(context.Background(), ct, unversionedCT, status, logr.Discard(), true)
+			require.ErrorContains(t, err, "is not available for VAP scope synchronization")
+			require.Len(t, status.Status.Errors, 1)
+			after, err := vapForVersion(&groupVersion)
+			require.NoError(t, err)
+			require.NoError(t, r.Get(context.Background(), client.ObjectKeyFromObject(existing), after))
+			require.Equal(t, before, after)
+
+			r.webhookCache.UpsertConfig(*webhook.VwhName, webhookconfigcache.WebhookMatchingConfig{
+				NamespaceSelector: selector,
+				Rules: []admissionregistrationv1.RuleWithOperations{{
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+					Rule:       admissionregistrationv1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
+				}},
+			})
+			require.NoError(t, r.manageVAP(context.Background(), ct, unversionedCT, status, logr.Discard(), true))
+			require.NoError(t, r.Get(context.Background(), client.ObjectKeyFromObject(existing), after))
+			require.Equal(t, existing.GetUID(), after.GetUID())
+			require.NotEqual(t, before, after)
+			require.Equal(t, GeneratedVAPState, status.Status.VAPGenerationStatus.State)
+			switch policy := after.(type) {
+			case *admissionregistrationv1.ValidatingAdmissionPolicy:
+				require.Equal(t, selector, policy.Spec.MatchConstraints.NamespaceSelector)
+			case *admissionregistrationv1beta1.ValidatingAdmissionPolicy:
+				require.Equal(t, selector, policy.Spec.MatchConstraints.NamespaceSelector)
+			}
+		})
+	}
+}
+
 func TestV1beta1ToV1PreservesResourceRuleScope(t *testing.T) {
 	scope := admissionregistrationv1beta1.AllScopes
 	failurePolicy := admissionregistrationv1beta1.Fail
@@ -3197,10 +3265,46 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		}
 
 		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-synced", logger)
+		require.ErrorContains(t, err, "is not available for VAP scope synchronization")
+		require.Nil(t, vap)
+	})
+
+	t.Run("SyncVAPScope waits for webhook configuration and recovers", func(t *testing.T) {
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
+		*transform.SyncVAPScope = true
+		cache := webhookconfigcache.NewWebhookConfigCache()
+		r := &ReconcileConstraintTemplate{webhookCache: cache}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap", logger)
+		require.ErrorContains(t, err, "is not available for VAP scope synchronization")
+		require.Nil(t, vap)
+
+		selector := &metav1.LabelSelector{
+			MatchLabels: map[string]string{"environment": "production"},
+			MatchExpressions: []metav1.LabelSelectorRequirement{
+				{Key: "admission.gatekeeper.sh/ignore", Operator: metav1.LabelSelectorOpDoesNotExist},
+			},
+		}
+		config := webhookconfigcache.WebhookMatchingConfig{
+			NamespaceSelector: selector,
+			Rules: []admissionregistrationv1.RuleWithOperations{{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+				Rule: admissionregistrationv1.Rule{
+					APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"},
+				},
+			}},
+		}
+		cache.UpsertConfig(*webhook.VwhName, config)
+		vap, err = r.transformTemplateToVAP(unversionedCT, "test-vap", logger)
 		require.NoError(t, err)
-		require.NotNil(t, vap)
-		// The VAP name is derived from the template name
-		require.Equal(t, "gatekeeper-test-template", vap.Name)
+		require.Equal(t, selector, vap.Spec.MatchConstraints.NamespaceSelector)
+
+		config.NamespaceSelector = nil
+		cache.UpsertConfig(*webhook.VwhName, config)
+		vap, err = r.transformTemplateToVAP(unversionedCT, "test-vap", logger)
+		require.NoError(t, err)
+		require.Nil(t, vap.Spec.MatchConstraints.NamespaceSelector)
 	})
 
 	t.Run("SyncVAPScope enabled with webhook config - adds match constraints and conditions", func(t *testing.T) {
@@ -3329,6 +3433,14 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		})
 
 		cache := webhookconfigcache.NewWebhookConfigCache()
+		cache.UpsertConfig(*webhook.VwhName, webhookconfigcache.WebhookMatchingConfig{
+			Rules: []admissionregistrationv1.RuleWithOperations{{
+				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+				Rule: admissionregistrationv1.Rule{
+					APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"},
+				},
+			}},
+		})
 
 		r := &ReconcileConstraintTemplate{
 			processExcluder: processExcluder,
