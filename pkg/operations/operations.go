@@ -131,3 +131,37 @@ func AssignedStringList() []string {
 func HasValidationOperations() bool {
 	return IsAssigned(Audit) || IsAssigned(Status) || IsAssigned(Webhook)
 }
+
+// HasExpansionConsumerOperations returns `true` if there are any operations
+// assigned that evaluate expanded resources, i.e. Audit and Webhook. Status,
+// Generate, and mutation-only processes do not evaluate expanded resources
+// and therefore do not need the expansion ingestion controller.
+func HasExpansionConsumerOperations() bool {
+	return IsAssigned(Audit) || IsAssigned(Webhook)
+}
+
+// AssignForTest overrides the assigned operations to exactly `ops` and
+// returns a function that restores the prior assignment. It exists so tests
+// (including those in other packages) can exercise operation-gated code
+// paths without depending on the additive semantics of the --operation flag.
+func AssignForTest(ops ...Operation) func() {
+	assigned := make(map[Operation]bool, len(ops))
+	for _, op := range ops {
+		assigned[op] = true
+	}
+
+	operationsMtx.Lock()
+	previous := operations
+	operations = &opSet{
+		validOperations:    previous.validOperations,
+		assignedOperations: assigned,
+		initialized:        true,
+	}
+	operationsMtx.Unlock()
+
+	return func() {
+		operationsMtx.Lock()
+		operations = previous
+		operationsMtx.Unlock()
+	}
+}
