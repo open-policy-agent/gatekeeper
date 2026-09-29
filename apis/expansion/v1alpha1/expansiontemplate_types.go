@@ -29,29 +29,32 @@ type ExpansionTemplateSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// ApplyTo lists the specific groups, versions and kinds of generator resources
+	// applyTo lists the specific groups, versions and kinds of generator resources
 	// which will be expanded.
 	ApplyTo []match.ApplyTo `json:"applyTo,omitempty"`
 
-	// TemplateSource specifies the source field on the generator resource to
+	// templateSource specifies the source field on the generator resource to
 	// use as the base for expanded resource. For Pod-creating generators, this
 	// is usually spec.template
 	TemplateSource string `json:"templateSource,omitempty"`
 
-	// GeneratedGVK specifies the GVK of the resources which the generator
+	// generatedGVK specifies the GVK of the resources which the generator
 	// resource creates.
 	GeneratedGVK GeneratedGVK `json:"generatedGVK,omitempty"`
 
-	// EnforcementAction specifies the enforcement action to be used for resources
+	// enforcementAction specifies the enforcement action to be used for resources
 	// matching the ExpansionTemplate. Specifying an empty value will use the
 	// enforcement action specified by the Constraint in violation.
 	EnforcementAction string `json:"enforcementAction,omitempty"`
 }
 
 type GeneratedGVK struct {
-	Group   string `json:"group,omitempty"`
+	// group is the API group of the generated resource.
+	Group string `json:"group,omitempty"`
+	// version is the API version of the generated resource.
 	Version string `json:"version,omitempty"`
-	Kind    string `json:"kind,omitempty"`
+	// kind is the kind of the generated resource.
+	Kind string `json:"kind,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -62,15 +65,19 @@ type GeneratedGVK struct {
 
 // ExpansionTemplate is the Schema for the ExpansionTemplate API.
 type ExpansionTemplate struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ExpansionTemplateSpec   `json:"spec,omitempty"`
+	// spec defines the desired state of ExpansionTemplate.
+	Spec ExpansionTemplateSpec `json:"spec,omitempty"`
+	// status is the observed state of ExpansionTemplate.
 	Status ExpansionTemplateStatus `json:"status,omitempty"`
 }
 
 // ExpansionTemplateStatus defines the observed state of ExpansionTemplate.
 type ExpansionTemplateStatus struct {
+	// byPod lists the observed status of this ExpansionTemplate for each pod.
 	ByPod []status.ExpansionTemplatePodStatusStatus `json:"byPod,omitempty"`
 }
 

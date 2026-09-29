@@ -29,35 +29,37 @@ type AssignImageSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+	// applyTo lists the specific groups, versions and kinds a mutation will be applied to.
 	// This is necessary because every mutation implies part of an object schema and object
 	// schemas are associated with specific GVKs.
 	ApplyTo []match.MutationApplyTo `json:"applyTo,omitempty"`
 
-	// Match allows the user to limit which resources get mutated.
+	// match allows the user to limit which resources get mutated.
 	// Individual match criteria are AND-ed together. An undefined
 	// match criteria matches everything.
 	Match match.Match `json:"match,omitempty"`
 
-	// Location describes the path to be mutated, for example: `spec.containers[name: main].image`.
+	// location describes the path to be mutated, for example: `spec.containers[name: main].image`.
 	Location string `json:"location,omitempty"`
 
-	// Parameters define the behavior of the mutator.
+	// parameters define the behavior of the mutator.
 	Parameters AssignImageParameters `json:"parameters,omitempty"`
 }
 
 type AssignImageParameters struct {
+	// pathTests are a series of existence tests that can be checked
+	// before a mutation is applied.
 	PathTests []PathTest `json:"pathTests,omitempty"`
 
-	// AssignDomain sets the domain component on an image string. The trailing
+	// assignDomain sets the domain component on an image string. The trailing
 	// slash should not be included.
 	AssignDomain string `json:"assignDomain,omitempty"`
 
-	// AssignPath sets the domain component on an image string.
+	// assignPath sets the path component on an image string.
 	AssignPath string `json:"assignPath,omitempty"`
 
-	// AssignImage sets the image component on an image string. It must start
-	// with a `:` or `@`.
+	// assignTag sets the tag or digest component on an image string. It must
+	// start with a `:` or `@`.
 	AssignTag string `json:"assignTag,omitempty"`
 }
 
@@ -66,6 +68,7 @@ type AssignImageStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// byPod lists the observed status of this AssignImage for each pod.
 	ByPod []v1beta1.MutatorPodStatusStatus `json:"byPod,omitempty"`
 }
 
@@ -73,10 +76,13 @@ type AssignImageStatus struct {
 
 // AssignImage is the Schema for the assign API.
 type AssignImage struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AssignImageSpec   `json:"spec,omitempty"`
+	// spec defines the desired state of AssignImage.
+	Spec AssignImageSpec `json:"spec,omitempty"`
+	// status is the observed state of AssignImage.
 	Status AssignImageStatus `json:"status,omitempty"`
 }
 
