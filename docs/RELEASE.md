@@ -70,8 +70,8 @@ During the workflow, it will create the release manifests, promote the manifests
 
 Before creating a release pull request, ensure the following steps are completed:
 
-1. **Dependabot PRs**
-   - Ensure all [Dependabot PRs](https://github.com/open-policy-agent/gatekeeper/pulls?q=is%3Apr+author%3Aapp%2Fdependabot) are reviewed and merged. This keeps dependencies up to date and secure.
+1. **Renovate PRs**
+   - Ensure all [Renovate PRs](https://github.com/open-policy-agent/gatekeeper/pulls?q=is%3Apr+is%3Aopen+label%3Adependencies) are reviewed and merged. This keeps dependencies up to date and secure.
 
 2. **Dependency Updates**
    - Confirm that the following dependencies are updated to their latest stable versions or commits:
