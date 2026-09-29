@@ -67,6 +67,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -77,6 +78,10 @@ import (
 const (
 	DenyAll = "DenyAll"
 	denyall = "denyall"
+
+	// unknownTarget is an intentionally unrecognized target name, used to force
+	// cfClient template creation/caching to fail in status-persist-retry tests.
+	unknownTarget = "unknown.target"
 )
 
 // globalTestMu serializes access to all global variables (webhook.VwhName, transform.SyncVAPScope)
@@ -172,6 +177,8 @@ func newUnitReconciler(t *testing.T, objects ...client.Object) (*ReconcileConstr
 		metrics:  newStatsReporter(),
 		tracker:  tracker,
 		getPod:   func(context.Context) (*corev1.Pod, error) { return pod, nil },
+
+		statusPersistBackoff: workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Second, time.Minute),
 	}, trackingClient
 }
 
@@ -2374,7 +2381,7 @@ func TestReconcileStatusCreateErrorIsReturned(t *testing.T) {
 
 func TestReconcileStatusUpdateErrorPreservesRequeueBehavior(t *testing.T) {
 	ct := makeReconcileConstraintTemplate("UpdateError")
-	ct.Spec.Targets[0].Target = "unknown.target"
+	ct.Spec.Targets[0].Target = unknownTarget
 	r, trackingClient := newUnitReconciler(t, ct)
 	updateErr := apierrors.NewConflict(schema.GroupResource{Group: statusv1beta1.GroupVersion.Group, Resource: "constrainttemplatepodstatuses"}, ct.GetName(), errors.New("conflict"))
 	trackingClient.statusUpdateErr = updateErr
@@ -2383,11 +2390,57 @@ func TestReconcileStatusUpdateErrorPreservesRequeueBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected status update failure to preserve nil error, got %v", err)
 	}
-	if result != (reconcile.Result{Requeue: true}) {
+	if result != (reconcile.Result{RequeueAfter: time.Second}) {
 		t.Fatalf("expected explicit requeue for status update failure, got %v", result)
 	}
 	if trackingClient.statusCreates != 1 || trackingClient.statusUpdates != 1 {
 		t.Fatalf("expected one create and one update attempt, got %d creates and %d updates", trackingClient.statusCreates, trackingClient.statusUpdates)
+	}
+}
+
+// TestReconcileDeleteResetsStatusPersistBackoff guards against a deleted-then-recreated
+// ConstraintTemplate inheriting stale backoff state from a prior failure streak, since the
+// statusPersistBackoff limiter is keyed only by request (name).
+func TestReconcileDeleteResetsStatusPersistBackoff(t *testing.T) {
+	ct := makeReconcileConstraintTemplate("DeleteBackoffReset")
+	ct.Spec.Targets[0].Target = unknownTarget
+	r, trackingClient := newUnitReconciler(t, ct)
+	updateErr := apierrors.NewConflict(schema.GroupResource{Group: statusv1beta1.GroupVersion.Group, Resource: "constrainttemplatepodstatuses"}, ct.GetName(), errors.New("conflict"))
+	trackingClient.statusUpdateErr = updateErr
+	request := reconcile.Request{NamespacedName: types.NamespacedName{Name: ct.GetName()}}
+
+	// Fail twice while the object exists, to accumulate backoff beyond the base delay.
+	result, err := r.Reconcile(context.Background(), request)
+	if err != nil || result != (reconcile.Result{RequeueAfter: time.Second}) {
+		t.Fatalf("expected first failure to use the base delay, got result=%v err=%v", result, err)
+	}
+	result, err = r.Reconcile(context.Background(), request)
+	if err != nil {
+		t.Fatalf("expected second failure to preserve nil error, got %v", err)
+	}
+	if result.RequeueAfter <= time.Second {
+		t.Fatalf("expected accumulated backoff beyond the base delay, got %v", result.RequeueAfter)
+	}
+
+	// Delete the object.
+	require.NoError(t, r.Delete(context.Background(), ct))
+	trackingClient.statusUpdateErr = nil
+	if _, err := r.Reconcile(context.Background(), request); err != nil {
+		t.Fatalf("expected delete reconcile to succeed, got %v", err)
+	}
+
+	// Recreate under the same name and fail again: the backoff must be back at the base
+	// delay, not continuing the pre-deletion streak.
+	recreated := makeReconcileConstraintTemplate("DeleteBackoffReset")
+	recreated.Spec.Targets[0].Target = unknownTarget
+	require.NoError(t, r.Create(context.Background(), recreated))
+	trackingClient.statusUpdateErr = updateErr
+	result, err = r.Reconcile(context.Background(), request)
+	if err != nil {
+		t.Fatalf("expected recreated-object failure to preserve nil error, got %v", err)
+	}
+	if result != (reconcile.Result{RequeueAfter: time.Second}) {
+		t.Fatalf("expected backoff to reset to the base delay after deletion, got %v", result)
 	}
 }
 

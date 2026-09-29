@@ -201,7 +201,7 @@ func (r *ReconcileExpansionStatus) Reconcile(ctx context.Context, request reconc
 	et.Status.ByPod = s
 
 	if err := r.statusClient.Status().Update(ctx, et); err != nil {
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
 }

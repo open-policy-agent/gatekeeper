@@ -198,8 +198,7 @@ func (r *ReconcileProviderStatus) Reconcile(ctx context.Context, request reconci
 
 	// Update the status of the Provider resource
 	if err := r.statusClient.Status().Update(ctx, providerObj); err != nil {
-		log.Error(err, "failed to update provider status")
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, fmt.Errorf("failed to update provider status: %w", err)
 	}
 	return reconcile.Result{}, nil
 }

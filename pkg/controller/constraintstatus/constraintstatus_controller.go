@@ -246,7 +246,7 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 	}
 
 	if err = r.statusClient.Status().Update(ctx, instance); err != nil {
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
