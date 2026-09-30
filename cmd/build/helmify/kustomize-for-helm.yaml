@@ -102,7 +102,7 @@ spec:
             - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
             - --max-serving-threads={{ .Values.maxServingThreads }}
             - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
-            - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+            - --validating-webhook-configuration-name={{ if not .Values.disableValidatingWebhook }}{{ .Values.validatingWebhookName }}{{ end }}
             - HELMSUBST_ADDITIONAL_VALIDATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - HELMSUBST_ADDITIONAL_MUTATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
@@ -201,7 +201,7 @@ spec:
             - --audit-interval={{ .Values.auditInterval }}
             - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-            - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+            - --validating-webhook-configuration-name={{ if not .Values.disableValidatingWebhook }}{{ .Values.validatingWebhookName }}{{ end }}
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - --audit-from-cache={{ .Values.auditFromCache }}
             - HELMSUBST_DEPLOYMENT_AUDIT_CHUNK_SIZE

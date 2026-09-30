@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -827,6 +828,64 @@ func TestMatchExcludedNamespacesGlob(t *testing.T) {
 				}
 
 				if err := shouldMatch(test.shouldMatch, test.shouldErr, matcher.Match(context.Background(), versionedAttributes, constraint, nil)); err != nil {
+					t.Error(err)
+				}
+			})
+		}
+	}
+}
+
+func TestBuildMatchConditionsDoesNotExemptNamespaceNames(t *testing.T) {
+	object := &unstructured.Unstructured{}
+	object.SetGroupVersionKind(rSchema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"})
+	object.SetName("test-config")
+	object.SetNamespace("team-payments")
+	objectBytes, err := json.Marshal(object.Object)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, pattern := range []string{"team-payments", "team-*", "*-payments"} {
+		for _, operation := range []admissionv1.Operation{admissionv1.Create, admissionv1.Update, admissionv1.Delete} {
+			t.Run(fmt.Sprintf("%s/%s", pattern, operation), func(t *testing.T) {
+				conditions, err := buildMatchConditions(&schema.Source{}, nil, []string{pattern})
+				if err != nil {
+					t.Fatal(err)
+				}
+				expressions := make([]cel.ExpressionAccessor, 0, len(conditions))
+				for _, condition := range conditions {
+					expressions = append(expressions, &matchconditions.MatchCondition{
+						Name: condition.Name, Expression: condition.Expression,
+					})
+				}
+				compiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				evaluator := compiler.CompileCondition(expressions, cel.OptionalVariableDeclarations{HasParams: true}, environment.StoredExpressions)
+				if compilationErrors := evaluator.CompilationErrors(); len(compilationErrors) != 0 {
+					t.Fatalf("compiling match conditions: %v", compilationErrors)
+				}
+				matcher := matchconditions.NewMatcher(evaluator, ptr.To(v1.Fail), "policy", "validate", t.Name())
+				request := &admissionv1.AdmissionRequest{
+					Kind:      metav1.GroupVersionKind{Version: "v1", Kind: "ConfigMap"},
+					Resource:  metav1.GroupVersionResource{Version: "v1", Resource: "configmaps"},
+					Name:      object.GetName(),
+					Namespace: object.GetNamespace(),
+					Operation: operation,
+				}
+				if operation != admissionv1.Delete {
+					request.Object = runtime.RawExtension{Raw: objectBytes}
+				}
+				if operation != admissionv1.Create {
+					request.OldObject = runtime.RawExtension{Raw: objectBytes}
+				}
+				attributes, err := RequestToVersionedAttributes(request)
+				if err != nil {
+					t.Fatal(err)
+				}
+				constraint := &unstructured.Unstructured{Object: map[string]interface{}{}}
+				if err := shouldMatch(true, false, matcher.Match(context.Background(), attributes, constraint, nil)); err != nil {
 					t.Error(err)
 				}
 			})

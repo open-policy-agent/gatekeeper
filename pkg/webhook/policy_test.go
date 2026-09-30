@@ -1952,6 +1952,12 @@ func TestGetReqObject(t *testing.T) {
 }
 
 func TestAppendValidationWebhookIfEnabled(t *testing.T) {
+	originalVwhName := VwhName
+	originalAdditionalVwhNames := AdditionalVwhNamesToRotateCerts
+	t.Cleanup(func() {
+		VwhName = originalVwhName
+		AdditionalVwhNamesToRotateCerts = originalAdditionalVwhNames
+	})
 	tests := []struct {
 		name               string
 		vwhName            string
@@ -2004,6 +2010,19 @@ func TestAppendValidationWebhookIfEnabled(t *testing.T) {
 			expectedWebhooks: []rotator.WebhookInfo{
 				{Name: "existing-webhook"},
 				{Name: "test-validation-webhook"},
+				{Name: "additional-validation-webhook-1"},
+				{Name: "additional-validation-webhook-2"},
+			},
+		},
+		{
+			name:             "empty primary name preserves existing webhooks",
+			input:            []rotator.WebhookInfo{{Name: "existing-mutation-webhook", Type: rotator.Mutating}},
+			expectedWebhooks: []rotator.WebhookInfo{{Name: "existing-mutation-webhook", Type: rotator.Mutating}},
+		},
+		{
+			name:               "empty primary name retains additional webhooks",
+			additionalVwhNames: "additional-validation-webhook-1,,additional-validation-webhook-2,",
+			expectedWebhooks: []rotator.WebhookInfo{
 				{Name: "additional-validation-webhook-1"},
 				{Name: "additional-validation-webhook-2"},
 			},
