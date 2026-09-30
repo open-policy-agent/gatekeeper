@@ -96,6 +96,11 @@ const (
 	defaultAdmissionFileTTL        = 24 * time.Hour
 	// Keep direct disk publishes under the same complete-record bound enforced
 	// by the webhook queue so they cannot bypass its memory and spool protection.
+	// The bound is applied to the full JSON-encoded record (message, details,
+	// annotations, resource labels, and request identity), not just the violation
+	// message. See defaultAdmissionExportMaxMessageBytes for the full rationale on
+	// why 64 KiB is generous for realistic policies yet still caps the
+	// user-influenced details and label fields that are otherwise unbounded.
 	defaultMaxAdmissionRecordBytes = 64 << 10
 	defaultMinAdmissionFreeBytes   = 16 << 20
 	minAdmissionFileAge            = time.Second
