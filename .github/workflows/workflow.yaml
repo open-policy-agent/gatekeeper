@@ -71,7 +71,6 @@ jobs:
             IMG=gatekeeper-e2e:latest \
             USE_LOCAL_IMG=true \
             GENERATE_VAP=true \
-            SYNC_VAP_ENFORCEMENT_SCOPE=true \
             GENERATE_VAPBINDING=true \
             EMIT_ADMISSION_AUDIT_ANNOTATIONS=true
 
@@ -150,7 +149,6 @@ jobs:
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
             GENERATE_VAP=true \
             GENERATE_VAPBINDING=true \
-            SYNC_VAP_ENFORCEMENT_SCOPE=true \
             EMIT_ADMISSION_AUDIT_ANNOTATIONS=true \
             ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS=${{ matrix.ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS }} \
             LOG_LEVEL=DEBUG
@@ -273,7 +271,6 @@ jobs:
             IMG=gatekeeper-e2e:latest \
             USE_LOCAL_IMG=true \
             GENERATE_VAP=true \
-            SYNC_VAP_ENFORCEMENT_SCOPE=true \
             GENERATE_VAPBINDING=true
 
           make test-e2e-owner-ref
