@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	corev1 "k8s.io/api/core/v1"
@@ -1036,5 +1037,33 @@ func Test_namesMatch(t *testing.T) {
 				t.Errorf("namesMatch() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestExcludedNamespacesProcessScoped(t *testing.T) {
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "rollout-ns"}}
+	obj := makeObject(schema.GroupVersionKind{Kind: "Pod", Group: ""}, "rollout-ns", "pod")
+
+	match := &Match{
+		ExcludedNamespaces: []wildcard.Wildcard{"rollout-ns"},
+		Processes:          []string{"webhook"},
+	}
+
+	webhookTarget := &Matchable{Object: obj, Namespace: ns, Process: process.Webhook}
+	matched, err := Matches(match, webhookTarget)
+	if err != nil {
+		t.Fatalf("Matches() error = %v", err)
+	}
+	if matched {
+		t.Fatalf("expected namespace to be excluded for webhook process")
+	}
+
+	auditTarget := &Matchable{Object: obj, Namespace: ns, Process: process.Audit}
+	matched, err = Matches(match, auditTarget)
+	if err != nil {
+		t.Fatalf("Matches() error = %v", err)
+	}
+	if !matched {
+		t.Fatalf("expected namespace exclusion to not apply during audit")
 	}
 }
