@@ -3,6 +3,7 @@ package process
 import (
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
@@ -55,8 +56,9 @@ func (s *Excluder) Add(entry []configv1alpha1.MatchEntry) {
 	for _, matchEntry := range entry {
 		for _, ns := range matchEntry.ExcludedNamespaces {
 			for _, op := range matchEntry.Processes {
+				normOp := Process(strings.ToLower(strings.TrimSpace(op)))
 				// adding excluded namespace to all processes for "*"
-				if Process(op) == Star {
+				if normOp == Star {
 					for _, o := range allProcesses {
 						if s.excludedNamespaces[o] == nil {
 							s.excludedNamespaces[o] = make(map[wildcard.Wildcard]bool)
@@ -64,10 +66,10 @@ func (s *Excluder) Add(entry []configv1alpha1.MatchEntry) {
 						s.excludedNamespaces[o][ns] = true
 					}
 				} else {
-					if s.excludedNamespaces[Process(op)] == nil {
-						s.excludedNamespaces[Process(op)] = make(map[wildcard.Wildcard]bool)
+					if s.excludedNamespaces[normOp] == nil {
+						s.excludedNamespaces[normOp] = make(map[wildcard.Wildcard]bool)
 					}
-					s.excludedNamespaces[Process(op)][ns] = true
+					s.excludedNamespaces[normOp][ns] = true
 				}
 			}
 		}

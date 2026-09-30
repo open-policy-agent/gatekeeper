@@ -136,7 +136,7 @@ func (h *webhookHandler) tracingLevel(ctx context.Context, req *admission.Reques
 	traceEnabled := false
 	dump := false
 	for _, trace := range cfg.Spec.Validation.Traces {
-		if trace.User != req.UserInfo.Username {
+		if !strings.EqualFold(trace.User, req.UserInfo.Username) {
 			continue
 		}
 		gvk := v1alpha1.GVK{
@@ -195,7 +195,7 @@ func (h *webhookHandler) skipExcludedNamespace(req *admissionv1.AdmissionRequest
 func GetCertNameVerifier() func(cs tls.ConnectionState) error {
 	return func(cs tls.ConnectionState) error {
 		if len(cs.PeerCertificates) > 0 {
-			if cs.PeerCertificates[0].Subject.CommonName != *CertCNName {
+			if !strings.EqualFold(cs.PeerCertificates[0].Subject.CommonName, *CertCNName) {
 				return fmt.Errorf("x509: subject with cn=%s do not identify as %s", cs.PeerCertificates[0].Subject.CommonName, *CertCNName)
 			}
 			return nil
