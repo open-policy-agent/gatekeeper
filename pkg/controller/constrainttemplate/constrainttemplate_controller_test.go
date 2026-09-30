@@ -2470,7 +2470,11 @@ func TestManageVAP_PreservesPolicyUntilWebhookScopeIsAvailable(t *testing.T) {
 			globalTestMu.Lock()
 			defer globalTestMu.Unlock()
 			originalSyncVAPScope := *transform.SyncVAPScope
-			t.Cleanup(func() { *transform.SyncVAPScope = originalSyncVAPScope })
+			originalVwhName := webhook.VwhName
+			t.Cleanup(func() {
+				*transform.SyncVAPScope = originalSyncVAPScope
+				webhook.VwhName = originalVwhName
+			})
 			*transform.SyncVAPScope = true
 			setVAPTestGlobals(t, &groupVersion)
 
@@ -2527,6 +2531,21 @@ func TestManageVAP_PreservesPolicyUntilWebhookScopeIsAvailable(t *testing.T) {
 				require.Equal(t, selector, policy.Spec.MatchConstraints.NamespaceSelector)
 			case *admissionregistrationv1beta1.ValidatingAdmissionPolicy:
 				require.Equal(t, selector, policy.Spec.MatchConstraints.NamespaceSelector)
+			}
+
+			webhook.VwhName = ptr.To("")
+			require.NoError(t, r.manageVAP(context.Background(), ct, unversionedCT, status, logr.Discard(), true))
+			after, err = vapForVersion(&groupVersion)
+			require.NoError(t, err)
+			require.NoError(t, r.Get(context.Background(), client.ObjectKeyFromObject(existing), after))
+			require.Equal(t, existing.GetUID(), after.GetUID())
+			switch policy := after.(type) {
+			case *admissionregistrationv1.ValidatingAdmissionPolicy:
+				require.Nil(t, policy.Spec.MatchConstraints.NamespaceSelector)
+				require.Len(t, policy.Spec.MatchConstraints.ResourceRules, 1)
+			case *admissionregistrationv1beta1.ValidatingAdmissionPolicy:
+				require.Nil(t, policy.Spec.MatchConstraints.NamespaceSelector)
+				require.Len(t, policy.Spec.MatchConstraints.ResourceRules, 1)
 			}
 		})
 	}
@@ -3185,7 +3204,10 @@ func Test_getWebhookConfigFromCache(t *testing.T) {
 // Test_transformTemplateToVAP tests the transformTemplateToVAP function.
 func Test_transformTemplateToVAP(t *testing.T) {
 	logger := logr.Discard()
-	const testWebhookName = "gatekeeper-validating-webhook-configuration"
+	const (
+		testWebhookName                   = "gatekeeper-validating-webhook-configuration"
+		globalExcludedNamespacesCondition = "gatekeeper_internal_match_global_excluded_namespaces"
+	)
 
 	// Create a minimal CEL-based ConstraintTemplate for testing
 	source := &celSchema.Source{
@@ -3267,6 +3289,43 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap-synced", logger)
 		require.ErrorContains(t, err, "is not available for VAP scope synchronization")
 		require.Nil(t, vap)
+	})
+
+	t.Run("SyncVAPScope enabled without a validating webhook keeps Config exclusions", func(t *testing.T) {
+		globalTestMu.Lock()
+		defer globalTestMu.Unlock()
+		originalSyncVAPScope := *transform.SyncVAPScope
+		originalVwhName := webhook.VwhName
+		defer func() {
+			*transform.SyncVAPScope = originalSyncVAPScope
+			webhook.VwhName = originalVwhName
+		}()
+		*transform.SyncVAPScope = true
+		webhook.VwhName = ptr.To("")
+
+		excluder := process.New()
+		excluder.Add([]configv1alpha1.MatchEntry{{
+			ExcludedNamespaces: []wildcard.Wildcard{"excluded-*"},
+			Processes:          []string{string(process.Webhook)},
+		}})
+		r := &ReconcileConstraintTemplate{processExcluder: excluder}
+
+		vap, err := r.transformTemplateToVAP(unversionedCT, "test-vap", logger)
+		require.NoError(t, err)
+		require.NotNil(t, vap)
+		require.Nil(t, vap.Spec.MatchConstraints.NamespaceSelector)
+		require.Len(t, vap.Spec.MatchConstraints.ResourceRules, 1)
+		require.Equal(t, []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update}, vap.Spec.MatchConstraints.ResourceRules[0].Operations)
+		require.Equal(t, []string{"*"}, vap.Spec.MatchConstraints.ResourceRules[0].Resources)
+		var hasConfigExclusion bool
+		for _, condition := range vap.Spec.MatchConditions {
+			require.NotEqual(t, "gatekeeper_internal_match_global_exempted_namespaces", condition.Name)
+			if condition.Name == globalExcludedNamespacesCondition {
+				hasConfigExclusion = true
+				require.Contains(t, condition.Expression, "excluded-*")
+			}
+		}
+		require.True(t, hasConfigExclusion)
 	})
 
 	t.Run("SyncVAPScope waits for webhook configuration and recovers", func(t *testing.T) {
@@ -3454,7 +3513,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 		require.NotNil(t, vap.Spec.MatchConditions)
 		hasExcludedNsCondition := false
 		for _, cond := range vap.Spec.MatchConditions {
-			if cond.Name == "gatekeeper_internal_match_global_excluded_namespaces" {
+			if cond.Name == globalExcludedNamespacesCondition {
 				hasExcludedNsCondition = true
 				require.Contains(t, cond.Expression, "kube-system")
 				require.Contains(t, cond.Expression, "gatekeeper-system")
@@ -3518,7 +3577,7 @@ func Test_transformTemplateToVAP(t *testing.T) {
 				hasWebhookCondition = true
 				require.Equal(t, `object.metadata.name.startsWith("prod-")`, cond.Expression)
 			}
-			if cond.Name == "gatekeeper_internal_match_global_excluded_namespaces" {
+			if cond.Name == globalExcludedNamespacesCondition {
 				hasExcludedNsCondition = true
 				require.Contains(t, cond.Expression, "test-exclude")
 			}

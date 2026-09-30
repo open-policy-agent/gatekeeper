@@ -32,7 +32,15 @@ With scope synchronization enabled, generated VAPs inherit the validating webhoo
 Earlier versions also generated a name-based VAP exemption condition. After upgrading, resources in namespaces that match an exemption flag but do not carry the ignore label are no longer exempt for that reason. Requests that violate an applicable policy can now be denied. Review affected namespaces before upgrading, and add the ignore label only where exemption is intended and permitted. Existing resources are not automatically deleted. Config-based namespace exclusions remain independent of label-based exemptions.
 :::
 
-When the validating webhook configuration is not available in Gatekeeper's cache, VAP generation reports an error and retries instead of generating a policy with a different scope. Existing VAPs retain their last successfully synchronized configuration; new VAPs wait for the configuration to become available. After an upgrade, verify VAP generation status and the selectors on generated policies before relying on their enforcement.
+When a non-empty validating webhook configuration name is configured but its configuration is not available in Gatekeeper's cache, VAP generation reports an error and retries instead of generating a policy with a different scope. Existing VAPs retain their last successfully synchronized configuration; new VAPs wait for the configuration to become available. After an upgrade, verify VAP generation status and the selectors on generated policies before relying on their enforcement.
+
+### Generation without a validating webhook
+
+Setting Helm's `disableValidatingWebhook=true` does not disable VAP generation. The chart passes an empty `--validating-webhook-configuration-name=` to both deployments to explicitly indicate that no validating webhook configuration should be inherited. For non-Helm installations, set this flag on every VAP generator when no validating webhook configuration is intended. The flag does not delete any existing webhook configuration.
+
+In this mode, generated VAPs use default resource rules for `CREATE` and `UPDATE`, retain constraint matching, and continue to honor the `Config` resource's `webhook` namespace exclusions while `--sync-vap-enforcement-scope=true`. They do not inherit webhook selectors or match conditions. Disabling scope synchronization instead would also disable Config-based scope synchronization.
+
+The ignore label and namespace exemption flags do not independently exempt resources in this mode. Disabling the validating webhook also removes the label-authorization webhook, so automatically trusting the ignore label would allow namespace editors to bypass native enforcement. Use administrator-controlled Config exclusions or constraint matching for intentional exclusions. Review generated policies after changing modes: existing VAPs are updated through reconciliation, not atomically with the Helm change.
 
 ## Motivations
 

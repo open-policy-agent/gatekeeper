@@ -781,8 +781,9 @@ func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrati
 	if !ok {
 		return nil, errors.New("unable to convert to v1 VAP")
 	}
+	v1beta1VAP = v1beta1VAP.DeepCopy()
 	v1beta1VAP.Spec = transformedVap.Spec
-	return v1beta1VAP.DeepCopy(), nil
+	return v1beta1VAP, nil
 }
 
 func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPolicy) (*admissionregistrationv1.ValidatingAdmissionPolicy, error) {
@@ -1120,6 +1121,10 @@ func (r *ReconcileConstraintTemplate) transformTemplateToVAP(
 	var excludedNamespaces []string
 	if r.processExcluder != nil {
 		excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
+	}
+
+	if *webhook.VwhName == "" {
+		return transform.TemplateToPolicyDefinitionWithWebhookConfig(unversionedCT, nil, excludedNamespaces, nil)
 	}
 
 	webhookConfig := r.getWebhookConfigFromCache(logger)
