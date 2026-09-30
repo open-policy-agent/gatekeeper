@@ -122,11 +122,59 @@ With this new engine and source added to the constraint template, now Gatekeeper
 For some policies, you may want admission requests to be handled by the K8s Validating Admission Controller instead of the Gatekeeper admission webhook.
 
 The K8s Validating Admission Controller requires both the Validating Admission Policy (VAP) and Validating Admission Policy Binding (VAPB) resources to exist to enforce a policy. Gatekeeper can be configured to generate both of these resources. To generate VAP Bindings for all Constraints, ensure the Gatekeeper 
-`--default-create-vap-binding-for-constraints` flag is set to `true`. To generate VAP as part of all Constraint Templates with the VAP CEL engine `K8sNativeValidation`, ensure the Gatekeeper `--default-create-vap-for-templates=true` flag is set to `true`. By default both flags are set to `true` now that the feature is in beta.
+`--default-create-vap-binding-for-constraints` flag is set to `true`. To enable VAP generation for all Constraint Templates with the VAP CEL engine `K8sNativeValidation`, ensure the Gatekeeper `--default-create-vap-for-templates=true` flag is set to `true`. In `template` mode this creates a VAP owned by the ConstraintTemplate. In `constraint` mode it makes the template eligible for per-Constraint VAP generation but does not create a template-owned VAP. By default both flags are set to `true` now that the feature is in beta.
 
 If a K8sNativeValidation source omits `failurePolicy`, Gatekeeper uses `--default-k8s-native-validation-failure-policy`, which defaults to `Fail`, for both Gatekeeper's CEL evaluation and generated VAP resources. An explicit `source.failurePolicy` takes precedence over this default. This is separate from `validatingWebhookFailurePolicy`, which controls how Kubernetes handles failures when calling Gatekeeper's validating webhook and does not set CEL or generated VAP failure policy defaults.
 
 When the Kubernetes API server cannot resolve the Constraint resource referenced by a generated VAP's `paramKind`, `failurePolicy: Fail` rejects matching requests. Clusters that need admission to remain available during transient bootstrap or resource-discovery failures can set `--default-k8s-native-validation-failure-policy=Ignore`, or set the Helm value `defaultK8sNativeValidationFailurePolicy: Ignore`. `Ignore` allows requests affected by policy configuration or evaluation errors; validations that evaluate to `false` continue to use the VAP binding's configured validation actions.
+
+### Per-Constraint VAP generation
+
+Set `--vap-generation-mode=constraint` or Helm value `vapGenerationMode: constraint` to generate one VAP and VAPBinding for each Constraint. Gatekeeper embeds `spec.parameters` in the generated VAP, omits the VAP `spec.paramKind`, and omits the VAPBinding `spec.paramRef`. This removes the kube-apiserver startup dependency on Constraint CRD discovery and parameter informer readiness. The default `template` mode preserves the existing shared VAP topology.
+
+**Parameter visibility:** Embedded parameters are readable by any principal with `get`, `list`, or `watch` access to the generated ValidatingAdmissionPolicies, even if that principal cannot read the source Constraint kind. Owner references do not transfer the Constraint's RBAC restrictions to its VAP. Review VAP read permissions before enabling this mode, and do not put secrets, credentials, or other confidential values in Constraint parameters.
+
+**Parameter size:** Before switching modes, verify that existing Constraints can be generated in a test cluster. Kubernetes limits each CEL expression to 100,000 Unicode code points. Per-Constraint mode embeds the complete parameter value in one expression and checks that limit after encoding, including map keys, CEL syntax, and JSON escaping. The supported raw parameter size therefore varies; a 100,000-character string already exceeds the limit once encoded. Parameters are not split across expressions. Shared-policy mode reads parameters from the Constraint object and does not have this expression-size restriction on parameter data.
+
+Oversized parameters produce a generation error identifying the encoded size and limit without including the parameter values. Gatekeeper leaves any existing VAP and binding unchanged, so they continue enforcing the previous parameters. A new Constraint does not receive a generated VAP until the error is corrected; VAP-only enforcement provides no protection from that Constraint in the meantime. Reduce the parameters or keep `vapGenerationMode: template`, and verify generation status and native admission decisions before completing the migration.
+
+The Helm chart leaves `vapGenerationMode` unset by default and does not add `--vap-generation-mode` during installs or upgrades when the value is omitted. Gatekeeper uses its binary default of `template`. Explicit `template` or `constraint` values emit the flag; values retained from an existing Helm release also apply when reused during an upgrade.
+
+In `constraint` mode, the ConstraintTemplate does not create a shared VAP. When migrating from `template` mode, Gatekeeper retains the existing shared VAP only while a VAPBinding still references it, then deletes it after all bindings have moved to their per-Constraint VAPs. Before moving an existing per-Constraint binding back to `template` mode, Gatekeeper verifies that the shared VAP is owned by the current template and matches its current generated policy, including synchronized scope. A stale shared VAP retained from an interrupted migration does not permit rollback. Until the shared policy is current, the binding and its specialized policy remain unchanged and reconciliation retries. This verifies API object state, not simultaneous activation by all kube-apiservers.
+
+Shared-policy cleanup runs in a separate worker on generator pods, in batches of up to 100 templates. Candidate collection stops between templates after one-third of the batch's 30-second timeout, leaving time for checking references and deleting policies; an in-flight read is still bounded by the full batch timeout. Each batch shares one paginated API list when cached references cannot establish that policies are still in use. List failures leave all candidates intact; deletion failures are retried with backoff. Ownership and resource-version checks protect replaced policies. Cleanup does not block template reconciliation or run in the admission request path. The worker retries discovery and watch initialization after startup failures, and binding changes enqueue cleanup directly without relisting every Constraint. It does not reuse negative reference results between batches.
+
+Per-Constraint mode is opt-in because it creates and compiles one VAP per Constraint. Constraint parameter updates rewrite the corresponding VAP, and ConstraintTemplate updates rewrite every derived VAP. A large number of Constraints therefore increases API server storage, memory, and compilation work. While Gatekeeper is unavailable, generated VAPs continue to enforce their last reconciled parameter values.
+
+All Gatekeeper pods assigned the `generate` operation must use the same VAP generation mode. The Helm chart assigns generation to the audit Deployment by default (`audit.disableGenerateOperation: false`); controller-manager generation defaults to disabled (`controllerManager.disableGenerateOperation: true`). Setting only `controllerManager.strategyType=Recreate` does not stop the default audit generator, and separate Deployment strategies do not coordinate a handoff between multiple generators.
+
+Change modes using a two-phase rollout:
+
+1. Record the current generation assignments and identify every running pod assigned `generate`, including any custom deployments. Pause automation that could restore those assignments during the migration. Upgrade with both `audit.disableGenerateOperation=true` and `controllerManager.disableGenerateOperation=true`, without changing `vapGenerationMode`; disable any custom generators as well.
+2. Wait for the rollout to complete and verify that **all previously running generator pods have terminated**, including pods in `Terminating`. Deployment readiness alone is not proof that no old generator remains. Do not change modes or re-enable generation until this condition holds.
+3. Upgrade with the desired `vapGenerationMode` and restore the recorded generation assignments in the same upgrade. Restore custom generators only after their configuration uses that same mode. Wait for generation to converge and verify the generated policies, binding references, Constraint status, and expected admission decisions before resuming automation.
+
+For the chart's default generation assignments, the Helm upgrades are:
+
+```shell
+helm upgrade gatekeeper <chart> --namespace gatekeeper-system --reuse-values \
+  --set audit.disableGenerateOperation=true \
+  --set controllerManager.disableGenerateOperation=true --wait
+
+# Complete the generator-termination check in step 2 before this upgrade.
+helm upgrade gatekeeper <chart> --namespace gatekeeper-system --reuse-values \
+  --set vapGenerationMode=constraint \
+  --set audit.disableGenerateOperation=false \
+  --set controllerManager.disableGenerateOperation=true --wait
+```
+
+Use the same sequence with `vapGenerationMode=template` for rollback. Adjust the release name, namespace, chart, and restored assignments for the installation; the second command above restores only the chart defaults. During the generation pause, existing native policies continue enforcing their last generated configuration, but policy changes do not converge. This procedure prevents mixed-mode generator overlap; it does not provide an atomic policy-activation barrier across kube-apiservers.
+
+ConstraintTemplate CEL should access Constraint parameters through `variables.params`. Per-Constraint mode rejects templates that directly reference the VAP top-level `params` variable because generated VAPs intentionally have no `paramKind`. Locally bound CEL variables named `params` are permitted. String-map keys are preserved literally, including keys that are not valid CEL property identifiers; use string indexing for those keys.
+
+When inherited webhook rules cover only a subset of a template's requested operations, generation succeeds with the intersected operations and reports a warning. In `constraint` mode, the warning appears in the `vap.k8s.io` entry's `message` under the ConstraintPodStatus `status.enforcementPointsStatus`, and in the generator logs. It clears after a successful reconcile with matching operations.
+
+Inlined parameters are dynamically typed CEL map and list values. Schema-specific Kubernetes list-map and list-set equality or concatenation semantics from the Constraint CRD are not available in this mode.
 
 To override the `--default-create-vap-for-templates` flag's behavior for a constraint template, set `generateVAP` to `true` explicitly under the K8sNativeValidation engine's `source` in the constraint template. 
 
@@ -160,7 +208,7 @@ Constraint without `enforcementAction: scoped`:
 | true | Generate VAPB |
 
 :::note
-VAP will only get generated for templates with VAP CEL Engine. VAPB will only get generated for constraints that belong to templates with VAP CEL engine.
+VAPs are only generated from templates with the VAP CEL engine. VAPBindings are only generated for Constraints that belong to templates with the VAP CEL engine.
 :::
 
 :::tip
