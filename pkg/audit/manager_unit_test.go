@@ -91,25 +91,25 @@ func Test_emitEvent(t *testing.T) {
 	constraint.SetName("must-have-owner")
 	resourceGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 
+	// getViolationRef's own namespace-selection logic (gkNamespace vs.
+	// rnamespace) is covered by Test_getViolationRef; this only checks that
+	// emitEvent picks the right message format for each case.
 	tcs := []struct {
 		name             string
 		involvedNS       bool
 		rnamespace       string
-		wantEventNS      string
 		wantMessageParts []string
 	}{
 		{
-			name:             "events default to gatekeeper's namespace",
+			name:             "default message includes the resource namespace",
 			involvedNS:       false,
 			rnamespace:       "app-ns",
-			wantEventNS:      "gatekeeper-system",
 			wantMessageParts: []string{"Resource Namespace: app-ns", "Constraint: must-have-owner", "Message: some violation"},
 		},
 		{
-			name:             "events can be emitted in the resource's namespace",
+			name:             "involved-namespace message omits the resource namespace",
 			involvedNS:       true,
 			rnamespace:       "app-ns",
-			wantEventNS:      "app-ns",
 			wantMessageParts: []string{"Constraint: must-have-owner", "Message: some violation"},
 		},
 	}
@@ -130,6 +130,9 @@ func Test_emitEvent(t *testing.T) {
 				require.Contains(t, event, "Warning AuditViolation")
 				for _, part := range tc.wantMessageParts {
 					require.Contains(t, event, part)
+				}
+				if tc.involvedNS {
+					require.NotContains(t, event, "Resource Namespace:")
 				}
 			default:
 				t.Fatal("expected an event to be recorded")
