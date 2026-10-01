@@ -32,6 +32,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -130,6 +131,35 @@ type Dependencies struct {
 	WebhookConfigCache *webhookconfigcache.WebhookConfigCache
 }
 
+// Validate rejects a dependency plan that does not match the assigned
+// operations. Every controller we go on to register expects its own
+// dependencies to be non-nil, so a mismatch has to fail setup rather than
+// surface later as a nil dereference.
+func (deps *Dependencies) Validate() error {
+	if operations.NeedsValidationDataSync() {
+		if deps.CacheMgr == nil {
+			return fmt.Errorf("cache manager is required for operations %v", operations.AssignedStringList())
+		}
+		if deps.SyncEventsCh == nil {
+			return fmt.Errorf("sync events channel is required for operations %v", operations.AssignedStringList())
+		}
+		if deps.WatchManger == nil {
+			return fmt.Errorf("watch manager is required for operations %v", operations.AssignedStringList())
+		}
+	} else if deps.CacheMgr != nil {
+		return fmt.Errorf("cache manager was built but no operation in %v syncs validation data", operations.AssignedStringList())
+	}
+
+	// The Config reconciler writes the exclusions it parses into this excluder,
+	// so it is required wherever the Config controller registers, not only where
+	// the exclusions are read back.
+	if operations.NeedsConfigReconciliation() && deps.ProcessExcluder == nil {
+		return fmt.Errorf("process excluder is required for operations %v", operations.AssignedStringList())
+	}
+
+	return nil
+}
+
 type defaultPodGetter struct {
 	client client.Client
 	scheme *runtime.Scheme
@@ -176,6 +206,10 @@ func (g *defaultPodGetter) GetPod(ctx context.Context) (*corev1.Pod, error) {
 
 // AddToManager adds all Controllers to the Manager.
 func AddToManager(m manager.Manager, deps *Dependencies) error {
+	if err := deps.Validate(); err != nil {
+		return fmt.Errorf("invalid controller dependencies: %w", err)
+	}
+
 	if *remoteCluster && *debugUseFakePod {
 		return fmt.Errorf("--enable-remote-cluster and --debug-use-fake-pod are mutually exclusive")
 	}
@@ -227,19 +261,23 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		}
 	}
 
-	// Adding the CacheManager as a runnable;
-	// manager will start CacheManager.
-	if err := m.Add(deps.CacheMgr); err != nil {
-		return fmt.Errorf("error adding cache manager as a runnable: %w", err)
-	}
+	// The cache manager and the sync controller only exist for operations that
+	// sync validation data.
+	if deps.CacheMgr != nil {
+		// Adding the CacheManager as a runnable;
+		// manager will start CacheManager.
+		if err := m.Add(deps.CacheMgr); err != nil {
+			return fmt.Errorf("error adding cache manager as a runnable: %w", err)
+		}
 
-	syncAdder := syncc.Adder{
-		Events:       deps.SyncEventsCh,
-		CacheManager: deps.CacheMgr,
-	}
-	// Create subordinate controller - we will feed it events dynamically via watch
-	if err := syncAdder.Add(m); err != nil {
-		return fmt.Errorf("registering sync controller: %w", err)
+		syncAdder := syncc.Adder{
+			Events:       deps.SyncEventsCh,
+			CacheManager: deps.CacheMgr,
+		}
+		// Create subordinate controller - we will feed it events dynamically via watch
+		if err := syncAdder.Add(m); err != nil {
+			return fmt.Errorf("registering sync controller: %w", err)
+		}
 	}
 
 	for _, a := range Injectors {
