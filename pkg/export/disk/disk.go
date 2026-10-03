@@ -22,6 +22,14 @@ type Connection struct {
 	// in the cleanup queue before being permanently removed (not retried).
 	// This prevents memory leaks from accumulating failed connections.
 	ClosedConnectionTTL time.Duration `json:"closedConnectionTTL,omitempty"`
+	// Retry tuning for failed-connection cleanup. When unset, the package
+	// defaults (maxRetryAttempts, baseRetryDelay, retryBackoffFactor,
+	// maxRetryDelay) are used so behavior is unchanged for existing configs.
+	MaxRetryAttempts   int           `json:"maxRetryAttempts,omitempty"`
+	BaseRetryDelay     time.Duration `json:"baseRetryDelay,omitempty"`
+	RetryBackoffFactor float64       `json:"retryBackoffFactor,omitempty"`
+	MaxRetryDelay      time.Duration `json:"maxRetryDelay,omitempty"`
+
 	// File to write audit logs
 	File *os.File
 
@@ -118,6 +126,12 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	if err != nil {
 		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
 	}
+	// Validate the retry config before registering any lock so an invalid
+	// value does not leave a leaked connectionLocks entry behind.
+	rc, err := parseRetryConfig(config)
+	if err != nil {
+		return fmt.Errorf("error creating connection %s: %w", connectionName, err)
+	}
 
 	connLock, _ := r.acquireCurrentConnectionLock(connectionName, true)
 	defer connLock.Unlock()
@@ -151,8 +165,12 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 	// Register the connection before creating its directory: once it is in
 	// openConnections, pathInUseLocked(path) holds, so a concurrent cleanup will
 	// not remove this path while ensureDirectory runs below.
-	conn := connectionFromConfig(&parsed)
-	r.openConnections[connectionName] = conn
+conn := connectionFromConfig(&parsed)
+conn.MaxRetryAttempts = rc.maxRetryAttempts
+conn.BaseRetryDelay = rc.baseRetryDelay
+conn.RetryBackoffFactor = rc.retryBackoffFactor
+conn.MaxRetryDelay = rc.maxRetryDelay
+r.openConnections[connectionName] = conn
 	r.mu.Unlock()
 
 	if err := ensureDirectory(parsed.path); err != nil {
@@ -189,6 +207,15 @@ func (r *Writer) CreateConnection(_ context.Context, connectionName string, conf
 
 func (r *Writer) UpdateConnection(_ context.Context, connectionName string, config interface{}) error {
 	parsed, err := parseConnectionConfig(config)
+	if err != nil {
+		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
+	}
+	// Validate the retry config up front, before any destructive migration
+	// (closeAndCleanupConnection / ensureDirectory) runs. parseRetryConfig
+	// checks retry keys that unmarshalConfig does not, so a present-but-invalid
+	// value must be rejected here rather than after the old connection has been
+	// closed and its directory removed, which would leave broken in-memory state.
+	rc, err := parseRetryConfig(config)
 	if err != nil {
 		return fmt.Errorf("error updating connection %s: %w", connectionName, err)
 	}
@@ -264,6 +291,14 @@ func (r *Writer) UpdateConnection(_ context.Context, connectionName string, conf
 		applyConnectionConfig(&conn, &parsed)
 	}
 
+	conn.MaxAuditResults = int(maxResults)
+	conn.ClosedConnectionTTL = ttl
+
+	conn.MaxRetryAttempts = rc.maxRetryAttempts
+	conn.BaseRetryDelay = rc.baseRetryDelay
+	conn.RetryBackoffFactor = rc.retryBackoffFactor
+	conn.MaxRetryDelay = rc.maxRetryDelay
+
 	r.mu.Lock()
 	r.openConnections[connectionName] = conn
 	r.mu.Unlock()
@@ -289,13 +324,17 @@ func (r *Writer) CloseConnection(connectionName string) error {
 	err := r.closeAndCleanupConnection(connectionName, &conn)
 	if err != nil {
 		now := time.Now()
+		baseDelay := conn.BaseRetryDelay
+		if baseDelay <= 0 {
+			baseDelay = baseRetryDelay
+		}
 		r.mu.Lock()
 		// Store the failed connection with retry metadata under a timestamped key to avoid replacing prior failures.
 		r.closedConnections[connectionName+now.String()] = FailedConnection{
 			Connection:  conn,
 			FailedAt:    now,
 			RetryCount:  0,
-			NextRetryAt: now.Add(baseRetryDelay),
+			NextRetryAt: now.Add(baseDelay),
 		}
 		if r.cleanupStopped {
 			r.cleanupOnce = sync.Once{}
