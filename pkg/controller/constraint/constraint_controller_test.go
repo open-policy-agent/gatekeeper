@@ -1431,63 +1431,208 @@ func TestReconcileConstraintVAP_DefaultedPolicy(t *testing.T) {
 
 func TestManageVAPB_RollbackWaitsForCurrentSharedPolicy(t *testing.T) {
 	for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
-		t.Run(version, func(t *testing.T) {
-			configureVAP(t, vapTestConfig{
-				apiEnabled: ptr.To(true), defaultGenerateVAP: ptr.To(true),
-				defaultGenerateVAPB: ptr.To(true), generationMode: ptr.To(VAPGenerationModeConstraint),
+		for _, bindingState := range []string{"specialized", "missing", "shared"} {
+			t.Run(version+"/"+bindingState, func(t *testing.T) {
+				configureVAP(t, vapTestConfig{
+					apiEnabled: ptr.To(true), defaultGenerateVAP: ptr.To(true),
+					defaultGenerateVAPB: ptr.To(true), generationMode: ptr.To(VAPGenerationModeConstraint),
+				})
+				groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
+				transform.SetGroupVersion(&groupVersion)
+				template := makeUnitCELTemplate()
+				template.SetUID("template-uid")
+				template.SetGeneration(2)
+				template.SetAnnotations(map[string]string{VAPBGenerationAnnotation: VAPBGenerationUnblocked})
+				instance := makeUnitConstraint()
+				reconciler, reader, writer, _ := newConstraintUnitReconciler(t, template, instance)
+				status := &constraintstatusv1beta1.ConstraintPodStatus{}
+				if _, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil {
+					t.Fatal(err)
+				}
+				shared, err := transform.TemplateToPolicyDefinition(template)
+				if err != nil {
+					t.Fatal(err)
+				}
+				shared.SetOwnerReferences([]metav1.OwnerReference{{
+					APIVersion: templatesv1beta1.SchemeGroupVersion.String(), Kind: "ConstraintTemplate",
+					Name: template.GetName(), UID: template.GetUID(), Controller: ptr.To(true),
+				}})
+				stale := shared.DeepCopy()
+				stale.Spec.Validations[0].Expression = "false"
+				stalePolicy, err := getRunTimeVAP(&groupVersion, stale, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				reader.objects[types.NamespacedName{Name: shared.GetName()}] = stalePolicy
+				bindingKey := types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}
+				switch bindingState {
+				case "missing":
+					delete(reader.objects, bindingKey)
+				case "shared":
+					switch binding := reader.objects[bindingKey].(type) {
+					case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+						binding.Spec.PolicyName = shared.GetName()
+					case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding:
+						binding.Spec.PolicyName = shared.GetName()
+					}
+				}
+				var beforeBinding runtime.Object
+				if binding := reader.objects[bindingKey]; binding != nil {
+					beforeBinding = binding.DeepCopyObject()
+				}
+				writer.updatedObjects, writer.deletedObjects = nil, nil
+				if err := SetVAPGenerationMode(VAPGenerationModeTemplate); err != nil {
+					t.Fatal(err)
+				}
+				delay, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status)
+				if err != nil || delay != time.Second {
+					t.Fatalf("stale policy rollback: delay=%s, err=%v; want retry", delay, err)
+				}
+				if len(writer.updatedObjects) != 0 || len(writer.deletedObjects) != 0 || !reflect.DeepEqual(beforeBinding, reader.objects[bindingKey]) {
+					t.Fatal("stale shared policy must not change the binding or delete the specialized policy")
+				}
+				if reader.objects[types.NamespacedName{Name: transform.GetConstraintVAPName(instance.GetKind(), instance.GetName())}] == nil {
+					t.Fatal("stale shared policy must retain the specialized policy")
+				}
+				readErr := errors.New("API unavailable during rollback")
+				reconciler.apiReader = &fakeReader{getErr: readErr}
+				if _, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status); !errors.Is(err, readErr) {
+					t.Fatalf("rollback API error = %v, want %v", err, readErr)
+				}
+				if len(writer.updatedObjects) != 0 || len(writer.deletedObjects) != 0 || !reflect.DeepEqual(beforeBinding, reader.objects[bindingKey]) {
+					t.Fatal("API failure must not change the binding or delete the specialized policy")
+				}
+				reconciler.apiReader = reader
+				currentPolicy, err := getRunTimeVAP(&groupVersion, shared, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				reader.objects[types.NamespacedName{Name: shared.GetName()}] = currentPolicy
+				writeErr := errors.New("binding write failed during rollback")
+				writer.createErr, writer.updateErr = writeErr, writeErr
+				if _, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status); !errors.Is(err, writeErr) {
+					t.Fatalf("rollback binding error = %v, want %v", err, writeErr)
+				}
+				if len(writer.updatedObjects) != 0 || len(writer.deletedObjects) != 0 || !reflect.DeepEqual(beforeBinding, reader.objects[bindingKey]) {
+					t.Fatal("failed binding write must preserve the binding and specialized policy")
+				}
+				writer.createErr, writer.updateErr = nil, nil
+				if delay, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil || delay != 0 {
+					t.Fatalf("current policy rollback: delay=%s, err=%v", delay, err)
+				}
+				wantUpdates := 1
+				if bindingState == "missing" {
+					wantUpdates = 0
+				}
+				if len(writer.updatedObjects) != wantUpdates || len(writer.deletedObjects) != 1 {
+					t.Fatalf("current policy rollback: updates=%d, deletes=%d", len(writer.updatedObjects), len(writer.deletedObjects))
+				}
+				if !bindingReferencesPolicy(reader.objects[bindingKey], shared.GetName()) {
+					t.Fatal("current policy rollback must create or update the shared-policy binding")
+				}
 			})
-			groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
-			transform.SetGroupVersion(&groupVersion)
-			template := makeUnitCELTemplate()
-			template.SetUID("template-uid")
-			template.SetGeneration(2)
-			template.SetAnnotations(map[string]string{VAPBGenerationAnnotation: VAPBGenerationUnblocked})
-			instance := makeUnitConstraint()
-			reconciler, reader, writer, _ := newConstraintUnitReconciler(t, template, instance)
-			status := &constraintstatusv1beta1.ConstraintPodStatus{}
-			if _, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil {
-				t.Fatal(err)
-			}
-			shared, err := transform.TemplateToPolicyDefinition(template)
-			if err != nil {
-				t.Fatal(err)
-			}
-			shared.SetOwnerReferences([]metav1.OwnerReference{{
-				APIVersion: templatesv1beta1.SchemeGroupVersion.String(), Kind: "ConstraintTemplate",
-				Name: template.GetName(), UID: template.GetUID(), Controller: ptr.To(true),
-			}})
-			stale := shared.DeepCopy()
-			stale.Spec.Validations[0].Expression = "false"
-			stalePolicy, err := getRunTimeVAP(&groupVersion, stale, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			reader.objects[types.NamespacedName{Name: shared.GetName()}] = stalePolicy
-			bindingKey := types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}
-			beforeBinding := reader.objects[bindingKey].DeepCopyObject()
-			writer.updatedObjects, writer.deletedObjects = nil, nil
-			if err := SetVAPGenerationMode(VAPGenerationModeTemplate); err != nil {
-				t.Fatal(err)
-			}
-			delay, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status)
-			if err != nil || delay != time.Second {
-				t.Fatalf("stale policy rollback: delay=%s, err=%v; want retry", delay, err)
-			}
-			if len(writer.updatedObjects) != 0 || len(writer.deletedObjects) != 0 || !reflect.DeepEqual(beforeBinding, reader.objects[bindingKey]) {
-				t.Fatal("stale shared policy must not change the binding or delete the specialized policy")
-			}
-			currentPolicy, err := getRunTimeVAP(&groupVersion, shared, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			reader.objects[types.NamespacedName{Name: shared.GetName()}] = currentPolicy
-			if delay, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, status); err != nil || delay != 0 {
-				t.Fatalf("current policy rollback: delay=%s, err=%v", delay, err)
-			}
-			if len(writer.updatedObjects) != 1 || len(writer.deletedObjects) != 1 {
-				t.Fatalf("current policy rollback: updates=%d, deletes=%d", len(writer.updatedObjects), len(writer.deletedObjects))
-			}
-		})
+		}
+	}
+}
+
+func TestRequiresSharedVAPCheck(t *testing.T) {
+	for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
+		for _, scenario := range []string{"specialized binding", "missing binding", "shared binding", "missing policy", "different owner", "policy read failure", "API reader missing"} {
+			t.Run(version+"/"+scenario, func(t *testing.T) {
+				instance := makeUnitConstraint()
+				groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
+				policy, err := vapForVersion(&groupVersion)
+				if err != nil {
+					t.Fatal(err)
+				}
+				policy.SetName(transform.GetConstraintVAPName(instance.GetKind(), instance.GetName()))
+				policy.SetOwnerReferences([]metav1.OwnerReference{{UID: instance.GetUID(), Controller: ptr.To(true)}})
+				live := &fakeReader{objects: map[types.NamespacedName]client.Object{client.ObjectKeyFromObject(policy): policy}}
+				reconciler := &ReconcileConstraint{reader: &fakeReader{objects: map[types.NamespacedName]client.Object{}}, apiReader: live}
+				var binding client.Object
+				want := true
+				switch scenario {
+				case "specialized binding", "shared binding":
+					binding, err = vapBindingForVersion(groupVersion)
+					if err != nil {
+						t.Fatal(err)
+					}
+					name := transform.GetTemplateVAPName(instance.GetKind())
+					if scenario == "specialized binding" {
+						name = policy.GetName()
+						reconciler.apiReader = nil
+					}
+					switch typed := binding.(type) {
+					case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+						typed.Spec.PolicyName = name
+					case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding:
+						typed.Spec.PolicyName = name
+					}
+				case "missing policy":
+					delete(live.objects, client.ObjectKeyFromObject(policy))
+					want = false
+				case "different owner":
+					policy.SetOwnerReferences([]metav1.OwnerReference{{UID: "previous-constraint", Controller: ptr.To(true)}})
+					want = false
+				case "policy read failure":
+					live.getErr = errors.New("live policy read failed")
+					want = false
+				case "API reader missing":
+					reconciler.apiReader = nil
+					want = false
+				}
+				got, err := reconciler.requiresSharedVAPCheck(context.Background(), instance, binding, &groupVersion)
+				wantErr := scenario == "policy read failure" || scenario == "API reader missing"
+				if got != want || (err != nil) != wantErr {
+					t.Fatalf("requires check=%v, err=%v; want %v, error=%v", got, err, want, wantErr)
+				}
+			})
+		}
+	}
+}
+
+func TestManageVAPB_TemplateWithoutRollbackSkipsFreshnessCheck(t *testing.T) {
+	for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
+		for _, foreignPolicy := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/foreignPolicy=%t", version, foreignPolicy), func(t *testing.T) {
+				configureVAP(t, vapTestConfig{
+					apiEnabled: ptr.To(true), defaultGenerateVAP: ptr.To(true),
+					defaultGenerateVAPB: ptr.To(true), generationMode: ptr.To(VAPGenerationModeTemplate),
+				})
+				groupVersion := schema.GroupVersion{Group: admissionregistrationv1.GroupName, Version: version}
+				transform.SetGroupVersion(&groupVersion)
+				template := makeUnitCELTemplate()
+				template.SetAnnotations(map[string]string{VAPBGenerationAnnotation: VAPBGenerationUnblocked})
+				instance := makeUnitConstraint()
+				reconciler, reader, writer, _ := newConstraintUnitReconciler(t, template, instance)
+				shared := makeUnitTemplateVAP(t, template, &groupVersion)
+				reader.objects[client.ObjectKeyFromObject(shared)] = shared
+				live := &fakeReader{
+					objects: map[types.NamespacedName]client.Object{},
+					getErrs: map[types.NamespacedName]error{{Name: template.GetName()}: errors.New("unexpected shared-policy reconstruction")},
+				}
+				if foreignPolicy {
+					policy, err := vapForVersion(&groupVersion)
+					if err != nil {
+						t.Fatal(err)
+					}
+					policy.SetName(transform.GetConstraintVAPName(instance.GetKind(), instance.GetName()))
+					policy.SetOwnerReferences([]metav1.OwnerReference{{UID: "previous-constraint", Controller: ptr.To(true)}})
+					reader.objects[client.ObjectKeyFromObject(policy)] = policy
+					live.objects[client.ObjectKeyFromObject(policy)] = policy
+				}
+				reconciler.apiReader = live
+				for attempt := 0; attempt < 2; attempt++ {
+					if delay, err := reconciler.manageVAPB(context.Background(), util.Dryrun, instance, &constraintstatusv1beta1.ConstraintPodStatus{}); err != nil || delay != 0 {
+						t.Fatalf("normal template reconciliation: delay=%s, err=%v", delay, err)
+					}
+				}
+				binding := reader.objects[types.NamespacedName{Name: transform.GetVAPBindingName(instance.GetKind(), instance.GetName())}]
+				if !bindingReferencesPolicy(binding, shared.GetName()) || len(writer.deletedObjects) != 0 {
+					t.Fatal("normal template mode must retain its shared binding and leave foreign policies untouched")
+				}
+			})
+		}
 	}
 }
 

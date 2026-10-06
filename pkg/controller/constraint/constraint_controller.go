@@ -775,15 +775,22 @@ func (r *ReconcileConstraint) manageVAPB(ctx context.Context, enforcementAction 
 			}
 			currentVapBinding = nil
 		}
-		if vapGenerationMode == VAPGenerationModeTemplate && bindingReferencesPolicy(currentVapBinding, vapKey.Name) {
-			current, err := r.sharedVAPIsCurrent(ctx, ct.GetName(), groupVersion)
+		if vapGenerationMode == VAPGenerationModeTemplate {
+			requiresCheck, err := r.requiresSharedVAPCheck(ctx, instance, currentVapBinding, groupVersion)
 			if err != nil {
 				r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
-				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not verify template ValidatingAdmissionPolicy for rollback")
+				return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not check for per-Constraint ValidatingAdmissionPolicy before rollback")
 			}
-			if !current {
-				updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, "waiting for current template ValidatingAdmissionPolicy before rollback", instance.GetGeneration())
-				return time.Second, nil
+			if requiresCheck {
+				current, err := r.sharedVAPIsCurrent(ctx, ct.GetName(), groupVersion)
+				if err != nil {
+					r.reporter.ReportVAPBStatus(vapBindingKey, metrics.VAPStatusError)
+					return noDelay, r.reportErrorOnConstraintStatus(ctx, status, err, "could not verify template ValidatingAdmissionPolicy for rollback")
+				}
+				if !current {
+					updateEnforcementPointStatus(status, util.VAPEnforcementPoint, WaitVAPBState, "waiting for current template ValidatingAdmissionPolicy before rollback", instance.GetGeneration())
+					return time.Second, nil
+				}
 			}
 		}
 		var transformedVapBinding *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding

@@ -306,6 +306,24 @@ func bindingReferencesPolicy(binding client.Object, policyName string) bool {
 	}
 }
 
+func (r *ReconcileConstraint) requiresSharedVAPCheck(ctx context.Context, constraint *unstructured.Unstructured, binding client.Object, groupVersion *schema.GroupVersion) (bool, error) {
+	name := transform.GetConstraintVAPName(constraint.GetKind(), constraint.GetName())
+	if bindingReferencesPolicy(binding, name) {
+		return true, nil
+	}
+	if r.apiReader == nil {
+		return false, errors.New("API reader is not configured")
+	}
+	policy, err := vapForVersion(groupVersion)
+	if err != nil {
+		return false, err
+	}
+	if err := r.apiReader.Get(ctx, types.NamespacedName{Name: name}, policy); err != nil {
+		return false, client.IgnoreNotFound(err)
+	}
+	return metav1.IsControlledBy(policy, constraint), nil
+}
+
 func (r *ReconcileConstraint) reconcileConstraintVAP(ctx context.Context, template *templates.ConstraintTemplate, constraint *unstructured.Unstructured, groupVersion *schema.GroupVersion) (string, error) {
 	name := transform.GetConstraintVAPName(constraint.GetKind(), constraint.GetName())
 	current, err := vapForVersion(groupVersion)
