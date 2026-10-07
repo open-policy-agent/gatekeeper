@@ -34,12 +34,11 @@ type Dependencies struct {
 
 // AddToManager adds audit manager to the Manager.
 func AddToManager(m manager.Manager, deps *Dependencies) error {
-	if *auditInterval == 0 {
-		log.Info("auditing is disabled")
-		return nil
-	}
 	am, err := New(m, deps)
 	if err != nil {
+		return err
+	}
+	if err := addAuditTriggerController(m, am); err != nil {
 		return err
 	}
 	return m.Add(am)

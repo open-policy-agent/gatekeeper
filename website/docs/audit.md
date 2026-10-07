@@ -5,6 +5,31 @@ title: Audit
 
 Audit performs periodic evaluations of existing resources against constraints, detecting pre-existing misconfigurations.
 
+## Triggering an Audit
+
+An audit can be requested before the next configured audit interval by creating an `AuditTrigger`.
+Set `spec.timestamp` to the earliest time the audit should start. Updating the timestamp creates a new
+resource generation and requests another audit.
+
+```yaml
+apiVersion: audit.gatekeeper.sh/v1alpha1
+kind: AuditTrigger
+metadata:
+  name: manual-audit
+spec:
+  timestamp: "2026-10-05T21:06:09Z"
+```
+
+The `Acknowledged` condition becomes `True` after Gatekeeper accepts the requested generation. The
+`Succeeded` condition is `Unknown` while the audit is pending or running, `True` after it completes,
+and `False` if it fails. Each condition's `observedGeneration` identifies the request generation it
+describes.
+
+Multiple requests that are pending when an audit starts are satisfied by that audit. An on-demand
+audit also resets the periodic audit schedule, so another audit will still start within the configured
+`--audit-interval`. Setting `--audit-interval=0` disables periodic audits, but audits can still be
+requested with an `AuditTrigger`.
+
 ## Reading Audit Results
 
 There are three ways to gather audit results, depending on the level of detail needed.
@@ -157,7 +182,7 @@ number of instances to run, please refer to [operations audit](operations.md#aud
 
 - Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`). NOTE: This flag only impacts when gathering audit results using the constraint status model. If you want to export audit results via other means, please refer to [the export guide](export.md). Both approaches for getting audit violations can be configured independently and work simultaneously without any interference.
 - Audit chunk size: set `--audit-chunk-size=400` (defaults to `500`, `0` = infinite) Lower chunk size can reduce memory consumption of the auditing `Pod` but can increase the number requests to the Kubernetes API server.
-- Audit interval: set `--audit-interval=123` (defaults to every `60` seconds). Disable audit interval by setting `--audit-interval=0`
+- Audit interval: set `--audit-interval=123` (defaults to every `60` seconds). Disable periodic audits by setting `--audit-interval=0`; `AuditTrigger` requests remain enabled.
 - Audit api server cache write to disk (Gatekeeper v3.7.0+): Starting from v3.7.0, by default, audit writes api server cache to the disk attached to the node. This reduces the memory consumption of the audit `pod`. If there are concerns with high IOPS, then switch audit to write cache to a tmpfs ramdisk instead. NOTE: write to ramdisk will increase memory footprint of the audit `pod`.  
   - helm install `--set audit.writeToRAMDisk=true` 
   - if not using helm, modify the deployment manifest to mount a ramdisk

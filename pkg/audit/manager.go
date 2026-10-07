@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -44,6 +45,7 @@ import (
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -96,6 +98,11 @@ type Manager struct {
 
 	// returns the running pod injected by the main controller
 	getPod func(context.Context) (*corev1.Pod, error)
+
+	auditRequests        chan auditRequest
+	pendingAuditRequests sync.Map
+	auditResults         sync.Map
+	auditTriggerEvents   chan event.GenericEvent
 }
 
 // StatusViolation represents each violation under status.
@@ -244,18 +251,20 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 		corev1.EventSource{Component: "gatekeeper-audit"})
 
 	am := &Manager{
-		opa:             deps.Client,
-		stopper:         make(chan struct{}),
-		stopped:         make(chan struct{}),
-		mgr:             mgr,
-		reporter:        reporter,
-		processExcluder: deps.ProcessExcluder,
-		eventRecorder:   recorder,
-		gkNamespace:     util.GetNamespace(),
-		auditCache:      deps.CacheLister,
-		expansionSystem: deps.ExpansionSystem,
-		exportSystem:    deps.ExportSystem,
-		getPod:          deps.GetPod,
+		opa:                deps.Client,
+		stopper:            make(chan struct{}),
+		stopped:            make(chan struct{}),
+		mgr:                mgr,
+		reporter:           reporter,
+		processExcluder:    deps.ProcessExcluder,
+		eventRecorder:      recorder,
+		gkNamespace:        util.GetNamespace(),
+		auditCache:         deps.CacheLister,
+		expansionSystem:    deps.ExpansionSystem,
+		exportSystem:       deps.ExportSystem,
+		getPod:             deps.GetPod,
+		auditRequests:      make(chan auditRequest, 100),
+		auditTriggerEvents: make(chan event.GenericEvent, 100),
 	}
 	return am, nil
 }
@@ -963,20 +972,45 @@ func (am *Manager) readUnstructuredList(jsonBytes []byte) ([]unstructured.Unstru
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(*auditInterval) * time.Second)
-	defer ticker.Stop()
+	ticker, tickerC := newAuditTicker(time.Duration(*auditInterval) * time.Second)
+	if ticker != nil {
+		defer ticker.Stop()
+	} else {
+		log.Info("periodic auditing is disabled; audits can still be triggered with AuditTrigger")
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info("Audit Manager close")
 			close(am.stopper)
 			return
-		case <-ticker.C:
-			if err := am.audit(ctx); err != nil {
+		case <-tickerC:
+			requests := am.drainAuditRequests(nil)
+			err := am.audit(ctx)
+			if err != nil {
 				log.Error(err, "audit manager audit() failed")
 			}
+			am.reportAuditResults(ctx, requests, err)
+		case request := <-am.auditRequests:
+			if ticker != nil {
+				ticker.Reset(time.Duration(*auditInterval) * time.Second)
+			}
+			requests := am.drainAuditRequests(&request)
+			err := am.audit(ctx)
+			if err != nil {
+				log.Error(err, "on-demand audit failed", "auditTrigger", request.name)
+			}
+			am.reportAuditResults(ctx, requests, err)
 		}
 	}
+}
+
+func newAuditTicker(interval time.Duration) (*time.Ticker, <-chan time.Time) {
+	if interval == 0 {
+		return nil, nil
+	}
+	ticker := time.NewTicker(interval)
+	return ticker, ticker.C
 }
 
 // Start implements controller.Controller.
