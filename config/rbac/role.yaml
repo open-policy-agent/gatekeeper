@@ -65,6 +65,22 @@ rules:
   - update
   - watch
 - apiGroups:
+  - audit.gatekeeper.sh
+  resources:
+  - audittriggers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - audit.gatekeeper.sh
+  resources:
+  - audittriggers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - config.gatekeeper.sh
   resources:
   - '*'
