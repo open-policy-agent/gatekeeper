@@ -27,7 +27,7 @@ var ErrDirectParameterReference = errors.New("direct params references are not s
 const (
 	celTrueLiteral               = "true"
 	matchExcludedNamespacesField = "excludedNamespaces"
-	maxParameterExpressionSize   = 100000
+	maxGeneratedExpressionSize   = 100000
 )
 
 func constraintParametersExpression(constraint *unstructured.Unstructured) (string, error) {
@@ -42,8 +42,8 @@ func constraintParametersExpression(constraint *unstructured.Unstructured) (stri
 	if err != nil {
 		return "", err
 	}
-	if size := utf8.RuneCountInString(expression); size > maxParameterExpressionSize {
-		return "", fmt.Errorf("spec.parameters expands to %d Unicode code points in the generated CEL expression, exceeding the %d limit; reduce parameters or use --vap-generation-mode=template", size, maxParameterExpressionSize)
+	if size := utf8.RuneCountInString(expression); size > maxGeneratedExpressionSize {
+		return "", fmt.Errorf("spec.parameters expands to %d Unicode code points in the generated CEL expression, exceeding the %d limit; reduce parameters or use --vap-generation-mode=template", size, maxGeneratedExpressionSize)
 	}
 	return expression, nil
 }
@@ -369,6 +369,11 @@ func specializeMatchConditions(conditions []admissionregistrationv1beta1.MatchCo
 			return nil, fmt.Errorf("specialize match condition %q: %w", condition.Name, err)
 		}
 		result = append(result, condition)
+	}
+	for _, condition := range result {
+		if size := utf8.RuneCountInString(condition.Expression); size > maxGeneratedExpressionSize {
+			return nil, fmt.Errorf("specialized match condition %q expands to %d Unicode code points in the generated CEL expression, exceeding the %d limit; reduce spec.match or use --vap-generation-mode=template", condition.Name, size, maxGeneratedExpressionSize)
+		}
 	}
 	return result, nil
 }

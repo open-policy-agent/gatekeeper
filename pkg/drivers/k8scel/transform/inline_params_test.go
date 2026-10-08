@@ -733,6 +733,85 @@ func TestSpecializeNamespaceMatchLargeList(t *testing.T) {
 	}
 }
 
+func TestConstraintToPolicyDefinitionRejectsOversizedMatch(t *testing.T) {
+	namespaces := make([]interface{}, 2000)
+	for index := range namespaces {
+		namespaces[index] = strings.Repeat("n", 59) + fmt.Sprintf("%04d", index)
+	}
+	for _, field := range []string{"namespaces", "excludedNamespaces"} {
+		t.Run(field, func(t *testing.T) {
+			condition := MatchNamespacesGlobV1Beta1()
+			if field == "excludedNamespaces" {
+				condition = MatchExcludedNamespacesGlobV1Beta1()
+			}
+			template := newInlineTestTemplate(&schema.Source{Validations: []schema.Validation{{Expression: "true"}}})
+			constraint := newTestConstraint("deny", nil, nil, &unstructured.Unstructured{Object: map[string]interface{}{
+				"spec": map[string]interface{}{"match": map[string]interface{}{field: namespaces}},
+			}})
+			original := constraint.DeepCopy()
+			policy, err := ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, nil, nil, nil)
+			if err == nil || policy != nil || !strings.Contains(err.Error(), condition.Name) || !strings.Contains(err.Error(), "100000") {
+				t.Fatalf("oversized match must return no policy and an actionable error, got %v", err)
+			}
+			if strings.Contains(err.Error(), fmt.Sprint(namespaces[0])) || !reflect.DeepEqual(original, constraint) {
+				t.Fatal("oversized match handling must not expose match values or mutate the constraint")
+			}
+		})
+	}
+}
+
+func TestSpecializeMatchConditionsExpressionSize(t *testing.T) {
+	const limit = 100000
+	for _, optimized := range []bool{false, true} {
+		condition := admissionregistrationv1beta1.MatchCondition{Name: "fallback", Expression: `params.spec.match.name != "never"`}
+		if optimized {
+			condition = MatchKindsV1Beta1()
+		}
+		render := func(value string) ([]admissionregistrationv1beta1.MatchCondition, error) {
+			match := map[string]interface{}{"name": value}
+			if optimized {
+				match = map[string]interface{}{"kinds": []interface{}{map[string]interface{}{"kinds": []interface{}{value}}}}
+			}
+			constraint := &unstructured.Unstructured{Object: map[string]interface{}{"spec": map[string]interface{}{"match": match}}}
+			return specializeMatchConditions([]admissionregistrationv1beta1.MatchCondition{condition}, constraint)
+		}
+		empty, err := render("")
+		if err != nil {
+			t.Fatal(err)
+		}
+		overhead := utf8.RuneCountInString(empty[0].Expression)
+		for _, piece := range []string{"x", "\u00e9", "\"", "\n"} {
+			single, err := render(piece)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expansion := utf8.RuneCountInString(single[0].Expression) - overhead
+			for _, delta := range []int{-1, 0, 1} {
+				t.Run(fmt.Sprintf("optimized=%t/%q/%d", optimized, piece, delta), func(t *testing.T) {
+					payload := limit + delta - overhead
+					value := strings.Repeat(piece, payload/expansion) + strings.Repeat("x", payload%expansion)
+					conditions, err := render(value)
+					if delta > 0 {
+						if err == nil || conditions != nil || !strings.Contains(err.Error(), condition.Name) || !strings.Contains(err.Error(), "100001") {
+							t.Fatalf("oversized expression must fail with its condition and size, got %v", err)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					if size := utf8.RuneCountInString(conditions[0].Expression); size != limit+delta {
+						t.Fatalf("generated expression size = %d, want %d", size, limit+delta)
+					}
+					if _, err := parseInlineExpression(conditions[0].Expression); err != nil {
+						t.Fatalf("within-limit expression must parse: %v", err)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestConstraintToPolicyDefinitionRejectsDirectParams(t *testing.T) {
 	tests := map[string]*schema.Source{
 		"match condition": {MatchConditions: []schema.MatchCondition{{Name: "uses-params", Expression: "params.spec.parameters.enabled"}}},

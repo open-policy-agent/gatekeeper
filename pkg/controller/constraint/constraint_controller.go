@@ -245,28 +245,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 		return err
 	}
 
-	isVapAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&log)
-	if isVapAPIEnabled && operations.IsAssigned(operations.Generate) {
-		obj, err := vapBindingForVersion(*groupVersion)
-		if err != nil {
-			return err
-		}
-		if err = c.Watch(source.Kind(mgr.GetCache(), obj, handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-			return eventPackerMapFuncFromOwnerRefs()(ctx, obj)
-		}))); err != nil {
-			return err
-		}
-		if GetVAPGenerationMode() == VAPGenerationModeConstraint {
-			obj, err := vapForVersion(groupVersion)
-			if err != nil {
-				return err
-			}
-			if err = c.Watch(source.Kind(mgr.GetCache(), obj, handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				return eventPackerMapFuncFromOwnerRefs()(ctx, obj)
-			}))); err != nil {
-				return err
-			}
-		}
+	if operations.IsAssigned(operations.Generate) {
+		return mgr.Add(&constraintVAPWatches{controller: c, cache: mgr.GetCache(), generationMode: GetVAPGenerationMode()})
 	}
 	return nil
 }
