@@ -3,7 +3,7 @@ id: api
 title: API Reference
 ---
 
-This page lists Gatekeeper's Custom Resource Definitions (CRDs) and provides a quick reference for commonly configured fields. It is not an exhaustive schema reference: use the [schemas and examples](#viewing-schemas-and-examples) for complete field definitions and the linked feature guides for usage examples. Required fields and defaults below include Gatekeeper's validation rules, not only OpenAPI schema requirements.
+This page lists Gatekeeper's Custom Resource Definitions (CRDs) and provides a quick reference for commonly configured fields in Gatekeeper v3.22.x. It is not an exhaustive schema reference: use the [schemas and examples](#viewing-schemas-and-examples) for complete field definitions and the linked feature guides for usage examples. Required fields and defaults below include Gatekeeper's validation rules, not only OpenAPI schema requirements.
 
 To inspect the live schema in a cluster:
 
@@ -28,7 +28,7 @@ Constraint kinds (for example `K8sRequiredLabels`) are **not** shipped as static
 | `AssignImage` | `mutations.gatekeeper.sh` | Cluster | Mutate container image strings |
 | `ModifySet` | `mutations.gatekeeper.sh` | Cluster | Merge or prune list values |
 | `ExpansionTemplate` | `expansion.gatekeeper.sh` | Cluster | Expand generator resources (for example Deployments) into child objects for policy |
-| `Connection` | `connection.gatekeeper.sh` | Namespaced | Configures export drivers/connections |
+| `Connection` | `connection.gatekeeper.sh` | Namespaced | Configures audit export drivers/connections |
 | `Provider` | `externaldata.gatekeeper.sh` | Cluster | Registers an external data provider |
 | [`*PodStatus` kinds](#status-crds-statusgatekeepersh) | `status.gatekeeper.sh` | Namespaced | Per-pod status reported by Gatekeeper controllers (read-only operational data) |
 
@@ -154,13 +154,12 @@ Common mutation fields:
 | Field | Type | Description |
 | ----- | ---- | ----------- |
 | `spec.applyTo[]` | []object | Required for `Assign`, `AssignImage`, and `ModifySet`; not supported by `AssignMetadata`. Each entry needs `groups`, `versions`, and `kinds`; globs are not allowed |
-| `spec.applyTo[].operations` | []string | Optional: `CREATE`, `UPDATE`, or `*`. Omitted/empty means all supported mutation operations (currently `CREATE` and `UPDATE`); `*` must appear alone. See [operation filtering](mutation.md#operations-field) |
 | `spec.match` | object | Optional [match criteria](mutation.md#extent-of-changes); empty/undefined criteria match everything |
 | `spec.location` | string | Required object path, for example `spec.containers[name: main].image`; see [path syntax](mutation.md#intent) |
 | `spec.parameters` | object | Mutator-specific options |
 | `spec.parameters.pathTests[]` | []object | Optional `subPath` + `condition` (`MustExist` / `MustNotExist`) checks; each subpath must be a prefix of `location`. Supported by `Assign`, `AssignImage`, and `ModifySet`, not `AssignMetadata`; see [conditionals](mutation.md#conditionals) |
 
-Omitted operations and `*` also include any mutation operations supported by future releases. List explicit operations to keep the same scope across upgrades. Operation-filtered mutators only run without admission-operation context (for example during expansion) if they include every supported operation.
+Gatekeeper v3.22.x does not support filtering mutators by admission operation. Mutators apply to matching resources for both `CREATE` and `UPDATE` requests handled by the mutation webhook.
 
 ### Assign (`v1`)
 
@@ -225,7 +224,7 @@ See [ExpansionTemplate behavior](expansion.md#expansiontemplate-explained).
 | `spec.driver` | string | Required export driver name: `dapr` or `disk` |
 | `spec.config` | object | Required driver-specific configuration (preserved unknown fields); see [export configuration](export.md#setting-up-audit-to-export-violations) |
 
-Create the Connection in Gatekeeper's namespace and select its name with `--audit-connection`. See [Export](export.md) for driver configuration and enablement.
+Create the Connection in Gatekeeper's namespace and select its name with `--audit-connection`. See [Export](export.md) for audit export configuration and enablement.
 
 ---
 
@@ -263,6 +262,8 @@ Gatekeeper writes these namespaced resources so each controller pod can report h
 
 ## Viewing schemas and examples
 
-* CRD YAML with full OpenAPI schemas: [`config/crd/bases`](https://github.com/open-policy-agent/gatekeeper/tree/master/config/crd/bases)
-* Helm-packaged CRDs, including Provider: [`charts/gatekeeper/crds`](https://github.com/open-policy-agent/gatekeeper/tree/master/charts/gatekeeper/crds)
-* End-to-end samples: [Examples](examples.md) and the [demo manifests](https://github.com/open-policy-agent/gatekeeper/tree/master/demo)
+These links use the Gatekeeper v3.22.2 release rather than the development branch.
+
+* CRD YAML with full OpenAPI schemas: [`config/crd/bases`](https://github.com/open-policy-agent/gatekeeper/tree/v3.22.2/config/crd/bases)
+* Helm-packaged CRDs, including Provider: [`charts/gatekeeper/crds`](https://github.com/open-policy-agent/gatekeeper/tree/v3.22.2/charts/gatekeeper/crds)
+* End-to-end samples: [Examples](examples.md) and the [demo manifests](https://github.com/open-policy-agent/gatekeeper/tree/v3.22.2/demo)
