@@ -161,7 +161,7 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 // Add creates a new Constraint Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	if !operations.HasValidationOperations() {
+	if !operations.HasConstraintControllers() {
 		return nil
 	}
 	reporter, err := newStatsReporter()
