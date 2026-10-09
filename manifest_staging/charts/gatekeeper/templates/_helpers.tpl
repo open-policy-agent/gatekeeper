@@ -32,6 +32,22 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 
 {{/*
+Create a container image reference from its parts. The registry is only
+prepended when it is set, so unqualified (e.g. local) or already fully
+qualified repositories keep working. The tag is only appended when it is set.
+*/}}
+{{- define "gatekeeper.image" -}}
+{{- if .registry -}}
+{{- printf "%s/%s" .registry .repository -}}
+{{- else -}}
+{{- .repository -}}
+{{- end -}}
+{{- if .tag -}}
+{{- printf ":%s" .tag -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Adds additional pod labels to the common ones
 */}}
 {{- define "gatekeeper.podLabels" -}}
@@ -107,7 +123,7 @@ Output post install webhook probe container entry
 */}}
 {{- define "gatekeeper.postInstallWebhookProbeContainer" -}}
 - name: webhook-probe-post
-  image: "{{ .Values.postInstall.probeWebhook.image.repository }}:{{ .Values.postInstall.probeWebhook.image.tag }}"
+  image: "{{ include "gatekeeper.image" .Values.postInstall.probeWebhook.image }}"
   imagePullPolicy: {{ .Values.postInstall.probeWebhook.image.pullPolicy }}
   command:
     - "curl"
