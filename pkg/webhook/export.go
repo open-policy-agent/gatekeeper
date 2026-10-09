@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"reflect"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -276,20 +279,61 @@ func consumeAdmissionExportJSONValue(budget *int64, value interface{}, depth int
 	case nil:
 		return consumeAdmissionExportBudget(budget, 4), true
 	case bool:
-		return consumeAdmissionExportBudget(budget, 4), true
+		size := int64(4)
+		if !typed {
+			size = 5
+		}
+		return consumeAdmissionExportBudget(budget, size), true
 	case string:
 		return consumeAdmissionExportJSONString(budget, typed), true
 	case json.Number:
-		return false, false
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
-		return consumeAdmissionExportBudget(budget, 1), true
+		if typed == "" {
+			return consumeAdmissionExportBudget(budget, 1), true
+		}
+		return consumeAdmissionExportBudget(budget, int64(len(typed))), true
+	case int, int8, int16, int32, int64:
+		var buffer [20]byte
+		encoded := strconv.AppendInt(buffer[:0], reflect.ValueOf(typed).Int(), 10)
+		return consumeAdmissionExportBudget(budget, int64(len(encoded))), true
+	case uint, uint8, uint16, uint32, uint64:
+		var buffer [20]byte
+		encoded := strconv.AppendUint(buffer[:0], reflect.ValueOf(typed).Uint(), 10)
+		return consumeAdmissionExportBudget(budget, int64(len(encoded))), true
+	case float32, float64:
+		number := reflect.ValueOf(typed)
+		floatValue := number.Float()
+		if math.IsNaN(floatValue) || math.IsInf(floatValue, 0) {
+			return false, false
+		}
+		bitSize := number.Type().Bits()
+		absoluteValue := math.Abs(floatValue)
+		format := byte('f')
+		if absoluteValue != 0 && (bitSize == 64 && (absoluteValue < 1e-6 || absoluteValue >= 1e21) || bitSize == 32 && (float32(absoluteValue) < 1e-6 || float32(absoluteValue) >= 1e21)) {
+			format = 'e'
+		}
+		var buffer [32]byte
+		encoded := strconv.AppendFloat(buffer[:0], floatValue, format, -1, bitSize)
+		encodedSize := len(encoded)
+		if format == 'e' && encodedSize >= 4 && encoded[encodedSize-4] == 'e' && encoded[encodedSize-3] == '-' && encoded[encodedSize-2] == '0' {
+			encodedSize--
+		}
+		return consumeAdmissionExportBudget(budget, int64(encodedSize)), true
 	case json.RawMessage:
 		return false, false
 	case []byte:
+		if typed == nil {
+			return consumeAdmissionExportBudget(budget, 4), true
+		}
 		encoded := int64(2 + 4*((len(typed)+2)/3))
 		return consumeAdmissionExportBudget(budget, encoded), true
 	case []string:
-		if len(typed) > 0 && !consumeAdmissionExportBudget(budget, int64(len(typed))+1) {
+		if typed == nil {
+			return consumeAdmissionExportBudget(budget, 4), true
+		}
+		if len(typed) == 0 {
+			return consumeAdmissionExportBudget(budget, 2), true
+		}
+		if !consumeAdmissionExportBudget(budget, int64(len(typed))+1) {
 			return false, true
 		}
 		for _, item := range typed {
@@ -299,7 +343,13 @@ func consumeAdmissionExportJSONValue(budget *int64, value interface{}, depth int
 		}
 		return true, true
 	case []interface{}:
-		if len(typed) > 0 && !consumeAdmissionExportBudget(budget, int64(len(typed))+1) {
+		if typed == nil {
+			return consumeAdmissionExportBudget(budget, 4), true
+		}
+		if len(typed) == 0 {
+			return consumeAdmissionExportBudget(budget, 2), true
+		}
+		if !consumeAdmissionExportBudget(budget, int64(len(typed))+1) {
 			return false, true
 		}
 		for _, item := range typed {
@@ -310,7 +360,13 @@ func consumeAdmissionExportJSONValue(budget *int64, value interface{}, depth int
 		}
 		return true, true
 	case map[string]string:
-		if len(typed) > 0 && !consumeAdmissionExportBudget(budget, int64(len(typed))*2+1) {
+		if typed == nil {
+			return consumeAdmissionExportBudget(budget, 4), true
+		}
+		if len(typed) == 0 {
+			return consumeAdmissionExportBudget(budget, 2), true
+		}
+		if !consumeAdmissionExportBudget(budget, int64(len(typed))*2+1) {
 			return false, true
 		}
 		for key, item := range typed {
@@ -320,7 +376,13 @@ func consumeAdmissionExportJSONValue(budget *int64, value interface{}, depth int
 		}
 		return true, true
 	case map[string]interface{}:
-		if len(typed) > 0 && !consumeAdmissionExportBudget(budget, int64(len(typed))*2+1) {
+		if typed == nil {
+			return consumeAdmissionExportBudget(budget, 4), true
+		}
+		if len(typed) == 0 {
+			return consumeAdmissionExportBudget(budget, 2), true
+		}
+		if !consumeAdmissionExportBudget(budget, int64(len(typed))*2+1) {
 			return false, true
 		}
 		for key, item := range typed {
@@ -371,8 +433,18 @@ func consumeAdmissionExportJSONString(budget *int64, value string) bool {
 			continue
 		}
 		runeValue, size := utf8.DecodeRuneInString(value[index:])
+		if runeValue == utf8.RuneError && size == 1 {
+			if int64(len(value)-index) > *budget {
+				return false
+			}
+			encoded, err := json.Marshal(value[index:])
+			if err != nil {
+				return false
+			}
+			return consumeAdmissionExportBudget(budget, int64(len(encoded)-2))
+		}
 		encodedSize := int64(size)
-		if runeValue == utf8.RuneError && size == 1 || runeValue == '\u2028' || runeValue == '\u2029' {
+		if runeValue == '\u2028' || runeValue == '\u2029' {
 			encodedSize = 6
 		}
 		if !consumeAdmissionExportBudget(budget, encodedSize) {

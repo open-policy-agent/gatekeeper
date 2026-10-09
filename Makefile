@@ -19,6 +19,8 @@ USE_LOCAL_IMG ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
 ENABLE_EXPORT ?= false
 ENABLE_ADMISSION_EXPORT ?= false
+EMIT_ADMISSION_AUDIT_ANNOTATIONS ?= false
+ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS ?= false
 AUDIT_CONNECTION ?= "audit"
 AUDIT_CHANNEL ?= "audit"
 LOG_LEVEL ?= "INFO"
@@ -28,13 +30,13 @@ SYNC_VAP_ENFORCEMENT_SCOPE ?= true
 
 VERSION := v3.24.0-beta.0
 
-KIND_VERSION ?= 0.32.0
+KIND_VERSION ?= 0.33.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.33.0
 KUSTOMIZE_VERSION ?= 5.8.1
 BATS_VERSION ?= 1.14.0
-ORAS_VERSION ?= 1.3.3
+ORAS_VERSION ?= 1.3.4
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 4.2.3
 NODE_VERSION ?= 24-bullseye-slim
@@ -72,6 +74,8 @@ HELM_EXTRA_ARGS := --set image.repository=${HELM_REPO} \
 	--set postInstall.labelNamespace.enabled=true \
 	--set postInstall.probeWebhook.enabled=true \
 	--set emitAdmissionEvents=true \
+	--set emitAdmissionAuditAnnotations=${EMIT_ADMISSION_AUDIT_ANNOTATIONS} \
+	--set admissionAuditAnnotationsIncludeSuccess=${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS} \
 	--set emitAuditEvents=true \
 	--set admissionEventsInvolvedNamespace=true \
 	--set auditEventsInvolvedNamespace=true \
@@ -120,6 +124,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --port=8443\
 \n        - --logtostderr\
 \n        - --emit-admission-events\
+\n        - --emit-admission-audit-annotations=${EMIT_ADMISSION_AUDIT_ANNOTATIONS}\
+\n        - --admission-audit-annotations-include-success=${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS}\
 \n        - --admission-events-involved-namespace\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
@@ -142,6 +148,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        name: manager\
 \n        args:\
 \n        - --emit-audit-events\
+\n        - --emit-admission-audit-annotations=${EMIT_ADMISSION_AUDIT_ANNOTATIONS}\
+\n        - --admission-audit-annotations-include-success=${ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS}\
 \n        - --audit-events-involved-namespace\
 \n        - --operation=audit\
 \n        - --operation=status\
@@ -224,7 +232,7 @@ test: __test-image
 
 .PHONY: test-e2e
 test-e2e:
-	bats -t ${BATS_TESTS_FILE}
+	bats -t test/bats/helpers_test.bats ${BATS_TESTS_FILE}
 
 test-e2e-owner-ref:
 	@bash test/with-admission-plugin/test-e2e-owner-ref.sh
@@ -426,6 +434,20 @@ lint:
 		-v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
 		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} \
 		golangci-lint run -v --fix --concurrency 2
+
+# lint-kube-api builds a golangci-lint binary with the kube-api-linter module
+# (https://github.com/kubernetes-sigs/kube-api-linter) plugged in, and runs it
+# against the API type definitions in ./apis, checking them against
+# Kubernetes API conventions. Requires a local Go toolchain; unlike `lint`
+# this isn't dockerized because the module plugin build needs `go` and `git`
+# on the host. The golangci-lint version comes from GOLANGCI_LINT_VERSION (it
+# is deliberately not set in .custom-gcl.yml, so pass --version if you run
+# `golangci-lint custom` by hand).
+.PHONY: lint-kube-api
+lint-kube-api:
+	GOBIN=$(shell pwd)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+	./bin/golangci-lint custom --version ${GOLANGCI_LINT_VERSION}
+	./bin/golangci-lint-kube-api-linter run -c .golangci-kube-api-linter.yaml --fix ./apis/...
 
 # Generate code
 generate: __conversion-gen __controller-gen
