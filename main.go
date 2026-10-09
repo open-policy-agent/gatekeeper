@@ -152,6 +152,12 @@ func main() {
 
 func innerMain() int {
 	flag.Parse()
+
+	// Suppress benign TLS handshake EOF noise from infrastructure TCP probes
+	// that dial the webhook port without completing TLS (OVN/LB health checks).
+	// controller-runtime's webhook http.Server uses the stdlib logger for these.
+	util.FilterBenignTLSHandshakeErrors()
+
 	encoder, ok := logLevelEncoders[*logLevelEncoder]
 	if !ok {
 		setupLog.Error(fmt.Errorf("invalid log level encoder: %v", *logLevelEncoder), "Invalid log level encoder")
