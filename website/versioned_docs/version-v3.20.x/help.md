@@ -19,6 +19,8 @@ Join us to help define the direction and implementation of this project!
 
 - Add a policy to the [Gatekeeper policy library](https://www.github.com/open-policy-agent/gatekeeper-library).
 
+- Review our [Contributor Ladder](https://github.com/open-policy-agent/gatekeeper/blob/master/CONTRIBUTOR_LADDER.md) to understand how you can grow from a community member to a maintainer.
+
 ## Contributing Process
 
 Please follow these 3 steps for contributions:
