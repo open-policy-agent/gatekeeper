@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -998,6 +999,8 @@ func newConstraintUnitReconciler(t *testing.T, ct *templates.ConstraintTemplate,
 		tracker:          tracker,
 		getPod:           func(context.Context) (*corev1.Pod, error) { return pod, nil },
 		ifWatching:       func(_ schema.GroupVersionKind, fn func() error) (bool, error) { return true, fn() },
+
+		baseStatusPersistBackoff: workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Second, time.Minute),
 	}
 	requests := util.EventPackerMapFunc()(context.Background(), instance)
 	if len(requests) != 1 {
@@ -1140,11 +1143,59 @@ func TestReconcileBaseStatusUpdateErrorPreservesRequeueBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected status update failure to preserve nil error, got %v", err)
 	}
-	if result != (reconcile.Result{Requeue: true}) {
+	if result != (reconcile.Result{RequeueAfter: time.Second}) {
 		t.Fatalf("expected explicit requeue for base status update failure, got %v", result)
 	}
 	if writer.createAttempts != 1 || writer.updateAttempts != 1 {
 		t.Fatalf("expected one create and one update attempt, got %d creates and %d updates", writer.createAttempts, writer.updateAttempts)
+	}
+}
+
+// TestReconcileDeleteResetsBaseStatusPersistBackoff guards against a deleted-then-recreated
+// object inheriting stale backoff state from a prior failure streak, since the
+// baseStatusPersistBackoff limiter is keyed only by request (kind/namespace/name).
+func TestReconcileDeleteResetsBaseStatusPersistBackoff(t *testing.T) {
+	configureVAP(t, vapTestConfig{
+		apiEnabled:          ptr.To(false),
+		defaultGenerateVAP:  ptr.To(true),
+		defaultGenerateVAPB: ptr.To(true),
+	})
+	ct := makeUnitCELTemplate()
+	instance := makeUnitConstraint()
+	r, reader, writer, request := newConstraintUnitReconciler(t, ct, instance)
+	updateErr := apierrors.NewConflict(schema.GroupResource{Group: constraintstatusv1beta1.GroupVersion.Group, Resource: "constraintpodstatuses"}, instance.GetName(), errors.New("conflict"))
+	writer.updateErr = updateErr
+
+	// Fail twice while the object exists, to accumulate backoff beyond the base delay.
+	result, err := r.Reconcile(context.Background(), request)
+	if err != nil || result != (reconcile.Result{RequeueAfter: time.Second}) {
+		t.Fatalf("expected first failure to use the base delay, got result=%v err=%v", result, err)
+	}
+	result, err = r.Reconcile(context.Background(), request)
+	if err != nil {
+		t.Fatalf("expected second failure to preserve nil error, got %v", err)
+	}
+	if result.RequeueAfter <= time.Second {
+		t.Fatalf("expected accumulated backoff beyond the base delay, got %v", result.RequeueAfter)
+	}
+
+	// Delete the object.
+	delete(reader.objects, client.ObjectKeyFromObject(instance))
+	writer.updateErr = nil
+	if _, err := r.Reconcile(context.Background(), request); err != nil {
+		t.Fatalf("expected delete reconcile to succeed, got %v", err)
+	}
+
+	// Recreate under the same name and fail again: the backoff must be back at the base
+	// delay, not continuing the pre-deletion streak.
+	reader.objects[client.ObjectKeyFromObject(instance)] = instance.DeepCopy()
+	writer.updateErr = updateErr
+	result, err = r.Reconcile(context.Background(), request)
+	if err != nil {
+		t.Fatalf("expected recreated-object failure to preserve nil error, got %v", err)
+	}
+	if result != (reconcile.Result{RequeueAfter: time.Second}) {
+		t.Fatalf("expected backoff to reset to the base delay after deletion, got %v", result)
 	}
 }
 
