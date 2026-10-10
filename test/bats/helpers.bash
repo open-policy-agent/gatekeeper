@@ -181,6 +181,20 @@ vap_admission_audit_configuration_ready() {
   ' <<<"${binding}" >/dev/null
 }
 
+vap_configmap_admission_enforced() {
+  local namespace="$1"
+  local policy_name="$2"
+  local binding_name="$3"
+  local output
+
+  if output="$(kubectl create configmap vap-exemption-probe --namespace "${namespace}" --dry-run=server 2>&1)"; then
+    return 1
+  fi
+
+  [[ "${output}" == *"ValidatingAdmissionPolicy '${policy_name}' with binding '${binding_name}' denied request"* &&
+     "${output}" == *"missing required label"* ]]
+}
+
 vap_admission_enforced() {
   local resource_name="$1"
   local policy_name="$2"

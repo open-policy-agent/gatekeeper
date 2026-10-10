@@ -785,8 +785,9 @@ func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrati
 	if !ok {
 		return nil, errors.New("unable to convert to v1 VAP")
 	}
+	v1beta1VAP = v1beta1VAP.DeepCopy()
 	v1beta1VAP.Spec = transformedVap.Spec
-	return v1beta1VAP.DeepCopy(), nil
+	return v1beta1VAP, nil
 }
 
 func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPolicy) (*admissionregistrationv1.ValidatingAdmissionPolicy, error) {
@@ -1126,15 +1127,20 @@ func (r *ReconcileConstraintTemplate) transformTemplateToVAP(
 		excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
 	}
 
-	exemptedNamespaces := webhook.GetAllExemptedNamespacesWithWildcard()
+	if *webhook.VwhName == "" {
+		return transform.TemplateToPolicyDefinitionWithWebhookConfig(unversionedCT, nil, excludedNamespaces, nil)
+	}
 
 	webhookConfig := r.getWebhookConfigFromCache(logger)
+	if webhookConfig == nil {
+		return nil, fmt.Errorf("webhook configuration %q is not available for VAP scope synchronization", *webhook.VwhName)
+	}
 
 	return transform.TemplateToPolicyDefinitionWithWebhookConfig(
 		unversionedCT,
 		webhookConfig,
 		excludedNamespaces,
-		exemptedNamespaces,
+		nil,
 	)
 }
 
@@ -1142,13 +1148,13 @@ func (r *ReconcileConstraintTemplate) transformTemplateToVAP(
 // Returns nil if cache is unavailable or config not found.
 func (r *ReconcileConstraintTemplate) getWebhookConfigFromCache(logger logr.Logger) *webhookconfigcache.WebhookMatchingConfig {
 	if r.webhookCache == nil {
-		logger.Info("webhook cache is nil, VAP will be created with default match constraints")
+		logger.Info("webhook cache is nil, waiting to synchronize VAP scope")
 		return nil
 	}
 
 	config, exists := r.webhookCache.GetConfig(*webhook.VwhName)
 	if !exists {
-		logger.Info("webhook config not found in cache, VAP will be created with default match constraints", "lookupKey", *webhook.VwhName)
+		logger.Info("webhook config not found in cache, waiting to synchronize VAP scope", "lookupKey", *webhook.VwhName)
 		return nil
 	}
 
