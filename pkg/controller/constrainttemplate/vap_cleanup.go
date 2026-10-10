@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/transform"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
@@ -112,12 +113,7 @@ func (worker *templateVAPCleanup) startWatches(ctx context.Context) (bool, error
 		return []string{owner.Name}
 	}))
 	bindingSource := source.TypedKind(worker.cache, binding, handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []string {
-		requests := constraintTemplateForVAPBinding(ctx, object)
-		names := make([]string, 0, len(requests))
-		for _, request := range requests {
-			names = append(names, request.Name)
-		}
-		return names
+		return worker.templatesForBinding(ctx, object, groupVersion)
 	}))
 	for _, eventSource := range []source.TypedSyncingSource[string]{policySource, bindingSource} {
 		if err := eventSource.Start(ctx, worker.queue); err != nil {
@@ -126,6 +122,38 @@ func (worker *templateVAPCleanup) startWatches(ctx context.Context) (bool, error
 	}
 	worker.groupVersion = *groupVersion
 	return true, nil
+}
+
+func (worker *templateVAPCleanup) templatesForBinding(ctx context.Context, binding client.Object, groupVersion *schema.GroupVersion) []string {
+	if owner := metav1.GetControllerOfNoCopy(binding); owner != nil && strings.HasPrefix(owner.APIVersion, statusv1beta1.ConstraintsGroup+"/") {
+		requests := constraintTemplateForVAPBinding(ctx, binding)
+		names := make([]string, 0, len(requests))
+		for _, request := range requests {
+			names = append(names, request.Name)
+		}
+		return names
+	}
+	policyNames := vapBindingPolicyNames(binding)
+	if len(policyNames) == 0 || policyNames[0] == "" {
+		return nil
+	}
+	policyName := policyNames[0]
+	policy, err := vapForVersion(groupVersion)
+	if err != nil {
+		logger.Error(err, "could not determine shared policy API version for binding cleanup")
+		return nil
+	}
+	if err := worker.cache.Get(ctx, types.NamespacedName{Name: policyName}, policy); err != nil {
+		if !apierrors.IsNotFound(err) {
+			logger.Error(err, "could not read cached policy for binding cleanup", "policy", policyName)
+		}
+		return nil
+	}
+	owner := metav1.GetControllerOfNoCopy(policy)
+	if owner == nil || owner.Kind != "ConstraintTemplate" || !strings.HasPrefix(owner.APIVersion, v1beta1.SchemeGroupVersion.Group+"/") || policyName != getVAPName(owner.Name) {
+		return nil
+	}
+	return []string{owner.Name}
 }
 
 func (worker *templateVAPCleanup) processNextBatch(ctx context.Context) {

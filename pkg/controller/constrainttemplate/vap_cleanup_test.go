@@ -31,6 +31,7 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -192,6 +193,193 @@ func TestTemplateVAPCleanupStartupAndBindingEvents(t *testing.T) {
 			bindings := &admissionregistrationv1.ValidatingAdmissionPolicyBindingList{}
 			require.NoError(t, manager.GetClient().List(ctx, bindings, client.MatchingFields{vapBindingPolicyNameField: "gatekeeper-testkind"}))
 			require.Empty(t, bindings.Items, "the live binding index must track migrations after discovery recovers")
+		})
+	}
+}
+
+func TestTemplateVAPCleanupUnownedBindingDeletion(t *testing.T) {
+	testTemplateVAPCleanupUnownedBinding(t, false)
+}
+
+func TestTemplateVAPCleanupUnownedBindingRetarget(t *testing.T) {
+	testTemplateVAPCleanupUnownedBinding(t, true)
+}
+
+func testTemplateVAPCleanupUnownedBinding(t *testing.T, retarget bool) {
+	t.Helper()
+	for _, groupVersion := range []schema.GroupVersion{admissionregistrationv1.SchemeGroupVersion, admissionregistrationv1beta1.SchemeGroupVersion} {
+		t.Run(groupVersion.Version, func(t *testing.T) {
+			setConstraintVAPGenerationMode(t)
+			setVAPTestGlobals(t, &groupVersion)
+			manager, _ := testutils.SetupManager(t, cfg)
+			live, err := client.New(cfg, client.Options{Scheme: manager.GetScheme()})
+			require.NoError(t, err)
+			ctx := context.Background()
+			template := makeReconcileConstraintTemplate("Unowned" + groupVersion.Version)
+			testutils.CreateThenCleanup(ctx, t, live, template)
+			require.NoError(t, live.Get(ctx, client.ObjectKeyFromObject(template), template))
+			beforeTemplate := template.DeepCopy()
+			policy := &admissionregistrationv1.ValidatingAdmissionPolicy{
+				TypeMeta: metav1.TypeMeta{APIVersion: admissionregistrationv1.SchemeGroupVersion.String(), Kind: "ValidatingAdmissionPolicy"},
+				ObjectMeta: metav1.ObjectMeta{Name: getVAPName(template.GetName()), OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: v1beta1.SchemeGroupVersion.String(), Kind: "ConstraintTemplate", Name: template.GetName(), UID: template.GetUID(), Controller: ptr.To(true),
+				}}},
+				Spec: admissionregistrationv1.ValidatingAdmissionPolicySpec{
+					MatchConstraints: &admissionregistrationv1.MatchResources{ResourceRules: []admissionregistrationv1.NamedRuleWithOperations{{RuleWithOperations: admissionregistrationv1.RuleWithOperations{
+						Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+						Rule:       admissionregistrationv1.Rule{APIGroups: []string{""}, APIVersions: []string{"v1"}, Resources: []string{"configmaps"}},
+					}}}},
+					Validations: []admissionregistrationv1.Validation{{Expression: "true"}},
+				},
+			}
+			testutils.CreateThenCleanup(ctx, t, live, policy)
+			policyKey := client.ObjectKeyFromObject(policy)
+			bindings := make([]*admissionregistrationv1.ValidatingAdmissionPolicyBinding, 2)
+			for index := range bindings {
+				bindings[index] = &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+					TypeMeta:   metav1.TypeMeta{APIVersion: admissionregistrationv1.SchemeGroupVersion.String(), Kind: "ValidatingAdmissionPolicyBinding"},
+					ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("unowned-%s-%d", groupVersion.Version, index)},
+					Spec: admissionregistrationv1.ValidatingAdmissionPolicyBindingSpec{
+						PolicyName: policy.Name, ValidationActions: []admissionregistrationv1.ValidationAction{admissionregistrationv1.Audit},
+					},
+				}
+				testutils.CreateThenCleanup(ctx, t, live, bindings[index])
+			}
+			reconciler := &ReconcileConstraintTemplate{Client: manager.GetClient(), apiReader: manager.GetAPIReader(), metrics: newStatsReporter()}
+			worker := newTemplateVAPCleanup(reconciler, groupVersion)
+			worker.cache = manager.GetCache()
+			queue := &observedCleanupQueue{TypedRateLimitingInterface: worker.queue}
+			worker.queue = queue
+			require.NoError(t, manager.Add(worker))
+			testutils.StartManager(ctx, t, manager)
+			require.Eventually(t, func() bool {
+				return live.Get(ctx, policyKey, &admissionregistrationv1.ValidatingAdmissionPolicy{}) == nil && queue.events.Load() > 0 && queue.Len() == 0
+			}, 10*time.Second, 20*time.Millisecond)
+			require.Never(t, func() bool {
+				return live.Get(ctx, policyKey, &admissionregistrationv1.ValidatingAdmissionPolicy{}) != nil
+			}, 2*time.Second, 50*time.Millisecond)
+			require.NoError(t, live.Delete(ctx, bindings[0]))
+			require.Never(t, func() bool {
+				return live.Get(ctx, policyKey, &admissionregistrationv1.ValidatingAdmissionPolicy{}) != nil
+			}, 2*time.Second, 50*time.Millisecond, "one remaining unowned binding must retain the policy")
+			if retarget {
+				require.NoError(t, live.Get(ctx, client.ObjectKeyFromObject(bindings[1]), bindings[1]))
+				bindings[1].Spec.PolicyName = "unrelated-policy"
+				require.NoError(t, live.Update(ctx, bindings[1]))
+			} else {
+				require.NoError(t, live.Delete(ctx, bindings[1]))
+			}
+			require.Eventually(t, func() bool {
+				return apierrors.IsNotFound(live.Get(ctx, policyKey, &admissionregistrationv1.ValidatingAdmissionPolicy{}))
+			}, 10*time.Second, 20*time.Millisecond, "removing the last unowned reference must trigger cleanup without a template update")
+			require.NoError(t, live.Get(ctx, client.ObjectKeyFromObject(template), template))
+			require.Equal(t, beforeTemplate.ResourceVersion, template.ResourceVersion)
+			require.Equal(t, beforeTemplate.Spec, template.Spec)
+		})
+	}
+}
+
+type cleanupPolicyCache struct {
+	cache.Cache
+	reader   client.Reader
+	getCalls int
+}
+
+func (cached *cleanupPolicyCache) Get(ctx context.Context, key client.ObjectKey, object client.Object, options ...client.GetOption) error {
+	cached.getCalls++
+	return cached.reader.Get(ctx, key, object, options...)
+}
+
+func TestTemplateVAPCleanupTemplatesForBinding(t *testing.T) {
+	for _, groupVersion := range []schema.GroupVersion{admissionregistrationv1.SchemeGroupVersion, admissionregistrationv1beta1.SchemeGroupVersion} {
+		t.Run(groupVersion.Version, func(t *testing.T) {
+			worker, _, policies := newCleanupTestWorker(t, groupVersion, 1)
+			for _, test := range []struct {
+				name         string
+				modify       func(client.Object, client.Object)
+				missing      bool
+				want         []string
+				wantGetCalls int
+			}{
+				{name: "unowned binding", want: []string{"template-000"}, wantGetCalls: 1},
+				{
+					name: "foreign binding owner",
+					modify: func(binding, _ client.Object) {
+						binding.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: "other", Controller: ptr.To(true)}})
+					},
+					want: []string{"template-000"}, wantGetCalls: 1,
+				},
+				{
+					name: "unowned policy",
+					modify: func(_, policy client.Object) {
+						policy.SetOwnerReferences(nil)
+					},
+					wantGetCalls: 1,
+				},
+				{
+					name: "non-controller policy owner",
+					modify: func(_, policy client.Object) {
+						policy.GetOwnerReferences()[0].Controller = ptr.To(false)
+					},
+					wantGetCalls: 1,
+				},
+				{
+					name: "foreign policy owner group",
+					modify: func(_, policy client.Object) {
+						policy.GetOwnerReferences()[0].APIVersion = "other.example/v1"
+					},
+					wantGetCalls: 1,
+				},
+				{
+					name: "foreign policy owner kind",
+					modify: func(_, policy client.Object) {
+						policy.GetOwnerReferences()[0].Kind = "OtherKind"
+					},
+					wantGetCalls: 1,
+				},
+				{
+					name: "policy name does not match owner",
+					modify: func(_, policy client.Object) {
+						policy.GetOwnerReferences()[0].Name = "other-template"
+					},
+					wantGetCalls: 1,
+				},
+				{name: "missing cached policy", missing: true, wantGetCalls: 1},
+				{
+					name: "owned shared binding skips lookup",
+					modify: func(binding, _ client.Object) {
+						binding.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: "constraints.gatekeeper.sh/v1beta1", Kind: "Template-000", Controller: ptr.To(true)}})
+					},
+					missing: true, want: []string{"template-000"},
+				},
+				{
+					name: "owned specialized binding skips lookup",
+					modify: func(binding, _ client.Object) {
+						binding.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: "constraints.gatekeeper.sh/v1beta1", Kind: "OtherKind", Controller: ptr.To(true)}})
+					},
+				},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					policy, ok := policies[0].DeepCopyObject().(client.Object)
+					require.True(t, ok)
+					cachedClient := crfake.NewClientBuilder().WithScheme(worker.reconciler.Scheme()).Build()
+					addCleanupTestBinding(t, cachedClient, groupVersion, policy.GetName())
+					binding, err := vapBindingForVersion(&groupVersion)
+					require.NoError(t, err)
+					require.NoError(t, cachedClient.Get(context.Background(), types.NamespacedName{Name: policy.GetName() + "-binding"}, binding))
+					if test.modify != nil {
+						test.modify(binding, policy)
+					}
+					if !test.missing {
+						policy.SetResourceVersion("")
+						require.NoError(t, cachedClient.Create(context.Background(), policy))
+					}
+					cached := &cleanupPolicyCache{reader: cachedClient}
+					worker.cache = cached
+					require.Equal(t, test.want, append([]string(nil), worker.templatesForBinding(context.Background(), binding, &groupVersion)...))
+					require.Equal(t, test.wantGetCalls, cached.getCalls)
+				})
+			}
 		})
 	}
 }
