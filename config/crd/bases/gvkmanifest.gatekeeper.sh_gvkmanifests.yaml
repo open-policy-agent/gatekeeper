@@ -37,6 +37,7 @@ spec:
           metadata:
             type: object
           spec:
+            description: spec defines the desired state of GVKManifest.
             properties:
               groups:
                 additionalProperties:
@@ -45,6 +46,8 @@ spec:
                       type: string
                     type: array
                   type: object
+                description: groups maps an API group name to the versions and kinds
+                  it contains.
                 type: object
             type: object
         type: object
