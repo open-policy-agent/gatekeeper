@@ -341,7 +341,7 @@ func TestNewMutationSystemEnabledWhenMutationOperationAssigned(t *testing.T) {
 
 // Validates that newExpansionSystem only constructs a real expansion.System
 // for processes that evaluate expanded resources (audit and webhook), per
-// operations.HasExpansionConsumerOperations. Other processes have no use for
+// operations.HasValidationOperations. Other processes have no use for
 // one, so setupControllers should not pay for its construction.
 func Test_newExpansionSystem(t *testing.T) {
 	tests := map[string]struct {
@@ -360,7 +360,10 @@ func Test_newExpansionSystem(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			restore := operations.AssignForTest(tc.assigned...)
+			restore, err := operations.SetForTest(tc.assigned...)
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer restore()
 
 			got := newExpansionSystem(mutationSystem)

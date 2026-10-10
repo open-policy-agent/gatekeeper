@@ -48,11 +48,11 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if !*expansion.ExpansionEnabled {
 		return nil
 	}
-	// Only the operations that evaluate expanded resources (audit and the
-	// validating webhook) need the expansion ingestion controller. Other
-	// processes, such as status-only or generate-only pods, must not
-	// register it solely because expansion defaults to enabled.
-	if !operations.HasExpansionConsumerOperations() {
+	// Only validation operations (audit and the validating webhook) evaluate
+	// expanded resources. Other processes, such as status-only or
+	// generate-only pods, must not register the ingestion controller solely
+	// because expansion defaults to enabled.
+	if !operations.HasValidationOperations() {
 		return nil
 	}
 	r := newReconciler(mgr, a.ExpansionSystem, a.GetPod, a.Tracker)

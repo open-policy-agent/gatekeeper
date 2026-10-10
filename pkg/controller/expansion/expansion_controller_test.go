@@ -38,17 +38,20 @@ func TestMain(m *testing.M) {
 	testutils.StartControlPlane(m, &cfg, 3)
 }
 
-// TestAdd_RequiresExpansionConsumerOperation verifies that the expansion
-// ingestion controller is skipped for processes that don't evaluate expanded
-// resources (e.g. status-only), even though expansion defaults to enabled.
+// TestAdd_RequiresValidationOperation verifies that the expansion ingestion
+// controller is skipped for processes without validation operations (e.g.
+// status-only), even though expansion defaults to enabled.
 // This fails if the old feature-flag-only gating in Add is restored, since a
 // nil manager would then be dereferenced while registering the controller.
-func TestAdd_RequiresExpansionConsumerOperation(t *testing.T) {
+func TestAdd_RequiresValidationOperation(t *testing.T) {
 	if !*expansion.ExpansionEnabled {
 		t.Fatal("expected expansion to be enabled by default for this test")
 	}
 
-	restore := operations.AssignForTest(operations.Status)
+	restore, err := operations.SetForTest(operations.Status)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer restore()
 
 	a := &Adder{}

@@ -61,12 +61,16 @@ func TestHasValidationOperations(t *testing.T) {
 		assigned []Operation
 		want     bool
 	}{
-		"status only":         {assigned: []Operation{Status}},
-		"generate only":       {assigned: []Operation{Generate}},
-		"audit":               {assigned: []Operation{Audit}, want: true},
-		"webhook":             {assigned: []Operation{Webhook}, want: true},
-		"status with audit":   {assigned: []Operation{Status, Audit}, want: true},
-		"status with webhook": {assigned: []Operation{Status, Webhook}, want: true},
+		"status only":              {assigned: []Operation{Status}},
+		"generate only":            {assigned: []Operation{Generate}},
+		"audit":                    {assigned: []Operation{Audit}, want: true},
+		"webhook":                  {assigned: []Operation{Webhook}, want: true},
+		"status with audit":        {assigned: []Operation{Status, Audit}, want: true},
+		"status with webhook":      {assigned: []Operation{Status, Webhook}, want: true},
+		"mutation-controller only": {assigned: []Operation{MutationController}},
+		"mutation-status only":     {assigned: []Operation{MutationStatus}},
+		"mutation-webhook only":    {assigned: []Operation{MutationWebhook}},
+		"none assigned":            {assigned: []Operation{}},
 	}
 
 	for name, tc := range tests {
@@ -101,35 +105,5 @@ func TestSetForTest(t *testing.T) {
 	restore()
 	if operations != original {
 		t.Fatal("SetForTest restore did not restore the original operations")
-	}
-}
-
-// Validates HasExpansionConsumerOperations only reports true for the
-// operations that actually evaluate expanded resources.
-func Test_HasExpansionConsumerOperations(t *testing.T) {
-	tests := map[string]struct {
-		assigned []Operation
-		expected bool
-	}{
-		"audit only":               {assigned: []Operation{Audit}, expected: true},
-		"webhook only":             {assigned: []Operation{Webhook}, expected: true},
-		"audit and webhook":        {assigned: []Operation{Audit, Webhook}, expected: true},
-		"status only":              {assigned: []Operation{Status}, expected: false},
-		"generate only":            {assigned: []Operation{Generate}, expected: false},
-		"mutation-controller only": {assigned: []Operation{MutationController}, expected: false},
-		"mutation-status only":     {assigned: []Operation{MutationStatus}, expected: false},
-		"mutation-webhook only":    {assigned: []Operation{MutationWebhook}, expected: false},
-		"none assigned":            {assigned: []Operation{}, expected: false},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			restore := AssignForTest(tc.assigned...)
-			defer restore()
-
-			if got := HasExpansionConsumerOperations(); got != tc.expected {
-				t.Errorf("HasExpansionConsumerOperations() = %v, want %v", got, tc.expected)
-			}
-		})
 	}
 }

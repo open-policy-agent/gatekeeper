@@ -322,7 +322,7 @@ func innerMain() int {
 	}
 
 	// Setup tracker and register readiness probe.
-	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled, *expansion.ExpansionEnabled && operations.HasExpansionConsumerOperations())
+	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled, *expansion.ExpansionEnabled && operations.HasValidationOperations())
 	if err != nil {
 		setupLog.Error(err, "unable to register readiness tracker")
 		return 1
@@ -671,13 +671,14 @@ func newExportSystem() *export.System {
 	return nil
 }
 
-// newExpansionSystem constructs an expansion.System only for processes that
-// evaluate expanded resources (audit and the validating webhook). Those
-// callers invoke Expand unconditionally, independent of whether expansion is
-// enabled, so they still get a non-nil (possibly empty) system; other
-// processes, such as status-only or generate-only pods, have no use for one.
+// newExpansionSystem constructs an expansion.System only for processes with
+// validation operations (audit and the validating webhook), the only callers
+// of Expand. They invoke Expand unconditionally, independent of whether
+// expansion is enabled, so they still get a non-nil (possibly empty) system;
+// other processes, such as status-only or generate-only pods, have no use for
+// one.
 func newExpansionSystem(mutationSystem *mutation.System) *expansion.System {
-	if !operations.HasExpansionConsumerOperations() {
+	if !operations.HasValidationOperations() {
 		return nil
 	}
 	return expansion.NewSystem(mutationSystem)
