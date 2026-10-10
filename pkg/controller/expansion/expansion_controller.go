@@ -11,6 +11,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
@@ -45,6 +46,13 @@ type Adder struct {
 
 func (a *Adder) Add(mgr manager.Manager) error {
 	if !*expansion.ExpansionEnabled {
+		return nil
+	}
+	// Only validation operations (audit and the validating webhook) evaluate
+	// expanded resources. Other processes, such as status-only or
+	// generate-only pods, must not register the ingestion controller solely
+	// because expansion defaults to enabled.
+	if !operations.HasValidationOperations() {
 		return nil
 	}
 	r := newReconciler(mgr, a.ExpansionSystem, a.GetPod, a.Tracker)

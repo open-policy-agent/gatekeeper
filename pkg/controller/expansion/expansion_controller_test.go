@@ -16,6 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
@@ -35,6 +36,28 @@ var cfg *rest.Config
 
 func TestMain(m *testing.M) {
 	testutils.StartControlPlane(m, &cfg, 3)
+}
+
+// TestAdd_RequiresValidationOperation verifies that the expansion ingestion
+// controller is skipped for processes without validation operations (e.g.
+// status-only), even though expansion defaults to enabled.
+// This fails if the old feature-flag-only gating in Add is restored, since a
+// nil manager would then be dereferenced while registering the controller.
+func TestAdd_RequiresValidationOperation(t *testing.T) {
+	if !*expansion.ExpansionEnabled {
+		t.Fatal("expected expansion to be enabled by default for this test")
+	}
+
+	restore, err := operations.SetForTest(operations.Status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restore()
+
+	a := &Adder{}
+	if err := a.Add(nil); err != nil {
+		t.Errorf("Add() error = %v, want nil", err)
+	}
 }
 
 func TestReconcile(t *testing.T) {

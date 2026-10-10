@@ -322,7 +322,7 @@ func innerMain() int {
 	}
 
 	// Setup tracker and register readiness probe.
-	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled, *expansion.ExpansionEnabled)
+	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled, *expansion.ExpansionEnabled && operations.HasValidationOperations())
 	if err != nil {
 		setupLog.Error(err, "unable to register readiness tracker")
 		return 1
@@ -525,7 +525,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	}
 
 	mutationSystem := newMutationSystem(mutationOpts)
-	expansionSystem := expansion.NewSystem(mutationSystem)
+	expansionSystem := newExpansionSystem(mutationSystem)
 	exportSystem := newExportSystem()
 
 	c := mgr.GetCache()
@@ -669,6 +669,19 @@ func newExportSystem() *export.System {
 		return export.NewSystem()
 	}
 	return nil
+}
+
+// newExpansionSystem constructs an expansion.System only for processes with
+// validation operations (audit and the validating webhook), the only callers
+// of Expand. They invoke Expand unconditionally, independent of whether
+// expansion is enabled, so they still get a non-nil (possibly empty) system;
+// other processes, such as status-only or generate-only pods, have no use for
+// one.
+func newExpansionSystem(mutationSystem *mutation.System) *expansion.System {
+	if !operations.HasValidationOperations() {
+		return nil
+	}
+	return expansion.NewSystem(mutationSystem)
 }
 
 func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
