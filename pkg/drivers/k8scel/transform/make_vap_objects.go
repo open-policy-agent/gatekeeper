@@ -3,7 +3,6 @@ package transform
 import (
 	"crypto/sha256"
 	"errors"
-	"flag"
 	"fmt"
 	"slices"
 	"strings"
@@ -24,8 +23,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag is deprecated and will be removed in Gatekeeper v3.24.")
-
 const (
 	vapEvaluationAuditAnnotationKey             = "evaluation"
 	vapEvaluationAuditAnnotationValueExpression = "params == null ? '' : 'true'"
@@ -45,9 +42,6 @@ func vapAuditAnnotations(enabled, includeSuccess bool) []admissionregistrationv1
 	}
 }
 
-func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
-	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, nil)
-}
 
 // quoteNamespaces wraps each namespace string in quotes for proper CEL syntax.
 func quoteNamespaces(namespaces []string) []string {
