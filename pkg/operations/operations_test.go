@@ -61,12 +61,16 @@ func TestHasValidationOperations(t *testing.T) {
 		assigned []Operation
 		want     bool
 	}{
-		"status only":         {assigned: []Operation{Status}},
-		"generate only":       {assigned: []Operation{Generate}},
-		"audit":               {assigned: []Operation{Audit}, want: true},
-		"webhook":             {assigned: []Operation{Webhook}, want: true},
-		"status with audit":   {assigned: []Operation{Status, Audit}, want: true},
-		"status with webhook": {assigned: []Operation{Status, Webhook}, want: true},
+		"status only":              {assigned: []Operation{Status}},
+		"generate only":            {assigned: []Operation{Generate}},
+		"audit":                    {assigned: []Operation{Audit}, want: true},
+		"webhook":                  {assigned: []Operation{Webhook}, want: true},
+		"status with audit":        {assigned: []Operation{Status, Audit}, want: true},
+		"status with webhook":      {assigned: []Operation{Status, Webhook}, want: true},
+		"mutation-controller only": {assigned: []Operation{MutationController}},
+		"mutation-status only":     {assigned: []Operation{MutationStatus}},
+		"mutation-webhook only":    {assigned: []Operation{MutationWebhook}},
+		"none assigned":            {assigned: []Operation{}},
 	}
 
 	for name, tc := range tests {
