@@ -28,6 +28,9 @@ func (c ConcurrentErrorSlice) Last() error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	if len(c.s) == 0 {
+		return nil
+	}
 	return c.s[len(c.s)-1]
 }
 
