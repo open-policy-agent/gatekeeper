@@ -1,6 +1,7 @@
 package disk
 
 import (
+	"bytes"
 	"container/heap"
 	"context"
 	"crypto/rand"
@@ -1014,7 +1015,7 @@ func recoverAdmissionOpenFile(path string, maxBytes int64) error {
 		return err
 	}
 	limit := info.Size()
-	if limit > maxBytes {
+	if maxBytes > 0 && limit > maxBytes {
 		limit = maxBytes
 		if err := file.Truncate(limit); err != nil {
 			return err
@@ -1041,8 +1042,39 @@ func recoverAdmissionOpenFile(path string, maxBytes int64) error {
 	if err := unlockAndClose(); err != nil {
 		return err
 	}
-	readyPath := strings.TrimSuffix(path, admissionOpenExtension) + ".recovered" + admissionReadyExtension
+	readyPath, err := recoveredReadyPath(path)
+	if err != nil {
+		return err
+	}
 	return os.Rename(path, readyPath)
+}
+
+// recoveredReadyPath returns a ready-file path for a recovered admission segment
+// that does not overwrite an existing file. It prefers the deterministic
+// ".recovered.log" name and, only if that is already taken, appends a short
+// random token so a second recovery of the same base name cannot clobber the
+// first recovered segment before a reader consumes it.
+func recoveredReadyPath(openPath string) (string, error) {
+	base := strings.TrimSuffix(openPath, admissionOpenExtension) + ".recovered"
+	candidate := base + admissionReadyExtension
+	if _, err := os.Lstat(candidate); errors.Is(err, os.ErrNotExist) {
+		return candidate, nil
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	for i := 0; i < 8; i++ {
+		token := make([]byte, 8)
+		if _, err := rand.Read(token); err != nil {
+			return "", err
+		}
+		candidate = base + "-" + hex.EncodeToString(token) + admissionReadyExtension
+		if _, err := os.Lstat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate, nil
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("unable to allocate a unique recovered ready path for %s", openPath)
 }
 
 func findLastNewline(file *os.File, size int64) (int64, error) {
@@ -1053,10 +1085,11 @@ func findLastNewline(file *os.File, size int64) (int64, error) {
 			start = 0
 		}
 		chunk := buffer[:end-start]
-		if _, err := file.ReadAt(chunk, start); err != nil && !errors.Is(err, io.EOF) {
+		n, err := file.ReadAt(chunk, start)
+		if err != nil && !errors.Is(err, io.EOF) {
 			return -1, err
 		}
-		if index := strings.LastIndexByte(string(chunk), '\n'); index >= 0 {
+		if index := bytes.LastIndexByte(chunk[:n], '\n'); index >= 0 {
 			return start + int64(index), nil
 		}
 		end = start
