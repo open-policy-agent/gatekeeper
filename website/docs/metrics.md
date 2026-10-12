@@ -148,6 +148,18 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
+- Name: `gatekeeper_validating_admission_policies_for_constraints`
+
+    Description: `Number of per-Constraint ValidatingAdmissionPolicy resources by generation status`
+
+    Reports policies generated in `constraint` mode. The `gatekeeper_validating_admission_policies` metric reports shared policies generated in `template` mode.
+
+    Tags:
+
+    - `status`: [`active`, `error`] (active = successfully generated, error = generation failed)
+
+    Aggregation: `LastValue`
+
 - Name: `gatekeeper_validating_admission_policy_bindings`
 
     Description: `Number of ValidatingAdmissionPolicyBinding resources by generation status`

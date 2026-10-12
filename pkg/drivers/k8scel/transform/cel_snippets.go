@@ -24,16 +24,14 @@ const (
 	)
 	`
 
-	// Note that switching the glob to a regex is valid because of how Gatekeeper validates the wildcard matcher
-	// (with this regex: "+kubebuilder:validation:Pattern=`^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$`").
 	matchNameGlob = `
 	!has(params.spec) ? true: (
 		!has(params.spec.match) ? true: (
 			!has(params.spec.match.name) ? true : (
 				[object, oldObject].exists(obj,
 					obj != null && (
-						(has(obj.metadata.generateName) && obj.metadata.generateName != "" && params.spec.match.name.endsWith("*") && string(obj.metadata.generateName).matches("^" + string(params.spec.match.name).replace("*", ".*") + "$")) ||
-						(has(obj.metadata.name) && string(obj.metadata.name).matches("^" + string(params.spec.match.name).replace("*", ".*") + "$"))
+						(has(obj.metadata.generateName) && obj.metadata.generateName != "" && params.spec.match.name.endsWith("*") && string(obj.metadata.generateName).matches(r"^\Q" + string(params.spec.match.name).replace(r"\E", r"\E\\E\Q").replace("*", r"\E.*\Q") + r"\E$")) ||
+						(has(obj.metadata.name) && string(obj.metadata.name).matches(r"^\Q" + string(params.spec.match.name).replace(r"\E", r"\E\\E\Q").replace("*", r"\E.*\Q") + r"\E$"))
 					)
 				)
 			)
@@ -41,8 +39,6 @@ const (
 	)
 	`
 
-	// Note that switching the glob to a regex is valid because of how Gatekeeper validates the wildcard matcher
-	// (with this regex: "+kubebuilder:validation:Pattern=`^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$`").
 	// TODO: consider using the `namespaceObject` field provided by ValidatingAdmissionPolicy.
 	matchNamespacesGlob = `
 	!has(params.spec) ? true: (
@@ -53,7 +49,7 @@ const (
 						// cluster-scoped objects always match
 						!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
 							params.spec.match.namespaces.exists(nsMatcher,
-								(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+								(string(obj.metadata.namespace).matches(r"^\Q" + string(nsMatcher).replace(r"\E", r"\E\\E\Q").replace("*", r"\E.*\Q") + r"\E$"))
 							)
 						)
 					)
@@ -63,8 +59,6 @@ const (
 	)
 	`
 
-	// Note that switching the glob to a regex is valid because of how Gatekeeper validates the wildcard matcher
-	// (with this regex: "+kubebuilder:validation:Pattern=`^(\*|\*-)?[a-z0-9]([-:a-z0-9]*[a-z0-9])?(\*|-\*)?$`").
 	// TODO: consider using the `namespaceObject` field provided by ValidatingAdmissionPolicy.
 	matchExcludedNamespacesGlob = `
 	!has(params.spec) ? true: (
@@ -75,7 +69,7 @@ const (
 						// cluster-scoped objects always match
 						!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
 							!params.spec.match.excludedNamespaces.exists(nsMatcher,
-								(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+								(string(obj.metadata.namespace).matches(r"^\Q" + string(nsMatcher).replace(r"\E", r"\E\\E\Q").replace("*", r"\E.*\Q") + r"\E$"))
 							)
 						)
 					)
@@ -92,13 +86,13 @@ const (
 			// For namespace objects, check if the namespace name itself is in the exclusion list
 			(has(obj.kind) && obj.kind == "Namespace" && has(obj.metadata.name)) ? (
 				![%s].exists(nsMatcher,
-					(string(obj.metadata.name).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+					(string(obj.metadata.name).matches(r"^\Q" + string(nsMatcher).replace(r"\E", r"\E\\E\Q").replace("*", r"\E.*\Q") + r"\E$"))
 				)
 			) : (
 				// cluster-scoped objects (non-namespace) always match
 				!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
 					![%s].exists(nsMatcher,
-						(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+						(string(obj.metadata.namespace).matches(r"^\Q" + string(nsMatcher).replace(r"\E", r"\E\\E\Q").replace("*", r"\E.*\Q") + r"\E$"))
 					)
 				)
 			)
@@ -112,7 +106,7 @@ const (
 			// For namespace objects, check if the namespace name itself is in the exemption list
 			(has(obj.kind) && obj.kind == "Namespace" && has(obj.metadata.name)) ? (
 				![%s].exists(nsMatcher,
-					(string(obj.metadata.name).matches("^" + string(nsMatcher).replace("*", ".*") + "$")) &&
+					(string(obj.metadata.name).matches(r"^\Q" + string(nsMatcher).replace(r"\E", r"\E\\E\Q").replace("*", r"\E.*\Q") + r"\E$")) &&
 					has(obj.metadata.labels) &&
 					("admission.gatekeeper.sh/ignore" in obj.metadata.labels)
 				)
@@ -120,7 +114,7 @@ const (
 				// cluster-scoped objects (non-namespace) always match
 				!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
 					![%s].exists(nsMatcher,
-						(string(obj.metadata.namespace).matches("^" + string(nsMatcher).replace("*", ".*") + "$"))
+						(string(obj.metadata.namespace).matches(r"^\Q" + string(nsMatcher).replace(r"\E", r"\E\\E\Q").replace("*", r"\E.*\Q") + r"\E$"))
 					)
 				)
 			)

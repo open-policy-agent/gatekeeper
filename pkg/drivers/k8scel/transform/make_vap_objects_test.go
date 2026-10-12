@@ -1490,7 +1490,7 @@ func TestConstraintToBinding(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			binding, err := constraintToBinding(test.constraint, test.enforcementActions, test.emitAuditAnnotations)
+			binding, err := constraintToBinding(test.constraint, test.enforcementActions, GetTemplateVAPName(test.constraint.GetKind()), true, test.emitAuditAnnotations)
 			if !errors.Is(err, test.expectedErr) {
 				t.Errorf("unexpected error. got %v; wanted %v", err, test.expectedErr)
 			}
