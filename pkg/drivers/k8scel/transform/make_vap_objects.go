@@ -42,7 +42,6 @@ func vapAuditAnnotations(enabled, includeSuccess bool) []admissionregistrationv1
 	}
 }
 
-
 // quoteNamespaces wraps each namespace string in quotes for proper CEL syntax.
 func quoteNamespaces(namespaces []string) []string {
 	quoted := make([]string, len(namespaces))
@@ -202,6 +201,10 @@ func appendWebhookMatchConditions(matchConditions []admissionregistrationv1beta1
 	}
 
 	return matchConditions
+}
+
+func TemplateToPolicyDefinition(template *templates.ConstraintTemplate) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+	return TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, nil)
 }
 
 func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string, exemptedNamespaces []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {

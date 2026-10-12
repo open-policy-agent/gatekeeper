@@ -2466,7 +2466,7 @@ func TestManageVAP_RefreshesExistingSharedPolicy(t *testing.T) {
 			unversioned := &templates.ConstraintTemplate{}
 			require.NoError(t, scheme.Convert(ct, unversioned, nil))
 			reconciler := &ReconcileConstraintTemplate{scheme: scheme, metrics: newStatsReporter()}
-			desired, err := reconciler.transformTemplateToVAP(unversioned, getVAPName(ct.GetName()), logger)
+			desired, err := reconciler.transformTemplateToVAP(unversioned, logger)
 			require.NoError(t, err)
 			stale := desired.DeepCopy()
 			stale.Spec.Validations[0].Expression = "false"
