@@ -1022,10 +1022,27 @@ func newConstraintUnitReconciler(t *testing.T, ct *templates.ConstraintTemplate,
 		t.Fatal(err)
 	}
 
+	matchingConfig := webhookconfigcache.WebhookMatchingConfig{
+		Rules: []admissionregistrationv1.RuleWithOperations{{
+			Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
+			Rule: admissionregistrationv1.Rule{
+				APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"},
+				Scope: ptr.To(admissionregistrationv1.AllScopes),
+			},
+		}},
+	}
+	webhookCache := webhookconfigcache.NewWebhookConfigCache()
+	webhookCache.UpsertConfig(*webhook.VwhName, matchingConfig)
 	reader := &fakeReader{
 		objects: map[types.NamespacedName]client.Object{
 			client.ObjectKeyFromObject(instance): instance.DeepCopy(),
 			{Name: versionedCT.GetName()}:        versionedCT,
+			{Name: *webhook.VwhName}: &admissionregistrationv1.ValidatingWebhookConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: *webhook.VwhName},
+				Webhooks: []admissionregistrationv1.ValidatingWebhook{{
+					Name: webhook.ValidatingWebhookName, Rules: matchingConfig.Rules,
+				}},
+			},
 		},
 		getErrs: make(map[types.NamespacedName]error),
 	}
@@ -1038,17 +1055,18 @@ func newConstraintUnitReconciler(t *testing.T, ct *templates.ConstraintTemplate,
 	}()
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: util.GetNamespace()}}
 	r := &ReconcileConstraint{
-		reader:           reader,
-		apiReader:        reader,
-		writer:           writer,
-		scheme:           scheme,
-		cfClient:         cfClient,
-		log:              logf.Log.WithName("test"),
-		reporter:         &fakeReporter{},
-		constraintsCache: NewConstraintsCache(),
-		tracker:          tracker,
-		getPod:           func(context.Context) (*corev1.Pod, error) { return pod, nil },
-		ifWatching:       func(_ schema.GroupVersionKind, fn func() error) (bool, error) { return true, fn() },
+		reader:             reader,
+		apiReader:          reader,
+		writer:             writer,
+		scheme:             scheme,
+		cfClient:           cfClient,
+		log:                logf.Log.WithName("test"),
+		reporter:           &fakeReporter{},
+		constraintsCache:   NewConstraintsCache(),
+		webhookConfigCache: webhookCache,
+		tracker:            tracker,
+		getPod:             func(context.Context) (*corev1.Pod, error) { return pod, nil },
+		ifWatching:         func(_ schema.GroupVersionKind, fn func() error) (bool, error) { return true, fn() },
 	}
 	requests := util.EventPackerMapFunc()(context.Background(), instance)
 	if len(requests) != 1 {
@@ -1115,6 +1133,49 @@ func configureVAP(t *testing.T, config vapTestConfig) {
 				t.Errorf("restore VAP generation mode: %v", err)
 			}
 		})
+	}
+}
+
+func TestTransformConstraintToVAPRequiresNamedScope(t *testing.T) {
+	originalSync := *transform.SyncVAPScope
+	originalName := webhook.VwhName
+	t.Cleanup(func() {
+		*transform.SyncVAPScope = originalSync
+		webhook.VwhName = originalName
+	})
+	*transform.SyncVAPScope = true
+	webhook.VwhName = ptr.To("required-webhook")
+	r := &ReconcileConstraint{webhookConfigCache: webhookconfigcache.NewWebhookConfigCache()}
+	template := makeTemplateWithRegoAndCELEngine(ptr.To(true))
+	instance := makeUnitConstraint()
+	if _, err := r.transformConstraintToVAP(template, instance); err == nil {
+		t.Fatal("expected missing named webhook scope to prevent policy generation")
+	}
+
+	webhook.VwhName = ptr.To("")
+	policy, err := r.transformConstraintToVAP(template, instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if policy.Spec.MatchConstraints.NamespaceSelector != nil {
+		t.Fatal("webhook-independent policy must not inherit a namespace selector")
+	}
+
+	webhook.VwhName = ptr.To("required-webhook")
+	selector := &metav1.LabelSelector{MatchLabels: map[string]string{"environment": "production"}}
+	r.webhookConfigCache.UpsertConfig(*webhook.VwhName, webhookconfigcache.WebhookMatchingConfig{
+		NamespaceSelector: selector,
+		Rules: []admissionregistrationv1.RuleWithOperations{{
+			Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+			Rule:       admissionregistrationv1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
+		}},
+	})
+	policy, err = r.transformConstraintToVAP(template, instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if policy.Spec.MatchConstraints.NamespaceSelector == nil || policy.Spec.MatchConstraints.NamespaceSelector.MatchLabels["environment"] != "production" {
+		t.Fatal("restored scope must be inherited by the specialized policy")
 	}
 }
 
@@ -1670,6 +1731,7 @@ func TestSharedVAPIsCurrent(t *testing.T) {
 				case "cache ahead":
 					authoritative := &fakeReader{objects: map[types.NamespacedName]client.Object{
 						{Name: template.GetName()}: reader.objects[types.NamespacedName{Name: template.GetName()}],
+						{Name: *webhook.VwhName}:   reader.objects[types.NamespacedName{Name: *webhook.VwhName}],
 					}}
 					reconciler.apiReader = authoritative
 					stale := shared.DeepCopy()

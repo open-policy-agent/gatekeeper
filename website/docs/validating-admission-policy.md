@@ -9,7 +9,7 @@ Feature State: Gatekeeper version v3.18 (stable)
 :::note
 Set `--enable-k8s-native-validation=false` to disable evaluating Validating Admission Policy CEL in constraint templates.
 
-The `--sync-vap-enforcement-scope` flag (enabled by default) ensures Gatekeeper generates ValidatingAdmissionPolicy (VAP) resources while fully honoring the match criteria and namespace exclusions you have configured whether via [ValidatingWebhookConfig](https://github.com/open-policy-agent/gatekeeper/blob/master/charts/gatekeeper/templates/gatekeeper-validating-webhook-configuration-validatingwebhookconfiguration.yaml#L35), the [Gatekeeper `Config` resource](https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces/#exempting-namespaces-from-gatekeeper-using-config-resource), or [namespace exemption flags](https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces/#exempting-namespaces-from-the-gatekeeper-admission-webhook-using---exempt-namespace-flag). This ensures the enforcement scope of generated VAPs always matches Gatekeeper's own boundaries. Set `--sync-vap-enforcement-scope=false` to disable this behavior.
+The `--sync-vap-enforcement-scope` flag (enabled by default) ensures Gatekeeper generates ValidatingAdmissionPolicy (VAP) resources while honoring the match criteria and namespace selectors in [ValidatingWebhookConfig](https://github.com/open-policy-agent/gatekeeper/blob/master/charts/gatekeeper/templates/gatekeeper-validating-webhook-configuration-validatingwebhookconfiguration.yaml#L35) and the namespace exclusions in the [Gatekeeper `Config` resource](https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces/#exempting-namespaces-from-gatekeeper-using-config-resource). Set `--sync-vap-enforcement-scope=false` to disable this behavior.
 :::
 
 :::warning
@@ -23,6 +23,24 @@ Feature State: Gatekeeper version v3.20 (beta)
 ## Description
 
 This feature allows Gatekeeper to integrate with Kubernetes Validating Admission Policy based on [Common Expression Language (CEL)](https://github.com/google/cel-spec), a declarative, in-process admission control alternative to validating admission webhooks.
+
+## Namespace exemptions and upgrades
+
+With scope synchronization enabled, generated VAPs inherit the validating webhook's complete `namespaceSelector`, including custom selectors. The default selector excludes namespaces carrying the `admission.gatekeeper.sh/ignore` label. The `--exempt-namespace`, `--exempt-namespace-prefix`, and `--exempt-namespace-suffix` flags only authorize which namespaces may carry that label; matching a flag does not itself exempt a namespace. See [Exempting Namespaces](exempt-namespaces.md) for the labeling procedure.
+
+:::warning
+Earlier versions also generated a name-based VAP exemption condition. After upgrading, resources in namespaces that match an exemption flag but do not carry the ignore label are no longer exempt for that reason. Requests that violate an applicable policy can now be denied. Review affected namespaces before upgrading, and add the ignore label only where exemption is intended and permitted. Existing resources are not automatically deleted. Config-based namespace exclusions remain independent of label-based exemptions.
+:::
+
+When a non-empty validating webhook configuration name is configured but its configuration is not available in Gatekeeper's cache, VAP generation reports an error and retries instead of generating a policy with a different scope. Existing VAPs retain their last successfully synchronized configuration; new VAPs wait for the configuration to become available. After an upgrade, verify VAP generation status and the selectors on generated policies before relying on their enforcement.
+
+### Generation without a validating webhook
+
+Setting Helm's `disableValidatingWebhook=true` does not disable VAP generation. The chart passes an empty `--validating-webhook-configuration-name=` to both deployments to explicitly indicate that no validating webhook configuration should be inherited. For non-Helm installations, set this flag on every VAP generator when no validating webhook configuration is intended. The flag does not delete any existing webhook configuration.
+
+In this mode, generated VAPs use default resource rules for `CREATE` and `UPDATE`, retain constraint matching, and continue to honor the `Config` resource's `webhook` namespace exclusions while `--sync-vap-enforcement-scope=true`. They do not inherit webhook selectors or match conditions. Disabling scope synchronization instead would also disable Config-based scope synchronization.
+
+The ignore label and namespace exemption flags do not independently exempt resources in this mode. Disabling the validating webhook also removes the label-authorization webhook, so automatically trusting the ignore label would allow namespace editors to bypass native enforcement. Use administrator-controlled Config exclusions or constraint matching for intentional exclusions. Review generated policies after changing modes: existing VAPs are updated through reconciliation, not atomically with the Helm change.
 
 ## Motivations
 

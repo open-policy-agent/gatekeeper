@@ -1,6 +1,8 @@
 package transform
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -11,12 +13,21 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
+	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	rschema "k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apiserver/pkg/admission/plugin/cel"
+	"k8s.io/apiserver/pkg/admission/plugin/webhook"
+	"k8s.io/apiserver/pkg/admission/plugin/webhook/matchconditions"
+	namespacematcher "k8s.io/apiserver/pkg/admission/plugin/webhook/predicates/namespace"
+	"k8s.io/apiserver/pkg/cel/environment"
+	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
 )
 
@@ -526,9 +537,9 @@ func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 			webhookConfig:           nil,
 			excludedNamespaces:      nil,
 			exemptedNamespaces:      []string{"gatekeeper-system"},
-			expectedMatchConditions: 6, // 1 template + 4 standard + 1 exempted
+			expectedMatchConditions: 5, // 1 template + 4 standard
 			expectedResourceRules:   1,
-			hasExemptedCondition:    true,
+			hasExemptedCondition:    false,
 		},
 		{
 			name:                    "with both excluded and exempted namespaces",
@@ -537,10 +548,10 @@ func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 			webhookConfig:           nil,
 			excludedNamespaces:      []string{"kube-system"},
 			exemptedNamespaces:      []string{"gatekeeper-system"},
-			expectedMatchConditions: 7, // 1 template + 4 standard + 1 excluded + 1 exempted
+			expectedMatchConditions: 6, // 1 template + 4 standard + 1 excluded
 			expectedResourceRules:   1,
 			hasExcludedCondition:    true,
-			hasExemptedCondition:    true,
+			hasExemptedCondition:    false,
 		},
 		{
 			name:   "with webhook config and namespace exclusions",
@@ -573,12 +584,12 @@ func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 			},
 			excludedNamespaces:       []string{"kube-system", "kube-public"},
 			exemptedNamespaces:       []string{"gatekeeper-system", "monitoring"},
-			expectedMatchConditions:  8, // 1 template + 4 standard + 1 webhook + 1 excluded + 1 exempted
+			expectedMatchConditions:  7, // 1 template + 4 standard + 1 webhook + 1 excluded
 			expectedResourceRules:    1,
 			hasNamespaceSelector:     true,
 			hasWebhookMatchCondition: true,
 			hasExcludedCondition:     true,
-			hasExemptedCondition:     true,
+			hasExemptedCondition:     false,
 		},
 		{
 			name:   "with multiple webhook rules",
@@ -737,18 +748,14 @@ func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 				}
 			}
 
-			// Verify exempted namespaces condition
-			if test.hasExemptedCondition {
-				found := false
-				for _, cond := range policy.Spec.MatchConditions {
-					if strings.Contains(cond.Name, "global_exempted") {
-						found = true
-						break
-					}
+			foundExempted := false
+			for _, condition := range policy.Spec.MatchConditions {
+				if condition.Name == "gatekeeper_internal_match_global_exempted_namespaces" {
+					foundExempted = true
 				}
-				if !found {
-					t.Error("expected exempted namespaces condition but not found")
-				}
+			}
+			if foundExempted != test.hasExemptedCondition {
+				t.Errorf("exempted namespaces condition present = %v, want %v", foundExempted, test.hasExemptedCondition)
 			}
 
 			// Verify policy name format
@@ -783,6 +790,145 @@ func TestTemplateToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 				t.Error("expected params variable but not found")
 			}
 		})
+	}
+}
+
+func TestVAPNamespaceExemptionMatching(t *testing.T) {
+	const ignoreLabel = "admission.gatekeeper.sh/ignore"
+	ignoreSelector := &metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			{Key: ignoreLabel, Operator: metav1.LabelSelectorOpDoesNotExist},
+		},
+	}
+	customSelector := ignoreSelector.DeepCopy()
+	customSelector.MatchLabels = map[string]string{"environment": "production"}
+	source := &schema.Source{
+		FailurePolicy: ptr.To("Fail"),
+		Validations:   []schema.Validation{{Expression: "false", Message: "test denial"}},
+	}
+	template := &templates.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "testnamespaceexemption"},
+		Spec: templates.ConstraintTemplateSpec{
+			CRD: templates.CRD{Spec: templates.CRDSpec{Names: templates.Names{Kind: "TestNamespaceExemption"}}},
+			Targets: []templates.Target{{
+				Code: []templates.Code{{Engine: schema.Name, Source: &templates.Anything{Value: source.MustToUnstructured()}}},
+			}},
+		},
+	}
+	tests := []struct {
+		name            string
+		kind            string
+		resource        string
+		namespaceLabels map[string]string
+		objectLabels    map[string]string
+		selector        *metav1.LabelSelector
+		excluded        []string
+		wantMatch       bool
+	}{
+		{name: "unlabeled namespace remains in scope", kind: "ConfigMap", resource: "configmaps", wantMatch: true},
+		{name: "labeled namespace is exempt", kind: "ConfigMap", resource: "configmaps", namespaceLabels: map[string]string{ignoreLabel: ""}},
+		{name: "ignore label value does not matter", kind: "ConfigMap", resource: "configmaps", namespaceLabels: map[string]string{ignoreLabel: "false"}},
+		{name: "resource label cannot exempt its namespace", kind: "ConfigMap", resource: "configmaps", objectLabels: map[string]string{ignoreLabel: ""}, wantMatch: true},
+		{name: "unlabeled Namespace remains in scope", kind: "Namespace", resource: "namespaces", wantMatch: true},
+		{name: "labeled Namespace is exempt", kind: "Namespace", resource: "namespaces", namespaceLabels: map[string]string{ignoreLabel: ""}},
+		{name: "cluster scoped resource remains in scope", kind: "Node", resource: "nodes", objectLabels: map[string]string{ignoreLabel: ""}, wantMatch: true},
+		{name: "custom selector matches", kind: "ConfigMap", resource: "configmaps", selector: customSelector, namespaceLabels: map[string]string{"environment": "production"}, wantMatch: true},
+		{name: "custom selector excludes", kind: "ConfigMap", resource: "configmaps", selector: customSelector, namespaceLabels: map[string]string{"environment": "development"}},
+		{name: "empty selector enforces labeled namespace", kind: "ConfigMap", resource: "configmaps", selector: &metav1.LabelSelector{}, namespaceLabels: map[string]string{ignoreLabel: ""}, wantMatch: true},
+		{name: "Config exclusion remains effective", kind: "ConfigMap", resource: "configmaps", excluded: []string{"team-*"}},
+	}
+	for _, test := range tests {
+		for _, operation := range []admissionv1.Operation{admissionv1.Create, admissionv1.Update, admissionv1.Delete} {
+			t.Run(fmt.Sprintf("%s/%s", test.name, operation), func(t *testing.T) {
+				selector := test.selector
+				if selector == nil {
+					selector = ignoreSelector
+				}
+				config := &webhookconfigcache.WebhookMatchingConfig{
+					NamespaceSelector: selector,
+					Rules: []admissionregistrationv1.RuleWithOperations{{
+						Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.OperationAll},
+						Rule:       admissionregistrationv1.Rule{APIGroups: []string{"*"}, APIVersions: []string{"*"}, Resources: []string{"*"}},
+					}},
+				}
+				policy, err := TemplateToPolicyDefinitionWithWebhookConfig(template, config, test.excluded, []string{"team-payments", "team-*", "*-payments"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(policy.Spec.MatchConstraints.NamespaceSelector, selector) {
+					t.Fatal("generated policy changed the webhook namespace selector")
+				}
+				namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "team-payments", Labels: test.namespaceLabels}}
+				indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+				if err := indexer.Add(namespace); err != nil {
+					t.Fatal(err)
+				}
+				predicate := &namespacematcher.Matcher{NamespaceLister: corelisters.NewNamespaceLister(indexer)}
+				accessor := webhook.NewValidatingWebhookAccessor("test", "test", &admissionregistrationv1.ValidatingWebhook{
+					NamespaceSelector: policy.Spec.MatchConstraints.NamespaceSelector,
+				})
+				object := &unstructured.Unstructured{}
+				object.SetGroupVersionKind(rschema.GroupVersionKind{Version: "v1", Kind: test.kind})
+				object.SetName("test-object")
+				object.SetLabels(test.objectLabels)
+				requestNamespace := namespace.Name
+				switch test.kind {
+				case "Namespace":
+					object.SetName(namespace.Name)
+					object.SetLabels(test.namespaceLabels)
+				case "Node":
+					requestNamespace = ""
+				default:
+					object.SetNamespace(namespace.Name)
+				}
+				encoded, err := json.Marshal(object.Object)
+				if err != nil {
+					t.Fatal(err)
+				}
+				request := &admissionv1.AdmissionRequest{
+					Kind:      metav1.GroupVersionKind{Version: "v1", Kind: test.kind},
+					Resource:  metav1.GroupVersionResource{Version: "v1", Resource: test.resource},
+					Name:      object.GetName(),
+					Namespace: requestNamespace,
+					Operation: operation,
+				}
+				if operation != admissionv1.Delete {
+					request.Object = runtime.RawExtension{Raw: encoded}
+				}
+				if operation != admissionv1.Create {
+					request.OldObject = runtime.RawExtension{Raw: encoded}
+				}
+				attributes, err := RequestToVersionedAttributes(request)
+				if err != nil {
+					t.Fatal(err)
+				}
+				matchesNamespace, statusErr := predicate.MatchNamespaceSelector(accessor, attributes)
+				if statusErr != nil {
+					t.Fatal(statusErr)
+				}
+				expressions := make([]cel.ExpressionAccessor, 0, len(policy.Spec.MatchConditions))
+				for _, condition := range policy.Spec.MatchConditions {
+					expressions = append(expressions, &matchconditions.MatchCondition{Name: condition.Name, Expression: condition.Expression})
+				}
+				compiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				evaluator := compiler.CompileCondition(expressions, cel.OptionalVariableDeclarations{HasParams: true}, environment.StoredExpressions)
+				if compilationErrors := evaluator.CompilationErrors(); len(compilationErrors) != 0 {
+					t.Fatalf("compiling match conditions: %v", compilationErrors)
+				}
+				matcher := matchconditions.NewMatcher(evaluator, ptr.To(admissionregistrationv1.Fail), "policy", "validate", policy.Name)
+				constraint := &unstructured.Unstructured{Object: map[string]interface{}{}}
+				result := matcher.Match(context.Background(), attributes, constraint, nil)
+				if result.Error != nil {
+					t.Fatal(result.Error)
+				}
+				if got := matchesNamespace && result.Matches; got != test.wantMatch {
+					t.Errorf("policy matches = %v, want %v", got, test.wantMatch)
+				}
+			})
+		}
 	}
 }
 
@@ -1604,9 +1750,9 @@ func TestBuildMatchConditions(t *testing.T) {
 			},
 			excludedNamespaces:  nil,
 			exemptedNamespaces:  []string{"gatekeeper-system"},
-			expectedConditions:  5, // 0 from source + 4 standard + 1 exempted
+			expectedConditions:  4, // 4 standard
 			checkExcludedExists: false,
-			checkExemptedExists: true,
+			checkExemptedExists: false,
 		},
 		{
 			name: "with both excluded and exempted namespaces",
@@ -1618,9 +1764,9 @@ func TestBuildMatchConditions(t *testing.T) {
 			},
 			excludedNamespaces:  []string{"kube-system"},
 			exemptedNamespaces:  []string{"gatekeeper-system"},
-			expectedConditions:  8, // 2 from source + 4 standard + 1 excluded + 1 exempted
+			expectedConditions:  7, // 2 from source + 4 standard + 1 excluded
 			checkExcludedExists: true,
-			checkExemptedExists: true,
+			checkExemptedExists: false,
 		},
 	}
 
@@ -1656,8 +1802,8 @@ func TestBuildMatchConditions(t *testing.T) {
 					break
 				}
 			}
-			if test.checkExemptedExists && !foundExempted {
-				t.Error("expected exempted namespaces condition but not found")
+			if foundExempted != test.checkExemptedExists {
+				t.Errorf("exempted namespaces condition present = %v, want %v", foundExempted, test.checkExemptedExists)
 			}
 		})
 	}

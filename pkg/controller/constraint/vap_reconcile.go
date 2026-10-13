@@ -142,6 +142,9 @@ func v1beta1VAPToV1(source *admissionregistrationv1beta1.ValidatingAdmissionPoli
 
 func (r *ReconcileConstraint) transformConstraintToVAP(template *templates.ConstraintTemplate, constraint *unstructured.Unstructured) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	webhookConfig, excludedNamespaces, exemptedNamespaces := r.vapMatchingConfig()
+	if *transform.SyncVAPScope && *webhook.VwhName != "" && webhookConfig == nil {
+		return nil, fmt.Errorf("webhook configuration %q is not available for VAP scope synchronization", *webhook.VwhName)
+	}
 	return transform.ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, webhookConfig, excludedNamespaces, exemptedNamespaces)
 }
 
@@ -152,6 +155,9 @@ func (r *ReconcileConstraint) vapMatchingConfig() (*webhookconfigcache.WebhookMa
 	var excludedNamespaces []string
 	if r.processExcluder != nil {
 		excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
+	}
+	if *webhook.VwhName == "" {
+		return nil, excludedNamespaces, nil
 	}
 	exemptedNamespaces := webhook.GetAllExemptedNamespacesWithWildcard()
 	var webhookConfig *webhookconfigcache.WebhookMatchingConfig
@@ -220,6 +226,9 @@ func (r *ReconcileConstraint) authoritativeVAPMatchingConfig(ctx context.Context
 	} else if config.GetDeletionTimestamp().IsZero() {
 		excluder.Add(config.Spec.Match)
 	}
+	if *webhook.VwhName == "" {
+		return nil, excluder.GetExcludedNamespaces(process.Webhook), nil, nil
+	}
 	configuration := &admissionregistrationv1.ValidatingWebhookConfiguration{}
 	var matching *webhookconfigcache.WebhookMatchingConfig
 	if err := r.apiReader.Get(ctx, types.NamespacedName{Name: *webhook.VwhName}, configuration); err != nil {
@@ -240,6 +249,9 @@ func (r *ReconcileConstraint) authoritativeVAPMatchingConfig(ctx context.Context
 				break
 			}
 		}
+	}
+	if matching == nil {
+		return nil, nil, nil, fmt.Errorf("webhook configuration %q is not available for VAP scope synchronization", *webhook.VwhName)
 	}
 	return matching, excluder.GetExcludedNamespaces(process.Webhook), webhook.GetAllExemptedNamespacesWithWildcard(), nil
 }
