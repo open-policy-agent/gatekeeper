@@ -21,6 +21,29 @@ var kindRegex = regexp.MustCompile(`(?m)^kind:[\s]+([\S]+)[\s]*$`)
 // use exactly two spaces to be sure we are capturing metadata.name.
 var nameRegex = regexp.MustCompile(`(?m)^  name:[\s]+([\S]+)[\s]*$`)
 
+// foldedActionRegex matches a single Helm template action, spanning newlines if
+// the action was wrapped.
+var foldedActionRegex = regexp.MustCompile(`(?s)\{\{.*?\}\}`)
+
+// actionLineBreakRegex matches a line break together with the indentation the
+// emitter adds around it.
+var actionLineBreakRegex = regexp.MustCompile(`\s*\n\s*`)
+
+// rejoinFoldedActions removes the line breaks that the YAML emitter used while
+// building the chart (kustomize) introduces inside a template action when it
+// wraps a long plain scalar. YAML folding turns such a break back into a single
+// space, so collapsing the break to one space is lossless; it keeps the
+// generated chart readable and legible to strict template lexers that reject a
+// newline inside an action (Helm < 3.6, Go < 1.16).
+func rejoinFoldedActions(obj string) string {
+	return foldedActionRegex.ReplaceAllStringFunc(obj, func(action string) string {
+		if !strings.ContainsRune(action, '\n') {
+			return action
+		}
+		return actionLineBreakRegex.ReplaceAllString(action, " ")
+	})
+}
+
 const (
 	DeploymentKind     = "Deployment"
 	ServiceAccountKind = "ServiceAccount"
@@ -179,6 +202,7 @@ func (ks *kindSet) Write() error {
 
 			fmt.Printf("Writing %s\n", destFile)
 
+			obj = rejoinFoldedActions(obj)
 			addSeparator := "---\n" + obj
 			if err := os.WriteFile(destFile, []byte(addSeparator), 0o600); err != nil {
 				return err
