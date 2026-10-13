@@ -56,6 +56,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -199,6 +200,8 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 		cstrEvents:      regEvents,
 		webhookCache:    webhookCache,
 		processExcluder: processExcluder,
+
+		statusPersistBackoff: workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Second, time.Minute),
 	}
 
 	if getPod == nil {
@@ -330,6 +333,13 @@ type ReconcileConstraintTemplate struct {
 	webhookCache    *webhookconfigcache.WebhookConfigCache
 	processExcluder *process.Excluder
 	vapCleanup      *templateVAPCleanup
+
+	// statusPersistBackoff is used in place of the deprecated Result.Requeue, which deferred
+	// to the workqueue's rate limiter, for the transient status persist retry path below.
+	// Result.RequeueAfter with a fixed delay would forget failure history on every attempt
+	// (the workqueue calls Forget before requeueing), so an explicit bounded exponential
+	// backoff is computed here instead, and reset via Forget once persistence succeeds.
+	statusPersistBackoff workqueue.TypedRateLimiter[reconcile.Request]
 }
 
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingadmissionpolicies;validatingadmissionpolicybindings,verbs=get;list;watch;create;update;patch;delete
@@ -362,6 +372,10 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	deleted = deleted || !ct.GetDeletionTimestamp().IsZero()
 
 	if deleted {
+		// The persist-backoff limiter is keyed by request (name), so a deleted object's
+		// accumulated backoff must be cleared here. Otherwise a new object recreated
+		// under the same name would inherit the stale delay.
+		r.statusPersistBackoff.Forget(request)
 		r.metrics.DeleteVAPStatus(request.NamespacedName)
 		r.metrics.DeleteCelCT(request.NamespacedName)
 		ctRef := &templates.ConstraintTemplate{}
@@ -437,10 +451,11 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 				return
 			}
 			logger.Error(persistErr, persistErrorMessage)
-			result = reconcile.Result{Requeue: true}
+			result = reconcile.Result{RequeueAfter: r.statusPersistBackoff.When(request)}
 			reconcileErr = nil
 			return
 		}
+		r.statusPersistBackoff.Forget(request)
 		if reported {
 			reconcileErr = reportedErr.err
 		}

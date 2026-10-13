@@ -304,7 +304,7 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if err = r.statusClient.Status().Update(ctx, instance); err != nil {
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
