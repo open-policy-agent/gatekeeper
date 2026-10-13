@@ -315,6 +315,57 @@ func TestReconcile(t *testing.T) {
 		require.NoError(t, err, "webhook config should be removed from cache after deletion")
 	})
 
+	t.Run("removing target webhook evicts scope and restoration recovers", func(t *testing.T) {
+		webhookNameMu.Lock()
+		defer webhookNameMu.Unlock()
+		webhookName := testVwhName + "-entry-removed"
+		setVwhName(webhookName)
+		defer func() { setVwhName(testVwhName) }()
+
+		ct := createVAPConstraintTemplate("test-ct-entry-removed")
+		testutils.CreateThenCleanup(ctx, t, c, ct)
+		vwh := createTestValidatingWebhook(webhookName, []admissionregistrationv1.RuleWithOperations{{
+			Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+			Rule:       admissionregistrationv1.Rule{APIGroups: []string{""}, APIVersions: []string{"v1"}, Resources: []string{"pods"}},
+		}}, nil, nil)
+		testutils.CreateThenCleanup(ctx, t, c, vwh)
+		require.Eventually(t, func() bool {
+			_, exists := cache.GetConfig(webhookName)
+			return exists && len(ctEvents) > 0
+		}, timeout, 20*time.Millisecond)
+		for len(ctEvents) > 0 {
+			<-ctEvents
+		}
+
+		updateName := func(name string) {
+			t.Helper()
+			require.NoError(t, retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				current := &admissionregistrationv1.ValidatingWebhookConfiguration{}
+				if err := c.Get(ctx, types.NamespacedName{Name: webhookName}, current); err != nil {
+					return err
+				}
+				current.Webhooks[0].Name = name
+				return c.Update(ctx, current)
+			}))
+		}
+		updateName("other.gatekeeper.sh")
+		require.Eventually(t, func() bool {
+			_, exists := cache.GetConfig(webhookName)
+			return !exists && len(ctEvents) > 0
+		}, timeout, 20*time.Millisecond)
+		require.Equal(t, ct.Name, (<-ctEvents).Object.GetName())
+		for len(ctEvents) > 0 {
+			<-ctEvents
+		}
+
+		updateName(webhook.ValidatingWebhookName)
+		require.Eventually(t, func() bool {
+			_, exists := cache.GetConfig(webhookName)
+			return exists && len(ctEvents) > 0
+		}, timeout, 20*time.Millisecond)
+		require.Equal(t, ct.Name, (<-ctEvents).Object.GetName())
+	})
+
 	t.Run("webhook namespace selector change triggers reconciliation", func(t *testing.T) {
 		webhookNameMu.Lock()
 		defer webhookNameMu.Unlock()
