@@ -547,14 +547,16 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		return err
 	}
 
-	wm, err := watch.New(dc)
+	wm, err := newWatchManager(dc)
 	if err != nil {
 		setupLog.Error(err, "unable to create watch manager")
 		return err
 	}
-	if err := mgr.Add(wm); err != nil {
-		setupLog.Error(err, "unable to register watch manager with the manager")
-		return err
+	if wm != nil {
+		if err := mgr.Add(wm); err != nil {
+			setupLog.Error(err, "unable to register watch manager with the manager")
+			return err
+		}
 	}
 
 	// processExcluder is used for namespace exclusion for specified processes in config
@@ -680,6 +682,18 @@ func newExportSystem() *export.System {
 		return export.NewSystem()
 	}
 	return nil
+}
+
+// newWatchManager constructs the watch manager only for processes that sync
+// validation data. Its registrars belong to the cache manager and the
+// constraint template controller, and neither is set up for other operations,
+// so a status-only, generate-only or mutation-only pod would otherwise run a
+// watch manager that never watches anything.
+func newWatchManager(dc watch.RemovableCache) (*watch.Manager, error) {
+	if !operations.NeedsValidationDataSync() {
+		return nil, nil
+	}
+	return watch.New(dc)
 }
 
 // newExpansionSystem constructs an expansion.System only for processes with

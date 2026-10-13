@@ -20,8 +20,8 @@ package operations
 // operation set at every call site.
 
 // NeedsValidationDataSync returns true when the pod has to keep referential
-// data in sync for validation. It gates the cache manager, its watch registrar,
-// the sync controller and the expectations pruner.
+// data in sync for validation. It gates the watch manager, the cache manager
+// and its registrar, the sync controller and the expectations pruner.
 func NeedsValidationDataSync() bool {
 	return HasValidationOperations()
 }

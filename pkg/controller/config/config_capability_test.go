@@ -42,7 +42,9 @@ import (
 func TestAdderRegistersWithoutDataSync(t *testing.T) {
 	for _, op := range []operations.Operation{operations.MutationStatus, operations.MutationWebhook} {
 		t.Run(string(op), func(t *testing.T) {
-			t.Cleanup(operations.AssignForTest(op))
+			restore, err := operations.SetForTest(op)
+			require.NoError(t, err)
+			t.Cleanup(restore)
 
 			mgr, _ := setupManager(t)
 			require.NoError(t, (&Adder{ProcessExcluder: process.New()}).Add(mgr))
@@ -59,7 +61,9 @@ func TestAdderRegistersWithoutDataSync(t *testing.T) {
 // exclusions from the Config resource still land, with no cache manager and no
 // constraint client behind it.
 func TestReconcileWithoutDataSync(t *testing.T) {
-	t.Cleanup(operations.AssignForTest(operations.MutationWebhook))
+	restore, err := operations.SetForTest(operations.MutationWebhook)
+	require.NoError(t, err)
+	t.Cleanup(restore)
 
 	ctx := context.Background()
 	mgr, _ := setupManager(t)

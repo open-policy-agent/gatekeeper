@@ -85,7 +85,11 @@ func TestCapabilities(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Cleanup(AssignForTest(tt.assigned...))
+			restore, err := SetForTest(tt.assigned...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(restore)
 
 			if got := NeedsValidationDataSync(); got != tt.dataSync {
 				t.Errorf("NeedsValidationDataSync() = %t, want %t", got, tt.dataSync)
@@ -103,25 +107,5 @@ func TestCapabilities(t *testing.T) {
 				t.Errorf("NeedsConfigReconciliation() = %t, want %t", got, tt.configReconciliation)
 			}
 		})
-	}
-}
-
-func TestAssignForTestRestores(t *testing.T) {
-	before := AssignedStringList()
-
-	restore := AssignForTest(Audit)
-	if got := AssignedStringList(); len(got) != 1 || got[0] != string(Audit) {
-		t.Fatalf("AssignedStringList() = %v, want [audit]", got)
-	}
-	restore()
-
-	after := AssignedStringList()
-	if len(before) != len(after) {
-		t.Fatalf("AssignedStringList() = %v, want %v", after, before)
-	}
-	for i := range before {
-		if before[i] != after[i] {
-			t.Fatalf("AssignedStringList() = %v, want %v", after, before)
-		}
 	}
 }

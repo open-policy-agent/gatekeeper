@@ -120,9 +120,13 @@ func TestDependenciesValidate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Cleanup(operations.AssignForTest(tt.assigned...))
+			restore, err := operations.SetForTest(tt.assigned...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(restore)
 
-			err := tt.deps().Validate()
+			err = tt.deps().Validate()
 			if tt.wantErr && err == nil {
 				t.Fatal("Validate() = nil, want error")
 			}
