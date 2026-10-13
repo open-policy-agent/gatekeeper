@@ -1262,9 +1262,6 @@ func TestManageVAPB_OperationMismatchWarning(t *testing.T) {
 		apiEnabled: ptr.To(true), defaultGenerateVAP: ptr.To(true),
 		defaultGenerateVAPB: ptr.To(true), generationMode: ptr.To(VAPGenerationModeConstraint),
 	})
-	originalSync := *transform.SyncVAPScope
-	*transform.SyncVAPScope = true
-	t.Cleanup(func() { *transform.SyncVAPScope = originalSync })
 	template := makeUnitCELTemplate()
 	template.Spec.Targets[0].Operations = []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update}
 	instance := makeUnitConstraint()
@@ -1355,9 +1352,6 @@ func TestManageVAPB_PerConstraintModeParameterUpdateOnlyUpdatesVAP(t *testing.T)
 }
 
 func TestReconcileConstraintVAP_DefaultedPolicy(t *testing.T) {
-	originalSync := *transform.SyncVAPScope
-	*transform.SyncVAPScope = false
-	t.Cleanup(func() { *transform.SyncVAPScope = originalSync })
 	for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
 		t.Run(version, func(t *testing.T) {
 			template := makeUnitCELTemplate()
@@ -1638,9 +1632,6 @@ func TestManageVAPB_TemplateWithoutRollbackSkipsFreshnessCheck(t *testing.T) {
 
 func TestSharedVAPIsCurrent(t *testing.T) {
 	configureVAP(t, vapTestConfig{defaultGenerateVAP: ptr.To(true)})
-	originalSync := *transform.SyncVAPScope
-	*transform.SyncVAPScope = true
-	t.Cleanup(func() { *transform.SyncVAPScope = originalSync })
 	for _, version := range []string{vapAPIVersionV1, vapAPIVersionV1Beta1} {
 		for _, scenario := range []string{"current", "defaulted", "old owner", "stale scope", "cache ahead", "API error", "Config cache cold", "webhook cache cold", "Config unavailable", "webhook unavailable", "generation disabled"} {
 			t.Run(version+"/"+scenario, func(t *testing.T) {

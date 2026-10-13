@@ -146,9 +146,6 @@ func (r *ReconcileConstraint) transformConstraintToVAP(template *templates.Const
 }
 
 func (r *ReconcileConstraint) vapMatchingConfig() (*webhookconfigcache.WebhookMatchingConfig, []string, []string) {
-	if !*transform.SyncVAPScope {
-		return nil, nil, nil
-	}
 	var excludedNamespaces []string
 	if r.processExcluder != nil {
 		excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
@@ -208,9 +205,6 @@ func (r *ReconcileConstraint) sharedVAPIsCurrent(ctx context.Context, templateNa
 }
 
 func (r *ReconcileConstraint) authoritativeVAPMatchingConfig(ctx context.Context) (*webhookconfigcache.WebhookMatchingConfig, []string, []string, error) {
-	if !*transform.SyncVAPScope {
-		return nil, nil, nil, nil
-	}
 	config := &configv1alpha1.Config{}
 	excluder := process.New()
 	if err := r.apiReader.Get(ctx, keys.Config, config); err != nil {
