@@ -55,9 +55,12 @@ func ReadUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
 	splits := strings.Split(string(bytes), "\n---")
 	var result []*unstructured.Unstructured
 
-	for _, split := range splits {
-		split = clean(split)
-		if len(split) == 0 {
+	for i, split := range splits {
+		if i < len(splits)-1 {
+			// Restore the newline consumed by the document separator.
+			split += "\n"
+		}
+		if len(clean(split)) == 0 {
 			continue
 		}
 
