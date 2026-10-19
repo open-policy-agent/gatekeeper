@@ -16,6 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -522,18 +523,32 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 			case <-relistCtx.Done():
 				return
 			default:
+				var lastErr error
 				operation := func(ctx context.Context) (bool, error) {
 					if err := c.syncGVK(ctx, gvk); err != nil {
-						return false, err
+						lastErr = err
+						if meta.IsNoMatchError(err) {
+							return false, err
+						}
+						if ctx.Err() != nil {
+							return false, ctx.Err()
+						}
+						return false, nil
 					}
+					lastErr = nil
 					return true, nil
 				}
 
 				if err := wait.ExponentialBackoffWithContext(relistCtx, backoff, operation); err != nil {
-					if errors.Is(err, context.Canceled) {
+					if errors.Is(err, context.Canceled) || relistCtx.Err() != nil {
 						return
 					}
-					log.Error(err, "internal: error listings gvk cache data", "gvk", gvk)
+					logErr := lastErr
+					if logErr == nil {
+						logErr = err
+					}
+					log.Error(logErr, "internal: error listings gvk cache data", "gvk", gvk)
+					gvksSet.Remove(gvk)
 				} else {
 					gvksSet.Remove(gvk)
 				}

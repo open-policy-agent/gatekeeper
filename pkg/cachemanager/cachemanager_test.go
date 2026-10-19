@@ -20,6 +20,7 @@ import (
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -831,6 +832,50 @@ func TestCacheManagerReplayGVKsCancelsInFlightListOnStop(t *testing.T) {
 		<-replayDone
 		t.Fatal("replayGVKs did not cancel an in-flight List after stopCh closed")
 	}
+}
+
+type errorReader struct {
+	err       error
+	listCalls int
+	mu        sync.Mutex
+}
+
+func (r *errorReader) Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
+	return r.err
+}
+
+func (r *errorReader) List(context.Context, client.ObjectList, ...client.ListOption) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.listCalls++
+	return r.err
+}
+
+func TestCacheManagerReplayGVKsExitsOnNoMatchError(t *testing.T) {
+	gvk := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Custom"}
+	reader := &errorReader{
+		err: &meta.NoKindMatchError{GroupKind: gvk.GroupKind()},
+	}
+	cm := newSyncGVKContentionCacheManager(gvk, reader)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stopCh := make(chan struct{})
+
+	replayDone := make(chan struct{})
+	go func() {
+		cm.replayGVKs(ctx, []schema.GroupVersionKind{gvk}, stopCh)
+		close(replayDone)
+	}()
+
+	select {
+	case <-replayDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("replayGVKs did not exit cleanly on NoKindMatchError and may be looping indefinitely")
+	}
+
+	reader.mu.Lock()
+	defer reader.mu.Unlock()
+	require.Equal(t, 1, reader.listCalls, "List should only be called once when NoKindMatchError is returned")
 }
 
 func TestCacheManagerManageCacheStopsRelistBeforeWipeWithoutHoldingLock(t *testing.T) {
