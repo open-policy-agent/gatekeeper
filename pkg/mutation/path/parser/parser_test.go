@@ -230,6 +230,16 @@ func TestParser(t *testing.T) {
 			wantErr: ErrInvalidInteger,
 		},
 		{
+			// Integer overflow that wraps around to zero
+			input:   `spec[bignum: 18446744073709551616]`,
+			wantErr: ErrInvalidInteger,
+		},
+		{
+			// Integer overflow that wraps around to a small positive number
+			input:   `spec[bignum: 18446744073709551621]`,
+			wantErr: ErrInvalidInteger,
+		},
+		{
 			// Quoted integers are parsed as strings
 			input: `spec[quoted: "123"]`,
 			expected: []Node{
