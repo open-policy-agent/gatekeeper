@@ -32,11 +32,11 @@ jobs:
     timeout-minutes: 15
     strategy:
       fail-fast: false
-      matrix:
+      matrix: &kubernetes-matrix
         KUBERNETES_VERSION: ["1.31.6", "1.32.3", "1.33.2"] # Latest available versions of Kubernetes at - https://hub.docker.com/r/kindest/node/tags
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
 
@@ -76,6 +76,7 @@ jobs:
             EMIT_ADMISSION_AUDIT_ANNOTATIONS=true
 
           make test-e2e \
+            BATS_TESTS_FILE=test/bats/test.bats \
             KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} \
             ENABLE_VAP_TESTS=1 \
             ENABLE_ADMISSION_AUDIT_ANNOTATION_TESTS=1
@@ -88,12 +89,80 @@ jobs:
           docker exec kind-control-plane cat /var/log/kubernetes/kube-apiserver-audit.log > logs-kube-apiserver-audit.json || true
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ always() }}
         with:
           name: logs-${{ matrix.KUBERNETES_VERSION }}
           path: |
             logs-*.json
+
+  vap_scope_build_test:
+    name: "[VAP Scope] Build and Test"
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: *kubernetes-matrix
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Bootstrap e2e
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+          make e2e-bootstrap \
+            KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} \
+            KIND_CLUSTER_FILE=test/bats/tests/kindcluster-audit.yml
+
+      - name: Run VAP scope e2e
+        run: |
+          make docker-buildx \
+            IMG=gatekeeper-e2e:latest
+
+          kind load docker-image --name kind \
+            gatekeeper-e2e:latest
+
+          make deploy \
+            IMG=gatekeeper-e2e:latest \
+            USE_LOCAL_IMG=true \
+            GENERATE_VAP=true \
+            SYNC_VAP_ENFORCEMENT_SCOPE=true \
+            GENERATE_VAPBINDING=true \
+            EMIT_ADMISSION_AUDIT_ANNOTATIONS=true
+
+          make test-e2e \
+            BATS_TESTS_FILE=test/bats/vap_scope.bats \
+            KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }} \
+            ENABLE_VAP_TESTS=1
+
+      - name: Save logs
+        if: ${{ always() }}
+        run: |
+          kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-vap-scope-controller.json
+          kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-vap-scope-audit.json
+          docker exec kind-control-plane cat /var/log/kubernetes/kube-apiserver-audit.log > logs-vap-scope-kube-apiserver-audit.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: vap-scope-logs-${{ matrix.KUBERNETES_VERSION }}
+          path: |
+            logs-vap-scope-*.json
 
   helm_build_test:
     name: "[Helm] Build and Test"
@@ -111,7 +180,7 @@ jobs:
             ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS: false
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
 
@@ -170,7 +239,7 @@ jobs:
           docker exec kind-control-plane cat /var/log/kubernetes/kube-apiserver-audit.log > logs-kube-apiserver-audit.json || true
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ always() }}
         with:
           name: helm-logs-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}
@@ -184,7 +253,7 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
       with:
         egress-policy: audit
 
@@ -227,7 +296,7 @@ jobs:
         kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-generatorexpansion-audit.json
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       if: ${{ always() }}
       with:
         name: generatorexpansion-logs
@@ -240,7 +309,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
 
@@ -285,7 +354,7 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ always() }}
         with:
           name: logs-ownerreferences-admission-plugin

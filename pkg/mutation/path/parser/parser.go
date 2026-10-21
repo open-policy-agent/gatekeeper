@@ -17,6 +17,7 @@ package parser
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/token"
 )
@@ -176,10 +177,11 @@ func parseInt64(s string) (int64, error) {
 		if d < '0' || d > '9' {
 			return 0, invalidIntegerError{s: fmt.Sprintf("unexpected digit: %c", d)}
 		}
-		result = result*10 + int64(d-'0')
-		if result < 0 {
+		digit := int64(d - '0')
+		if result > (math.MaxInt64-digit)/10 {
 			return 0, invalidIntegerError{s: fmt.Sprintf("overflow in integer string: %s", s)}
 		}
+		result = result*10 + digit
 	}
 	return result, nil
 }
