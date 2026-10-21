@@ -56,6 +56,17 @@ func ReadUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
 	var result []*unstructured.Unstructured
 
 	for i, split := range splits {
+		if i > 0 {
+			// Tabs after "---" are separator whitespace, not document indentation.
+			line, rest, hasNewline := strings.Cut(split, "\n")
+			line = strings.TrimLeft(line, " \t")
+			if line == "" || line == "\r" || strings.HasPrefix(line, "#") {
+				split = line
+				if hasNewline {
+					split += "\n" + rest
+				}
+			}
+		}
 		if i < len(splits)-1 {
 			// Restore the newline consumed by the document separator.
 			split += "\n"
