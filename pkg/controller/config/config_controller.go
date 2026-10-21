@@ -330,7 +330,10 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	if err := r.cacheManager.UpsertSource(ctx, configSourceKey, gvksToSync); err != nil {
 		r.tracker.For(configGVK).TryCancelExpect(instance)
 
-		return reconcile.Result{Requeue: true}, r.updateOrCreatePodStatus(ctx, instance, err)
+		if statusErr := r.updateOrCreatePodStatus(ctx, instance, err); statusErr != nil {
+			log.Error(statusErr, "failed to update config status after cache sync failure")
+		}
+		return reconcile.Result{}, err
 	}
 
 	r.tracker.For(configGVK).Observe(instance)
