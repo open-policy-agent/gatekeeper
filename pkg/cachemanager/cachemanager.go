@@ -383,18 +383,21 @@ func (c *CacheManager) syncGVK(ctx context.Context, gvk schema.GroupVersionKind)
 		Kind:    gvk.Kind + "List",
 	})
 
-	var err error
-	func() {
-		c.mu.RLock()
-		defer c.mu.RUnlock()
+	c.mu.RLock()
+	watching := c.watchedSet.Contains(gvk)
+	c.mu.RUnlock()
 
-		// only call List if we are still watching the gvk.
-		if c.watchedSet.Contains(gvk) {
-			err = c.reader.List(ctx, u)
-		}
-	}()
+	// Only call List if we are still watching the GVK, but do not hold the
+	// cache-manager lock while listing. Full-GVK LISTs can be slow on large
+	// clusters; holding the lock here blocks source updates/removals and delays
+	// cancellation of stale relists. AddObject re-checks the watched set before
+	// adding each listed object, so a GVK removed while the List is in flight will
+	// not be re-added to the constraint framework cache.
+	if !watching {
+		return nil
+	}
 
-	if err != nil {
+	if err := c.reader.List(ctx, u); err != nil {
 		return fmt.Errorf("listing data for %+v: %w", gvk, err)
 	}
 
@@ -414,6 +417,7 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 	// when needing to create another one. This ensures that we are essentially
 	// only using a singleton routine to relist gvks.
 	waitToCloseChan := make(chan struct{})
+	relistStopRequested := false
 
 	// edge case: the 0th relist goroutine is "stopped", by definition, so we close the wait channel
 	// but it's also "running" so we don't close the kill channel in order to do so in the for loop below.
@@ -424,62 +428,89 @@ func (c *CacheManager) manageCache(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-c.backgroundManagementTicker.C:
-			func() {
-				c.mu.Lock()
-				defer c.mu.Unlock()
+			c.mu.Lock()
 
-				// first make sure there is no drift between c.gvksToSync and watch manager
-				if c.danglingWatches.Size() > 0 {
-					if err := c.replaceWatchSet(ctx); err != nil {
-						log.V(logging.DebugLevel).Info("error replacing watch set", "error", err)
-					}
+			// first make sure there is no drift between c.gvksToSync and watch manager
+			if c.danglingWatches.Size() > 0 {
+				if err := c.replaceWatchSet(ctx); err != nil {
+					log.V(logging.DebugLevel).Info("error replacing watch set", "error", err)
 				}
+			}
 
-				c.wipeCacheIfNeeded(ctx)
-				if !c.needToList {
-					// this means that there are no changes needed
-					// such that any gvks need to be relisted.
-					// any in flight goroutines can finish relisiting.
-					return
-				}
+			refreshNeeded := c.needToList || c.gvksToDeleteFromCache.Size() > 0 || c.excluderChanged
+			if !refreshNeeded {
+				// this means that there are no changes needed
+				// such that any gvks need to be relisted.
+				// any in flight goroutines can finish relisiting.
+				c.mu.Unlock()
+				continue
+			}
 
-				// otherwise, spin up new goroutines to relist gvks as there has been a wipe
-
-				// stop any goroutines that were relisting before
-				// as we may no longer be interested in those gvks
-				// and wait with a timeout for the child gorountine to stop.
+			// Stop the current relist before wiping the cache. Otherwise, a LIST that
+			// completed just before cancellation could add stale objects after the
+			// wipe. Do not hold c.mu while waiting because the relist can still need
+			// the lock through AddObject.
+			if !relistStopRequested {
 				close(relistStopChan)
-				select {
-				case <-waitToCloseChan:
-					// child goroutine exited gracefully
-					break
-				case <-time.After(time.Second * 10):
-					log.Error(fmt.Errorf("internal: background relist did not exit gracefully"), "possible goroutine leak")
-					// do not close waitToCloseChan as the goroutine may eventually exit and call close on the channel
-					break
-				}
+				relistStopRequested = true
+			}
+			c.mu.Unlock()
+			select {
+			case <-waitToCloseChan:
+				// child goroutine exited gracefully
+				relistStopRequested = false
+			case <-time.After(time.Second * 10):
+				log.Error(fmt.Errorf("internal: background relist did not exit gracefully"), "possible goroutine leak")
+				// Keep waiting on the same relist during the next management cycle. Wiping
+				// or starting another relist while it is still running can restore stale data.
+				continue
+			case <-ctx.Done():
+				return
+			}
 
-				// assume all gvks need to be relisted
-				// and while under lock, make a copy of
-				// all gvks so we can pass it in the goroutine
-				// without needing to read lock this data
-				gvksToRelist := c.gvksToSync.GVKs()
-
-				// clean state
-				c.needToList = false
+			c.mu.Lock()
+			c.wipeCacheIfNeeded(ctx)
+			if !c.needToList {
+				// The wipe failed, so there is no active relist. Reset the channels to
+				// the initial stopped state before retrying on the next tick.
 				relistStopChan = make(chan struct{})
 				waitToCloseChan = make(chan struct{})
+				close(waitToCloseChan)
+				c.mu.Unlock()
+				continue
+			}
 
-				go func() {
-					c.replayGVKs(ctx, gvksToRelist, relistStopChan)
-					close(waitToCloseChan)
-				}()
+			// Assume all GVKs need to be relisted. Copy them while holding the lock
+			// so the relist goroutine does not need to read gvksToSync concurrently.
+			gvksToRelist := c.gvksToSync.GVKs()
+
+			// clean state
+			c.needToList = false
+			relistStopChan = make(chan struct{})
+			waitToCloseChan = make(chan struct{})
+			stopCh := relistStopChan
+			doneCh := waitToCloseChan
+			c.mu.Unlock()
+
+			go func() {
+				c.replayGVKs(ctx, gvksToRelist, stopCh)
+				close(doneCh)
 			}()
 		}
 	}
 }
 
 func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.GroupVersionKind, stopCh <-chan struct{}) {
+	relistCtx, cancelRelist := context.WithCancel(ctx)
+	defer cancelRelist()
+	go func() {
+		select {
+		case <-stopCh:
+			cancelRelist()
+		case <-relistCtx.Done():
+		}
+	}()
+
 	gvksSet := watch.NewSet()
 	gvksSet.Add(gvksToRelist...)
 
@@ -488,28 +519,20 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 
 		for _, gvk := range gvkItems {
 			select {
-			case <-ctx.Done():
-				return
-			case <-stopCh:
+			case <-relistCtx.Done():
 				return
 			default:
 				operation := func(ctx context.Context) (bool, error) {
-					select {
-					// make sure that the stop channel hasn't closed yet in order to stop
-					// the operation in the backoff retry-er earlier so we don't sync GVKs
-					// that we may not want to sync anymore. This also ensures that we exit
-					// the func as soon as possible.
-					case <-stopCh:
-						return true, nil
-					default:
-						if err := c.syncGVK(ctx, gvk); err != nil {
-							return false, err
-						}
-						return true, nil
+					if err := c.syncGVK(ctx, gvk); err != nil {
+						return false, err
 					}
+					return true, nil
 				}
 
-				if err := wait.ExponentialBackoffWithContext(ctx, backoff, operation); err != nil {
+				if err := wait.ExponentialBackoffWithContext(relistCtx, backoff, operation); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return
+					}
 					log.Error(err, "internal: error listings gvk cache data", "gvk", gvk)
 				} else {
 					gvksSet.Remove(gvk)

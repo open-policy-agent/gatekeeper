@@ -49,11 +49,14 @@ import (
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -67,7 +70,11 @@ import (
 )
 
 const (
-	ctrlName = "constrainttemplate-controller"
+	ctrlName                  = "constrainttemplate-controller"
+	vapAPIVersionV1           = "v1"
+	vapAPIVersionV1Beta1      = "v1beta1"
+	vapBindingPolicyNameField = "spec.policyName"
+	vapBindingListPageSize    = 500
 )
 
 var (
@@ -95,7 +102,7 @@ type Adder struct {
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
 	if !operations.HasValidationOperations() {
-		return nil
+		return addStatusControllers(mgr, nil, nil)
 	}
 	// constraintEvents will be used to receive events from dynamic watches registered for constraint controller
 	constraintEvents := make(chan event.GenericEvent, 1024)
@@ -146,46 +153,34 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 	if err != nil {
 		return nil, err
 	}
-	statusW, err := wm.NewRegistrar(ctrlName+"-status", regEvents)
-	if err != nil {
-		return nil, err
-	}
-
 	// via the registrar below.
 
 	constraintAdder := constraint.Adder{
-		CFClient:         cfClient,
-		ConstraintsCache: constraintsCache,
-		WatchManager:     wm,
-		Events:           cstrEvents,
-		Tracker:          tracker,
-		GetPod:           getPod,
-		IfWatching:       w.IfWatching,
+		CFClient:           cfClient,
+		ConstraintsCache:   constraintsCache,
+		WatchManager:       wm,
+		Events:             cstrEvents,
+		Tracker:            tracker,
+		GetPod:             getPod,
+		ProcessExcluder:    processExcluder,
+		WebhookConfigCache: webhookCache,
+		IfWatching:         w.IfWatching,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := constraintAdder.Add(mgr); err != nil {
 		return nil, fmt.Errorf("registering constraint controller: %w", err)
 	}
 
+	var statusW *watch.Registrar
 	if operations.IsAssigned(operations.Status) {
 		// statusEvents will be used to receive events from dynamic watches registered
 		// via the registrar below.
 		statusEvents := make(chan event.GenericEvent, 1024)
-		csAdder := constraintstatus.Adder{
-			CFClient:     cfClient,
-			WatchManager: wm,
-			Events:       statusEvents,
-			IfWatching:   statusW.IfWatching,
-		}
-		if err := csAdder.Add(mgr); err != nil {
+		statusW, err = wm.NewRegistrar(ctrlName+"-status", statusEvents)
+		if err != nil {
 			return nil, err
 		}
-
-		ctsAdder := constrainttemplatestatus.Adder{
-			CfClient:     cfClient,
-			WatchManager: wm,
-		}
-		if err := ctsAdder.Add(mgr); err != nil {
+		if err := addStatusControllers(mgr, statusEvents, statusW.IfWatching); err != nil {
 			return nil, err
 		}
 	}
@@ -193,6 +188,7 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 	r := newStatsReporter()
 	reconciler := &ReconcileConstraintTemplate{
 		Client:          mgr.GetClient(),
+		apiReader:       mgr.GetAPIReader(),
 		scheme:          mgr.GetScheme(),
 		cfClient:        cfClient,
 		watcher:         w,
@@ -208,7 +204,27 @@ func newReconciler(mgr manager.Manager, cfClient *constraintclient.Client, wm *w
 	if getPod == nil {
 		reconciler.getPod = reconciler.defaultGetPod
 	}
+	if operations.IsAssigned(operations.Generate) && constraint.GetVAPGenerationMode() == constraint.VAPGenerationModeConstraint {
+		reconciler.vapCleanup = newTemplateVAPCleanup(reconciler, schema.GroupVersion{})
+		reconciler.vapCleanup.cache = mgr.GetCache()
+		if err := mgr.Add(reconciler.vapCleanup); err != nil {
+			reconciler.vapCleanup.queue.ShutDown()
+			return nil, err
+		}
+	}
 	return reconciler, nil
+}
+
+func addStatusControllers(mgr manager.Manager, events <-chan event.GenericEvent, ifWatching func(schema.GroupVersionKind, func() error) (bool, error)) error {
+	csAdder := constraintstatus.Adder{
+		Events:     events,
+		IfWatching: ifWatching,
+	}
+	if err := csAdder.Add(mgr); err != nil {
+		return err
+	}
+
+	return (&constrainttemplatestatus.Adder{}).Add(mgr)
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
@@ -254,6 +270,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 		return err
 	}
 
+	if constraint.GetVAPGenerationMode() == constraint.VAPGenerationModeConstraint {
+		return nil
+	}
 	isVapAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&logger)
 	if isVapAPIEnabled && operations.IsAssigned(operations.Generate) {
 		obj, err := vapForVersion(groupVersion)
@@ -299,6 +318,7 @@ func (e *combinedStatusError) Unwrap() []error { return e.errs }
 // ReconcileConstraintTemplate reconciles a ConstraintTemplate object.
 type ReconcileConstraintTemplate struct {
 	client.Client
+	apiReader       client.Reader
 	scheme          *runtime.Scheme
 	watcher         *watch.Registrar
 	statusWatcher   *watch.Registrar
@@ -309,6 +329,7 @@ type ReconcileConstraintTemplate struct {
 	cstrEvents      chan<- event.GenericEvent
 	webhookCache    *webhookconfigcache.WebhookConfigCache
 	processExcluder *process.Excluder
+	vapCleanup      *templateVAPCleanup
 }
 
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingadmissionpolicies;validatingadmissionpolicybindings,verbs=get;list;watch;create;update;patch;delete
@@ -353,6 +374,21 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 			logAction(ctRef, deletedAction)
 			r.metrics.registry.remove(request.NamespacedName)
 		} else {
+			isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&logger)
+			if isAPIEnabled {
+				currentVap, err := vapForVersion(groupVersion)
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+				vapName := getVAPName(ctUnversioned.GetName())
+				if err := r.Get(ctx, types.NamespacedName{Name: vapName}, currentVap); err != nil {
+					if !apierrors.IsNotFound(err) {
+						return reconcile.Result{}, err
+					}
+				} else if err := r.deleteVAPIfOwned(ctx, currentVap, ctUnversioned); err != nil {
+					return reconcile.Result{}, err
+				}
+			}
 			result, err = r.handleDelete(ctx, ctUnversioned)
 			if err != nil {
 				logger.Error(err, "deletion error")
@@ -363,20 +399,6 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 			if result.RequeueAfter == 0 {
 				logAction(ct, deletedAction)
 				r.metrics.registry.remove(request.NamespacedName)
-			}
-			isAPIEnabled, groupVersion := transform.IsVapAPIEnabled(&logger)
-			if isAPIEnabled {
-				currentVap, err := vapForVersion(groupVersion)
-				if err != nil {
-					return reconcile.Result{}, err
-				}
-				vapName := getVAPName(ctUnversioned.GetName())
-				currentVap.SetName(vapName)
-				if err := r.Delete(ctx, currentVap); err != nil {
-					if !apierrors.IsNotFound(err) {
-						return reconcile.Result{}, err
-					}
-				}
 			}
 		}
 		err = r.deleteAllStatus(ctx, request.Name)
@@ -423,7 +445,6 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 			reconcileErr = reportedErr.err
 		}
 	}()
-
 	status.Status.TemplateUID = ct.GetUID()
 	status.Status.ObservedGeneration = ct.GetGeneration()
 	status.Status.Errors = nil
@@ -554,7 +575,8 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 
 	var requeueAfter time.Duration
-	if err := r.generateCRD(ctx, ct, proposedCRD, currentCRD, status, logger, generateVap, &requeueAfter); err != nil {
+	generateTemplateVAP := generateVap && constraint.GetVAPGenerationMode() == constraint.VAPGenerationModeTemplate
+	if err := r.generateCRD(ctx, ct, proposedCRD, currentCRD, status, logger, generateTemplateVAP, &requeueAfter); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -568,6 +590,11 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	err = r.manageVAP(ctx, ct, unversionedCT, status, logger, generateVap)
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+	if operations.IsAssigned(operations.Generate) && constraint.GetVAPGenerationMode() == constraint.VAPGenerationModeConstraint {
+		if err := r.triggerConstraintEvents(ctx, ct, status); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 	return reconcile.Result{RequeueAfter: requeueAfter}, nil
 }
@@ -662,12 +689,18 @@ func (r *ReconcileConstraintTemplate) addWatch(ctx context.Context, kind schema.
 	if err := r.watcher.AddWatch(ctx, kind); err != nil {
 		return err
 	}
+	if r.statusWatcher == nil {
+		return nil
+	}
 	return r.statusWatcher.AddWatch(ctx, kind)
 }
 
 func (r *ReconcileConstraintTemplate) removeWatch(ctx context.Context, kind schema.GroupVersionKind) error {
 	if err := r.watcher.RemoveWatch(ctx, kind); err != nil {
 		return err
+	}
+	if r.statusWatcher == nil {
+		return nil
 	}
 	return r.statusWatcher.RemoveWatch(ctx, kind)
 }
@@ -695,11 +728,9 @@ func (r *ReconcileConstraintTemplate) triggerConstraintEvents(ctx context.Contex
 		err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not list all constraint objects", status, err)
 		return err
 	}
-	logger.Info("list gvk objects", "cstrObjs", cstrObjs)
-	for _, cstr := range cstrObjs {
-		c := cstr
-		logger.Info("triggering cstrEvent")
-		r.cstrEvents <- event.GenericEvent{Object: &c}
+	logger.Info("triggering constraint events", "gvk", gvk, "count", len(cstrObjs))
+	for i := range cstrObjs {
+		r.cstrEvents <- event.GenericEvent{Object: &cstrObjs[i]}
 	}
 
 	return nil
@@ -745,28 +776,59 @@ func makeGvk(kind string) schema.GroupVersionKind {
 
 func vapForVersion(gvk *schema.GroupVersion) (client.Object, error) {
 	switch gvk.Version {
-	case "v1":
+	case vapAPIVersionV1:
 		return &admissionregistrationv1.ValidatingAdmissionPolicy{}, nil
-	case "v1beta1":
+	case vapAPIVersionV1Beta1:
 		return &admissionregistrationv1beta1.ValidatingAdmissionPolicy{}, nil
 	default:
 		return nil, errors.New("unrecognized version")
 	}
 }
 
+func vapBindingForVersion(gvk *schema.GroupVersion) (client.Object, error) {
+	switch gvk.Version {
+	case vapAPIVersionV1:
+		return &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}, nil
+	case vapAPIVersionV1Beta1:
+		return &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{}, nil
+	default:
+		return nil, errors.New("unrecognized version")
+	}
+}
+
+func constraintTemplateForVAPBinding(_ context.Context, obj client.Object) []reconcile.Request {
+	owner := metav1.GetControllerOfNoCopy(obj)
+	if owner == nil || !strings.HasPrefix(owner.APIVersion, statusv1beta1.ConstraintsGroup+"/") {
+		return nil
+	}
+	var policyName string
+	switch binding := obj.(type) {
+	case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+		policyName = binding.Spec.PolicyName
+	case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding:
+		policyName = binding.Spec.PolicyName
+	default:
+		return nil
+	}
+	if policyName != transform.GetTemplateVAPName(owner.Kind) {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: strings.ToLower(owner.Kind)}}}
+}
+
 func getVAPName(constraintName string) string {
-	return fmt.Sprintf("gatekeeper-%s", constraintName)
+	return transform.GetTemplateVAPName(constraintName)
 }
 
 func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrationv1beta1.ValidatingAdmissionPolicy, currentVap client.Object) (client.Object, error) {
 	if currentVap == nil {
-		if gvk.Version == "v1" {
+		if gvk.Version == vapAPIVersionV1 {
 			return v1beta1ToV1(transformedVap)
 		}
 		return transformedVap.DeepCopy(), nil
 	}
 
-	if gvk.Version == "v1" {
+	if gvk.Version == vapAPIVersionV1 {
 		v1CurrentVAP, ok := currentVap.(*admissionregistrationv1.ValidatingAdmissionPolicy)
 		if !ok {
 			return nil, errors.New("unable to convert to v1 VAP")
@@ -784,8 +846,9 @@ func getRunTimeVAP(gvk *schema.GroupVersion, transformedVap *admissionregistrati
 	if !ok {
 		return nil, errors.New("unable to convert to v1 VAP")
 	}
+	v1beta1VAP = v1beta1VAP.DeepCopy()
 	v1beta1VAP.Spec = transformedVap.Spec
-	return v1beta1VAP.DeepCopy(), nil
+	return v1beta1VAP, nil
 }
 
 func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPolicy) (*admissionregistrationv1.ValidatingAdmissionPolicy, error) {
@@ -867,7 +930,15 @@ func v1beta1ToV1(v1beta1Obj *admissionregistrationv1beta1.ValidatingAdmissionPol
 		return nil, fmt.Errorf("%w: unrecognized failure policy: %s", celSchema.ErrBadFailurePolicy, *v1beta1Obj.Spec.FailurePolicy)
 	}
 	obj.Spec.FailurePolicy = &failurePolicy
-	obj.Spec.AuditAnnotations = nil
+	if len(v1beta1Obj.Spec.AuditAnnotations) > 0 {
+		obj.Spec.AuditAnnotations = make([]admissionregistrationv1.AuditAnnotation, 0, len(v1beta1Obj.Spec.AuditAnnotations))
+		for _, annotation := range v1beta1Obj.Spec.AuditAnnotations {
+			obj.Spec.AuditAnnotations = append(obj.Spec.AuditAnnotations, admissionregistrationv1.AuditAnnotation{
+				Key:             annotation.Key,
+				ValueExpression: annotation.ValueExpression,
+			})
+		}
+	}
 
 	for _, v := range v1beta1Obj.Spec.Variables {
 		obj.Spec.Variables = append(obj.Spec.Variables, admissionregistrationv1.Variable{
@@ -943,6 +1014,20 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 	isVapAPIEnabled, groupVersion = transform.IsVapAPIEnabled(&logger)
 	logger.Info("isVapAPIEnabled", "isVapAPIEnabled", isVapAPIEnabled)
 	logger.Info("groupVersion", "groupVersion", groupVersion)
+	if constraint.GetVAPGenerationMode() == constraint.VAPGenerationModeConstraint {
+		if status.Status.VAPGenerationStatus == nil || status.Status.VAPGenerationStatus.State != ErrGenerateVAPState || status.Status.VAPGenerationStatus.ObservedGeneration != ct.GetGeneration() {
+			status.Status.VAPGenerationStatus = nil
+		}
+		if !isVapAPIEnabled || groupVersion == nil {
+			r.metrics.DeleteVAPStatus(types.NamespacedName{Name: ct.GetName()})
+			return nil
+		}
+		if r.vapCleanup == nil {
+			return errors.New("template VAP cleanup worker is not configured")
+		}
+		r.vapCleanup.queue.Add(ct.GetName())
+		return nil
+	}
 
 	if generateVap && (!isVapAPIEnabled || groupVersion == nil) {
 		r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
@@ -1040,7 +1125,7 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		}
 		if currentVap != nil {
 			logger.Info("deleting VAP")
-			if err := r.Delete(ctx, currentVap); err != nil {
+			if err := r.deleteVAPIfOwned(ctx, currentVap, ct); err != nil {
 				r.metrics.ReportVAPStatus(types.NamespacedName{Name: ct.GetName()}, metrics.VAPStatusError)
 				err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not delete VAP object", status, err)
 				return err
@@ -1056,6 +1141,81 @@ func (r *ReconcileConstraintTemplate) manageVAP(ctx context.Context, ct *v1beta1
 		r.metrics.DeleteVAPStatus(types.NamespacedName{Name: ct.GetName()})
 	}
 	return nil
+}
+
+func (r *ReconcileConstraintTemplate) deleteVAPIfOwned(ctx context.Context, policy client.Object, owner metav1.Object) error {
+	if !metav1.IsControlledBy(policy, owner) {
+		logger.Info("template VAP is not owned by this ConstraintTemplate, skipping delete", "vapName", policy.GetName())
+		return nil
+	}
+	if err := r.Delete(ctx, policy, client.Preconditions{UID: ptr.To(policy.GetUID()), ResourceVersion: ptr.To(policy.GetResourceVersion())}); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+func vapBindingPolicyNames(binding client.Object) []string {
+	switch typed := binding.(type) {
+	case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+		return []string{typed.Spec.PolicyName}
+	case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding:
+		return []string{typed.Spec.PolicyName}
+	default:
+		return nil
+	}
+}
+
+func (r *ReconcileConstraintTemplate) vapsReferencedByBindings(ctx context.Context, groupVersion *schema.GroupVersion, vapNames []string) (sets.Set[string], error) {
+	if r.apiReader == nil {
+		return nil, errors.New("API reader is not configured")
+	}
+	var bindings client.ObjectList
+	switch groupVersion.Version {
+	case vapAPIVersionV1:
+		bindings = &admissionregistrationv1.ValidatingAdmissionPolicyBindingList{}
+	case vapAPIVersionV1Beta1:
+		bindings = &admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingList{}
+	default:
+		return nil, errors.New("unrecognized version")
+	}
+	remaining := sets.New(vapNames...)
+	referenced := sets.New[string]()
+	for vapName := range remaining {
+		if err := r.List(ctx, bindings, client.MatchingFields{vapBindingPolicyNameField: vapName}); err != nil {
+			return nil, err
+		}
+		if meta.LenList(bindings) > 0 {
+			referenced.Insert(vapName)
+			remaining.Delete(vapName)
+		}
+	}
+	continuation := ""
+	for len(remaining) > 0 {
+		if err := r.apiReader.List(ctx, bindings, client.Limit(vapBindingListPageSize), client.Continue(continuation)); err != nil {
+			return nil, err
+		}
+		markReferenced := func(policyName string) {
+			if remaining.Has(policyName) {
+				referenced.Insert(policyName)
+				remaining.Delete(policyName)
+			}
+		}
+		switch typed := bindings.(type) {
+		case *admissionregistrationv1.ValidatingAdmissionPolicyBindingList:
+			for index := range typed.Items {
+				markReferenced(typed.Items[index].Spec.PolicyName)
+			}
+		case *admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingList:
+			for index := range typed.Items {
+				markReferenced(typed.Items[index].Spec.PolicyName)
+			}
+		}
+		continuation = bindings.GetContinue()
+		if continuation == "" {
+			break
+		}
+	}
+	return referenced, nil
 }
 
 // updateTemplateWithBlockVAPBGenerationAnnotations updates the ConstraintTemplate with an annotation to block VAPB generation until specific time
@@ -1117,15 +1277,20 @@ func (r *ReconcileConstraintTemplate) transformTemplateToVAP(
 		excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
 	}
 
-	exemptedNamespaces := webhook.GetAllExemptedNamespacesWithWildcard()
+	if *webhook.VwhName == "" {
+		return transform.TemplateToPolicyDefinitionWithWebhookConfig(unversionedCT, nil, excludedNamespaces, nil)
+	}
 
 	webhookConfig := r.getWebhookConfigFromCache(logger)
+	if webhookConfig == nil {
+		return nil, fmt.Errorf("webhook configuration %q is not available for VAP scope synchronization", *webhook.VwhName)
+	}
 
 	return transform.TemplateToPolicyDefinitionWithWebhookConfig(
 		unversionedCT,
 		webhookConfig,
 		excludedNamespaces,
-		exemptedNamespaces,
+		nil,
 	)
 }
 
@@ -1133,13 +1298,13 @@ func (r *ReconcileConstraintTemplate) transformTemplateToVAP(
 // Returns nil if cache is unavailable or config not found.
 func (r *ReconcileConstraintTemplate) getWebhookConfigFromCache(logger logr.Logger) *webhookconfigcache.WebhookMatchingConfig {
 	if r.webhookCache == nil {
-		logger.Info("webhook cache is nil, VAP will be created with default match constraints")
+		logger.Info("webhook cache is nil, waiting to synchronize VAP scope")
 		return nil
 	}
 
 	config, exists := r.webhookCache.GetConfig(*webhook.VwhName)
 	if !exists {
-		logger.Info("webhook config not found in cache, VAP will be created with default match constraints", "lookupKey", *webhook.VwhName)
+		logger.Info("webhook config not found in cache, waiting to synchronize VAP scope", "lookupKey", *webhook.VwhName)
 		return nil
 	}
 

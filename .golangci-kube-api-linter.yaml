@@ -1,0 +1,26 @@
+version: "2"
+run:
+  go: "1.26"
+linters:
+  default: none
+  enable:
+    - kubeapilinter
+  settings:
+    custom:
+      kubeapilinter:
+        type: module
+        description: >-
+          Kube API Linter (https://github.com/kubernetes-sigs/kube-api-linter)
+          lints Kubernetes-like APIs based on API conventions and best practices.
+        settings:
+          linters:
+            disable:
+              - "*"
+            enable:
+              # commentstart checks that field godoc comments start with the
+              # lowerCamelCase JSON field name, per Kubernetes API conventions.
+              # Only rules that are purely doc-comment fixes are enabled here;
+              # rules that recommend Go type changes (e.g. optionalorrequired,
+              # nonpointerstructs) are left for a follow-up once the team has
+              # decided how to apply them without altering wire compatibility.
+              - commentstart

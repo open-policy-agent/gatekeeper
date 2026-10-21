@@ -2,11 +2,13 @@ package modifyset
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/google/go-cmp/cmp"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/unversioned"
 	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/mutators/core"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/parser"
 	patht "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/path/tester"
@@ -30,6 +32,7 @@ type Mutator struct {
 
 	// bindings are the set of GVK and operation scopes this Mutator applies to.
 	bindings []schema.Binding
+	matcher  *match.CompiledMatch
 	tester   *patht.Tester
 }
 
@@ -37,7 +40,7 @@ type Mutator struct {
 var _ schema.MutatorWithSchema = &Mutator{}
 
 func (m *Mutator) Matches(mutable *types.Mutable) (bool, error) {
-	res, err := core.MatchWithApplyTo(mutable, m.modifySet.Spec.ApplyTo, &m.modifySet.Spec.Match)
+	res, err := core.MatchWithApplyToMatcher(mutable, m.modifySet.Spec.ApplyTo, m.matcher)
 	if err != nil {
 		log.Error(err, "Matches failed for modify set", "modifyset", m.modifySet.Name)
 	}
@@ -111,6 +114,7 @@ func (m *Mutator) DeepCopy() types.Mutator {
 			Nodes: make([]parser.Node, len(m.path.Nodes)),
 		},
 		bindings: make([]schema.Binding, len(m.bindings)),
+		matcher:  m.matcher,
 	}
 
 	copy(res.path.Nodes, m.path.Nodes)
@@ -154,6 +158,10 @@ func MutatorForModifySet(modifySet *mutationsunversioned.ModifySet) (*Mutator, e
 	if err != nil {
 		return nil, err
 	}
+	compiledMatcher, err := match.Compile(&modifySet.Spec.Match)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Mutator{
 		id:        types.MakeID(modifySet),
@@ -161,6 +169,7 @@ func MutatorForModifySet(modifySet *mutationsunversioned.ModifySet) (*Mutator, e
 		bindings:  gvks,
 		path:      path,
 		tester:    tester,
+		matcher:   compiledMatcher,
 	}, nil
 }
 
@@ -197,6 +206,10 @@ func (s setter) SetValue(obj map[string]interface{}, key string) error {
 	}
 }
 
+func equalSetValue(a, b interface{}) bool {
+	return reflect.DeepEqual(a, b)
+}
+
 func (s setter) setValueMerge(obj map[string]interface{}, key string) error {
 	val, ok := obj[key]
 	// missing list => add all values as a new list.
@@ -212,7 +225,7 @@ func (s setter) setValueMerge(obj map[string]interface{}, key string) error {
 outer:
 	for _, v := range s.values {
 		for _, existing := range vals {
-			if cmp.Equal(v, existing) {
+			if equalSetValue(v, existing) {
 				continue outer
 			}
 		}
@@ -241,7 +254,7 @@ func (s setter) setValuePrune(obj map[string]interface{}, key string) error {
 	for _, existing := range vals {
 		matched := false
 		for _, v := range s.values {
-			if cmp.Equal(v, existing) {
+			if equalSetValue(v, existing) {
 				matched = true
 			}
 		}

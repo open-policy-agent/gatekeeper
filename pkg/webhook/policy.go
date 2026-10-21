@@ -127,10 +127,12 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 		admissionExporter = queuedExporter
 	}
 	handler := &validationHandler{
-		opa:               deps.OpaClient,
-		mutationSystem:    deps.MutationSystem,
-		expansionSystem:   deps.ExpansionSystem,
-		admissionExporter: admissionExporter,
+		opa:                                     deps.OpaClient,
+		mutationSystem:                          deps.MutationSystem,
+		expansionSystem:                         deps.ExpansionSystem,
+		admissionExporter:                       admissionExporter,
+		emitAdmissionAuditAnnotations:           util.GetEmitAdmissionAuditAnnotations(),
+		admissionAuditAnnotationsIncludeSuccess: util.GetAdmissionAuditAnnotationsIncludeSuccess(),
 		webhookHandler: webhookHandler{
 			client:          mgr.GetClient(),
 			reader:          mgr.GetAPIReader(),
@@ -155,12 +157,14 @@ var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
 	webhookHandler
-	opa               *constraintclient.Client
-	mutationSystem    *mutation.System
-	expansionSystem   *expansion.System
-	admissionExporter admissionViolationExporter
-	semaphore         chan struct{}
-	log               logr.Logger
+	opa                                     *constraintclient.Client
+	mutationSystem                          *mutation.System
+	expansionSystem                         *expansion.System
+	admissionExporter                       admissionViolationExporter
+	emitAdmissionAuditAnnotations           bool
+	admissionAuditAnnotationsIncludeSuccess bool
+	semaphore                               chan struct{}
+	log                                     logr.Logger
 }
 
 // Handle the validation request
@@ -231,7 +235,14 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	res := resp.Results()
-	denyMsgs, warnMsgs := h.processValidationResults(res, &req)
+	denyMsgs, warnMsgs, auditResults := h.processValidationResults(res, &req)
+	var auditAnnotations map[string]string
+	if h.emitAdmissionAuditAnnotations && (h.admissionAuditAnnotationsIncludeSuccess || auditResults.totalViolations > 0) {
+		auditAnnotations, err = buildAdmissionAuditAnnotations(len(denyMsgs) == 0, auditResults)
+		if err != nil {
+			h.log.Error(err, "failed to build admission audit annotation")
+		}
+	}
 
 	if len(denyMsgs) > 0 {
 		requestResponse = denyResponse
@@ -243,7 +254,8 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 					Code:    http.StatusForbidden,
 					Message: strings.Join(denyMsgs, "\n"),
 				},
-				Warnings: warnMsgs,
+				Warnings:         warnMsgs,
+				AuditAnnotations: auditAnnotations,
 			},
 		}
 	}
@@ -255,7 +267,8 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 			Result: &metav1.Status{
 				Code: http.StatusOK,
 			},
-			Warnings: warnMsgs,
+			Warnings:         warnMsgs,
+			AuditAnnotations: auditAnnotations,
 		},
 	}
 	if len(warnMsgs) > 0 {
@@ -264,8 +277,9 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	return vResp
 }
 
-func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *admission.Request) ([]string, []string) {
+func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *admission.Request) ([]string, []string, admissionAuditResults) {
 	var denyMsgs, warnMsgs []string
+	var auditResults admissionAuditResults
 	resourceName := req.Name
 	obj := &unstructured.Unstructured{}
 	objectDecoded := false
@@ -307,8 +321,8 @@ func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *
 	}
 	for _, result := range res {
 		if result == nil || result.Constraint == nil {
-			if h.admissionExporter != nil {
-				h.log.Error(errors.New("constraint is nil"), "skipping admission violation export")
+			if h.admissionExporter != nil || h.emitAdmissionAuditAnnotations {
+				h.log.Error(errors.New("constraint is nil"), "skipping invalid admission violation result")
 			}
 			continue
 		}
@@ -316,9 +330,22 @@ func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *
 		if !valid {
 			continue
 		}
+		if h.emitAdmissionAuditAnnotations {
+			auditResults.add(result, actions)
+		}
 		if h.admissionExporter != nil {
 			h.exportAdmissionViolation(result, actions, baseExportMessage)
 		}
+		if len(actions) == 0 && !*logDenies && !*emitAdmissionEvents {
+			switch result.EnforcementAction {
+			case string(util.Deny):
+				denyMsgs = append(denyMsgs, validationMessage(result.Constraint.GetName(), result.Msg))
+			case string(util.Warn):
+				warnMsgs = append(warnMsgs, validationMessage(result.Constraint.GetName(), result.Msg))
+			}
+			continue
+		}
+
 		if *logDenies {
 			h.log.WithValues(
 				logging.Semantic, true,
@@ -389,15 +416,19 @@ func (h *validationHandler) processValidationResults(res []*rtypes.Result, req *
 		}
 		for _, action := range actions {
 			if action == string(util.Deny) {
-				denyMsgs = append(denyMsgs, fmt.Sprintf("[%s] %s", result.Constraint.GetName(), result.Msg))
+				denyMsgs = append(denyMsgs, validationMessage(result.Constraint.GetName(), result.Msg))
 			}
 
 			if action == string(util.Warn) {
-				warnMsgs = append(warnMsgs, fmt.Sprintf("[%s] %s", result.Constraint.GetName(), result.Msg))
+				warnMsgs = append(warnMsgs, validationMessage(result.Constraint.GetName(), result.Msg))
 			}
 		}
 	}
-	return denyMsgs, warnMsgs
+	return denyMsgs, warnMsgs, auditResults
+}
+
+func validationMessage(constraintName, msg string) string {
+	return "[" + constraintName + "] " + msg
 }
 
 // newAdmissionViolationExportMessage prepares the fields shared by all
@@ -763,34 +794,9 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		return nil, fmt.Errorf("failed to create augmentedReview: %w", err)
 	}
 
-	resultants := []*expansion.Resultant{}
-	// Skip the expansion if admissionRequest.Obj is nil.
-	rawObj := getReqObject(req)
-	if rawObj != nil {
-		// Convert the request's generator resource to unstructured for expansion
-		obj := &unstructured.Unstructured{}
-		if _, _, err := deserializer.Decode(rawObj, nil, obj); err != nil {
-			return nil, fmt.Errorf("error decoding generator resource %s: %w", req.Name, err)
-		}
-		obj.SetNamespace(req.Namespace)
-		obj.SetGroupVersionKind(
-			schema.GroupVersionKind{
-				Group:   req.Kind.Group,
-				Version: req.Kind.Version,
-				Kind:    req.Kind.Kind,
-			})
-
-		// Expand the generator and apply mutators to the resultant resources
-		// The base object is not mutated, so we do not need to specify its source
-		base := &mutationtypes.Mutable{
-			Object:    obj,
-			Namespace: review.Namespace,
-			Username:  req.UserInfo.Username,
-		}
-		resultants, err = h.expansionSystem.Expand(base)
-		if err != nil {
-			return nil, fmt.Errorf("unable to expand object: %w", err)
-		}
+	resultants, err := h.expandRequest(req, review)
+	if err != nil {
+		return nil, err
 	}
 
 	trace, dump := h.tracingLevel(ctx, req)
@@ -810,6 +816,46 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	}
 
 	return resp, nil
+}
+
+func (h *validationHandler) expandRequest(req *admission.Request, review *target.AugmentedReview) ([]*expansion.Resultant, error) {
+	resultants := []*expansion.Resultant{}
+	// Skip the expansion if admissionRequest.Obj is nil.
+	rawObj := getReqObject(req)
+	if rawObj == nil {
+		return resultants, nil
+	}
+
+	gvk := schema.GroupVersionKind{
+		Group:   req.Kind.Group,
+		Version: req.Kind.Version,
+		Kind:    req.Kind.Kind,
+	}
+	if !h.expansionSystem.HasTemplatesForGVK(gvk) {
+		return resultants, nil
+	}
+
+	// Convert the request's generator resource to unstructured for expansion.
+	obj := &unstructured.Unstructured{}
+	if _, _, err := deserializer.Decode(rawObj, nil, obj); err != nil {
+		return nil, fmt.Errorf("error decoding generator resource %s: %w", req.Name, err)
+	}
+	obj.SetNamespace(req.Namespace)
+	obj.SetGroupVersionKind(gvk)
+
+	// Expand the generator and apply mutators to the resultant resources.
+	// The base object is not mutated, so we do not need to specify its source.
+	base := &mutationtypes.Mutable{
+		Object:    obj,
+		Namespace: review.Namespace,
+		Username:  req.UserInfo.Username,
+	}
+	resultants, err := h.expansionSystem.Expand(base)
+	if err != nil {
+		return nil, fmt.Errorf("unable to expand object: %w", err)
+	}
+
+	return resultants, nil
 }
 
 func (h *validationHandler) review(ctx context.Context, review interface{}, namespace *corev1.Namespace, trace bool, dump bool) (*rtypes.Responses, error) {
@@ -901,10 +947,12 @@ func getViolationRef(gkNamespace, rkind, rname, rnamespace, rrv string, ruid typ
 
 func AppendValidationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
 	if operations.IsAssigned(operations.Webhook) {
-		webhooks = append(webhooks, rotator.WebhookInfo{
-			Name: *VwhName,
-			Type: rotator.Validating,
-		})
+		if *VwhName != "" {
+			webhooks = append(webhooks, rotator.WebhookInfo{
+				Name: *VwhName,
+				Type: rotator.Validating,
+			})
+		}
 		for _, addlVwh := range strings.Split(*AdditionalVwhNamesToRotateCerts, ",") {
 			if addlVwh != *VwhName && addlVwh != "" {
 				webhooks = append(webhooks, rotator.WebhookInfo{

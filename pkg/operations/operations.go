@@ -88,6 +88,31 @@ func init() {
 	flag.Var(operations, "operation", "The operation to be performed by this instance. e.g. audit, webhook. This flag can be declared more than once. Omitting will default to supporting all operations.")
 }
 
+// SetForTest replaces the assigned operations until the returned restore
+// function is called.
+func SetForTest(assigned ...Operation) (func(), error) {
+	replacement := newOperationSet()
+	replacement.assignedOperations = make(map[Operation]bool, len(assigned))
+	replacement.initialized = true
+	for _, op := range assigned {
+		if !replacement.validOperations[op] {
+			return nil, fmt.Errorf("operation %s is not a valid operation: %v", op, replacement.validOperations)
+		}
+		replacement.assignedOperations[op] = true
+	}
+
+	operationsMtx.Lock()
+	original := operations
+	operations = replacement
+	operationsMtx.Unlock()
+
+	return func() {
+		operationsMtx.Lock()
+		operations = original
+		operationsMtx.Unlock()
+	}, nil
+}
+
 // IsAssigned returns true when the provided operation is assigned to the pod.
 func IsAssigned(op Operation) bool {
 	operationsMtx.RLock()
@@ -129,5 +154,5 @@ func AssignedStringList() []string {
 // are any operations that would require a constraint or template controller
 // or a sync controller.
 func HasValidationOperations() bool {
-	return IsAssigned(Audit) || IsAssigned(Status) || IsAssigned(Webhook)
+	return IsAssigned(Audit) || IsAssigned(Webhook)
 }

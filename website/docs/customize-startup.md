@@ -46,6 +46,24 @@ There are four types of events that are emitted by Gatekeeper when the emit even
 > ```
 > Gatekeeper might burst 25 events about an object, but limit the refill rate to 1 new event every 5 minutes. This will help control the long-tail of events for resources that are always violating the constraint.
 
+## [Alpha] Emit API server audit annotations for admission evaluations
+
+The `--emit-admission-audit-annotations` flag adds audit annotations to validation requests that reach Gatekeeper policy evaluation. It is disabled by default. When enabled, it annotates violations only unless `--admission-audit-annotations-include-success=true` is also set. Requests skipped before policy evaluation, such as excluded namespaces, are not annotated.
+
+The validation webhook returns one `evaluation` entry in `AdmissionResponse.auditAnnotations`. The API server prefixes that key with the webhook name, producing `validation.gatekeeper.sh/evaluation` in the API audit event. Its versioned JSON value contains Gatekeeper's `allowed` decision, bounded summaries of deny, warn, and dryrun violations, the total and included violation counts, and a truncation indicator. The decision is specific to Gatekeeper; another admission plugin or a later API server error can still reject the request. Request identity belongs to the enclosing audit event and is not repeated in this payload. The AdmissionReview UID, event type, evaluated resource kind/version, resource labels, and Constraint annotations are also intentionally omitted. The value is limited to 10 KiB. Long messages, policy-provided `details`, or additional violations may be omitted, and the payload reports truncation.
+
+With `--admission-audit-annotations-include-success=true`, an evaluation with no violations produces this custom annotation value; otherwise it produces no custom annotation:
+
+```json
+{"schemaVersion":"v1","allowed":true,"violations":[],"totalViolations":0,"includedViolations":0,"truncated":false}
+```
+
+When admission audit annotations are enabled on a process performing the `generate` operation, generated ValidatingAdmissionPolicyBindings add the Kubernetes `Audit` action alongside `Deny` or `Warn`; `dryrun` already maps to `Audit`. Failed native validations therefore produce Kubernetes' standard `validation.policy.admission.k8s.io/validation_failure` annotation. Kubernetes controls that annotation's content and aggregation; it is not an exhaustive list of all matching bindings. By default, generated ValidatingAdmissionPolicies omit the custom `evaluation` marker and rely on this native failure annotation.
+
+To also annotate successful evaluations, set `--admission-audit-annotations-include-success=true`. It defaults to `false` and has no effect unless `--emit-admission-audit-annotations` is enabled. Success here means zero violations, not simply an allowed request: deny, warn, and dryrun violations remain annotated regardless of this setting. When both flags are enabled, generated VAPs add an `evaluation` audit annotation with the value `true` when at least one binding evaluates the request. Kubernetes deduplicates this constant across matching bindings, keeping the value bounded without listing matching Constraint names. This option does not re-evaluate CEL expressions or change admission decisions. For Helm, set `emitAdmissionAuditAnnotations=true` for violations-only auditing, and also set `admissionAuditAnnotationsIncludeSuccess=true` to include successful evaluations. If the webhook and native VAP enforcement points both evaluate a request, both may add audit entries.
+
+For split deployments, configure both flags consistently on the validation webhook process and the process performing the `generate` operation. Restart the affected processes when changing these startup settings; generated VAPs are reconciled to the selected mode. API server audit logging must be enabled at `Metadata` or a higher level. Audit annotations do not create Kubernetes Event resources, do not annotate admitted objects, and do not change admission decisions. The violation-export payload is unaffected by these settings. Policy messages and `details` may contain user-controlled or sensitive data, so protect access to the audit backend.
+
 ## [Beta] Enable mutation logging and annotations
 
 The `--log-mutations` flag enables logging of mutation events and errors.
