@@ -1711,11 +1711,9 @@ func TestBuildMatchConditions(t *testing.T) {
 		name                string
 		source              *schema.Source
 		excludedNamespaces  []string
-		exemptedNamespaces  []string
 		expectedConditions  int
 		expectedErr         error
 		checkExcludedExists bool
-		checkExemptedExists bool
 	}{
 		{
 			name: "basic conditions with no exclusions",
@@ -1725,10 +1723,8 @@ func TestBuildMatchConditions(t *testing.T) {
 				},
 			},
 			excludedNamespaces:  nil,
-			exemptedNamespaces:  nil,
 			expectedConditions:  5, // 1 from source + 4 standard matchers
 			checkExcludedExists: false,
-			checkExemptedExists: false,
 		},
 		{
 			name: "with excluded namespaces",
@@ -1738,24 +1734,20 @@ func TestBuildMatchConditions(t *testing.T) {
 				},
 			},
 			excludedNamespaces:  []string{"kube-system", "default"},
-			exemptedNamespaces:  nil,
 			expectedConditions:  6, // 1 from source + 4 standard + 1 excluded
 			checkExcludedExists: true,
-			checkExemptedExists: false,
 		},
 		{
-			name: "with exempted namespaces",
+			name: "standard conditions only",
 			source: &schema.Source{
 				MatchConditions: []schema.MatchCondition{},
 			},
 			excludedNamespaces:  nil,
-			exemptedNamespaces:  []string{"gatekeeper-system"},
 			expectedConditions:  4, // 4 standard
 			checkExcludedExists: false,
-			checkExemptedExists: false,
 		},
 		{
-			name: "with both excluded and exempted namespaces",
+			name: "with template conditions and excluded namespaces",
 			source: &schema.Source{
 				MatchConditions: []schema.MatchCondition{
 					{Name: "test1", Expression: "true"},
@@ -1763,16 +1755,14 @@ func TestBuildMatchConditions(t *testing.T) {
 				},
 			},
 			excludedNamespaces:  []string{"kube-system"},
-			exemptedNamespaces:  []string{"gatekeeper-system"},
 			expectedConditions:  7, // 2 from source + 4 standard + 1 excluded
 			checkExcludedExists: true,
-			checkExemptedExists: false,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			conditions, err := buildMatchConditions(test.source, test.excludedNamespaces, test.exemptedNamespaces)
+			conditions, err := buildMatchConditions(test.source, test.excludedNamespaces)
 
 			if !errors.Is(err, test.expectedErr) {
 				t.Errorf("unexpected error. got %v; wanted %v", err, test.expectedErr)
@@ -1794,16 +1784,10 @@ func TestBuildMatchConditions(t *testing.T) {
 				t.Error("expected excluded namespaces condition but not found")
 			}
 
-			// Check for exempted namespaces condition
-			foundExempted := false
 			for _, cond := range conditions {
 				if strings.Contains(cond.Name, "exempted") {
-					foundExempted = true
-					break
+					t.Errorf("unexpected exempted namespaces condition %q", cond.Name)
 				}
-			}
-			if foundExempted != test.checkExemptedExists {
-				t.Errorf("exempted namespaces condition present = %v, want %v", foundExempted, test.checkExemptedExists)
 			}
 		})
 	}

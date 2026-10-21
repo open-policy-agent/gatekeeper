@@ -897,7 +897,11 @@ func TestMatchExcludedNamespacesGlob(t *testing.T) {
 	}
 }
 
-func TestBuildMatchConditionsDoesNotExemptNamespaceNames(t *testing.T) {
+func TestTemplateToPolicyDefinitionIgnoresExemptNamespaceNames(t *testing.T) {
+	template := newInlineTestTemplate(&schema.Source{
+		FailurePolicy: ptr.To("Fail"),
+		Validations:   []schema.Validation{{Expression: "true"}},
+	})
 	object := &unstructured.Unstructured{}
 	object.SetGroupVersionKind(rSchema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"})
 	object.SetName("test-config")
@@ -910,10 +914,11 @@ func TestBuildMatchConditionsDoesNotExemptNamespaceNames(t *testing.T) {
 	for _, pattern := range []string{"team-payments", "team-*", "*-payments"} {
 		for _, operation := range []admissionv1.Operation{admissionv1.Create, admissionv1.Update, admissionv1.Delete} {
 			t.Run(fmt.Sprintf("%s/%s", pattern, operation), func(t *testing.T) {
-				conditions, err := buildMatchConditions(&schema.Source{}, nil, []string{pattern})
+				policy, err := TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, []string{pattern})
 				if err != nil {
 					t.Fatal(err)
 				}
+				conditions := policy.Spec.MatchConditions
 				expressions := make([]cel.ExpressionAccessor, 0, len(conditions))
 				for _, condition := range conditions {
 					expressions = append(expressions, &matchconditions.MatchCondition{
