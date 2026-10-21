@@ -548,7 +548,10 @@ func (c *CacheManager) replayGVKs(ctx context.Context, gvksToRelist []schema.Gro
 						logErr = err
 					}
 					log.Error(logErr, "internal: error listings gvk cache data", "gvk", gvk)
-					gvksSet.Remove(gvk)
+					// Retain transient failures so backoff exhaustion does not abandon wiped inventory.
+					if meta.IsNoMatchError(err) {
+						gvksSet.Remove(gvk)
+					}
 				} else {
 					gvksSet.Remove(gvk)
 				}

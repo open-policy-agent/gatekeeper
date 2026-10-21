@@ -878,6 +878,100 @@ func TestCacheManagerReplayGVKsExitsOnNoMatchError(t *testing.T) {
 	require.Equal(t, 1, reader.listCalls, "List should only be called once when NoKindMatchError is returned")
 }
 
+func TestCacheManagerReplayGVKsRetriesAfterBackoffExhaustion(t *testing.T) {
+	for _, failures := range []int{0, backoff.Steps - 1, backoff.Steps, 2*backoff.Steps - 1} {
+		t.Run(fmt.Sprintf("%d_failures", failures), func(t *testing.T) {
+			item := fakes.UnstructuredFor(configMapGVK, "default", "replayed")
+			key, err := fakes.KeyFor(item)
+			require.NoError(t, err)
+			var attempts []time.Time
+			reader := fakes.SpyReader{
+				ListFunc: func(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+					attempts = append(attempts, time.Now())
+					if len(attempts) <= failures {
+						return errors.New("temporary list failure")
+					}
+					result, ok := list.(*unstructured.UnstructuredList)
+					if !ok {
+						return fmt.Errorf("expected *unstructured.UnstructuredList, got %T", list)
+					}
+					result.Items = []unstructured.Unstructured{*item}
+					return nil
+				},
+			}
+			cm := newSyncGVKContentionCacheManager(configMapGVK, reader)
+			cfClient := &fakes.FakeCfClient{}
+			cm.cfClient = cfClient
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+
+			cm.replayGVKs(ctx, []schema.GroupVersionKind{configMapGVK}, make(chan struct{}))
+
+			require.NoError(t, ctx.Err())
+			require.Len(t, attempts, failures+1)
+			require.Equal(t, 1, cfClient.Len())
+			require.True(t, cfClient.Contains(map[fakes.CfDataKey]interface{}{key: nil}),
+				"inventory must recover without an object or source event")
+			for i := 1; i < len(attempts); i++ {
+				if i%backoff.Steps != 0 {
+					require.GreaterOrEqual(t, attempts[i].Sub(attempts[i-1]), backoff.Duration,
+						"transient retries must retain backoff pacing")
+				}
+			}
+		})
+	}
+}
+
+func TestCacheManagerReplayGVKsCancelsBackoffAfterExhaustion(t *testing.T) {
+	for _, stopReplay := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stop_channel_%t", stopReplay), func(t *testing.T) {
+			attempts := make(chan struct{}, 1)
+			reader := fakes.SpyReader{
+				ListFunc: func(ctx context.Context, _ client.ObjectList, _ ...client.ListOption) error {
+					select {
+					case attempts <- struct{}{}:
+						return errors.New("temporary list failure")
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				},
+			}
+			cm := newSyncGVKContentionCacheManager(configMapGVK, reader)
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			stopCh := make(chan struct{})
+			replayDone := make(chan struct{})
+			go func() {
+				defer close(replayDone)
+				cm.replayGVKs(ctx, []schema.GroupVersionKind{configMapGVK}, stopCh)
+			}()
+			t.Cleanup(func() {
+				cancel()
+				<-replayDone
+			})
+
+			for i := 0; i <= backoff.Steps; i++ {
+				select {
+				case <-attempts:
+				case <-replayDone:
+					t.Fatal("replay stopped retrying a recoverable GVK")
+				case <-ctx.Done():
+					t.Fatal("replay did not continue after backoff exhaustion")
+				}
+			}
+			if stopReplay {
+				close(stopCh)
+			} else {
+				cancel()
+			}
+			select {
+			case <-replayDone:
+			case <-time.After(2 * time.Second):
+				t.Fatal("replay did not cancel its retry backoff")
+			}
+		})
+	}
+}
+
 func TestCacheManagerManageCacheStopsRelistBeforeWipeWithoutHoldingLock(t *testing.T) {
 	reader := newCompletesListOnCancelReader(*fakes.UnstructuredFor(configMapGVK, "default", "cm"))
 	cm := newSyncGVKContentionCacheManager(configMapGVK, reader)
