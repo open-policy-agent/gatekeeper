@@ -141,26 +141,31 @@ func v1beta1VAPToV1(source *admissionregistrationv1beta1.ValidatingAdmissionPoli
 }
 
 func (r *ReconcileConstraint) transformConstraintToVAP(template *templates.ConstraintTemplate, constraint *unstructured.Unstructured) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
-	webhookConfig, excludedNamespaces, exemptedNamespaces := r.vapMatchingConfig()
-	return transform.ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, webhookConfig, excludedNamespaces, exemptedNamespaces)
+	webhookConfig, excludedNamespaces := r.vapMatchingConfig()
+	if *transform.SyncVAPScope && *webhook.VwhName != "" && webhookConfig == nil {
+		return nil, fmt.Errorf("webhook configuration %q is not available for VAP scope synchronization", *webhook.VwhName)
+	}
+	return transform.ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, webhookConfig, excludedNamespaces, nil)
 }
 
-func (r *ReconcileConstraint) vapMatchingConfig() (*webhookconfigcache.WebhookMatchingConfig, []string, []string) {
+func (r *ReconcileConstraint) vapMatchingConfig() (*webhookconfigcache.WebhookMatchingConfig, []string) {
 	if !*transform.SyncVAPScope {
-		return nil, nil, nil
+		return nil, nil
 	}
 	var excludedNamespaces []string
 	if r.processExcluder != nil {
 		excludedNamespaces = r.processExcluder.GetExcludedNamespaces(process.Webhook)
 	}
-	exemptedNamespaces := webhook.GetAllExemptedNamespacesWithWildcard()
+	if *webhook.VwhName == "" {
+		return nil, excludedNamespaces
+	}
 	var webhookConfig *webhookconfigcache.WebhookMatchingConfig
 	if r.webhookConfigCache != nil {
 		if config, found := r.webhookConfigCache.GetConfig(*webhook.VwhName); found {
 			webhookConfig = &config
 		}
 	}
-	return webhookConfig, excludedNamespaces, exemptedNamespaces
+	return webhookConfig, excludedNamespaces
 }
 
 func (r *ReconcileConstraint) sharedVAPIsCurrent(ctx context.Context, templateName string, groupVersion *schema.GroupVersion) (bool, error) {
@@ -192,11 +197,11 @@ func (r *ReconcileConstraint) sharedVAPIsCurrent(ctx context.Context, templateNa
 	if err != nil || !eligible {
 		return false, err
 	}
-	webhookConfig, excludedNamespaces, exemptedNamespaces, err := r.authoritativeVAPMatchingConfig(ctx)
+	webhookConfig, excludedNamespaces, err := r.authoritativeVAPMatchingConfig(ctx)
 	if err != nil {
 		return false, err
 	}
-	desired, transformErr := transform.TemplateToPolicyDefinitionWithWebhookConfig(unversioned, webhookConfig, excludedNamespaces, exemptedNamespaces)
+	desired, transformErr := transform.TemplateToPolicyDefinitionWithWebhookConfig(unversioned, webhookConfig, excludedNamespaces, nil)
 	if transformErr != nil && (desired == nil || !errors.Is(transformErr, transform.ErrOperationMismatch)) {
 		return false, transformErr
 	}
@@ -207,24 +212,27 @@ func (r *ReconcileConstraint) sharedVAPIsCurrent(ctx context.Context, templateNa
 	return vapEqual(current, proposed), nil
 }
 
-func (r *ReconcileConstraint) authoritativeVAPMatchingConfig(ctx context.Context) (*webhookconfigcache.WebhookMatchingConfig, []string, []string, error) {
+func (r *ReconcileConstraint) authoritativeVAPMatchingConfig(ctx context.Context) (*webhookconfigcache.WebhookMatchingConfig, []string, error) {
 	if !*transform.SyncVAPScope {
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	}
 	config := &configv1alpha1.Config{}
 	excluder := process.New()
 	if err := r.apiReader.Get(ctx, keys.Config, config); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 	} else if config.GetDeletionTimestamp().IsZero() {
 		excluder.Add(config.Spec.Match)
+	}
+	if *webhook.VwhName == "" {
+		return nil, excluder.GetExcludedNamespaces(process.Webhook), nil
 	}
 	configuration := &admissionregistrationv1.ValidatingWebhookConfiguration{}
 	var matching *webhookconfigcache.WebhookMatchingConfig
 	if err := r.apiReader.Get(ctx, types.NamespacedName{Name: *webhook.VwhName}, configuration); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 	} else {
 		for index := range configuration.Webhooks {
@@ -241,7 +249,10 @@ func (r *ReconcileConstraint) authoritativeVAPMatchingConfig(ctx context.Context
 			}
 		}
 	}
-	return matching, excluder.GetExcludedNamespaces(process.Webhook), webhook.GetAllExemptedNamespacesWithWildcard(), nil
+	if matching == nil {
+		return nil, nil, fmt.Errorf("webhook configuration %q is not available for VAP scope synchronization", *webhook.VwhName)
+	}
+	return matching, excluder.GetExcludedNamespaces(process.Webhook), nil
 }
 
 func vapEqual(current, proposed runtime.Object) bool {

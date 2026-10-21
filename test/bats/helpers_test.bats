@@ -158,3 +158,111 @@ assert_audit_matchers_status() {
   run vap_admission_audit_annotation_without_violations_matches audit-resource gatekeeper-policy
   assert_failure
 }
+
+@test "VAP readiness requires the requested native warning and denial" {
+  kubectl() {
+    [[ "$*" == "create namespace probe --dry-run=server" ]] || return 2
+    printf '%s\n' "${mock_output}"
+    return "${mock_status}"
+  }
+  mock_status=1
+  denial="ValidatingAdmissionPolicy 'policy' with binding 'deny-binding' denied request: missing required label"
+  warning="Warning: Validation failed for ValidatingAdmissionPolicy 'policy' with binding 'warn-binding': missing required label"
+
+  mock_output="${denial}"
+  run vap_admission_enforced probe policy deny-binding
+  assert_success
+  run vap_admission_enforced probe policy deny-binding warn-binding
+  assert_failure
+
+  mock_output="${warning}"$'\n'"${denial}"
+  run vap_admission_enforced probe policy deny-binding warn-binding
+  assert_success
+
+  mock_output="Warning: Validation failed for ValidatingAdmissionPolicy 'policy' with binding 'other-binding': missing required label"$'\n'"${denial}"
+  run vap_admission_enforced probe policy deny-binding warn-binding
+  assert_failure
+
+  mock_output="${warning}"$'\n''Error from server: admission webhook denied request'
+  run vap_admission_enforced probe policy deny-binding warn-binding
+  assert_failure
+
+  mock_output="${warning}"$'\n'"${denial}"
+  mock_status=0
+  run vap_admission_enforced probe policy deny-binding warn-binding
+  assert_failure
+}
+
+@test "VAP cleanup removes constraints before their template and remaining fixtures" {
+  BATS_TESTS_DIR=fixtures
+  calls="${BATS_TEST_TMPDIR}/kubectl-calls"
+  kubectl() {
+    printf '%s\n' "$*" >>"${calls}"
+    if [[ "$1" == get ]]; then
+      echo "customresourcedefinition.apiextensions.k8s.io/k8srequiredlabelsvap.constraints.gatekeeper.sh"
+    fi
+  }
+
+  run cleanup_vap_test
+  assert_success
+  expected="get crd k8srequiredlabelsvap.constraints.gatekeeper.sh --ignore-not-found -o name
+delete --ignore-not-found --timeout=60s -f fixtures/constraints/all_ns_must_have_label_provided_vapbinding.yaml -f fixtures/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml
+delete --ignore-not-found --timeout=60s -f fixtures/templates/k8srequiredlabels_template_vap.yaml
+delete --ignore-not-found --timeout=60s -f fixtures/good/good_ns.yaml -f fixtures/bad/bad_ns.yaml
+delete pod temp --ignore-not-found --timeout=60s"
+  assert_equal "${expected}" "$(<"${calls}")"
+}
+
+@test "VAP cleanup skips constraint deletion after its CRD is gone" {
+  BATS_TESTS_DIR=fixtures
+  calls="${BATS_TEST_TMPDIR}/kubectl-calls"
+  kubectl() {
+    printf '%s\n' "$*" >>"${calls}"
+  }
+
+  run cleanup_vap_test
+  assert_success
+  assert_not_match 'fixtures/constraints/' "$(<"${calls}")"
+  assert_match 'fixtures/templates/k8srequiredlabels_template_vap.yaml' "$(<"${calls}")"
+  assert_match 'delete pod temp' "$(<"${calls}")"
+}
+
+@test "VAP cleanup continues and reports a constraint deletion failure" {
+  BATS_TESTS_DIR=fixtures
+  calls="${BATS_TEST_TMPDIR}/kubectl-calls"
+  kubectl() {
+    printf '%s\n' "$*" >>"${calls}"
+    if [[ "$1" == get ]]; then
+      echo "customresourcedefinition.apiextensions.k8s.io/k8srequiredlabelsvap.constraints.gatekeeper.sh"
+    elif [[ "$*" == *"fixtures/constraints/"* ]]; then
+      echo "constraint deletion failed" >&2
+      return 1
+    fi
+  }
+
+  run cleanup_vap_test
+  assert_failure
+  assert_match 'constraint deletion failed' "${output}"
+  assert_match 'fixtures/templates/k8srequiredlabels_template_vap.yaml' "$(<"${calls}")"
+  assert_match 'fixtures/good/good_ns.yaml' "$(<"${calls}")"
+  assert_match 'delete pod temp' "$(<"${calls}")"
+}
+
+@test "VAP cleanup reports discovery errors and still attempts remaining cleanup" {
+  BATS_TESTS_DIR=fixtures
+  calls="${BATS_TEST_TMPDIR}/kubectl-calls"
+  kubectl() {
+    printf '%s\n' "$*" >>"${calls}"
+    if [[ "$1" == get ]]; then
+      echo "Forbidden" >&2
+      return 1
+    fi
+  }
+
+  run cleanup_vap_test
+  assert_failure
+  assert_match 'Forbidden' "${output}"
+  assert_not_match 'fixtures/constraints/' "$(<"${calls}")"
+  assert_match 'fixtures/templates/k8srequiredlabels_template_vap.yaml' "$(<"${calls}")"
+  assert_match 'delete pod temp' "$(<"${calls}")"
+}
