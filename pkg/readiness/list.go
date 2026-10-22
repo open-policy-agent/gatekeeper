@@ -65,7 +65,7 @@ func retryLister(r Lister, predicate retryPredicate) Lister {
 			return true, nil
 		})
 		if err != nil {
-			log.Error(err, "listing", "gvk", gvk, "err", err)
+			log.Error(err, "listing failed", "gvk", gvk)
 			return err
 		}
 		return nil
