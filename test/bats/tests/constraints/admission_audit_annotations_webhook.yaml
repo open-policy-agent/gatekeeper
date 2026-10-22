@@ -1,0 +1,17 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: admission-audit-annotations-webhook
+  labels:
+    gatekeeper.sh/tests: "yes"
+spec:
+  enforcementAction: deny
+  match:
+    namespaces:
+      - admission-audit-annotations-webhook
+    kinds:
+      - apiGroups: [""]
+        kinds: ["ConfigMap"]
+  parameters:
+    labels:
+      - gatekeeper

@@ -21,6 +21,10 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS": `{{ if hasKey .Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}`,
 
+	"- HELMSUBST_EMIT_ADMISSION_AUDIT_ANNOTATIONS": `{{ if hasKey .Values "emitAdmissionAuditAnnotations" }}- --emit-admission-audit-annotations={{ .Values.emitAdmissionAuditAnnotations }}{{- end }}`,
+
+	"- HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS": `{{ if hasKey .Values "admissionAuditAnnotationsIncludeSuccess" }}- --admission-audit-annotations-include-success={{ .Values.admissionAuditAnnotationsIncludeSuccess }}{{- end }}`,
+
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION": `{{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK": `{{ .Values.audit.hostNetwork }}`,
@@ -392,6 +396,11 @@ var replacements = map[string]string{
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}`,
+
+	"        - HELMSUBST_DEPLOYMENT_VAP_GENERATION_MODE": "\n" +
+		"        {{- if hasKey .Values \"vapGenerationMode\"}}\n" +
+		"        - --vap-generation-mode={{ .Values.vapGenerationMode }}\n" +
+		"        {{- end }}",
 
 	"        - HELMSUBST_DEPLOYMENT_DEFAULT_K8S_NATIVE_VALIDATION_FAILURE_POLICY": "\n" +
 		"        {{- if hasKey .Values \"defaultK8sNativeValidationFailurePolicy\"}}\n" +

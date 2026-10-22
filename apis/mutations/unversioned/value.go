@@ -34,10 +34,10 @@ type AssignField struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Value *types.Anything `json:"value,omitempty"`
 
-	// FromMetadata assigns a value from the specified metadata field.
+	// fromMetadata assigns a value from the specified metadata field.
 	FromMetadata *FromMetadata `json:"fromMetadata,omitempty"`
 
-	// ExternalData describes the external data provider to be used for mutation.
+	// externalData describes the external data provider to be used for mutation.
 	ExternalData *ExternalData `json:"externalData,omitempty"`
 }
 
@@ -90,7 +90,7 @@ func (a *AssignField) Validate() error {
 }
 
 type FromMetadata struct {
-	// Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+	// field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
 	Field Field `json:"field,omitempty"`
 }
 

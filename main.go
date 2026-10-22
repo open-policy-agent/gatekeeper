@@ -48,11 +48,13 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/cachemanager"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/webhookconfig/webhookconfigcache"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	celSchema "github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
@@ -219,6 +221,10 @@ func innerMain() int {
 		setupLog.Error(err, "Invalid default K8sNativeValidation failure policy")
 		return 1
 	}
+	if err := constraint.ValidateVAPGenerationMode(); err != nil {
+		setupLog.Error(err, "Invalid VAP generation mode")
+		return 1
+	}
 
 	if *mutation.DeprecatedMutationEnabled {
 		setupLog.Error(errors.New("--enable-mutation flag is deprecated"), "use of deprecated flag")
@@ -321,7 +327,7 @@ func innerMain() int {
 	}
 
 	// Setup tracker and register readiness probe.
-	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled, *expansion.ExpansionEnabled)
+	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled, *expansion.ExpansionEnabled && operations.HasValidationOperations())
 	if err != nil {
 		setupLog.Error(err, "unable to register readiness tracker")
 		return 1
@@ -414,6 +420,18 @@ blockingLoop:
 		return 1
 	}
 	return 0
+}
+
+// newMutationSystem returns a *mutation.System built from opts, or nil when no
+// mutation operation (mutation-webhook, mutation-controller, mutation-status) is
+// assigned to this pod. expansion.NewSystem already treats a nil mutation system
+// as "skip mutation" (see pkg/expansion/system.go), so callers can pass the result
+// straight through without an additional nil check.
+func newMutationSystem(opts mutation.SystemOpts) *mutation.System {
+	if !mutation.Enabled() {
+		return nil
+	}
+	return mutation.NewSystem(opts)
 }
 
 func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.Tracker, setupFinished chan struct{}) error {
@@ -511,9 +529,9 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		}
 	}
 
-	mutationSystem := mutation.NewSystem(mutationOpts)
-	expansionSystem := expansion.NewSystem(mutationSystem)
-	exportSystem := export.NewSystem()
+	mutationSystem := newMutationSystem(mutationOpts)
+	expansionSystem := newExpansionSystem(mutationSystem)
+	exportSystem := newExportSystem()
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -645,6 +663,30 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	}
 
 	return nil
+}
+
+// newExportSystem constructs an export.System only when audit or admission
+// violation export has been requested, since either flag requires a
+// constructed export.System. It returns nil when both are disabled so that
+// the default configuration carries no unused export dependency.
+func newExportSystem() *export.System {
+	if *exportutil.ExportEnabled || *exportutil.AdmissionExportEnabled {
+		return export.NewSystem()
+	}
+	return nil
+}
+
+// newExpansionSystem constructs an expansion.System only for processes with
+// validation operations (audit and the validating webhook), the only callers
+// of Expand. They invoke Expand unconditionally, independent of whether
+// expansion is enabled, so they still get a non-nil (possibly empty) system;
+// other processes, such as status-only or generate-only pods, have no use for
+// one.
+func newExpansionSystem(mutationSystem *mutation.System) *expansion.System {
+	if !operations.HasValidationOperations() {
+		return nil
+	}
+	return expansion.NewSystem(mutationSystem)
 }
 
 func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {

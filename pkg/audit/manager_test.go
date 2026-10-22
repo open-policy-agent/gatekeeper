@@ -1181,3 +1181,12 @@ func TestAuditExportPublishingStateBoundsErrors(t *testing.T) {
 	require.Len(t, state.Errors, exportutil.MaxConnectionStatusErrors)
 	require.Contains(t, state.Errors, exportutil.AdditionalPublishErrorsOmittedMessage)
 }
+
+func TestNewRejectsMissingExportSystemWhenExportEnabled(t *testing.T) {
+	origExport := *exportutil.ExportEnabled
+	defer func() { *exportutil.ExportEnabled = origExport }()
+	*exportutil.ExportEnabled = true
+
+	_, err := New(nil, &Dependencies{ExportSystem: nil})
+	require.Error(t, err)
+}

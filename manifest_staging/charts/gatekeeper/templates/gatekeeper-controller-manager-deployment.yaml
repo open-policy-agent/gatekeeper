@@ -67,6 +67,8 @@ spec:
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
         {{ if hasKey .Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}
+        {{ if hasKey .Values "emitAdmissionAuditAnnotations" }}- --emit-admission-audit-annotations={{ .Values.emitAdmissionAuditAnnotations }}{{- end }}
+        {{ if hasKey .Values "admissionAuditAnnotationsIncludeSuccess" }}- --admission-audit-annotations-include-success={{ .Values.admissionAuditAnnotationsIncludeSuccess }}{{- end }}
         {{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}
         - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace
           }}
@@ -95,8 +97,8 @@ spec:
           }}
         - --max-serving-threads={{ .Values.maxServingThreads }}
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
-        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName
-          }}
+        - --validating-webhook-configuration-name={{ if not .Values.disableValidatingWebhook
+          }}{{ .Values.validatingWebhookName }}{{ end }}
         {{ if .Values.additionalValidatingWebhookConfigsToRotateCerts | empty | not }}- --additional-validating-webhook-configs-to-rotate-certs={{ .Values.additionalValidatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         {{ if .Values.additionalMutatingWebhookConfigsToRotateCerts | empty | not }}- --additional-mutating-webhook-configs-to-rotate-certs={{ .Values.additionalMutatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
@@ -154,6 +156,10 @@ spec:
         
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
+        {{- end }}
+
+        {{- if hasKey .Values "vapGenerationMode"}}
+        - --vap-generation-mode={{ .Values.vapGenerationMode }}
         {{- end }}
         
         {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}

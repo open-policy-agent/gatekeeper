@@ -85,6 +85,8 @@ spec:
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EMIT_ADMISSION_EVENTS
+            - HELMSUBST_EMIT_ADMISSION_AUDIT_ANNOTATIONS
+            - HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOG_STATS_ADMISSION
             - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
@@ -100,7 +102,7 @@ spec:
             - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
             - --max-serving-threads={{ .Values.maxServingThreads }}
             - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
-            - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+            - --validating-webhook-configuration-name={{ if not .Values.disableValidatingWebhook }}{{ .Values.validatingWebhookName }}{{ end }}
             - HELMSUBST_ADDITIONAL_VALIDATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - HELMSUBST_ADDITIONAL_MUTATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
@@ -119,6 +121,7 @@ spec:
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOGFILE
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
+            - HELMSUBST_DEPLOYMENT_VAP_GENERATION_MODE
             - HELMSUBST_DEPLOYMENT_DEFAULT_WAIT_VAPB_GENERATION
             - HELMSUBST_READINESS_RETRIES
             - HELMSUBST_ENABLE_PPROF
@@ -199,12 +202,14 @@ spec:
             - --audit-interval={{ .Values.auditInterval }}
             - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-            - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+            - --validating-webhook-configuration-name={{ if not .Values.disableValidatingWebhook }}{{ .Values.validatingWebhookName }}{{ end }}
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - --audit-from-cache={{ .Values.auditFromCache }}
             - HELMSUBST_DEPLOYMENT_AUDIT_CHUNK_SIZE
             - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
             - HELMSUBST_DEPLOYMENT_AUDIT_EMIT_EVENTS
+            - HELMSUBST_EMIT_ADMISSION_AUDIT_ANNOTATIONS
+            - HELMSUBST_ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS
             - HELMSUBST_DEPLOYMENT_AUDIT_LOG_STATS_ADMISSION
             - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - HELMSUBST_AUDIT_OPERATIONS
@@ -225,6 +230,7 @@ spec:
             - HELMSUBST_DEPLOYMENT_DEFAULT_K8S_NATIVE_VALIDATION_FAILURE_POLICY
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
+            - HELMSUBST_DEPLOYMENT_VAP_GENERATION_MODE
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_SUFFIXES
