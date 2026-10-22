@@ -47,6 +47,16 @@ func TestDependenciesValidate(t *testing.T) {
 			deps:     dataSyncDeps,
 		},
 		{
+			name:     "data sync operations without a process excluder",
+			assigned: []operations.Operation{operations.Audit},
+			deps: func() *Dependencies {
+				deps := dataSyncDeps()
+				deps.ProcessExcluder = nil
+				return deps
+			},
+			wantErr: true,
+		},
+		{
 			name:     "data sync operations without a cache manager",
 			assigned: []operations.Operation{operations.Audit},
 			deps: func() *Dependencies {

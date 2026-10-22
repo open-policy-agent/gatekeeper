@@ -858,12 +858,8 @@ func (t *Tracker) trackConfigAndSyncSets(ctx context.Context, errChan chan<- err
 			if !cfg.GetDeletionTimestamp().IsZero() {
 				log.Info("config resource is being deleted - skipping for readiness")
 			} else {
-				// Only wait for the Config resource if a controller in this pod
-				// will actually observe it.
-				if operations.NeedsConfigReconciliation() {
-					t.config.Expect(cfg)
-					log.V(logging.DebugLevel).Info("setting expectations for config", "configCount", 1)
-				}
+				t.config.Expect(cfg)
+				log.V(logging.DebugLevel).Info("setting expectations for config", "configCount", 1)
 
 				for _, entry := range cfg.Spec.Sync.SyncOnly {
 					dataGVKs[entry.ToGroupVersionKind()] = struct{}{}

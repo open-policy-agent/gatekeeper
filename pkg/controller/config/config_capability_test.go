@@ -40,7 +40,13 @@ import (
 // Config.spec.readiness.statsEnabled - and that a missing dependency still
 // fails setup loudly instead of silently skipping registration.
 func TestAdderRegistersWithoutDataSync(t *testing.T) {
-	for _, op := range []operations.Operation{operations.MutationStatus, operations.MutationWebhook} {
+	for _, op := range []operations.Operation{
+		operations.Status,
+		operations.Generate,
+		operations.MutationWebhook,
+		operations.MutationStatus,
+		operations.MutationController,
+	} {
 		t.Run(string(op), func(t *testing.T) {
 			restore, err := operations.SetForTest(op)
 			require.NoError(t, err)

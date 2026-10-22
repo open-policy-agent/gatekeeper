@@ -17,69 +17,58 @@ package operations
 
 import "testing"
 
-func TestCapabilities(t *testing.T) {
+func TestNeedsValidationDataSync(t *testing.T) {
 	tests := []struct {
-		name                  string
-		assigned              []Operation
-		dataSync              bool
-		processExclusions     bool
-		generateNotifications bool
-		configReconciliation  bool
+		name     string
+		assigned []Operation
+		want     bool
 	}{
 		{
-			// Even here: the readiness tracker exists regardless of the
-			// operation set, and only the Config controller can switch its
-			// verbose logging on.
-			name:                 "no operations",
-			assigned:             nil,
-			configReconciliation: true,
+			name: "no operations",
 		},
 		{
-			name:                 "audit",
-			assigned:             []Operation{Audit},
-			dataSync:             true,
-			processExclusions:    true,
-			configReconciliation: true,
+			name:     "audit",
+			assigned: []Operation{Audit},
+			want:     true,
 		},
 		{
-			name:                 "validating webhook",
-			assigned:             []Operation{Webhook},
-			dataSync:             true,
-			processExclusions:    true,
-			configReconciliation: true,
+			name:     "validating webhook",
+			assigned: []Operation{Webhook},
+			want:     true,
 		},
 		{
-			name:                 "mutation webhook only",
-			assigned:             []Operation{MutationWebhook},
-			processExclusions:    true,
-			configReconciliation: true,
+			name:     "status only",
+			assigned: []Operation{Status},
 		},
 		{
-			// Mutation-only pods read nothing else off the Config resource, but
-			// their readiness stats switch still lives there.
-			name:                 "mutation status only",
-			assigned:             []Operation{MutationStatus},
-			configReconciliation: true,
+			name:     "mutation webhook only",
+			assigned: []Operation{MutationWebhook},
 		},
 		{
-			name:                 "mutation controller only",
-			assigned:             []Operation{MutationController},
-			configReconciliation: true,
+			name:     "mutation status only",
+			assigned: []Operation{MutationStatus},
 		},
 		{
-			name:                  "generate only",
-			assigned:              []Operation{Generate},
-			processExclusions:     true,
-			generateNotifications: true,
-			configReconciliation:  true,
+			name:     "mutation controller only",
+			assigned: []Operation{MutationController},
 		},
 		{
-			name:                  "all operations",
-			assigned:              allOperations,
-			dataSync:              true,
-			processExclusions:     true,
-			generateNotifications: true,
-			configReconciliation:  true,
+			name:     "generate only",
+			assigned: []Operation{Generate},
+		},
+		{
+			name:     "generate and mutation webhook",
+			assigned: []Operation{Generate, MutationWebhook},
+		},
+		{
+			name:     "audit and status",
+			assigned: []Operation{Audit, Status},
+			want:     true,
+		},
+		{
+			name:     "all operations",
+			assigned: allOperations,
+			want:     true,
 		},
 	}
 
@@ -91,20 +80,8 @@ func TestCapabilities(t *testing.T) {
 			}
 			t.Cleanup(restore)
 
-			if got := NeedsValidationDataSync(); got != tt.dataSync {
-				t.Errorf("NeedsValidationDataSync() = %t, want %t", got, tt.dataSync)
-			}
-			if got := NeedsProcessExclusions(); got != tt.processExclusions {
-				t.Errorf("NeedsProcessExclusions() = %t, want %t", got, tt.processExclusions)
-			}
-			if got := NeedsGenerateConfigNotifications(); got != tt.generateNotifications {
-				t.Errorf("NeedsGenerateConfigNotifications() = %t, want %t", got, tt.generateNotifications)
-			}
-			if got := NeedsReadinessStats(); !got {
-				t.Errorf("NeedsReadinessStats() = %t, want true", got)
-			}
-			if got := NeedsConfigReconciliation(); got != tt.configReconciliation {
-				t.Errorf("NeedsConfigReconciliation() = %t, want %t", got, tt.configReconciliation)
+			if got := NeedsValidationDataSync(); got != tt.want {
+				t.Errorf("NeedsValidationDataSync() = %t, want %t", got, tt.want)
 			}
 		})
 	}

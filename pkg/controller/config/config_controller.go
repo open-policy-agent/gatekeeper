@@ -167,10 +167,7 @@ type Adder struct {
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	if !operations.NeedsConfigReconciliation() {
-		return nil
-	}
-
+	// Every operation needs Config reconciliation for its readiness-statistics setting.
 	r, err := newReconciler(mgr, a.CacheManager, a.ProcessExcluder, a.Tracker, a.GetPod, a.CtEvents)
 	if err != nil {
 		return err
@@ -347,7 +344,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		r.tracker.DisableStats()
 	}
 
-	notifyGenerate := operations.NeedsGenerateConfigNotifications() && *transform.SyncVAPScope && r.ctEvents != nil
+	notifyGenerate := operations.IsAssigned(operations.Generate) && *transform.SyncVAPScope && r.ctEvents != nil
 
 	var configChanged bool
 	if notifyGenerate {
