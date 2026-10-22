@@ -24,7 +24,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag is deprecated and will be removed in Gatekeeper v3.24.")
+var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration and Config resource. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag is deprecated and will be removed in Gatekeeper v3.24.")
 
 const (
 	vapEvaluationAuditAnnotationKey             = "evaluation"
@@ -59,7 +59,7 @@ func quoteNamespaces(namespaces []string) []string {
 }
 
 // buildMatchConditions constructs the complete list of match conditions for the VAP policy.
-func buildMatchConditions(source *schema.Source, excludedNamespaces, exemptedNamespaces []string) ([]admissionregistrationv1beta1.MatchCondition, error) {
+func buildMatchConditions(source *schema.Source, excludedNamespaces []string) ([]admissionregistrationv1beta1.MatchCondition, error) {
 	// Start with template-defined match conditions
 	matchConditions, err := source.GetV1Beta1MatchConditions()
 	if err != nil {
@@ -74,13 +74,6 @@ func buildMatchConditions(source *schema.Source, excludedNamespaces, exemptedNam
 		quotedNamespaces := quoteNamespaces(excludedNamespaces)
 		matchConditions = append(matchConditions,
 			MatchGlobalExcludedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
-	}
-
-	// Add exempted namespaces condition if specified
-	if len(exemptedNamespaces) > 0 {
-		quotedNamespaces := quoteNamespaces(exemptedNamespaces)
-		matchConditions = append(matchConditions,
-			MatchGlobalExemptedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
 	}
 
 	return matchConditions, nil
@@ -210,15 +203,17 @@ func appendWebhookMatchConditions(matchConditions []admissionregistrationv1beta1
 	return matchConditions
 }
 
-func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string, exemptedNamespaces []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+// TemplateToPolicyDefinitionWithWebhookConfig retains its final argument for API compatibility.
+// Namespace exemptions are inherited from webhookConfig instead.
+func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string, _ []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	// Extract CEL source from template
 	source, err := schema.GetSourceFromTemplate(template)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build match conditions (includes template conditions + namespace exclusions/exemptions)
-	matchConditions, err := buildMatchConditions(source, excludedNamespaces, exemptedNamespaces)
+	// Build match conditions (includes template conditions + namespace exclusions)
+	matchConditions, err := buildMatchConditions(source, excludedNamespaces)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +280,8 @@ func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintT
 }
 
 // ConstraintToPolicyDefinitionWithWebhookConfig creates a VAP with one Constraint's parameters inlined.
-func ConstraintToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, constraint *unstructured.Unstructured, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string, exemptedNamespaces []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+// Its final argument is ignored and retained for API compatibility.
+func ConstraintToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, constraint *unstructured.Unstructured, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string, _ []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	source, err := schema.GetSourceFromTemplate(template)
 	if err != nil {
 		return nil, err
@@ -294,7 +290,7 @@ func ConstraintToPolicyDefinitionWithWebhookConfig(template *templates.Constrain
 		return nil, err
 	}
 
-	policy, transformErr := TemplateToPolicyDefinitionWithWebhookConfig(template, webhookConfig, excludedNamespaces, exemptedNamespaces)
+	policy, transformErr := TemplateToPolicyDefinitionWithWebhookConfig(template, webhookConfig, excludedNamespaces, nil)
 	if policy == nil {
 		return nil, transformErr
 	}

@@ -554,6 +554,13 @@ func TestConstraintToPolicyDefinitionWithWebhookConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	legacyPolicy, err := ConstraintToPolicyDefinitionWithWebhookConfig(template, constraint, nil, nil, []string{"team-payments", "team-*", "*-payments"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(legacyPolicy, policy) {
+		t.Fatal("legacy exemption namespace argument changed the policy")
+	}
 	if policy.Name != "gatekeeper-footemplate-foo-name-vap" {
 		t.Fatalf("policy name = %q", policy.Name)
 	}
