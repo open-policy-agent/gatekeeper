@@ -33,6 +33,8 @@ import (
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/mutations/v1alpha1"
 	syncsetv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/syncset/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/keys"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/syncutil"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -825,6 +827,39 @@ func Test_ReadyTracker_TrackConstraintTemplates(t *testing.T) {
 			if rt.templates.Populated() != expectPopulated {
 				t.Fatalf("templates object tracker's populated field is marked as %v but should be %v", rt.templates.Populated(), expectPopulated)
 			}
+		})
+	}
+}
+
+func Test_ReadyTracker_TrackConfigWithoutDataSync(t *testing.T) {
+	for _, op := range []operations.Operation{
+		operations.Status,
+		operations.Generate,
+		operations.MutationWebhook,
+		operations.MutationStatus,
+		operations.MutationController,
+	} {
+		t.Run(string(op), func(t *testing.T) {
+			restore, err := operations.SetForTest(op)
+			require.NoError(t, err)
+			t.Cleanup(restore)
+
+			cfg := testConfig.DeepCopy()
+			cfg.Name = keys.Config.Name
+			cfg.Namespace = keys.Config.Namespace
+			lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(cfg).Build()
+			rt := newTracker(lister, false, false, false, false, retryNone, func() objData {
+				return objData{retries: 0}
+			})
+			errChan := make(chan error, 1)
+
+			rt.trackConfigAndSyncSets(context.Background(), errChan)
+
+			require.Empty(t, errChan)
+			require.True(t, rt.config.Populated())
+			require.False(t, rt.config.Satisfied(), "readiness must wait for Config reconciliation")
+			rt.config.Observe(cfg)
+			require.True(t, rt.config.Satisfied())
 		})
 	}
 }

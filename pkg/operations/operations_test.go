@@ -50,13 +50,6 @@ func Test_Flags(t *testing.T) {
 }
 
 func TestHasValidationOperations(t *testing.T) {
-	original := operations
-	t.Cleanup(func() {
-		operationsMtx.Lock()
-		defer operationsMtx.Unlock()
-		operations = original
-	})
-
 	tests := map[string]struct {
 		assigned []Operation
 		want     bool
@@ -70,20 +63,20 @@ func TestHasValidationOperations(t *testing.T) {
 		"mutation-controller only": {assigned: []Operation{MutationController}},
 		"mutation-status only":     {assigned: []Operation{MutationStatus}},
 		"mutation-webhook only":    {assigned: []Operation{MutationWebhook}},
-		"none assigned":            {assigned: []Operation{}},
+		"generate and mutation webhook": {
+			assigned: []Operation{Generate, MutationWebhook},
+		},
+		"all operations": {assigned: allOperations, want: true},
+		"none assigned":  {assigned: []Operation{}},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			assigned := newOperationSet()
-			assigned.assignedOperations = make(map[Operation]bool)
-			for _, op := range tc.assigned {
-				assigned.assignedOperations[op] = true
+			restore, err := SetForTest(tc.assigned...)
+			if err != nil {
+				t.Fatal(err)
 			}
-
-			operationsMtx.Lock()
-			operations = assigned
-			operationsMtx.Unlock()
+			t.Cleanup(restore)
 
 			if got := HasValidationOperations(); got != tc.want {
 				t.Errorf("HasValidationOperations() = %t, want %t", got, tc.want)
