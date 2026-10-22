@@ -202,7 +202,7 @@ func newReconciler(mgr manager.Manager, cm *cm.CacheManager, processExcluder *pr
 	if processExcluder == nil {
 		return nil, fmt.Errorf("processExcluder must be non-nil")
 	}
-	if cm == nil && operations.NeedsValidationDataSync() {
+	if cm == nil && operations.HasValidationOperations() {
 		return nil, fmt.Errorf("cacheManager must be non-nil when validation data sync is required")
 	}
 

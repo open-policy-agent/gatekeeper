@@ -136,7 +136,7 @@ type Dependencies struct {
 // dependencies to be non-nil, so a mismatch has to fail setup rather than
 // surface later as a nil dereference.
 func (deps *Dependencies) Validate() error {
-	if operations.NeedsValidationDataSync() {
+	if operations.HasValidationOperations() {
 		if deps.CacheMgr == nil {
 			return fmt.Errorf("cache manager is required for operations %v", operations.AssignedStringList())
 		}

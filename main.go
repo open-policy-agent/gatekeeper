@@ -572,7 +572,7 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		events chan event.GenericEvent
 		cm     *cachemanager.CacheManager
 	)
-	if operations.NeedsValidationDataSync() {
+	if operations.HasValidationOperations() {
 		// Events ch will be used to receive events from dynamic watches registered
 		// via the registrar below.
 		events = make(chan event.GenericEvent, 1024)
@@ -690,7 +690,7 @@ func newExportSystem() *export.System {
 // so a status-only, generate-only or mutation-only pod would otherwise run a
 // watch manager that never watches anything.
 func newWatchManager(dc watch.RemovableCache) (*watch.Manager, error) {
-	if !operations.NeedsValidationDataSync() {
+	if !operations.HasValidationOperations() {
 		return nil, nil
 	}
 	return watch.New(dc)
