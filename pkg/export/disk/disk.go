@@ -96,6 +96,9 @@ const (
 	defaultAdmissionFileTTL        = 24 * time.Hour
 	// Keep direct disk publishes under the same complete-record bound enforced
 	// by the webhook queue so they cannot bypass its memory and spool protection.
+	// The value stays well below defaultMaxAdmissionFileBytes so any accepted
+	// record still fits in a freshly rotated segment rather than failing the
+	// write, and it bounds how much of a segment one record can claim.
 	defaultMaxAdmissionRecordBytes = 64 << 10
 	defaultMinAdmissionFreeBytes   = 16 << 20
 	minAdmissionFileAge            = time.Second
