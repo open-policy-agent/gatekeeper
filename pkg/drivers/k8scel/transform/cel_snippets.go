@@ -99,28 +99,6 @@ const (
 		)
 	)
 	`
-	// Expression to exempt objects in globally exempted namespaces and namespace objects themselves if they're in the exemption list from exempt namespace flags.
-	matchGlobalExemptedNamespacesGlob = `
-	[object, oldObject].exists(obj,
-		obj != null && (
-			// For namespace objects, check if the namespace name itself is in the exemption list
-			(has(obj.kind) && obj.kind == "Namespace" && has(obj.metadata.name)) ? (
-				![%s].exists(nsMatcher,
-					(string(obj.metadata.name).matches(r"^\Q" + string(nsMatcher).replace(r"\E", r"\E\\E\Q").replace("*", r"\E.*\Q") + r"\E$")) &&
-					has(obj.metadata.labels) &&
-					("admission.gatekeeper.sh/ignore" in obj.metadata.labels)
-				)
-			) : (
-				// cluster-scoped objects (non-namespace) always match
-				!has(obj.metadata.namespace) || obj.metadata.namespace == "" ? true : (
-					![%s].exists(nsMatcher,
-						(string(obj.metadata.namespace).matches(r"^\Q" + string(nsMatcher).replace(r"\E", r"\E\\E\Q").replace("*", r"\E.*\Q") + r"\E$"))
-					)
-				)
-			)
-		)
-	)
-	`
 )
 
 func MatchExcludedNamespacesGlobV1Beta1() admissionregistrationv1beta1.MatchCondition {
@@ -134,13 +112,6 @@ func MatchGlobalExcludedNamespacesGlobV1Beta1(excludedNamespaces string) admissi
 	return admissionregistrationv1beta1.MatchCondition{
 		Name:       "gatekeeper_internal_match_global_excluded_namespaces",
 		Expression: fmt.Sprintf(matchGlobalExcludedNamespacesGlob, excludedNamespaces, excludedNamespaces),
-	}
-}
-
-func MatchGlobalExemptedNamespacesGlobV1Beta1(exemptedNamespaces string) admissionregistrationv1beta1.MatchCondition {
-	return admissionregistrationv1beta1.MatchCondition{
-		Name:       "gatekeeper_internal_match_global_exempted_namespaces",
-		Expression: fmt.Sprintf(matchGlobalExemptedNamespacesGlob, exemptedNamespaces, exemptedNamespaces),
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel/schema"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/wildcard"
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/admissionregistration/v1"
@@ -896,10 +897,77 @@ func TestMatchExcludedNamespacesGlob(t *testing.T) {
 	}
 }
 
+func TestTemplateToPolicyDefinitionIgnoresExemptNamespaceNames(t *testing.T) {
+	template := newInlineTestTemplate(&schema.Source{
+		FailurePolicy: ptr.To("Fail"),
+		Validations:   []schema.Validation{{Expression: "true"}},
+	})
+	object := &unstructured.Unstructured{}
+	object.SetGroupVersionKind(rSchema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"})
+	object.SetName("test-config")
+	object.SetNamespace("team-payments")
+	objectBytes, err := json.Marshal(object.Object)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, pattern := range []string{"team-payments", "team-*", "*-payments"} {
+		for _, operation := range []admissionv1.Operation{admissionv1.Create, admissionv1.Update, admissionv1.Delete} {
+			t.Run(fmt.Sprintf("%s/%s", pattern, operation), func(t *testing.T) {
+				policy, err := TemplateToPolicyDefinitionWithWebhookConfig(template, nil, nil, []string{pattern})
+				if err != nil {
+					t.Fatal(err)
+				}
+				conditions := policy.Spec.MatchConditions
+				expressions := make([]cel.ExpressionAccessor, 0, len(conditions))
+				for _, condition := range conditions {
+					expressions = append(expressions, &matchconditions.MatchCondition{
+						Name: condition.Name, Expression: condition.Expression,
+					})
+				}
+				compiler, err := cel.NewCompositedCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				evaluator := compiler.CompileCondition(expressions, cel.OptionalVariableDeclarations{HasParams: true}, environment.StoredExpressions)
+				if compilationErrors := evaluator.CompilationErrors(); len(compilationErrors) != 0 {
+					t.Fatalf("compiling match conditions: %v", compilationErrors)
+				}
+				matcher := matchconditions.NewMatcher(evaluator, ptr.To(v1.Fail), "policy", "validate", t.Name())
+				request := &admissionv1.AdmissionRequest{
+					Kind:      metav1.GroupVersionKind{Version: "v1", Kind: "ConfigMap"},
+					Resource:  metav1.GroupVersionResource{Version: "v1", Resource: "configmaps"},
+					Name:      object.GetName(),
+					Namespace: object.GetNamespace(),
+					Operation: operation,
+				}
+				if operation != admissionv1.Delete {
+					request.Object = runtime.RawExtension{Raw: objectBytes}
+				}
+				if operation != admissionv1.Create {
+					request.OldObject = runtime.RawExtension{Raw: objectBytes}
+				}
+				attributes, err := RequestToVersionedAttributes(request)
+				if err != nil {
+					t.Fatal(err)
+				}
+				constraint := &unstructured.Unstructured{Object: map[string]interface{}{}}
+				if err := shouldMatch(true, false, matcher.Match(context.Background(), attributes, constraint, nil)); err != nil {
+					t.Error(err)
+				}
+				for _, condition := range conditions {
+					checkSpecializedMatch(t, condition, constraint, request, true, false)
+				}
+			})
+		}
+	}
+}
+
 func TestGlobRegexLiterals(t *testing.T) {
 	const (
 		nameField       = "name"
 		namespacesField = "namespaces"
+		namespaceKind   = "Namespace"
 	)
 	matchers := []struct {
 		field     string
@@ -910,7 +978,6 @@ func TestGlobRegexLiterals(t *testing.T) {
 		{field: namespacesField, condition: func(string) admissionregistrationv1beta1.MatchCondition { return MatchNamespacesGlobV1Beta1() }},
 		{field: matchExcludedNamespacesField, condition: func(string) admissionregistrationv1beta1.MatchCondition { return MatchExcludedNamespacesGlobV1Beta1() }, excluded: true},
 		{field: "global exclusions", condition: MatchGlobalExcludedNamespacesGlobV1Beta1, excluded: true},
-		{field: "global exemptions", condition: MatchGlobalExemptedNamespacesGlobV1Beta1, excluded: true},
 	}
 	for _, match := range matchers {
 		for _, literal := range []string{"foo.bar", `foo.+?()|[]{}^$bar`, `foo\bar`, `foo\Ebar`, `foo\\Ebar`, `foo\Qbar`} {
@@ -939,14 +1006,14 @@ func TestGlobRegexLiterals(t *testing.T) {
 							t.Fatal(err)
 						}
 					}
-					for _, kind := range []string{"ConfigMap", "Namespace"} {
+					for _, kind := range []string{"ConfigMap", namespaceKind} {
 						for _, candidate := range []string{literal, literal + "-suffix", "prefix-" + literal, "prefix-" + literal + "-suffix", "foo-bar", "unrelated"} {
 							t.Run(fmt.Sprintf("%s/%q", kind, candidate), func(t *testing.T) {
 								object := &unstructured.Unstructured{}
 								object.SetGroupVersionKind(rSchema.GroupVersionKind{Version: "v1", Kind: kind})
 								object.SetName(candidate)
 								object.SetLabels(map[string]string{"admission.gatekeeper.sh/ignore": ""})
-								if kind != "Namespace" {
+								if kind != namespaceKind {
 									object.SetNamespace(candidate)
 								}
 								encoded, err := json.Marshal(object.Object)
@@ -964,7 +1031,7 @@ func TestGlobRegexLiterals(t *testing.T) {
 								if match.excluded {
 									want = !want
 								}
-								if kind == "Namespace" && (match.field == namespacesField || match.field == matchExcludedNamespacesField) {
+								if kind == namespaceKind && (match.field == namespacesField || match.field == matchExcludedNamespacesField) {
 									want = true
 								}
 								if err := shouldMatch(want, false, matcher.Match(context.Background(), attributes, constraint, nil)); err != nil {

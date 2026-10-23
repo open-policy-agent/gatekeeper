@@ -181,17 +181,55 @@ vap_admission_audit_configuration_ready() {
   ' <<<"${binding}" >/dev/null
 }
 
+vap_configmap_admission_enforced() {
+  local namespace="$1"
+  local policy_name="$2"
+  local binding_name="$3"
+  local output
+
+  if output="$(kubectl create configmap vap-exemption-probe --namespace "${namespace}" --dry-run=server 2>&1)"; then
+    return 1
+  fi
+
+  [[ "${output}" == *"ValidatingAdmissionPolicy '${policy_name}' with binding '${binding_name}' denied request"* &&
+     "${output}" == *"missing required label"* ]]
+}
+
 vap_admission_enforced() {
   local resource_name="$1"
   local policy_name="$2"
   local binding_name="$3"
+  local warning_binding_name="${4:-}"
   local output
 
   if output="$(kubectl create namespace "${resource_name}" --dry-run=server 2>&1)"; then
     return 1
   fi
 
-  [[ "${output}" == *"ValidatingAdmissionPolicy '${policy_name}' with binding '${binding_name}' denied request"* ]]
+  [[ "${output}" == *"ValidatingAdmissionPolicy '${policy_name}' with binding '${binding_name}' denied request"* ]] &&
+    [[ -z "${warning_binding_name}" ||
+       "${output}" == *"Warning: Validation failed for ValidatingAdmissionPolicy '${policy_name}' with binding '${warning_binding_name}':"* ]]
+}
+
+cleanup_vap_test() {
+  local cleanup_status=0
+  local crd
+  if crd="$(kubectl get crd k8srequiredlabelsvap.constraints.gatekeeper.sh --ignore-not-found -o name)"; then
+    if [[ -n "${crd}" ]]; then
+      kubectl delete --ignore-not-found --timeout=60s \
+        -f "${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml" \
+        -f "${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml" || cleanup_status=$?
+    fi
+  else
+    cleanup_status=1
+  fi
+  kubectl delete --ignore-not-found --timeout=60s \
+    -f "${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml" || cleanup_status=$?
+  kubectl delete --ignore-not-found --timeout=60s \
+    -f "${BATS_TESTS_DIR}/good/good_ns.yaml" \
+    -f "${BATS_TESTS_DIR}/bad/bad_ns.yaml" || cleanup_status=$?
+  kubectl delete pod temp --ignore-not-found --timeout=60s || cleanup_status=$?
+  return "${cleanup_status}"
 }
 
 vap_admission_audit_annotations_match() {

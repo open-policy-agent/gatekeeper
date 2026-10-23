@@ -37,7 +37,8 @@ KUBERNETES_VERSION ?= 1.33.0
 KUSTOMIZE_VERSION ?= 5.8.1
 BATS_VERSION ?= 1.14.0
 ORAS_VERSION ?= 1.3.4
-BATS_TESTS_FILE ?= test/bats/test.bats
+# Run all suites locally; CI selects separate files for the core and VAP-scope matrices.
+BATS_TESTS_FILE ?= test/bats/test.bats test/bats/vap_scope.bats
 HELM_VERSION ?= 4.2.3
 NODE_VERSION ?= 24-bullseye-slim
 YQ_VERSION ?= 4.53.3

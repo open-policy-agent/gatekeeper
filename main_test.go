@@ -373,3 +373,40 @@ func Test_newExpansionSystem(t *testing.T) {
 		})
 	}
 }
+
+// Validates that newWatchManager only constructs a watch manager for processes
+// that sync validation data (audit and webhook). Nothing registers a watch
+// on other processes, so setupControllers should not start one there.
+func Test_newWatchManager(t *testing.T) {
+	tests := map[string]struct {
+		assigned []operations.Operation
+		wantNil  bool
+	}{
+		"audit only":               {assigned: []operations.Operation{operations.Audit}, wantNil: false},
+		"webhook only":             {assigned: []operations.Operation{operations.Webhook}, wantNil: false},
+		"audit and status":         {assigned: []operations.Operation{operations.Audit, operations.Status}, wantNil: false},
+		"status only":              {assigned: []operations.Operation{operations.Status}, wantNil: true},
+		"generate only":            {assigned: []operations.Operation{operations.Generate}, wantNil: true},
+		"mutation-webhook only":    {assigned: []operations.Operation{operations.MutationWebhook}, wantNil: true},
+		"mutation-status only":     {assigned: []operations.Operation{operations.MutationStatus}, wantNil: true},
+		"mutation-controller only": {assigned: []operations.Operation{operations.MutationController}, wantNil: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			restore, err := operations.SetForTest(tc.assigned...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer restore()
+
+			got, err := newWatchManager(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (got == nil) != tc.wantNil {
+				t.Errorf("newWatchManager() = %v, wantNil %v", got, tc.wantNil)
+			}
+		})
+	}
+}
