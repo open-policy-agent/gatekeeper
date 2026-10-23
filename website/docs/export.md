@@ -111,7 +111,7 @@ enableAdmissionViolationExport: true
 exportBackend: disk
 ```
 
-Admission violation export currently supports only the disk driver. The Helm chart rejects `enableAdmissionViolationExport: true` unless `exportBackend: disk`; the Dapr driver is not supported for admission export. The supported configuration routes audit and admission export through the same `Connection`, channel, path, and volume. Admission segment retention and other spool limits are fixed internal defaults while the feature is alpha; `maxAuditResults` continues to apply only to audit results. Additional admission-specific configuration can be added later if operational feedback requires it.
+Admission violation export currently supports only the disk driver; the Dapr driver is not supported for admission export. This is enforced at two layers: the Helm chart rejects `enableAdmissionViolationExport: true` unless `exportBackend: disk`, and the Dapr driver itself rejects admission violation messages at publish time (returning an error surfaced through the webhook export status, logs, and metrics) so the restriction holds even when Gatekeeper is deployed with raw manifests that bypass the chart. The supported configuration routes audit and admission export through the same `Connection`, channel, path, and volume. Admission segment retention and other spool limits are fixed internal defaults while the feature is alpha; `maxAuditResults` continues to apply only to audit results. Additional admission-specific configuration can be added later if operational feedback requires it.
 
 The chart mounts `audit.exportVolume` at `audit.exportVolumeMount.path` in every controller-manager pod when admission export is enabled. The reader sidecar is disabled by default; configure a production reader or explicitly enable the demonstration reader with `admission.disableExportSidecar: false`. Each pod writes its own spool, so multiple webhook replicas and separate audit/webhook deployments do not contend for one file.
 
@@ -156,7 +156,22 @@ Admission export limits are fixed while the feature is alpha and apply independe
 | Disk spool | Maximum completed-segment age | 24 hours |
 | Filesystem | Free-space reserve | 16 MiB |
 
-The 64 KiB record limit applies to the entire JSON object after encoding, not only to the violation message. JSON field names and escaping, policy-provided details, constraint annotations, resource labels, and request identity all count toward the limit. KiB measures bytes, so the number of characters that fit varies with UTF-8 and JSON escaping. The limit leaves room for normal policy and request metadata while preventing one user-influenced result from consuming a disproportionate share of the queue and disk spool. The `kubectl.kubernetes.io/last-applied-configuration` constraint annotation is omitted, but other annotations still count. An oversized record is dropped before enqueue and reported with drop reason `message_too_large`.
+#### Understanding the 64 KiB record limit
+
+The 64 KiB record limit applies to the **entire JSON object after encoding**, not only to the violation message. Every part of the exported record counts toward the limit:
+
+- the violation message,
+- policy-provided `details`,
+- constraint annotations,
+- all labels on the reviewed resource,
+- the request identity (username, UID, and groups),
+- and the JSON structure itself (field names, quotes, and escaping).
+
+Because the limit is measured in bytes, the number of characters that fit depends on encoding. A 64 KiB record holds up to 65,536 bytes: roughly 65,000 plain ASCII characters, about half that for accented Latin or other two-byte UTF-8 text, and fewer still for three-byte (for example, CJK) or four-byte (for example, emoji) characters. Characters that must be JSON-escaped, such as `"`, `\`, and newlines, cost two bytes each.
+
+**Why 64 KiB is a good limit.** It is generous for realistic policies while still capping the fields a policy author or a request submitter can inflate without bound. A typical violation from common policy libraries encodes to only a few kilobytes, because their messages are short, their `details` are usually empty, and they carry a small number of annotations. That leaves roughly an order of magnitude of headroom for normal policy and request metadata. At the same time, the two fields that no policy catalog constrains, the policy-provided `details` and the reviewed resource's labels, cannot grow a record without limit. This keeps any single hostile or unusually verbose result from consuming a disproportionate share of the bounded in-memory queue (16 MiB) and on-disk spool (20 MiB). The `kubectl.kubernetes.io/last-applied-configuration` constraint annotation, which is often large, is omitted from the record, but all other annotations still count.
+
+An oversized record is dropped **before** it enters the queue and is reported with drop reason `message_too_large`; it is never truncated, so a torn partial record is never exported. If your policies legitimately produce large `details` or you review resources with unusually large label sets and you see `message_too_large` drops, reduce the size of the emitted `details` in the policy rather than relying on the record limit to carry them; retain full history in the downstream system instead.
 
 Segment rotation occurs when any byte, record-count, or age limit is reached. The spool limits bound unconsumed backlog; they do not guarantee that records remain available for 24 hours. Cleanup removes the oldest completed segments until the count, byte, and age limits all hold, so count or byte pressure can remove a segment long before its maximum age. When one-minute age rotation is the limiting factor, 20 completed segments provide roughly 20 minutes of backlog; higher volume can rotate segments sooner. A reader must therefore drain segments fast enough for the workload.
 
