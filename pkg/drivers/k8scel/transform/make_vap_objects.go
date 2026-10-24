@@ -24,7 +24,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration, Config resource and exempt namespace flags. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag is deprecated and will be removed in Gatekeeper v3.24.")
+var SyncVAPScope = flag.Bool("sync-vap-enforcement-scope", true, "(beta) Synchronize ValidatingAdmissionPolicy enforcement scope with Gatekeeper's admission validation scope. When enabled, VAP resources inherit match criteria, conditions, and namespace exclusions from Gatekeeper's webhook configuration and Config resource. This ensures consistent policy enforcement between Gatekeeper and VAP but triggers constraint template reconciliation on scope changes in Config resource or webhook configuration. This flag is deprecated and will be removed in Gatekeeper v3.24.")
 
 const (
 	vapEvaluationAuditAnnotationKey             = "evaluation"
@@ -59,7 +59,7 @@ func quoteNamespaces(namespaces []string) []string {
 }
 
 // buildMatchConditions constructs the complete list of match conditions for the VAP policy.
-func buildMatchConditions(source *schema.Source, excludedNamespaces, exemptedNamespaces []string) ([]admissionregistrationv1beta1.MatchCondition, error) {
+func buildMatchConditions(source *schema.Source, excludedNamespaces []string) ([]admissionregistrationv1beta1.MatchCondition, error) {
 	// Start with template-defined match conditions
 	matchConditions, err := source.GetV1Beta1MatchConditions()
 	if err != nil {
@@ -74,13 +74,6 @@ func buildMatchConditions(source *schema.Source, excludedNamespaces, exemptedNam
 		quotedNamespaces := quoteNamespaces(excludedNamespaces)
 		matchConditions = append(matchConditions,
 			MatchGlobalExcludedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
-	}
-
-	// Add exempted namespaces condition if specified
-	if len(exemptedNamespaces) > 0 {
-		quotedNamespaces := quoteNamespaces(exemptedNamespaces)
-		matchConditions = append(matchConditions,
-			MatchGlobalExemptedNamespacesGlobV1Beta1(strings.Join(quotedNamespaces, ",")))
 	}
 
 	return matchConditions, nil
@@ -210,15 +203,17 @@ func appendWebhookMatchConditions(matchConditions []admissionregistrationv1beta1
 	return matchConditions
 }
 
-func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string, exemptedNamespaces []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+// TemplateToPolicyDefinitionWithWebhookConfig retains its final argument for API compatibility.
+// Namespace exemptions are inherited from webhookConfig instead.
+func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string, _ []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
 	// Extract CEL source from template
 	source, err := schema.GetSourceFromTemplate(template)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build match conditions (includes template conditions + namespace exclusions/exemptions)
-	matchConditions, err := buildMatchConditions(source, excludedNamespaces, exemptedNamespaces)
+	// Build match conditions (includes template conditions + namespace exclusions)
+	matchConditions, err := buildMatchConditions(source, excludedNamespaces)
 	if err != nil {
 		return nil, err
 	}
@@ -284,6 +279,45 @@ func TemplateToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintT
 	return policy, errors.Join(errs...)
 }
 
+// ConstraintToPolicyDefinitionWithWebhookConfig creates a VAP with one Constraint's parameters inlined.
+// Its final argument is ignored and retained for API compatibility.
+func ConstraintToPolicyDefinitionWithWebhookConfig(template *templates.ConstraintTemplate, constraint *unstructured.Unstructured, webhookConfig *webhookconfigcache.WebhookMatchingConfig, excludedNamespaces []string, _ []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicy, error) {
+	source, err := schema.GetSourceFromTemplate(template)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateNoDirectParameterReferences(source); err != nil {
+		return nil, err
+	}
+
+	policy, transformErr := TemplateToPolicyDefinitionWithWebhookConfig(template, webhookConfig, excludedNamespaces, nil)
+	if policy == nil {
+		return nil, transformErr
+	}
+	policy.Name = GetConstraintVAPName(constraint.GetKind(), constraint.GetName())
+	policy.Spec.ParamKind = nil
+	for index := range policy.Spec.AuditAnnotations {
+		if policy.Spec.AuditAnnotations[index].Key == vapEvaluationAuditAnnotationKey {
+			policy.Spec.AuditAnnotations[index].ValueExpression = "'true'"
+		}
+	}
+	policy.Spec.MatchConditions, err = specializeMatchConditions(policy.Spec.MatchConditions, constraint)
+	if err != nil {
+		return nil, err
+	}
+	parameters, err := constraintParametersExpression(constraint)
+	if err != nil {
+		return nil, err
+	}
+	for index := range policy.Spec.Variables {
+		if policy.Spec.Variables[index].Name == schema.ParamsName {
+			policy.Spec.Variables[index].Expression = parameters
+			return policy, transformErr
+		}
+	}
+	return nil, errors.New("generated ValidatingAdmissionPolicy is missing the reserved params variable")
+}
+
 func getTemplateOperations(template *templates.ConstraintTemplate) ([]admissionregistrationv1.OperationType, error) {
 	if len(template.Spec.Targets) != 1 {
 		return nil, schema.ErrOneTargetAllowed
@@ -295,10 +329,15 @@ func getTemplateOperations(template *templates.ConstraintTemplate) ([]admissionr
 // Accepts a list of enforcement actions to apply to the binding.
 // If the enforcement action is not recognized, returns an error.
 func ConstraintToBinding(constraint *unstructured.Unstructured, actions []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, error) {
-	return constraintToBinding(constraint, actions, util.GetEmitAdmissionAuditAnnotations())
+	return constraintToBinding(constraint, actions, GetTemplateVAPName(constraint.GetKind()), true, util.GetEmitAdmissionAuditAnnotations())
 }
 
-func constraintToBinding(constraint *unstructured.Unstructured, actions []string, emitAdmissionAuditAnnotations bool) (*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, error) {
+// ConstraintToInlinedBinding creates a VAPBinding for a per-Constraint VAP without a parameter reference.
+func ConstraintToInlinedBinding(constraint *unstructured.Unstructured, actions []string) (*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, error) {
+	return constraintToBinding(constraint, actions, GetConstraintVAPName(constraint.GetKind(), constraint.GetName()), false, util.GetEmitAdmissionAuditAnnotations())
+}
+
+func constraintToBinding(constraint *unstructured.Unstructured, actions []string, policyName string, includeParamRef, emitAdmissionAuditAnnotations bool) (*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, error) {
 	if len(actions) == 0 {
 		return nil, fmt.Errorf("%w: enforcement actions must be provided", ErrBadEnforcementAction)
 	}
@@ -325,14 +364,16 @@ func constraintToBinding(constraint *unstructured.Unstructured, actions []string
 			Name: GetVAPBindingName(constraint.GetKind(), constraint.GetName()),
 		},
 		Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
-			PolicyName: fmt.Sprintf("gatekeeper-%s", strings.ToLower(constraint.GetKind())),
-			ParamRef: &admissionregistrationv1beta1.ParamRef{
-				Name:                    constraint.GetName(),
-				ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
-			},
+			PolicyName:        policyName,
 			MatchResources:    &admissionregistrationv1beta1.MatchResources{},
 			ValidationActions: enforcementActions,
 		},
+	}
+	if includeParamRef {
+		binding.Spec.ParamRef = &admissionregistrationv1beta1.ParamRef{
+			Name:                    constraint.GetName(),
+			ParameterNotFoundAction: ptr.To[admissionregistrationv1beta1.ParameterNotFoundActionType](admissionregistrationv1beta1.AllowAction),
+		}
 	}
 	objectSelectorMap, found, err := unstructured.NestedMap(constraint.Object, "spec", "match", "labelSelector")
 	if err != nil {
@@ -363,7 +404,20 @@ func constraintToBinding(constraint *unstructured.Unstructured, actions []string
 }
 
 func GetVAPBindingName(kind, constraintName string) string {
-	name := fmt.Sprintf("gatekeeper-%s-%s", strings.ToLower(kind), constraintName)
+	return generatedVAPObjectName(fmt.Sprintf("gatekeeper-%s-%s", strings.ToLower(kind), constraintName))
+}
+
+// GetTemplateVAPName returns the shared VAP name for a Constraint kind.
+func GetTemplateVAPName(kind string) string {
+	return fmt.Sprintf("gatekeeper-%s", strings.ToLower(kind))
+}
+
+// GetConstraintVAPName returns the bounded name of a per-Constraint VAP.
+func GetConstraintVAPName(kind, constraintName string) string {
+	return generatedVAPObjectName(fmt.Sprintf("gatekeeper-%s-%s-vap", strings.ToLower(kind), constraintName))
+}
+
+func generatedVAPObjectName(name string) string {
 	if len(name) <= validation.DNS1123SubdomainMaxLength {
 		return name
 	}
