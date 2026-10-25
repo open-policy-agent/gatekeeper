@@ -34,12 +34,12 @@ type Manager struct {
 	mgr    manager.Manager
 }
 
-// New creates a new manager for audit.
+// New creates a new manager for upgrade.
 func New(mgr manager.Manager) *Manager {
-	am := &Manager{
-		mgr: mgr,
+	return &Manager{
+		client: mgr.GetClient(),
+		mgr:    mgr,
 	}
-	return am
 }
 
 // Start implements the Runnable interface.
