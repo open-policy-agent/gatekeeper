@@ -16,14 +16,17 @@ limitations under the License.
 package readiness
 
 import (
+	"reflect"
 	"strconv"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func makeCT(name string) *v1beta1.ConstraintTemplate {
@@ -477,5 +480,72 @@ func Test_ObjectTracker_Unexpected_Does_Not_Prevent_Satisfied(t *testing.T) {
 	ot.ExpectationsDone()
 	if !ot.Satisfied() {
 		t.Fatal("Nothing expected and ExpectationsDone(): should have been satisfied")
+	}
+}
+
+func TestObjKeyFromObject_UnstructuredConstraintTemplate(t *testing.T) {
+	kindPath := []string{"spec", "crd", "spec", "names", "kind"}
+
+	newCT := func(t *testing.T, set func(obj map[string]interface{}) error) *unstructured.Unstructured {
+		t.Helper()
+		u := &unstructured.Unstructured{Object: map[string]interface{}{}}
+		u.SetGroupVersionKind(v1beta1.SchemeGroupVersion.WithKind(reflect.TypeFor[v1beta1.ConstraintTemplate]().Name()))
+		u.SetName("test")
+		if set != nil {
+			if err := set(u.Object); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return u
+	}
+
+	tests := []struct {
+		name    string
+		set     func(obj map[string]interface{}) error
+		want    objKey
+		wantErr bool
+	}{
+		{
+			name: "kind is used for the constraint GVK",
+			set: func(obj map[string]interface{}) error {
+				return unstructured.SetNestedField(obj, "K8sRequiredLabels", kindPath...)
+			},
+			want: objKey{
+				namespacedName: types.NamespacedName{Name: "test"},
+				gvk:            schema.GroupVersionKind{Group: constraintGroup, Version: v1beta1.SchemeGroupVersion.Version, Kind: "K8sRequiredLabels"},
+			},
+		},
+		{
+			name:    "missing spec",
+			wantErr: true,
+		},
+		{
+			name: "missing kind",
+			set: func(obj map[string]interface{}) error {
+				return unstructured.SetNestedField(obj, map[string]interface{}{}, kindPath[:len(kindPath)-1]...)
+			},
+			wantErr: true,
+		},
+		{
+			name: "kind is not a string",
+			set: func(obj map[string]interface{}) error {
+				return unstructured.SetNestedField(obj, int64(1), kindPath...)
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := objKeyFromObject(newCT(t, tt.set))
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("objKeyFromObject() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if diff := cmp.Diff(tt.want, got, cmp.AllowUnexported(objKey{})); diff != "" {
+				t.Errorf("objKeyFromObject() mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
