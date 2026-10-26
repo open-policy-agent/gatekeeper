@@ -236,6 +236,9 @@ spec:
       {{- end }}
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
       hostNetwork: {{ .Values.audit.hostNetwork }}
+      {{- if hasKey .Values.audit "hostUsers" }}
+      hostUsers: {{ .Values.audit.hostUsers }}
+      {{- end }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
