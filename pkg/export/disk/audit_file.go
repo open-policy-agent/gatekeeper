@@ -54,6 +54,9 @@ func (conn *Connection) handleAuditStart(auditID string, topic string) error {
 	if conn.File != nil {
 		return fmt.Errorf("audit file already open for audit run %s", conn.currentAuditRun)
 	}
+	if err := conn.removeAbortedAuditFile(); err != nil {
+		return err
+	}
 
 	dir, err := auditDirPath(conn.Path, topic)
 	if err != nil {
@@ -119,6 +122,41 @@ func (conn *Connection) handleAuditEnd(topic string) error {
 	log.Info("File renamed", "filename", readyFilePath)
 
 	return conn.cleanupOldAuditFiles(topic)
+}
+
+// abortAuditRun discards the active run after a failed write or finalization so
+// incomplete output is never published and later records cannot reach it. A run
+// that was already published has no remaining run file and is left unchanged.
+func (conn *Connection) abortAuditRun(runFile string) error {
+	var closeErr error
+	if conn.File != nil {
+		// Close releases the descriptor and its lock even when it reports an
+		// error; os.ErrClosed means an earlier failed close already released it.
+		if err := conn.File.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+			closeErr = fmt.Errorf("closing aborted audit file: %w", err)
+		}
+		conn.File = nil
+	}
+	conn.currentAuditRun = ""
+	conn.abortedAuditFile = runFile
+	return errors.Join(closeErr, conn.removeAbortedAuditFile())
+}
+
+// removeAbortedAuditFile is retried before each run starts, so a Connection
+// owns at most one unremovable aborted file.
+func (conn *Connection) removeAbortedAuditFile() error {
+	if conn.abortedAuditFile == "" {
+		return nil
+	}
+	err := os.Remove(conn.abortedAuditFile)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing aborted audit file: %w", err)
+	}
+	if err == nil {
+		log.Info("Removed incomplete audit file", "filename", conn.abortedAuditFile)
+	}
+	conn.abortedAuditFile = ""
+	return nil
 }
 
 func (conn *Connection) unlockAndCloseFile() error {

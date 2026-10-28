@@ -3,6 +3,7 @@ package disk
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -27,6 +28,9 @@ type Connection struct {
 
 	// current audit run file name
 	currentAuditRun string
+	// abortedAuditFile is a failed run's incomplete file that could not be
+	// removed. It is never published and is removed before another run starts.
+	abortedAuditFile string
 	// admission owns private alpha limits and resources that must close with the Connection.
 	admission admissionState
 }
@@ -392,15 +396,17 @@ func (r *Writer) Publish(ctx context.Context, connectionName string, data interf
 		return fmt.Errorf("publish canceled: %w", err)
 	}
 
+	runFile := conn.File.Name()
 	_, err := conn.File.Write(append(jsonData, '\n'))
 	if err != nil {
-		return fmt.Errorf("error writing message to disk: %w", err)
+		connChanged = true
+		return fmt.Errorf("error writing message to disk: %w", errors.Join(err, conn.abortAuditRun(runFile)))
 	}
 
 	if violation.Message == util.AuditCompletedMsg {
 		connChanged = true
 		if err := conn.handleAuditEnd(topic); err != nil {
-			return fmt.Errorf("error handling audit end: %w", err)
+			return fmt.Errorf("error handling audit end: %w", errors.Join(err, conn.abortAuditRun(runFile)))
 		}
 		conn.File = nil
 		conn.currentAuditRun = ""

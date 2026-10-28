@@ -1124,6 +1124,18 @@ func TestPublishClearsFileAfterAuditEndRenameError(t *testing.T) {
 	if conn.File != nil {
 		t.Fatal("expected closed file to be cleared after audit end rename error")
 	}
+	if _, err := os.Stat(path.Join(tmpPath, "topic1", "audit1.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected unpublished audit run file to be removed, stat error = %v", err)
+	}
+
+	for _, message := range []string{util.AuditStartedMsg, util.AuditCompletedMsg} {
+		if err := writer.Publish(context.Background(), "conn1", util.ExportMsg{ID: "audit2", Message: message}, "topic1"); err != nil {
+			t.Fatalf("Publish(next audit %s) error = %v", message, err)
+		}
+	}
+	if _, err := os.Stat(path.Join(tmpPath, "topic1", "audit2.log")); err != nil {
+		t.Fatalf("expected next audit run to be published: %v", err)
+	}
 }
 
 // TestConcurrentPublishUpdateCloseConnection exercises concurrent Publish,
