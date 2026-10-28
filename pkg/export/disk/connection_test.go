@@ -2,7 +2,9 @@ package disk
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"slices"
@@ -12,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
@@ -994,6 +997,105 @@ func TestPublish(t *testing.T) {
 						}
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestPublishAuditControlMessages(t *testing.T) {
+	for _, representation := range []struct {
+		name   string
+		encode func(t *testing.T, msg util.ExportMsg) interface{}
+	}{
+		{
+			name: "value",
+			encode: func(_ *testing.T, msg util.ExportMsg) interface{} {
+				return msg
+			},
+		},
+		{
+			name: "pointer",
+			encode: func(_ *testing.T, msg util.ExportMsg) interface{} {
+				return &msg
+			},
+		},
+		{
+			name: "raw JSON",
+			encode: func(t *testing.T, msg util.ExportMsg) interface{} {
+				t.Helper()
+				data, err := json.Marshal(msg)
+				if err != nil {
+					t.Fatalf("Marshal() error = %v", err)
+				}
+				return json.RawMessage(data)
+			},
+		},
+	} {
+		t.Run(representation.name, func(t *testing.T) {
+			for _, tt := range []struct {
+				name    string
+				message string
+			}{
+				{name: "ordinary violation", message: "policy violation"},
+				{name: "start text violation", message: util.AuditStartedMsg},
+				{name: "completion text violation", message: util.AuditCompletedMsg},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					writer := newTestWriter(closeAndRemoveFilesWithRetry)
+					outputPath := t.TempDir()
+					requireCreateConnection(t, writer, "conn1", diskConfig(outputPath, 3))
+					t.Cleanup(func() {
+						if err := writer.CloseConnection("conn1"); err != nil {
+							t.Errorf("CloseConnection() error = %v", err)
+						}
+					})
+
+					messages := []util.ExportMsg{
+						{ID: "audit1", Message: util.AuditStartedMsg},
+						{ID: "audit1", EventType: "violation_audited", Message: "earlier violation", ResourceName: "earlier-pod"},
+						{ID: "audit1", EventType: "violation_audited", Message: tt.message, ResourceName: "tested-pod"},
+						{ID: "audit1", EventType: "violation_audited", Message: "later violation", ResourceName: "later-pod"},
+						{ID: "audit1", Message: util.AuditCompletedMsg},
+					}
+					readyFile := path.Join(outputPath, "topic1", "audit1.log")
+					for i, msg := range messages {
+						if err := writer.Publish(context.Background(), "conn1", representation.encode(t, msg), "topic1"); err != nil {
+							t.Errorf("Publish(record %d) error = %v", i, err)
+						}
+						if i < len(messages)-1 {
+							if _, err := os.Stat(readyFile); !os.IsNotExist(err) {
+								t.Errorf("ready file must not exist before audit completion, after record %d: %v", i, err)
+							}
+						}
+					}
+					files, err := listFiles(path.Join(outputPath, "topic1"))
+					if err != nil {
+						t.Fatalf("listFiles() error = %v", err)
+					}
+					if !slices.Equal(files, []string{readyFile}) {
+						t.Errorf("expected only completed audit file %s, got %v", readyFile, files)
+					}
+
+					file, err := os.Open(readyFile)
+					if err != nil {
+						t.Fatalf("Open() error = %v", err)
+					}
+					defer file.Close()
+					var got []util.ExportMsg
+					decoder := json.NewDecoder(file)
+					for {
+						var msg util.ExportMsg
+						if err := decoder.Decode(&msg); err == io.EOF {
+							break
+						} else if err != nil {
+							t.Fatalf("Decode() error = %v", err)
+						}
+						got = append(got, msg)
+					}
+					if diff := cmp.Diff(messages, got); diff != "" {
+						t.Errorf("decoded audit records differ (-want +got):\n%s", diff)
+					}
+				})
 			}
 		})
 	}
