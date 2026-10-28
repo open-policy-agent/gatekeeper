@@ -412,6 +412,8 @@ This quick start enables the demonstration admission reader. It logs completed a
 
 ### Quick start with exporting violations on node storage using Disk driver via emptyDir
 
+The disk driver writes each audit run as newline-delimited JSON. Audit control records contain the audit `id` and `message` (`audit is started` or `audit is completed`) and omit `eventType`. These controls open the run's `.txt` file and finalize it as a ready `.log` file. Audit violation records use `eventType: violation_audited`; their policy-supplied `message` is always data, even when it matches either control message.
+
 #### Configure Gatekeeper with Export enabled to Disk
 
 1. Deploy Gatekeeper with disk export configurations.
