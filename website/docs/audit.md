@@ -140,7 +140,7 @@ This feature allows different systems to be provided for Gatekeeper to export au
 Limitations/drawbacks of exporting violations:
 
 - There is a risk of messages getting dropped. You might not receive all the exported violations. This depends on the type of backend you are using for delivery. For example, using a network as backend to export violation has the risk of messages getting dropped.
-- Disk export requires writable storage and a consumer that delivers the exported files to your downstream system.
+- Additional dependency on the backend system provided. For example, using pubsub tools to export violations.
 
 ## Running Audit
 

@@ -21,7 +21,7 @@ For disk export, provide a writable mounted volume and a consumer for the export
 
 In the audit deployment, set the `--enable-violation-export` flag to `true` to export audit violations. Additionally, use `--audit-connection` (defaults to `audit-connection`) and `--audit-channel`(defaults to `audit-channel`) flags to allow audit to export violations using desired connection onto desired channel. `--audit-connection` must be set to the name of the connection config, and `--audit-channel` must be set to name of the channel where violations should get published.
 
-A `Connection` custom resource with `spec` that contains `driver` and `config` fields is required to establish a connection for sending violations over the channel. The following example uses the disk driver to export messages:
+A `Connection` custom resource with `spec` that contains `driver` and `config` fields are required to establish connection for sending violations over the channel. Following is an example to establish a connection that uses disk to export messages:
 
 ```yaml
 apiVersion: connection.gatekeeper.sh/v1alpha1
@@ -32,11 +32,11 @@ metadata:
 spec:
   driver: "disk"
   config:
-    path: "/tmp/violations/topics"
+    path: "tmp/violations/topics"
     maxAuditResults: 3
 ```
-  - `driver` field determines which driver should be used to establish a connection. The supported value is `disk`.
-  - `config` field configures the driver. For disk, set `path` to a directory on the writable mounted volume and `maxAuditResults` to the number of audit results to retain.
+- `driver` field determines which tool/driver should be used to establish a connection. Valid values are: `disk`
+- `config` field is an object that configures how the connection is made.
 
 #### Available drivers
 
@@ -54,7 +54,7 @@ metadata:
 spec:
   driver: "disk"
   config:
-    path: "/tmp/violations/topics"
+    path: "tmp/violations/topics"
     maxAuditResults: 3
 status:
   byPod:
@@ -111,7 +111,7 @@ enableAdmissionViolationExport: true
 exportBackend: disk
 ```
 
-Admission violation export supports the disk driver. The Helm chart rejects `enableAdmissionViolationExport: true` unless `exportBackend: disk`. The supported configuration routes audit and admission export through the same `Connection`, channel, path, and volume. Admission segment retention and other spool limits are fixed internal defaults while the feature is alpha; `maxAuditResults` continues to apply only to audit results. Additional admission-specific configuration can be added later if operational feedback requires it.
+Admission violation export currently supports only the disk driver. The Helm chart rejects `enableAdmissionViolationExport: true` unless `exportBackend: disk`. The supported configuration routes audit and admission export through the same `Connection`, channel, path, and volume. Admission segment retention and other spool limits are fixed internal defaults while the feature is alpha; `maxAuditResults` continues to apply only to audit results. Additional admission-specific configuration can be added later if operational feedback requires it.
 
 The chart mounts `audit.exportVolume` at `audit.exportVolumeMount.path` in every controller-manager pod when admission export is enabled. The reader sidecar is disabled by default; configure a production reader or explicitly enable the demonstration reader with `admission.disableExportSidecar: false`. Each pod writes its own spool, so multiple webhook replicas and separate audit/webhook deployments do not contend for one file.
 
@@ -122,7 +122,7 @@ audit:
   connection: audit-connection
   channel: audit-channel
   exportConnection:
-    path: /tmp/violations/topics
+    path: tmp/violations/topics
     maxAuditResults: 3
 admission:
   disableExportSidecar: true
@@ -180,8 +180,6 @@ Admission export is best-effort. Backend publishing does not delay or change the
 ### Quick start with exporting admission violations to disk
 
 This quick start enables the demonstration admission reader. It logs completed admission records and deletes each segment after reading it, so use it only to verify the feature.
-
-The selected Connection name must be unused or already owned by this Helm release.
 
 1. Install or upgrade Gatekeeper with admission export, the disk backend, and the demonstration reader enabled:
 
@@ -250,8 +248,6 @@ The selected Connection name must be unused or already owned by this Helm releas
 
 ### Quick start with exporting violations on node storage using Disk driver via emptyDir
 
-This quick start uses the demonstration reader and a per-pod `emptyDir`; unread records are lost when a pod is deleted or replaced. The selected Connection name must be unused or already owned by this Helm release.
-
 #### Configure Gatekeeper with Export enabled to Disk
 
 1. Deploy Gatekeeper with disk export configurations.
@@ -295,7 +291,7 @@ This quick start uses the demonstration reader and a per-pod `emptyDir`; unread 
     --set enableViolationExport=true \
     --set audit.connection=audit-connection \
     --set audit.channel=audit-channel \
-    --set audit.exportConnection.path=/tmp/violations/topics \
+    --set audit.exportConnection.path=tmp/violations/topics \
     --set audit.exportConnection.maxAuditResults=3 \
     --set exportBackend=disk
     ```
@@ -311,13 +307,13 @@ This quick start uses the demonstration reader and a per-pod `emptyDir`; unread 
     spec:
       driver: "disk"
       config:
-        path: "/tmp/violations/topics"
+        path: "tmp/violations/topics"
         maxAuditResults: 3
     ```
 
     | Property        | Description                                                                                                                                                            | Default                  |
     |:----------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |:-------------------------|
-    | path            | (alpha) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "/tmp/violations/topics" |
+    | path            | (alpha) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "tmp/violations/topics" |
     | maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
     | closedConnectionTTL | (alpha) Optional duration string controlling how long a failed closed Connection remains eligible for cleanup retries. Accepted values are `"1m"` through `"10m"`. The chart leaves it unset and the driver defaults to `"10m"`. | `"10m"` |
 

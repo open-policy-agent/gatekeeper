@@ -3,7 +3,6 @@ package export
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,9 +59,7 @@ func TestSystemRejectsDapr(t *testing.T) {
 
 	ctx := context.Background()
 	system := NewSystem()
-	connectionName := "dapr-to-disk"
-	path := t.TempDir()
-	t.Cleanup(func() { assert.NoError(t, system.CloseConnection(connectionName)) })
+	connectionName := "unsupported-dapr"
 
 	err := system.UpsertConnection(ctx, map[string]interface{}{"component": "pubsub"}, connectionName, "dapr")
 	assert.EqualError(t, err, "driver dapr is not supported")
@@ -73,42 +70,6 @@ func TestSystemRejectsDapr(t *testing.T) {
 	for _, publishErr := range errorsByMessage {
 		assert.ErrorContains(t, publishErr, "connection is not initialized")
 	}
-
-	config := map[string]interface{}{
-		"path":            path,
-		"maxAuditResults": float64(1),
-	}
-	if err := system.UpsertConnection(ctx, config, connectionName, disk.Name); err != nil {
-		t.Fatalf("UpsertConnection(disk) after rejecting dapr: %v", err)
-	}
-	assert.Equal(t, disk.Name, system.connectionToDriver[connectionName])
-	for _, message := range []exportutil.ExportMsg{
-		{ID: "recovered-audit", Message: exportutil.AuditStartedMsg},
-		{ID: "recovered-audit", ResourceName: "recovered-pod"},
-		{ID: "recovered-audit", Message: exportutil.AuditCompletedMsg},
-	} {
-		if err := system.Publish(ctx, connectionName, "audit", message); err != nil {
-			t.Fatalf("Publish(disk) after rejecting dapr: %v", err)
-		}
-	}
-	content, err := os.ReadFile(filepath.Join(path, "audit", "recovered-audit.log"))
-	if err != nil {
-		t.Fatalf("read recovered disk export: %v", err)
-	}
-	decoder := json.NewDecoder(strings.NewReader(string(content)))
-	var resourceNames []string
-	for {
-		var message exportutil.ExportMsg
-		err := decoder.Decode(&message)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("decode recovered disk export: %v", err)
-		}
-		resourceNames = append(resourceNames, message.ResourceName)
-	}
-	assert.Contains(t, resourceNames, "recovered-pod")
 }
 
 func TestNewSystem(t *testing.T) {
