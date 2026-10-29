@@ -26,7 +26,7 @@ import (
 
 // ConnectionSpec defines the desired state of Connection.
 type ConnectionSpec struct {
-	// driver is the name of one of the expected drivers i.e. dapr, disk
+	// driver is the name of one of the expected drivers i.e. disk
 	// +kubebuilder:validation:Required
 	Driver string `json:"driver"`
 	// config is the driver-specific configuration for this connection.

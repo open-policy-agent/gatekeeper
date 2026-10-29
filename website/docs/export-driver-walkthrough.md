@@ -23,7 +23,7 @@ type Driver interface {
 }
 ```
 
-As an example, the Dapr driver implements these methods to publish message and manage connection to do so. Please refer to [dapr.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/export/dapr/dapr.go) to understand the logic that goes in each of these methods.
+As an example, the disk driver implements these methods to publish message and manage connection to do so. Please refer to [disk.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/export/disk/disk.go) to understand the logic that goes in each of these methods.
 
 ### How to add new driver to export audit violations to foo backend
 
@@ -72,7 +72,7 @@ This newly added driver's `Connections` exported variable must be added to the m
 
 ```go
 var supportedDrivers = map[string]driver.Driver{
-	dapr.Name: dapr.Connections,
+	disk.Name: disk.Connections,
   foo.Name: foo.Connections,
 }
 ```
@@ -95,4 +95,4 @@ spec:
     key: value
 ```
 
-> The `spec.driver` field must exist and must match one of the keys of the `supportedDrivers` map that was defined earlier to use the corresponding driver. The `spec.config` field in the configuration can vary depending on the driver being used. For dapr driver, `spec.config` must be `component: "pubsub"`.
+> The `spec.driver` field must exist and must match one of the keys of the `supportedDrivers` map that was defined earlier to use the corresponding driver. The `spec.config` field in the configuration can vary depending on the driver being used.
