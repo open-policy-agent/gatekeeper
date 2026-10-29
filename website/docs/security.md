@@ -104,6 +104,26 @@ For a release `vX.Y.Z`, patched images are published under **new, separate** tag
 
 All published architectures — `linux/amd64`, `linux/arm64`, and `linux/arm/v7` are included in the patched image and scanned for applicable fixes. Patching is best-effort per architecture, so an architecture may pass through unchanged or retain fixable CVEs (see [Best-effort library patching](#best-effort-library-patching) below).
 
+## Using patched images with Helm
+
+Use the chart version matching the original release and a patched image tag that has already been published. The `gatekeeper-crds` image is not patched, so the CRD hook must use the original release tag. For example, use these values with chart version `3.23.1`:
+
+```yaml
+image:
+  repository: ghcr.io/open-policy-agent/gatekeeper
+  release: v3.23.1-patched
+
+preInstall:
+  crdRepository:
+    image:
+      repository: ghcr.io/open-policy-agent/gatekeeper-crds
+      tag: v3.23.1
+```
+
+Set both CRD-hook `repository` and `tag` fields shown above. Without the repository override, the hook uses `image.release` instead of its separate tag, causing it to request a nonexistent patched CRD image and blocking installation or upgrade.
+
+If using a numbered patched image such as `v3.23.1-1`, keep the CRD-hook tag at `v3.23.1`.
+
 ## How patched images are produced
 
 1. The published release image is scanned with [Trivy](https://trivy.dev/) for **fixable** Go-library vulnerabilities.

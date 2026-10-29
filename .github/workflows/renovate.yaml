@@ -17,7 +17,8 @@ on:
         options: [info, debug]
         default: info
 
-permissions: read-all
+permissions:
+  contents: read
 
 concurrency:
   group: renovate
@@ -29,10 +30,6 @@ jobs:
     if: github.repository == 'open-policy-agent/gatekeeper' && vars.RENOVATE_APP_ID != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -43,6 +40,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       # Manual dry-run opens no PRs and writes nothing.
       - name: Select dry-run mode
