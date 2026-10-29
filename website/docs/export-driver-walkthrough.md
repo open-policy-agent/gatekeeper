@@ -23,7 +23,7 @@ type Driver interface {
 }
 ```
 
-As an example, the Dapr driver implements these methods to publish message and manage connection to do so. Please refer to [dapr.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/export/dapr/dapr.go) to understand the logic that goes in each of these methods.
+As an example, the disk driver implements these methods to publish messages to files and manage connections. Please refer to [disk.go](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/export/disk/disk.go) to understand the logic that goes in each of these methods. The disk driver supports both audit and admission export; see [Exporting violations](export.md) for configuration and limitations.
 
 ### How to add new driver to export audit violations to foo backend
 
@@ -72,7 +72,7 @@ This newly added driver's `Connections` exported variable must be added to the m
 
 ```go
 var supportedDrivers = map[string]driver.Driver{
-	dapr.Name: dapr.Connections,
+	disk.Name: disk.Connections,
   foo.Name: foo.Connections,
 }
 ```
@@ -81,7 +81,7 @@ And thats it! Exporter system will take the newly added driver into account and 
 
 ### How to establish connections to different backend
 
-To enable audit to use this driver to publish messages, a `Connection` custom resource with appropriate `config` and `driver` is needed. For example,
+To enable audit to publish messages through a driver, a `Connection` custom resource with appropriate `config` and `driver` is needed. For example, the built-in disk driver uses:
 
 ```yaml
 apiVersion: connection.gatekeeper.sh/v1alpha1
@@ -90,9 +90,10 @@ metadata:
   name: audit-connection
   namespace: gatekeeper-system
 spec:
-  driver: "foo"
+  driver: "disk"
   config:
-    key: value
+    path: "/tmp/violations/topics"
+    maxAuditResults: 3
 ```
 
-> The `spec.driver` field must exist and must match one of the keys of the `supportedDrivers` map that was defined earlier to use the corresponding driver. The `spec.config` field in the configuration can vary depending on the driver being used. For dapr driver, `spec.config` must be `component: "pubsub"`.
+> The `spec.driver` field must exist and must match one of the keys of the `supportedDrivers` map that was defined earlier to use the corresponding driver. The `spec.config` field varies by driver. For disk, `path` must be on a writable mounted volume and `maxAuditResults` controls audit retention. A newly registered `foo` driver would use `spec.driver: foo` and its own configuration. See [Exporting violations](export.md) for per-pod storage and consumer requirements.

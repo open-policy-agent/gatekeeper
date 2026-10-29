@@ -47,7 +47,7 @@ spec:
                 x-kubernetes-preserve-unknown-fields: true
               driver:
                 description: driver is the name of one of the expected drivers i.e.
-                  dapr, disk
+                  disk
                 type: string
             required:
             - config

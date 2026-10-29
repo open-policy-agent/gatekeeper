@@ -7,7 +7,6 @@ GHCR_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper
 GHCR_CRD_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper-crds
 GHCR_GATOR_REPOSITORY ?= ghcr.io/open-policy-agent/gator
 GHCR_FAKE_READER_REPOSITORY ?= ghcr.io/open-policy-agent/fake-reader
-GHCR_FAKE_SUBSCRIBER_REPOSITORY ?= ghcr.io/open-policy-agent/fake-subscriber
 
 IMG := $(REPOSITORY):latest
 CRD_IMG := $(CRD_REPOSITORY):latest
@@ -45,9 +44,6 @@ YQ_VERSION ?= 4.53.3
 
 HELM_ARGS ?=
 HELM_TIMEOUT ?= 5m
-HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
-	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
-	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
 
 HELM_DISK_SHARED_EXPORT_ARGS = --set audit.exportVolumeMount.path=${EXPORT_DISK_MOUNT} \
 	--set audit.exportConnection.path=${EXPORT_DISK_PATH} \
@@ -98,7 +94,6 @@ GOLANGCI_LINT_VERSION := v2.9.0
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
 
 BENCHMARK_FILE_NAME ?= benchmarks.txt
-FAKE_SUBSCRIBER_IMAGE ?= fake-subscriber:latest
 FAKE_READER_IMAGE ?= fake-reader:latest
 FAKE_READER_IMAGE_PULL_POLICY ?= IfNotPresent
 
@@ -320,7 +315,6 @@ ifneq ($(filter true,$(ENABLE_EXPORT) $(ENABLE_ADMISSION_EXPORT)),)
 		$(HELM_EXPORT_ARGS) \
 		$(if $(and $(filter true,$(ENABLE_EXPORT) $(ENABLE_ADMISSION_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_SHARED_EXPORT_ARGS)) \
 		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_AUDIT_EXPORT_ARGS)) \
-		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter dapr,$(EXPORT_BACKEND))),$(HELM_DAPR_EXPORT_ARGS)) \
 		$(if $(and $(filter true,$(ENABLE_ADMISSION_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_ADMISSION_EXPORT_ARGS)) \
 		$(HELM_EXTRA_ARGS)
 else
@@ -353,24 +347,6 @@ e2e-helm-upgrade:
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
 		$(HELM_EXTRA_ARGS)
-
-e2e-subscriber-build-load-image:
-	docker buildx build --platform="linux/amd64" -t ${FAKE_SUBSCRIBER_IMAGE} --load -f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
-	kind load docker-image --name kind ${FAKE_SUBSCRIBER_IMAGE}
-
-e2e-subscriber-deploy:
-	kubectl create ns fake-subscriber
-	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: fake-subscriber/' | kubectl apply -f -
-	kubectl apply -f test/export/fake-subscriber/manifest/subscriber.yaml
-
-e2e-publisher-component-deploy:
-	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -
-	yq 'select(.kind == "Component")' test/export/fake-subscriber/manifest/publish-components.yaml | kubectl apply -f -
-
-e2e-publisher-connection-deploy:
-	yq 'select(.kind == "Connection")' test/export/fake-subscriber/manifest/publish-components.yaml | kubectl apply -f -
-
-e2e-publisher-deploy: e2e-publisher-component-deploy e2e-publisher-connection-deploy
 
 e2e-reader-build-image:
 	docker buildx build --platform="$(PLATFORM)" -t ${FAKE_READER_IMAGE} --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
@@ -575,15 +551,6 @@ docker-buildx-fake-reader: docker-buildx-builder
 		--output=$(OUTPUT_TYPE) \
 		-t ${GHCR_FAKE_READER_REPOSITORY}:latest \
 		-f test/export/fake-reader/Dockerfile test/export/fake-reader
-
-# Build fake-subscriber image
-docker-buildx-fake-subscriber: docker-buildx-builder
-	docker buildx build \
-		$(_ATTESTATIONS) \
-		--platform="$(PLATFORM)" \
-		--output=$(OUTPUT_TYPE) \
-		-t ${GHCR_FAKE_SUBSCRIBER_REPOSITORY}:latest \
-		-f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
 
 # Update manager_image_patch.yaml with image tag
 patch-image:

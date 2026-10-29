@@ -3,13 +3,12 @@ package export
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/dapr"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/driver"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/testdriver"
@@ -17,10 +16,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var testSystem *System
-
 type recordingDriver struct {
 	published []any
+	closed    []string
 }
 
 func (driver *recordingDriver) Publish(_ context.Context, _ string, data interface{}, _ string) error {
@@ -28,35 +26,89 @@ func (driver *recordingDriver) Publish(_ context.Context, _ string, data interfa
 	return nil
 }
 
-func (*recordingDriver) CloseConnection(string) error { return nil }
+func (driver *recordingDriver) CloseConnection(connectionName string) error {
+	driver.closed = append(driver.closed, connectionName)
+	return nil
+}
 
 func (*recordingDriver) UpdateConnection(context.Context, string, interface{}) error { return nil }
 
 func (*recordingDriver) CreateConnection(context.Context, string, interface{}) error { return nil }
 
-func TestMain(m *testing.M) {
-	ctx := context.Background()
+func newTestSystem(t *testing.T) *System {
+	t.Helper()
+	oldDrivers := supportedDrivers
 	supportedDrivers = map[string]driver.Driver{
-		dapr.Name: dapr.FakeConn,
+		testdriver.Name:    testdriver.FakeConn,
+		testdriver.ErrName: testdriver.FakeErrConn,
+		"recording":        &recordingDriver{},
 	}
-	testSystem = NewSystem()
-	cfg := map[string]interface{}{
-		dapr.Name: map[string]interface{}{
-			"component": "pubsub",
-		},
-	}
-	for name, fakeConn := range supportedDrivers {
-		testSystem.connectionToDriver[name] = name
-		_ = fakeConn.CreateConnection(ctx, name, cfg[name])
-	}
-	r := m.Run()
-	for name, fakeConn := range testSystem.connectionToDriver {
-		_ = supportedDrivers[fakeConn].CloseConnection(name)
+	system := NewSystem()
+	t.Cleanup(func() {
+		for connectionName := range system.connectionToDriver {
+			_ = system.CloseConnection(connectionName)
+		}
+		supportedDrivers = oldDrivers
+	})
+	return system
+}
+
+func TestSystemRejectsDapr(t *testing.T) {
+	if _, supported := supportedDrivers["dapr"]; supported {
+		t.Fatal("dapr must not be registered in the production driver registry")
 	}
 
-	if r != 0 {
-		os.Exit(r)
+	ctx := context.Background()
+	system := NewSystem()
+	connectionName := "dapr-to-disk"
+	path := t.TempDir()
+	t.Cleanup(func() { assert.NoError(t, system.CloseConnection(connectionName)) })
+
+	err := system.UpsertConnection(ctx, map[string]interface{}{"component": "pubsub"}, connectionName, "dapr")
+	assert.EqualError(t, err, "driver dapr is not supported")
+	assert.Empty(t, system.connectionToDriver)
+	assert.ErrorContains(t, system.Publish(ctx, connectionName, "audit", "message"), "connection is not initialized")
+	errorsByMessage := system.PublishBatch(ctx, connectionName, "audit", []any{"first", "second"})
+	assert.Len(t, errorsByMessage, 2)
+	for _, publishErr := range errorsByMessage {
+		assert.ErrorContains(t, publishErr, "connection is not initialized")
 	}
+
+	config := map[string]interface{}{
+		"path":            path,
+		"maxAuditResults": float64(1),
+	}
+	if err := system.UpsertConnection(ctx, config, connectionName, disk.Name); err != nil {
+		t.Fatalf("UpsertConnection(disk) after rejecting dapr: %v", err)
+	}
+	assert.Equal(t, disk.Name, system.connectionToDriver[connectionName])
+	for _, message := range []exportutil.ExportMsg{
+		{ID: "recovered-audit", Message: exportutil.AuditStartedMsg},
+		{ID: "recovered-audit", ResourceName: "recovered-pod"},
+		{ID: "recovered-audit", Message: exportutil.AuditCompletedMsg},
+	} {
+		if err := system.Publish(ctx, connectionName, "audit", message); err != nil {
+			t.Fatalf("Publish(disk) after rejecting dapr: %v", err)
+		}
+	}
+	content, err := os.ReadFile(filepath.Join(path, "audit", "recovered-audit.log"))
+	if err != nil {
+		t.Fatalf("read recovered disk export: %v", err)
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(content)))
+	var resourceNames []string
+	for {
+		var message exportutil.ExportMsg
+		err := decoder.Decode(&message)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("decode recovered disk export: %v", err)
+		}
+		resourceNames = append(resourceNames, message.ResourceName)
+	}
+	assert.Contains(t, resourceNames, "recovered-pod")
 }
 
 func TestNewSystem(t *testing.T) {
@@ -91,34 +143,33 @@ func TestSystem_UpsertConnection(t *testing.T) {
 		newDriver      string
 		setup          func(*System) error
 		wantErr        bool
+		wantClosed     []string
 	}{
 		{
 			name:           "new connection with supported driver",
-			config:         map[string]interface{}{"component": "pubsub"},
+			config:         "config1",
 			connectionName: "conn1",
-			newDriver:      dapr.Name,
+			newDriver:      testdriver.Name,
 			setup: func(s *System) error {
 				s.connectionToDriver = map[string]string{}
-				supportedDrivers[dapr.Name] = dapr.FakeConn
 				return nil
 			},
 			wantErr: false,
 		},
 		{
 			name:           "update existing connection with same driver",
-			config:         map[string]interface{}{"component": "pubsub1"},
+			config:         "updated-config1",
 			connectionName: "conn1",
-			newDriver:      dapr.Name,
+			newDriver:      testdriver.Name,
 			setup: func(s *System) error {
-				s.connectionToDriver["conn1"] = dapr.Name
-				supportedDrivers[dapr.Name] = dapr.FakeConn
-				return supportedDrivers[dapr.Name].CreateConnection(ctx, "conn1", map[string]interface{}{"component": "pubsub"})
+				s.connectionToDriver["conn1"] = testdriver.Name
+				return supportedDrivers[testdriver.Name].CreateConnection(ctx, "conn1", "config1")
 			},
 			wantErr: false,
 		},
 		{
 			name:           "new connection with unsupported driver",
-			config:         map[string]interface{}{"component": "pubsub"},
+			config:         "config3",
 			connectionName: "conn3",
 			newDriver:      "unsupportedDriver",
 			setup:          func(_ *System) error { return nil },
@@ -126,21 +177,20 @@ func TestSystem_UpsertConnection(t *testing.T) {
 		},
 		{
 			name:           "update existing connection with different driver",
-			config:         map[string]interface{}{"component": "pubsub"},
+			config:         "config4",
 			connectionName: "conn4",
-			newDriver:      dapr.Name,
+			newDriver:      testdriver.Name,
 			setup: func(s *System) error {
-				s.connectionToDriver["conn4"] = testdriver.Name
-				supportedDrivers[dapr.Name] = dapr.FakeConn
-				supportedDrivers[testdriver.Name] = testdriver.FakeConn
-				return supportedDrivers[testdriver.Name].CreateConnection(ctx, "conn4", "config4")
+				s.connectionToDriver["conn4"] = "recording"
+				return supportedDrivers["recording"].CreateConnection(ctx, "conn4", "config4")
 			},
-			wantErr: false,
+			wantErr:    false,
+			wantClosed: []string{"conn4"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			system := NewSystem()
+			system := newTestSystem(t)
 			if err := tt.setup(system); err != nil {
 				t.Fatalf("failed to setup test: %v", err)
 			}
@@ -155,6 +205,11 @@ func TestSystem_UpsertConnection(t *testing.T) {
 					t.Errorf("connection %s not found or driver mismatch: got %v, want %v", tt.connectionName, driver, tt.newDriver)
 				}
 			}
+			recorder, ok := supportedDrivers["recording"].(*recordingDriver)
+			if !ok {
+				t.Fatal("expected recording test driver")
+			}
+			assert.Equal(t, tt.wantClosed, recorder.closed)
 		})
 	}
 }
@@ -169,9 +224,8 @@ func TestSystem_CloseConnection(t *testing.T) {
 		{
 			name: "close existing connection",
 			setup: func(s *System) {
-				s.connectionToDriver["test-connection"] = dapr.Name
-				supportedDrivers[dapr.Name] = dapr.FakeConn
-				_ = dapr.FakeConn.CreateConnection(context.TODO(), "test-connection", map[string]interface{}{"component": "pubsub"})
+				s.connectionToDriver["test-connection"] = testdriver.Name
+				_ = testdriver.FakeConn.CreateConnection(context.TODO(), "test-connection", "test-config")
 			},
 			connectionName: "test-connection",
 			wantErr:        false,
@@ -189,7 +243,7 @@ func TestSystem_CloseConnection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewSystem()
+			s := newTestSystem(t)
 			if tt.setup != nil {
 				tt.setup(s)
 			}
@@ -233,7 +287,7 @@ func TestSystem_Publish(t *testing.T) {
 		{
 			name: "Exporting to a connection that does not exist",
 			fields: fields{
-				connections: map[string]string{"audit": dapr.Name},
+				connections: map[string]string{"audit": testdriver.Name},
 			},
 			args:    args{ctx: context.Background(), connection: "test", topic: "test", msg: nil},
 			wantErr: true,
@@ -241,18 +295,21 @@ func TestSystem_Publish(t *testing.T) {
 		{
 			name: "Exporting to a connection that does exist",
 			fields: fields{
-				connections: testSystem.connectionToDriver,
+				connections: map[string]string{testdriver.Name: testdriver.Name},
 			},
-			args:    args{ctx: context.Background(), connection: "dapr", topic: "test", msg: nil},
+			args:    args{ctx: context.Background(), connection: testdriver.Name, topic: "test", msg: nil},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &System{
-				mux:                sync.RWMutex{},
-				connectionToDriver: tt.fields.connections,
+			s := newTestSystem(t)
+			for connectionName, driverName := range tt.fields.connections {
+				if err := s.UpsertConnection(tt.args.ctx, "config", connectionName, driverName); err != nil {
+					t.Fatalf("UpsertConnection() error = %v", err)
+				}
 			}
+			s.connectionToDriver = tt.fields.connections
 			if err := s.Publish(tt.args.ctx, tt.args.connection, tt.args.topic, tt.args.msg); (err != nil) != tt.wantErr {
 				t.Errorf("System.Publish() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -279,10 +336,6 @@ func TestSystemPublishBatchFallbackPreservesMessageTypes(t *testing.T) {
 }
 
 func TestSystemSupportsAuditAndAdmissionOnSharedDiskConnection(t *testing.T) {
-	oldDrivers := supportedDrivers
-	supportedDrivers = map[string]driver.Driver{disk.Name: disk.Connections}
-	t.Cleanup(func() { supportedDrivers = oldDrivers })
-
 	ctx := context.Background()
 	system := NewSystem()
 	connectionName := "shared-disk-sources"
@@ -348,9 +401,8 @@ func TestSystem_closeConnection(t *testing.T) {
 		{
 			name: "close existing connection with supported driver",
 			setup: func(s *System) {
-				s.connectionToDriver["conn1"] = dapr.Name
-				supportedDrivers[dapr.Name] = dapr.FakeConn
-				_ = dapr.FakeConn.CreateConnection(ctx, "conn1", map[string]interface{}{"component": "pubsub"})
+				s.connectionToDriver["conn1"] = testdriver.Name
+				_ = testdriver.FakeConn.CreateConnection(ctx, "conn1", "config1")
 			},
 			args:                args{connectionName: "conn1"},
 			wantErr:             false,
@@ -370,7 +422,6 @@ func TestSystem_closeConnection(t *testing.T) {
 			name: "close connection returns error from driver",
 			setup: func(s *System) {
 				s.connectionToDriver["conn3"] = testdriver.ErrName
-				supportedDrivers[testdriver.ErrName] = testdriver.FakeErrConn
 				_ = supportedDrivers[testdriver.ErrName].CreateConnection(ctx, "conn3", "config3")
 			},
 			args:                args{connectionName: "conn3"},
@@ -381,7 +432,7 @@ func TestSystem_closeConnection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewSystem()
+			s := newTestSystem(t)
 			if tt.setup != nil {
 				tt.setup(s)
 			}

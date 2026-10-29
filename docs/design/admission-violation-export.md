@@ -72,7 +72,7 @@ availability while making loss observable.
 - Retrying an individual failed admission publish.
 - Persisting the in-memory webhook queue across pod restarts.
 - Blocking or changing an admission response because export failed.
-- Supporting admission export through Dapr in the alpha Helm configuration.
+- Supporting admission export through backends other than disk in the alpha Helm configuration.
 - Multiple admission Connections or channels.
 - Admission-specific public spool tuning in the alpha API.
 - Coordinating one shared writable disk directory across Gatekeeper pods.
@@ -671,10 +671,11 @@ reader sidecars; source-specific filenames and status preserve separation where
 both protocols share a channel directory. The design can add independent routing
 later if operational use cases require it.
 
-### Dapr Admission Export
+### Non-Disk Admission Export
 
-Not supported in the alpha chart. Helm rendering fails when admission export is
-enabled with Dapr or any backend other than disk. Keeping the generic export
+Not supported in the alpha chart. The alpha Dapr driver is removed from the
+v3.24 development release. Helm rendering fails when admission export is
+enabled with any backend other than disk. Keeping the generic export
 system source-agnostic avoids hard-coding driver capability into the controller,
 while the supported deployment surface remains disk-only until delivery,
 cancellation, and overload semantics are defined for other drivers.
