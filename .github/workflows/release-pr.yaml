@@ -104,7 +104,7 @@ jobs:
             Before merging this PR, please ensure the following items are completed:
 
             ### Pre-Release Dependencies Check
-            - [ ] **Dependabot PRs**: All open [Dependabot PRs](https://github.com/open-policy-agent/gatekeeper/pulls?q=is%3Apr+author%3Aapp%2Fdependabot) have been reviewed and merged
+            - [ ] **Renovate PRs**: All open [Renovate PRs](https://github.com/open-policy-agent/gatekeeper/pulls?q=is%3Apr+is%3Aopen+label%3Adependencies) have been reviewed and merged
             - [ ] **OPA**: Updated to latest stable version from [OPA releases](https://github.com/open-policy-agent/opa/releases)
             - [ ] **cert-controller**: Updated to latest commit from [cert-controller](https://github.com/open-policy-agent/cert-controller/)
             - [ ] **Constraint Framework**: Updated to latest commit from [frameworks releases](https://github.com/open-policy-agent/frameworks/)
