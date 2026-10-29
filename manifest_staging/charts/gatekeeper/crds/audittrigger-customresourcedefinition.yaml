@@ -17,16 +17,19 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.conditions[?(@.type=='Acknowledged')].status
+    - jsonPath: .status.acknowledgedGeneration
       name: Acknowledged
-      type: string
-    - jsonPath: .status.conditions[?(@.type=='Succeeded')].status
+      type: integer
+    - jsonPath: .status.successfulGeneration
       name: Succeeded
-      type: string
+      type: integer
+    - jsonPath: .status.failedGeneration
+      name: Failed
+      type: integer
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: AuditTrigger requests an audit at or after a specified time.
+        description: AuditTrigger requests an audit as soon as possible.
         properties:
           apiVersion:
             description: |-
@@ -50,79 +53,80 @@ spec:
                 type: string
             type: object
           spec:
-            description: AuditTriggerSpec defines when an audit should run.
+            description: AuditTriggerSpec requests an immediate audit.
             properties:
-              timestamp:
-                description: Timestamp is the earliest time at which to start the
-                  requested audit.
-                format: date-time
+              auditNonce:
+                description: |-
+                  AuditNonce requests an audit as soon as possible when changed. It is a
+                  change token, not an execution ID; use metadata.generation to track completion.
+                maxLength: 128
+                minLength: 1
                 type: string
             required:
-            - timestamp
+            - auditNonce
             type: object
           status:
             description: AuditTriggerStatus describes the state of the requested audit.
             properties:
-              conditions:
-                items:
-                  description: Condition contains details for one aspect of the current
-                    state of this API Resource.
-                  properties:
-                    lastTransitionTime:
-                      description: |-
-                        lastTransitionTime is the last time the condition transitioned from one status to another.
-                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                      format: date-time
-                      type: string
-                    message:
-                      description: |-
-                        message is a human readable message indicating details about the transition.
-                        This may be an empty string.
-                      maxLength: 32768
-                      type: string
-                    observedGeneration:
-                      description: |-
-                        observedGeneration represents the .metadata.generation that the condition was set based upon.
-                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                        with respect to the current state of the instance.
-                      format: int64
-                      minimum: 0
-                      type: integer
-                    reason:
-                      description: |-
-                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                        Producers of specific condition types may define expected values and meanings for this field,
-                        and whether the values are considered a guaranteed API.
-                        The value should be a CamelCase string.
-                        This field may not be empty.
-                      maxLength: 1024
-                      minLength: 1
-                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                      type: string
-                    status:
-                      description: status of the condition, one of True, False, Unknown.
-                      enum:
-                      - "True"
-                      - "False"
-                      - Unknown
-                      type: string
-                    type:
-                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                      maxLength: 316
-                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                      type: string
-                  required:
-                  - lastTransitionTime
-                  - message
-                  - reason
-                  - status
-                  - type
-                  type: object
-                type: array
+              acknowledgedGeneration:
+                description: AcknowledgedGeneration is the highest generation accepted
+                  by Gatekeeper.
+                format: int64
+                minimum: 0
+                type: integer
+              failedGeneration:
+                description: FailedGeneration is the highest generation covered by
+                  a failed audit.
+                format: int64
+                minimum: 0
+                type: integer
+              lastRun:
+                description: AuditRunStatus describes the latest started execution,
+                  regardless of its trigger.
+                properties:
+                  completedAt:
+                    format: date-time
+                    type: string
+                  coveredGeneration:
+                    description: CoveredGeneration is frozen when the run starts.
+                      Later requests need another run.
+                    format: int64
+                    type: integer
+                  message:
+                    type: string
+                  phase:
+                    enum:
+                    - Running
+                    - Succeeded
+                    - Failed
+                    - Unknown
+                    type: string
+                  reason:
+                    type: string
+                  startedAt:
+                    format: date-time
+                    type: string
+                required:
+                - coveredGeneration
+                - message
+                - phase
+                - reason
+                - startedAt
+                type: object
+              successfulGeneration:
+                description: |-
+                  SuccessfulGeneration is the highest generation covered by a successful audit.
+                  Check this before FailedGeneration; a later failure does not invalidate success.
+                format: int64
+                minimum: 0
+                type: integer
             type: object
         required:
         - spec
         type: object
+        x-kubernetes-validations:
+        - message: AuditTrigger must be named audit-trigger
+          rule: self.metadata.name == 'audit-trigger'
     served: true
     storage: true
     subresources:
