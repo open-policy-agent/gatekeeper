@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -312,6 +313,33 @@ func TestConnectionPodStatusUpdateRequiresReconcile(t *testing.T) {
 	require.True(t, connectionPodStatusUpdateRequiresReconcile(oldStatus, newStatus))
 }
 
+func TestConnectionUpdateRequiresReconcile(t *testing.T) {
+	oldConn := &connectionv1alpha1.Connection{
+		ObjectMeta: metav1.ObjectMeta{Generation: 1, UID: "uid-1"},
+		Spec:       connectionv1alpha1.ConnectionSpec{Driver: disk.Name},
+	}
+
+	newConn := oldConn.DeepCopy()
+	newConn.Status.ByPod = []statusv1alpha1.ConnectionPodStatusStatus{{ID: "audit"}}
+	require.False(t, connectionUpdateRequiresReconcile(oldConn, newConn), "status-only update")
+
+	newConn = oldConn.DeepCopy()
+	newConn.Labels = map[string]string{"team": "a"}
+	newConn.Annotations = map[string]string{"note": "b"}
+	require.False(t, connectionUpdateRequiresReconcile(oldConn, newConn), "metadata-only update")
+
+	newConn = oldConn.DeepCopy()
+	newConn.Generation = 2
+	require.True(t, connectionUpdateRequiresReconcile(oldConn, newConn), "spec update")
+
+	newConn = oldConn.DeepCopy()
+	newConn.UID = "uid-2"
+	require.True(t, connectionUpdateRequiresReconcile(oldConn, newConn), "recreated at the same generation")
+
+	require.True(t, connectionUpdateRequiresReconcile(nil, newConn))
+	require.True(t, connectionUpdateRequiresReconcile(oldConn, nil))
+}
+
 type conflictOnceWriter struct {
 	client.Client
 	onConflict func(context.Context) error
@@ -585,6 +613,115 @@ func TestReconcile_E2E(t *testing.T) {
 }
 
 // Mocks ExportSystem to simulate the export system behavior failures and impact on the controller.
+// Status and metadata updates must not re-run UpsertConnection.
+func TestReconcile_IgnoresConnectionStatusAndMetadataUpdates(t *testing.T) {
+	auditConnectionName := "audit-connection-5"
+	require.NoError(t, flag.CommandLine.Parse([]string{"--enable-violation-export=true", "--audit-connection=" + auditConnectionName}), "parsing flags")
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	g := gomega.NewGomegaWithT(t)
+	mgr, _ := testutils.SetupManager(t, cfg)
+	k8sClient := testclient.NewRetryClient(mgr.GetClient())
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
+		return fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod")), nil
+	}
+	originalReconciler := newReconciler(mgr, export.NewSystem(), auditConnectionName, getPod)
+	var reconciles atomic.Int32
+	countingReconciler := reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+		if req.Name == auditConnectionName {
+			reconciles.Add(1)
+		}
+		return originalReconciler.Reconcile(ctx, req)
+	})
+	require.NoError(t, add(mgr, countingReconciler, auditConnectionName))
+	testutils.StartManager(ctx, t, mgr)
+
+	key := types.NamespacedName{Name: auditConnectionName, Namespace: util.GetNamespace()}
+	connObj := &connectionv1alpha1.Connection{
+		ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+		Spec: connectionv1alpha1.ConnectionSpec{
+			Driver: disk.Name,
+			Config: &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())},
+		},
+	}
+	g.Expect(k8sClient.Create(ctx, connObj)).Should(gomega.Succeed())
+	t.Cleanup(func() { _ = k8sClient.Delete(context.Background(), connObj) })
+
+	pod, _ := getPod(ctx)
+	statusName, err := statusv1alpha1.KeyForConnection(pod.Name, key.Namespace, key.Name)
+	require.NoError(t, err)
+	statusKey := types.NamespacedName{Name: statusName, Namespace: util.GetNamespace()}
+	waitForObservedGeneration := func(generation int64) {
+		g.Eventually(func(g gomega.Gomega) {
+			podStatus := &statusv1alpha1.ConnectionPodStatus{}
+			g.Expect(k8sClient.Get(ctx, statusKey, podStatus)).Should(gomega.Succeed())
+			g.Expect(podStatus.Status.ObservedGeneration).Should(gomega.Equal(generation))
+			g.Expect(podStatus.Status.ConnectionErrors).Should(gomega.BeEmpty())
+		}).WithTimeout(timeout).Should(gomega.Succeed())
+	}
+	waitForObservedGeneration(connObj.GetGeneration())
+	g.Expect(connectionState(originalReconciler.state.Load())).Should(gomega.Equal(stateReady))
+
+	// Let the create, status create, and seed reconciles drain.
+	g.Eventually(func() bool {
+		before := reconciles.Load()
+		time.Sleep(time.Second)
+		return reconciles.Load() == before
+	}).WithTimeout(timeout).Should(gomega.BeTrue())
+	settled := reconciles.Load()
+
+	waitForCache := func(matches func(*connectionv1alpha1.Connection) bool) {
+		g.Eventually(func() bool {
+			cached := &connectionv1alpha1.Connection{}
+			return mgr.GetCache().Get(ctx, key, cached) == nil && matches(cached)
+		}).WithTimeout(timeout).Should(gomega.BeTrue())
+	}
+	for _, id := range []string{"audit-run-1", "audit-run-2"} {
+		g.Eventually(func() error {
+			latest := &connectionv1alpha1.Connection{}
+			if err := k8sClient.Get(ctx, key, latest); err != nil {
+				return err
+			}
+			latest.Status.ByPod = []statusv1alpha1.ConnectionPodStatusStatus{{ID: id, ObservedGeneration: latest.GetGeneration()}}
+			return mgr.GetClient().Status().Update(ctx, latest)
+		}).WithTimeout(timeout).Should(gomega.Succeed())
+		waitForCache(func(cached *connectionv1alpha1.Connection) bool {
+			return len(cached.Status.ByPod) == 1 && cached.Status.ByPod[0].ID == id
+		})
+	}
+	g.Eventually(func() error {
+		latest := &connectionv1alpha1.Connection{}
+		if err := k8sClient.Get(ctx, key, latest); err != nil {
+			return err
+		}
+		latest.Labels = map[string]string{"team": "platform"}
+		return mgr.GetClient().Update(ctx, latest)
+	}).WithTimeout(timeout).Should(gomega.Succeed())
+	waitForCache(func(cached *connectionv1alpha1.Connection) bool {
+		return cached.Labels["team"] == "platform"
+	})
+	g.Consistently(reconciles.Load).WithTimeout(3*time.Second).Should(gomega.Equal(settled), "status and metadata updates must not reconcile")
+
+	// A spec change still reconciles.
+	var updatedGeneration int64
+	g.Eventually(func() error {
+		latest := &connectionv1alpha1.Connection{}
+		if err := k8sClient.Get(ctx, key, latest); err != nil {
+			return err
+		}
+		latest.Spec.Config = &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())}
+		if err := mgr.GetClient().Update(ctx, latest); err != nil {
+			return err
+		}
+		updatedGeneration = latest.GetGeneration()
+		return nil
+	}).WithTimeout(timeout).Should(gomega.Succeed())
+	g.Expect(updatedGeneration).Should(gomega.BeNumerically(">", connObj.GetGeneration()))
+	g.Eventually(reconciles.Load).WithTimeout(timeout).Should(gomega.BeNumerically(">", settled))
+	waitForObservedGeneration(updatedGeneration)
+}
+
 func TestReconcile_ExportSystem_Failures(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-2"

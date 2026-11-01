@@ -130,7 +130,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, connectionName string) err
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
 				UpdateFunc: func(e event.TypedUpdateEvent[*connectionv1alpha1.Connection]) bool {
-					return e.ObjectNew.GetNamespace() == util.GetNamespace()
+					return e.ObjectNew.GetNamespace() == util.GetNamespace() && connectionUpdateRequiresReconcile(e.ObjectOld, e.ObjectNew)
 				},
 				DeleteFunc: func(e event.TypedDeleteEvent[*connectionv1alpha1.Connection]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
@@ -179,6 +179,15 @@ func seedConnectionSource(connectionName string) source.Source {
 		q.Add(reconcile.Request{NamespacedName: types.NamespacedName{Namespace: util.GetNamespace(), Name: connectionName}})
 		return nil
 	})
+}
+
+// connectionUpdateRequiresReconcile reconciles only on spec changes (generation)
+// or a recreate (UID), skipping the status update that follows every publish.
+func connectionUpdateRequiresReconcile(oldConn, newConn *connectionv1alpha1.Connection) bool {
+	if oldConn == nil || newConn == nil {
+		return true
+	}
+	return oldConn.GetGeneration() != newConn.GetGeneration() || oldConn.GetUID() != newConn.GetUID()
 }
 
 // connectionPodStatusUpdateRequiresReconcile filters publisher-owned health
