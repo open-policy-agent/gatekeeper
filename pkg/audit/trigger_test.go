@@ -67,6 +67,7 @@ func TestAuditTriggerRunCoalescesAndPreservesCompletion(t *testing.T) {
 	resets := 0
 	runner := newAuditTriggerRunner(c, func(context.Context) error {
 		runs++
+		require.Equal(t, runs-1, resets)
 		if runs == 1 {
 			running := getAuditTrigger(t, c).Status.LastRun
 			require.Equal(t, "Running", running.Phase)
@@ -79,7 +80,12 @@ func TestAuditTriggerRunCoalescesAndPreservesCompletion(t *testing.T) {
 		}
 		return nil
 	})
-	runner.resetTicker = func() { resets++ }
+	runner.resetTicker = func() {
+		status := getAuditTrigger(t, c).Status
+		require.Equal(t, "Succeeded", status.LastRun.Phase)
+		require.Equal(t, status.LastRun.CoveredGeneration, status.SuccessfulGeneration)
+		resets++
+	}
 	require.NoError(t, runner.run(context.Background(), true))
 	got := getAuditTrigger(t, c)
 	require.EqualValues(t, 7, got.Status.SuccessfulGeneration)
@@ -102,6 +108,7 @@ func TestAuditTriggerFailureOrdering(t *testing.T) {
 			c := newAuditTriggerClient(t, newAuditTrigger(10))
 			auditErr := errors.New("list failed")
 			runs := 0
+			resets := 0
 			runner := newAuditTriggerRunner(c, func(context.Context) error {
 				runs++
 				if (runs == 1) == failFirst {
@@ -109,11 +116,14 @@ func TestAuditTriggerFailureOrdering(t *testing.T) {
 				}
 				return nil
 			})
+			runner.resetTicker = func() { resets++ }
 			err := runner.run(context.Background(), true)
 			if failFirst {
 				require.ErrorIs(t, err, auditErr)
+				require.Zero(t, resets)
 			} else {
 				require.NoError(t, err)
+				require.Equal(t, 1, resets)
 			}
 			advanceAuditTrigger(t, c, 11)
 			err = runner.run(context.Background(), true)
@@ -132,6 +142,7 @@ func TestAuditTriggerFailureOrdering(t *testing.T) {
 			}
 			require.NoError(t, runner.run(context.Background(), true))
 			require.Equal(t, 2, runs)
+			require.Equal(t, 1, resets)
 		})
 	}
 }
@@ -139,11 +150,14 @@ func TestAuditTriggerFailureOrdering(t *testing.T) {
 func TestAuditTriggerPeriodicRunAndRecovery(t *testing.T) {
 	c := newAuditTriggerClient(t, newAuditTrigger(7))
 	ctx, cancel := context.WithCancel(context.Background())
+	resets := 0
 	runner := newAuditTriggerRunner(c, func(context.Context) error {
 		cancel()
 		return nil
 	})
+	runner.resetTicker = func() { resets++ }
 	require.ErrorIs(t, runner.run(ctx, true), context.Canceled)
+	require.Zero(t, resets)
 	got := getAuditTrigger(t, c)
 	require.Zero(t, got.Status.SuccessfulGeneration)
 	require.Zero(t, got.Status.FailedGeneration)
@@ -154,12 +168,14 @@ func TestAuditTriggerPeriodicRunAndRecovery(t *testing.T) {
 		runs++
 		return nil
 	})
+	recovered.resetTicker = func() { resets++ }
 	require.NoError(t, recovered.run(context.Background(), true))
 	require.EqualValues(t, 7, getAuditTrigger(t, c).Status.SuccessfulGeneration)
 	require.NoError(t, recovered.run(context.Background(), true))
 	require.Equal(t, 1, runs)
 	require.NoError(t, recovered.run(context.Background(), false))
 	require.Equal(t, 2, runs)
+	require.Equal(t, 1, resets)
 }
 
 func TestAuditTriggerDoesNotCreditRecreatedObject(t *testing.T) {

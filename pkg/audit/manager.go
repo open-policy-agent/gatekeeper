@@ -267,7 +267,7 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 func (am *Manager) audit(ctx context.Context) error {
 	startTime := time.Now()
 	timestamp := startTime.UTC().Format(time.RFC3339)
-	am.log = log.WithValues(logging.AuditID, timestamp)
+	am.log = logf.FromContext(ctx).WithValues(logging.AuditID, timestamp)
 	logStart(am.log)
 	auditExportPublishingState := auditExportPublishingState{
 		SuccessCount: 0,

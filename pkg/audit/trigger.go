@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -81,6 +82,11 @@ type auditTriggerRunner struct {
 }
 
 func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
+	source := "scheduled"
+	if onDemand {
+		source = "on-demand"
+	}
+	ctx = logf.IntoContext(ctx, log.WithValues("auditSource", source))
 	trigger := &auditv1alpha1.AuditTrigger{}
 	if err := r.reader.Get(ctx, auditTriggerKey, trigger); err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -117,9 +123,6 @@ func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
 		return err
 	}
 
-	if onDemand && r.resetTicker != nil {
-		r.resetTicker()
-	}
 	auditErr := r.audit(ctx)
 	if ctx.Err() != nil {
 		// Cancellation does not establish a terminal result. Recovery reruns work
@@ -141,6 +144,9 @@ func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
 		}
 	}); err != nil {
 		return err
+	}
+	if onDemand && auditErr == nil && r.resetTicker != nil {
+		r.resetTicker()
 	}
 	return auditErr
 }
