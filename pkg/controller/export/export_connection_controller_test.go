@@ -612,7 +612,6 @@ func TestReconcile_E2E(t *testing.T) {
 	})
 }
 
-// Mocks ExportSystem to simulate the export system behavior failures and impact on the controller.
 // Status and metadata updates must not re-run UpsertConnection.
 func TestReconcile_IgnoresConnectionStatusAndMetadataUpdates(t *testing.T) {
 	auditConnectionName := "audit-connection-5"
@@ -722,6 +721,7 @@ func TestReconcile_IgnoresConnectionStatusAndMetadataUpdates(t *testing.T) {
 	waitForObservedGeneration(updatedGeneration)
 }
 
+// Mocks ExportSystem to simulate the export system behavior failures and impact on the controller.
 func TestReconcile_ExportSystem_Failures(t *testing.T) {
 	// Setup
 	auditConnectionName := "audit-connection-2"
