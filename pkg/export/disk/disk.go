@@ -379,7 +379,7 @@ func (r *Writer) Publish(ctx context.Context, connectionName string, data interf
 		}
 	}()
 
-	if violation.Message == util.AuditStartedMsg {
+	if violation.EventType == "" && violation.Message == util.AuditStartedMsg {
 		err := conn.handleAuditStart(violation.ID, topic)
 		if err != nil {
 			return fmt.Errorf("error handling audit start: %w", err)
@@ -403,7 +403,7 @@ func (r *Writer) Publish(ctx context.Context, connectionName string, data interf
 		return fmt.Errorf("error writing message to disk: %w", errors.Join(err, conn.abortAuditRun(runFile)))
 	}
 
-	if violation.Message == util.AuditCompletedMsg {
+	if violation.EventType == "" && violation.Message == util.AuditCompletedMsg {
 		connChanged = true
 		if err := conn.handleAuditEnd(topic); err != nil {
 			return fmt.Errorf("error handling audit end: %w", errors.Join(err, conn.abortAuditRun(runFile)))
