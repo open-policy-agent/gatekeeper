@@ -1,4 +1,7 @@
 ---
+{{- if and (or .Values.enableViolationExport .Values.enableAdmissionViolationExport) (eq (.Values.exportBackend | default "" | lower) "dapr") }}
+{{- fail "exportBackend dapr is no longer supported because the Dapr export driver has been removed; set exportBackend to disk or disable violation export" }}
+{{- end }}
 {{- if and (or .Values.enableViolationExport .Values.enableAdmissionViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") }}
 apiVersion: connection.gatekeeper.sh/v1alpha1
 kind: Connection

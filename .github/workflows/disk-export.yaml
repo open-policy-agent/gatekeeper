@@ -4,8 +4,8 @@ on:
     paths:
       - ".github/workflows/disk-export.yaml"
       - "Makefile"
-      - "pkg/export/disk/**"
-      - "pkg/export/util/**"
+      - "apis/connection/**"
+      - "pkg/export/**"
       - "pkg/controller/export/**"
       - "pkg/webhook/**"
       - "cmd/build/helmify/**"
@@ -16,8 +16,8 @@ on:
     paths:
       - ".github/workflows/disk-export.yaml"
       - "Makefile"
-      - "pkg/export/disk/**"
-      - "pkg/export/util/**"
+      - "apis/connection/**"
+      - "pkg/export/**"
       - "pkg/controller/export/**"
       - "pkg/webhook/**"
       - "cmd/build/helmify/**"

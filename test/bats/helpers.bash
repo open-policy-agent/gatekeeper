@@ -396,10 +396,7 @@ total_violations() {
   audit_id="$(jq -r '.status.auditTimestamp // empty' <<<"${constraint}")" || return 1
   [[ -n "${audit_id}" ]] || return 1
   violations=""
-  if [[ "${backend}" == "dapr" ]]; then
-    export_logs="$(kubectl logs -n fake-subscriber -l app=sub -c go-sub --tail=-1)" || return 1
-    violations="$(awk -v audit_id="${audit_id}" -v constraint_name="${constraint_name}" 'index($0, "ID:\"" audit_id "\"") && index($0, "EventType:\"violation_audited\"") && index($0, "Name:\"" constraint_name "\"") {count++} END {print count+0}' <<<"${export_logs}")"
-  elif [[ "${backend}" == "disk" ]]; then
+  if [[ "${backend}" == "disk" ]]; then
     export_logs="$(kubectl logs -n gatekeeper-system -l gatekeeper.sh/operation=audit -c reader --tail=-1)" || return 1
     violations="$(awk -v audit_id="${audit_id}" -v constraint_name="${constraint_name}" 'index($0, "\"id\":\"" audit_id "\"") && index($0, "\"eventType\":\"violation_audited\"") && index($0, "\"name\":\"" constraint_name "\"") {count++} END {print count+0}' <<<"${export_logs}")"
   else
