@@ -1126,6 +1126,13 @@ func TestAuditExportRun(t *testing.T) {
 			wantPublished: 1,
 		},
 		{
+			name:              "connection removed mid-run after a failure logs the failure",
+			publishErrs:       []error{errors.New("mkdir failed"), notConfigured},
+			wantCalls:         2,
+			wantPublishErrors: 1,
+			wantErrorLogs:     1,
+		},
+		{
 			name:              "failed start publish continues the run",
 			publishErrs:       []error{errors.New("mkdir failed")},
 			wantCalls:         4,

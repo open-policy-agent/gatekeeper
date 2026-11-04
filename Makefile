@@ -327,6 +327,7 @@ else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
 		--debug --wait --timeout ${HELM_TIMEOUT} \
+		$(if $(ENABLE_EXPORT),--set enableViolationExport=${ENABLE_EXPORT}) \
 		$(HELM_EXTRA_ARGS)
 endif
 

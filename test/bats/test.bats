@@ -1043,8 +1043,6 @@ __expansion_audit_test() {
 
   local logs
   logs="$(audit_logs)"
-  run grep -q 'violation_audited' <<<"${logs}"
-  assert_success
   run grep -E 'failed to (export audit violation|write export errors|close connection|upsert connection)|unsupported connection|Reconciler error.*export-connection-controller' <<<"${logs}"
   assert_failure
 

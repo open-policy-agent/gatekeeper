@@ -1489,6 +1489,9 @@ func (am *Manager) finishAuditExport(ctx context.Context, state *auditExportPubl
 	}
 	am.publishAuditExport(state, exportutil.ExportMsg{Message: exportutil.AuditCompletedMsg, ID: timestamp})
 	if state.notConfigured {
+		if len(state.Errors) != 0 {
+			am.logAuditExportResult(state)
+		}
 		// The export controller reports the missing connection.
 		am.exportLogs.reset()
 		return
