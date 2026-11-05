@@ -1075,7 +1075,7 @@ __expansion_audit_test() {
   local resource="gatekeeper-audit-export-test"
   CLEAN_CMD="kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/audit_export_requires_label.yaml; kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/audit_export_ns.yaml; ${CLEAN_CMD}"
   kubectl apply -f "${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml"
-  kubectl wait --for=condition=Established --timeout=60s crd/k8srequiredlabels.constraints.gatekeeper.sh
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Established --timeout=60s crd/k8srequiredlabels.constraints.gatekeeper.sh"
   kubectl apply -f "${BATS_TESTS_DIR}/constraints/audit_export_requires_label.yaml"
   kubectl apply -f "${BATS_TESTS_DIR}/bad/audit_export_ns.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels ${constraint}"
