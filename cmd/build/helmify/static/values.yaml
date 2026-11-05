@@ -301,7 +301,6 @@ admission:
       seccompProfile:
         type: RuntimeDefault
   disableExportSidecar: true
-# enableViolationExport: unset means true. Set to false to opt out.
 exportBackend: ""
 audit:
   connection: audit-connection
