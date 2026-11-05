@@ -178,6 +178,36 @@ func TestConflictingEntries(t *testing.T) {
 			wantErr: ErrConflict,
 		},
 		{
+			name:     "child forbidden but parent required (child first)",
+			location: "spec.some.thing",
+			ts: []Test{
+				{
+					SubPath:   mustParse("spec.some.thing"),
+					Condition: MustNotExist,
+				},
+				{
+					SubPath:   mustParse("spec.some"),
+					Condition: MustExist,
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name:     "child required but parent forbidden (child first)",
+			location: "spec.some.thing",
+			ts: []Test{
+				{
+					SubPath:   mustParse("spec.some.thing"),
+					Condition: MustExist,
+				},
+				{
+					SubPath:   mustParse("spec.some"),
+					Condition: MustNotExist,
+				},
+			},
+			wantErr: ErrConflict,
+		},
+		{
 			name:     "grandparent forbidden but grandchild required",
 			location: "spec.some.thing.more",
 			ts: []Test{
