@@ -29,7 +29,8 @@ jobs:
   build_test:
     name: "Build and Test"
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    # Allow three fresh audit intervals plus the explicit opt-out smoke test.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix: &kubernetes-matrix
