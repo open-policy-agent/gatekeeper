@@ -5,7 +5,7 @@ title: Exporting violations
 
 `Feature State`: Audit export in Gatekeeper version v3.13+ (alpha), v3.24+ (beta, enabled by default); admission export in v3.24+ (alpha)
 
-> ❗ Audit export is beta and enabled by default; nothing is exported until you create a `Connection`. The Dapr driver and admission export are alpha and subject to change (feedback is welcome!). This feature was previously known as "Consuming violations using Pubsub".
+> ❗ Audit export is beta and enabled by default; nothing is exported until you create a `Connection`. Admission export is alpha and subject to change (feedback is welcome!). This feature was previously known as "Consuming violations using Pubsub".
 
 ## Description
 
@@ -15,7 +15,7 @@ This feature exports audit violations, and optionally admission violations, to a
 
 ## Enabling Gatekeeper to export audit violations
 
-Install prerequisites such as a pubsub tool, a message broker etc.
+For disk export, provide a writable mounted volume and a consumer for the exported files.
 
 ### Setting up audit to export violations
 
@@ -23,7 +23,7 @@ Audit export is enabled by default (`--enable-violation-export` defaults to `tru
 
 To opt out, set `--enable-violation-export=false`, or `enableViolationExport: false` with Helm. Audit then does no export work, even if a matching `Connection` exists.
 
-A `Connection` custom resource with `spec` that contains `driver` and `config` fields are required to establish connection for sending violations over the channel. Following is an example to establish a connection that uses Dapr to export messages:
+A `Connection` custom resource with `spec` that contains `driver` and `config` fields are required to establish connection for sending violations over the channel. Following is an example to establish a connection that uses disk to export messages:
 
 ```yaml
 apiVersion: connection.gatekeeper.sh/v1alpha1
@@ -37,12 +37,11 @@ spec:
     path: "tmp/violations/topics"
     maxAuditResults: 3
 ```
-- `driver` field determines which tool/driver should be used to establish a connection. Valid values are: `dapr`, `disk`
-- `config` field is an object that configures how the connection is made. E.g. which queue messages should be sent to.
+- `driver` field determines which tool/driver should be used to establish a connection. Valid values are: `disk`
+- `config` field is an object that configures how the connection is made.
 
 #### Available drivers
 
-- Dapr: Export violations using pubsub model provided with [Dapr](https://dapr.io/)
 - Disk: Export violations to file system.
 
 #### Status
@@ -55,9 +54,10 @@ metadata:
   name: audit-connection
   namespace: gatekeeper-system
 spec:
-  driver: "dapr"
+  driver: "disk"
   config:
-    component: "pubsub"
+    path: "tmp/violations/topics"
+    maxAuditResults: 3
 status:
   byPod:
   - id: "pod-id"
@@ -99,7 +99,9 @@ Each publisher replaces only the entry it owns. Audit updates `source: audit`, w
 
 ### Upgrading from v3.23 or earlier
 
-Before v3.24, `--enable-violation-export` defaulted to `false`. If a `Connection` named by `--audit-connection` (disk or Dapr) already exists and the flag was never set, audit starts exporting to it after the upgrade. Check with `kubectl get connections -n gatekeeper-system`, and set the flag to `false` to keep export off. Rolling back restores the old default, so export stops. With export on by default, a `Connection` with the `--audit-connection` name in the Gatekeeper namespace is enough to start export, so restrict who can create or update `Connection` resources there. With Helm, a quoted `enableViolationExport: "false"` with `exportBackend: disk` no longer creates the unused disk `Connection`, volume and demo sidecar; Helm removes them on upgrade.
+Before v3.24, `--enable-violation-export` defaulted to `false`. If a disk `Connection` named by `--audit-connection` already exists and the flag was never set, audit starts exporting to it after the upgrade. Check with `kubectl get connections -n gatekeeper-system`, and set the flag to `false` to keep export off. Rolling back restores the old default, so export stops. With export on by default, a `Connection` with the `--audit-connection` name in the Gatekeeper namespace is enough to start export, so restrict who can create or update `Connection` resources there. With Helm, a quoted `enableViolationExport: "false"` with `exportBackend: disk` no longer creates the unused disk `Connection`, volume and demo sidecar; Helm removes them on upgrade.
+
+The Dapr export driver has been removed. Migrate existing Dapr Connections to disk, providing a writable volume and a consumer, or disable violation export while migrating.
 
 ## Enabling Gatekeeper to export admission violations
 
@@ -117,7 +119,7 @@ enableAdmissionViolationExport: true
 exportBackend: disk
 ```
 
-Admission violation export currently supports only the disk driver. The Helm chart rejects `enableAdmissionViolationExport: true` unless `exportBackend: disk`; the Dapr driver is not supported for admission export. The supported configuration routes audit and admission export through the same `Connection`, channel, path, and volume. Because audit export is on by default, audit also exports to the `Connection` that Helm creates for disk admission export, unless you set `enableViolationExport: false`. Admission segment retention and other spool limits are fixed internal defaults while the feature is alpha; `maxAuditResults` continues to apply only to audit results. Additional admission-specific configuration can be added later if operational feedback requires it.
+Admission violation export currently supports only the disk driver. The Helm chart rejects `enableAdmissionViolationExport: true` unless `exportBackend: disk`. The supported configuration routes audit and admission export through the same `Connection`, channel, path, and volume. Because audit export is on by default, audit also exports to the `Connection` that Helm creates for disk admission export, unless you set `enableViolationExport: false`. Admission segment retention and other spool limits are fixed internal defaults while the feature is alpha; `maxAuditResults` continues to apply only to audit results. Additional admission-specific configuration can be added later if operational feedback requires it.
 
 The chart mounts `audit.exportVolume` at `audit.exportVolumeMount.path` in every controller-manager pod when admission export is enabled. The reader sidecar is disabled by default; configure a production reader or explicitly enable the demonstration reader with `admission.disableExportSidecar: false`. Each pod writes its own spool, so multiple webhook replicas and separate audit/webhook deployments do not contend for one file.
 
@@ -252,171 +254,9 @@ This quick start enables the demonstration admission reader. It logs completed a
       --output yaml
     ```
 
-### Quick start with exporting audit violations using Dapr and Redis
-
-#### Prerequisites for Dapr
-
-1. Install Dapr
-
-   To install Dapr with specific requirements and configuration, please refer to [Dapr docs](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-deploy/).
-
-  :::important
-    - Make sure to set `SIDECAR_DROP_ALL_CAPABILITIES` environment variable on `dapr-sidecar` injector pod to `true` to avoid getting `PodSecurity violation` errors for the injected sidecar container as Gatekeeper by default requires workloads to run with [restricted](https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted) policy. If using helm charts to install Dapr, you can use `--set dapr_sidecar_injector.sidecarDropALLCapabilities=true`.
-    - Additionally, [configure appropriate seccompProfile for sidecar containers](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#configure-seccompprofile-for-sidecar-containers) injected by Dapr to avoid getting `PodSecurity violation` errors. We are setting required Dapr annotation for audit pod while deploying Gatekeeper later in this quick start to avoid getting `PodSecurity violation` error.
-  :::
-
-    > Dapr is installed with mtls enabled by default, for more details on the same please refer to [Dapr security](https://docs.dapr.io/operations/security/mtls/#setting-up-mtls-with-the-configuration-resource).
-
-2. Install Redis
-
-    Please refer to [this](https://docs.dapr.io/getting-started/tutorials/configure-state-pubsub/#step-1-create-a-redis-store) guide to install Redis.
-
-    > Redis is used for example purposes only. Dapr supports [many different state store options](https://docs.dapr.io/reference/components-reference/supported-state-stores/). To install Redis with TLS, please refer to [this](https://docs.bitnami.com/kubernetes/infrastructure/redis-cluster/administration/enable-tls/) doc.
-
-#### Configure a sample subscriber to receive violations
-
-1. Create `fake-subscriber` namespace and redis secret
-
-    ```shell
-    kubectl create ns fake-subscriber
-    # creating redis secret in subscriber namespace to allow Dapr sidecar to connect to redis instance
-    kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: fake-subscriber/' | kubectl apply -f -
-    ```
-
-2. Create Dapr pubsub component
-
-    ```shell
-    kubectl apply -f - <<EOF
-    apiVersion: dapr.io/v1alpha1
-    kind: Component
-    metadata:
-      name: pubsub
-      namespace: fake-subscriber
-    spec:
-      type: pubsub.redis
-      version: v1
-      metadata:
-      - name: redisHost
-        value: redis-master.default.svc.cluster.local:6379
-      - name: redisPassword
-        secretKeyRef: 
-          name: redis
-          key: redis-password
-    EOF
-    ```
-
-    > Please use [this guide](https://docs.dapr.io/reference/components-reference/supported-state-stores/setup-redis/) to properly configure Redis pubsub component for Dapr.
-
-3. Deploy subscriber application
-
-    ```yaml
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: sub
-      namespace: fake-subscriber
-      labels:
-        app: sub
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app: sub
-      template:
-        metadata:
-          labels:
-            app: sub
-          annotations:
-            dapr.io/enabled: "true"
-            dapr.io/app-id: "subscriber"
-            dapr.io/enable-api-logging: "true"
-            dapr.io/app-port: "6002"
-        spec:
-          containers:
-          - name: go-sub
-            image: ghcr.io/open-policy-agent/fake-subscriber:latest
-            imagePullPolicy: Always
-    ```
-
-    :::important
-    The `fake-subscriber` image is published as part of each Gatekeeper release at `ghcr.io/open-policy-agent/fake-subscriber`. To build a custom version locally, use the Dockerfile at [gatekeeper/test/export/fake-subscriber](https://github.com/open-policy-agent/gatekeeper/tree/master/test/export/fake-subscriber).
-    :::
-
-#### Configure Gatekeeper with Export enabled with Dapr
-
-1. Create Gatekeeper namespace, and create Dapr pubsub component and Redis secret in Gatekeeper's namespace (`gatekeeper-system` by default). Please make sure to update `gatekeeper-system` namespace for the next steps if your cluster's Gatekeeper namespace is different.
-
-    ```shell
-    kubectl create namespace gatekeeper-system
-    kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -
-    kubectl apply -f - <<EOF
-    apiVersion: dapr.io/v1alpha1
-    kind: Component
-    metadata:
-      name: pubsub
-      namespace: gatekeeper-system
-    spec:
-      type: pubsub.redis
-      version: v1
-      metadata:
-      - name: redisHost
-        value: redis-master.default.svc.cluster.local:6379
-      - name: redisPassword
-        secretKeyRef:
-          name: redis
-          key: redis-password
-    EOF
-    ```
-
-2. To upgrade or install Gatekeeper with `--enable-violation-export` set to `true`, `--audit-connection` set to `audit-connection`, `--audit-channel` set to `audit-channel` on audit pod.
-
-    ```shell
-    # auditPodAnnotations is used to add annotations required by Dapr to inject sidecar to audit pod
-    echo 'auditPodAnnotations: {dapr.io/enabled: "true", dapr.io/app-id: "audit", dapr.io/metrics-port: "9999", dapr.io/sidecar-seccomp-profile-type: "RuntimeDefault"}' > /tmp/annotations.yaml
-    helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
-    --set enableViolationExport=true \
-    --set audit.connection=audit-connection \
-    --set audit.channel=audit-channel \
-    --values /tmp/annotations.yaml
-    ```
-
-    **Note:** Verify that after the audit pod is running there is a Dapr sidecar injected and running along side `manager` container.
-
-3. Create connection config to establish a connection.
-
-    ```shell
-    kubectl apply -f - <<EOF
-    apiVersion: connection.gatekeeper.sh/v1alpha1
-    kind: Connection
-    metadata:
-      name: audit-connection
-      namespace: gatekeeper-system
-    spec:
-      driver: "dapr"
-      config:
-        component: "pubsub"
-    EOF
-    ```
-
-    **Note:** Name of the `Connection` custom resource must match the value of `--audit-connection` for it to be used by audit to export violation. At the moment, only one connection can exist for audit.
-
-4. Create the constraint templates and constraints, and make sure audit ran by checking constraints. If constraint status is updated with information such as `auditTimeStamp` or `totalViolations`, then audit has ran at least once. Additionally, populated `TOTAL-VIOLATIONS` field for all constraints while listing constraints also indicates that audit has ran at least once.
-
-    ```log
-    kubectl get constraint
-    NAME                 ENFORCEMENT-ACTION   TOTAL-VIOLATIONS
-    pod-must-have-test                        0
-    ```
-
-5. Finally, check the subscriber logs to see the violations received.
-
-    ```log
-    kubectl logs -l app=sub -c go-sub -n fake-subscriber 
-    2023/07/18 20:16:41 Listening...
-    2023/07/18 20:37:20 main.ExportMsg{ID:"2023-07-18T20:37:19Z", Details:map[string]interface {}{"missing_labels":[]interface {}{"test"}}, EventType:"violation_audited", Group:"constraints.gatekeeper.sh", Version:"v1beta1", Kind:"K8sRequiredLabels", Name:"pod-must-have-test", Namespace:"", Message:"you must provide labels: {\"test\"}", EnforcementAction:"deny", ConstraintAnnotations:map[string]string(nil), ResourceGroup:"", ResourceAPIVersion:"v1", ResourceKind:"Pod", ResourceNamespace:"nginx", ResourceName:"nginx-deployment-58899467f5-j85bs", ResourceLabels:map[string]string{"app":"nginx", "owner":"admin", "pod-template-hash":"58899467f5"}}
-    ```
-
 ### Quick start with exporting violations on node storage using Disk driver via emptyDir
+
+The disk driver writes each audit run as newline-delimited JSON. Audit control records contain the audit `id` and `message` (`audit is started` or `audit is completed`) and omit `eventType`. These controls open the run's `.txt` file and finalize it as a ready `.log` file. Audit violation records use `eventType: violation_audited`; their policy-supplied `message` is always data, even when it matches either control message.
 
 #### Configure Gatekeeper with Export enabled to Disk
 
@@ -457,12 +297,13 @@ This quick start enables the demonstration admission reader. It logs completed a
 
     ```shell
     helm upgrade --install gatekeeper gatekeeper/gatekeeper --namespace gatekeeper-system \
+    --create-namespace \
     --set enableViolationExport=true \
     --set audit.connection=audit-connection \
     --set audit.channel=audit-channel \
     --set audit.exportConnection.path=tmp/violations/topics \
     --set audit.exportConnection.maxAuditResults=3 \
-    --set exportBackend=disk \
+    --set exportBackend=disk
     ```
     
     As part of the command above, the `Connection` resource is installed with the following values and defaults:
@@ -485,6 +326,8 @@ This quick start enables the demonstration admission reader. It logs completed a
     | path            | (alpha) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "tmp/violations/topics" |
     | maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
     | closedConnectionTTL | (alpha) Optional duration string controlling how long a failed closed Connection remains eligible for cleanup retries. Accepted values are `"1m"` through `"10m"`. The chart leaves it unset and the driver defaults to `"10m"`. | `"10m"` |
+
+    Each audit run is written to `<audit-run-id>.txt` in the channel directory and renamed to `<audit-run-id>.log` after its completion record is written, so readers should consume only `.log` files. A failed or partial record write aborts the run: the publish error is reported, the file is closed, and removal of the incomplete `.txt` file is attempted. Finalization failures before the rename use the same abort path. Remaining records of the failed run are rejected rather than retried. The next audit starts a new file once storage recovers, without a `Connection` change or restart; if the incomplete file could not be removed, the next start retries removal and fails until removal succeeds. Aborting a run does not remove completed `.log` files or admission files. Errors after the rename, such as permission or retention-cleanup failures, are still reported without discarding the completed run.
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
 
@@ -519,7 +362,7 @@ This quick start enables the demonstration admission reader. It logs completed a
 3. Finally, check the sidecar reader logs to see the violations written.
 
     ```log
-    kubectl logs -l gatekeeper.sh/operation=audit -c go-sub -n gatekeeper-system 
+    kubectl logs -l gatekeeper.sh/operation=audit -c reader -n gatekeeper-system
     2025/03/05 00:37:16 {"id":"2025-03-05T00:37:13Z","details":{"missing_labels":["test"]},"eventType":"violation_audited","group":"constraints.gatekeeper.sh","version":"v1beta1","kind":"K8sRequiredLabels","name":"pod-must-have-test","message":"you must provide labels: {\"test\"}","enforcementAction":"deny","resourceAPIVersion":"v1","resourceKind":"Pod","resourceNamespace":"nginx","resourceName":"nginx-deployment-2-79479fc6db-7qbnm","resourceLabels":{"app":"nginx-ingress","app.kubernetes.io/component":"controller","pod-template-hash":"79479fc6db"}}
     ```
 

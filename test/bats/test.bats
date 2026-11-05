@@ -211,6 +211,36 @@ teardown_file() {
   done
 }
 
+@test "Helm rejects the removed Dapr export backend" {
+  command -v helm >/dev/null || skip "helm is not available"
+
+  local operation backend
+  for operation in install upgrade; do
+    local helm_args=(template gatekeeper manifest_staging/charts/gatekeeper --namespace "${GATEKEEPER_NAMESPACE}")
+    if [[ "${operation}" == upgrade ]]; then
+      helm_args+=(--is-upgrade)
+    fi
+    for backend in dapr DAPR Dapr; do
+      run helm "${helm_args[@]}" --set enableViolationExport=true --set "exportBackend=${backend}"
+      assert_failure
+      assert_match 'exportBackend dapr is no longer supported' "${output}"
+
+      run helm "${helm_args[@]}" --set enableAdmissionViolationExport=true --set "exportBackend=${backend}"
+      assert_failure
+      assert_match 'exportBackend (dapr is no longer supported|to be disk)' "${output}"
+
+      run helm "${helm_args[@]}" --set enableViolationExport=false --set enableAdmissionViolationExport=false --set "exportBackend=${backend}"
+      assert_success
+    done
+
+    # Audit export without a chart-managed disk Connection still renders.
+    run helm "${helm_args[@]}" --set enableViolationExport=true
+    assert_success
+    run helm "${helm_args[@]}" --set enableViolationExport=true --set exportBackend=custom
+    assert_success
+  done
+}
+
 @test "vap test" {
   if [ -z $ENABLE_VAP_TESTS ]; then
     skip "skipping vap tests"

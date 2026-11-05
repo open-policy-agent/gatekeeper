@@ -44,6 +44,21 @@ check() {
   fi
 }
 
+reject_dapr() {
+  local name="$1" output
+  shift
+  if output="$("${HELM}" template gatekeeper "${CHART}" "$@" 2>&1)"; then
+    echo "FAIL: ${name}: expected the removed Dapr backend to be rejected"
+    failures=$((failures + 1))
+  elif [[ "${output}" == *"exportBackend dapr is no longer supported"* ||
+          "${output}" == *"enableAdmissionViolationExport requires exportBackend to be disk"* ]]; then
+    echo "PASS: ${name}"
+  else
+    echo "FAIL: ${name}: unexpected render error: ${output}"
+    failures=$((failures + 1))
+  fi
+}
+
 #     name                                  flag     volume driver sidecar args
 check "defaults"                            omitted  no     none   no
 check "null"                                omitted  no     none   no      -f "${tmp}/null.yaml"
@@ -57,7 +72,11 @@ check "admission-only disk, audit false"    false    no     disk   no      --set
 check "admission string false, disk"        omitted  no     none   no      --set-string enableAdmissionViolationExport=false --set exportBackend=disk
 check "true, disk"                          true     yes    disk   yes     --set enableViolationExport=true --set exportBackend=disk
 check "combined, disk"                      true     yes    disk   yes     --set enableViolationExport=true --set enableAdmissionViolationExport=true --set exportBackend=disk
-check "true, dapr"                          true     no     none   no      --set enableViolationExport=true --set exportBackend=dapr
+check "disabled, dapr"                      false    no     none   no      --set enableViolationExport=false --set enableAdmissionViolationExport=false --set exportBackend=dapr
+check "string false, dapr"                  false    no     none   no      --set-string enableViolationExport=false --set-string enableAdmissionViolationExport=false --set exportBackend=dapr
+reject_dapr "default audit, dapr" --set exportBackend=dapr
+reject_dapr "true, dapr" --set enableViolationExport=true --set exportBackend=dapr
+reject_dapr "admission, dapr" --set enableViolationExport=false --set enableAdmissionViolationExport=true --set exportBackend=dapr
 
 if [[ "${failures}" -ne 0 ]]; then
   echo "${failures} helm render check(s) failed" >&2

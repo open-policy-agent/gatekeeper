@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/dapr"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/driver"
 )
@@ -19,7 +18,6 @@ import (
 var ErrConnectionNotConfigured = errors.New("connection is not initialized")
 
 var supportedDrivers = map[string]driver.Driver{
-	dapr.Name: dapr.Connections,
 	disk.Name: disk.Connections,
 }
 
