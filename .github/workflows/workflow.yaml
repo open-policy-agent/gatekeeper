@@ -260,7 +260,8 @@ jobs:
   build_test_generator_expansion:
     name: "[Generator Resource Expansion] Build and Test"
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    # The shared suite waits for three fresh audit intervals.
+    timeout-minutes: 20
 
     steps:
     - name: Harden Runner
