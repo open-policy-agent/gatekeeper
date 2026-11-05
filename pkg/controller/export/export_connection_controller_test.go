@@ -366,6 +366,38 @@ func (writer *conflictOnceWriter) Update(ctx context.Context, obj client.Object,
 	return writer.Client.Update(ctx, obj, opts...)
 }
 
+func TestUpdateConnectionPodPublishStatusClassifiesMissingConnection(t *testing.T) {
+	testScheme := runtime.NewScheme()
+	require.NoError(t, connectionv1alpha1.AddToScheme(testScheme))
+	require.NoError(t, statusv1alpha1.AddToScheme(testScheme))
+	require.NoError(t, corev1.AddToScheme(testScheme))
+	connection := &connectionv1alpha1.Connection{
+		ObjectMeta: metav1.ObjectMeta{Name: "connection", Namespace: util.GetNamespace()},
+	}
+	podNotFound := apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "audit-pod")
+
+	for _, missingConnection := range []bool{true, false} {
+		t.Run(fmt.Sprintf("missing connection=%t", missingConnection), func(t *testing.T) {
+			builder := fake.NewClientBuilder().WithScheme(testScheme)
+			if !missingConnection {
+				builder.WithObjects(connection)
+			}
+			k8sClient := builder.Build()
+			err := UpdateConnectionPodPublishStatus(
+				context.Background(), k8sClient, k8sClient, testScheme, connection.Name,
+				statusv1alpha1.ConnectionPublishStatus{Source: statusv1alpha1.AuditPublishSource},
+				func(context.Context) (*corev1.Pod, error) { return nil, podNotFound },
+			)
+			require.Error(t, err)
+			require.True(t, apierrors.IsNotFound(err), "preserve Kubernetes error classification")
+			require.Equal(t, missingConnection, errors.Is(err, ErrConnectionNotFound))
+			if !missingConnection {
+				require.ErrorIs(t, err, podNotFound)
+			}
+		})
+	}
+}
+
 func TestUpdateConnectionPodPublishStatusMergesAfterConflict(t *testing.T) {
 	testutils.Setenv(t, "POD_NAMESPACE", "gatekeeper-system")
 	testScheme := runtime.NewScheme()

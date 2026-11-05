@@ -40,6 +40,9 @@ import (
 
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
 
+// ErrConnectionNotFound identifies a missing Connection during a publish-status update.
+var ErrConnectionNotFound = errors.New("connection not found")
+
 type Adder struct {
 	ExportSystem export.Exporter
 	// GetPod returns an instance of the currently running Gatekeeper pod
@@ -307,6 +310,9 @@ func UpdateConnectionPodPublishStatus(
 	}, func() error {
 		connObj := &connectionv1alpha1.Connection{}
 		if err := reader.Get(ctx, request, connObj); err != nil {
+			if apierrors.IsNotFound(err) {
+				return fmt.Errorf("%w: %w", ErrConnectionNotFound, err)
+			}
 			return err
 		}
 		return updateOrCreateConnectionPodStatus(ctx, reader, writer, scheme, connObj, nil, &publishStatus, getPod)

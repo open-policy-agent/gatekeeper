@@ -1064,12 +1064,34 @@ __expansion_audit_test() {
 }
 
 @test "audit export without a connection test" {
-  if [ -n "$ENABLE_EXPORT_TESTS" ]; then
+  if [ -n "${ENABLE_EXPORT_TESTS:-}" ] || [ -n "${ENABLE_ADMISSION_EXPORT_TESTS:-}" ]; then
     skip "skipping test, export tests create a connection"
   fi
 
-  # Audit export is on by default. Without a Connection, audit skips export quietly.
-  wait_for_process 240 ${SLEEP_TIME} "audit_runs_finished_at_least 3"
+  run audit_export_enabled
+  assert_success
+  local export_enabled="${output}"
+  local constraint="audit-export-requires-label"
+  local resource="gatekeeper-audit-export-test"
+  CLEAN_CMD="kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/audit_export_requires_label.yaml; kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/audit_export_ns.yaml; ${CLEAN_CMD}"
+  kubectl apply -f "${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml"
+  kubectl wait --for=condition=Established --timeout=60s crd/k8srequiredlabels.constraints.gatekeeper.sh
+  kubectl apply -f "${BATS_TESTS_DIR}/constraints/audit_export_requires_label.yaml"
+  kubectl apply -f "${BATS_TESTS_DIR}/bad/audit_export_ns.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels ${constraint}"
+
+  run audit_log_records
+  assert_success
+  run jq -rs '[.[] | .audit_id | select(type == "string")] | max // ""' <<<"${output}"
+  assert_success
+  local previous="${output}" check
+  for _ in 1 2 3; do
+    printf -v check 'audit_constraint_run_finished %q %q %q %q' k8srequiredlabels "${constraint}" "${resource}" "${previous}"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "${check}"
+    run audit_constraint_run_finished k8srequiredlabels "${constraint}" "${resource}" "${previous}"
+    assert_success
+    previous="${output}"
+  done
 
   local logs
   logs="$(audit_logs)"
@@ -1084,13 +1106,22 @@ __expansion_audit_test() {
   kubectl get pod temp >/dev/null 2>&1 || kubectl run temp --image=curlimages/curl -- tail -f /dev/null
   kubectl wait --for=condition=Ready --timeout=60s pod temp
 
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "audit_metrics | grep -qxF 'gatekeeper_export_connection_state{state=\"not_configured\"} 1'"
+  if [[ "${export_enabled}" == true ]]; then
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "audit_metrics | grep -qxF 'gatekeeper_export_connection_state{state=\"not_configured\"} 1'"
+  fi
   local metrics
-  metrics="$(audit_metrics)"
-  run grep -xF 'gatekeeper_audit_export_published_count_total 0' <<<"${metrics}"
+  run audit_metrics
   assert_success
-  run grep -xF 'gatekeeper_audit_export_publish_error_count_total 0' <<<"${metrics}"
-  assert_success
+  metrics="${output}"
+  if [[ "${export_enabled}" == true ]]; then
+    run grep -xF 'gatekeeper_audit_export_published_count_total 0' <<<"${metrics}"
+    assert_success
+    run grep -xF 'gatekeeper_audit_export_publish_error_count_total 0' <<<"${metrics}"
+    assert_success
+  else
+    run grep -E '^gatekeeper_(export_connection_state|audit_export_(published|publish_error)_count_total)([{[:space:]])' <<<"${metrics}"
+    assert_failure
+  fi
 }
 
 @test "shutdown delay"  {

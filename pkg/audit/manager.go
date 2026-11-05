@@ -1602,7 +1602,7 @@ func reportExportConnectionErrors(
 	}
 
 	if err := exportController.UpdateConnectionPodPublishStatus(ctx, reader, writer, scheme, *exportutil.AuditConnection, publishStatus, getPod); err != nil {
-		if apierrors.IsNotFound(err) {
+		if errors.Is(err, exportController.ErrConnectionNotFound) {
 			logger.V(logging.DebugLevel).Info("skipping audit export status update, connection not found", "connection", *exportutil.AuditConnection, "error", err.Error())
 			return
 		}

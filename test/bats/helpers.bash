@@ -436,11 +436,47 @@ audit_logs() {
   kubectl logs -n "${GATEKEEPER_NAMESPACE}" -l control-plane=audit-controller -c manager --tail=-1
 }
 
-audit_runs_finished_at_least() {
-  local expected="$1"
-  local finished
-  finished="$(audit_logs | grep -c 'audit_finished')"
-  [[ "${finished}" -ge "${expected}" ]]
+audit_log_records() {
+  local logs
+  logs="$(audit_logs)" || return 1
+  # DEBUG uses console-prefixed JSON; startup output can also contain plain text.
+  jq -Rc '(fromjson? // (split("\t") | last | fromjson?)) | select(type == "object")' <<<"${logs}"
+}
+
+audit_export_enabled() {
+  local deployment
+  deployment="$(kubectl -n "${GATEKEEPER_NAMESPACE}" get deployment gatekeeper-audit -ojson)" || return 1
+  jq -er '
+    [.spec.template.spec.containers[]? | select(.name == "manager")] as $managers
+    | if ($managers | length) != 1 then
+        error("expected one audit manager container")
+      else ($managers[0].args // []) end
+    | map(select(test("^--?enable-violation-export($|=)")))
+    | (last // "--enable-violation-export=true")
+    | if test("^--?enable-violation-export$") then "true"
+      else
+        sub("^--?enable-violation-export="; "") as $value
+        | if (["true", "True", "TRUE", "t", "T", "1"] | index($value)) != null then "true"
+          elif (["false", "False", "FALSE", "f", "F", "0"] | index($value)) != null then "false"
+          else error("invalid audit export flag value: " + $value) end
+      end
+  ' <<<"${deployment}"
+}
+
+audit_constraint_run_finished() {
+  local kind="$1" name="$2" resource="$3" after="$4"
+  local constraint logs
+  constraint="$(kubectl get "${kind}" "${name}" -ojson)" || return 1
+  logs="$(audit_log_records)" || return 1
+  jq -ers --argjson constraint "${constraint}" --arg name "${name}" --arg resource "${resource}" --arg after "${after}" '
+    $constraint.status.auditTimestamp as $id
+    | select(($id | type) == "string" and $id > $after)
+    | select(any($constraint.status.violations[]?; .name == $resource))
+    | select(any(.[]; .event_type == "violation_audited" and .audit_id == $id
+        and .constraint_name == $name and .resource_name == $resource))
+    | select(any(.[]; .event_type == "audit_finished" and .audit_id == $id))
+    | $id
+  ' <<<"${logs}"
 }
 
 # Requires the temp curl pod.

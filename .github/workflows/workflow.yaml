@@ -81,6 +81,16 @@ jobs:
             ENABLE_VAP_TESTS=1 \
             ENABLE_ADMISSION_AUDIT_ANNOTATION_TESTS=1
 
+      - name: Verify explicit audit export opt-out
+        run: |
+          kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c manager --tail=-1 > logs-audit-default.json
+          kubectl -n gatekeeper-system patch deployment gatekeeper-audit --type=json -p='[
+            {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-violation-export=false"},
+            {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--audit-interval=5"}
+          ]'
+          kubectl -n gatekeeper-system rollout status deployment/gatekeeper-audit --timeout=120s
+          bats -t --filter '^audit export without a connection test$' test/bats/test.bats
+
       - name: Save logs
         if: ${{ always() }}
         run: |

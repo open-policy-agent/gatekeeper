@@ -40,6 +40,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,6 +50,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	controllerruntimemanager "sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -1044,6 +1046,79 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 					g.Expect(publishStatus.LastSuccessTime).To(gomega.BeNil())
 				}
 			}
+		})
+	}
+}
+
+func TestReportExportConnectionErrorsNotFound(t *testing.T) {
+	require.NoError(t, apis.AddToScheme(scheme.Scheme))
+	tests := []struct {
+		name              string
+		missingConnection bool
+		missingPod        bool
+		missingOnCreate   bool
+		missingOnUpdate   bool
+		wantError         bool
+		wantSkip          bool
+	}{
+		{name: "missing connection is skipped", missingConnection: true, wantSkip: true},
+		{name: "missing pod is reported", missingPod: true, wantError: true},
+		{name: "status create NotFound is reported", missingOnCreate: true, wantError: true},
+		{name: "status update NotFound is reported", missingOnUpdate: true, wantError: true},
+		{name: "new status is created without an error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("audit-pod"))
+			connection := &connectionv1alpha1.Connection{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: *exportutil.AuditConnection, Namespace: util.GetNamespace(),
+					UID: types.UID("connection-uid"), Generation: 1,
+				},
+			}
+			statusName, err := statusv1alpha1.KeyForConnection(pod.Name, connection.Namespace, connection.Name)
+			require.NoError(t, err)
+			builder := fake.NewClientBuilder().WithScheme(scheme.Scheme)
+			if !tt.missingConnection {
+				builder.WithObjects(connection)
+			}
+			if tt.missingOnUpdate {
+				builder.WithObjects(&statusv1alpha1.ConnectionPodStatus{
+					ObjectMeta: metav1.ObjectMeta{Name: statusName, Namespace: pod.Namespace},
+					Status: statusv1alpha1.ConnectionPodStatusStatus{
+						ID: pod.Name, ConnectionUID: connection.UID, ObservedGeneration: connection.Generation,
+					},
+				})
+			}
+			statusNotFound := apierrors.NewNotFound(
+				schema.GroupResource{Group: "status.gatekeeper.sh", Resource: "connectionpodstatuses"}, statusName)
+			k8sClient := builder.WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+					if tt.missingOnCreate {
+						return statusNotFound
+					}
+					return c.Create(ctx, obj, opts...)
+				},
+				Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+					if tt.missingOnUpdate {
+						return statusNotFound
+					}
+					return c.Update(ctx, obj, opts...)
+				},
+			}).Build()
+			getPod := func(context.Context) (*corev1.Pod, error) {
+				if tt.missingPod {
+					return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, pod.Name)
+				}
+				return pod, nil
+			}
+			var messages []string
+			logger := funcr.New(func(_, message string) { messages = append(messages, message) }, funcr.Options{Verbosity: 10})
+			reportExportConnectionErrors(context.Background(), auditExportPublishingState{SuccessCount: 1},
+				logger, k8sClient, k8sClient, scheme.Scheme, getPod)
+			logs := strings.Join(messages, "\n")
+			require.Equal(t, tt.wantError, strings.Contains(logs, `"msg"="failed to write export errors to the connection pod status"`), logs)
+			require.Equal(t, tt.wantSkip, strings.Contains(logs, `"msg"="skipping audit export status update, connection not found"`), logs)
 		})
 	}
 }
