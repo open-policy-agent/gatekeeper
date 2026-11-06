@@ -9,7 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAdmissionExportFlagDefaults(t *testing.T) {
+func TestExportFlagDefaults(t *testing.T) {
+	require.Equal(t, "true", flag.CommandLine.Lookup("enable-violation-export").DefValue)
 	got := flag.CommandLine.Lookup("enable-admission-violation-export")
 	require.NotNil(t, got)
 	require.Equal(t, "false", got.DefValue)

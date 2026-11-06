@@ -302,6 +302,34 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
+### Export
+
+`gatekeeper_export_connection_state` is reported by pods that export violations: audit pods with `--enable-violation-export` (default `true`) and webhook pods with `--enable-admission-violation-export=true`. The audit export counters below are reported by audit pods only. A pod with export disabled reports none of these metrics. Admission export metrics are listed under [Webhook](#webhook).
+
+- Name: `gatekeeper_export_connection_state`
+
+    Description: `State of the export connection configured for this pod, by state`
+
+    Tags:
+
+    - `state`: [`unknown`, `not_configured`, `ready`, `error`]
+
+    Aggregation: `LastValue`
+
+    The current state is `1` and the others are `0`. `unknown` lasts until the first reconcile after startup. `not_configured` means no `Connection` named by `--audit-connection` exists, which is normal until you create one. `ready` means the `Connection` is set up. `error` means the latest `Connection` change failed; see the `Connection` status. If an earlier configuration worked, export keeps using it until a change succeeds.
+
+- Name: `gatekeeper_audit_export_published_count`
+
+    Description: `Number of audit messages exported, including run start and end markers`
+
+    Aggregation: `Count`
+
+- Name: `gatekeeper_audit_export_publish_error_count`
+
+    Description: `Number of audit messages that failed to export`
+
+    Aggregation: `Count`
+
 ### Mutation
 
 - Name: `gatekeeper_mutator_ingestion_count`

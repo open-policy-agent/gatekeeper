@@ -3,9 +3,9 @@ id: export
 title: Exporting violations
 ---
 
-`Feature State`: Audit export in Gatekeeper version v3.13+; admission export in v3.24+ (alpha)
+`Feature State`: Audit export in Gatekeeper version v3.13+ (alpha), v3.24+ (beta, enabled by default); admission export in v3.24+ (alpha)
 
-> ❗ This feature is alpha, subject to change (feedback is welcome!). This feature was previously known as "Consuming violations using Pubsub".
+> ❗ Audit export is beta and enabled by default; nothing is exported until you create a `Connection`. Admission export is alpha and subject to change (feedback is welcome!). This feature was previously known as "Consuming violations using Pubsub".
 
 ## Description
 
@@ -19,7 +19,9 @@ For disk export, provide a writable mounted volume and a consumer for the export
 
 ### Setting up audit to export violations
 
-In the audit deployment, set the `--enable-violation-export` flag to `true` to export audit violations. Additionally, use `--audit-connection` (defaults to `audit-connection`) and `--audit-channel`(defaults to `audit-channel`) flags to allow audit to export violations using desired connection onto desired channel. `--audit-connection` must be set to the name of the connection config, and `--audit-channel` must be set to name of the channel where violations should get published.
+Audit export is enabled by default (`--enable-violation-export` defaults to `true`). Nothing is exported until a `Connection` named by `--audit-connection` (defaults to `audit-connection`) exists in the Gatekeeper namespace. Until then, audit does no export work and the `gatekeeper_export_connection_state` metric reports `not_configured`, which is normal. The first audit run after a restart may skip export while the `Connection` is being loaded. `--audit-channel` (defaults to `audit-channel`) sets the channel violations are published to. See [Export metrics](metrics.md#export) to monitor export.
+
+To opt out, set `--enable-violation-export=false`, or `enableViolationExport: false` with Helm. Audit then does no export work, even if a matching `Connection` exists.
 
 A `Connection` custom resource with `spec` that contains `driver` and `config` fields are required to establish connection for sending violations over the channel. Following is an example to establish a connection that uses disk to export messages:
 
@@ -95,6 +97,12 @@ The following table describes each property in the `status.byPod` section:
 
 Each publisher replaces only the entry it owns. Audit updates `source: audit`, while admission violation export from the validation webhook updates `source: webhook`; either update preserves the other entry. If a source observes more than 500 distinct error classes before a successful status update, the final entry reports that additional classes were omitted. Each stored error message is the coalesced class text before the first colon and is not otherwise length-truncated.
 
+### Upgrading from a release with audit export disabled by default
+
+`--enable-violation-export` defaulted to `false` in earlier releases, including `v3.24.0-beta.0`. If a disk `Connection` named by `--audit-connection` already exists and the flag was never set, audit starts exporting to it after the upgrade. Check with `kubectl get connections -n gatekeeper-system`, and set the flag to `false` to keep export off. Rolling back restores the old default, so export stops. With export on by default, a `Connection` with the `--audit-connection` name in the Gatekeeper namespace is enough to start export, so restrict who can create or update `Connection` resources there. With Helm, a quoted `enableViolationExport: "false"` with `exportBackend: disk` no longer creates the unused disk `Connection`, volume and demo sidecar; Helm removes them on upgrade.
+
+The Dapr export driver has been removed. Migrate existing Dapr Connections to disk, providing a writable volume and a consumer, or disable violation export while migrating.
+
 ## Enabling Gatekeeper to export admission violations
 
 Admission violation export is independent from audit export and is disabled by default. Set `--enable-admission-violation-export=true` on the controller-manager deployment to enable it. Enabling `--enable-violation-export` on the audit deployment does not enable admission export.
@@ -111,7 +119,7 @@ enableAdmissionViolationExport: true
 exportBackend: disk
 ```
 
-Admission violation export currently supports only the disk driver. The Helm chart rejects `enableAdmissionViolationExport: true` unless `exportBackend: disk`. The supported configuration routes audit and admission export through the same `Connection`, channel, path, and volume. Admission segment retention and other spool limits are fixed internal defaults while the feature is alpha; `maxAuditResults` continues to apply only to audit results. Additional admission-specific configuration can be added later if operational feedback requires it.
+Admission violation export currently supports only the disk driver. The Helm chart rejects `enableAdmissionViolationExport: true` unless `exportBackend: disk`. The supported configuration routes audit and admission export through the same `Connection`, channel, path, and volume. Because audit export is on by default, audit also exports to the `Connection` that Helm creates for disk admission export, unless you set `enableViolationExport: false`. Admission segment retention and other spool limits are fixed internal defaults while the feature is alpha; `maxAuditResults` continues to apply only to audit results. Additional admission-specific configuration can be added later if operational feedback requires it.
 
 The chart mounts `audit.exportVolume` at `audit.exportVolumeMount.path` in every controller-manager pod when admission export is enabled. The reader sidecar is disabled by default; configure a production reader or explicitly enable the demonstration reader with `admission.disableExportSidecar: false`. Each pod writes its own spool, so multiple webhook replicas and separate audit/webhook deployments do not contend for one file.
 

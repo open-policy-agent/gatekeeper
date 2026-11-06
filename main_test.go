@@ -244,26 +244,51 @@ func TestNewExportSystem(t *testing.T) {
 		*exportutil.AdmissionExportEnabled = origAdmission
 	}()
 
+	all := []operations.Operation{
+		operations.Audit, operations.Generate, operations.MutationController,
+		operations.MutationStatus, operations.MutationWebhook, operations.Status, operations.Webhook,
+	}
 	tests := []struct {
 		name             string
+		ops              []operations.Operation
 		exportEnabled    bool
 		admissionEnabled bool
-		wantNil          bool
+		wantAudit        bool
+		wantAdmission    bool
 	}{
-		{"both disabled", false, false, true},
-		{"audit export enabled", true, false, false},
-		{"admission export enabled", false, true, false},
-		{"both enabled", true, true, false},
+		{"all operations, both disabled", all, false, false, false, false},
+		{"all operations, both enabled", all, true, true, true, true},
+		{"audit, audit export", []operations.Operation{operations.Audit}, true, false, true, false},
+		{"audit, admission export only", []operations.Operation{operations.Audit}, false, true, false, false},
+		{"webhook, admission export", []operations.Operation{operations.Webhook}, false, true, false, true},
+		{"webhook, audit export only", []operations.Operation{operations.Webhook}, true, false, false, false},
+		{"status, both enabled", []operations.Operation{operations.Status}, true, true, false, false},
+		{"generate, both enabled", []operations.Operation{operations.Generate}, true, true, false, false},
+		{"mutation, both enabled", []operations.Operation{operations.MutationController, operations.MutationStatus, operations.MutationWebhook}, true, true, false, false},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			restore, err := operations.SetForTest(tc.ops...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer restore()
 			*exportutil.ExportEnabled = tc.exportEnabled
 			*exportutil.AdmissionExportEnabled = tc.admissionEnabled
 
-			got := newExportSystem()
-			if gotNil := got == nil; gotNil != tc.wantNil {
-				t.Errorf("newExportSystem() = %v, want nil: %v", got, tc.wantNil)
+			if got := exportutil.AuditExportEnabledForProcess(); got != tc.wantAudit {
+				t.Errorf("AuditExportEnabledForProcess() = %v, want %v", got, tc.wantAudit)
+			}
+			if got := exportutil.AdmissionExportEnabledForProcess(); got != tc.wantAdmission {
+				t.Errorf("AdmissionExportEnabledForProcess() = %v, want %v", got, tc.wantAdmission)
+			}
+			wantSystem := tc.wantAudit || tc.wantAdmission
+			if got := exportutil.ExportConnectionControllerEnabled(); got != wantSystem {
+				t.Errorf("ExportConnectionControllerEnabled() = %v, want %v", got, wantSystem)
+			}
+			if got := newExportSystem(); (got != nil) != wantSystem {
+				t.Errorf("newExportSystem() = %v, want non-nil: %v", got, wantSystem)
 			}
 		})
 	}

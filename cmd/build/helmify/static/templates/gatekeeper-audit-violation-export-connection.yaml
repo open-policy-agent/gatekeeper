@@ -1,8 +1,10 @@
 ---
-{{- if and (or .Values.enableViolationExport .Values.enableAdmissionViolationExport) (eq (.Values.exportBackend | default "" | lower) "dapr") }}
+{{- $audit := include "gatekeeper.exportFlag" (dict "value" .Values.enableViolationExport "default" "true") }}
+{{- $admission := include "gatekeeper.exportFlag" (dict "value" .Values.enableAdmissionViolationExport "default" "false") }}
+{{- if and (or (eq $audit "true") (eq $admission "true")) (eq (.Values.exportBackend | default "" | lower) "dapr") }}
 {{- fail "exportBackend dapr is no longer supported because the Dapr export driver has been removed; set exportBackend to disk or disable violation export" }}
 {{- end }}
-{{- if and (or .Values.enableViolationExport .Values.enableAdmissionViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") }}
+{{- if eq (include "gatekeeper.diskConnectionRendered" .) "true" }}
 apiVersion: connection.gatekeeper.sh/v1alpha1
 kind: Connection
 metadata:

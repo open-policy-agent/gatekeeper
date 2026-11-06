@@ -4,6 +4,8 @@ import (
 	"errors"
 	"flag"
 	"strings"
+
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 )
 
 const (
@@ -21,7 +23,7 @@ const (
 var errAdditionalPublishErrorsOmitted = errors.New(AdditionalPublishErrorsOmittedMessage)
 
 var (
-	ExportEnabled          = flag.Bool("enable-violation-export", false, "(alpha) Enable exporting audit violations to external systems")
+	ExportEnabled          = flag.Bool("enable-violation-export", true, "(beta) Enable exporting audit violations. Export starts only when a matching Connection exists. Set to false to opt out.")
 	AuditConnection        = flag.String("audit-connection", defaultConnection, "(alpha) Connection name for exporting audit violation messages. Defaults to audit-connection")
 	AuditChannel           = flag.String("audit-channel", defaultChannel, "(alpha) Channel name for exporting audit violation messages. Defaults to audit-channel")
 	AdmissionExportEnabled = flag.Bool("enable-admission-violation-export", false, "(alpha) Enable exporting admission violations to external systems")
@@ -30,6 +32,22 @@ var (
 // AdmissionConnectionName returns the Connection shared with audit export.
 func AdmissionConnectionName() string {
 	return *AuditConnection
+}
+
+// AuditExportEnabledForProcess reports whether this process publishes audit violations.
+func AuditExportEnabledForProcess() bool {
+	return operations.IsAssigned(operations.Audit) && *ExportEnabled
+}
+
+// AdmissionExportEnabledForProcess reports whether this process publishes admission violations.
+func AdmissionExportEnabledForProcess() bool {
+	return operations.IsAssigned(operations.Webhook) && *AdmissionExportEnabled
+}
+
+// ExportConnectionControllerEnabled reports whether this process needs an export
+// system and the export Connection controller.
+func ExportConnectionControllerEnabled() bool {
+	return AuditExportEnabledForProcess() || AdmissionExportEnabledForProcess()
 }
 
 // AdmissionChannelName returns the channel shared with audit export.

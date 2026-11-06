@@ -11,6 +11,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
@@ -39,6 +40,8 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	// These tests register controllers without an export system.
+	*exportutil.ExportEnabled = false
 	testutils.StartControlPlane(m, &cfg, 3)
 }
 
