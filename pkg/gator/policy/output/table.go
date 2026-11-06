@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"text/tabwriter"
+
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/catalog"
 )
 
 // TablePrinter outputs results in human-readable table format.
@@ -49,7 +51,7 @@ func (p *TablePrinter) PrintSearchResults(w io.Writer, results []SearchResult) e
 	defer tw.Flush()
 
 	// Header
-	fmt.Fprintln(tw, "NAME\tVERSION\tCATEGORY\tDESCRIPTION")
+	fmt.Fprintln(tw, "NAME\tVERSION\tCATEGORY\tK8S VERSION\tDESCRIPTION")
 
 	// Rows
 	for _, r := range results {
@@ -57,7 +59,8 @@ func (p *TablePrinter) PrintSearchResults(w io.Writer, results []SearchResult) e
 		if len(desc) > 50 {
 			desc = desc[:47] + "..."
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.Name, r.Version, r.Category, desc)
+		k8sVersion := catalog.FormatMinK8sVersion(r.MinKubernetesVersion)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.Name, r.Version, r.Category, k8sVersion, desc)
 	}
 
 	return nil
@@ -104,6 +107,20 @@ func (p *TablePrinter) PrintInstallResult(w io.Writer, result *InstallResult) er
 		fmt.Fprintf(w, "- %s (already installed at same version)\n", name)
 	}
 
+	printIncompatible(w, result.Incompatible)
+	if result.DryRun {
+		// An offline dry-run cannot verify a bounded policy's cluster
+		// compatibility, but the policy is still previewed as installable with an
+		// advisory note rather than hidden. A real install re-checks and may
+		// reject it as incompatible.
+		for _, entry := range result.Unknown {
+			fmt.Fprintf(w, "%s%s (would install)\n", prefix, entry.Name)
+			fmt.Fprintf(w, "    note: %s\n", entry.Reason)
+		}
+	} else {
+		printUnknown(w, result.Unknown)
+	}
+
 	for _, f := range result.Failed {
 		fmt.Fprintf(w, "✗ %s - failed: %s\n", f.Name, f.Error)
 	}
@@ -114,6 +131,25 @@ func (p *TablePrinter) PrintInstallResult(w io.Writer, result *InstallResult) er
 	}
 
 	return nil
+}
+
+// printIncompatible writes the skip line for each policy that was skipped
+// because the cluster's Kubernetes version is outside the policy's supported
+// range. Shared by the install and upgrade printers so the format stays in sync.
+func printIncompatible(w io.Writer, entries []SkippedEntry) {
+	for _, entry := range entries {
+		fmt.Fprintf(w, "- %s (skipped: %s)\n", entry.Name, entry.Reason)
+	}
+}
+
+// printUnknown writes the skip line for each policy whose Kubernetes-version
+// compatibility could not be determined. This is the non-dry-run rendering; a
+// dry-run instead previews such policies as installable with an advisory note
+// (see PrintInstallResult).
+func printUnknown(w io.Writer, entries []SkippedEntry) {
+	for _, entry := range entries {
+		fmt.Fprintf(w, "- %s (compatibility unknown: %s)\n", entry.Name, entry.Reason)
+	}
 }
 
 // PrintUninstallResult outputs uninstall results as a human-readable table.
@@ -167,11 +203,13 @@ func (p *TablePrinter) PrintUpgradeResult(w io.Writer, result *UpgradeResult) er
 		fmt.Fprintf(w, "- %s (not found in catalog)\n", name)
 	}
 
+	printIncompatible(w, result.Incompatible)
+
 	for _, f := range result.Failed {
 		fmt.Fprintf(w, "✗ %s - failed: %s\n", f.Name, f.Error)
 	}
 
-	if len(result.Upgraded) == 0 && len(result.Failed) == 0 {
+	if len(result.Upgraded) == 0 && len(result.Failed) == 0 && len(result.Incompatible) == 0 {
 		if len(result.NotFound) > 0 {
 			fmt.Fprintf(w, "\nNo upgrades available. %d policies not found in catalog.\n", len(result.NotFound))
 		} else {
