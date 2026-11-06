@@ -98,6 +98,8 @@ type Manager struct {
 
 	// returns the running pod injected by the main controller
 	getPod func(context.Context) (*corev1.Pod, error)
+
+	auditTriggerWake chan struct{}
 }
 
 // StatusViolation represents each violation under status.
@@ -246,18 +248,19 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 		corev1.EventSource{Component: "gatekeeper-audit"})
 
 	am := &Manager{
-		opa:             deps.Client,
-		stopper:         make(chan struct{}),
-		stopped:         make(chan struct{}),
-		mgr:             mgr,
-		reporter:        reporter,
-		processExcluder: deps.ProcessExcluder,
-		eventRecorder:   recorder,
-		gkNamespace:     util.GetNamespace(),
-		auditCache:      deps.CacheLister,
-		expansionSystem: deps.ExpansionSystem,
-		exportSystem:    deps.ExportSystem,
-		getPod:          deps.GetPod,
+		opa:              deps.Client,
+		stopper:          make(chan struct{}),
+		stopped:          make(chan struct{}),
+		mgr:              mgr,
+		reporter:         reporter,
+		processExcluder:  deps.ProcessExcluder,
+		eventRecorder:    recorder,
+		gkNamespace:      util.GetNamespace(),
+		auditCache:       deps.CacheLister,
+		expansionSystem:  deps.ExpansionSystem,
+		exportSystem:     deps.ExportSystem,
+		getPod:           deps.GetPod,
+		auditTriggerWake: make(chan struct{}, 1),
 	}
 	return am, nil
 }
@@ -266,7 +269,7 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 func (am *Manager) audit(ctx context.Context) error {
 	startTime := time.Now()
 	timestamp := startTime.UTC().Format(time.RFC3339)
-	am.log = log.WithValues(logging.AuditID, timestamp)
+	am.log = logf.FromContext(ctx).WithValues(logging.AuditID, timestamp)
 	logStart(am.log)
 	auditExportPublishingState := auditExportPublishingState{
 		SuccessCount: 0,
@@ -951,20 +954,55 @@ func (am *Manager) readUnstructuredList(jsonBytes []byte) ([]unstructured.Unstru
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(*auditInterval) * time.Second)
-	defer ticker.Stop()
+	runner := &auditTriggerRunner{
+		reader: am.mgr.GetAPIReader(),
+		client: am.mgr.GetClient(),
+		audit:  am.audit,
+		now:    time.Now,
+	}
+	ticker, tickerC := newAuditTicker(time.Duration(*auditInterval) * time.Second)
+	if ticker != nil {
+		defer ticker.Stop()
+		runner.resetTicker = func() {
+			ticker.Reset(time.Duration(*auditInterval) * time.Second)
+		}
+	} else {
+		log.Info("periodic auditing is disabled; audits can still be triggered with AuditTrigger")
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info("Audit Manager close")
 			close(am.stopper)
 			return
-		case <-ticker.C:
-			if err := am.audit(ctx); err != nil {
+		case <-tickerC:
+			err := runner.run(ctx, false)
+			if err != nil {
 				log.Error(err, "audit manager audit() failed")
+			}
+		case <-am.auditTriggerWake:
+			err := runner.run(ctx, true)
+			if err != nil {
+				log.Error(err, "on-demand audit failed")
+				select {
+				case <-ctx.Done():
+				case <-time.After(time.Second):
+					select {
+					case am.auditTriggerWake <- struct{}{}:
+					default:
+					}
+				}
 			}
 		}
 	}
+}
+
+func newAuditTicker(interval time.Duration) (*time.Ticker, <-chan time.Time) {
+	if interval == 0 {
+		return nil, nil
+	}
+	ticker := time.NewTicker(interval)
+	return ticker, ticker.C
 }
 
 // Start implements controller.Controller.
