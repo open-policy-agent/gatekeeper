@@ -255,6 +255,9 @@ spec:
       {{- end }}
       dnsPolicy: {{ .Values.controllerManager.dnsPolicy }}
       hostNetwork: {{ .Values.controllerManager.hostNetwork }}
+      {{- if hasKey .Values.controllerManager "hostUsers" }}
+      hostUsers: {{ .Values.controllerManager.hostUsers }}
+      {{- end }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
