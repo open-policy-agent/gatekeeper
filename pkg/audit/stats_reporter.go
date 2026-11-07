@@ -3,8 +3,10 @@ package audit
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/metrics/exporters/view"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"go.opentelemetry.io/otel"
@@ -19,6 +21,9 @@ const (
 	lastRunStartTimeMetricName = "audit_last_run_time"
 	lastRunEndTimeMetricName   = "audit_last_run_end_time"
 	enforcementActionKey       = "enforcement_action"
+
+	auditExportPublishedMetricName    = "audit_export_published_count"
+	auditExportPublishErrorMetricName = "audit_export_publish_error_count"
 )
 
 var auditDurationM metric.Float64Histogram
@@ -86,6 +91,44 @@ func (r *reporter) observeRunEnd(_ context.Context, o metric.Float64Observer) er
 	return nil
 }
 
+// reportAuditExportPublish counts one audit export publish attempt.
+func (r *reporter) reportAuditExportPublish(err error) {
+	if err != nil {
+		r.auditExportPublishErrors.Add(1)
+		return
+	}
+	r.auditExportPublished.Add(1)
+}
+
+// registerAuditExportMetrics registers the audit export counters when this
+// process exports audit violations. They are observable so they read 0
+// before the first publish.
+func registerAuditExportMetrics(meter metric.Meter, r *reporter) error {
+	if !exportutil.AuditExportEnabledForProcess() {
+		return nil
+	}
+	_, err := meter.Int64ObservableCounter(
+		auditExportPublishedMetricName,
+		metric.WithDescription("Number of audit messages exported, including run start and end markers"),
+		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
+			o.Observe(r.auditExportPublished.Load())
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	_, err = meter.Int64ObservableCounter(
+		auditExportPublishErrorMetricName,
+		metric.WithDescription("Number of audit messages that failed to export"),
+		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
+			o.Observe(r.auditExportPublishErrors.Load())
+			return nil
+		}),
+	)
+	return err
+}
+
 // newStatsReporter creates a reporter for audit metrics.
 func newStatsReporter() (*reporter, error) {
 	r := &reporter{}
@@ -126,6 +169,10 @@ func newStatsReporter() (*reporter, error) {
 		return nil, err
 	}
 
+	if err := registerAuditExportMetrics(meter, r); err != nil {
+		return nil, err
+	}
+
 	return r, nil
 }
 
@@ -134,4 +181,6 @@ type reporter struct {
 	endTime                             time.Time
 	startTime                           time.Time
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64
+	auditExportPublished                atomic.Int64
+	auditExportPublishErrors            atomic.Int64
 }

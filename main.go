@@ -673,12 +673,11 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 	return nil
 }
 
-// newExportSystem constructs an export.System only when audit or admission
-// violation export has been requested, since either flag requires a
-// constructed export.System. It returns nil when both are disabled so that
-// the default configuration carries no unused export dependency.
+// newExportSystem constructs an export.System only when this process publishes
+// audit or admission violations. It returns nil otherwise so that pods that do
+// not publish never initialize an export backend.
 func newExportSystem() *export.System {
-	if *exportutil.ExportEnabled || *exportutil.AdmissionExportEnabled {
+	if exportutil.ExportConnectionControllerEnabled() {
 		return export.NewSystem()
 	}
 	return nil

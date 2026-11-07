@@ -107,7 +107,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 		scheme.Scheme,
 		corev1.EventSource{Component: "gatekeeper-webhook"})
 	var admissionExporter admissionViolationExporter
-	if *exportutil.AdmissionExportEnabled {
+	if exportutil.AdmissionExportEnabledForProcess() {
 		if deps.ExportSystem == nil {
 			return errors.New("admission violation export requires an export system")
 		}

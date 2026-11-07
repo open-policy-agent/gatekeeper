@@ -206,3 +206,35 @@ deployed namespace is exempted.
 "kubernetes.io/metadata.name":
   - {{ .Release.Namespace }}
 {{- end -}}
+
+{{/*
+Returns "true" for true, t or 1 and "false" for false, f or 0, in any case.
+Unset, null or "" returns the default; other values are returned unchanged.
+Usage: include "gatekeeper.exportFlag" (dict "value" .Values.enableViolationExport "default" "true")
+*/}}
+{{- define "gatekeeper.exportFlag" -}}
+{{- $value := toString .value -}}
+{{- if or (kindIs "invalid" .value) (eq $value "") -}}
+{{- .default -}}
+{{- else if has (lower $value) (list "true" "t" "1") -}}
+true
+{{- else if has (lower $value) (list "false" "f" "0") -}}
+false
+{{- else -}}
+{{- $value -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Returns "true" if the chart creates the disk Connection: the disk backend and
+either audit or admission export set to true.
+*/}}
+{{- define "gatekeeper.diskConnectionRendered" -}}
+{{- $audit := include "gatekeeper.exportFlag" (dict "value" .Values.enableViolationExport "default" "false") -}}
+{{- $admission := include "gatekeeper.exportFlag" (dict "value" .Values.enableAdmissionViolationExport "default" "false") -}}
+{{- if and (eq (.Values.exportBackend | default "" | lower) "disk") (or (eq $audit "true") (eq $admission "true")) -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}

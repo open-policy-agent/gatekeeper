@@ -16,7 +16,7 @@ PUSH_TO_GHCR ?= false
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
-ENABLE_EXPORT ?= false
+ENABLE_EXPORT ?=
 ENABLE_ADMISSION_EXPORT ?= false
 EMIT_ADMISSION_AUDIT_ANNOTATIONS ?= false
 ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS ?= false
@@ -59,7 +59,7 @@ HELM_DISK_ADMISSION_EXPORT_ARGS = --set admission.disableExportSidecar=false \
 	--set admission.exportSidecar.image=${FAKE_READER_IMAGE} \
 	--set admission.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
 
-HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
+HELM_EXPORT_ARGS := $(if $(ENABLE_EXPORT),--set enableViolationExport=${ENABLE_EXPORT}) \
 	--set audit.connection=${AUDIT_CONNECTION} \
 	--set audit.channel=${AUDIT_CHANNEL} \
 	--set enableAdmissionViolationExport=${ENABLE_ADMISSION_EXPORT} \
@@ -323,6 +323,7 @@ else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
 		--debug --wait --timeout ${HELM_TIMEOUT} \
+		$(if $(ENABLE_EXPORT),--set enableViolationExport=${ENABLE_EXPORT}) \
 		$(HELM_EXTRA_ARGS)
 endif
 
