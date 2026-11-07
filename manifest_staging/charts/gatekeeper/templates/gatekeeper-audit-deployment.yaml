@@ -53,11 +53,7 @@ spec:
         {{- toYaml .Values.audit.affinity | nindent 8 }}
       automountServiceAccountToken: {{ .Values.audit.serviceAccount.automountServiceAccountToken }}
       containers:
-      - {{- if .Values.image.release }}
-        image: {{ .Values.image.repository }}:{{ .Values.image.release }}
-        {{- else }}
-        image: {{ .Values.image.repository }}
-        {{- end }}
+      - image: {{ include "gatekeeper.image" (dict "registry" .Values.image.registry "repository" .Values.image.repository "tag" .Values.image.release) }}
         args:
         - --audit-interval={{ .Values.auditInterval }}
         - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel
