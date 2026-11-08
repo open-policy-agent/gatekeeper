@@ -4,8 +4,11 @@ on:
     paths:
       - ".github/workflows/disk-export.yaml"
       - "Makefile"
-      - "pkg/export/disk/**"
-      - "pkg/export/util/**"
+      - "main.go"
+      - "apis/connection/**"
+      - "pkg/audit/**"
+      - "pkg/export/**"
+      - "pkg/operations/**"
       - "pkg/controller/export/**"
       - "pkg/webhook/**"
       - "cmd/build/helmify/**"
@@ -16,8 +19,11 @@ on:
     paths:
       - ".github/workflows/disk-export.yaml"
       - "Makefile"
-      - "pkg/export/disk/**"
-      - "pkg/export/util/**"
+      - "main.go"
+      - "apis/connection/**"
+      - "pkg/audit/**"
+      - "pkg/export/**"
+      - "pkg/operations/**"
       - "pkg/controller/export/**"
       - "pkg/webhook/**"
       - "cmd/build/helmify/**"
@@ -31,9 +37,13 @@ jobs:
     name: "Disk export test"
     runs-on: ubuntu-22.04
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        KUBERNETES_VERSION: ["1.35.8", "1.36.4", "1.37.0"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 
@@ -44,13 +54,13 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/bin
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap
+          make e2e-bootstrap KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
 
       - name: Validate admission-only Helm arguments
         run: |
           output="$(make -n e2e-helm-deploy \
             HELM_REPO=test HELM_CRD_REPO=test HELM_RELEASE=test \
-            ENABLE_EXPORT=false ENABLE_ADMISSION_EXPORT=true EXPORT_BACKEND=disk \
+            ENABLE_ADMISSION_EXPORT=true EXPORT_BACKEND=disk \
             EXPORT_DISK_MOUNT=/custom/mount EXPORT_DISK_PATH=/custom/path \
             MAX_AUDIT_RESULTS=4 FAKE_READER_IMAGE=fake-reader:test)"
           grep -q -- '--set audit.exportVolumeMount.path=/custom/mount' <<<"$output"
@@ -61,8 +71,13 @@ jobs:
             echo "admission-only deployment unexpectedly configured the audit reader" >&2
             exit 1
           fi
+          if grep -q -- '--set enableViolationExport' <<<"$output"; then
+            echo "unset ENABLE_EXPORT unexpectedly set enableViolationExport" >&2
+            exit 1
+          fi
 
           make e2e-helm-install
+          HELM=./.staging/helm/linux-amd64/helm ./test/export/helm-render-test.sh
           rendered="$(./.staging/helm/linux-amd64/helm template gatekeeper manifest_staging/charts/gatekeeper \
             --set enableAdmissionViolationExport=true \
             --set exportBackend=disk \
@@ -99,7 +114,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ always() }}
         with:
-          name: export-logs
+          name: export-logs-${{ matrix.KUBERNETES_VERSION }}
           path: |
             logs-*.json
             k8s-*.txt

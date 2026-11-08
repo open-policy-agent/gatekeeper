@@ -29,14 +29,15 @@ jobs:
   build_test:
     name: "Build and Test"
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    # Allow three fresh audit intervals plus the explicit opt-out smoke test.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix: &kubernetes-matrix
-        KUBERNETES_VERSION: ["1.31.6", "1.32.3", "1.33.2"] # Latest available versions of Kubernetes at - https://hub.docker.com/r/kindest/node/tags
+        KUBERNETES_VERSION: ["1.35.8", "1.36.4", "1.37.0"] # Latest available versions of Kubernetes at - https://hub.docker.com/r/kindest/node/tags
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 
@@ -81,6 +82,16 @@ jobs:
             ENABLE_VAP_TESTS=1 \
             ENABLE_ADMISSION_AUDIT_ANNOTATION_TESTS=1
 
+      - name: Verify explicit audit export opt-out
+        run: |
+          kubectl logs -n gatekeeper-system -l control-plane=audit-controller -c manager --tail=-1 > logs-audit-default.json
+          kubectl -n gatekeeper-system patch deployment gatekeeper-audit --type=json -p='[
+            {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-violation-export=false"},
+            {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--audit-interval=5"}
+          ]'
+          kubectl -n gatekeeper-system rollout status deployment/gatekeeper-audit --timeout=120s
+          bats -t --filter '^audit export without a connection test$' test/bats/test.bats
+
       - name: Save logs
         if: ${{ always() }}
         run: |
@@ -107,7 +118,7 @@ jobs:
       matrix: *kubernetes-matrix
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 
@@ -157,7 +168,7 @@ jobs:
           docker exec kind-control-plane cat /var/log/kubernetes/kube-apiserver-audit.log > logs-vap-scope-kube-apiserver-audit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ always() }}
         with:
           name: vap-scope-logs-${{ matrix.KUBERNETES_VERSION }}
@@ -180,7 +191,7 @@ jobs:
             ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS: false
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 
@@ -249,11 +260,12 @@ jobs:
   build_test_generator_expansion:
     name: "[Generator Resource Expansion] Build and Test"
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    # The shared suite waits for three fresh audit intervals.
+    timeout-minutes: 20
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+      uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
       with:
         egress-policy: audit
 
@@ -309,7 +321,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 

@@ -222,7 +222,7 @@ See [ExpansionTemplate behavior](expansion.md#expansiontemplate-explained).
 
 | Field | Type | Description |
 | ----- | ---- | ----------- |
-| `spec.driver` | string | Required export driver name: `dapr` or `disk` |
+| `spec.driver` | string | Required export driver name: `disk` |
 | `spec.config` | object | Required driver-specific configuration (preserved unknown fields); see [export configuration](export.md#setting-up-audit-to-export-violations) |
 
 Create the Connection in Gatekeeper's namespace and select its name with `--audit-connection`. See [Export](export.md) for driver configuration and enablement.

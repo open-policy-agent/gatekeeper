@@ -2,13 +2,17 @@ package export
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr/funcr"
 	"github.com/onsi/gomega"
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
@@ -18,6 +22,7 @@ import (
 	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	anythingtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	testclient "github.com/open-policy-agent/gatekeeper/v3/test/clients"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
@@ -25,10 +30,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8sscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -76,6 +83,25 @@ func TestAdderAddRejectsTypedNilExportSystemWhenExportEnabled(t *testing.T) {
 	var typedNilSystem *export.System
 	a := &Adder{ExportSystem: typedNilSystem}
 	require.Error(t, a.Add(nil))
+}
+
+// A pod without the audit or webhook operation must not register the
+// controller, even with both export flags on and no export system.
+func TestAdderAddSkipsProcessWithoutExportOperation(t *testing.T) {
+	origExport := *exportutil.ExportEnabled
+	origAdmission := *exportutil.AdmissionExportEnabled
+	defer func() {
+		*exportutil.ExportEnabled = origExport
+		*exportutil.AdmissionExportEnabled = origAdmission
+	}()
+	*exportutil.ExportEnabled = true
+	*exportutil.AdmissionExportEnabled = true
+	restore, err := operations.SetForTest(operations.Status)
+	require.NoError(t, err)
+	defer restore()
+
+	a := &Adder{ExportSystem: nil}
+	require.NoError(t, a.Add(nil))
 }
 
 // TestIsNilExporterDoesNotPanicOnValueTypeExportSystem guards against a
@@ -160,6 +186,36 @@ func TestUpdateOrCreateConnectionPodStatusRepairsMetadata(t *testing.T) {
 	require.Equal(t, connObj.GetName(), got.Labels[statusv1beta1.ConnectionNameLabel])
 	require.Equal(t, pod.GetName(), got.Labels[statusv1beta1.PodLabel])
 	require.Len(t, got.OwnerReferences, 1)
+}
+
+func TestUpdateOrCreateConnectionPodStatusResetsStaleConnectionUID(t *testing.T) {
+	ctx := context.Background()
+	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("status-pod"), fakes.WithUID("status-pod-uid"))
+	connObj := &connectionv1alpha1.Connection{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "audit-connection-recreated",
+			Namespace:  util.GetNamespace(),
+			UID:        "new-connection-uid",
+			Generation: 1,
+		},
+	}
+	status, err := statusv1alpha1.NewConnectionStatusForPod(pod, connObj.GetNamespace(), connObj.GetName(), k8sscheme.Scheme)
+	require.NoError(t, err)
+	status.Status.ConnectionUID = "old-connection-uid"
+	status.Status.ObservedGeneration = connObj.GetGeneration()
+	status.Status.ConnectionErrors = []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: "old error"}}
+	status.Status.PublishStatuses = []statusv1alpha1.ConnectionPublishStatus{{Source: statusv1alpha1.WebhookPublishSource, Active: true}}
+
+	k8sClient := fake.NewClientBuilder().WithScheme(k8sscheme.Scheme).WithObjects(status).Build()
+	getPod := func(context.Context) (*corev1.Pod, error) { return pod, nil }
+
+	require.NoError(t, updateOrCreateConnectionPodStatus(ctx, k8sClient, k8sClient, k8sscheme.Scheme, connObj, nil, nil, getPod))
+
+	got := &statusv1alpha1.ConnectionPodStatus{}
+	require.NoError(t, k8sClient.Get(ctx, client.ObjectKeyFromObject(status), got))
+	require.Equal(t, connObj.GetUID(), got.Status.ConnectionUID)
+	require.Empty(t, got.Status.ConnectionErrors)
+	require.Empty(t, got.Status.PublishStatuses)
 }
 
 func diskConnectionConfig(path string) map[string]interface{} {
@@ -257,6 +313,33 @@ func TestConnectionPodStatusUpdateRequiresReconcile(t *testing.T) {
 	require.True(t, connectionPodStatusUpdateRequiresReconcile(oldStatus, newStatus))
 }
 
+func TestConnectionUpdateRequiresReconcile(t *testing.T) {
+	oldConn := &connectionv1alpha1.Connection{
+		ObjectMeta: metav1.ObjectMeta{Generation: 1, UID: "uid-1"},
+		Spec:       connectionv1alpha1.ConnectionSpec{Driver: disk.Name},
+	}
+
+	newConn := oldConn.DeepCopy()
+	newConn.Status.ByPod = []statusv1alpha1.ConnectionPodStatusStatus{{ID: "audit"}}
+	require.False(t, connectionUpdateRequiresReconcile(oldConn, newConn), "status-only update")
+
+	newConn = oldConn.DeepCopy()
+	newConn.Labels = map[string]string{"team": "a"}
+	newConn.Annotations = map[string]string{"note": "b"}
+	require.False(t, connectionUpdateRequiresReconcile(oldConn, newConn), "metadata-only update")
+
+	newConn = oldConn.DeepCopy()
+	newConn.Generation = 2
+	require.True(t, connectionUpdateRequiresReconcile(oldConn, newConn), "spec update")
+
+	newConn = oldConn.DeepCopy()
+	newConn.UID = "uid-2"
+	require.True(t, connectionUpdateRequiresReconcile(oldConn, newConn), "recreated at the same generation")
+
+	require.True(t, connectionUpdateRequiresReconcile(nil, newConn))
+	require.True(t, connectionUpdateRequiresReconcile(oldConn, nil))
+}
+
 type conflictOnceWriter struct {
 	client.Client
 	onConflict func(context.Context) error
@@ -281,6 +364,38 @@ func (writer *conflictOnceWriter) Update(ctx context.Context, obj client.Object,
 		)
 	}
 	return writer.Client.Update(ctx, obj, opts...)
+}
+
+func TestUpdateConnectionPodPublishStatusClassifiesMissingConnection(t *testing.T) {
+	testScheme := runtime.NewScheme()
+	require.NoError(t, connectionv1alpha1.AddToScheme(testScheme))
+	require.NoError(t, statusv1alpha1.AddToScheme(testScheme))
+	require.NoError(t, corev1.AddToScheme(testScheme))
+	connection := &connectionv1alpha1.Connection{
+		ObjectMeta: metav1.ObjectMeta{Name: "connection", Namespace: util.GetNamespace()},
+	}
+	podNotFound := apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "audit-pod")
+
+	for _, missingConnection := range []bool{true, false} {
+		t.Run(fmt.Sprintf("missing connection=%t", missingConnection), func(t *testing.T) {
+			builder := fake.NewClientBuilder().WithScheme(testScheme)
+			if !missingConnection {
+				builder.WithObjects(connection)
+			}
+			k8sClient := builder.Build()
+			err := UpdateConnectionPodPublishStatus(
+				context.Background(), k8sClient, k8sClient, testScheme, connection.Name,
+				statusv1alpha1.ConnectionPublishStatus{Source: statusv1alpha1.AuditPublishSource},
+				func(context.Context) (*corev1.Pod, error) { return nil, podNotFound },
+			)
+			require.Error(t, err)
+			require.True(t, apierrors.IsNotFound(err), "preserve Kubernetes error classification")
+			require.Equal(t, missingConnection, errors.Is(err, ErrConnectionNotFound))
+			if !missingConnection {
+				require.ErrorIs(t, err, podNotFound)
+			}
+		})
+	}
 }
 
 func TestUpdateConnectionPodPublishStatusMergesAfterConflict(t *testing.T) {
@@ -412,7 +527,7 @@ func TestReconcile_E2E(t *testing.T) {
 	originalReconciler := newReconciler(mgr, export.NewSystem(), auditConnectionName, getPod)
 	wrappedReconciler, requests := testutils.SetupTestReconcile(originalReconciler)
 	// Register the controller with the manager
-	require.NoError(t, add(mgr, wrappedReconciler))
+	require.NoError(t, add(mgr, wrappedReconciler, originalReconciler.auditConnectionName))
 	// Start the manager and let it run in the background
 	testutils.StartManager(ctx, t, mgr)
 
@@ -527,6 +642,115 @@ func TestReconcile_E2E(t *testing.T) {
 			k8sClient.Delete(ctx, &connPodStatusObj) // nolint:errcheck
 		}()
 	})
+}
+
+// Status and metadata updates must not re-run UpsertConnection.
+func TestReconcile_IgnoresConnectionStatusAndMetadataUpdates(t *testing.T) {
+	auditConnectionName := "audit-connection-5"
+	require.NoError(t, flag.CommandLine.Parse([]string{"--enable-violation-export=true", "--audit-connection=" + auditConnectionName}), "parsing flags")
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	g := gomega.NewGomegaWithT(t)
+	mgr, _ := testutils.SetupManager(t, cfg)
+	k8sClient := testclient.NewRetryClient(mgr.GetClient())
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
+		return fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod")), nil
+	}
+	originalReconciler := newReconciler(mgr, export.NewSystem(), auditConnectionName, getPod)
+	var reconciles atomic.Int32
+	countingReconciler := reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+		if req.Name == auditConnectionName {
+			reconciles.Add(1)
+		}
+		return originalReconciler.Reconcile(ctx, req)
+	})
+	require.NoError(t, add(mgr, countingReconciler, auditConnectionName))
+	testutils.StartManager(ctx, t, mgr)
+
+	key := types.NamespacedName{Name: auditConnectionName, Namespace: util.GetNamespace()}
+	connObj := &connectionv1alpha1.Connection{
+		ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+		Spec: connectionv1alpha1.ConnectionSpec{
+			Driver: disk.Name,
+			Config: &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())},
+		},
+	}
+	g.Expect(k8sClient.Create(ctx, connObj)).Should(gomega.Succeed())
+	t.Cleanup(func() { _ = k8sClient.Delete(context.Background(), connObj) })
+
+	pod, _ := getPod(ctx)
+	statusName, err := statusv1alpha1.KeyForConnection(pod.Name, key.Namespace, key.Name)
+	require.NoError(t, err)
+	statusKey := types.NamespacedName{Name: statusName, Namespace: util.GetNamespace()}
+	waitForObservedGeneration := func(generation int64) {
+		g.Eventually(func(g gomega.Gomega) {
+			podStatus := &statusv1alpha1.ConnectionPodStatus{}
+			g.Expect(k8sClient.Get(ctx, statusKey, podStatus)).Should(gomega.Succeed())
+			g.Expect(podStatus.Status.ObservedGeneration).Should(gomega.Equal(generation))
+			g.Expect(podStatus.Status.ConnectionErrors).Should(gomega.BeEmpty())
+		}).WithTimeout(timeout).Should(gomega.Succeed())
+	}
+	waitForObservedGeneration(connObj.GetGeneration())
+	g.Expect(connectionState(originalReconciler.state.Load())).Should(gomega.Equal(stateReady))
+
+	// Let the create, status create, and seed reconciles drain.
+	g.Eventually(func() bool {
+		before := reconciles.Load()
+		time.Sleep(time.Second)
+		return reconciles.Load() == before
+	}).WithTimeout(timeout).Should(gomega.BeTrue())
+	settled := reconciles.Load()
+
+	waitForCache := func(matches func(*connectionv1alpha1.Connection) bool) {
+		g.Eventually(func() bool {
+			cached := &connectionv1alpha1.Connection{}
+			return mgr.GetCache().Get(ctx, key, cached) == nil && matches(cached)
+		}).WithTimeout(timeout).Should(gomega.BeTrue())
+	}
+	for _, id := range []string{"audit-run-1", "audit-run-2"} {
+		g.Eventually(func() error {
+			latest := &connectionv1alpha1.Connection{}
+			if err := k8sClient.Get(ctx, key, latest); err != nil {
+				return err
+			}
+			latest.Status.ByPod = []statusv1alpha1.ConnectionPodStatusStatus{{ID: id, ObservedGeneration: latest.GetGeneration()}}
+			return mgr.GetClient().Status().Update(ctx, latest)
+		}).WithTimeout(timeout).Should(gomega.Succeed())
+		waitForCache(func(cached *connectionv1alpha1.Connection) bool {
+			return len(cached.Status.ByPod) == 1 && cached.Status.ByPod[0].ID == id
+		})
+	}
+	g.Eventually(func() error {
+		latest := &connectionv1alpha1.Connection{}
+		if err := k8sClient.Get(ctx, key, latest); err != nil {
+			return err
+		}
+		latest.Labels = map[string]string{"team": "platform"}
+		return mgr.GetClient().Update(ctx, latest)
+	}).WithTimeout(timeout).Should(gomega.Succeed())
+	waitForCache(func(cached *connectionv1alpha1.Connection) bool {
+		return cached.Labels["team"] == "platform"
+	})
+	g.Consistently(reconciles.Load).WithTimeout(3*time.Second).Should(gomega.Equal(settled), "status and metadata updates must not reconcile")
+
+	// A spec change still reconciles.
+	var updatedGeneration int64
+	g.Eventually(func() error {
+		latest := &connectionv1alpha1.Connection{}
+		if err := k8sClient.Get(ctx, key, latest); err != nil {
+			return err
+		}
+		latest.Spec.Config = &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())}
+		if err := mgr.GetClient().Update(ctx, latest); err != nil {
+			return err
+		}
+		updatedGeneration = latest.GetGeneration()
+		return nil
+	}).WithTimeout(timeout).Should(gomega.Succeed())
+	g.Expect(updatedGeneration).Should(gomega.BeNumerically(">", connObj.GetGeneration()))
+	g.Eventually(reconciles.Load).WithTimeout(timeout).Should(gomega.BeNumerically(">", settled))
+	waitForObservedGeneration(updatedGeneration)
 }
 
 // Mocks ExportSystem to simulate the export system behavior failures and impact on the controller.
@@ -652,6 +876,71 @@ func TestReconcile_ExportSystem_Failures(t *testing.T) {
 	})
 }
 
+// A Connection without spec is valid in the CRD and must not panic the controller.
+func TestReconcile_ConnectionWithoutSpec(t *testing.T) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	g := gomega.NewGomegaWithT(t)
+	mgr, _ := testutils.SetupManager(t, cfg)
+	directK8sClient, err := client.New(cfg, client.Options{Scheme: mgr.GetScheme()})
+	require.NoError(t, err)
+
+	connectionName := "audit-connection-no-spec"
+	getPod := func(_ context.Context) (*corev1.Pod, error) {
+		return fakes.Pod(fakes.WithNamespace("gatekeeper-system"), fakes.WithName("no-pod")), nil
+	}
+	fakeExportSystem := &FakeExportSystem{}
+	reconciler := Reconciler{
+		reader:              directK8sClient,
+		writer:              directK8sClient,
+		scheme:              mgr.GetScheme(),
+		system:              fakeExportSystem,
+		auditConnectionName: connectionName,
+		getPod:              getPod,
+	}
+	request := reconcile.Request{NamespacedName: types.NamespacedName{Name: connectionName, Namespace: util.GetNamespace()}}
+
+	noSpec := &unstructured.Unstructured{}
+	noSpec.SetGroupVersionKind(connectionv1alpha1.GroupVersion.WithKind("Connection"))
+	noSpec.SetName(connectionName)
+	noSpec.SetNamespace(util.GetNamespace())
+	require.NoError(t, directK8sClient.Create(ctx, noSpec))
+
+	pod, _ := getPod(ctx)
+	statusName, err := statusv1alpha1.KeyForConnection(pod.Name, util.GetNamespace(), connectionName)
+	require.NoError(t, err)
+	statusKey := types.NamespacedName{Name: statusName, Namespace: util.GetNamespace()}
+	connPodStatus := &statusv1alpha1.ConnectionPodStatus{}
+	t.Cleanup(func() {
+		_ = directK8sClient.Delete(context.Background(), noSpec)
+		_ = directK8sClient.Delete(context.Background(), connPodStatus)
+	})
+
+	result, err := reconciler.Reconcile(ctx, request)
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	g.Expect(result.Requeue).Should(gomega.BeTrue()) // nolint:staticcheck
+	g.Expect(fakeExportSystem.UpsertConnectionCalledCount).Should(gomega.Equal(0), "the export system must not see an incomplete Connection")
+	g.Expect(directK8sClient.Get(ctx, statusKey, connPodStatus)).Should(gomega.Succeed())
+	g.Expect(connPodStatus.Status.ConnectionErrors).Should(gomega.HaveLen(1))
+	g.Expect(connPodStatus.Status.ConnectionErrors[0].Type).Should(gomega.Equal(statusv1alpha1.UpsertConnectionError))
+	g.Expect(connPodStatus.Status.ConnectionErrors[0].Message).Should(gomega.Equal("spec.config is required"))
+
+	connObj := &connectionv1alpha1.Connection{}
+	require.NoError(t, directK8sClient.Get(ctx, request.NamespacedName, connObj))
+	connObj.Spec = connectionv1alpha1.ConnectionSpec{
+		Driver: disk.Name,
+		Config: &anythingtypes.Anything{Value: diskConnectionConfig(t.TempDir())},
+	}
+	require.NoError(t, directK8sClient.Update(ctx, connObj))
+
+	result, err = reconciler.Reconcile(ctx, request)
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	g.Expect(result.Requeue).Should(gomega.BeFalse()) // nolint:staticcheck
+	g.Expect(fakeExportSystem.UpsertConnectionCalledCount).Should(gomega.Equal(1))
+	g.Expect(directK8sClient.Get(ctx, statusKey, connPodStatus)).Should(gomega.Succeed())
+	g.Expect(connPodStatus.Status.ConnectionErrors).Should(gomega.BeEmpty(), "fixing the Connection clears the error without a restart")
+}
+
 // Mock K8s client to simulate the client failures and impact on the controller.
 func TestReconcile_Client_Failures(t *testing.T) {
 	// Setup
@@ -743,7 +1032,7 @@ func TestReconcile_ConnectionPodStatus(t *testing.T) {
 	originalReconciler := newReconciler(mgr, export.NewSystem(), auditConnectionName, getPod)
 	wrappedReconciler, requests := testutils.SetupTestReconcile(originalReconciler)
 	// Register the controller with the manager
-	require.NoError(t, add(mgr, wrappedReconciler))
+	require.NoError(t, add(mgr, wrappedReconciler, originalReconciler.auditConnectionName))
 	// Start the manager and let it run in the background
 	testutils.StartManager(ctx, t, mgr)
 
@@ -880,7 +1169,7 @@ func TestReconcile_UnsupportedConnectionName(t *testing.T) {
 	}
 	originalReconciler := newReconciler(mgr, export.NewSystem(), auditConnectionNameGood, getPod)
 	wrappedReconciler, requests := testutils.SetupTestReconcile(originalReconciler)
-	require.NoError(t, add(mgr, wrappedReconciler))
+	require.NoError(t, add(mgr, wrappedReconciler, originalReconciler.auditConnectionName))
 	testutils.StartManager(ctx, t, mgr)
 
 	t.Run("Reconcile called for new Connection create for an unsupported connection name and the ConnectionPodStatus has an UpsertError and doesn't impact Create for a valid Connection object", func(t *testing.T) {
@@ -1000,6 +1289,183 @@ func TestReconcile_UnsupportedConnectionName(t *testing.T) {
 			k8sClient.Delete(ctx, &connPodStatusObjGood) // nolint:errcheck
 		}()
 	})
+}
+
+func TestReconcileConnectionState(t *testing.T) {
+	testutils.Setenv(t, "POD_NAMESPACE", "gatekeeper-system")
+	const auditConnectionName = "audit-connection"
+	testScheme := runtime.NewScheme()
+	require.NoError(t, connectionv1alpha1.AddToScheme(testScheme))
+	require.NoError(t, statusv1alpha1.AddToScheme(testScheme))
+	require.NoError(t, corev1.AddToScheme(testScheme))
+	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("gatekeeper-pod"))
+	connection := func(name string, withConfig bool) *connectionv1alpha1.Connection {
+		conn := &connectionv1alpha1.Connection{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: util.GetNamespace()}}
+		if withConfig {
+			conn.Spec = connectionv1alpha1.ConnectionSpec{Driver: disk.Name, Config: &anythingtypes.Anything{Value: diskConnectionConfig("/tmp/violations")}}
+		}
+		return conn
+	}
+	valid := connection(auditConnectionName, true)
+	mockErr := errors.New("mock error")
+
+	type step struct {
+		// connection is the object present for the reconcile; nil means it does not exist.
+		connection  *connectionv1alpha1.Connection
+		getErr      error
+		upsertErr   error
+		closeErr    error
+		getPodErr   error
+		wantState   connectionState
+		wantRequeue bool
+		wantErr     bool
+	}
+	tests := []struct {
+		name            string
+		steps           []step
+		wantUpserts     int
+		wantCloses      int
+		wantStatuses    int
+		wantRemovedLogs int
+	}{
+		{
+			name:       "missing connection is not configured",
+			steps:      []step{{wantState: stateNotConfigured}},
+			wantCloses: 1,
+		},
+		{
+			name:       "missing connection with failing pod lookup",
+			steps:      []step{{getPodErr: mockErr, wantState: stateNotConfigured, wantErr: true}},
+			wantCloses: 1,
+		},
+		{
+			name: "failed close is not configured and requeues",
+			steps: []step{
+				{connection: valid, wantState: stateReady},
+				{closeErr: mockErr, wantState: stateNotConfigured, wantRequeue: true},
+			},
+			wantUpserts: 1,
+			wantCloses:  1,
+		},
+		{
+			name: "deleting a ready connection logs removal once",
+			steps: []step{
+				{connection: valid, wantState: stateReady},
+				{wantState: stateNotConfigured},
+				{wantState: stateNotConfigured},
+			},
+			wantUpserts:     1,
+			wantCloses:      2,
+			wantRemovedLogs: 1,
+		},
+		{
+			name: "get error leaves state unchanged",
+			steps: []step{
+				{connection: valid, wantState: stateReady},
+				{connection: valid, getErr: mockErr, wantState: stateReady, wantErr: true},
+			},
+			wantUpserts:  1,
+			wantStatuses: 1,
+		},
+		{
+			name: "invalid edit keeps the working connection",
+			steps: []step{
+				{connection: valid, wantState: stateReady},
+				{connection: connection(auditConnectionName, false), wantState: stateError, wantRequeue: true},
+			},
+			wantUpserts:  1,
+			wantStatuses: 1,
+		},
+		{
+			name: "upsert failure recovers without an edit",
+			steps: []step{
+				{connection: valid, upsertErr: mockErr, wantState: stateError, wantRequeue: true},
+				{connection: valid, wantState: stateReady},
+			},
+			wantUpserts:  2,
+			wantStatuses: 1,
+		},
+		{
+			name:         "unsupported connection name leaves state unchanged",
+			steps:        []step{{connection: connection("other-connection", true), wantState: stateUnknown}},
+			wantStatuses: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			k8sClient := fake.NewClientBuilder().WithScheme(testScheme).Build()
+			reader := &FakeClient{Client: k8sClient}
+			system := &FakeExportSystem{}
+			var getPodErr error
+			var logs []string
+			r := &Reconciler{
+				reader:              reader,
+				writer:              k8sClient,
+				scheme:              testScheme,
+				system:              system,
+				auditConnectionName: auditConnectionName,
+				getPod: func(context.Context) (*corev1.Pod, error) {
+					return pod, getPodErr
+				},
+				log: funcr.New(func(_, args string) { logs = append(logs, args) }, funcr.Options{}),
+			}
+
+			for i, st := range tc.steps {
+				name := auditConnectionName
+				existing := &connectionv1alpha1.Connection{}
+				existingErr := k8sClient.Get(ctx, types.NamespacedName{Namespace: util.GetNamespace(), Name: name}, existing)
+				switch {
+				case st.connection == nil && existingErr == nil:
+					require.NoError(t, k8sClient.Delete(ctx, existing))
+				case st.connection != nil:
+					name = st.connection.Name
+					desired := st.connection.DeepCopy()
+					if existingErr == nil && existing.Name == name {
+						desired.ResourceVersion = existing.ResourceVersion
+						require.NoError(t, k8sClient.Update(ctx, desired))
+					} else {
+						require.NoError(t, k8sClient.Create(ctx, desired))
+					}
+				}
+				reader.getErr = st.getErr
+				system.UpsertConnectionError = st.upsertErr
+				system.CloseConnectionError = st.closeErr
+				getPodErr = st.getPodErr
+
+				result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: util.GetNamespace(), Name: name}})
+				require.Equal(t, st.wantErr, err != nil, "step %d: %v", i, err)
+				require.Equal(t, st.wantRequeue, result.Requeue, "step %d", i) // nolint:staticcheck
+				require.Equal(t, st.wantState, connectionState(r.state.Load()), "step %d", i)
+			}
+
+			require.Equal(t, tc.wantUpserts, system.UpsertConnectionCalledCount)
+			require.Equal(t, tc.wantCloses, system.CloseConnectionCalledCount)
+			statuses := &statusv1alpha1.ConnectionPodStatusList{}
+			require.NoError(t, k8sClient.List(ctx, statuses))
+			require.Len(t, statuses.Items, tc.wantStatuses)
+			removedLogs := 0
+			for _, entry := range logs {
+				if strings.Contains(entry, `"msg"="removed connection"`) {
+					removedLogs++
+				}
+			}
+			require.Equal(t, tc.wantRemovedLogs, removedLogs)
+		})
+	}
+}
+
+func TestSeedConnectionSourceQueuesConfiguredConnection(t *testing.T) {
+	testutils.Setenv(t, "POD_NAMESPACE", "gatekeeper-system")
+	queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+	defer queue.ShutDown()
+
+	require.NoError(t, seedConnectionSource("audit-connection").Start(context.Background(), queue))
+
+	require.Equal(t, 1, queue.Len())
+	request, _ := queue.Get()
+	require.Equal(t, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: "gatekeeper-system", Name: "audit-connection"}}, request)
 }
 
 type FakeClient struct {

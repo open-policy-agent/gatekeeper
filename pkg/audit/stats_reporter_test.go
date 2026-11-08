@@ -2,13 +2,16 @@ package audit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	testmetric "github.com/open-policy-agent/gatekeeper/v3/test/metrics"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -198,6 +201,46 @@ func TestReporter_observeRunEnd(t *testing.T) {
 			assert.Equal(t, tt.expectedErr, rdr.Collect(tt.ctx, rm))
 			fmt.Println(rm.ScopeMetrics[0])
 			metricdatatest.AssertEqual(t, tt.want, rm.ScopeMetrics[0].Metrics[1], metricdatatest.IgnoreTimestamp())
+		})
+	}
+}
+
+func TestAuditExportMetrics(t *testing.T) {
+	oldExportEnabled := *exportutil.ExportEnabled
+	t.Cleanup(func() { *exportutil.ExportEnabled = oldExportEnabled })
+
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("export enabled %t", enabled), func(t *testing.T) {
+			*exportutil.ExportEnabled = enabled
+			rdr := sdkmetric.NewManualReader()
+			meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(rdr)).Meter("test")
+			r := &reporter{}
+			require.NoError(t, registerAuditExportMetrics(meter, r))
+			collect := func() map[string]int64 {
+				rm := metricdata.ResourceMetrics{}
+				require.NoError(t, rdr.Collect(context.Background(), &rm))
+				values := map[string]int64{}
+				for _, scope := range rm.ScopeMetrics {
+					for _, m := range scope.Metrics {
+						sum, ok := m.Data.(metricdata.Sum[int64])
+						require.True(t, ok)
+						values[m.Name] = sum.DataPoints[0].Value
+					}
+				}
+				return values
+			}
+			want := func(published, publishErrors int64) map[string]int64 {
+				if !enabled {
+					return map[string]int64{}
+				}
+				return map[string]int64{auditExportPublishedMetricName: published, auditExportPublishErrorMetricName: publishErrors}
+			}
+
+			require.Equal(t, want(0, 0), collect())
+			r.reportAuditExportPublish(nil)
+			r.reportAuditExportPublish(nil)
+			r.reportAuditExportPublish(errors.New("publish failed"))
+			require.Equal(t, want(2, 1), collect())
 		})
 	}
 }

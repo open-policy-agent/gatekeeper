@@ -12,20 +12,24 @@ import (
 	"path"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	"github.com/onsi/gomega"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	constrainttypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
 	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
 	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
@@ -36,14 +40,17 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	controllerruntimemanager "sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -1041,6 +1048,290 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReportExportConnectionErrorsNotFound(t *testing.T) {
+	require.NoError(t, apis.AddToScheme(scheme.Scheme))
+	tests := []struct {
+		name              string
+		missingConnection bool
+		missingPod        bool
+		missingOnCreate   bool
+		missingOnUpdate   bool
+		wantError         bool
+		wantSkip          bool
+	}{
+		{name: "missing connection is skipped", missingConnection: true, wantSkip: true},
+		{name: "missing pod is reported", missingPod: true, wantError: true},
+		{name: "status create NotFound is reported", missingOnCreate: true, wantError: true},
+		{name: "status update NotFound is reported", missingOnUpdate: true, wantError: true},
+		{name: "new status is created without an error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("audit-pod"))
+			connection := &connectionv1alpha1.Connection{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: *exportutil.AuditConnection, Namespace: util.GetNamespace(),
+					UID: types.UID("connection-uid"), Generation: 1,
+				},
+			}
+			statusName, err := statusv1alpha1.KeyForConnection(pod.Name, connection.Namespace, connection.Name)
+			require.NoError(t, err)
+			builder := fake.NewClientBuilder().WithScheme(scheme.Scheme)
+			if !tt.missingConnection {
+				builder.WithObjects(connection)
+			}
+			if tt.missingOnUpdate {
+				builder.WithObjects(&statusv1alpha1.ConnectionPodStatus{
+					ObjectMeta: metav1.ObjectMeta{Name: statusName, Namespace: pod.Namespace},
+					Status: statusv1alpha1.ConnectionPodStatusStatus{
+						ID: pod.Name, ConnectionUID: connection.UID, ObservedGeneration: connection.Generation,
+					},
+				})
+			}
+			statusNotFound := apierrors.NewNotFound(
+				schema.GroupResource{Group: "status.gatekeeper.sh", Resource: "connectionpodstatuses"}, statusName)
+			k8sClient := builder.WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+					if tt.missingOnCreate {
+						return statusNotFound
+					}
+					return c.Create(ctx, obj, opts...)
+				},
+				Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+					if tt.missingOnUpdate {
+						return statusNotFound
+					}
+					return c.Update(ctx, obj, opts...)
+				},
+			}).Build()
+			getPod := func(context.Context) (*corev1.Pod, error) {
+				if tt.missingPod {
+					return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, pod.Name)
+				}
+				return pod, nil
+			}
+			var messages []string
+			logger := funcr.New(func(_, message string) { messages = append(messages, message) }, funcr.Options{Verbosity: 10})
+			reportExportConnectionErrors(context.Background(), auditExportPublishingState{SuccessCount: 1},
+				logger, k8sClient, k8sClient, scheme.Scheme, getPod)
+			logs := strings.Join(messages, "\n")
+			require.Equal(t, tt.wantError, strings.Contains(logs, `"msg"="failed to write export errors to the connection pod status"`), logs)
+			require.Equal(t, tt.wantSkip, strings.Contains(logs, `"msg"="skipping audit export status update, connection not found"`), logs)
+		})
+	}
+}
+
+type scriptedExporter struct {
+	// errs holds the result of each Publish call in order; later calls succeed.
+	errs  []error
+	calls int
+}
+
+func (e *scriptedExporter) Publish(context.Context, string, string, interface{}) error {
+	e.calls++
+	if e.calls <= len(e.errs) {
+		return e.errs[e.calls-1]
+	}
+	return nil
+}
+
+func (*scriptedExporter) UpsertConnection(context.Context, interface{}, string, string) error {
+	return nil
+}
+
+func (*scriptedExporter) CloseConnection(string) error { return nil }
+
+type auditExportTestManager struct {
+	controllerruntimemanager.Manager
+	client client.Client
+}
+
+func (m *auditExportTestManager) GetAPIReader() client.Reader { return m.client }
+
+func (m *auditExportTestManager) GetClient() client.Client { return m.client }
+
+func (m *auditExportTestManager) GetScheme() *runtime.Scheme { return scheme.Scheme }
+
+func TestAuditExportRun(t *testing.T) {
+	oldExportEnabled := *exportutil.ExportEnabled
+	*exportutil.ExportEnabled = true
+	t.Cleanup(func() { *exportutil.ExportEnabled = oldExportEnabled })
+	require.NoError(t, apis.AddToScheme(scheme.Scheme))
+
+	notConfigured := fmt.Errorf("%w, name: %s", export.ErrConnectionNotConfigured, *exportutil.AuditConnection)
+	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("audit-pod"))
+	constraint := &unstructured.Unstructured{}
+	constraint.SetGroupVersionKind(schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabels"})
+	constraint.SetName("required-labels")
+	violations := make([]Result, 2)
+	for i := range violations {
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(schema.GroupVersionKind{Version: "v1", Kind: "Namespace"})
+		obj.SetName(fmt.Sprintf("namespace-%d", i))
+		violations[i] = Result{Result: &constrainttypes.Result{Constraint: constraint, Msg: "missing label", EnforcementAction: string(util.Deny)}, obj: obj}
+	}
+
+	// Each run publishes a start marker, two violations and an end marker.
+	tests := []struct {
+		name              string
+		exportDisabled    bool
+		publishErrs       []error
+		missingConnection bool
+		wantCalls         int
+		wantStatus        bool
+		wantPublished     int64
+		wantPublishErrors int64
+		wantErrorLogs     int
+	}{
+		{
+			name:           "explicit opt-out with a connection publishes nothing",
+			exportDisabled: true,
+		},
+		{
+			name:        "connection not configured skips the run",
+			publishErrs: []error{notConfigured},
+			wantCalls:   1,
+		},
+		{
+			name:          "connection removed mid-run stops publishing",
+			publishErrs:   []error{nil, notConfigured},
+			wantCalls:     2,
+			wantPublished: 1,
+		},
+		{
+			name:              "connection removed mid-run after a failure logs the failure",
+			publishErrs:       []error{errors.New("mkdir failed"), notConfigured},
+			wantCalls:         2,
+			wantPublishErrors: 1,
+			wantErrorLogs:     1,
+		},
+		{
+			name:              "failed start publish continues the run",
+			publishErrs:       []error{errors.New("mkdir failed")},
+			wantCalls:         4,
+			wantStatus:        true,
+			wantPublished:     3,
+			wantPublishErrors: 1,
+			wantErrorLogs:     1,
+		},
+		{
+			name:              "connection missing at status write",
+			missingConnection: true,
+			wantCalls:         4,
+			wantPublished:     4,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			*exportutil.ExportEnabled = !tc.exportDisabled
+			builder := fake.NewClientBuilder().WithScheme(scheme.Scheme)
+			if !tc.missingConnection {
+				builder = builder.WithObjects(&connectionv1alpha1.Connection{ObjectMeta: metav1.ObjectMeta{Name: *exportutil.AuditConnection, Namespace: util.GetNamespace()}})
+			}
+			k8sClient := builder.Build()
+			exporter := &scriptedExporter{errs: tc.publishErrs}
+			var logs []string
+			am := &Manager{
+				exportSystem: exporter,
+				reporter:     &reporter{},
+				mgr:          &auditExportTestManager{client: k8sClient},
+				getPod:       func(context.Context) (*corev1.Pod, error) { return pod, nil },
+				log:          funcr.New(func(_, args string) { logs = append(logs, args) }, funcr.Options{}),
+			}
+			state := &auditExportPublishingState{Errors: map[string]error{}}
+
+			am.startAuditExport(state, "timestamp")
+			am.addAuditResponsesToUpdateLists(map[util.KindVersionName]*LimitQueue{}, violations, map[util.KindVersionName]int64{}, map[util.EnforcementAction]int64{}, "timestamp", state)
+			am.finishAuditExport(context.Background(), state, "timestamp")
+
+			require.Equal(t, tc.wantCalls, exporter.calls)
+			statuses := &statusv1alpha1.ConnectionPodStatusList{}
+			require.NoError(t, k8sClient.List(context.Background(), statuses))
+			require.Equal(t, tc.wantStatus, len(statuses.Items) == 1)
+			require.Equal(t, tc.wantPublished, am.reporter.auditExportPublished.Load())
+			require.Equal(t, tc.wantPublishErrors, am.reporter.auditExportPublishErrors.Load())
+			require.Equal(t, tc.wantErrorLogs, countLogs(logs, `"error"=`), logs)
+		})
+	}
+}
+
+func countLogs(logs []string, substr string) int {
+	n := 0
+	for _, entry := range logs {
+		if strings.Contains(entry, substr) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestAuditExportLogLimiting(t *testing.T) {
+	oldExportEnabled := *exportutil.ExportEnabled
+	*exportutil.ExportEnabled = true
+	t.Cleanup(func() { *exportutil.ExportEnabled = oldExportEnabled })
+	require.NoError(t, apis.AddToScheme(scheme.Scheme))
+
+	errA := errors.New("class A: failed")
+	errB := errors.New("class B: failed")
+	notConfigured := fmt.Errorf("%w, name: %s", export.ErrConnectionNotConfigured, *exportutil.AuditConnection)
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme.Scheme).
+		WithObjects(&connectionv1alpha1.Connection{ObjectMeta: metav1.ObjectMeta{Name: *exportutil.AuditConnection, Namespace: util.GetNamespace()}}).
+		Build()
+	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("audit-pod"))
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	var logs []string
+	am := &Manager{
+		reporter: &reporter{},
+		mgr:      &auditExportTestManager{client: k8sClient},
+		getPod:   func(context.Context) (*corev1.Pod, error) { return pod, nil },
+		log:      funcr.New(func(_, args string) { logs = append(logs, args) }, funcr.Options{}),
+	}
+	am.exportLogs.now = func() time.Time { return now }
+
+	steps := []struct {
+		name          string
+		after         time.Duration
+		publishErr    error
+		wantErrorLogs int
+		wantRecovered int
+	}{
+		{name: "first failure logs", publishErr: errA, wantErrorLogs: 1},
+		{name: "same failure within the interval is suppressed", after: time.Minute, publishErr: errA},
+		{name: "same failure after the interval logs a reminder", after: 11 * time.Minute, publishErr: errA, wantErrorLogs: 1},
+		{name: "new error class logs", after: time.Minute, publishErr: errB, wantErrorLogs: 1},
+		{name: "clean run logs recovery", after: time.Minute, wantRecovered: 1},
+		{name: "second clean run logs nothing", after: time.Minute},
+		{name: "failure after recovery logs", after: time.Minute, publishErr: errA, wantErrorLogs: 1},
+		{name: "not configured logs nothing", after: time.Minute, publishErr: notConfigured},
+		{name: "failure after not configured logs", after: time.Minute, publishErr: errA, wantErrorLogs: 1},
+	}
+	for _, step := range steps {
+		now = now.Add(step.after)
+		logs = nil
+		am.exportSystem = &scriptedExporter{errs: []error{step.publishErr}}
+		state := &auditExportPublishingState{Errors: map[string]error{}}
+
+		am.startAuditExport(state, "timestamp")
+		am.finishAuditExport(context.Background(), state, "timestamp")
+
+		require.Equal(t, step.wantErrorLogs, countLogs(logs, `"error"=`), "%s: %v", step.name, logs)
+		require.Equal(t, step.wantRecovered, countLogs(logs, "audit export recovered"), "%s: %v", step.name, logs)
+		require.Len(t, logs, step.wantErrorLogs+step.wantRecovered, "%s: %v", step.name, logs)
+	}
+
+	// Each logged error class keeps its full error text.
+	now = now.Add(time.Minute)
+	logs = nil
+	am.exportSystem = &scriptedExporter{errs: []error{errA, errB}}
+	state := &auditExportPublishingState{Errors: map[string]error{}}
+	am.startAuditExport(state, "timestamp")
+	am.finishAuditExport(context.Background(), state, "timestamp")
+	require.Len(t, logs, 1, logs)
+	require.Contains(t, logs[0], errA.Error())
+	require.Contains(t, logs[0], errB.Error())
 }
 
 func Test_hasConstraintInstances(t *testing.T) {

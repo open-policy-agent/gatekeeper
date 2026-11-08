@@ -1,0 +1,15 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: audit-export-requires-label
+  labels:
+    gatekeeper.sh/tests: "yes"
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+    name: gatekeeper-audit-export-test
+  parameters:
+    labels: ["audit-export-required"]
