@@ -33,6 +33,8 @@ spec:
       {{- .Values.postInstall.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
       serviceAccount: {{ .Values.postInstall.labelNamespace.serviceAccount.name }}
+      securityContext:
+        {{- toYaml .Values.postInstall.podSecurityContext | nindent 8 }}
       {{- if .Values.postInstall.probeWebhook.enabled }}
       volumes:
       {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}
