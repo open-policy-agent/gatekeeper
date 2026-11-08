@@ -1,9 +1,13 @@
 package policy
 
 import (
+	"errors"
 	"testing"
 
+	gatorpolicy "github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/policy/client"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInstallCommand_ValidationErrors(t *testing.T) {
@@ -157,6 +161,139 @@ func TestSearchCommand_ValidationErrors(t *testing.T) {
 	cmd.SetArgs([]string{})
 	err := cmd.Execute()
 	assert.Error(t, err)
+}
+
+func TestInstallExitError(t *testing.T) {
+	unknownEntry := client.IncompatibleEntry{Name: "p1", Reason: "cluster Kubernetes version was not queried in this offline dry-run preview"}
+
+	t.Run("offline dry-run with only unknown compatibility exits 0", func(t *testing.T) {
+		// An offline dry-run cannot determine compatibility, so a bounded policy
+		// lands in Unknown. That is the expected preview outcome and must not fail
+		// the command, or scripts gating on dry-run success break.
+		result := &client.InstallResult{
+			Unknown:        []client.IncompatibleEntry{unknownEntry},
+			TotalRequested: 1,
+		}
+		hint, err := installExitError(result, true /* dryRun */, nil)
+		assert.NoError(t, err)
+		assert.Empty(t, hint)
+	})
+
+	t.Run("real run with unknown compatibility signals partial success", func(t *testing.T) {
+		// Outside a dry-run the cluster version is resolved, so Unknown should not
+		// normally occur; if it does, it is a genuine skip and must not exit 0.
+		result := &client.InstallResult{
+			Unknown:        []client.IncompatibleEntry{unknownEntry},
+			TotalRequested: 1,
+		}
+		_, err := installExitError(result, false /* dryRun */, nil)
+		var exitErr *gatorpolicy.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, gatorpolicy.ExitPartialSuccess, exitErr.Code)
+	})
+
+	t.Run("incompatible policies signal partial success even in a dry-run", func(t *testing.T) {
+		// A confirmed incompatibility (e.g. a dry-run with a pre-resolved version)
+		// is a real skip, unlike unknown compatibility, so it still fails.
+		result := &client.InstallResult{
+			Incompatible:   []client.IncompatibleEntry{{Name: "p1", Reason: "out of range"}},
+			TotalRequested: 1,
+		}
+		_, err := installExitError(result, true /* dryRun */, nil)
+		var exitErr *gatorpolicy.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, gatorpolicy.ExitPartialSuccess, exitErr.Code)
+	})
+
+	t.Run("failed policies signal partial success with a re-run hint", func(t *testing.T) {
+		result := &client.InstallResult{
+			Installed:      []string{"good"},
+			Failed:         []string{"bad"},
+			Errors:         map[string]string{"bad": "boom"},
+			TotalRequested: 2,
+		}
+		hint, err := installExitError(result, false, nil)
+		var exitErr *gatorpolicy.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, gatorpolicy.ExitPartialSuccess, exitErr.Code)
+		assert.Contains(t, hint, "Re-run command")
+	})
+
+	t.Run("version resolution error with nothing installed is a cluster error", func(t *testing.T) {
+		result := &client.InstallResult{
+			Failed:         []string{"bad"},
+			Errors:         map[string]string{"bad": "unreachable"},
+			TotalRequested: 1,
+		}
+		_, err := installExitError(result, false, errors.New("determining cluster Kubernetes version"))
+		var exitErr *gatorpolicy.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, gatorpolicy.ExitClusterError, exitErr.Code)
+	})
+
+	t.Run("full success exits 0", func(t *testing.T) {
+		result := &client.InstallResult{
+			Installed:      []string{"good"},
+			TotalRequested: 1,
+		}
+		hint, err := installExitError(result, false, nil)
+		assert.NoError(t, err)
+		assert.Empty(t, hint)
+	})
+}
+
+func TestUpgradeExitError(t *testing.T) {
+	t.Run("conflict exits 3 even though the batch continued past it", func(t *testing.T) {
+		// Upgrade records an ownership conflict and keeps going, so the conflict
+		// arrives alongside a successful upgrade. It must still map to the
+		// conflict exit code rather than generic partial success.
+		result := &client.UpgradeResult{
+			Upgraded: []client.VersionChange{{Name: "conflict-batch-ok", FromVersion: "v1.0.0", ToVersion: "v2.0.0"}},
+			Failed:   []string{"owned"},
+			Errors:   map[string]string{"owned": "not managed by gator"},
+			ConflictErr: &client.ConflictError{
+				ResourceKind: "K8sRequiredLabels",
+				ResourceName: "owned-constraint",
+			},
+		}
+		err := upgradeExitError(result, nil)
+		var exitErr *gatorpolicy.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, gatorpolicy.ExitConflictError, exitErr.Code)
+		assert.Contains(t, err.Error(), "owned-constraint")
+	})
+
+	t.Run("failed policies without a conflict signal partial success", func(t *testing.T) {
+		result := &client.UpgradeResult{
+			Upgraded: []client.VersionChange{{Name: "partial-batch-ok"}},
+			Failed:   []string{"failed-policy"},
+			Errors:   map[string]string{"failed-policy": "boom"},
+		}
+		err := upgradeExitError(result, nil)
+		var exitErr *gatorpolicy.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, gatorpolicy.ExitPartialSuccess, exitErr.Code)
+	})
+
+	t.Run("cluster-scoped failure with nothing upgraded is a cluster error", func(t *testing.T) {
+		// Upgrade aborts the batch on a cluster-scoped failure and returns it as
+		// a top-level error, so nothing upgraded.
+		result := &client.UpgradeResult{
+			Failed: []string{"first"},
+			Errors: map[string]string{"first": "timeout waiting for template first to be ready"},
+		}
+		err := upgradeExitError(result, errors.New("timeout waiting for template first to be ready"))
+		var exitErr *gatorpolicy.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, gatorpolicy.ExitClusterError, exitErr.Code)
+	})
+
+	t.Run("full success exits 0", func(t *testing.T) {
+		result := &client.UpgradeResult{
+			Upgraded: []client.VersionChange{{Name: "all-ok"}},
+		}
+		assert.NoError(t, upgradeExitError(result, nil))
+	})
 }
 
 func TestGenerateCatalogCommand_InvalidPath(t *testing.T) {
