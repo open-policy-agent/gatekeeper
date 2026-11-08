@@ -30,6 +30,8 @@ spec:
       {{- if .Values.preUninstall.deleteWebhookConfigurations.priorityClassName }}
       priorityClassName: {{ .Values.preUninstall.deleteWebhookConfigurations.priorityClassName }}
       {{- end }}
+      securityContext:
+        {{- toYaml .Values.preUninstall.podSecurityContext | nindent 8 }}
       containers:
         - name: kubectl-delete
           image: "{{ .Values.preUninstall.deleteWebhookConfigurations.image.repository }}:{{ .Values.preUninstall.deleteWebhookConfigurations.image.tag }}"

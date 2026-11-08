@@ -93,6 +93,8 @@ spec:
       {{- if .Values.upgradeCRDs.priorityClassName }}
       priorityClassName: {{ .Values.upgradeCRDs.priorityClassName }}
       {{- end }}
+      securityContext:
+        {{- toYaml .Values.crds.podSecurityContext | nindent 8 }}
       containers:
       - name: crds-upgrade
         {{- if .Values.preInstall.crdRepository.image.repository }}
