@@ -5,7 +5,11 @@
 {{- fail "exportBackend dapr is no longer supported because the Dapr export driver has been removed; set exportBackend to disk or disable violation export" }}
 {{- end }}
 {{- if eq (include "gatekeeper.diskConnectionRendered" .) "true" }}
+{{- if .Capabilities.APIVersions.Has "connection.gatekeeper.sh/v1beta1/Connection" }}
 apiVersion: connection.gatekeeper.sh/v1beta1
+{{- else }}
+apiVersion: connection.gatekeeper.sh/v1alpha1
+{{- end }}
 kind: Connection
 metadata:
   name: '{{ .Values.audit.connection }}'
