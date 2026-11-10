@@ -43,6 +43,73 @@ Note: The `gator verify` command was first called `gator test`. These names were
 changed to better align `gator` with other projects in the open-policy-agent
 space.
 
+### Testing policies that use external data
+
+`Feature State`: Gatekeeper version v3.24+ (alpha)
+
+`gator test` can evaluate ConstraintTemplates that call `external_data()`
+against a live HTTPS Provider. This is off by default. To enable it, pass
+`--enable-external-data` together with one or more `--external-data-providers`
+files or directories containing `Provider` resources
+(`externaldata.gatekeeper.sh/v1beta1`, or the deprecated `v1alpha1`):
+
+```yaml
+apiVersion: externaldata.gatekeeper.sh/v1beta1
+kind: Provider
+metadata:
+  name: test-provider
+spec:
+  url: https://provider.example.com/validate
+  timeout: 3
+  caBundle: <base64-encoded-CA-certificate-in-PEM-format>
+```
+
+```shell
+gator test \
+  --filename=policies/ \
+  --enable-external-data \
+  --external-data-providers=providers/
+```
+
+See this
+[example template](https://github.com/open-policy-agent/gatekeeper/blob/master/test/gator/test/fixtures/externaldata/policy.yaml)
+for a complete policy that calls `external_data`.
+
+The Provider must be reachable from the machine running Gator (in-cluster
+Service DNS names usually are not), use HTTPS with TLS 1.3 and the given
+`caBundle`, and implement the
+[ProviderRequest/ProviderResponse protocol](externaldata.md#providerrequest).
+Set `spec.url` to the Provider's final endpoint rather than relying on HTTP
+redirects. Gator does not present a client certificate, so Providers that
+require mutual TLS are not supported.
+
+Providers are configuration, not objects under test. Gator reads them only
+from `--external-data-providers`; when external data is enabled, a Provider in
+`--filename`, stdin, or `--image` input is rejected, so keep Provider files
+outside any `--filename` directory. Supplying only one of the two flags is an
+error. Provider files are validated before any other input is read: unknown
+fields (such as a misspelled `timeout`) are errors, and `spec.timeout` must be
+a positive number of seconds. Only use trusted policies and Provider files,
+because evaluation makes outbound requests to the configured Providers. Unlike
+Gator, the controller-manager enables external data by default.
+
+:::warning
+Provider failures, including an unreachable Provider, do not fail the command.
+As in Gatekeeper, they are returned to Rego in the response's `system_error`,
+`errors`, and `status_code` fields. A policy that ignores `system_error` passes
+silently when the Provider is down. To fail closed, add a violation when
+`response.system_error != ""`, as the example template above does.
+:::
+
+To reuse a cluster's Provider, export it with
+`kubectl get provider <name> -o yaml > providers/<name>.yaml`
+(`kubectl get providers -o yaml` produces a `List`, which Gator does not read),
+and update `spec.url` if it uses an in-cluster address.
+
+Without both flags, templates that call `external_data` fail with
+`undefined function external_data`. Mutators that use `externalData`,
+`gator verify` suites, and `gator bench` are not yet supported.
+
 ## The `gator policy` subcommand
 
 `Feature State`: Gatekeeper version v3.22+ (alpha)
@@ -280,69 +347,6 @@ The `--deny-only` flag will only output violations about denied constraints, not
 `--deny-only` flag is available after Gatekeeper 3.19.
 :::
 
-
-#### Testing policies that use external data
-
-`Feature State`: Gatekeeper version v3.24+ (alpha)
-
-`gator test` can evaluate ConstraintTemplates that call `external_data()`
-against a live HTTPS Provider. This is off by default. To enable it, pass
-`--enable-external-data` together with one or more `--external-data-providers`
-files or directories containing `Provider` resources
-(`externaldata.gatekeeper.sh/v1beta1`, or the deprecated `v1alpha1`):
-
-```yaml
-apiVersion: externaldata.gatekeeper.sh/v1beta1
-kind: Provider
-metadata:
-  name: test-provider
-spec:
-  url: https://provider.example.com/validate
-  timeout: 3
-  caBundle: <base64-encoded-CA-certificate-in-PEM-format>
-```
-
-```shell
-gator test \
-  --filename=policies/ \
-  --enable-external-data \
-  --external-data-providers=providers/
-```
-
-See this
-[example template](https://github.com/open-policy-agent/gatekeeper/blob/master/test/gator/test/fixtures/externaldata/policy.yaml)
-for a complete policy that calls `external_data`.
-
-The Provider must be reachable from the machine running Gator (in-cluster
-Service DNS names usually are not), use HTTPS with TLS 1.3 and the given
-`caBundle`, and implement the
-[ProviderRequest/ProviderResponse protocol](externaldata.md#providerrequest).
-Set `spec.url` to the Provider's final endpoint rather than relying on HTTP
-redirects. Gator does not present a client certificate, so Providers that
-require mutual TLS are not supported.
-
-Providers are configuration, not objects under test. Gator reads them only
-from `--external-data-providers`; when external data is enabled, a Provider in
-`--filename`, stdin, or `--image` input is rejected. Supplying only one of the
-two flags is an error. Provider files are validated before any other input is
-read: unknown fields (such as a misspelled `timeout`) are errors, and
-`spec.timeout` must be a positive number of seconds. Only use trusted policies
-and Provider files, because evaluation makes outbound requests to the
-configured Providers. Unlike Gator, the controller-manager enables external
-data by default.
-
-:::warning
-Provider failures, including an unreachable Provider, do not fail the command.
-As in Gatekeeper, they are returned to Rego in the response's `system_error`,
-`errors`, and `status_code` fields. A policy that ignores `system_error` passes
-silently when the Provider is down. To fail closed, add a violation when
-`response.system_error != ""`, as the example template above does.
-:::
-
-Without both flags, templates that call `external_data` fail with
-`undefined function external_data`. External data is supported only for
-ConstraintTemplates in `gator test`; mutators that use `externalData`,
-`gator verify` suites, and `gator bench` are not yet supported.
 
 #### Exit Codes
 

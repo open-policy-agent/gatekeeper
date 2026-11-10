@@ -10,7 +10,7 @@ import (
 )
 
 // WithExternalDataProviders enables external_data with only the given
-// Providers. Pass it at most once.
+// Providers. Pass it at most once; a second call replaces the first.
 func WithExternalDataProviders(providers ...*unversioned.Provider) Opt {
 	return func() ([]constraintclient.Opt, []rego.Arg, error) {
 		if len(providers) == 0 {
