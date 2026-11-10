@@ -91,7 +91,7 @@ match_yaml_msg () {
   [ "$status" -eq 1 ]
   match_substring "$output" "--external-data-providers path must not be empty"
 
-  # Flags are validated, and Providers read, before any regular input is read.
+  # Flag and Provider errors are reported before regular input is read.
   missing_input="$BATS_TEST_TMPDIR/missing-input.yaml"
   missing_provider="$BATS_TEST_TMPDIR/missing-provider.yaml"
 
@@ -108,19 +108,24 @@ match_yaml_msg () {
 
 @test "external data never trusts Provider objects from regular input or stdin" {
   policy="$BATS_TEST_DIRNAME/fixtures/externaldata/policy.yaml"
-  provider="$BATS_TEST_DIRNAME/fixtures/externaldata/provider-invalid.yaml"
+  provider="$BATS_TEST_DIRNAME/fixtures/externaldata/provider.yaml"
+  invalid_provider="$BATS_TEST_DIRNAME/fixtures/externaldata/provider-invalid.yaml"
 
   run bin/gator test --filename="$policy" --enable-external-data --external-data-providers="$provider" --filename="$provider"
   [ "$status" -eq 1 ]
-  match_substring "$output" "use --external-data-providers"
+  match_substring "$output" "read only from --external-data-providers"
 
   run bin/gator test --filename="$policy" --enable-external-data --external-data-providers="$provider" < "$provider"
   [ "$status" -eq 1 ]
-  match_substring "$output" "use --external-data-providers"
+  match_substring "$output" "read only from --external-data-providers"
 
-  run bin/gator test --filename="$policy" --enable-external-data --external-data-providers="$provider"
+  # An invalid Provider is reported before regular input is read.
+  missing_input="$BATS_TEST_TMPDIR/missing-input.yaml"
+  run bin/gator test --filename="$missing_input" --enable-external-data --external-data-providers="$invalid_provider"
   [ "$status" -eq 1 ]
-  match_substring "$output" "invalid Provider"
+  match_substring "$output" "reading external data Providers"
+  match_substring "$output" "only HTTPS scheme is supported"
+  refute_substring "$output" "missing-input.yaml"
 
   run bin/gator test --filename="$policy"
   [ "$status" -eq 1 ]
@@ -128,18 +133,18 @@ match_yaml_msg () {
 }
 
 @test "external data never trusts Provider objects from OCI artifacts" {
-  provider="$BATS_TEST_DIRNAME/fixtures/externaldata/provider-invalid.yaml"
+  provider="$BATS_TEST_DIRNAME/fixtures/externaldata/provider.yaml"
   policy="$BATS_TEST_DIRNAME/fixtures/externaldata/policy.yaml"
   img=localhost:5000/gator/untrusted-external-data-provider:v1
   media_type=:application/vnd.oci.image.layer.v1.tar+gzip
 
   pushd "$BATS_TEST_DIRNAME/fixtures/externaldata"
-  oras push "$img" "./provider-invalid.yaml$media_type"
+  oras push "$img" "./provider.yaml$media_type"
   popd
   run bin/gator test --plain-http --image="$img" --filename="$policy" \
     --enable-external-data --external-data-providers="$provider"
   [ "$status" -eq 1 ]
-  match_substring "$output" "use --external-data-providers"
+  match_substring "$output" "read only from --external-data-providers"
 }
 
 @test "manifest with no violations piped to stdin returns 0 exit status" {

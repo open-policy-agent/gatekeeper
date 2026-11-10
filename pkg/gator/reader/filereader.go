@@ -48,15 +48,9 @@ func ReadSources(filenames []string, images []string, tempDir string, allowPlain
 	return sourcesToUnstruct(sources), nil
 }
 
-// Provider holds a trusted Provider configuration and the file it came from.
-type Provider struct {
-	Resource *unversioned.Provider
-	Source   string
-}
-
-// ReadProviders reads Providers from the given local files and directories.
-// Every object must be a cluster-scoped Provider.
-func ReadProviders(paths []string) ([]Provider, error) {
+// ReadProviders reads and validates the Providers in the given files and
+// directories. Every object must be a Provider.
+func ReadProviders(paths []string) ([]*unversioned.Provider, error) {
 	sources, err := readFiles(paths)
 	if err != nil {
 		return nil, fmt.Errorf("reading Provider files: %w", err)
@@ -67,7 +61,7 @@ func ReadProviders(paths []string) ([]Provider, error) {
 		return nil, fmt.Errorf("registering Provider APIs: %w", err)
 	}
 
-	var providers []Provider
+	var providers []*unversioned.Provider
 	seen := make(map[string]string)
 	for _, source := range sources {
 		for _, obj := range source.objs {
@@ -84,13 +78,16 @@ func ReadProviders(paths []string) ([]Provider, error) {
 			if first, ok := seen[obj.GetName()]; ok {
 				return nil, fmt.Errorf("provider %q in %q is already defined in %q", obj.GetName(), source.filename, first)
 			}
+			if err := gator.ValidateProvider(provider); err != nil {
+				return nil, fmt.Errorf("file %q: invalid Provider %q: %w", source.filename, obj.GetName(), err)
+			}
 
-			providers = append(providers, Provider{Resource: provider, Source: source.filename})
+			providers = append(providers, provider)
 			seen[obj.GetName()] = source.filename
 		}
 	}
 	if len(providers) == 0 {
-		return nil, fmt.Errorf("no Provider resources found in --external-data-providers")
+		return nil, fmt.Errorf("no Provider resources found")
 	}
 	return providers, nil
 }
