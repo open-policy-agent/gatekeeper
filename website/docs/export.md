@@ -105,7 +105,7 @@ The Dapr export driver has been removed. Migrate existing Dapr Connections to di
 
 ### Connection names and upgrade preflight
 
-`Connection.metadata.name` must be at most 63 characters. Gatekeeper uses the full name in the `internal.gatekeeper.sh/connection-name` label on `ConnectionPodStatus` objects, and Kubernetes limits label values to 63 characters. Earlier alpha CRDs accepted longer names; exporting could still work even when status creation failed.
+`Connection.metadata.name` must be at most 63 characters so it can be used in status labels. Earlier alpha CRDs accepted longer names.
 
 Before upgrading the CRD, find existing Connections that need migration:
 
@@ -114,20 +114,19 @@ kubectl get connections.connection.gatekeeper.sh --all-namespaces -o json |
   jq -r '.items[] | select(.metadata.name | length > 63) | [.metadata.namespace, .metadata.name] | @tsv'
 ```
 
-The upgrade does not delete, rename, or truncate existing Connections. They remain readable, and Kubernetes validation ratcheting can allow spec and status updates that leave an existing long name unchanged. This does **not** repair the invalid status label. New Connections, including attempts to recreate a deleted long-named Connection from a backup, must satisfy the new limit.
+Existing long-named Connections remain readable but cannot produce valid status labels. They are not renamed or deleted automatically. New or restored Connections must satisfy the limit.
 
 For each long-named Connection:
 
-1. Back up its configuration and choose a distinct name of at most 63 characters. Do not blindly truncate names: different Connections may share the same prefix.
-2. Create a replacement Connection in the same namespace with the intended driver/configuration. Kubernetes object names are immutable, so migration requires a separate object.
-3. Update `--audit-connection` on every exporting audit and controller-manager deployment to the replacement name. With Helm, the setting is `audit.connection`; changing it also changes the identity of the chart-managed Connection. Plan that replacement explicitly rather than relying on an automatic rename. Account for interrupted or overlapping export during the rollout, and preserve the required volumes and consumers.
-4. Verify the replacement's `status.byPod`, export metrics, and actual consumer output for all exporting pods before explicitly retiring the old Connection. Keep the old configuration until the migration is verified.
+1. Back up its configuration and create a replacement in the same namespace with a distinct name of at most 63 characters and the intended driver/configuration.
+2. Update `--audit-connection` on every exporting deployment, or `audit.connection` with Helm. Changing the Helm value replaces the chart-managed Connection; plan for interrupted or overlapping export during the rollout.
+3. Check the replacement's `status.byPod`, export metrics, and consumer output before retiring the old Connection.
 
 #### ConnectionPodStatus names
 
-Status names normally remain the dash-escaped combination of pod name, Connection namespace, and Connection name. Escaping can make that combination exceed Kubernetes' 253-character object-name limit, even when each component is at most 63 characters. Only these overlength names use `connection-<sha256>`, where the suffix is the full lowercase hexadecimal SHA-256 digest of the original packed key. All valid legacy status names remain unchanged; Connection names and status labels are never shortened.
+Status names that would exceed Kubernetes' 253-character limit use a hashed fallback; existing valid names are unchanged. Identify statuses using their `internal.gatekeeper.sh/connection-name` and `internal.gatekeeper.sh/pod` labels and `status.id`, rather than parsing their names.
 
-Consumers should identify a status by its `internal.gatekeeper.sh/connection-name` and `internal.gatekeeper.sh/pod` labels and `status.id`, not by decoding its object name. Older controllers cannot reproduce the hashed fallback, so a downgrade restores the status failure for those overlength combinations. This change does not add support for pod names exceeding the separate 63-character pod-label limit.
+Downgrading to an older controller restores status-creation failures for these overlength combinations. Pod names remain subject to the separate 63-character status-label limit.
 
 ## Enabling Gatekeeper to export admission violations
 
