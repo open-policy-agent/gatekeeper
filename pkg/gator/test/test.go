@@ -8,7 +8,6 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
-	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/drivers/k8scel"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
@@ -32,11 +31,10 @@ func init() {
 }
 
 func Test(objs []*unstructured.Unstructured, opts ...gator.Opt) (*GatorResponses, error) {
-	return testWithDriverArgs(objs, []rego.Arg{rego.DisableBuiltins("external_data")}, opts...)
-}
-
-func testWithDriverArgs(objs []*unstructured.Unstructured, driverArgs []rego.Arg, opts ...gator.Opt) (*GatorResponses, error) {
 	args := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
+
+	// gator.WithExternalDataProviders re-enables external_data.
+	driverArgs := []rego.Arg{rego.DisableBuiltins("external_data")}
 
 	for _, opt := range opts {
 		extraArgs, extraDriverArgs, err := opt()
@@ -176,35 +174,6 @@ func testWithDriverArgs(objs []*unstructured.Unstructured, driverArgs []rego.Arg
 	}
 
 	return responses, nil
-}
-
-// TestWithProviders evaluates objs using only the given Providers.
-// A Provider in objs is an error.
-func TestWithProviders(objs []*unstructured.Unstructured, providers []reader.Provider, opts ...gator.Opt) (*GatorResponses, error) {
-	if len(providers) == 0 {
-		return nil, fmt.Errorf("no external data Providers supplied")
-	}
-	for _, obj := range objs {
-		if reader.IsProvider(obj) {
-			return nil, fmt.Errorf("provider %q in ordinary inputs is not trusted; use --external-data-providers", obj.GetName())
-		}
-	}
-
-	cache := frameworksexternaldata.NewCache()
-	seen := make(map[string]string, len(providers))
-	for _, provider := range providers {
-		if provider.Resource == nil {
-			return nil, fmt.Errorf("nil Provider in %q", provider.Source)
-		}
-		if first, ok := seen[provider.Resource.Name]; ok {
-			return nil, fmt.Errorf("provider %q in %q is already defined in %q", provider.Resource.Name, provider.Source, first)
-		}
-		if err := cache.Upsert(provider.Resource); err != nil {
-			return nil, fmt.Errorf("invalid Provider %q in %q: %w", provider.Resource.Name, provider.Source, err)
-		}
-		seen[provider.Resource.Name] = provider.Source
-	}
-	return testWithDriverArgs(objs, []rego.Arg{rego.AddExternalDataProviderCache(cache)}, opts...)
 }
 
 func WithGatherStats() gator.Opt {

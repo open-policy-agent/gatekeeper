@@ -1,6 +1,7 @@
 package test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -175,5 +176,23 @@ func Test_validateExternalDataFlags(t *testing.T) {
 				t.Fatalf("got error %v, want %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func Test_rejectProviders(t *testing.T) {
+	pod := &unstructured.Unstructured{Object: map[string]interface{}{"apiVersion": "v1", "kind": "Pod"}}
+	if err := rejectProviders([]*unstructured.Unstructured{pod}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	provider := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "externaldata.gatekeeper.sh/v1beta1",
+		"kind":       "Provider",
+		"metadata":   map[string]interface{}{"name": "untrusted"},
+	}}
+	err := rejectProviders([]*unstructured.Unstructured{pod, provider})
+	want := `provider "untrusted" found in --filename, --image, or stdin input; Providers are read only from --external-data-providers`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("got error %v, want it to contain %q", err, want)
 	}
 }

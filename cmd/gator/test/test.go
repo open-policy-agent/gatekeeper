@@ -16,6 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/spf13/cobra"
 	"go.yaml.in/yaml/v3"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
@@ -31,7 +32,7 @@ gator test --filename="manifest.yaml" --filename="templates-and-constraints/"
 # Receive input from stdin
 cat manifest.yaml | gator test
 
-# Evaluate policies using a trusted HTTPS Provider configuration
+# Evaluate policies that use external data
 gator test --filename="manifest.yaml" --enable-external-data --external-data-providers="providers.yaml"
 
 # Output structured violations data
@@ -102,18 +103,23 @@ func run(_ *cobra.Command, _ []string) {
 		cmdutils.ErrFatalf("invalid default K8sNativeValidation failure policy: %v", err)
 	}
 
-	var providers []reader.Provider
+	var opts []gator.Opt
 	if flagEnableExternalData {
-		var err error
-		providers, err = reader.ReadProviders(flagExternalDataProviders)
+		providers, err := reader.ReadProviders(flagExternalDataProviders)
 		if err != nil {
 			cmdutils.ErrFatalf("reading external data Providers: %v", err)
 		}
+		opts = append(opts, gator.WithExternalDataProviders(providers...))
 	}
 
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, flagPlainHTTP)
 	if err != nil {
 		cmdutils.ErrFatalf("reading: %v", err)
+	}
+	if flagEnableExternalData {
+		if err := rejectProviders(unstrucs); err != nil {
+			cmdutils.ErrFatalf("reading: %v", err)
+		}
 	}
 	if len(unstrucs) == 0 {
 		cmdutils.ErrFatalf("no input data identified")
@@ -121,7 +127,6 @@ func run(_ *cobra.Command, _ []string) {
 
 	printBuf := gator.NewPrintBuffer(gator.DefaultPrintBufferLimit)
 
-	var opts []gator.Opt
 	if flagIncludeTrace {
 		opts = append(opts, test.WithTrace())
 	}
@@ -135,12 +140,7 @@ func run(_ *cobra.Command, _ []string) {
 		opts = append(opts, gator.WithPrintHook(printBuf))
 	}
 
-	var responses *test.GatorResponses
-	if flagEnableExternalData {
-		responses, err = test.TestWithProviders(unstrucs, providers, opts...)
-	} else {
-		responses, err = test.Test(unstrucs, opts...)
-	}
+	responses, err := test.Test(unstrucs, opts...)
 	if err != nil {
 		cmdutils.ErrFatalf("auditing objects: %v", err)
 	}
@@ -171,6 +171,17 @@ func validateExternalDataFlags(enabled bool, paths []string) error {
 	for _, path := range paths {
 		if path == "" {
 			return fmt.Errorf("--external-data-providers path must not be empty")
+		}
+	}
+	return nil
+}
+
+// rejectProviders returns an error if objs contains a Provider. Providers are
+// read only from --external-data-providers.
+func rejectProviders(objs []*unstructured.Unstructured) error {
+	for _, obj := range objs {
+		if reader.IsProvider(obj) {
+			return fmt.Errorf("provider %q found in --filename, --image, or stdin input; Providers are read only from --external-data-providers, so move Provider files to a separate directory", obj.GetName())
 		}
 	}
 	return nil

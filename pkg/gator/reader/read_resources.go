@@ -240,8 +240,12 @@ func ToProvider(scheme *runtime.Scheme, u *unstructured.Unstructured) (*unversio
 			gator.ErrNotAProvider, gvk)
 	}
 
-	s, err := ToStructured(scheme, u)
+	s, err := scheme.New(gvk)
 	if err != nil {
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingProvider, err)
+	}
+	// Reject unknown fields so typos are not silently ignored.
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructuredWithValidation(u.UnstructuredContent(), s, true); err != nil {
 		return nil, fmt.Errorf("%w: %w", gator.ErrAddingProvider, err)
 	}
 

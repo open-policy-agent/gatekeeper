@@ -20,6 +20,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/util/cert"
 )
@@ -37,17 +38,18 @@ func externalDataObjects(t *testing.T) []*unstructured.Unstructured {
 	return objs
 }
 
-func externalDataProvider(url, caBundle string) reader.Provider {
-	return reader.Provider{Resource: &unversioned.Provider{
+func externalDataProvider(name, url, caBundle string) *unversioned.Provider {
+	return &unversioned.Provider{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: unversioned.ProviderSpec{
 			URL:      url,
 			CABundle: caBundle,
 			Timeout:  3,
 		},
-	}}
+	}
 }
 
-func TestTestWithProviders(t *testing.T) {
+func TestTestExternalData(t *testing.T) {
 	type providerResult struct {
 		value       string
 		itemError   string
@@ -98,23 +100,21 @@ func TestTestWithProviders(t *testing.T) {
 	server.StartTLS()
 	t.Cleanup(server.Close)
 	ca := base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))
-	provider := externalDataProvider(server.URL, ca)
-	provider.Resource.Name = externalDataProviderName
-	provider.Source = "provider.yaml"
+	provider := externalDataProvider(externalDataProviderName, server.URL, ca)
 	objs := externalDataObjects(t)
 
 	_, err := Test(objs)
 	require.ErrorContains(t, err, "external_data")
 	require.Zero(t, requests.Load())
 
-	responses, err := TestWithProviders(objs, []reader.Provider{provider})
+	responses, err := Test(objs, gator.WithExternalDataProviders(provider))
 	require.NoError(t, err)
 	require.Len(t, responses.Results(), 1)
 	require.Equal(t, "namespace denied", responses.Results()[0].Msg)
 	require.Positive(t, requests.Load())
 
 	result.Store(providerResult{value: "allow"})
-	responses, err = TestWithProviders(objs, []reader.Provider{provider})
+	responses, err = Test(objs, gator.WithExternalDataProviders(provider))
 	require.NoError(t, err)
 	require.Empty(t, responses.Results())
 
@@ -126,25 +126,25 @@ func TestTestWithProviders(t *testing.T) {
 		{response: providerResult{itemError: "item unavailable"}, wantMsg: "provider item error"},
 	} {
 		result.Store(tc.response)
-		responses, err = TestWithProviders(objs, []reader.Provider{provider})
+		responses, err = Test(objs, gator.WithExternalDataProviders(provider))
 		require.NoError(t, err)
 		require.Len(t, responses.Results(), 1)
 		require.Equal(t, tc.wantMsg, responses.Results()[0].Msg)
 	}
 
-	// A Provider whose caBundle does not trust the server fails closed before
-	// any request reaches it.
+	// A caBundle that does not trust the server fails before any request is sent.
 	otherCert, _, err := cert.GenerateSelfSignedCertKey("untrusted.example", nil, nil)
 	require.NoError(t, err)
-	untrustedCA := externalDataProvider(server.URL, base64.StdEncoding.EncodeToString(otherCert))
-	untrustedCA.Resource.Name = externalDataProviderName
+	untrustedCA := externalDataProvider(externalDataProviderName, server.URL, base64.StdEncoding.EncodeToString(otherCert))
 	before := requests.Load()
-	responses, err = TestWithProviders(objs, []reader.Provider{untrustedCA})
+	responses, err = Test(objs, gator.WithExternalDataProviders(untrustedCA))
 	require.NoError(t, err)
 	require.Len(t, responses.Results(), 1)
 	require.Equal(t, "provider failure", responses.Results()[0].Msg)
 	require.Equal(t, before, requests.Load())
 
+	// external_data is registered process-wide, so check it is still disabled
+	// without the option.
 	_, err = Test(objs)
 	require.ErrorContains(t, err, "external_data")
 	plainClient, err := gator.NewOPAClient(false)
@@ -155,60 +155,78 @@ func TestTestWithProviders(t *testing.T) {
 	require.ErrorContains(t, err, "external_data")
 	require.Equal(t, before, requests.Load())
 
-	untrusted := append(append([]*unstructured.Unstructured{}, objs...), &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "externaldata.gatekeeper.sh/v1beta1",
-			"kind":       "Provider",
-			"metadata":   map[string]interface{}{"name": "untrusted"},
-		},
-	})
-	_, err = TestWithProviders(untrusted, []reader.Provider{provider})
-	require.ErrorContains(t, err, "use --external-data-providers")
+	// The option also enables external_data for gator.NewOPAClient.
+	providerClient, err := gator.NewOPAClient(false, gator.WithExternalDataProviders(provider))
+	require.NoError(t, err)
+	_, err = providerClient.AddTemplate(context.Background(), template)
+	require.NoError(t, err)
+
+	// A Provider in objs is not trusted, so the call reports a missing Provider.
+	inputProvider := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "externaldata.gatekeeper.sh/v1beta1",
+		"kind":       "Provider",
+		"metadata":   map[string]interface{}{"name": externalDataProviderName},
+		"spec":       map[string]interface{}{"url": server.URL, "caBundle": ca, "timeout": int64(3)},
+	}}
+	withInputProvider := append(append([]*unstructured.Unstructured{}, objs...), inputProvider)
+	_, err = Test(withInputProvider)
+	require.ErrorContains(t, err, "external_data")
+	responses, err = Test(withInputProvider, gator.WithExternalDataProviders(externalDataProvider("other-provider", server.URL, ca)))
+	require.NoError(t, err)
+	require.Len(t, responses.Results(), 1)
+	require.Equal(t, "provider failure", responses.Results()[0].Msg)
 	require.Equal(t, before, requests.Load())
 }
 
-func TestTestWithProvidersErrors(t *testing.T) {
+func TestTestExternalDataProviderErrors(t *testing.T) {
 	objs := externalDataObjects(t)
-	_, err := TestWithProviders(objs, nil)
-	require.ErrorContains(t, err, "no external data Providers")
-
-	_, err = TestWithProviders(objs, []reader.Provider{{Source: "nil.yaml"}})
-	require.ErrorContains(t, err, "nil Provider")
-
-	provider := externalDataProvider("http://provider.example.test", "")
-	provider.Resource.Name = externalDataProviderName
-	provider.Source = "invalid.yaml"
-	_, err = TestWithProviders(objs, []reader.Provider{provider})
-	require.ErrorContains(t, err, "invalid.yaml")
-	require.ErrorContains(t, err, "HTTPS")
-
-	provider.Resource.Spec.URL = "https://provider.example.test"
-	_, err = TestWithProviders(objs, []reader.Provider{provider})
-	require.ErrorContains(t, err, "caBundle")
-
-	provider.Resource.Spec.Timeout = -1
-	_, err = TestWithProviders(objs, []reader.Provider{provider})
-	require.ErrorContains(t, err, "timeout")
-
-	provider.Resource.Spec.Timeout = 3
-	provider.Resource.Spec.CABundle = "not-base64"
-	_, err = TestWithProviders(objs, []reader.Provider{provider})
-	require.ErrorContains(t, err, "caBundle")
-
-	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	t.Cleanup(server.Close)
-	provider.Resource.Spec.CABundle = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-		Type: "CERTIFICATE", Bytes: server.Certificate().Raw,
-	}))
-	// The framework returns a missing Provider as response data, not an error.
-	provider.Resource.Name = "different-provider"
-	result, err := TestWithProviders(objs, []reader.Provider{provider})
+	certPEM, _, err := cert.GenerateSelfSignedCertKey("provider.example.test", nil, nil)
 	require.NoError(t, err)
-	require.Len(t, result.Results(), 1)
-	require.Equal(t, "provider failure", result.Results()[0].Msg)
+	ca := base64.StdEncoding.EncodeToString(certPEM)
+	valid := func() *unversioned.Provider {
+		return externalDataProvider(externalDataProviderName, "https://provider.example.test", ca)
+	}
 
-	_, err = TestWithProviders(objs, []reader.Provider{provider, provider})
-	require.ErrorContains(t, err, "already defined")
+	tests := []struct {
+		name      string
+		providers func() []*unversioned.Provider
+		wantErr   string
+	}{
+		{name: "no Providers", providers: func() []*unversioned.Provider { return nil }, wantErr: "no external data Providers"},
+		{name: "nil Provider", providers: func() []*unversioned.Provider { return []*unversioned.Provider{nil} }, wantErr: "nil external data Provider"},
+		{name: "duplicate", providers: func() []*unversioned.Provider { return []*unversioned.Provider{valid(), valid()} }, wantErr: "defined more than once"},
+		{name: "http URL", providers: func() []*unversioned.Provider {
+			p := valid()
+			p.Spec.URL = "http://provider.example.test"
+			return []*unversioned.Provider{p}
+		}, wantErr: "HTTPS"},
+		{name: "missing caBundle", providers: func() []*unversioned.Provider {
+			p := valid()
+			p.Spec.CABundle = ""
+			return []*unversioned.Provider{p}
+		}, wantErr: "caBundle"},
+		{name: "invalid caBundle", providers: func() []*unversioned.Provider {
+			p := valid()
+			p.Spec.CABundle = "not-base64"
+			return []*unversioned.Provider{p}
+		}, wantErr: "caBundle"},
+		{name: "negative timeout", providers: func() []*unversioned.Provider {
+			p := valid()
+			p.Spec.Timeout = -1
+			return []*unversioned.Provider{p}
+		}, wantErr: "timeout"},
+		{name: "zero timeout", providers: func() []*unversioned.Provider {
+			p := valid()
+			p.Spec.Timeout = 0
+			return []*unversioned.Provider{p}
+		}, wantErr: "spec.timeout must be a positive number of seconds"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Test(objs, gator.WithExternalDataProviders(tc.providers()...))
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
 }
 
 const externalDataExpansionObjects = `apiVersion: templates.gatekeeper.sh/v1beta1
@@ -281,11 +299,11 @@ spec:
         image: bad-image
 `
 
-// TestTestWithProvidersExpansion checks external data on expanded resources.
-func TestTestWithProvidersExpansion(t *testing.T) {
+// TestTestExternalDataExpansion checks external data on expanded resources.
+func TestTestExternalDataExpansion(t *testing.T) {
 	var mu sync.Mutex
 	requestKeys := map[string][][]string{}
-	newProvider := func(name string) reader.Provider {
+	newProvider := func(name string) *unversioned.Provider {
 		server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var request externaldata.ProviderRequest
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -318,16 +336,13 @@ func TestTestWithProvidersExpansion(t *testing.T) {
 		t.Cleanup(server.Close)
 
 		ca := base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))
-		provider := externalDataProvider(server.URL, ca)
-		provider.Resource.Name = name
-		provider.Source = name + ".yaml"
-		return provider
+		return externalDataProvider(name, server.URL, ca)
 	}
 
 	objs, err := reader.ReadK8sResources(strings.NewReader(externalDataExpansionObjects))
 	require.NoError(t, err)
 
-	responses, err := TestWithProviders(objs, []reader.Provider{newProvider("first"), newProvider("second")})
+	responses, err := Test(objs, gator.WithExternalDataProviders(newProvider("first"), newProvider("second")))
 	require.NoError(t, err)
 
 	var got []string
