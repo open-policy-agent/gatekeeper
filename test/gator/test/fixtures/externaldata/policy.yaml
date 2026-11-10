@@ -1,0 +1,44 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: externaldatatest
+spec:
+  crd:
+    spec:
+      names:
+        kind: ExternalDataTest
+  targets:
+  - target: admission.k8s.gatekeeper.sh
+    rego: |
+      package externaldatatest
+
+      violation[{"msg": msg}] {
+        input.review.object.kind == "Namespace"
+        response := external_data({"provider": "test-provider", "keys": [input.review.object.metadata.name]})
+        response.system_error != ""
+        msg := "provider failure"
+      }
+
+      violation[{"msg": msg}] {
+        input.review.object.kind == "Namespace"
+        response := external_data({"provider": "test-provider", "keys": [input.review.object.metadata.name]})
+        count(response.errors) > 0
+        msg := "provider item error"
+      }
+
+      violation[{"msg": msg}] {
+        input.review.object.kind == "Namespace"
+        response := external_data({"provider": "test-provider", "keys": [input.review.object.metadata.name]})
+        response.responses[_][1] == "deny"
+        msg := "namespace denied"
+      }
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: ExternalDataTest
+metadata:
+  name: check-external-data
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tested

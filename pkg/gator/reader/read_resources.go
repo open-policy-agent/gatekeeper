@@ -8,6 +8,9 @@ import (
 	"io/fs"
 	"strings"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
+	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
@@ -226,6 +229,30 @@ func ToGVKManifest(scheme *runtime.Scheme, u *unstructured.Unstructured) (*gvkma
 	return gvkManifest, nil
 }
 
+// ToProvider converts an unstructured v1alpha1 or v1beta1 Provider into the
+// unversioned Provider used by the external data cache.
+func ToProvider(scheme *runtime.Scheme, u *unstructured.Unstructured) (*unversioned.Provider, error) {
+	gvk := u.GroupVersionKind()
+	if !IsProvider(u) ||
+		(gvk.Version != externaldatav1alpha1.SchemeGroupVersion.Version &&
+			gvk.Version != externaldatav1beta1.SchemeGroupVersion.Version) {
+		return nil, fmt.Errorf("%w: expected externaldata.gatekeeper.sh/v1alpha1 or v1beta1 Provider, got %s",
+			gator.ErrNotAProvider, gvk)
+	}
+
+	s, err := ToStructured(scheme, u)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingProvider, err)
+	}
+
+	provider := &unversioned.Provider{}
+	if err := scheme.Convert(s, provider, nil); err != nil {
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingProvider, err)
+	}
+
+	return provider, nil
+}
+
 // ReadObject reads a file from the filesystem abstraction at the specified
 // path, and returns an unstructured.Unstructured object if the file can be
 // successfully unmarshalled.
@@ -330,6 +357,11 @@ func IsSyncSet(u *unstructured.Unstructured) bool {
 func IsGVKManifest(u *unstructured.Unstructured) bool {
 	gvk := u.GroupVersionKind()
 	return gvk.Group == gvkmanifestv1alpha1.GroupVersion.Group && gvk.Kind == "GVKManifest"
+}
+
+func IsProvider(u *unstructured.Unstructured) bool {
+	gvk := u.GroupVersionKind()
+	return gvk.Group == externaldatav1beta1.ExternalDataGroup && gvk.Kind == "Provider"
 }
 
 func IsConstraint(u *unstructured.Unstructured) bool {

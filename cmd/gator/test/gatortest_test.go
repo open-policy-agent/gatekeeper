@@ -148,3 +148,32 @@ func Test_enforcableFailures(t *testing.T) {
 		})
 	}
 }
+
+func Test_validateExternalDataFlags(t *testing.T) {
+	tests := []struct {
+		name    string
+		enabled bool
+		paths   []string
+		wantErr string
+	}{
+		{name: "disabled"},
+		{name: "enabled without providers", enabled: true, wantErr: "--enable-external-data requires --external-data-providers"},
+		{name: "providers without enable", paths: []string{"provider.yaml"}, wantErr: "--external-data-providers requires --enable-external-data=true"},
+		{name: "empty provider path", enabled: true, paths: []string{""}, wantErr: "--external-data-providers path must not be empty"},
+		{name: "enabled with providers", enabled: true, paths: []string{"provider.yaml"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateExternalDataFlags(tc.enabled, tc.paths)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || err.Error() != tc.wantErr {
+				t.Fatalf("got error %v, want %q", err, tc.wantErr)
+			}
+		})
+	}
+}

@@ -31,6 +31,9 @@ gator test --filename="manifest.yaml" --filename="templates-and-constraints/"
 # Receive input from stdin
 cat manifest.yaml | gator test
 
+# Evaluate policies using a trusted HTTPS Provider configuration
+gator test --filename="manifest.yaml" --enable-external-data --external-data-providers="providers.yaml"
+
 # Output structured violations data
 gator test --filename="manifest.yaml" --output=json`
 )
@@ -44,16 +47,18 @@ var Cmd = &cobra.Command{
 }
 
 var (
-	flagFilenames    []string
-	flagOutput       string
-	flagIncludeTrace bool
-	flagGatherStats  bool
-	flagImages       []string
-	flagPlainHTTP    bool
-	flagTempDir      string
-	flagEnableK8sCel bool
-	flagDenyOnly     bool
-	flagVerbose      bool
+	flagFilenames             []string
+	flagOutput                string
+	flagIncludeTrace          bool
+	flagGatherStats           bool
+	flagImages                []string
+	flagPlainHTTP             bool
+	flagTempDir               string
+	flagEnableK8sCel          bool
+	flagDenyOnly              bool
+	flagVerbose               bool
+	flagEnableExternalData    bool
+	flagExternalDataProviders []string
 )
 
 var flagDefaultFailurePolicyForK8sNativeValidation string
@@ -85,11 +90,25 @@ func init() {
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 	Cmd.Flags().BoolVarP(&flagDenyOnly, "deny-only", "", false, "output only denied constraints")
 	Cmd.Flags().BoolVarP(&flagVerbose, flagNameVerbose, "v", false, "print extended test output")
+	Cmd.Flags().BoolVar(&flagEnableExternalData, "enable-external-data", false, "allow external_data() to contact explicitly configured HTTPS Providers")
+	Cmd.Flags().StringArrayVar(&flagExternalDataProviders, "external-data-providers", nil, "trusted file or directory containing Provider resources; may be specified multiple times; requires --enable-external-data")
 }
 
 func run(_ *cobra.Command, _ []string) {
+	if err := validateExternalDataFlags(flagEnableExternalData, flagExternalDataProviders); err != nil {
+		cmdutils.ErrFatalf("%v", err)
+	}
 	if err := celSchema.SetDefaultFailurePolicyForK8sNativeValidation(flagDefaultFailurePolicyForK8sNativeValidation); err != nil {
 		cmdutils.ErrFatalf("invalid default K8sNativeValidation failure policy: %v", err)
+	}
+
+	var providers []reader.Provider
+	if flagEnableExternalData {
+		var err error
+		providers, err = reader.ReadProviders(flagExternalDataProviders)
+		if err != nil {
+			cmdutils.ErrFatalf("reading external data Providers: %v", err)
+		}
 	}
 
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, flagPlainHTTP)
@@ -116,7 +135,12 @@ func run(_ *cobra.Command, _ []string) {
 		opts = append(opts, gator.WithPrintHook(printBuf))
 	}
 
-	responses, err := test.Test(unstrucs, opts...)
+	var responses *test.GatorResponses
+	if flagEnableExternalData {
+		responses, err = test.TestWithProviders(unstrucs, providers, opts...)
+	} else {
+		responses, err = test.Test(unstrucs, opts...)
+	}
 	if err != nil {
 		cmdutils.ErrFatalf("auditing objects: %v", err)
 	}
@@ -135,6 +159,21 @@ func run(_ *cobra.Command, _ []string) {
 		exitCode = 1
 	}
 	os.Exit(exitCode)
+}
+
+func validateExternalDataFlags(enabled bool, paths []string) error {
+	if enabled && len(paths) == 0 {
+		return fmt.Errorf("--enable-external-data requires --external-data-providers")
+	}
+	if !enabled && len(paths) > 0 {
+		return fmt.Errorf("--external-data-providers requires --enable-external-data=true")
+	}
+	for _, path := range paths {
+		if path == "" {
+			return fmt.Errorf("--external-data-providers path must not be empty")
+		}
+	}
+	return nil
 }
 
 func formatOutput(flagOutput string, allResults []*test.GatorResult, stats []*instrumentation.StatsEntry) string {

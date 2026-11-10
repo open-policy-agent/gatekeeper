@@ -43,6 +43,58 @@ Note: The `gator verify` command was first called `gator test`. These names were
 changed to better align `gator` with other projects in the open-policy-agent
 space.
 
+### Testing policies that use external data
+
+`Feature State`: Gatekeeper version v3.24+ (alpha)
+
+`gator test` can evaluate ConstraintTemplates that call `external_data()`
+against a live HTTPS Provider. This is off by default. To enable it, pass
+`--enable-external-data` together with one or more `--external-data-providers`
+files or directories containing `Provider` resources
+(`externaldata.gatekeeper.sh/v1beta1`, or the deprecated `v1alpha1`):
+
+```yaml
+apiVersion: externaldata.gatekeeper.sh/v1beta1
+kind: Provider
+metadata:
+  name: test-provider
+spec:
+  url: https://provider.example.com/validate
+  timeout: 3
+  caBundle: <base64-encoded-CA-certificate-in-PEM-format>
+```
+
+```shell
+gator test \
+  --filename=test/gator/test/fixtures/externaldata/policy.yaml \
+  --enable-external-data \
+  --external-data-providers=provider.yaml
+```
+
+The Provider must be reachable from the machine running Gator (in-cluster
+Service DNS names usually are not), use HTTPS with TLS 1.3 and the given
+`caBundle`, and implement the
+[ProviderRequest/ProviderResponse protocol](externaldata.md#providerrequest).
+Set `spec.url` to the Provider's final endpoint rather than relying on HTTP
+redirects. Gator does not present a client certificate, so Providers that
+require mutual TLS are not supported.
+
+Providers are configuration, not objects under test. Gator reads them only
+from `--external-data-providers`; when external data is enabled, a Provider in
+`--filename`, stdin, or `--image` input is rejected. Supplying only one of the
+two flags is an error. Only use trusted policies and Provider files, because
+evaluation makes outbound requests to the configured Providers. Unlike Gator,
+the controller-manager enables external data by default.
+
+Provider failures are returned to Rego in the response's `system_error`,
+`errors`, and `status_code` fields rather than as CLI errors, so policies should
+check them; see the
+[example policy](https://github.com/open-policy-agent/gatekeeper/blob/master/test/gator/test/fixtures/externaldata/policy.yaml).
+Without both flags, templates that call `external_data` fail with
+`undefined function external_data`. External data is supported only for
+ConstraintTemplates in `gator test`; mutators that use `externalData`,
+`gator verify` suites, and `gator bench` are not yet supported.
+
 ## The `gator policy` subcommand
 
 `Feature State`: Gatekeeper version v3.22+ (alpha)
