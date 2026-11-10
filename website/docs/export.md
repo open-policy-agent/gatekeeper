@@ -99,17 +99,15 @@ Each publisher replaces only the entry it owns. Audit updates `source: audit`, w
 
 ### Connection API versions and storage migration
 
-`connection.gatekeeper.sh/v1beta1` is the preferred API and storage version. `v1alpha1` remains served with the same spec and status fields, so existing alpha manifests and clients continue to address the same objects. The separate `ConnectionPodStatus` API remains `status.gatekeeper.sh/v1alpha1`; its API version is not changed by Connection graduation.
+`connection.gatekeeper.sh/v1beta1` is the preferred API and storage version; `v1alpha1` remains served. `ConnectionPodStatus` remains `status.gatekeeper.sh/v1alpha1`.
 
-Upgrade the Connection CRD and confirm that the beta API is available before starting the new Gatekeeper pods, whose Connection controllers use beta. Helm's CRD upgrade hook handles this ordering by default. If you disable that hook or manage CRDs separately, perform this step explicitly before the binary rollout.
+Upgrade the Connection CRD before starting the new Gatekeeper pods. Helm's CRD upgrade hook does this by default; if it is disabled or you manage CRDs separately, update the CRD first.
 
-Helm resolves the rendered Connection before running the CRD upgrade hook, so the chart uses the still-served alpha API when beta is not yet discoverable. After the hook upgrades the CRD, alpha requests use beta storage; this compatibility fallback does not change the storage version.
+Gatekeeper attempts to migrate existing Connections to beta storage on startup, preserving their identity, configuration, and status. Check upgrade-manager logs for migration errors and run the [Connection name preflight](#connection-names-and-upgrade-preflight) before upgrading.
 
-On startup, Gatekeeper attempts to rewrite existing Connections through the API server so they are persisted using the beta storage version. This preserves their names, UIDs, driver configuration, and status. Run the [Connection name preflight](#connection-names-and-upgrade-preflight) before upgrading. Kubernetes validation ratcheting may permit rewriting an unchanged long name, but does not repair its invalid status label. Investigate errors from the upgrade manager rather than assuming every object was migrated. Changing the CRD's storage flag, or successfully reading an object through the beta endpoint, does not by itself prove that older stored objects were rewritten.
-
-For a binary rollback, retain the CRD that serves both versions. Do not apply an older alpha-only CRD after beta storage has been used: Kubernetes requires versions recorded in `status.storedVersions` to remain in the CRD. Removing beta requires first restoring an appropriate storage version and verifying that all objects have been rewritten out of beta. Likewise, do not manually remove alpha from `status.storedVersions` merely to make a migration appear complete.
-
-The beta contract preserves the existing Connection spec/status fields, routing flag names and defaults, and audit record/file formats. Only one selected Connection is supported. `publishStatuses[].active` means at least one publish succeeded in the reporting window, not that every violation was delivered or consumed downstream. Earlier alpha releases exposed aggregate `active` and `errors` fields; consumers of those fields must move to `connectionErrors` and source-specific `publishStatuses`.
+:::warning
+For a binary rollback, retain the CRD serving both API versions. Do not restore an alpha-only CRD after beta storage has been used.
+:::
 
 ### Upgrading from a release with audit export disabled by default
 
@@ -119,7 +117,7 @@ The Dapr export driver has been removed. Migrate existing Dapr Connections to di
 
 ### Connection names and upgrade preflight
 
-`Connection.metadata.name` must be at most 63 characters. Gatekeeper uses the full name in the `internal.gatekeeper.sh/connection-name` label on `ConnectionPodStatus` objects, and Kubernetes limits label values to 63 characters. Earlier alpha CRDs accepted longer names; exporting could still work even when status creation failed.
+`Connection.metadata.name` must be at most 63 characters so it can be used in status labels. Earlier alpha CRDs accepted longer names.
 
 Before upgrading the CRD, find existing Connections that need migration:
 
@@ -128,20 +126,19 @@ kubectl get connections.connection.gatekeeper.sh --all-namespaces -o json |
   jq -r '.items[] | select(.metadata.name | length > 63) | [.metadata.namespace, .metadata.name] | @tsv'
 ```
 
-The upgrade does not delete, rename, or truncate existing Connections. They remain readable, and Kubernetes validation ratcheting can allow spec and status updates that leave an existing long name unchanged. This does **not** repair the invalid status label. New Connections, including attempts to recreate a deleted long-named Connection from a backup, must satisfy the new limit.
+Existing long-named Connections remain readable but cannot produce valid status labels. They are not renamed or deleted automatically. New or restored Connections must satisfy the limit.
 
 For each long-named Connection:
 
-1. Back up its configuration and choose a distinct name of at most 63 characters. Do not blindly truncate names: different Connections may share the same prefix.
-2. Create a replacement Connection in the same namespace with the intended driver/configuration. Kubernetes object names are immutable, so migration requires a separate object.
-3. Update `--audit-connection` on every exporting audit and controller-manager deployment to the replacement name. With Helm, the setting is `audit.connection`; changing it also changes the identity of the chart-managed Connection. Plan that replacement explicitly rather than relying on an automatic rename. Account for interrupted or overlapping export during the rollout, and preserve the required volumes and consumers.
-4. Verify the replacement's `status.byPod`, export metrics, and actual consumer output for all exporting pods before explicitly retiring the old Connection. Keep the old configuration until the migration is verified.
+1. Back up its configuration and create a replacement in the same namespace with a distinct name of at most 63 characters and the intended driver/configuration.
+2. Update `--audit-connection` on every exporting deployment, or `audit.connection` with Helm. Changing the Helm value replaces the chart-managed Connection; plan for interrupted or overlapping export during the rollout.
+3. Check the replacement's `status.byPod`, export metrics, and consumer output before retiring the old Connection.
 
 #### ConnectionPodStatus names
 
-Status names normally remain the dash-escaped combination of pod name, Connection namespace, and Connection name. Escaping can make that combination exceed Kubernetes' 253-character object-name limit, even when each component is at most 63 characters. Only these overlength names use `connection-<sha256>`, where the suffix is the full lowercase hexadecimal SHA-256 digest of the original packed key. All valid legacy status names remain unchanged; Connection names and status labels are never shortened.
+Status names that would exceed Kubernetes' 253-character limit use a hashed fallback; existing valid names are unchanged. Identify statuses using their `internal.gatekeeper.sh/connection-name` and `internal.gatekeeper.sh/pod` labels and `status.id`, rather than parsing their names.
 
-Consumers should identify a status by its `internal.gatekeeper.sh/connection-name` and `internal.gatekeeper.sh/pod` labels and `status.id`, not by decoding its object name. Older controllers cannot reproduce the hashed fallback, so a downgrade restores the status failure for those overlength combinations. This change does not add support for pod names exceeding the separate 63-character pod-label limit.
+Downgrading to an older controller restores status-creation failures for these overlength combinations. Pod names remain subject to the separate 63-character status-label limit.
 
 ## Enabling Gatekeeper to export admission violations
 
@@ -369,7 +366,9 @@ The disk driver writes each audit run as newline-delimited JSON. Audit control r
 
     Each audit run is written to `<audit-run-id>.txt` in the channel directory and renamed to `<audit-run-id>.log` after its completion record is written, so readers should consume only `.log` files. A failed or partial record write aborts the run: the publish error is reported, the file is closed, and removal of the incomplete `.txt` file is attempted. Finalization failures before the rename use the same abort path. Remaining records of the failed run are rejected rather than retried. The next audit starts a new file once storage recovers, without a `Connection` change or restart; if the incomplete file could not be removed, the next start retries removal and fails until removal succeeds. Aborting a run does not remove completed `.log` files or admission files. Errors after the rename, such as permission or retention-cleanup failures, are still reported without discarding the completed run.
 
-    Beta does not promise lossless delivery during storage failures or downstream consumption. `maxAuditResults` bounds retained completed audit runs, not their total bytes, and retention can remove unread output. Removing a disk Connection or changing its path owns and cleans the old configured directory. Use a dedicated path per pod and archive consumed records in a downstream system when durability is required; the default `emptyDir` is lost when its pod is deleted.
+    :::warning
+    Disk export is best effort. `maxAuditResults` limits completed runs, not bytes, and retention can remove unread files. Removing a Connection or changing its path triggers cleanup of the old export directory; use a dedicated path per pod. The default `emptyDir` is lost when its pod is deleted. Archive exports elsewhere if durability is required.
+    :::
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
 
