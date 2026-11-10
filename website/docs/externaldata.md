@@ -163,6 +163,10 @@ Starting with v3.13+, Gatekeeper supports caching of responses from external dat
 
 External data adds a [custom OPA built-in function](https://www.openpolicyagent.org/docs/latest/extensions/#custom-built-in-functions-in-go) called `external_data` to Rego. This function is used to query external data providers.
 
+To test a policy that calls this function against a live Provider before
+deploying it, see [testing policies that use external data](gator.md#testing-policies-that-use-external-data)
+with `gator test`.
+
 `external_data` is a function that takes a request and returns a response. The request is a JSON object with the following fields:
 - `provider`: the name of the provider to query
 - `keys`: the list of keys to send to the provider
