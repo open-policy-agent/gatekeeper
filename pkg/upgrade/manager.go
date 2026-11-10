@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -25,7 +26,8 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "upgrade")
 
 const (
-	crdName = "constrainttemplates.templates.gatekeeper.sh"
+	crdName                = "constrainttemplates.templates.gatekeeper.sh"
+	connectionGroupVersion = "connection.gatekeeper.sh/v1alpha1"
 )
 
 // Manager allows us to upgrade resources on startup.
@@ -46,7 +48,7 @@ func New(mgr manager.Manager) *Manager {
 func (um *Manager) Start(ctx context.Context) error {
 	log.Info("Starting Upgrade Manager")
 	defer log.Info("Stopping upgrade manager workers")
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 	go func() { errCh <- um.upgrade(ctx) }()
 	select {
 	case <-ctx.Done():
@@ -80,13 +82,45 @@ func (um *Manager) upgrade(ctx context.Context) error {
 		"templates.gatekeeper.sh/v1alpha1",
 		"mutations.gatekeeper.sh/v1alpha1",
 		"externaldata.gatekeeper.sh/v1alpha1",
+		connectionGroupVersion,
 	}
 	for _, gv := range gvs {
+		if gv == connectionGroupVersion {
+			um.upgradeConnections(ctx)
+			continue
+		}
 		if err := um.upgradeGroupVersion(ctx, gv); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func upgradeBackoff() wait.Backoff {
+	return wait.Backoff{
+		Duration: time.Second,
+		Factor:   2,
+		Jitter:   1,
+		Steps:    5,
+	}
+}
+
+func (um *Manager) upgradeConnections(ctx context.Context) {
+	var lastErr error
+	err := wait.ExponentialBackoffWithContext(ctx, upgradeBackoff(), func(ctx context.Context) (bool, error) {
+		lastErr = um.upgradeGroupVersion(ctx, connectionGroupVersion)
+		if errors.IsForbidden(lastErr) || errors.IsUnauthorized(lastErr) || errors.IsInvalid(lastErr) {
+			return false, lastErr
+		}
+		return lastErr == nil, nil
+	})
+	if err != nil {
+		if lastErr == nil {
+			lastErr = err
+		}
+		// Export is optional: a failed migration must not stop unrelated admission.
+		log.Error(lastErr, "Connection storage migration could not start; retain the dual-version Connection CRD, resolve the error and restart Gatekeeper to retry", "groupVersion", connectionGroupVersion)
+	}
 }
 
 // upgradeGroupVersion touches each resource in a given groupVersion, incrementing its storage version.
@@ -145,10 +179,12 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 
 		if len(updateResources) > 0 {
 			urloop := &updateResourceLoop{
-				ur:      updateResources,
-				client:  um.client,
-				stop:    make(chan struct{}),
-				stopped: make(chan struct{}),
+				ur:           updateResources,
+				client:       um.client,
+				stop:         make(chan struct{}),
+				stopped:      make(chan struct{}),
+				groupVersion: groupVersion,
+				logger:       log.WithValues("group", group, "version", version, "kind", kind),
 			}
 			log.Info("starting update resources loop", "group", group, "version", version, "kind", kind)
 			go urloop.update(ctx)
@@ -158,19 +194,30 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 }
 
 type updateResourceLoop struct {
-	ur      map[util.KindVersionName]unstructured.Unstructured
-	client  client.Client
-	stop    chan struct{}
-	stopped chan struct{}
+	ur           map[util.KindVersionName]unstructured.Unstructured
+	client       client.Client
+	stop         chan struct{}
+	stopped      chan struct{}
+	groupVersion string
+	logger       logr.Logger
 }
 
 func (urloop *updateResourceLoop) update(ctx context.Context) {
 	defer close(urloop.stopped)
-	updateLoop := func() (bool, error) {
-		for _, item := range urloop.ur {
+	connectionMigration := urloop.groupVersion == connectionGroupVersion
+	failures := make(map[util.KindVersionName]error)
+	blocked := make(map[util.KindVersionName]bool)
+	rewritten, deleted := 0, 0
+	updateLoop := func(ctx context.Context) (bool, error) {
+		for key, item := range urloop.ur {
+			if blocked[key] {
+				continue
+			}
 			select {
 			case <-urloop.stop:
 				return true, nil
+			case <-ctx.Done():
+				return false, ctx.Err()
 			default:
 				failure := false
 				var latestItem unstructured.Unstructured
@@ -186,29 +233,61 @@ func (urloop *updateResourceLoop) update(ctx context.Context) {
 				if err != nil {
 					failure = true
 					log.Error(err, "could not get latest resource during update", "name", name, "namespace", namespace)
+					if connectionMigration {
+						if errors.IsNotFound(err) {
+							delete(urloop.ur, key)
+							deleted++
+						} else {
+							failures[key] = err
+							if errors.IsForbidden(err) || errors.IsUnauthorized(err) {
+								blocked[key] = true
+							}
+						}
+						// Never rewrite a stale Connection after a failed read.
+						continue
+					}
 				}
 				if err := urloop.client.Update(ctx, &latestItem); err != nil {
 					failure = true
 					log.Error(err, "could not update resource", "name", name, "namespace", namespace)
+					if connectionMigration {
+						failures[key] = err
+						if errors.IsInvalid(err) || errors.IsForbidden(err) || errors.IsUnauthorized(err) {
+							blocked[key] = true
+						}
+					}
 				}
 				if !failure {
 					key := util.GetUniqueKey(latestItem)
 					delete(urloop.ur, key)
+					delete(failures, key)
+					rewritten++
 				}
 			}
 		}
-		if len(urloop.ur) == 0 {
+		if len(urloop.ur) == 0 || connectionMigration && len(urloop.ur) == len(blocked) {
 			return true, nil
 		}
 		return false, nil
 	}
 
-	if err := wait.ExponentialBackoff(wait.Backoff{
-		Duration: 1 * time.Second,
-		Factor:   2,
-		Jitter:   1,
-		Steps:    5,
-	}, updateLoop); err != nil {
+	err := wait.ExponentialBackoffWithContext(ctx, upgradeBackoff(), updateLoop)
+	if connectionMigration {
+		if len(urloop.ur) == 0 {
+			urloop.logger.Info("Connection storage migration completed", "rewritten", rewritten, "deleted", deleted)
+		}
+		for key, item := range urloop.ur {
+			failure := failures[key]
+			if failure == nil {
+				failure = err
+			}
+			// Do not log the objects: Connection configuration can contain credentials.
+			urloop.logger.Error(failure, "Connection storage migration incomplete; a storage rewrite could not be confirmed. Retain the dual-version Connection CRD, resolve the error and restart Gatekeeper to retry",
+				"name", item.GetName(), "namespace", item.GetNamespace(), "blocked", blocked[key])
+		}
+		return
+	}
+	if err != nil {
 		log.Error(err, "could not update resource reached max retries", "remaining update resources", urloop.ur)
 	}
 }

@@ -59,7 +59,7 @@ func TestConnectionPodStatusNameLifecycle(t *testing.T) {
 				require.NoError(t, k8sClient.Create(ctx, conn))
 				t.Cleanup(func() { require.NoError(t, k8sClient.Delete(ctx, conn)) })
 
-				require.NoError(t, updateOrCreateConnectionPodStatus(ctx, k8sClient, k8sClient, k8sscheme.Scheme, conn, nil, nil, getPod))
+				require.NoError(t, UpdateOrCreateConnectionPodStatus(ctx, k8sClient, k8sClient, k8sscheme.Scheme, conn.Name, nil, getPod))
 				t.Cleanup(func() { require.NoError(t, deleteStatus(ctx, k8sClient, namespace, name, getPod)) })
 				key, err := statusv1alpha1.KeyForConnection(pod.Name, namespace, name)
 				require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestConnectionPodStatusNameLifecycle(t *testing.T) {
 				uid := status.UID
 
 				connectionErrors := []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: "updated"}}
-				require.NoError(t, updateOrCreateConnectionPodStatus(ctx, k8sClient, k8sClient, k8sscheme.Scheme, conn, connectionErrors, nil, getPod))
+				require.NoError(t, UpdateOrCreateConnectionPodStatus(ctx, k8sClient, k8sClient, k8sscheme.Scheme, conn.Name, connectionErrors, getPod))
 				require.NoError(t, k8sClient.Get(ctx, statusKey, status))
 				require.Equal(t, uid, status.UID, "updates must find the original status object")
 				require.Equal(t, connectionErrors, status.Status.ConnectionErrors)

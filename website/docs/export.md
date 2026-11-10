@@ -3,9 +3,9 @@ id: export
 title: Exporting violations
 ---
 
-`Feature State`: Audit export in Gatekeeper version v3.13+ (alpha), v3.24+ (beta, enabled by default); admission export in v3.24+ (alpha)
+`Feature State`: Audit export in Gatekeeper version v3.13+ (alpha), v3.24+ (beta, enabled by default); Connection `v1beta1`, audit routing flags, and the audit disk driver in v3.24+ (beta); admission export in v3.24+ (alpha)
 
-> ❗ Audit export is beta and enabled by default; nothing is exported until you create a `Connection`. Admission export is alpha and subject to change (feedback is welcome!). This feature was previously known as "Consuming violations using Pubsub".
+> ❗ Audit export, its routing flags, and the audit disk driver are beta. Audit export is enabled by default; nothing is exported until you create a `Connection`. Admission export and its producer-specific spool behavior remain alpha and subject to change (feedback is welcome!). This feature was previously known as "Consuming violations using Pubsub".
 
 ## Description
 
@@ -26,7 +26,7 @@ To opt out, set `--enable-violation-export=false`, or `enableViolationExport: fa
 A `Connection` custom resource with `spec` that contains `driver` and `config` fields are required to establish connection for sending violations over the channel. Following is an example to establish a connection that uses disk to export messages:
 
 ```yaml
-apiVersion: connection.gatekeeper.sh/v1alpha1
+apiVersion: connection.gatekeeper.sh/v1beta1
 kind: Connection
 metadata:
   name: audit-connection
@@ -48,7 +48,7 @@ spec:
 Upon controller ingestion, the `Connection` will reflect the state of the export connection on its `status` sub resource.
 
 ```yaml
-apiVersion: connection.gatekeeper.sh/v1alpha1
+apiVersion: connection.gatekeeper.sh/v1beta1
 kind: Connection
 metadata:
   name: audit-connection
@@ -96,6 +96,18 @@ The following table describes each property in the `status.byPod` section:
 | `publishStatuses[].errors` | array | Publish error classes reported by this source, limited to 500 entries |
 
 Each publisher replaces only the entry it owns. Audit updates `source: audit`, while admission violation export from the validation webhook updates `source: webhook`; either update preserves the other entry. If a source observes more than 500 distinct error classes before a successful status update, the final entry reports that additional classes were omitted. Each stored error message is the coalesced class text before the first colon and is not otherwise length-truncated.
+
+### Connection API versions and storage migration
+
+`connection.gatekeeper.sh/v1beta1` is the preferred API and storage version. `v1alpha1` remains served with the same spec and status fields, so existing alpha manifests and clients continue to address the same objects. The separate `ConnectionPodStatus` API remains `status.gatekeeper.sh/v1alpha1`; its API version is not changed by Connection graduation.
+
+Upgrade the Connection CRD and confirm that the beta API is available before starting the new Gatekeeper pods, whose Connection controllers use beta. Helm's CRD upgrade hook handles this ordering by default. If you disable that hook or manage CRDs separately, perform this step explicitly before the binary rollout.
+
+On startup, Gatekeeper attempts to rewrite existing Connections through the API server so they are persisted using the beta storage version. This preserves their names, UIDs, driver configuration, and status. Run the [Connection name preflight](#connection-names-and-upgrade-preflight) before upgrading. Kubernetes validation ratcheting may permit rewriting an unchanged long name, but does not repair its invalid status label. Investigate errors from the upgrade manager rather than assuming every object was migrated. Changing the CRD's storage flag, or successfully reading an object through the beta endpoint, does not by itself prove that older stored objects were rewritten.
+
+For a binary rollback, retain the CRD that serves both versions. Do not apply an older alpha-only CRD after beta storage has been used: Kubernetes requires versions recorded in `status.storedVersions` to remain in the CRD. Removing beta requires first restoring an appropriate storage version and verifying that all objects have been rewritten out of beta. Likewise, do not manually remove alpha from `status.storedVersions` merely to make a migration appear complete.
+
+The beta contract preserves the existing Connection spec/status fields, routing flag names and defaults, and audit record/file formats. Only one selected Connection is supported. `publishStatuses[].active` means at least one publish succeeded in the reporting window, not that every violation was delivered or consumed downstream. Earlier alpha releases exposed aggregate `active` and `errors` fields; consumers of those fields must move to `connectionErrors` and source-specific `publishStatuses`.
 
 ### Upgrading from a release with audit export disabled by default
 
@@ -335,7 +347,7 @@ The disk driver writes each audit run as newline-delimited JSON. Audit control r
     As part of the command above, the `Connection` resource is installed with the following values and defaults:
 
     ```yaml
-    apiVersion: connection.gatekeeper.sh/v1alpha1
+    apiVersion: connection.gatekeeper.sh/v1beta1
     kind: Connection
     metadata:
       name: "audit-connection"
@@ -349,11 +361,13 @@ The disk driver writes each audit run as newline-delimited JSON. Audit control r
 
     | Property        | Description                                                                                                                                                            | Default                  |
     |:----------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |:-------------------------|
-    | path            | (alpha) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "tmp/violations/topics" |
-    | maxAuditResults | (alpha) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
-    | closedConnectionTTL | (alpha) Optional duration string controlling how long a failed closed Connection remains eligible for cleanup retries. Accepted values are `"1m"` through `"10m"`. The chart leaves it unset and the driver defaults to `"10m"`. | `"10m"` |
+    | path            | (beta) Path for audit pod manager container to export violations and sidecar container to read from. Must be a child of volume mount path so the parent is writable.  | "tmp/violations/topics" |
+    | maxAuditResults | (beta) Maximum number of audit results that can be stored in the export path.                                                      | 3                 |
+    | closedConnectionTTL | (beta) Optional duration string controlling how long a failed closed Connection remains eligible for cleanup retries. Accepted values are `"1m"` through `"10m"`. The chart leaves it unset and the driver defaults to `"10m"`. | `"10m"` |
 
     Each audit run is written to `<audit-run-id>.txt` in the channel directory and renamed to `<audit-run-id>.log` after its completion record is written, so readers should consume only `.log` files. A failed or partial record write aborts the run: the publish error is reported, the file is closed, and removal of the incomplete `.txt` file is attempted. Finalization failures before the rename use the same abort path. Remaining records of the failed run are rejected rather than retried. The next audit starts a new file once storage recovers, without a `Connection` change or restart; if the incomplete file could not be removed, the next start retries removal and fails until removal succeeds. Aborting a run does not remove completed `.log` files or admission files. Errors after the rename, such as permission or retention-cleanup failures, are still reported without discarding the completed run.
+
+    Beta does not promise lossless delivery during storage failures or downstream consumption. `maxAuditResults` bounds retained completed audit runs, not their total bytes, and retention can remove unread output. Removing a disk Connection or changing its path owns and cleans the old configured directory. Use a dedicated path per pod and archive consumed records in a downstream system when durability is required; the default `emptyDir` is lost when its pod is deleted.
 
     **Note**: After the audit pod starts, verify that it contains two running containers.
 

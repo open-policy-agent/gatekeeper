@@ -84,7 +84,7 @@ And thats it! Exporter system will take the newly added driver into account and 
 To enable audit to use this driver to publish messages, a `Connection` custom resource with appropriate `config` and `driver` is needed. For example,
 
 ```yaml
-apiVersion: connection.gatekeeper.sh/v1alpha1
+apiVersion: connection.gatekeeper.sh/v1beta1
 kind: Connection
 metadata:
   name: audit-connection
