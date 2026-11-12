@@ -44,6 +44,9 @@ func ValidateProvider(provider *unversioned.Provider) error {
 // addProvider adds provider to cache. Unlike the cluster, it also rejects a
 // zero timeout, which makes every request time out.
 func addProvider(cache *externaldata.ProviderCache, provider *unversioned.Provider) error {
+	if provider == nil {
+		return fmt.Errorf("nil external data Provider")
+	}
 	if err := cache.Upsert(provider); err != nil {
 		return err
 	}
