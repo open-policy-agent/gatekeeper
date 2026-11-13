@@ -31,8 +31,10 @@ var (
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 
+	localSchemeBuilder = runtime.NewSchemeBuilder(SchemeBuilder.AddToScheme)
+
 	// AddToScheme adds the types in this group-version to the given scheme.
-	AddToScheme = SchemeBuilder.AddToScheme
+	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func addKnownTypes(scheme *runtime.Scheme) error {

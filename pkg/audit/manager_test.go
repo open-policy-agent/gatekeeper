@@ -25,7 +25,7 @@ import (
 	constrainttypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/config/v1alpha1"
-	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
+	connectionv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1beta1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
@@ -993,12 +993,12 @@ func Test_reportExportConnectionErrors(t *testing.T) {
 			client := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
 
 			// Create Connection object for setup
-			connObj := connectionv1alpha1.Connection{
+			connObj := connectionv1beta1.Connection{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      *exportutil.AuditConnection,
 					Namespace: util.GetNamespace(),
 				},
-				Spec: connectionv1alpha1.ConnectionSpec{
+				Spec: connectionv1beta1.ConnectionSpec{
 					Driver: disk.Name,
 					Config: &anythingtypes.Anything{Value: map[string]interface{}{
 						"path":            "value",
@@ -1070,7 +1070,7 @@ func TestReportExportConnectionErrorsNotFound(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("audit-pod"))
-			connection := &connectionv1alpha1.Connection{
+			connection := &connectionv1beta1.Connection{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: *exportutil.AuditConnection, Namespace: util.GetNamespace(),
 					UID: types.UID("connection-uid"), Generation: 1,
@@ -1229,7 +1229,7 @@ func TestAuditExportRun(t *testing.T) {
 			*exportutil.ExportEnabled = !tc.exportDisabled
 			builder := fake.NewClientBuilder().WithScheme(scheme.Scheme)
 			if !tc.missingConnection {
-				builder = builder.WithObjects(&connectionv1alpha1.Connection{ObjectMeta: metav1.ObjectMeta{Name: *exportutil.AuditConnection, Namespace: util.GetNamespace()}})
+				builder = builder.WithObjects(&connectionv1beta1.Connection{ObjectMeta: metav1.ObjectMeta{Name: *exportutil.AuditConnection, Namespace: util.GetNamespace()}})
 			}
 			k8sClient := builder.Build()
 			exporter := &scriptedExporter{errs: tc.publishErrs}
@@ -1278,7 +1278,7 @@ func TestAuditExportLogLimiting(t *testing.T) {
 	errB := errors.New("class B: failed")
 	notConfigured := fmt.Errorf("%w, name: %s", export.ErrConnectionNotConfigured, *exportutil.AuditConnection)
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme.Scheme).
-		WithObjects(&connectionv1alpha1.Connection{ObjectMeta: metav1.ObjectMeta{Name: *exportutil.AuditConnection, Namespace: util.GetNamespace()}}).
+		WithObjects(&connectionv1beta1.Connection{ObjectMeta: metav1.ObjectMeta{Name: *exportutil.AuditConnection, Namespace: util.GetNamespace()}}).
 		Build()
 	pod := fakes.Pod(fakes.WithNamespace(util.GetNamespace()), fakes.WithName("audit-pod"))
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

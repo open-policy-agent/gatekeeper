@@ -40,6 +40,7 @@ func TestReconcile_E2E(t *testing.T) {
 	pod, _ := getPod(ctx)
 
 	t.Run("Reconcile called and updates Connection status", func(t *testing.T) {
+		// Alpha clients must observe status aggregated by the beta controller.
 		connObj := connectionv1alpha1.Connection{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      *exportutil.AuditConnection,
