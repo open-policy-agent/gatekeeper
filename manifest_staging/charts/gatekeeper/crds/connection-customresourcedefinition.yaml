@@ -37,6 +37,10 @@ spec:
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
+            properties:
+              name:
+                maxLength: 63
+                type: string
             type: object
           spec:
             description: spec defines the desired state of Connection.

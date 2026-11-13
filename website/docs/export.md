@@ -103,6 +103,31 @@ Each publisher replaces only the entry it owns. Audit updates `source: audit`, w
 
 The Dapr export driver has been removed. Migrate existing Dapr Connections to disk, providing a writable volume and a consumer, or disable violation export while migrating.
 
+### Connection names and upgrade preflight
+
+`Connection.metadata.name` must be at most 63 characters so it can be used in status labels. Earlier alpha CRDs accepted longer names.
+
+Before upgrading the CRD, find existing Connections that need migration:
+
+```shell
+kubectl get connections.connection.gatekeeper.sh --all-namespaces -o json |
+  jq -r '.items[] | select(.metadata.name | length > 63) | [.metadata.namespace, .metadata.name] | @tsv'
+```
+
+Existing long-named Connections remain readable but cannot produce valid status labels. They are not renamed or deleted automatically. New or restored Connections must satisfy the limit.
+
+For each long-named Connection:
+
+1. Back up its configuration and create a replacement in the same namespace with a distinct name of at most 63 characters and the intended driver/configuration.
+2. Update `--audit-connection` on every exporting deployment, or `audit.connection` with Helm. Changing the Helm value replaces the chart-managed Connection; plan for interrupted or overlapping export during the rollout.
+3. Check the replacement's `status.byPod`, export metrics, and consumer output before retiring the old Connection.
+
+#### ConnectionPodStatus names
+
+Status names that would exceed Kubernetes' 253-character limit use a hashed fallback; existing valid names are unchanged. Identify statuses using their `internal.gatekeeper.sh/connection-name` and `internal.gatekeeper.sh/pod` labels and `status.id`, rather than parsing their names.
+
+Downgrading to an older controller restores status-creation failures for these overlength combinations. Pod names remain subject to the separate 63-character status-label limit.
+
 ## Enabling Gatekeeper to export admission violations
 
 Admission violation export is independent from audit export and is disabled by default. Set `--enable-admission-violation-export=true` on the controller-manager deployment to enable it. Enabling `--enable-violation-export` on the audit deployment does not enable admission export.
