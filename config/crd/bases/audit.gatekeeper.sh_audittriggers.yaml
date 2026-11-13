@@ -1,0 +1,127 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: audittriggers.audit.gatekeeper.sh
+spec:
+  group: audit.gatekeeper.sh
+  names:
+    kind: AuditTrigger
+    listKind: AuditTriggerList
+    plural: audittriggers
+    singular: audittrigger
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.acknowledgedGeneration
+      name: Acknowledged
+      type: integer
+    - jsonPath: .status.successfulGeneration
+      name: Succeeded
+      type: integer
+    - jsonPath: .status.failedGeneration
+      name: Failed
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AuditTrigger requests an audit as soon as possible.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AuditTriggerSpec requests an immediate audit.
+            properties:
+              auditNonce:
+                description: |-
+                  AuditNonce requests an audit as soon as possible when changed. It is a
+                  change token, not an execution ID; use metadata.generation to track completion.
+                maxLength: 128
+                minLength: 1
+                type: string
+            required:
+            - auditNonce
+            type: object
+          status:
+            description: AuditTriggerStatus describes the state of the requested audit.
+            properties:
+              acknowledgedGeneration:
+                description: AcknowledgedGeneration is the highest generation accepted
+                  by Gatekeeper.
+                format: int64
+                minimum: 0
+                type: integer
+              failedGeneration:
+                description: FailedGeneration is the highest generation covered by
+                  a failed audit.
+                format: int64
+                minimum: 0
+                type: integer
+              lastRun:
+                description: AuditRunStatus describes the latest started execution,
+                  regardless of its trigger.
+                properties:
+                  completedAt:
+                    format: date-time
+                    type: string
+                  coveredGeneration:
+                    description: CoveredGeneration is frozen when the run starts.
+                      Later requests need another run.
+                    format: int64
+                    type: integer
+                  message:
+                    type: string
+                  phase:
+                    enum:
+                    - Running
+                    - Succeeded
+                    - Failed
+                    - Unknown
+                    type: string
+                  reason:
+                    type: string
+                  startedAt:
+                    format: date-time
+                    type: string
+                required:
+                - coveredGeneration
+                - message
+                - phase
+                - reason
+                - startedAt
+                type: object
+              successfulGeneration:
+                description: |-
+                  SuccessfulGeneration is the highest generation covered by a successful audit.
+                  Check this before FailedGeneration; a later failure does not invalidate success.
+                format: int64
+                minimum: 0
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: AuditTrigger must be named audit-trigger
+          rule: self.metadata.name == 'audit-trigger'
+    served: true
+    storage: true
+    subresources:
+      status: {}
