@@ -6,9 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
+	frameworkapis "github.com/open-policy-agent/frameworks/constraint/pkg/apis"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/oci"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var allowedExtensions = []string{gator.ExtYAML, gator.ExtYML, gator.ExtJSON}
@@ -43,6 +46,50 @@ func ReadSources(filenames []string, images []string, tempDir string, allowPlain
 	}
 
 	return sourcesToUnstruct(sources), nil
+}
+
+// ReadProviders reads and validates the Providers in the given files and
+// directories. Every object must be a Provider.
+func ReadProviders(paths []string) ([]*unversioned.Provider, error) {
+	sources, err := readFiles(paths)
+	if err != nil {
+		return nil, fmt.Errorf("reading Provider files: %w", err)
+	}
+
+	scheme := runtime.NewScheme()
+	if err := frameworkapis.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("registering Provider APIs: %w", err)
+	}
+
+	var providers []*unversioned.Provider
+	seen := make(map[string]string)
+	for _, source := range sources {
+		for _, obj := range source.objs {
+			provider, err := ToProvider(scheme, obj)
+			if err != nil {
+				return nil, fmt.Errorf("file %q: %w", source.filename, err)
+			}
+			if obj.GetNamespace() != "" {
+				return nil, fmt.Errorf("file %q: Provider %q must be cluster-scoped", source.filename, obj.GetName())
+			}
+			if obj.GetName() == "" {
+				return nil, fmt.Errorf("file %q: Provider metadata.name must not be empty", source.filename)
+			}
+			if first, ok := seen[obj.GetName()]; ok {
+				return nil, fmt.Errorf("provider %q in %q is already defined in %q", obj.GetName(), source.filename, first)
+			}
+			if err := gator.ValidateProvider(provider); err != nil {
+				return nil, fmt.Errorf("file %q: invalid Provider %q: %w", source.filename, obj.GetName(), err)
+			}
+
+			providers = append(providers, provider)
+			seen[obj.GetName()] = source.filename
+		}
+	}
+	if len(providers) == 0 {
+		return nil, fmt.Errorf("no Provider resources found")
+	}
+	return providers, nil
 }
 
 func readImage(image string, tempDir string, allowPlainHTTP bool) ([]*source, error) {
