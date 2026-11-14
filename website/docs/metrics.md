@@ -457,3 +457,12 @@ Gatekeeper can be configured to export metrics to Google Cloud's operations suit
 - set `--stackdriver-only-when-available`. Only attempt to start the stackdriver exporter if credentials are available.
 
 - set `--stackdriver-metric-interval`. Interval to read metrics for stackdriver exporter. Defaulted to 10 secs if unspecified.
+
+## API Server Metrics for Webhook Monitoring
+
+In addition to the metrics exposed by Gatekeeper itself, the Kubernetes API server
+provides counters that track webhook call outcomes. The most relevant for fail-open
+monitoring is `apiserver_admission_webhook_fail_open_count`.
+
+For alerting examples and operational guidance, see
+[Failing Closed — Detecting Fail-Open Admission](failing-closed.md#detecting-fail-open-admission).
